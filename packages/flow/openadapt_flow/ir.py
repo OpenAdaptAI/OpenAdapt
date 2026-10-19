@@ -1501,6 +1501,37 @@ class DialogResponse(BaseModel):
         return self
 
 
+class HoverEvidence(BaseModel):
+    """What the recording saw when the pointer rested on a click target.
+
+    See :mod:`openadapt_flow.runtime.hover_evidence`. Captured for click steps
+    whose target carries no record identity (an icon-only control) on a
+    pixel surface. Replay moves the pointer onto the resolved target, waits
+    ``dwell_ms`` and compares its response with this one before clicking.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    response: bool = Field(
+        description="Whether anything near the target changed under the pointer"
+    )
+    region: Optional[Region] = Field(
+        default=None,
+        description=(
+            "The changed box, as an offset from the recorded click point"
+            " (dx, dy, w, h). Set iff ``response``."
+        ),
+    )
+    crop: Optional[str] = Field(
+        default=None,
+        description=(
+            "Bundle-relative PNG of the response pixels (templates/hover/),"
+            " sealed with the other image crops. Set iff ``response``."
+        ),
+    )
+    dwell_ms: int = Field(default=800, ge=0, le=5000)
+
+
 class Step(BaseModel):
     id: str
     intent: str = Field(description="Human-readable purpose of the step")
@@ -1808,6 +1839,15 @@ class Step(BaseModel):
             " Without a crop the pixel-compare tier abstains on"
             " remote-display/pixel replays and identity falls to the OCR"
             " band tier (docs/LIMITS.md)."
+        ),
+    )
+    hover: Optional[HoverEvidence] = Field(
+        default=None,
+        description=(
+            "Pointer-hover response captured at record time for a click whose"
+            " target carries no record identity (runtime.hover_evidence)."
+            " None when the recorder could not hover or the step has other"
+            " identity evidence, and on bundles compiled before this field."
         ),
     )
     submit_binding: Optional[SubmitBinding] = Field(
@@ -3293,6 +3333,39 @@ class KnownIdEvidence(BaseModel):
     export_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
+class IdentityLook(BaseModel):
+    """One extra look taken before stopping on a look-alike identifier.
+
+    See :mod:`openadapt_flow.runtime.identity_looks`. Holds no identifier
+    values: only what kind of look it was, what it concluded, and the
+    SHA-256 of the frame it read when it read one.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["frame", "magnified", "known_ids", "clipboard"]
+    #: ``agrees``: consistent with the first read, settles nothing alone.
+    #: ``resolves``: names exactly one record, the expected one.
+    #: ``contradicts``: names another record; the step stops.
+    #: ``unavailable``: the look could not be taken or read nothing usable.
+    outcome: Literal["agrees", "resolves", "contradicts", "unavailable"]
+    reason: Optional[str] = Field(default=None, max_length=80)
+    frame_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class HoverLook(BaseModel):
+    """The live hover response compared with the recorded one.
+
+    Holds no pixels: the verdict, why, and the SHA-256 of the hover frame.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    verdict: Literal["verified", "mismatch", "unexpected", "absent", "unverifiable"]
+    reason: str = Field(max_length=80)
+    frame_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
 class IdentityCheck(BaseModel):
     """Outcome of the pre-click target-identity check (runtime.identity).
 
@@ -3336,6 +3409,7 @@ class IdentityCheck(BaseModel):
         "pixel",
         "vlm",
         "signal_quorum",
+        "hover",
     ] = "context"
     coverage: float = 0.0
     expected: str = ""
@@ -3375,6 +3449,27 @@ class IdentityCheck(BaseModel):
             "Set when the known-ID list was needed but may not be used: no "
             "admission confirmation, the export changed since it was "
             "confirmed, or it is older than the configured age. The step halts."
+        ),
+    )
+    hover: Optional[HoverLook] = Field(
+        default=None,
+        description=(
+            "Set for mode ``hover``: the live pointer-hover response compared "
+            "with the recorded one (runtime.hover_evidence)."
+        ),
+    )
+    looks: list[IdentityLook] = Field(
+        default_factory=list,
+        description=(
+            "Extra looks taken because the first read abstained only on a "
+            "look-alike identifier (runtime.identity_looks), in order."
+        ),
+    )
+    look_halt: Optional[Literal["identity_look_changed_screen"]] = Field(
+        default=None,
+        description=(
+            "Set when an extra look changed the screen outside the "
+            "identifier it read. The step halts."
         ),
     )
 
@@ -3835,6 +3930,20 @@ class ServerResponseEvidence(BaseModel):
         return self.status < 400
 
 
+class CheckToClickRecheck(BaseModel):
+    """The screen changed between a pixel step's check and its click.
+
+    Records which checked regions changed on the fresh frame taken just
+    before the click, and what the runtime did: re-observed the target and
+    its identity on that frame, or refused the click. No pixels.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    changed: list[Literal["target", "identity", "hover", "frame_size"]]
+    outcome: Literal["reobserved", "aborted"]
+
+
 class StepResult(BaseModel):
     step_id: str
     intent: str
@@ -3967,6 +4076,10 @@ class StepResult(BaseModel):
     identity_reobserved: bool = False
     identity_first_read: Optional[IdentityCheck] = None
     identity_first_frame_png: Optional[str] = None
+    #: Pixel clicks only: each time the target, identity or hover region
+    #: changed between the step's check and its click (see
+    #: ``Replayer._pixel_recheck``). Empty, and omitted, when nothing changed.
+    check_to_click: list[CheckToClickRecheck] = Field(default_factory=list)
     heal: Optional[HealEvent] = None
     error: Optional[str] = None
     before_png: Optional[str] = None  # run-dir-relative paths
@@ -3997,6 +4110,8 @@ class StepResult(BaseModel):
             data.pop("effect_field_checks", None)
         if isinstance(data, dict) and not self.server_responses:
             data.pop("server_responses", None)
+        if isinstance(data, dict) and not self.check_to_click:
+            data.pop("check_to_click", None)
         return data
 
 

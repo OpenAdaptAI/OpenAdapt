@@ -1,0 +1,37 @@
+id: desktop-readback-separate-session
+claim: >-
+  A save in a desktop, RDP or Citrix application can be checked the way a
+  person checks it: a separate session that is never the one that typed
+  searches for the record, opens the one result that shows its
+  identifier, confirms the record view shows that identifier, and reads
+  the saved fields through UI Automation or OCR, judged by the shared
+  effect judge. The look-up types only into the search box and never
+  clicks a control with a save-like label. With its own sign-in it
+  declares tier 2 (a separate session); without one, tier 3. It is never
+  labeled a system-of-record read.
+surfaces: [docs]
+tier: supported
+evidence:
+  - path: tests/test_desktop_readback.py
+    proves: >-
+      On the WinForms patient-notes fixture through the real in-guest
+      agent and Windows client (UI Automation): confirms a saved note,
+      refutes a wrong one, opens only the row that shows the full
+      identity past a same-first-name decoy, halts on two matching rows,
+      and refuses a search button with a save-like label. On the RDP
+      kiosk's look-up panel through the RDP backend and real OCR:
+      confirms a booking from its own RDP logon (tier 2), never turns an
+      OCR mismatch into REFUTED, and never takes "not found" as proof
+      that nothing was saved. The same look-up confirms through a Citrix
+      Workspace window and a native macOS window (tier 3, a window as the
+      same user). Neither fixture's save control or form is touched. The
+      deployment refuses a read-back session that is the session that
+      types.
+caveats:
+  - >-
+    The WinForms fixture runs as a UI Automation stand-in that mirrors
+    patient_notes.ps1 and its pn_db.py persistence, and the kiosk as
+    pixels drawn at the Tk layout; neither is the live Windows VM or the
+    Docker RDP fixture in this evidence. On the pixel path OpenAdapt cannot
+    prove where keyboard focus is; it checks the search box shows the
+    query before it submits.

@@ -57,18 +57,27 @@ recording and replaced when the file is written.
 
 - **No headers at all.** So no `Cookie`, `Set-Cookie` or `Authorization`
   value is written.
-- **Cookie values the browser sent** are replaced by `<session:cookie>`
-  wherever a page echoes them (for example, a login page that sets the
-  session cookie from script).
+- **Cookie and credential values** are replaced wherever a page echoes them
+  in a body, URL or script: the cookies the browser sent and the cookies a
+  response set with `Set-Cookie` (`<session:cookie>`), and the credential of
+  an `Authorization` header (`<session:authorization>`).
 - **Password-like fields** (names matching `pass`, `password`, `passwd`,
-  `pwd`, `clearpass`, `secret`) and the recording's `--secret` fields: their
-  values are replaced by `<secret>` in bodies, URLs and response text.
-- **Session tokens**: a body or query field whose name contains `csrf`,
-  `xsrf`, `token`, `nonce` or `authenticity`, with a value of at least 8
-  characters, has that value replaced by `<session:NAME>` everywhere it
+  `passphrase`, `pwd`, `clearpass`, `secret`, `private_key`, or exactly `pin`
+  or `otp`) and the recording's `--secret` fields: their values are replaced
+  by `<secret>` in bodies, URLs and response text.
+- **Session tokens**: a field whose name contains `csrf`, `xsrf`, `token`,
+  `nonce`, `authenticity`, `session`, `api_key`, `jwt`, `bearer` or
+  `authorization` (or is exactly `sid` or `auth`), with a value of at least
+  8 characters, has that value replaced by `<session:NAME>` everywhere it
   appears, including the HTML that carried it. A reader can therefore tell
   that a form's hidden `csrf_token_form` and the token in the save request
   are the same session value.
+
+Field names are read in form bodies, URL queries, and JSON request and
+response bodies at any depth, so a token that only a response carried (a
+login's `access_token`) is withheld wherever later traffic echoes it. In a
+JSON body, a password-like or token-like field is replaced field by field,
+whatever the length of its value.
 
 Replacement is by exact value (and its URL-encoded form), longest value
 first. Business values the person typed (names, dates, addresses) are not

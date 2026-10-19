@@ -3348,6 +3348,12 @@ class PlaywrightBackend:
                 cause_type=type(exc).__name__,
             ) from exc
 
+    def hover(self, x: int, y: int) -> None:
+        """Rest the mouse on pixel coordinates without pressing a button."""
+
+        self._assert_qualification_environment_current()
+        self.page.mouse.move(x, y)
+
     def drag(self, x: int, y: int, end_x: int, end_y: int) -> None:
         """Drag between two independently resolved points."""
 

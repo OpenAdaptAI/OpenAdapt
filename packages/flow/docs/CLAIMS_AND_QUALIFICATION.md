@@ -40,7 +40,7 @@ boundaries, and unmet controls.
 
 Product claims are enforced by CI. Every registered claim is tiered and mapped
 to the specific tests and benchmark artifacts that back it in
-[`../claims.yaml`](../claims.yaml). CI runs `scripts/validate_claims.py`, which
+[`../claims/`](../claims/) (one file per claim). CI runs `scripts/validate_claims.py`, which
 **fails the build whenever a claim's tier outranks its strongest evidence** and
 regenerates [`VERIFICATION.md`](VERIFICATION.md), the claim-by-claim
 verification report, from the registry, so the adjectives in the README cannot

@@ -1,11 +1,875 @@
 {
-  "generated_at": "2026-10-19T11:08:21-04:00 (git HEAD commit date)",
+  "generated_at": "committed registry state (regenerate: scripts/validate_claims.py --report)",
   "green_check_run": false,
   "green_check_job": null,
   "green_check_scope": [],
   "ok": true,
   "validation_errors": [],
   "claims": [
+    {
+      "id": "compose-recorded-bundles",
+      "claim": "openadapt-flow compose sequences named, already-compiled child bundles under a handoff contract. Each child stays bound to its recorded surface. The parent starts a child only after a predecessor ends VERIFIED (or an explicit allowed halt class). Handoffs copy effect-bound parameter values from confirmed effect receipts; missing evidence HALTs. certify and run execute the parent artifact.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "README.md",
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "The parent sequences admitted child runs. It does not enlarge the workflow-program graph and does not introduce a process contract. It does not switch backends inside one recording.",
+        "Evidence is unit tests plus a local mock second child. This claim does not cover Production admission or a live Citrix session."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_compose_authoring.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Authoring copies two child bundles, records the handoff contract, and refuses a source that is not effect-bound, an unknown target parameter, a single child, a cyclic after-graph, and a backwards handoff."
+        },
+        {
+          "path": "tests/test_compose_runtime.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": "test_two_child_fixture_second_is_local_backend",
+          "node_found": true,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "A two-child fixture runs intake through MockMed with independent effect verification, then a local FakeBackend child that receives the verified patient_id. Missing handoff evidence and an unverified predecessor HALT before the next child starts."
+        },
+        {
+          "path": "tests/test_cli_compose.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The compose parser dispatches, the CLI writes a composition artifact, and replay refuses to run one."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "deferred-report-check",
+      "claim": "A save that only a later report can confirm (an X12 999 or 277CA acknowledgment, a CSV export, a saved status page) ends SAVED_AWAITING_CHECK: never VERIFIED or billable until a matching accepting report row settles it, and RECONCILIATION_REQUIRED when the report rejects it or no row arrives by the deadline.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "The report confirms acceptance of the item with that key, not its field values. The hosted runner and the Execute v1 and production-receipt wire formats carry the outcome as RECONCILIATION_REQUIRED."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_deferred_report.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Synthetic 999, 277CA, CSV and text reports parse into accepted, rejected, pending and conflicting rows (a 999 can only reject; a provider-level 277CA trace is ignored); the ledger keeps keys only as private digests; a real replayer run ends SAVED_AWAITING_CHECK and not billable; an unchecked second effect, a failed run or anything else uncertain stays RECONCILIATION_REQUIRED; an accepting row settles VERIFIED, while a rejecting row, a duplicate key, the deadline (checked before any report), a report older than the save, or a report read another way does not; the CLI settles it and never rewrites report.json; verify-run refuses the kind."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "desktop-readback-separate-session",
+      "claim": "A save in a desktop, RDP or Citrix application can be checked the way a person checks it: a separate session that is never the one that typed searches for the record, opens the one result that shows its identifier, confirms the record view shows that identifier, and reads the saved fields through UI Automation or OCR, judged by the shared effect judge. The look-up types only into the search box and never clicks a control with a save-like label. With its own sign-in it declares tier 2 (a separate session); without one, tier 3. It is never labeled a system-of-record read.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "The WinForms fixture runs as a UI Automation stand-in that mirrors patient_notes.ps1 and its pn_db.py persistence, and the kiosk as pixels drawn at the Tk layout; neither is the live Windows VM or the Docker RDP fixture in this evidence. On the pixel path OpenAdapt cannot prove where keyboard focus is; it checks the search box shows the query before it submits."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_desktop_readback.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "On the WinForms patient-notes fixture through the real in-guest agent and Windows client (UI Automation): confirms a saved note, refutes a wrong one, opens only the row that shows the full identity past a same-first-name decoy, halts on two matching rows, and refuses a search button with a save-like label. On the RDP kiosk's look-up panel through the RDP backend and real OCR: confirms a booking from its own RDP logon (tier 2), never turns an OCR mismatch into REFUTED, and never takes \"not found\" as proof that nothing was saved. The same look-up confirms through a Citrix Workspace window and a native macOS window (tier 3, a window as the same user). Neither fixture's save control or form is touched. The deployment refuses a read-back session that is the session that types."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "deterministic-zero-model-replay",
+      "claim": "Replay is deterministic, local, and $0 \u2014 zero model calls on either the record or the replay side.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "README.md",
+        "website",
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "A VLM rung exists as the lowest fallback of the ladder; it is not invoked on a clean deterministic replay, and never on the record side."
+      ],
+      "evidence": [
+        {
+          "path": "tests/e2e/test_record_compile_replay.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (e2e-browser))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "e2e-browser",
+          "junit_status": null,
+          "proves": "Baseline replay x3 resolves every step on the `template` rung with 0 heals and 0 model calls; healed bundles replay clean afterward."
+        },
+        {
+          "path": "tests/test_replayer.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The replayer is a deterministic resolution ladder; the VLM rung is a fallback, not on the default path \u2014 the core runtime is model-free."
+        },
+        {
+          "path": "benchmark/BENCHMARK.md",
+          "kind": "benchmark",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "CI-reproducible MockMed run artifact: 100/100 compiled replays at 4.9s p50 with zero model calls, measured 2026-07-08 on Flow 0.1.0 (pre-v0.2.0 source build); field/artifact reference."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "effect-verification-silent-writes",
+      "claim": "Effect verification against the system of record catches silent wrong writes the screen-only oracle misses (5 of 7 transactional fault classes).",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "README.md",
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Verification requires the step to DECLARE typed `effects` AND a configured EffectVerifier. Without a real system-of-record verifier, on-screen read-back is SAME-SURFACE and not independent."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_effect_verifier.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The REST/FHIR/document-hash verifiers confirm exactly-one write and refute duplicate / missing / partial / collateral-loss writes."
+        },
+        {
+          "path": "tests/test_silent_wrong_action_benchmark.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Each silent-wrong-action class is silent under the screen-only oracle and is CAUGHT once effects are declared and verified."
+        },
+        {
+          "path": "tests/test_effect_fhir.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The FHIR effect verifier's read/confirm/refute/indeterminate contract (the live-OpenEMR smoke is a separate opt-in function in this file)."
+        },
+        {
+          "path": "benchmark/fault_model/FAULT_MODEL.md",
+          "kind": "benchmark",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "The 7-class transactional fault-model study: 5/7 classes silently mishandled by screen-only, all 5 halt through the real replayer."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "halt-teach-promote",
+      "claim": "A halt is learnable: halt -> teach a correction -> promote a guarded branch, refusing underdetermined fixes.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "README.md",
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Promotion is governed by a regression gate that blocks identity- weakening corrections; the loop refuses to guess when the fix is underdetermined."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_halt_learn_loop.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "A surprise modal halts and emits a learnable trace; teaching promotes a guarded dismiss branch that replays without regression; an underdetermined correction is refused."
+        },
+        {
+          "path": "tests/test_teach_cli.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The `teach` CLI resolves a halt via a correction spec or a recording, refuses an underdetermined fix, and errors on a non-halted run."
+        },
+        {
+          "path": "tests/test_teach_placement.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "A recorded fix's own target is carried into the taught bundle; the fix is placed before a step that never acted and after a step that acted (retried, or checked against its expected screen); retrying a step that can write, and a fix with no recorded target, are refused."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "identifier-crop-compile-emission",
+      "claim": "The compiler emits a pixel identifier crop (anchor.identifier_crop) for identity-armed steps without structured identity \u2014 and for any step whose identifying region is marked at record time (--identifier) \u2014 so the pixel-compare identity tier arms on remote-display/pixel replays; every crop-less identity-applicable step records an explicit degrade reason, and lint surfaces per-bundle pixel-identity coverage.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Mechanism proven on synthetic fixtures and the bundled demo app only \u2014 this does NOT re-qualify any desktop/remote-display substrate, and the pixel tier remains MISMATCH-or-ABSTAIN (it can add a safe halt on a wrong identifier, never authorize a match; PIXEL_VERIFY_ENABLED stays off pending a jitter-robust distance).",
+        "Automatic emission requires an OCR-readable identity band at compile time; icon-only or unreadable rows still compile crop-less (with the recorded reason) and fall back to the OCR band tier at replay."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_compile_identifier_crop.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Synthetic-fixture proof of the emission mechanism: a pixel-only recording compiles WITH a crop under templates/identifiers/ (sealed + manifest-hashed like every image crop); a structured recording writes NO identity pixels and records why; explicit --identifier markings (event rect / meta region) win; encrypted save seals the crop and the sealed crop still reaches the tier; the compiled crop drives a wrong-MRN MISMATCH through the real replayer ladder while pixel VERIFY stays hard-gated off (zero-false-accept preserved)."
+        },
+        {
+          "path": "tests/test_identifier_crop_lint.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Lint coverage surfacing: identity-armed steps with vs without crops (missing_identifier_crop findings carry the compiler's degrade reason; warn on band-only identity, info under structured identity)."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "identity-gate-halt-armed",
+      "claim": "On ambiguity the runtime halts instead of guessing, and an identity gate refuses a wrong-entity (wrong-patient) click \u2014 on ARMED steps only.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "README.md",
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Identity verification covers ONLY armed steps. Real bundles arm a MINORITY of clicks (4 of 12 on a recent live OpenEMR bundle); an UNARMED click proceeds with no identity check whatsoever. Coverage is an auditable per-step metric, but disclosure does not close the gap. `scaffold-verifier --bundle` reports coverage before and after evidence from the recording's DOM / accessibility text at each unarmed click; it proposes only evidence the runtime checks on that surface, and a person applies it."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_identity.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Wrong-entity / near-name sibling / generic-band / param-in-band probes: the identity check refuses to verify a mismatched target and never arms on non-discriminative bands."
+        },
+        {
+          "path": "tests/test_disambiguation.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Underdetermined targets surface as explicit disambiguation rather than a guessed click."
+        },
+        {
+          "path": "tests/test_identity_fuzz.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Public property-based checks preserve the never-false-accept invariant for collapsible identifiers while requiring clean identifiers to remain verifiable."
+        },
+        {
+          "path": "tests/test_identity_ladder.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The identity resolution ladder (structural/template/OCR) escalation."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "lookup-teaches-the-check",
+      "claim": "When a recording shows the person or the agent look the record up after saving, Flow proposes that look-up as the record check with no marking or configuration: a same-session check and, for desktop, RDP and Citrix recordings, a separate-session desktop_readback. Every proposal waits for a person.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Measured on one synthetic kiosk recording. The detector needs a save button with a save word, a typed and submitted search, and the saved values readable by OCR on the last frame."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_lookup_detect.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "On a synthetic recording of the RDP kiosk: finds the save by its OCR label, the search, and only the values the look-up brought onto the screen (not the saved form still showing the same text); proposes nothing without a look-up; the proposed desktop_readback, with only its address filled in, confirms the booking through real OCR from separate sessions; check accept writes check.json and never overwrites one; record --verify needs no file and ends with the look-up prompt when none is found."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "mockmed-benchmark-ci-reproducible",
+      "claim": "The MockMed benchmark is CI-reproducible: compiled replay finishes ~4.9s p50 with zero model calls versus ~37.5s p50 (~$0.27/run) for the agent. Measured 2026-07-08 on Flow 0.1.0, a pre-v0.2.0 source build; not re-measured on a later release.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "README.md",
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "The published latency/cost figures come from a dated run artifact measured on Flow 0.1.0 (pre-v0.2.0 source checkout; exact runtime HEAD not retained) on 2026-07-08; the app is intentionally simple, so success rate (100/100 vs 20/20) is not the story \u2014 the standing cost/latency delta is. Agent cost is a list-price estimate."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_mockmed.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The MockMed app + drift screens are deterministic and reachable, the substrate the benchmark replays against."
+        },
+        {
+          "path": "tests/test_benchmark.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The benchmark harness / report accounting that produces the numbers."
+        },
+        {
+          "path": "benchmark/BENCHMARK.md",
+          "kind": "benchmark",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "Full numbers, methodology, and caveats for the CI-reproducible MockMed comparison (dated run artifact)."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "qualified-remote-decision-v2-supported",
+      "claim": "A negotiated V2 attended task binds optional reviewed entity wording to the exact qualification, bundle, step, policy, and pause authority. An unqualified or unrecognized entity class stays local and the remote task uses the signed neutral record or item fallback.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "V2 requires openadapt-types 0.10.x and explicit peer negotiation. The dependency does not upgrade a V1 consumer, and the byte-compatible V1 path remains available.",
+        "The entity class is presentation metadata only. Actual record identity remains inside the customer-controlled runner and is revalidated before any resumed action."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_attended_actions.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Required CI covers the V1-compatible and V2 signed envelopes, provenance binding, remote-safe entity vocabulary, idempotent decisions, and fresh revalidation before resumed actuation."
+        },
+        {
+          "path": "tests/test_qualification_project.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Required CI requires the current exact qualification contract before the V2 producer can emit its reviewed presentation metadata."
+        },
+        {
+          "path": "docs/DECISION_DELIVERY.md",
+          "kind": "doc",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "The delivery contract defines explicit V2 negotiation, neutral V1 fallback, and the local boundary for actual entity identifiers."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "record-check-from-app-reads",
+      "claim": "scaffold-verifier builds a record check from the reads the app made after the save (the recording's network capture, a SQLite database read path, or a reviewed verifier section), binds the recorded values to run parameters, guards every other table when a database path is given (no row added, changed or removed), and tests the check against injected bad writes before anyone reviews it. A check that misses one is written as a draft with the misses listed. Every effect stays unconfirmed until a person removes the flag.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Proven on synthetic fixtures only (MockMed, the effect_e2e SQLite record service, an OpenEMR-shaped FHIR fake). A check built from API reads alone cannot see writes to tables it does not read, so it stays a draft unless a database path covers them or a person declares the read complete. The fault classes are the effect_e2e taxonomy, not a measured field incident rate.",
+        "Saves that update an existing record are not handled yet: the check expects one new record. The read's credential is the operator's job; the recording's reads used the browser's sign-in."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_record_check_synthesis.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": "test_database_read_path_covers_every_table_and_passes_the_suite",
+          "node_found": true,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "On the benchmark/effect_e2e record service, a check built from a database read path catches every injected bad write end to end through the real replayer (including the stray billing write) and passes the clean save."
+        },
+        {
+          "path": "tests/test_record_check_synthesis.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": "test_one_rest_read_misses_the_billing_write_and_stays_a_draft",
+          "node_found": true,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "A check built from one REST read misses the stray billing write, both in the recorded-state fault test and end to end, and is written as a draft with that miss listed."
+        },
+        {
+          "path": "tests/test_record_check_synthesis.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": "test_mockmed_needs_a_declared_complete_read",
+          "node_found": true,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "On the MockMed --break-it fault server, the check built from the app's /api/db read catches every fault end to end once a person declares the read complete, and stays a draft until then."
+        },
+        {
+          "path": "tests/test_record_check_synthesis.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": "test_openemr_fhir_check_refutes_store_level_faults",
+          "node_found": true,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "On the OpenEMR-shaped FHIR R4 fake, the check found from the Observation search refutes partial, duplicate, phantom, wrong-patient and lost-update faults and confirms the clean save."
+        },
+        {
+          "path": "tests/test_record_check_synthesis.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": "test_guards_catch_a_changed_or_deleted_row_through_the_real_read",
+          "node_found": true,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The generated SQL reads, run against a real SQLite file, refute a save that also changed or deleted a row in another table."
+        },
+        {
+          "path": "tests/test_record_check_synthesis.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": "test_verify_run_refuses_until_a_person_removes_the_flags",
+          "node_found": true,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "verify-run refuses the proposed check until every needs_operator_confirmation line is removed."
+        },
+        {
+          "path": "docs/EFFECT_KIT.md",
+          "kind": "doc",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "The operator guide: inputs, outputs, the fault classes, and what the proof does not cover."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "reviewed-judgment-cases-supported",
+      "claim": "A qualification project can bind typed local facts, evidence hashes, reviewer provenance, and the exact decision contract to reviewed examples and counterfactuals. It can retain permanent human authority, record a reviewed automatic-rule candidate, or refuse certification until more evidence exists, without converting one historical choice into policy.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "An automatic-rule case names only a reviewed rule identifier and finite option. Flow does not infer or generate executable policy from the case; the rule must be authored and qualified through the normal program path.",
+        "A retained human-node case preserves runtime human authority. A more-evidence-required case refuses certification instead of guessing."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_judgment_cases.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Required CI covers closed fact schemas, exact workflow and decision bindings, local-only evidence references, conflict refusal, reciprocal contrast coverage for automatic-rule candidates, retained human authority, unresolved-evidence refusal, and the invariant that case evaluation never edits or synthesizes the executable rule."
+        },
+        {
+          "path": "tests/test_qualification_project.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Required CI binds the reviewed local evidence bytes and review note into certification, reproduces that exact contract when a qualified workflow is saved, and refuses changed case or evidence digests."
+        },
+        {
+          "path": "docs/BUSINESS_DECISIONS.md",
+          "kind": "doc",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "The public contract separates qualification-time judgment capture from one live runtime answer and describes the scriptable authoring and judgment-case interfaces."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "server-response-evidence",
+      "claim": "In a browser, the server's answer to a save's own write request is kept on the step and counted on the receipt at check level same_screen, as method, status and media type only. It comes from the same transaction as the save, so on its own it never confirms an effect or makes a run VERIFIED.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Only the browser backend sees server answers. A save that writes to another origin (a separate API host) leaves none. An answer that arrives after the screen postconditions is not kept."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_server_responses.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Only same-origin fetch, XHR and form writes sent after the mark are kept, never beacons, other origins, requests already in flight or service-worker answers, and never a URL, path or body; a real Chromium save produces one; a 201 answer with an unconfirmed read-back still ends RECONCILIATION_REQUIRED and not billable; a redirect counts as not an error; the receipt counts answers without changing its evidence tier; results without answers serialize as before."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "substrate-runtime-validation-supported",
+      "claim": "Runtime-validation v3 binds Standard and Regulated hosted activation to the exact governed authorization template reproduced from the sealed qualification. It also binds the successful run's resolved target kind (`web|windows|macos|linux|rdp|citrix`), artifact, compiler, parameter schema, strict lint, policy, risk, report, and opaque environment. Web retains its exact HTTPS/host boundary. Native and remote execution emits no app, window, host, readiness, or backend-hint values to Cloud. Local verification retains signed v1 and v2 compatibility.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "README.md",
+        "docs",
+        "website"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "The HMAC proves operator-token possession and envelope integrity; it is not independent observation of the local replay or certification of an arbitrary target application."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_runtime_validation.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Required CI exercises all six target kinds, validates v3 against its closed JSON Schema, refuses a Standard or Regulated activation without an exact template, binds the template SHA to the HMAC, preserves web URL/host checks, keeps native/remote execution empty, verifies the canonical HMAC vector, and retains signed v1/v2 compatibility."
+        },
+        {
+          "path": "tests/test_cli_new_commands.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Required CI carries the resolved web, Windows, and Citrix backend token through durable resume into the new run report rather than trusting an upload-time relabel."
+        },
+        {
+          "path": "schemas/runtime-validation-attestation-v3.json",
+          "kind": "doc",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "The public closed envelope requires target_kind and the governed authorization template SHA, and conditionally permits browser execution fields only for web."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "typed-business-decisions-supported",
+      "claim": "A qualification client can add or update a typed finite business-policy decision without editing an internal manifest. The compiled workflow can then pause at that decision, accept one authorized and attributed choice, retain a signed durable receipt, revalidate the live application, and continue only through the certified successor branch.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "The engine validates a principal and its roles; it does not authenticate a self-asserted user. Desktop, Cloud, or a customer-local identity route must supply the authenticated principal.",
+        "A human choice is control authority only. It cannot satisfy entity identity, a postcondition, or effect verification, and it cannot turn a screen statement or a human assertion into VERIFIED."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_business_decision.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Required CI covers typed qualification authoring and replacement, qualification-revision and certification invalidation, ambiguous insertion refusal, the closed runtime decision contract, role and evidence checks, expiry, renewal, idempotency, crash recovery, signed branch authority, scoped outputs, fresh live-state revalidation, normal downstream action gates, and repair-bypass refusal."
+        },
+        {
+          "path": "docs/BUSINESS_DECISIONS.md",
+          "kind": "doc",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "The public engine contract separates a declared business choice from an operational halt and defines the Desktop, Cloud, and customer-local integration boundary."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "ui-readback-separate-session",
+      "claim": "With no API or database access, a save can be checked through the application's own record page: a separate browser with a new, empty context and its own sign-in opens the record by identifier, confirms the page shows that identifier, reads the saved fields from the page structure, and judges them with the shared effect judge. After sign-in the session refuses every request that is not a read. The check declares tier 2 (a separate session) and is never labeled a system-of-record read.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "README.md",
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Measured on synthetic fixtures (MockMed and the effect_e2e record service) whose record pages were written for these tests, not on a production application's record pages. The check sees only what a record page shows and is only as independent as the page's own read path."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_ui_readback_verifier.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The verdict rules without a browser: confirms, refutes partial, duplicate and lost-update saves, never claims absence as proof that nothing was saved, halts on another record's page, a refused request, a changed layout, a shortened value, an unfresh session or a failed sign-in, declares tier 2, and keeps every existing verifier identity digest unchanged."
+        },
+        {
+          "path": "tests/test_ui_readback_browser.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "In a real browser against MockMed's server-rendered record pages: its own sign-in even when another session is signed in, refuted wrong saves, fetch/beacon/XHR/form posts refused with none reaching the server, display changes that stop rather than pass, and tier-2 evidence through the real replayer."
+        },
+        {
+          "path": "tests/test_ui_readback_benchmark.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "A subset of the measurement: the same-screen check misses accepted wrong saves, the UI read-back catches partial, wrong-record and lost-update saves, and the measured blind spots stay blind."
+        },
+        {
+          "path": "benchmark/ui_readback",
+          "kind": "benchmark",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "The full measurement next to a same-screen check and an API read, on the GUI replay and API-write fault lists plus display probes."
+        }
+      ],
+      "errors": []
+    },
     {
       "id": "web-supported",
       "claim": "The Playwright browser path records a GUI workflow and replays it deterministically and locally. Required CI exercises the recorder, compiler, and replay contract.",
@@ -267,1238 +1131,6 @@
       "errors": []
     },
     {
-      "id": "deterministic-zero-model-replay",
-      "claim": "Replay is deterministic, local, and $0 \u2014 zero model calls on either the record or the replay side.",
-      "tier": "supported",
-      "reproducibility": null,
-      "surfaces": [
-        "README.md",
-        "website",
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "A VLM rung exists as the lowest fallback of the ladder; it is not invoked on a clean deterministic replay, and never on the record side."
-      ],
-      "evidence": [
-        {
-          "path": "tests/e2e/test_record_compile_replay.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (e2e-browser))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "e2e-browser",
-          "junit_status": null,
-          "proves": "Baseline replay x3 resolves every step on the `template` rung with 0 heals and 0 model calls; healed bundles replay clean afterward."
-        },
-        {
-          "path": "tests/test_replayer.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "The replayer is a deterministic resolution ladder; the VLM rung is a fallback, not on the default path \u2014 the core runtime is model-free."
-        },
-        {
-          "path": "benchmark/BENCHMARK.md",
-          "kind": "benchmark",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "CI-reproducible MockMed run artifact: 100/100 compiled replays at 4.9s p50 with zero model calls, measured 2026-07-08 on Flow 0.1.0 (pre-v0.2.0 source build); field/artifact reference."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "effect-verification-silent-writes",
-      "claim": "Effect verification against the system of record catches silent wrong writes the screen-only oracle misses (5 of 7 transactional fault classes).",
-      "tier": "supported",
-      "reproducibility": null,
-      "surfaces": [
-        "README.md",
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "Verification requires the step to DECLARE typed `effects` AND a configured EffectVerifier. Without a real system-of-record verifier, on-screen read-back is SAME-SURFACE and not independent."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_effect_verifier.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "The REST/FHIR/document-hash verifiers confirm exactly-one write and refute duplicate / missing / partial / collateral-loss writes."
-        },
-        {
-          "path": "tests/test_silent_wrong_action_benchmark.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Each silent-wrong-action class is silent under the screen-only oracle and is CAUGHT once effects are declared and verified."
-        },
-        {
-          "path": "tests/test_effect_fhir.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "The FHIR effect verifier's read/confirm/refute/indeterminate contract (the live-OpenEMR smoke is a separate opt-in function in this file)."
-        },
-        {
-          "path": "benchmark/fault_model/FAULT_MODEL.md",
-          "kind": "benchmark",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "The 7-class transactional fault-model study: 5/7 classes silently mishandled by screen-only, all 5 halt through the real replayer."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "effect-verifier-kit",
-      "claim": "The effect-verifier kit makes declaring and wiring effect verification a reviewed deployment-config exercise instead of bespoke per-deployment code: declarative REST / FHIR / read-only-SQL / file-arrival / document-hash verifier configs with secret-isolated auth references and explicit run-parameter binding, a cross-substrate exactly-one-NEW-record duplicate guard, per-consequential-step effect-coverage lint/certify gates, and typed reconciliation tasks on halt. A deployment with multiple reviewed read boundaries selects the strongest evidence tier before actuation, retains that exact selection through durable resume, and never downgrades to a weaker verifier after an action.",
-      "tier": "validating",
-      "reproducibility": null,
-      "surfaces": [
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "CONTRACT-PROVEN, not live-proven: the SQL verifier is exercised against sqlite fixtures (no production MariaDB/Postgres), the SFTP arrival path against a fake transport (no real SFTP server), and the worked-example configs are templates \u2014 only the FHIR substrate has an additional opt-in live-OpenEMR test. Per-verifier claims are exactly as strong as these tests."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_effect_sql.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "The read-only SQL verifier's whitelist (mutation/stacking/comment smuggling refused at construction) and full verdict contract, plus the exact table-delta audit promoted from the Frappe Lending reference matrix \u2014 against LOCAL sqlite fixtures only."
-        },
-        {
-          "path": "tests/test_effect_file_arrival.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "File-arrival verdicts (pattern / size>0 / mtime freshness / content probe / duplicate export) against real temp directories, and the SFTP path against an in-memory fake paramiko-shaped transport."
-        },
-        {
-          "path": "tests/test_effect_kit_config.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "The declarative construction path: env-var auth references fail loud when unset, run-parameter references resolve at build (and refuse to construct unresolved), and pre-kit configs build byte-identically."
-        },
-        {
-          "path": "tests/test_effect_verifier_candidates.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Required CI constructs and preflights all reviewed candidates before input, pins the strongest verifier and its pre-state, preserves the binding through durable resume, and refuses an unavailable selected verifier rather than falling back after an action."
-        },
-        {
-          "path": "tests/test_effect_coverage_lint.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "lint warns per consequential step lacking an effect contract and reports coverage %; certify fails the same gap only when the policy sets require_effects_for_irreversible (warn-vs-fail is policy-configurable)."
-        },
-        {
-          "path": "tests/test_effect_reconciliation.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Every escalated verification failure emits a typed ReconciliationTask carrying the one-way contract hash and verdict evidence \u2014 never the resolved selector values."
-        },
-        {
-          "path": "docs/EFFECT_KIT.md",
-          "kind": "doc",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "The operator-facing kit contract: config reference plus Frappe (REST/SQL) and OpenEMR (FHIR/SQL) worked examples targeting the reference fixtures."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "record-check-from-app-reads",
-      "claim": "scaffold-verifier builds a record check from the reads the app made after the save (the recording's network capture, a SQLite database read path, or a reviewed verifier section), binds the recorded values to run parameters, guards every other table when a database path is given (no row added, changed or removed), and tests the check against injected bad writes before anyone reviews it. A check that misses one is written as a draft with the misses listed. Every effect stays unconfirmed until a person removes the flag.",
-      "tier": "supported",
-      "reproducibility": null,
-      "surfaces": [
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "Proven on synthetic fixtures only (MockMed, the effect_e2e SQLite record service, an OpenEMR-shaped FHIR fake). A check built from API reads alone cannot see writes to tables it does not read, so it stays a draft unless a database path covers them or a person declares the read complete. The fault classes are the effect_e2e taxonomy, not a measured field incident rate.",
-        "Saves that update an existing record are not handled yet: the check expects one new record. The read's credential is the operator's job; the recording's reads used the browser's sign-in."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_record_check_synthesis.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": "test_database_read_path_covers_every_table_and_passes_the_suite",
-          "node_found": true,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "On the benchmark/effect_e2e record service, a check built from a database read path catches every injected bad write end to end through the real replayer (including the stray billing write) and passes the clean save."
-        },
-        {
-          "path": "tests/test_record_check_synthesis.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": "test_one_rest_read_misses_the_billing_write_and_stays_a_draft",
-          "node_found": true,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "A check built from one REST read misses the stray billing write, both in the recorded-state fault test and end to end, and is written as a draft with that miss listed."
-        },
-        {
-          "path": "tests/test_record_check_synthesis.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": "test_mockmed_needs_a_declared_complete_read",
-          "node_found": true,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "On the MockMed --break-it fault server, the check built from the app's /api/db read catches every fault end to end once a person declares the read complete, and stays a draft until then."
-        },
-        {
-          "path": "tests/test_record_check_synthesis.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": "test_openemr_fhir_check_refutes_store_level_faults",
-          "node_found": true,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "On the OpenEMR-shaped FHIR R4 fake, the check found from the Observation search refutes partial, duplicate, phantom, wrong-patient and lost-update faults and confirms the clean save."
-        },
-        {
-          "path": "tests/test_record_check_synthesis.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": "test_guards_catch_a_changed_or_deleted_row_through_the_real_read",
-          "node_found": true,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "The generated SQL reads, run against a real SQLite file, refute a save that also changed or deleted a row in another table."
-        },
-        {
-          "path": "tests/test_record_check_synthesis.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": "test_verify_run_refuses_until_a_person_removes_the_flags",
-          "node_found": true,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "verify-run refuses the proposed check until every needs_operator_confirmation line is removed."
-        },
-        {
-          "path": "docs/EFFECT_KIT.md",
-          "kind": "doc",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "The operator guide: inputs, outputs, the fault classes, and what the proof does not cover."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "ui-readback-separate-session",
-      "claim": "With no API or database access, a save can be checked through the application's own record page: a separate browser with a new, empty context and its own sign-in opens the record by identifier, confirms the page shows that identifier, reads the saved fields from the page structure, and judges them with the shared effect judge. After sign-in the session refuses every request that is not a read. The check declares tier 2 (a separate session) and is never labeled a system-of-record read.",
-      "tier": "supported",
-      "reproducibility": null,
-      "surfaces": [
-        "README.md",
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "Measured on synthetic fixtures (MockMed and the effect_e2e record service) whose record pages were written for these tests, not on a production application's record pages. The check sees only what a record page shows and is only as independent as the page's own read path."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_ui_readback_verifier.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "The verdict rules without a browser: confirms, refutes partial, duplicate and lost-update saves, never claims absence as proof that nothing was saved, halts on another record's page, a refused request, a changed layout, a shortened value, an unfresh session or a failed sign-in, declares tier 2, and keeps every existing verifier identity digest unchanged."
-        },
-        {
-          "path": "tests/test_ui_readback_browser.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "In a real browser against MockMed's server-rendered record pages: its own sign-in even when another session is signed in, refuted wrong saves, fetch/beacon/XHR/form posts refused with none reaching the server, display changes that stop rather than pass, and tier-2 evidence through the real replayer."
-        },
-        {
-          "path": "tests/test_ui_readback_benchmark.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "A subset of the measurement: the same-screen check misses accepted wrong saves, the UI read-back catches partial, wrong-record and lost-update saves, and the measured blind spots stay blind."
-        },
-        {
-          "path": "benchmark/ui_readback",
-          "kind": "benchmark",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "The full measurement next to a same-screen check and an API read, on the GUI replay and API-write fault lists plus display probes."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "desktop-readback-separate-session",
-      "claim": "A save in a desktop, RDP or Citrix application can be checked the way a person checks it: a separate session that is never the one that typed searches for the record, opens the one result that shows its identifier, confirms the record view shows that identifier, and reads the saved fields through UI Automation or OCR, judged by the shared effect judge. The look-up types only into the search box and never clicks a control with a save-like label. With its own sign-in it declares tier 2 (a separate session); without one, tier 3. It is never labeled a system-of-record read.",
-      "tier": "supported",
-      "reproducibility": null,
-      "surfaces": [
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "The WinForms fixture runs as a UI Automation stand-in that mirrors patient_notes.ps1 and its pn_db.py persistence, and the kiosk as pixels drawn at the Tk layout; neither is the live Windows VM or the Docker RDP fixture in this evidence. On the pixel path OpenAdapt cannot prove where keyboard focus is; it checks the search box shows the query before it submits."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_desktop_readback.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "On the WinForms patient-notes fixture through the real in-guest agent and Windows client (UI Automation): confirms a saved note, refutes a wrong one, opens only the row that shows the full identity past a same-first-name decoy, halts on two matching rows, and refuses a search button with a save-like label. On the RDP kiosk's look-up panel through the RDP backend and real OCR: confirms a booking from its own RDP logon (tier 2), never turns an OCR mismatch into REFUTED, and never takes \"not found\" as proof that nothing was saved. The same look-up confirms through a Citrix Workspace window and a native macOS window (tier 3, a window as the same user). Neither fixture's save control or form is touched. The deployment refuses a read-back session that is the session that types."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "server-response-evidence",
-      "claim": "In a browser, the server's answer to a save's own write request is kept on the step and counted on the receipt at check level same_screen, as method, status and media type only. It comes from the same transaction as the save, so on its own it never confirms an effect or makes a run VERIFIED.",
-      "tier": "supported",
-      "reproducibility": null,
-      "surfaces": [
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "Only the browser backend sees server answers. A save that writes to another origin (a separate API host) leaves none. An answer that arrives after the screen postconditions is not kept."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_server_responses.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Only same-origin fetch, XHR and form writes sent after the mark are kept, never beacons, other origins, requests already in flight or service-worker answers, and never a URL, path or body; a real Chromium save produces one; a 201 answer with an unconfirmed read-back still ends RECONCILIATION_REQUIRED and not billable; a redirect counts as not an error; the receipt counts answers without changing its evidence tier; results without answers serialize as before."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "deferred-report-check",
-      "claim": "A save that only a later report can confirm (an X12 999 or 277CA acknowledgment, a CSV export, a saved status page) ends SAVED_AWAITING_CHECK: never VERIFIED or billable until a matching accepting report row settles it, and RECONCILIATION_REQUIRED when the report rejects it or no row arrives by the deadline.",
-      "tier": "supported",
-      "reproducibility": null,
-      "surfaces": [
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "The report confirms acceptance of the item with that key, not its field values. The hosted runner and the Execute v1 and production-receipt wire formats carry the outcome as RECONCILIATION_REQUIRED."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_deferred_report.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Synthetic 999, 277CA, CSV and text reports parse into accepted, rejected, pending and conflicting rows (a 999 can only reject; a provider-level 277CA trace is ignored); the ledger keeps keys only as private digests; a real replayer run ends SAVED_AWAITING_CHECK and not billable; an unchecked second effect, a failed run or anything else uncertain stays RECONCILIATION_REQUIRED; an accepting row settles VERIFIED, while a rejecting row, a duplicate key, the deadline (checked before any report), a report older than the save, or a report read another way does not; the CLI settles it and never rewrites report.json; verify-run refuses the kind."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "lookup-teaches-the-check",
-      "claim": "When a recording shows the person or the agent look the record up after saving, Flow proposes that look-up as the record check with no marking or configuration: a same-session check and, for desktop, RDP and Citrix recordings, a separate-session desktop_readback. Every proposal waits for a person.",
-      "tier": "supported",
-      "reproducibility": null,
-      "surfaces": [
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "Measured on one synthetic kiosk recording. The detector needs a save button with a save word, a typed and submitted search, and the saved values readable by OCR on the last frame."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_lookup_detect.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "On a synthetic recording of the RDP kiosk: finds the save by its OCR label, the search, and only the values the look-up brought onto the screen (not the saved form still showing the same text); proposes nothing without a look-up; the proposed desktop_readback, with only its address filled in, confirms the booking through real OCR from separate sessions; check accept writes check.json and never overwrites one; record --verify needs no file and ends with the look-up prompt when none is found."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "identity-gate-halt-armed",
-      "claim": "On ambiguity the runtime halts instead of guessing, and an identity gate refuses a wrong-entity (wrong-patient) click \u2014 on ARMED steps only.",
-      "tier": "supported",
-      "reproducibility": null,
-      "surfaces": [
-        "README.md",
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "Identity verification covers ONLY armed steps. Real bundles arm a MINORITY of clicks (4 of 12 on a recent live OpenEMR bundle); an UNARMED click proceeds with no identity check whatsoever. Coverage is an auditable per-step metric, but disclosure does not close the gap. `scaffold-verifier --bundle` reports coverage before and after evidence from the recording's DOM / accessibility text at each unarmed click; it proposes only evidence the runtime checks on that surface, and a person applies it."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_identity.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Wrong-entity / near-name sibling / generic-band / param-in-band probes: the identity check refuses to verify a mismatched target and never arms on non-discriminative bands."
-        },
-        {
-          "path": "tests/test_disambiguation.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Underdetermined targets surface as explicit disambiguation rather than a guessed click."
-        },
-        {
-          "path": "tests/test_identity_fuzz.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Public property-based checks preserve the never-false-accept invariant for collapsible identifiers while requiring clean identifiers to remain verifiable."
-        },
-        {
-          "path": "tests/test_identity_ladder.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "The identity resolution ladder (structural/template/OCR) escalation."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "identifier-crop-compile-emission",
-      "claim": "The compiler emits a pixel identifier crop (anchor.identifier_crop) for identity-armed steps without structured identity \u2014 and for any step whose identifying region is marked at record time (--identifier) \u2014 so the pixel-compare identity tier arms on remote-display/pixel replays; every crop-less identity-applicable step records an explicit degrade reason, and lint surfaces per-bundle pixel-identity coverage.",
-      "tier": "supported",
-      "reproducibility": null,
-      "surfaces": [
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "Mechanism proven on synthetic fixtures and the bundled demo app only \u2014 this does NOT re-qualify any desktop/remote-display substrate, and the pixel tier remains MISMATCH-or-ABSTAIN (it can add a safe halt on a wrong identifier, never authorize a match; PIXEL_VERIFY_ENABLED stays off pending a jitter-robust distance).",
-        "Automatic emission requires an OCR-readable identity band at compile time; icon-only or unreadable rows still compile crop-less (with the recorded reason) and fall back to the OCR band tier at replay."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_compile_identifier_crop.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Synthetic-fixture proof of the emission mechanism: a pixel-only recording compiles WITH a crop under templates/identifiers/ (sealed + manifest-hashed like every image crop); a structured recording writes NO identity pixels and records why; explicit --identifier markings (event rect / meta region) win; encrypted save seals the crop and the sealed crop still reaches the tier; the compiled crop drives a wrong-MRN MISMATCH through the real replayer ladder while pixel VERIFY stays hard-gated off (zero-false-accept preserved)."
-        },
-        {
-          "path": "tests/test_identifier_crop_lint.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Lint coverage surfacing: identity-armed steps with vs without crops (missing_identifier_crop findings carry the compiler's degrade reason; warn on band-only identity, info under structured identity)."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "halt-teach-promote",
-      "claim": "A halt is learnable: halt -> teach a correction -> promote a guarded branch, refusing underdetermined fixes.",
-      "tier": "supported",
-      "reproducibility": null,
-      "surfaces": [
-        "README.md",
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "Promotion is governed by a regression gate that blocks identity- weakening corrections; the loop refuses to guess when the fix is underdetermined."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_halt_learn_loop.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "A surprise modal halts and emits a learnable trace; teaching promotes a guarded dismiss branch that replays without regression; an underdetermined correction is refused."
-        },
-        {
-          "path": "tests/test_teach_cli.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "The `teach` CLI resolves a halt via a correction spec or a recording, refuses an underdetermined fix, and errors on a non-halted run."
-        },
-        {
-          "path": "tests/test_teach_placement.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "A recorded fix's own target is carried into the taught bundle; the fix is placed before a step that never acted and after a step that acted (retried, or checked against its expected screen); retrying a step that can write, and a fix with no recorded target, are refused."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "typed-business-decisions-supported",
-      "claim": "A qualification client can add or update a typed finite business-policy decision without editing an internal manifest. The compiled workflow can then pause at that decision, accept one authorized and attributed choice, retain a signed durable receipt, revalidate the live application, and continue only through the certified successor branch.",
-      "tier": "supported",
-      "reproducibility": null,
-      "surfaces": [
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "The engine validates a principal and its roles; it does not authenticate a self-asserted user. Desktop, Cloud, or a customer-local identity route must supply the authenticated principal.",
-        "A human choice is control authority only. It cannot satisfy entity identity, a postcondition, or effect verification, and it cannot turn a screen statement or a human assertion into VERIFIED."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_business_decision.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Required CI covers typed qualification authoring and replacement, qualification-revision and certification invalidation, ambiguous insertion refusal, the closed runtime decision contract, role and evidence checks, expiry, renewal, idempotency, crash recovery, signed branch authority, scoped outputs, fresh live-state revalidation, normal downstream action gates, and repair-bypass refusal."
-        },
-        {
-          "path": "docs/BUSINESS_DECISIONS.md",
-          "kind": "doc",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "The public engine contract separates a declared business choice from an operational halt and defines the Desktop, Cloud, and customer-local integration boundary."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "reviewed-judgment-cases-supported",
-      "claim": "A qualification project can bind typed local facts, evidence hashes, reviewer provenance, and the exact decision contract to reviewed examples and counterfactuals. It can retain permanent human authority, record a reviewed automatic-rule candidate, or refuse certification until more evidence exists, without converting one historical choice into policy.",
-      "tier": "supported",
-      "reproducibility": null,
-      "surfaces": [
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "An automatic-rule case names only a reviewed rule identifier and finite option. Flow does not infer or generate executable policy from the case; the rule must be authored and qualified through the normal program path.",
-        "A retained human-node case preserves runtime human authority. A more-evidence-required case refuses certification instead of guessing."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_judgment_cases.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Required CI covers closed fact schemas, exact workflow and decision bindings, local-only evidence references, conflict refusal, reciprocal contrast coverage for automatic-rule candidates, retained human authority, unresolved-evidence refusal, and the invariant that case evaluation never edits or synthesizes the executable rule."
-        },
-        {
-          "path": "tests/test_qualification_project.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Required CI binds the reviewed local evidence bytes and review note into certification, reproduces that exact contract when a qualified workflow is saved, and refuses changed case or evidence digests."
-        },
-        {
-          "path": "docs/BUSINESS_DECISIONS.md",
-          "kind": "doc",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "The public contract separates qualification-time judgment capture from one live runtime answer and describes the scriptable authoring and judgment-case interfaces."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "qualified-remote-decision-v2-supported",
-      "claim": "A negotiated V2 attended task binds optional reviewed entity wording to the exact qualification, bundle, step, policy, and pause authority. An unqualified or unrecognized entity class stays local and the remote task uses the signed neutral record or item fallback.",
-      "tier": "supported",
-      "reproducibility": null,
-      "surfaces": [
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "V2 requires openadapt-types 0.10.x and explicit peer negotiation. The dependency does not upgrade a V1 consumer, and the byte-compatible V1 path remains available.",
-        "The entity class is presentation metadata only. Actual record identity remains inside the customer-controlled runner and is revalidated before any resumed action."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_attended_actions.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Required CI covers the V1-compatible and V2 signed envelopes, provenance binding, remote-safe entity vocabulary, idempotent decisions, and fresh revalidation before resumed actuation."
-        },
-        {
-          "path": "tests/test_qualification_project.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Required CI requires the current exact qualification contract before the V2 producer can emit its reviewed presentation metadata."
-        },
-        {
-          "path": "docs/DECISION_DELIVERY.md",
-          "kind": "doc",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "The delivery contract defines explicit V2 negotiation, neutral V1 fallback, and the local boundary for actual entity identifiers."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "mockmed-benchmark-ci-reproducible",
-      "claim": "The MockMed benchmark is CI-reproducible: compiled replay finishes ~4.9s p50 with zero model calls versus ~37.5s p50 (~$0.27/run) for the agent. Measured 2026-07-08 on Flow 0.1.0, a pre-v0.2.0 source build; not re-measured on a later release.",
-      "tier": "supported",
-      "reproducibility": null,
-      "surfaces": [
-        "README.md",
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "The published latency/cost figures come from a dated run artifact measured on Flow 0.1.0 (pre-v0.2.0 source checkout; exact runtime HEAD not retained) on 2026-07-08; the app is intentionally simple, so success rate (100/100 vs 20/20) is not the story \u2014 the standing cost/latency delta is. Agent cost is a list-price estimate."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_mockmed.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "The MockMed app + drift screens are deterministic and reachable, the substrate the benchmark replays against."
-        },
-        {
-          "path": "tests/test_benchmark.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "The benchmark harness / report accounting that produces the numbers."
-        },
-        {
-          "path": "benchmark/BENCHMARK.md",
-          "kind": "benchmark",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "Full numbers, methodology, and caveats for the CI-reproducible MockMed comparison (dated run artifact)."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "windows-desktop-validating",
-      "claim": "Windows UIA has scoped acceptance: the deterministic structural rung delivered native actions in a fixed WinForms workflow with independent effects and fail-closed stale/ambiguity refusal.",
-      "tier": "validating",
-      "reproducibility": null,
-      "surfaces": [
-        "README.md",
-        "docs",
-        "website"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "The live desktop e2e is OPT-IN and infra-gated (needs a Parallels Win11-ARM VM; `OAFLOW_PARALLELS_E2E=1`); it never runs on default CI. Only the mocked backend protocol runs in CI.",
-        "Acceptance covers the named in-tree workflow and exact Windows VM. Third-party applications require workflow-specific qualification."
-      ],
-      "evidence": [
-        {
-          "path": "tests/e2e/test_parallels_desktop_e2e.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "validating",
-          "gating": "opt-in (OAFLOW_PARALLELS_E2E)",
-          "node": null,
-          "node_found": null,
-          "ci_job": "validating",
-          "junit_status": null,
-          "proves": "OPT-IN live proof on a real Win11-ARM VM: record->compile->replay through WindowsBackend with the structural rung resolving every click by AutomationId (armed_coverage == 1.0)."
-        },
-        {
-          "path": "tests/test_windows_backend.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "The 4-method Backend protocol on Windows against a MOCKED WAA server (runs in CI post-merge; proves the wire, not a live desktop)."
-        },
-        {
-          "path": "benchmark/structural_action/STRUCTURAL_ACTION.md",
-          "kind": "benchmark",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "Desktop drift benchmark: the structural rung resolved 21/21 targets where visual replay alone managed 6/21."
-        },
-        {
-          "path": "benchmark/windows_uia/results.json",
-          "kind": "benchmark",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "Accepted candidate 20260717-candidate-56759c8-v2: 3/3 exact task and SQLite effects, 12 UIA receipts, and 3/3 stale plus 3/3 ambiguity refusals with zero silent incorrect success, over-halt, or model calls."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "macos-native-validating",
-      "claim": "Native macOS has scoped acceptance for exact-window-bound text delivery, independent file effects, and ambiguity refusal on a fixed TextEdit task.",
-      "tier": "validating",
-      "reproducibility": "field",
-      "surfaces": [
-        "README.md",
-        "docs",
-        "website"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "Acceptance covers TextEdit on one macOS 15.7.3 Apple Silicon host and active user session; each customer application is qualified separately.",
-        "The original counted report remains failed. The hash-bound adjudication accepts only its independently confirmed action/effect/refusal evidence."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_macos_backend.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "CI covers unique-window binding, foreground/focus proof, exact-element text delivery, and refusal before physical input when proof fails."
-        },
-        {
-          "path": "tests/test_macos_qualification.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "CI validates the qualification oracle, failure taxonomy, evidence hashes, cleanup adjudication, and ambiguity-refusal accounting."
-        },
-        {
-          "path": "benchmark/macos_native/textedit_counted_3plus1_b1b61a5_20260717.adjudication.json",
-          "kind": "benchmark",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "Candidate b1b61a5 completed 3/3 exact-byte TextEdit effects and refused two ambiguous windows without modifying either file."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "linux-native-validating",
-      "claim": "Native Linux uses an exact-window AT-SPI backend with complete candidate enumeration, native action delivery, and fail-closed ambiguity, staleness, and Wayland portal boundaries.",
-      "tier": "validating",
-      "reproducibility": null,
-      "surfaces": [
-        "README.md",
-        "docs"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "Required CI establishes live scoped acceptance only for the in-tree GTK3 application on its isolated Xvfb image. Each third-party application and environment requires its own qualification.",
-        "X11 is the initial built-in live transport. Wayland requires a real operator-approved XDG RemoteDesktop/ScreenCast portal session; the built-in client currently refuses rather than pretending a grant exists."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_linux_backend.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Default CI covers exact app/window binding, bounded candidate enumeration, ambiguity and stale-target refusal, native invoke/focus and editable-text delivery, window-scoped capture, physical-input opt-in, and Wayland portal refusal through an injected Linux client."
-        },
-        {
-          "path": "tests/test_linux_qualification.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Default CI enforces the live qualification's fixed three-trial matrix, independent exact-file and absence oracles, and separate silent-incorrect-success, over-halt, and refusal-failure accounting."
-        },
-        {
-          "path": "scripts/qualify_linux_atspi.py",
-          "kind": "benchmark",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "The required linux-atspi-x11 job drives the real GTK3 fixture through AT-SPI on an isolated Xvfb display and session D-Bus, emitting a per-trial JSON evidence artifact."
-        },
-        {
-          "path": "docs/desktop/LINUX_NATIVE.md",
-          "kind": "doc",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "The operator contract, X11 and Wayland boundaries, configuration, delivery-only receipt semantics, and required real GTK/AT-SPI CI qualification contract."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "rdp-validating",
-      "claim": "RDP has scoped acceptance for real-network framebuffer decode and input delivery into Windows 11 with independent exact file-effect verification.",
-      "tier": "validating",
-      "reproducibility": "field",
-      "surfaces": [
-        "README.md",
-        "docs",
-        "website"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "Acceptance covers the named 1280x800 Windows Run/file task and exact VM environment, not arbitrary applications, identity policies, or Citrix.",
-        "The multi-window campaign uses deterministic synthetic applications. It exercises the real FreeRDP pixel and input path but does not qualify a named customer application or environment."
-      ],
-      "evidence": [
-        {
-          "path": "tests/e2e/test_parallels_rdp_e2e.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "validating",
-          "gating": "opt-in (OAFLOW_PARALLELS_RDP_E2E)",
-          "node": null,
-          "node_found": null,
-          "ci_job": "validating",
-          "junit_status": null,
-          "proves": "Opt-in snapshot-safe real RDP qualification harness with exactly three trials, independent guest-tools oracle, failure taxonomy, and cleanup."
-        },
-        {
-          "path": "tests/test_rdp_backend.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "CI covers the backend/transport contract, framebuffer conversion, pointer and keyboard delivery, resize rebaseline between actions, mid-lease geometry refusal, pre-delivery horizontal-scroll refusal, typed uncertain transport failures, and record-compile-replay conformance."
-        },
-        {
-          "path": "tests/test_rdp_multiapp_campaign_contract.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Required CI covers the bounded 27-trial FreeRDP campaign contract, independent SQLite, CSV, and Maildir oracles, fail-closed visual action preflight, uncertain-delivery handling, and result accounting."
-        },
-        {
-          "path": "benchmark/rdp_multiapp/README.md",
-          "kind": "doc",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "The public synthetic multi-window campaign defines the workflow, faults, independent persisted surfaces, and acceptance denominator."
-        },
-        {
-          "path": "benchmark/rdp/results_82a658a_20260718.sanitized.json",
-          "kind": "benchmark",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "Candidate 82a658a passed 3/3 at 51.845, 10.467, and 7.477 seconds, with zero failures, silent incorrect successes, over-halts, or model calls."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "substrate-runtime-validation-supported",
-      "claim": "Runtime-validation v3 binds Standard and Regulated hosted activation to the exact governed authorization template reproduced from the sealed qualification. It also binds the successful run's resolved target kind (`web|windows|macos|linux|rdp|citrix`), artifact, compiler, parameter schema, strict lint, policy, risk, report, and opaque environment. Web retains its exact HTTPS/host boundary. Native and remote execution emits no app, window, host, readiness, or backend-hint values to Cloud. Local verification retains signed v1 and v2 compatibility.",
-      "tier": "supported",
-      "reproducibility": null,
-      "surfaces": [
-        "README.md",
-        "docs",
-        "website"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "The HMAC proves operator-token possession and envelope integrity; it is not independent observation of the local replay or certification of an arbitrary target application."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_runtime_validation.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Required CI exercises all six target kinds, validates v3 against its closed JSON Schema, refuses a Standard or Regulated activation without an exact template, binds the template SHA to the HMAC, preserves web URL/host checks, keeps native/remote execution empty, verifies the canonical HMAC vector, and retains signed v1/v2 compatibility."
-        },
-        {
-          "path": "tests/test_cli_new_commands.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "Required CI carries the resolved web, Windows, and Citrix backend token through durable resume into the new run report rather than trusting an upload-time relabel."
-        },
-        {
-          "path": "schemas/runtime-validation-attestation-v3.json",
-          "kind": "doc",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "The public closed envelope requires target_kind and the governed authorization template SHA, and conditionally permits browser execution fields only for web."
-        }
-      ],
-      "errors": []
-    },
-    {
-      "id": "desktop-recording-validating",
-      "claim": "The product CLI records desktop workflows through openadapt-capture and `record --backend windows|macos|linux|rdp|citrix` captures the operator's real demonstration and emits the compile-ready recording format, so record -> compile -> replay closes on the desktop substrate, not just the browser.",
-      "tier": "validating",
-      "reproducibility": null,
-      "surfaces": [
-        "README.md",
-        "docs",
-        "website"
-      ],
-      "strongest_evidence": "supported",
-      "caveats": [
-        "Offline capture carries NO structural (UIA AutomationId) locator, so replay uses the visual ladder (template/ocr/geometry). The live capture needs a display (openadapt-capture is the optional `capture` extra); the CI proof covers a real on-disk capture session -> convert -> compile -> replay, not a live recorder run (the live recorder has its own integration suite in the openadapt-capture repo).",
-        "`--secret` is refused on an unqualified pixel/desktop capture with no field geometry, and RDP recording uses the replay pixel space or a deployment-calibrated client-window mapping."
-      ],
-      "evidence": [
-        {
-          "path": "tests/test_desktop_record.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "The live-capture orchestration + CLI wiring (record --backend windows|macos|linux|rdp|citrix -> openadapt-capture -> convert_capture), and that a desktop-shaped recording COMPILES into a bundle and REPLAYS to completion through the desktop backend path, resolving each click to its recorded target (runs on default CI)."
-        },
-        {
-          "path": "tests/test_capture_adapter.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": null,
-          "node_found": null,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "The capture->recording bridge over a REAL openadapt-capture session (its own event-processing pipeline + frame extraction) feeding the UNMODIFIED compiler (runs on default CI: the `test` job installs the `capture` extra; openadapt-capture >=0.5.4 imports clean headless)."
-        },
-        {
-          "path": "docs/desktop/RECORDING.md",
-          "kind": "doc",
-          "exists": true,
-          "strength": "roadmap",
-          "gating": "artifact (doc/benchmark)",
-          "node": null,
-          "node_found": null,
-          "ci_job": null,
-          "junit_status": null,
-          "proves": "The capture-assisted and live-observer paths, fail-closed secret handling, RDP coordinate binding, and reuse of openadapt-capture + the capture adapter."
-        }
-      ],
-      "errors": []
-    },
-    {
       "id": "citrix-pixel-validating",
       "claim": "Citrix uses a dedicated exact-Workspace-window backend beneath the governed pixel-only remote-display contract. Required CI covers its readiness gate, governed execution, durable resume, report binding, and refusal contracts; the counted no-DOM qualification covers the driver, visual ladder, independent effects, and drift halts. Live ICA/HDX acceptance remains separately bound to the exact deployment.",
       "tier": "validating",
@@ -1639,20 +1271,23 @@
       "errors": []
     },
     {
-      "id": "win32-window-replay-roadmap",
-      "claim": "Windows hosts can replay window-scoped remote-display workflows (the Citrix/RDP client window on a Windows endpoint) through the same governed pixel contract already proven on macOS hosts.",
-      "tier": "roadmap",
+      "id": "desktop-recording-validating",
+      "claim": "The product CLI records desktop workflows through openadapt-capture and `record --backend windows|macos|linux|rdp|citrix` captures the operator's real demonstration and emits the compile-ready recording format, so record -> compile -> replay closes on the desktop substrate, not just the browser.",
+      "tier": "validating",
       "reproducibility": null,
       "surfaces": [
-        "docs"
+        "README.md",
+        "docs",
+        "website"
       ],
       "strongest_evidence": "supported",
       "caveats": [
-        "NOT qualified: no counted end-to-end batch on a real Windows host or a real client window exists. The contract tests mock every Win32 call; real DPI virtualization, UIPI, foreground-arbitration, and PrintWindow rendering behavior remain unproven until the Parallels/real-Windows validation procedure is executed and counted."
+        "Offline capture carries NO structural (UIA AutomationId) locator, so replay uses the visual ladder (template/ocr/geometry). The live capture needs a display (openadapt-capture is the optional `capture` extra); the CI proof covers a real on-disk capture session -> convert -> compile -> replay, not a live recorder run (the live recorder has its own integration suite in the openadapt-capture repo).",
+        "`--secret` is refused on an unqualified pixel/desktop capture with no field geometry, and RDP recording uses the replay pixel space or a deployment-calibrated client-window mapping."
       ],
       "evidence": [
         {
-          "path": "tests/test_win32_window_client.py",
+          "path": "tests/test_desktop_record.py",
           "kind": "test",
           "exists": true,
           "strength": "supported",
@@ -1661,10 +1296,22 @@
           "node_found": null,
           "ci_job": "test",
           "junit_status": null,
-          "proves": "MOCK-ONLY conformance: the win32 WindowClient implements the remote-display WindowClient seam (exact process/title/class selection with ambiguity halt, client-area coordinate mapping under per-monitor DPI awareness, PrintWindow-then-BitBlt capture fallback, focus-verification refusal, and the UIPI elevation guard) against a scripted Win32 API \u2014 never against a real Windows host."
+          "proves": "The live-capture orchestration + CLI wiring (record --backend windows|macos|linux|rdp|citrix -> openadapt-capture -> convert_capture), and that a desktop-shaped recording COMPILES into a bundle and REPLAYS to completion through the desktop backend path, resolving each click to its recorded target (runs on default CI)."
         },
         {
-          "path": "docs/desktop/CITRIX_PIXEL.md",
+          "path": "tests/test_capture_adapter.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The capture->recording bridge over a REAL openadapt-capture session (its own event-processing pipeline + frame extraction) feeding the UNMODIFIED compiler (runs on default CI: the `test` job installs the `capture` extra; openadapt-capture >=0.5.4 imports clean headless)."
+        },
+        {
+          "path": "docs/desktop/RECORDING.md",
           "kind": "doc",
           "exists": true,
           "strength": "roadmap",
@@ -1673,7 +1320,228 @@
           "node_found": null,
           "ci_job": null,
           "junit_status": null,
-          "proves": "The remote-display contract the client implements and the evidence ladder for qualifying it (Parallels/RDP client-window analog first, then a counted live Citrix host run)."
+          "proves": "The capture-assisted and live-observer paths, fail-closed secret handling, RDP coordinate binding, and reuse of openadapt-capture + the capture adapter."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "effect-verifier-kit",
+      "claim": "The effect-verifier kit makes declaring and wiring effect verification a reviewed deployment-config exercise instead of bespoke per-deployment code: declarative REST / FHIR / read-only-SQL / file-arrival / document-hash verifier configs with secret-isolated auth references and explicit run-parameter binding, a cross-substrate exactly-one-NEW-record duplicate guard, per-consequential-step effect-coverage lint/certify gates, and typed reconciliation tasks on halt. A deployment with multiple reviewed read boundaries selects the strongest evidence tier before actuation, retains that exact selection through durable resume, and never downgrades to a weaker verifier after an action.",
+      "tier": "validating",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "CONTRACT-PROVEN, not live-proven: the SQL verifier is exercised against sqlite fixtures (no production MariaDB/Postgres), the SFTP arrival path against a fake transport (no real SFTP server), and the worked-example configs are templates \u2014 only the FHIR substrate has an additional opt-in live-OpenEMR test. Per-verifier claims are exactly as strong as these tests."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_effect_sql.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The read-only SQL verifier's whitelist (mutation/stacking/comment smuggling refused at construction) and full verdict contract, plus the exact table-delta audit promoted from the Frappe Lending reference matrix \u2014 against LOCAL sqlite fixtures only."
+        },
+        {
+          "path": "tests/test_effect_file_arrival.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "File-arrival verdicts (pattern / size>0 / mtime freshness / content probe / duplicate export) against real temp directories, and the SFTP path against an in-memory fake paramiko-shaped transport."
+        },
+        {
+          "path": "tests/test_effect_kit_config.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The declarative construction path: env-var auth references fail loud when unset, run-parameter references resolve at build (and refuse to construct unresolved), and pre-kit configs build byte-identically."
+        },
+        {
+          "path": "tests/test_effect_verifier_candidates.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Required CI constructs and preflights all reviewed candidates before input, pins the strongest verifier and its pre-state, preserves the binding through durable resume, and refuses an unavailable selected verifier rather than falling back after an action."
+        },
+        {
+          "path": "tests/test_effect_coverage_lint.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "lint warns per consequential step lacking an effect contract and reports coverage %; certify fails the same gap only when the policy sets require_effects_for_irreversible (warn-vs-fail is policy-configurable)."
+        },
+        {
+          "path": "tests/test_effect_reconciliation.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Every escalated verification failure emits a typed ReconciliationTask carrying the one-way contract hash and verdict evidence \u2014 never the resolved selector values."
+        },
+        {
+          "path": "docs/EFFECT_KIT.md",
+          "kind": "doc",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "The operator-facing kit contract: config reference plus Frappe (REST/SQL) and OpenEMR (FHIR/SQL) worked examples targeting the reference fixtures."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "linux-native-validating",
+      "claim": "Native Linux uses an exact-window AT-SPI backend with complete candidate enumeration, native action delivery, and fail-closed ambiguity, staleness, and Wayland portal boundaries.",
+      "tier": "validating",
+      "reproducibility": null,
+      "surfaces": [
+        "README.md",
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Required CI establishes live scoped acceptance only for the in-tree GTK3 application on its isolated Xvfb image. Each third-party application and environment requires its own qualification.",
+        "X11 is the initial built-in live transport. Wayland requires a real operator-approved XDG RemoteDesktop/ScreenCast portal session; the built-in client currently refuses rather than pretending a grant exists."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_linux_backend.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Default CI covers exact app/window binding, bounded candidate enumeration, ambiguity and stale-target refusal, native invoke/focus and editable-text delivery, window-scoped capture, physical-input opt-in, and Wayland portal refusal through an injected Linux client."
+        },
+        {
+          "path": "tests/test_linux_qualification.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Default CI enforces the live qualification's fixed three-trial matrix, independent exact-file and absence oracles, and separate silent-incorrect-success, over-halt, and refusal-failure accounting."
+        },
+        {
+          "path": "scripts/qualify_linux_atspi.py",
+          "kind": "benchmark",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "The required linux-atspi-x11 job drives the real GTK3 fixture through AT-SPI on an isolated Xvfb display and session D-Bus, emitting a per-trial JSON evidence artifact."
+        },
+        {
+          "path": "docs/desktop/LINUX_NATIVE.md",
+          "kind": "doc",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "The operator contract, X11 and Wayland boundaries, configuration, delivery-only receipt semantics, and required real GTK/AT-SPI CI qualification contract."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "macos-native-validating",
+      "claim": "Native macOS has scoped acceptance for exact-window-bound text delivery, independent file effects, and ambiguity refusal on a fixed TextEdit task.",
+      "tier": "validating",
+      "reproducibility": "field",
+      "surfaces": [
+        "README.md",
+        "docs",
+        "website"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Acceptance covers TextEdit on one macOS 15.7.3 Apple Silicon host and active user session; each customer application is qualified separately.",
+        "The original counted report remains failed. The hash-bound adjudication accepts only its independently confirmed action/effect/refusal evidence."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_macos_backend.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "CI covers unique-window binding, foreground/focus proof, exact-element text delivery, and refusal before physical input when proof fails."
+        },
+        {
+          "path": "tests/test_macos_qualification.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "CI validates the qualification oracle, failure taxonomy, evidence hashes, cleanup adjudication, and ambiguity-refusal accounting."
+        },
+        {
+          "path": "benchmark/macos_native/textedit_counted_3plus1_b1b61a5_20260717.adjudication.json",
+          "kind": "benchmark",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "Candidate b1b61a5 completed 3/3 exact-byte TextEdit effects and refused two ambiguous windows without modifying either file."
         }
       ],
       "errors": []
@@ -1746,22 +1614,166 @@
       "errors": []
     },
     {
-      "id": "compose-recorded-bundles",
-      "claim": "openadapt-flow compose sequences named, already-compiled child bundles under a handoff contract. Each child stays bound to its recorded surface. The parent starts a child only after a predecessor ends VERIFIED (or an explicit allowed halt class). Handoffs copy effect-bound parameter values from confirmed effect receipts; missing evidence HALTs. certify and run execute the parent artifact.",
-      "tier": "supported",
+      "id": "rdp-validating",
+      "claim": "RDP has scoped acceptance for real-network framebuffer decode and input delivery into Windows 11 with independent exact file-effect verification.",
+      "tier": "validating",
+      "reproducibility": "field",
+      "surfaces": [
+        "README.md",
+        "docs",
+        "website"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Acceptance covers the named 1280x800 Windows Run/file task and exact VM environment, not arbitrary applications, identity policies, or Citrix.",
+        "The multi-window campaign uses deterministic synthetic applications. It exercises the real FreeRDP pixel and input path but does not qualify a named customer application or environment."
+      ],
+      "evidence": [
+        {
+          "path": "tests/e2e/test_parallels_rdp_e2e.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "validating",
+          "gating": "opt-in (OAFLOW_PARALLELS_RDP_E2E)",
+          "node": null,
+          "node_found": null,
+          "ci_job": "validating",
+          "junit_status": null,
+          "proves": "Opt-in snapshot-safe real RDP qualification harness with exactly three trials, independent guest-tools oracle, failure taxonomy, and cleanup."
+        },
+        {
+          "path": "tests/test_rdp_backend.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "CI covers the backend/transport contract, framebuffer conversion, pointer and keyboard delivery, resize rebaseline between actions, mid-lease geometry refusal, pre-delivery horizontal-scroll refusal, typed uncertain transport failures, and record-compile-replay conformance."
+        },
+        {
+          "path": "tests/test_rdp_multiapp_campaign_contract.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Required CI covers the bounded 27-trial FreeRDP campaign contract, independent SQLite, CSV, and Maildir oracles, fail-closed visual action preflight, uncertain-delivery handling, and result accounting."
+        },
+        {
+          "path": "benchmark/rdp_multiapp/README.md",
+          "kind": "doc",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "The public synthetic multi-window campaign defines the workflow, faults, independent persisted surfaces, and acceptance denominator."
+        },
+        {
+          "path": "benchmark/rdp/results_82a658a_20260718.sanitized.json",
+          "kind": "benchmark",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "Candidate 82a658a passed 3/3 at 51.845, 10.467, and 7.477 seconds, with zero failures, silent incorrect successes, over-halts, or model calls."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "windows-desktop-validating",
+      "claim": "Windows UIA has scoped acceptance: the deterministic structural rung delivered native actions in a fixed WinForms workflow with independent effects and fail-closed stale/ambiguity refusal.",
+      "tier": "validating",
       "reproducibility": null,
       "surfaces": [
         "README.md",
+        "docs",
+        "website"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "The live desktop e2e is OPT-IN and infra-gated (needs a Parallels Win11-ARM VM; `OAFLOW_PARALLELS_E2E=1`); it never runs on default CI. Only the mocked backend protocol runs in CI.",
+        "Acceptance covers the named in-tree workflow and exact Windows VM. Third-party applications require workflow-specific qualification."
+      ],
+      "evidence": [
+        {
+          "path": "tests/e2e/test_parallels_desktop_e2e.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "validating",
+          "gating": "opt-in (OAFLOW_PARALLELS_E2E)",
+          "node": null,
+          "node_found": null,
+          "ci_job": "validating",
+          "junit_status": null,
+          "proves": "OPT-IN live proof on a real Win11-ARM VM: record->compile->replay through WindowsBackend with the structural rung resolving every click by AutomationId (armed_coverage == 1.0)."
+        },
+        {
+          "path": "tests/test_windows_backend.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The 4-method Backend protocol on Windows against a MOCKED WAA server (runs in CI post-merge; proves the wire, not a live desktop)."
+        },
+        {
+          "path": "benchmark/structural_action/STRUCTURAL_ACTION.md",
+          "kind": "benchmark",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "Desktop drift benchmark: the structural rung resolved 21/21 targets where visual replay alone managed 6/21."
+        },
+        {
+          "path": "benchmark/windows_uia/results.json",
+          "kind": "benchmark",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "Accepted candidate 20260717-candidate-56759c8-v2: 3/3 exact task and SQLite effects, 12 UIA receipts, and 3/3 stale plus 3/3 ambiguity refusals with zero silent incorrect success, over-halt, or model calls."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "win32-window-replay-roadmap",
+      "claim": "Windows hosts can replay window-scoped remote-display workflows (the Citrix/RDP client window on a Windows endpoint) through the same governed pixel contract already proven on macOS hosts.",
+      "tier": "roadmap",
+      "reproducibility": null,
+      "surfaces": [
         "docs"
       ],
       "strongest_evidence": "supported",
       "caveats": [
-        "The parent sequences admitted child runs. It does not enlarge the workflow-program graph and does not introduce a process contract. It does not switch backends inside one recording.",
-        "Evidence is unit tests plus a local mock second child. This claim does not cover Production admission or a live Citrix session."
+        "NOT qualified: no counted end-to-end batch on a real Windows host or a real client window exists. The contract tests mock every Win32 call; real DPI virtualization, UIPI, foreground-arbitration, and PrintWindow rendering behavior remain unproven until the Parallels/real-Windows validation procedure is executed and counted."
       ],
       "evidence": [
         {
-          "path": "tests/test_compose_authoring.py",
+          "path": "tests/test_win32_window_client.py",
           "kind": "test",
           "exists": true,
           "strength": "supported",
@@ -1770,31 +1782,19 @@
           "node_found": null,
           "ci_job": "test",
           "junit_status": null,
-          "proves": "Authoring copies two child bundles, records the handoff contract, and refuses a source that is not effect-bound, an unknown target parameter, a single child, a cyclic after-graph, and a backwards handoff."
+          "proves": "MOCK-ONLY conformance: the win32 WindowClient implements the remote-display WindowClient seam (exact process/title/class selection with ambiguity halt, client-area coordinate mapping under per-monitor DPI awareness, PrintWindow-then-BitBlt capture fallback, focus-verification refusal, and the UIPI elevation guard) against a scripted Win32 API \u2014 never against a real Windows host."
         },
         {
-          "path": "tests/test_compose_runtime.py",
-          "kind": "test",
+          "path": "docs/desktop/CITRIX_PIXEL.md",
+          "kind": "doc",
           "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
-          "node": "test_two_child_fixture_second_is_local_backend",
-          "node_found": true,
-          "ci_job": "test",
-          "junit_status": null,
-          "proves": "A two-child fixture runs intake through MockMed with independent effect verification, then a local FakeBackend child that receives the verified patient_id. Missing handoff evidence and an unverified predecessor HALT before the next child starts."
-        },
-        {
-          "path": "tests/test_cli_compose.py",
-          "kind": "test",
-          "exists": true,
-          "strength": "supported",
-          "gating": "ci (required PR gate (test))",
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
           "node": null,
           "node_found": null,
-          "ci_job": "test",
+          "ci_job": null,
           "junit_status": null,
-          "proves": "The compose parser dispatches, the CLI writes a composition artifact, and replay refuses to run one."
+          "proves": "The remote-display contract the client implements and the evidence ladder for qualifying it (Parallels/RDP client-window analog first, then a counted live Citrix host run)."
         }
       ],
       "errors": []

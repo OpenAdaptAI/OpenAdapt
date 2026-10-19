@@ -1,0 +1,27 @@
+id: halt-teach-promote
+claim: >-
+  A halt is learnable: halt -> teach a correction -> promote a guarded
+  branch, refusing underdetermined fixes.
+surfaces: [README.md, docs]
+tier: supported
+evidence:
+  - path: tests/test_halt_learn_loop.py
+    proves: >-
+      A surprise modal halts and emits a learnable trace; teaching promotes
+      a guarded dismiss branch that replays without regression; an
+      underdetermined correction is refused.
+  - path: tests/test_teach_cli.py
+    proves: >-
+      The `teach` CLI resolves a halt via a correction spec or a recording,
+      refuses an underdetermined fix, and errors on a non-halted run.
+  - path: tests/test_teach_placement.py
+    proves: >-
+      A recorded fix's own target is carried into the taught bundle; the
+      fix is placed before a step that never acted and after a step that
+      acted (retried, or checked against its expected screen); retrying a
+      step that can write, and a fix with no recorded target, are refused.
+caveats:
+  - >-
+    Promotion is governed by a regression gate that blocks identity-
+    weakening corrections; the loop refuses to guess when the fix is
+    underdetermined.
