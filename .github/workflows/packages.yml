@@ -363,7 +363,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install
-        run: pip install -e ../types -e '.[dev]'
+        run: pip install -e ../types -e '.[dev,agent]'
       - name: Resolve Playwright version
         id: pw
         run: |
@@ -399,6 +399,9 @@ jobs:
             tests/e2e/test_structural_action.py \
             tests/e2e/test_compile_agent_e2e.py \
             tests/e2e/test_code_action_e2e.py \
+            tests/e2e/test_mcp_teach_e2e.py \
+            tests/test_agent_guard.py \
+            tests/e2e/test_agent_guard_e2e.py \
             --basetemp=runs/ci-critical --junitxml=runs/critical-junit.xml
       - name: Fail if any critical test was skipped or none ran
         run: |

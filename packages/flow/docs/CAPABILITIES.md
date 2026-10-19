@@ -72,6 +72,9 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   underdetermined. The healthy replay path still makes no model call.
   [`LEARN_FROM_MANY_RUNS.md`](LEARN_FROM_MANY_RUNS.md) covers `induce`,
   `teach-branch` and shadow mining together, with each one's status.
+  Spoken narration recorded with the demonstration proposes branch
+  conditions; a proposal becomes a guard only when every recording agrees, a
+  probe confirms it, or a person accepts it. See [`NARRATION.md`](NARRATION.md).
   With `--probe-on test-copy.yaml`, a refused optional step is instead
   replayed both ways on a declared test copy and scored by reading the record
   back; it is certified only when exactly one reading works for every

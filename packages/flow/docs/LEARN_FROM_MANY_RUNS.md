@@ -45,6 +45,12 @@ step dropped and with it kept, scores each run by reading the record back,
 and certifies the step only when exactly one reading works for every
 recording. See [PROBE_INDUCTION.md](PROBE_INDUCTION.md).
 
+If the person said why while recording ("if the insurance is Medicare, skip
+the copay screen"), the sentence proposes the condition. It becomes a guard
+only when every recording agrees with it, a probe confirms it, or a person
+accepts it; a recording that contradicts it keeps the point refused. See
+[NARRATION.md](NARRATION.md).
+
 `admit rec-1 rec-2` runs the same induction as its first step, then proposes
 the checks and stops once for a decision (see
 [SHADOW_CANDIDATES.md](SHADOW_CANDIDATES.md#how-a-candidate-is-admitted)).
@@ -62,7 +68,9 @@ which may be a name or a reference number. `teach-branch` needs at least two
 halts at the same step, fixed with the same corrective steps. It keys the
 branch on screen text that every example showed and no earlier screen did.
 If a normal run also shows that text, it narrows the guard with a run
-parameter that separates the two cases, or refuses when none does.
+parameter that separates the two cases, or refuses when none does. A
+narrated sentence that names the parameter settles a tie between several, if
+every run agrees with it ([NARRATION.md](NARRATION.md#teach-branch)).
 
 The result goes through the same learning loop as any repair (induction,
 regression gate, held-out check) and is written as a repair candidate. It is

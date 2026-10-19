@@ -562,7 +562,11 @@ class ContinuationCoordinator:
             raise ContinuationBusy(
                 "the durable manifest disappeared at terminal commit"
             )
-        report_sha256 = "sha256:" + hashlib.sha256(report_path.read_bytes()).hexdigest()
+        from openadapt_flow import sealed_set
+
+        report_sha256 = (
+            "sha256:" + hashlib.sha256(sealed_set.read_bytes(report_path)).hexdigest()
+        )
         try:
             self.authority.prepare_terminal(
                 manifest,
@@ -662,7 +666,9 @@ class ContinuationCoordinator:
             if record.phase != "completed":
                 raise ContinuationBusy("the local continuation is not completed")
         try:
-            corrected_report_json = corrected_report_path.read_bytes()
+            from openadapt_flow import sealed_set
+
+            corrected_report_json = sealed_set.read_bytes(corrected_report_path)
         except OSError as exc:
             raise ContinuationBusy(
                 "the corrected terminal report is unavailable"

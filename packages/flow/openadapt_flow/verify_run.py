@@ -68,6 +68,7 @@ from openadapt_flow.qualify.result import verify_config_sha256
 from openadapt_flow.runtime.effects.adapter import verifier_identity
 from openadapt_flow.runtime.effects.effect import (
     Effect,
+    EffectKind,
     EffectState,
     EffectVerdict,
     Verdict,
@@ -256,7 +257,13 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
             raise VerifyRunError(
                 "give the save's checks as either effects or record, not both"
             )
-        data["effects"] = [e.model_dump(mode="json") for e in _record_effects(record)]
+        # Only the fields record_effects set, so an effect's model_fields_set
+        # says what the file chose (``_audit_effect`` reads it); the values,
+        # and so the digests, are the same as qualify's.
+        data["effects"] = [
+            e.model_dump(mode="json", exclude_unset=True)
+            for e in _record_effects(record)
+        ]
     try:
         cfg = VerifyConfig.model_validate(data)
     except Exception as exc:
@@ -289,6 +296,25 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
                 "an on-screen read-back effect cannot be verified after the fact"
             )
     return cfg
+
+
+def _audit_effect(effect: Effect, bound: Effect) -> Effect:
+    """The effect as verify-run judges it: an audit after the fact.
+
+    A ``record_written`` check also refutes when a record outside the target
+    changed (``Effect.forbid_collateral_change``), not only when one vanished,
+    unless the file sets ``forbid_collateral_change: false`` on that effect.
+    The contract itself is left as the file states it, so its digest stays
+    the one qualify reports; the receipt's evidence says the check ran.
+    """
+
+    if (
+        bound.kind is not EffectKind.RECORD_WRITTEN
+        or not bound.forbid_collateral_loss
+        or "forbid_collateral_change" in effect.model_fields_set
+    ):
+        return bound
+    return bound.model_copy(update={"forbid_collateral_change": True})
 
 
 # -- hashing ------------------------------------------------------------------
@@ -716,9 +742,10 @@ def verify_run(
             )
         except (KeyError, ValueError) as exc:
             raise VerifyRunError(f"effect contract cannot bind params: {exc}") from exc
-        tier = verifier_effect_tier(verifier, bound)
+        judged = _audit_effect(effect, bound)
+        tier = verifier_effect_tier(verifier, judged)
         try:
-            verdict = verify_effect_without_mutation(verifier, bound, before)
+            verdict = verify_effect_without_mutation(verifier, judged, before)
         except EffectContractMutationError as exc:
             raise VerifyRunError(str(exc)) from exc
         if tier is None and verdict.verdict is Verdict.CONFIRMED:
@@ -746,6 +773,7 @@ def verify_run(
                 "expected_count": verdict.expected_count,
                 "unavailable": verdict.unavailable,
                 "stale": verdict.stale,
+                "collateral_change_checked": judged.forbid_collateral_change,
             }
         )
 

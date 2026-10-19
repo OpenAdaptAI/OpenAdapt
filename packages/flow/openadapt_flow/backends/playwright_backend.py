@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 from urllib.parse import urlsplit
 
 from openadapt_flow.backends._page_quiescence import PageQuiescence
+from openadapt_flow.backends._server_responses import ServerResponseLog
 from openadapt_flow.runtime.step_timing import timed_span
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -1173,6 +1174,18 @@ class PlaywrightBackend:
         # openadapt_flow.backends._page_quiescence). Armed at construction:
         # network requests issued before this point are not tracked.
         self._quiescence = PageQuiescence(page)
+        # The server's answers to write requests, kept as save evidence (see
+        # openadapt_flow.backends._server_responses). Never a check.
+        self._server_responses = ServerResponseLog(page)
+
+    def server_response_mark(self) -> int:
+        """Where the log of server answers to write requests stands now."""
+        return self._server_responses.mark()
+
+    def server_responses_since(self, mark: int) -> list[Any]:
+        """Server answers to the page's own write requests sent after
+        ``mark``; never blocks on a response body."""
+        return self._server_responses.since(mark)
 
     @property
     def viewport(self) -> tuple[int, int]:
@@ -3493,6 +3506,7 @@ class PlaywrightBackend:
         headless: bool = True,
         *,
         record_video_dir: Optional[str] = None,
+        before_goto: Optional[Callable[[Any], None]] = None,
     ) -> tuple["PlaywrightBackend", Callable[[], None]]:
         """Start Playwright + chromium, open ``url``, and return a backend.
 
@@ -3506,6 +3520,9 @@ class PlaywrightBackend:
                 the page is created directly on the browser as before. The
                 finished video is only flushed to disk after ``close()`` (which
                 closes the context); read its path from ``backend.page.video``.
+            before_goto: Called with the new page before it opens ``url``, so
+                a request filter (a teach scope's egress guard) sees the first
+                load too.
         Returns:
             ``(backend, close)`` where ``close()`` shuts down the browser and
             the Playwright driver (flushing the video first, when recording).
@@ -3530,8 +3547,6 @@ class PlaywrightBackend:
             page = context.new_page()
         else:
             page = browser.new_page(viewport=viewport, device_scale_factor=1)
-        page.goto(url)
-        backend = cls(page)
 
         def close() -> None:
             if shared is not None:
@@ -3549,7 +3564,14 @@ class PlaywrightBackend:
             finally:
                 pw.stop()
 
-        return backend, close
+        if before_goto is not None:
+            try:
+                before_goto(page)
+            except BaseException:
+                close()
+                raise
+        page.goto(url)
+        return cls(page), close
 
 
 from openadapt_flow.backends._browser_process import (  # noqa: E402

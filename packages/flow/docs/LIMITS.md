@@ -609,12 +609,32 @@ What it does provide ([`AFTER_A_STOP.md`](AFTER_A_STOP.md)):
   to a person, runs only after that person approves it, runs at most once,
   and counts as done only when an independent read of the system of record
   confirms its own declared effects.
+- `undo propose` finds candidate undo steps for each saving step (another
+  recording, captured traffic, or the field's old value) and tries each one
+  on a declared test copy. It writes a candidate into the bundle, as a
+  proposal, only when every record afterwards matches the read-back from
+  before the save. A person approves a proposal once (`undo accept`), and
+  each run still needs approval after the stop.
 
 The limits of that:
 
 - A step with no declared effect is `unknown` in the ledger. Flow can't say
   whether it changed anything.
-- An undo exists only where someone declared it. Flow doesn't infer one.
+- An undo exists only where someone declared it or approved a verified
+  proposal. Flow never uses an undo no person approved.
+- A proposal is verified once, on a test copy, with the bundle's parameters.
+  It is evidence that the inverse path works on that copy, not a proof for
+  every record in production.
+- A proposal must restore every record exactly. An app that cancels by
+  changing a status, or writes an audit row when a record is deleted, fails
+  verification unless a person names those fields with `--ignore-field`.
+- Flow builds API undo steps only from JSON requests. A browser form post, or
+  a Delete control on the saved record's page, needs a recording of a person
+  doing the undo.
+- A proposal that finds its record (`locate`) or restores old values
+  (`restore`) needs values the replayer keeps just before the save. They exist
+  only for runs whose bundle already held the proposal, and only when the
+  save's record check read the system of record before the save.
 - An undo can fail or be refused. Then a person must repair the record by
   hand.
 - No undo is offered for a workflow with a loop: the undo can't be bound to
@@ -628,6 +648,49 @@ Before resuming or teaching a halted consequential workflow, reconcile prior
 effects, confirm the current entity and application state, and ensure the bundle
 and approval still match the paused run. A report that accurately names the
 halt does not prove earlier actions were harmless.
+
+### 6. An agent that reads the app can be steered by it
+
+When an agent does a task once so it can be compiled (teach), or proposes a
+repair, it reads the live app. A record note, a banner, a tooltip, an image's
+alt text or a server response can hold text written to steer it. Published
+work on computer-use agents shows such text often works. OpenAdapt does not
+rely on the agent ignoring it. The full analysis is in
+[`THREAT_MODEL.md`](THREAT_MODEL.md).
+
+What is enforced:
+
+- With a declared teach scope (`compile_agent(..., teach_scope=...)`), the
+  agent can type only declared values, can't follow a link or submit a form to
+  an undeclared origin, and can't make the browser reach an undeclared origin.
+  With a write adapter for the app, a write to another record, an undeclared
+  field or an undeclared value is aborted before it is sent. After the run,
+  Flow reads the system of record and refuses the draft unless it shows
+  exactly the declared write. On MockMed, every injected instruction in the
+  test suite (5 places by 4 goals) is blocked or caught this way, with a
+  scripted agent that obeys all of them.
+- Self-repair refuses a proposed control that leads to another origin.
+- A save approval shows who asked, the agent's own reason (as a quote), the
+  screen text it saw, and any of that text that reads like an instruction to
+  an agent.
+
+What is not:
+
+- The scope is wired into `openadapt_flow.jit` only. `compile-agent` from a
+  prompt (on main) does not pass one yet; teach over MCP and the airbag guard
+  are separate pull requests that must pass a scope when they land.
+- A self-repair bridge may type text that the screen shows, so injected text
+  can become a typed value in a proposed repair. The person approving sees it.
+- A steered agent can still read other records in the same app and send what
+  it read to its model provider (scrubbed where scrubbing is on).
+- Without a write adapter, and on every surface other than the web, a wrong
+  write lands first and is caught by the read-back afterwards; it then needs
+  reconciliation.
+- Values chosen by clicking (not typing), drag and drop, and WebSocket
+  traffic are checked only by the write adapter or the read-back, if at all.
+- The instruction detector on approval forms is a heuristic display aid.
+- No live model has been run against these fixtures yet; the live-model test
+  is off by default because it costs money.
 
 ## Interaction and environment limits
 
@@ -705,8 +768,13 @@ host hardening, storage encryption, backups, retention, access control,
 monitoring, effect-verifier integration, update validation, and disaster
 recovery.
 
-The repository supplies integrity manifests, optional bundle encryption,
-destination policy, local egress checks, and audit primitives. A content digest
+The repository supplies integrity manifests, optional encryption at rest for
+bundles, web recordings and the run directories of sealed bundles, destination
+policy, local egress checks, and audit primitives. Encryption at rest does not
+cover data in process memory, the target application's own storage, file names
+and sizes, desktop recordings, or commands outside the list in
+[`phi_at_rest.md`](phi_at_rest.md), which refuse sealed input; the key is a
+passphrase in the environment, not a KMS. A content digest
 proves byte identity, not publisher identity. A local hash chain is tamper
 evident against ordinary changes, not tamper proof against an administrator who
 can rewrite it. Local approvals record provenance but are not enterprise-IdP
