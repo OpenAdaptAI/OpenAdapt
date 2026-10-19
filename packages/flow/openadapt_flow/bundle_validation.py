@@ -232,6 +232,16 @@ _SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
         ),
         _SealedCanonicalOmission(
             owner=Step,
+            field_name="closes_surface",
+            omitted_values=(False,),
+            reason=(
+                "a click that leaves its page open is what every earlier "
+                "bundle recorded; a click declared to close its popup is "
+                "sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Step,
             field_name="dialog",
             omitted_values=(None,),
             reason=(

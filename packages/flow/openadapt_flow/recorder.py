@@ -59,7 +59,11 @@ from typing import Any, Callable, Optional
 
 from PIL import Image, ImageDraw
 
-from openadapt_flow.backend import Backend, RichPointerActionBackend
+from openadapt_flow.backend import (
+    Backend,
+    PageCloseExpectationBackend,
+    RichPointerActionBackend,
+)
 from openadapt_flow.image_hash import perceptual_hash
 from openadapt_flow.ir import (
     MAX_PAGES_OPENED_PER_STEP,
@@ -526,6 +530,23 @@ class Recorder:
         self._multi_surface = True
         return ids
 
+    def _closed_its_page(self, event: dict[str, Any]) -> bool:
+        """Whether a click left the popup or tab it ran on closed."""
+        return (
+            event.get("kind") in ("click", "double_click")
+            and self._active_surface in self._opened_page_ids()
+            and isinstance(self._backend, PageCloseExpectationBackend)
+            and self._backend.page_closed()
+        )
+
+    def _opened_page_ids(self) -> set[str]:
+        """Ids of the page surfaces (popups, tabs) a recorded action opened."""
+        return {
+            str(meta["id"])
+            for meta in self._surface_meta
+            if meta.get("opened_by_event") is not None
+        }
+
     @property
     def event_count(self) -> int:
         """Number of complete events already persisted."""
@@ -584,7 +605,23 @@ class Recorder:
                     "backend record the clicks that answer the dialog instead"
                 )
             arm(dialog_response, None)
-        act()
+        # A popup or tab may close itself from the click that finishes it (an
+        # approval window). On a page surface, expect that close so the click
+        # counts as delivered, and record it so replay expects the same.
+        page_backend = (
+            self._backend
+            if event.get("kind") in ("click", "double_click")
+            and self._active_surface in self._opened_page_ids()
+            and isinstance(self._backend, PageCloseExpectationBackend)
+            else None
+        )
+        if page_backend is not None:
+            page_backend.expect_page_close()
+        try:
+            act()
+        finally:
+            if page_backend is not None:
+                page_backend.cancel_page_close()
         if dialog_response is not None:
             seen = self._backend.take_dialogs(_DIALOG_WAIT_S)  # type: ignore[attr-defined]
             if len(seen) != 1:
@@ -603,6 +640,10 @@ class Recorder:
         opened = self._claim_new_pages(self._i)
         if opened:
             event = {**event, "opens": opened}
+        # Checked after the settle: a page closes asynchronously after the
+        # click that closes it.
+        if self._closed_its_page(event):
+            event = {**event, "closes_surface": True}
         self._commit(event, before, after, structural_before)
 
     def record_observed(
@@ -679,6 +720,8 @@ class Recorder:
         opened = self._claim_new_pages(self._i)
         if opened:
             event = {**event, "opens": opened}
+        if self._closed_its_page(event):
+            event = {**event, "closes_surface": True}
         self._commit(
             event,
             before_png,

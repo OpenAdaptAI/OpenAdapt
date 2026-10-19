@@ -605,6 +605,33 @@ class FreshActuationReacquisitionBackend(Protocol):
 
 
 @runtime_checkable
+class PageCloseExpectationBackend(Protocol):
+    """Optional seam for a click that closes its own popup.
+
+    A popup or tab that a step opened can close itself from the click that
+    finishes it (an approval or sign-in window). The browser may then report
+    the page closed while the click is still being delivered. Without an
+    expectation, that error leaves delivery uncertain. The runtime arms an
+    expectation only for a step whose recording shows it closed its page
+    (``Step.closes_surface``); the backend then counts the click as delivered
+    only when the page was open before the click, the browser reports the
+    page closed, and the page is confirmed closed afterwards.
+    """
+
+    def expect_page_close(self) -> None:
+        """Expect the next click on this page to close it. One-shot."""
+        ...
+
+    def cancel_page_close(self) -> None:
+        """Drop an unconsumed expectation."""
+        ...
+
+    def page_closed(self) -> bool:
+        """Whether this page surface has closed."""
+        ...
+
+
+@runtime_checkable
 class PreparedPointerActuationBackend(Protocol):
     """Optional pointer pre-positioning for opaque remote-display clients.
 
