@@ -44,10 +44,15 @@ its own copy of the app.
 [SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#openemr-agent-screen-program-and-api-step)
 has every run.
 
-A screen can't show a save that went wrong behind it. On a test app that
-shows a save as done before its server answers, with the server breaking the
-save in 6 ways, 5 times each, the agent reported all 30 bad saves as done. Reading each record back caught all 30, with no false
-alarms on 10 clean saves ([details below](#why-the-read-back-matters)).
+A screen can't show a save that went wrong behind it. On a test copy of
+OpenEMR, with faults injected in its database (a field blanked, a value changed, a
+duplicate chart, a chart removed, another chart deleted or edited), the agent
+claimed success on all 30 bad saves. Reading the record back caught 25 of the
+30 and confirmed all 5 clean saves, with no false alarms. It missed the 5 where
+a different chart was edited; that check is being added. On MockMed, a test app
+that shows a save as done before its server answers, the agent also claimed
+all 30 bad saves, and the read-back caught all 30
+([details below](#why-the-read-back-matters)).
 
 ## One harness, three modes
 

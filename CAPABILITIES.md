@@ -267,6 +267,14 @@ fails when a command is added without being listed here.
   benchmark harness. The approval-gated production profile still runs the
   screen steps; making the API step work under it is in progress:
   [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#openemr-agent-screen-program-and-api-step).
+- **An agent's claims versus the read-back, on OpenEMR.** With faults injected
+  in the fixture's database (partial, wrong value, duplicate, not persisted,
+  another chart deleted, another chart edited; 5 items each), Claude Sonnet 5.5
+  computer use claimed success on all 30 bad saves. `verify-run` caught 25 and
+  confirmed 5 of 5 clean saves with no false alarms. It missed all 5 edits to a
+  different chart: its collateral check finds a removed record, not a changed
+  one. That check is being added:
+  [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back).
 - **An agent's claims versus the read-back.** Claude Sonnet 5.5 computer use,
   working alone on a test app whose server broke the save in 6 ways (5 items
   each), reported all 30 bad saves as done. `verify-run` flagged all 30 and
