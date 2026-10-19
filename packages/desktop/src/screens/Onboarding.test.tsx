@@ -43,7 +43,7 @@ it("doesn't call permissions missing when the engine can't check them", async ()
   expect(screen.queryByText("needed")).toBeNull();
   expect(screen.queryByText(/Grant the permissions/)).toBeNull();
   expect(screen.getByText(/can't reach the local engine/)).toBeTruthy();
-  const start = screen.getByRole("button", { name: "Choose an app and task" });
+  const start = screen.getByRole("button", { name: "Choose an app and workflow" });
   expect((start as HTMLButtonElement).disabled).toBe(true);
 });
 
