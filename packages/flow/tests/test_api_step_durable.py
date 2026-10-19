@@ -20,7 +20,7 @@ import pytest
 import requests
 
 from openadapt_flow.compiler.api_proposal import admit_api_step
-from openadapt_flow.ir import Workflow
+from openadapt_flow.ir import WebFormField, Workflow
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.actuators import (
     ActuationStatus,
@@ -295,3 +295,53 @@ def test_a_gui_fallback_that_halted_at_the_save_resumes_on_the_gui(fx):
     assert second.calls == 0
     assert ("press", "Enter") in [(a[0], a[1]) for a in fx.backend.actions]
     assert [r["note"] for r in fx.records()] == ["gui"]
+
+
+def test_an_identity_checked_save_with_a_right_record_contract_runs_durably(tmp_path):
+    # The referral's case: the save checks the right record on screen and the
+    # API step was admitted with --identity. The API step checks the request
+    # and the record check select the same record, so the durable checkpoint
+    # has its identity evidence and the run never fails after the save.
+    from openadapt_flow.runtime.effects import Effect, EffectKind, ValueExpr
+
+    wf = _span_workflow(admitted=False)
+    effect = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={**TARGET, "note": ValueExpr(param="note")},
+        expected_count=1,
+        timeout_s=2.0,
+    )
+    save = wf.steps[-1]
+    spec = save.api_binding.web_form.model_copy(
+        update={
+            "fields": [
+                *save.api_binding.web_form.fields,
+                WebFormField(name="form_note", source="param", param="note"),
+            ]
+        }
+    )
+    binding = save.api_binding.model_copy(
+        update={"effects": [effect], "web_form": spec}
+    )
+    save = save.model_copy(
+        update={"identity_armed": True, "effects": [effect], "api_binding": binding}
+    )
+    wf = wf.model_copy(
+        update={"steps": [*wf.steps[:-1], save], "params": {**wf.params, "note": "api"}}
+    )
+    wf, _ = admit_api_step(
+        wf, admitted_by="reviewer", identity={"subject_name": "note"}
+    )
+    fx = Fixture(tmp_path, wf)
+    try:
+        actuator = ScriptedActuator(fx.url, ActuationStatus.ACTUATED)
+        report = fx.run(actuator)
+        assert report.success is True, [r.error for r in report.results]
+        assert actuator.calls == 1
+        save_result = report.results[-1]
+        assert save_result.actuation == "api"
+        assert save_result.identity is not None
+        assert save_result.identity.status == "verified"
+        assert [c.actuation for c in fx.store().checkpoints()] == ["api_folded", "api"]
+    finally:
+        fx.stop()
