@@ -10,11 +10,9 @@ to it, and what happened when you did. Use them when you build an agent, a
 screen recorder, or a benchmark harness and want one validated format for
 observations and actions, plus JSON Schema for code that isn't in Python.
 
-The release on PyPI (0.22.0) needs Python 3.10 or later, and its only
-dependency is Pydantic 2. On `main`, the models live in Flow as
-`openadapt_flow.contracts`, and this package keeps `import openadapt_types`
-working on top of it. Releases built from `main` depend on `openadapt-flow`
-and need Python 3.10 to 3.12.
+It needs Python 3.10 or later, and its only dependency is Pydantic 2.
+openadapt-flow depends on this package and re-exports it as
+`openadapt_flow.contracts`, so the same classes are reachable under both names.
 
 ## Quick start
 

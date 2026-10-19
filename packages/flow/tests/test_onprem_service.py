@@ -319,7 +319,7 @@ def test_egress_audit_is_clean_for_local_and_allowed_peers(tmp_path):
     assert path.is_file() and report["sealed"]
     import hashlib
 
-    from openadapt_flow.contracts.seal import parse_key_registry
+    from openadapt_types.seal import parse_key_registry
     from openadapt_flow.offline_seal import public_key_entry, verify_local_seal
 
     seal = json.loads(Path(str(path) + ".seal.json").read_text())

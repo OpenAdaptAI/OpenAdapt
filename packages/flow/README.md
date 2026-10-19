@@ -168,7 +168,8 @@ to test the fallbacks that pixel-only surfaces such as Citrix depend on.
 | A pop-up blocks the screen after Save | The expected screen after the save didn't appear, so the run stopped at the save step and named the check that failed. | Same file |
 | A look-alike row above the target, or the target row removed | Stopped before the click: the row showed a different patient name. | [`test_perturbation.py`](tests/e2e/test_perturbation.py) |
 | Targets moved, relabeled, and re-themed, with their DOM ids unchanged (element locator on) | The element locator found 15 of 15. Image, text, and position matching alone found 0 of 15. | [`benchmark/structural_action/`](benchmark/structural_action/STRUCTURAL_ACTION.md) |
-| Browser zoom, display scaling, font size, or font family changed | Zoom, scaling, and font-size changes stopped the run at the first step. In a 21-point sweep there were no wrong actions and no crashes; only the recorded settings and two serif font swaps finished, and a monospace font stopped at the identity check. With the element locator on, four of these changes produced no wrong writes. | [`benchmark/cosmetic_drift/`](benchmark/cosmetic_drift/COSMETIC_DRIFT.md), [`test_structural_action.py`](tests/e2e/test_structural_action.py) |
+| Remote desktop redrawn at 125%, 150% or 175% display scaling, or with ClearType switched | The run fitted one scale from the recorded labels and continued on a view resampled to the recorded geometry. On in-process renderings of the RDP and canvas kiosks, 17 of 24 healthy runs finished, up from 3, and all 24 runs where the record switched before Save stopped with nothing saved. Record IDs with 1/l or 0/O (the RDP fixture's `MRN A1001`) still stopped at the identity check at every render but the recorded one. | [`benchmark/pixel_scale/`](benchmark/pixel_scale/README.md), [`test_pixel_scale_replay.py`](tests/test_pixel_scale_replay.py) |
+| Browser zoom, display scaling, font size, or font family changed | In the browser, zoom, scaling, and font-size changes stopped the run at the first step. In a 21-point sweep there were no wrong actions and no crashes; only the recorded settings and two serif font swaps finished, and a monospace font stopped at the identity check. With the element locator on, four of these changes produced no wrong writes. | [`benchmark/cosmetic_drift/`](benchmark/cosmetic_drift/COSMETIC_DRIFT.md), [`test_structural_action.py`](tests/e2e/test_structural_action.py) |
 
 ![One recording replayed on two UIs. Left: the theme it was recorded on. Right: a dark theme it had never seen, where each step resolves through text or position matching.](docs/showcase/demo.gif)
 
@@ -395,8 +396,13 @@ browser workflows. Desktop and Citrix runs are self-hosted
   ([`EFFECT_E2E.md`](benchmark/effect_e2e/EFFECT_E2E.md)).
 - The identity check runs only on steps where the recording captured
   identifying context. The live OpenEMR bundle had it on 4 to 7 of 12 clicks.
-- In our tests on the pixel path, any change in zoom, display scaling, or
-  font size stopped the run at its first step.
+- On a remote desktop, a change in display scaling (125% to 175%) or
+  ClearType no longer stops a run by itself. This was measured on in-process
+  renderings of two kiosks, not over a live RDP or Citrix session. A run
+  still stops when the identity check can't confirm the record at the new
+  scale: record IDs with 1/l or 0/O stopped at every render but the recorded
+  one. In the browser with the element locator off, zoom and font-size
+  changes still stop the run at its first step.
 - The Citrix path was tested on a stand-in with no DOM (3 healthy runs and 3
   stops on drift), not a live Citrix ICA/HDX session. Each deployment has to
   be tested on its own Citrix setup.

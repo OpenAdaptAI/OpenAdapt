@@ -1,0 +1,299 @@
+// Local teach-the-fix (spec §2, byoc-required). The halted run + a fix
+// (re-recorded or corrected) go to the engine's `teach_fix`, which runs
+// `openadapt-flow teach` LOCALLY and promotes a new bundle if gated. Teaching
+// sends nothing to Cloud; this is the regulated-lane correction surface.
+import { useEffect, useState } from "react";
+import { CMD, engineInvoke, engineTry } from "../lib/engine";
+import type { RunPersistenceRetryResponse, RunReport } from "../lib/types";
+import { Button, Card, CardHead, Callout, Field } from "../ui/primitives";
+
+interface TeachCorrection {
+  schema: "openadapt.desktop-teach-correction/v1";
+  capture_id: string;
+  fix_path: string;
+  workflow_id: string;
+  run_id: string;
+}
+
+interface TeachRecordingResult {
+  capture_id?: string | null;
+  correction?: TeachCorrection;
+}
+
+interface BranchOffer {
+  examples: number;
+  step_key: string;
+}
+
+export function Teach({
+  workflowId,
+  onDone,
+}: {
+  workflowId: string;
+  onDone: () => void;
+}) {
+  const [report, setReport] = useState<RunReport | null>(null);
+  const [note, setNote] = useState("");
+  const [mode, setMode] = useState<"record" | "describe">("record");
+  const [phase, setPhase] = useState<"idle" | "recording" | "teaching">("idle");
+  const [result, setResult] = useState<string | null>(null);
+  const [retryingPersistence, setRetryingPersistence] = useState(false);
+  const [correction, setCorrection] = useState<TeachCorrection | null>(null);
+  const [branchOffer, setBranchOffer] = useState<BranchOffer | null>(null);
+  const [branching, setBranching] = useState(false);
+
+  useEffect(() => {
+    engineTry<RunReport | null>(
+      CMD.GET_RUN_REPORT,
+      { workflow_id: workflowId },
+      null,
+    ).then(setReport);
+  }, [workflowId]);
+
+  async function recordFix() {
+    if (!report?.run_id) {
+      setResult("Open the halted run before you record a correction.");
+      return;
+    }
+    setPhase("recording");
+    setResult(null);
+    setCorrection(null);
+    try {
+      await engineInvoke(CMD.START_RECORDING, {
+        purpose: "teach_fix",
+        workflow_id: workflowId,
+        run_id: report.run_id,
+      });
+    } catch (error) {
+      setResult(String(error));
+      setPhase("idle");
+    }
+  }
+  async function stopFix() {
+    try {
+      const stopped = await engineInvoke<TeachRecordingResult>(
+        CMD.STOP_RECORDING,
+        {},
+      );
+      if (stopped.correction) {
+        setCorrection(stopped.correction);
+        setResult("Correction recorded. Submit it when you are ready.");
+      } else {
+        setResult("Desktop could not bind this recording to the halted run.");
+      }
+    } catch (error) {
+      setResult(String(error));
+    } finally {
+      setPhase("idle");
+    }
+  }
+
+  async function teach() {
+    if (!report?.run_id) {
+      setResult("Open the halted run before you submit a correction.");
+      return;
+    }
+    setPhase("teaching");
+    setResult(null);
+    try {
+      const r = await engineInvoke<{
+        promoted?: boolean;
+        message?: string;
+        branch_offer?: BranchOffer;
+      }>(
+        CMD.TEACH_FIX,
+        {
+          workflow_id: workflowId,
+          run_id: report.run_id,
+          note,
+          mode,
+          fix_capture_id: correction?.capture_id,
+          fix_path: correction?.fix_path,
+        },
+      );
+      setResult(
+        r?.promoted
+          ? "Fix accepted and promoted locally."
+          : r?.message ?? "Teach submitted.",
+      );
+      setBranchOffer(r?.branch_offer ?? null);
+    } catch (e) {
+      setResult(String(e));
+    } finally {
+      setPhase("idle");
+    }
+  }
+
+  async function teachBranch() {
+    if (!branchOffer) return;
+    setBranching(true);
+    try {
+      const r = await engineInvoke<{ ok?: boolean; message?: string }>(
+        CMD.TEACH_BRANCH,
+        { workflow_id: workflowId, step_key: branchOffer.step_key },
+      );
+      setResult(r?.message ?? "Branch request sent.");
+      if (r?.ok) setBranchOffer(null);
+    } catch (e) {
+      setResult(String(e));
+    } finally {
+      setBranching(false);
+    }
+  }
+
+  async function retryPersistence() {
+    if (!report) return;
+    setRetryingPersistence(true);
+    setResult(null);
+    try {
+      const response = await engineInvoke<RunPersistenceRetryResponse>(
+        CMD.RETRY_RUN_PERSISTENCE,
+        { workflow_id: workflowId, run_id: report.run_id },
+      );
+      if (response.ok && response.report) {
+        setReport(response.report);
+        setResult("The run is now saved in local history and is ready for Teach.");
+      } else {
+        setResult(response.error || "Desktop could not save the run in local history.");
+      }
+    } catch {
+      setResult("Desktop could not save the run in local history.");
+    } finally {
+      setRetryingPersistence(false);
+    }
+  }
+
+  return (
+    <div className="content">
+      <div className="page-head">
+        <div className="titles">
+          <p className="eyebrow">Correct · runs on this computer</p>
+          <h1>Teach the fix</h1>
+        </div>
+      </div>
+
+      {report?.halt && (
+        <Card>
+          <CardHead eyebrow="Halted step" title={report.halt.step_intent} />
+          <Callout tone="warn">{report.halt.reason}</Callout>
+        </Card>
+      )}
+
+      {report?.persistence && report.persistence.state !== "persisted" && (
+        <Card>
+          <CardHead
+            eyebrow="Local history"
+            title="Save this run before teaching"
+            sub={report.persistence.message}
+          />
+          {report.persistence.retryable && (
+            <Button
+              disabled={retryingPersistence}
+              onClick={() => void retryPersistence()}
+            >
+              {retryingPersistence ? "Saving…" : "Retry local history save"}
+            </Button>
+          )}
+        </Card>
+      )}
+
+      <Card>
+        <CardHead
+          eyebrow="Your correction"
+          title="Show OpenAdapt the right action"
+          sub="Re-demonstrate the halted step, or describe the correct target."
+        />
+
+        <div className="row" style={{ marginBottom: "var(--space-4)" }}>
+          <Button
+            variant={mode === "record" ? "primary" : "ghost"}
+            size="sm"
+            onClick={() => setMode("record")}
+          >
+            Re-record the step
+          </Button>
+          <Button
+            variant={mode === "describe" ? "primary" : "ghost"}
+            size="sm"
+            onClick={() => setMode("describe")}
+          >
+            Describe the fix
+          </Button>
+        </div>
+
+        {mode === "record" ? (
+          <div className="row">
+            {phase === "recording" ? (
+              <>
+                <span className="rec-dot" />
+                <Button variant="danger" onClick={stopFix}>
+                  Stop fix recording
+                </Button>
+              </>
+            ) : (
+              <Button variant="ghost" onClick={recordFix}>
+                Record the correct action
+              </Button>
+            )}
+          </div>
+        ) : (
+          <Field
+            label="What should this step do?"
+            hint="No PHI — describe the target (e.g. 'the Save button in the toolbar')."
+          >
+            <textarea
+              className="input"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </Field>
+        )}
+
+        <div className="row" style={{ marginTop: "var(--space-5)" }}>
+          <Button
+            variant="primary"
+            disabled={
+              phase !== "idle" ||
+              (mode === "record" && correction === null) ||
+              (mode === "describe" && note.trim() === "")
+            }
+            onClick={teach}
+          >
+            {phase === "teaching" ? "Teaching…" : "Submit fix"}
+          </Button>
+          <Button variant="ghost" onClick={onDone}>
+            Back to library
+          </Button>
+        </div>
+
+        {result && (
+          <div style={{ marginTop: "var(--space-4)" }}>
+            <Callout tone="info">{result}</Callout>
+          </div>
+        )}
+      </Card>
+
+      {branchOffer && (
+        <Card>
+          <CardHead
+            eyebrow="Make it permanent"
+            title={`You resolved this step ${branchOffer.examples} times`}
+            sub="OpenAdapt can learn one branch that applies when the screen shows what these halts had in common. It uses no model at run time, and it stays inactive until its tests pass and you approve it."
+          />
+          <div className="row">
+            <Button
+              variant="primary"
+              disabled={branching}
+              onClick={() => void teachBranch()}
+            >
+              {branching ? "Learning…" : "Learn a branch from these fixes"}
+            </Button>
+            <Button variant="ghost" onClick={() => setBranchOffer(null)}>
+              Not now
+            </Button>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}

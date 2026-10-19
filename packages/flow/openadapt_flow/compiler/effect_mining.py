@@ -49,6 +49,7 @@ simply never populate them, and the miner falls back to the honest placeholder
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional
 
@@ -57,7 +58,9 @@ from openadapt_flow.runtime.effects.effect import (
     MIN_RENAV_ACTIONS,
     Effect,
     EffectKind,
+    ReadbackGuard,
     ReadbackNav,
+    ReadbackReference,
     ReadbackSpec,
     ValueExpr,
     stable_id,
@@ -561,7 +564,65 @@ def _value_view_region(step: Step, norm_value: str) -> Optional[Region]:
     return None
 
 
-def derive_different_path_readback(steps: list[Step]) -> int:
+def _as_learned_nav(
+    step: Step, demo_reference: Optional[str], secret_params: frozenset[str]
+) -> Optional[ReadbackNav]:
+    """A typing step that only replays with this run's data, or None.
+
+    Typing the reference number the save showed becomes a ``reference`` step;
+    typing a run input (a search for this run's patient) becomes a ``param``
+    step. Secrets never replay.
+    """
+    if step.action is not ActionKind.TYPE or step.secret:
+        return None
+    if (
+        demo_reference
+        and step.text
+        and _norm_text(step.text) == _norm_text(demo_reference)
+    ):
+        return ReadbackNav(action="type", reference=True)
+    if step.param is not None and step.param not in secret_params:
+        return ReadbackNav(action="type", param=step.param)
+    return None
+
+
+def _types_reference(nav: list[ReadbackNav]) -> bool:
+    return any(step.reference for step in nav)
+
+
+def _commit_labels(steps: list[Step]) -> list[str]:
+    """Labels of the write flow's consequential controls, for the guard."""
+    labels: list[str] = []
+    for step in steps:
+        if step.risk != "irreversible" or step.anchor is None:
+            continue
+        text = (step.anchor.ocr_text or "").strip()
+        if text and text not in labels:
+            labels.append(text)
+    return labels
+
+
+def _line_region(lines: Optional[list[Any]], norm_value: str) -> Optional[Region]:
+    """The region of the OCR line that shows ``norm_value``, if exactly one."""
+    hits = [
+        line.region
+        for line in lines or []
+        if norm_value and norm_value in _norm_text(getattr(line, "text", ""))
+    ]
+    if len(hits) != 1:
+        return None
+    x, y, w, h = hits[0]
+    return (int(x), int(y), int(w), int(h))
+
+
+def derive_different_path_readback(
+    steps: list[Step],
+    *,
+    references: Optional[Mapping[str, str]] = None,
+    view_lines: Optional[Mapping[str, list[Any]]] = None,
+    param_bindings: Optional[Mapping[str, str]] = None,
+    secret_params: frozenset[str] = frozenset(),
+) -> int:
     """Cross-step pass: UPGRADE a same-surface read-back to DIFFERENT-PATH.
 
     A same-surface read-back (mined by :func:`_mine_onscreen_readback`) is the
@@ -573,17 +634,38 @@ def derive_different_path_readback(steps: list[Step]) -> int:
     ``different_path=True`` with the intervening navigation as
     :attr:`ReadbackSpec.renavigation` and the re-view's bounded region.
 
-    Conservative and fail-safe: it upgrades ONLY when every intervening step is
-    a deterministic, non-parameterized navigation action
-    (:func:`_as_readback_nav`), there are at least :data:`MIN_RENAV_ACTIONS` of
-    them (a genuine away-and-back, not a re-read), and the re-view re-shows the
-    value in a bounded region (:func:`_value_view_region`). Anything else is
-    left as the weaker same-surface read-back — an over-eager upgrade would only
-    ever cause a false HALT, never a false CONFIRM, but staying conservative
-    keeps the derived oracle honest. Returns the number of effects upgraded.
+    Two shapes are recognized:
+
+    - **Fixed navigation.** Every intervening step is a deterministic,
+      non-parameterized action (:func:`_as_readback_nav`), there are at least
+      :data:`MIN_RENAV_ACTIONS` of them, and the re-view re-shows the value in
+      a bounded region (:func:`_value_view_region`). Default-eligible as before.
+    - **Learned search.** The person found the record again by typing a run
+      input (a search for this run's patient) or the reference number the
+      save showed (``references``, from :func:`mine_reference`). The typing
+      replays with this run's value. The navigation must contain a state
+      reset (:func:`~openadapt_flow.compiler.readback_authoring.detect_reset`);
+      without one the effect stays same-surface. The check is marked
+      ``demonstrated`` with no admission, so it confirms nothing until a
+      person admits it (``openadapt-flow check admit``). When the saved value
+      is one run input's value (``param_bindings``), the check reads that
+      input back, not the demonstrated literal.
+
+    Every upgraded check carries a read-only :class:`ReadbackGuard` with the
+    labels of the write flow's consequential controls. ``view_lines`` maps a
+    step id to the OCR lines of its after-frame; it bounds the re-view when
+    the step asserts no text (parameter values are never asserted).
+
+    Conservative and fail-safe: an over-eager upgrade could only cause a false
+    HALT, never a false CONFIRM. Returns the number of effects upgraded.
 
     Makes ZERO model / network calls (pure structure over the compiled steps).
     """
+    from openadapt_flow.compiler.readback_authoring import detect_reset
+
+    refs = dict(references or {})
+    lines_by_step = dict(view_lines or {})
+    bindings = dict(param_bindings or {})
     upgraded = 0
     for i, step in enumerate(steps):
         effect = _onscreen_readback_effect(step)
@@ -593,18 +675,66 @@ def derive_different_path_readback(steps: list[Step]) -> int:
         if not value:
             continue
         norm_value = _norm_text(value)
+        prior = effect.readback
+        reference = prior.reference if prior is not None else None
+        demo_reference = refs.get(step.id) if reference is not None else None
+        guard = ReadbackGuard(commit_labels=_commit_labels(steps[: i + 1]))
         nav: list[ReadbackNav] = []
+        nav_steps: list[Step] = []
+        learned = False
         for later in steps[i + 1 :]:
-            navstep = _as_readback_nav(later)
+            navstep = _as_learned_nav(later, demo_reference, secret_params)
+            if navstep is not None:
+                learned = True
+            else:
+                navstep = _as_readback_nav(later)
             if navstep is None:
                 break  # non-deterministic step — cannot build a safe re-nav
             nav.append(navstep)
+            nav_steps.append(later)
             region = _value_view_region(later, norm_value)
-            if region is not None and len(nav) >= MIN_RENAV_ACTIONS:
+            if region is None and learned:
+                region = _line_region(lines_by_step.get(later.id), norm_value)
+            if region is None:
+                continue
+            if learned:
+                reset = detect_reset(nav_steps)
+                if reset is None:
+                    break  # no state reset: stays same-surface
                 effect.readback = ReadbackSpec(
                     region=region,
                     different_path=True,
                     renavigation=list(nav),
+                    demonstrated=True,
+                    reset=reset,
+                    guard=guard,
+                    # Kept for a search by a run input too: the reopened
+                    # record must show this save's number, or an older
+                    # record with the same value could pass.
+                    reference=reference,
+                )
+                if value in bindings:
+                    effect.value = ValueExpr(param=bindings[value])
+                effect.probe = (
+                    "LEARNED-SEARCH on-screen read-back: find the record again "
+                    f"by the demonstrated search ({len(nav)} action(s), "
+                    f"{reset.kind.replace('_', ' ')} detected), then re-OCR "
+                    f"region {region}. Needs a person's admission before it "
+                    "can confirm a save."
+                )
+                upgraded += 1
+                break
+            if len(nav) >= MIN_RENAV_ACTIONS:
+                # Reopen credit needs a state reset inside the navigation;
+                # without one the spec stays different-path but earns only
+                # the same-screen level (onscreen._is_persisted_reacquisition).
+                effect.readback = ReadbackSpec(
+                    region=region,
+                    different_path=True,
+                    renavigation=list(nav),
+                    reset=detect_reset(nav_steps),
+                    guard=guard,
+                    reference=reference if _types_reference(nav) else None,
                 )
                 effect.probe = (
                     "DIFFERENT-PATH on-screen read-back: re-open the record by "
@@ -618,6 +748,73 @@ def derive_different_path_readback(steps: list[Step]) -> int:
                 upgraded += 1
                 break
     return upgraded
+
+
+# -- reference numbers -----------------------------------------------------
+
+_TOKEN = re.compile(r"[A-Za-z0-9#][A-Za-z0-9#._-]*[A-Za-z0-9]")
+_DATE_LIKE = re.compile(r"^\d{1,4}[-.]\d{1,2}[-.]\d{1,4}$")
+
+
+def _reference_candidates(text: str) -> list[str]:
+    out = []
+    for match in _TOKEN.finditer(text):
+        token = match.group(0).lstrip("#")
+        digits = sum(ch.isdigit() for ch in token)
+        if digits < 3 or not 4 <= len(token) <= 32 or _DATE_LIKE.match(token):
+            continue
+        out.append(token)
+    return out
+
+
+def reference_pattern(token: str) -> str:
+    """A pattern for numbers shaped like ``token``, with one capture group.
+
+    Letter runs and separators are kept as shown (``CLM-``); each digit run
+    may be a little shorter or longer than the demonstrated one.
+    """
+    body = []
+    for run in re.findall(r"\d+|[A-Za-z]+|[^A-Za-z0-9]", token):
+        if run.isdigit():
+            body.append(r"\d{%d,%d}" % (max(1, len(run) - 2), len(run) + 3))
+        else:
+            body.append(re.escape(run))
+    return r"(?<![A-Za-z0-9])(" + "".join(body) + r")(?![A-Za-z0-9])"
+
+
+def mine_reference(
+    before_lines: Optional[list[Any]],
+    after_lines: Optional[list[Any]],
+    exclude_texts: tuple[str, ...] = (),
+) -> Optional[tuple[ReadbackReference, str]]:
+    """The reference number the save's screen newly shows, or None.
+
+    A candidate is a token with at least three digits that is on the
+    after-frame, on no line of the before-frame, and not typed by the person
+    (``exclude_texts``). Exactly one distinct candidate must remain;
+    otherwise nothing is learned. Returns the capture and the demonstrated
+    value (used only at compile time, to recognize a later search by it).
+    """
+    if not after_lines:
+        return None
+    before_text = " ".join(getattr(line, "text", "") for line in before_lines or [])
+    before_tokens = set(_reference_candidates(before_text))
+    typed = {_norm_text(v) for v in exclude_texts if v}
+    found: dict[str, Any] = {}
+    for line in after_lines:
+        for token in _reference_candidates(getattr(line, "text", "")):
+            if token in before_tokens or _norm_text(token) in typed:
+                continue
+            if any(_norm_text(token) in t for t in typed):
+                continue
+            found.setdefault(token, line)
+    if len(found) != 1:
+        return None
+    token, line = next(iter(found.items()))
+    x, y, w, h = (int(v) for v in line.region)
+    pad_x = max(w // 2, 40)
+    region = (max(0, x - pad_x), max(0, y - h), w + 2 * pad_x, 3 * h)
+    return ReadbackReference(region=region, pattern=reference_pattern(token)), token
 
 
 def mine_step_effects(
