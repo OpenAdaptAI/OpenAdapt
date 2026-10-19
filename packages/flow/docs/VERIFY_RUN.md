@@ -93,6 +93,13 @@ table other people edit during the run, set `forbid_collateral_change: false`
 on that effect in `effects:`. Fields that change on their own, such as a
 modification time, belong in the verifier's `records_drop_fields`.
 
+A changed record is not proof that the executor changed it: another user may
+have edited it during the run. The verdict says so, and the outcome is
+`reconciliation_required`, so a person checks the record before anything is
+retried or undone. Values compare by type. A `Decimal` or `datetime` read
+from a database equals the JSON form the baseline stored it in, while two
+strings compare exactly, so `"02139"` changed to `"2139"` is a change.
+
 ## Verdicts
 
 | What the store shows | `effect_verdict` | `outcome` |

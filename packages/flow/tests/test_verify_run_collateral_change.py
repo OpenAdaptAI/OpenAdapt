@@ -227,3 +227,103 @@ def test_verify_run_refuses_an_in_place_edit_of_another_record(sor, tmp_path: Pa
     assert receipt["effect_verdict"] == "REFUTED"
     assert receipt["outcome"] != "verified"
     assert result["evidence"]["readback"]["effects"][0]["collateral_change_checked"]
+
+
+# -- driver types against a baseline that went through JSON --------------------
+
+
+def test_unchanged_sql_row_against_its_round_tripped_baseline(tmp_path: Path):
+    import sqlite3
+    from decimal import Decimal
+
+    from openadapt_flow.runtime.effects import SqlRecordVerifier
+
+    sqlite3.register_adapter(Decimal, str)
+    sqlite3.register_converter("DECIMAL", lambda b: Decimal(b.decode()))
+    path = tmp_path / "sor.db"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE claims (id INTEGER PRIMARY KEY, claim_no TEXT, "
+        "amount DECIMAL, entered TIMESTAMP, scan BLOB, zip TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO claims (claim_no, amount, entered, scan, zip) VALUES "
+        "('C-1', ?, '2026-10-19 08:30:00', ?, '02139')",
+        (Decimal("1.50"), b"scan-1"),
+    )
+    conn.commit()
+
+    def connect() -> sqlite3.Connection:
+        return sqlite3.connect(path, detect_types=sqlite3.PARSE_DECLTYPES)
+
+    verifier = SqlRecordVerifier(
+        connect,
+        "SELECT id, claim_no, amount, entered, scan, zip FROM claims",
+        poll_interval_s=0.01,
+    )
+    live = verifier.capture_pre_state()
+    assert isinstance(live.records[0]["amount"], Decimal)
+    # verify-run's baseline file: JSON out, JSON back in.
+    before = EffectState.model_validate(live.model_dump(mode="json"))
+    conn.execute(
+        "INSERT INTO claims (claim_no, amount, entered, scan, zip) VALUES "
+        "('C-2', ?, '2026-10-19 09:00:00', ?, '02139')",
+        (Decimal("20.00"), b"new"),
+    )
+    conn.commit()
+    effect = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={"claim_no": "C-2"},
+        expected_count=1,
+        count_new_only=True,
+        forbid_collateral_change=True,
+        timeout_s=0.05,
+    )
+    verdict = verifier.verify(effect, before)
+    assert verdict.verdict is Verdict.CONFIRMED, verdict.reason
+
+    # The same read does catch a real change to the old row.
+    conn.execute("UPDATE claims SET zip = '2139' WHERE claim_no = 'C-1'")
+    conn.commit()
+    verdict = verifier.verify(effect, before)
+    assert verdict.verdict is Verdict.REFUTED
+    assert "zip" in verdict.reason
+    conn.close()
+
+
+@pytest.mark.parametrize(
+    ("stored", "read"),
+    [
+        (1.5, "Decimal"),
+        ("1.50", "Decimal"),
+        ("2026-10-19T08:30:00", "datetime"),
+        ("2026-10-19 08:30:00", "datetime"),
+        ("00ff", "bytes"),
+    ],
+)
+def test_driver_values_equal_their_json_form(stored, read) -> None:
+    from datetime import datetime
+    from decimal import Decimal
+
+    from openadapt_flow.runtime.effects._common import _same_value
+
+    value = {
+        "Decimal": Decimal("1.50"),
+        "datetime": datetime(2026, 10, 19, 8, 30),
+        "bytes": b"\x00\xff",
+    }[read]
+    assert _same_value(stored, value)
+
+
+def test_text_that_looks_numeric_still_compares_exactly() -> None:
+    from openadapt_flow.runtime.effects._common import _same_value
+
+    assert not _same_value("02139", "2139")
+    assert not _same_value("1.50", "1.5")
+
+
+def test_the_reason_says_it_may_be_someone_else() -> None:
+    edited = {**EXISTING, "phone_home": "555-0199"}
+    verdict = _judge(_effect(forbid_collateral_change=True), [edited, TARGET])
+    assert "another user's concurrent edit" in verdict.reason
+    assert "a person should reconcile" in verdict.reason

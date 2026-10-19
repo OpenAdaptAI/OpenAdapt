@@ -11,7 +11,8 @@ fault-model study uses for ``classify``).
 
 from __future__ import annotations
 
-import json
+from datetime import date, datetime, time
+from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable, Optional
 
 from openadapt_flow.runtime.effects.effect import (
@@ -262,15 +263,70 @@ def _judge_exact_new_set(
     )
 
 
-def _same_value(value: Any) -> str:
-    """A value in a form where key order and number formatting don't matter.
+_NUMBER = (int, float, Decimal)
+_WHEN = (datetime, date, time)
 
-    A baseline round-trips through canonical JSON (sorted keys), so a nested
-    record (an address list) can come back with its keys in another order;
-    that is not a change.
+
+def _as_number(value: Any) -> Optional[Decimal]:
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _as_when(value: Any) -> Optional[Any]:
+    if isinstance(value, _WHEN):
+        return value
+    if isinstance(value, str):
+        for parse in (datetime.fromisoformat, date.fromisoformat, time.fromisoformat):
+            try:
+                return parse(value)
+            except ValueError:
+                continue
+    return None
+
+
+def _same_value(before: Any, after: Any) -> bool:
+    """Whether a record field is unchanged between the baseline and now.
+
+    The baseline may have been written to JSON and read back (verify-run's
+    baseline file), while the current read has the driver's own types. So a
+    ``Decimal('1.50')`` read now equals the ``"1.50"`` or ``1.5`` it was
+    stored as, a ``datetime`` equals its ISO string (either separator), and
+    ``bytes`` equal their hex or UTF-8 text. Nested values compare element by
+    element, so key order doesn't matter. Two strings compare exactly: a
+    text field that changed from ``"02139"`` to ``"2139"`` is a change.
     """
 
-    return json.dumps(value, sort_keys=True, default=str)
+    if isinstance(before, dict) and isinstance(after, dict):
+        return set(before) == set(after) and all(
+            _same_value(before[k], after[k]) for k in before
+        )
+    if isinstance(before, (list, tuple)) and isinstance(after, (list, tuple)):
+        return len(before) == len(after) and all(
+            _same_value(b, a) for b, a in zip(before, after)
+        )
+    if before is None or after is None:
+        return before is None and after is None
+    if isinstance(before, bool) or isinstance(after, bool):
+        return before == after
+    if isinstance(before, (bytes, bytearray)) or isinstance(after, (bytes, bytearray)):
+        raw, other = (
+            (before, after)
+            if isinstance(before, (bytes, bytearray))
+            else (after, before)
+        )
+        if isinstance(other, (bytes, bytearray)):
+            return bytes(raw) == bytes(other)
+        text = str(other)
+        return text == bytes(raw).hex() or text == bytes(raw).decode("utf-8", "replace")
+    if isinstance(before, _NUMBER) or isinstance(after, _NUMBER):
+        b, a = _as_number(before), _as_number(after)
+        return b is not None and a is not None and b == a
+    if isinstance(before, _WHEN) or isinstance(after, _WHEN):
+        b, a = _as_when(before), _as_when(after)
+        return b is not None and a is not None and b == a
+    return before == after
 
 
 def _judge_record_written(
@@ -311,7 +367,7 @@ def _judge_record_written(
             fields = sorted(
                 k
                 for k in set(r) | set(after)
-                if _same_value(r.get(k)) != _same_value(after.get(k))
+                if not _same_value(r.get(k), after.get(k))
             )
             if fields:
                 collateral_changed.append((r, fields))
@@ -362,7 +418,9 @@ def _judge_record_written(
             f"{len(collateral_changed)} pre-existing record(s) outside the "
             f"target changed -- collateral change (field(s): "
             f"{', '.join(names[:_SAMPLE_LIMIT])}"
-            f"{'' if len(names) <= _SAMPLE_LIMIT else ', ...'})"
+            f"{'' if len(names) <= _SAMPLE_LIMIT else ', ...'}); this may be "
+            f"another user's concurrent edit, not this action -- a person "
+            f"should reconcile it before anything is retried or undone"
         )
     return EffectVerdict(
         verdict=Verdict.REFUTED,
