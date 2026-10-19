@@ -48,3 +48,7 @@ eb78575c688f06d7edc04afc69389aad10e1f5fa:packages/flow/tests/fixtures/terminal_v
 # branch commit that added them. The lines carry gitleaks:allow from the next commit on.
 3f0df2191a649540e79a621ac5406ebe2ff228e2:packages/flow/openadapt_flow/jit/authority.py:generic-api-key:101
 3f0df2191a649540e79a621ac5406ebe2ff228e2:packages/flow/openadapt_flow/jit/authority.py:generic-api-key:390
+# PR #1367 (network capture redaction): the first commit's synthetic test values in
+# test_network_capture_redact_json.py; the next commit builds them at run time.
+52502adf407793c211fb3c0ac5aba37556206d8c:packages/flow/tests/test_network_capture_redact_json.py:generic-api-key:17
+52502adf407793c211fb3c0ac5aba37556206d8c:packages/flow/tests/test_network_capture_redact_json.py:generic-api-key:146
