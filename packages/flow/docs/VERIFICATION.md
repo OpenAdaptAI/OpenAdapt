@@ -15,6 +15,7 @@
 **Bound to required CI pass evidence:**
 
 - `compose-recorded-bundles`
+- `deferred-report-check`
 - `desktop-readback-separate-session`
 - `deterministic-zero-model-replay`
 - `effect-verification-silent-writes`
@@ -65,6 +66,21 @@
 
 - The parent sequences admitted child runs. It does not enlarge the workflow-program graph and does not introduce a process contract. It does not switch backends inside one recording.
 - Evidence is unit tests plus a local mock second child. This claim does not cover Production admission or a live Citrix session.
+
+### `deferred-report-check` — supported — bound to required CI pass evidence
+
+> A save that only a later report can confirm (an X12 999 or 277CA acknowledgment, a CSV export, a saved status page) ends SAVED_AWAITING_CHECK: never VERIFIED or billable until a matching accepting report row settles it, and RECONCILIATION_REQUIRED when the report rejects it or no row arrives by the deadline.
+
+- Surfaces: docs
+- Strongest evidence strength: **supported** (tier is `supported`)
+
+| Backing evidence | Kind | Gating / CI stage | Strength | Proves |
+|---|---|---|---|---|
+| `tests/test_deferred_report.py` | test | ci (required PR gate (test)) | supported | Synthetic 999, 277CA, CSV and text reports parse into accepted, rejected, pending and conflicting rows (a 999 can only reject; a provider-level 277CA trace is ignored); the ledger keeps keys only as private digests; a real replayer run ends SAVED_AWAITING_CHECK and not billable; an unchecked second effect, a failed run or anything else uncertain stays RECONCILIATION_REQUIRED; an accepting row settles VERIFIED, while a rejecting row, a duplicate key, the deadline (checked before any report), a report older than the save, or a report read another way does not; the CLI settles it and never rewrites report.json; verify-run refuses the kind. |
+
+**Caveats (honest limits):**
+
+- The report confirms acceptance of the item with that key, not its field values. The hosted runner and the Execute v1 and production-receipt wire formats carry the outcome as RECONCILIATION_REQUIRED.
 
 ### `desktop-readback-separate-session` — supported — bound to required CI pass evidence
 

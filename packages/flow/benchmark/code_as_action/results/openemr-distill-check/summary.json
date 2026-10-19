@@ -1,0 +1,39 @@
+{
+  "arms": {
+    "code": {
+      "correct": 2,
+      "median_actions": 42.5,
+      "median_cost_usd": 0.098,
+      "median_model_calls": 18.0,
+      "median_model_seconds": 29.816,
+      "median_output_tokens": 1515.5,
+      "median_prompt_tokens": 209911.0,
+      "median_run_seconds": 53.872,
+      "median_screenshots_sent": 4.0,
+      "runs": 2,
+      "runs_under_load": 2,
+      "total_cost_usd": 0.1952
+    }
+  },
+  "environment": {
+    "app": "OpenEMR local fixture (pinned image), New Patient form, 1280x800, headless",
+    "blocks": [
+      {
+        "arm": "code",
+        "at": "2026-10-18T20:41:50Z",
+        "baseline_sha256": "fdcab903921f0d2f518317e659ab79528a31c8b9639365dc1e3758376afc0d12",
+        "round": 1,
+        "seeded_existing_chart_status": 201
+      }
+    ],
+    "effort": "medium",
+    "engine_commit": "e8ff6311",
+    "load_limit_1m": 12.0,
+    "measured_at": "2026-10-18T20:45:36Z",
+    "model": "claude-sonnet-5-5",
+    "platform": "macOS-15.7.3-arm64-arm-64bit",
+    "python": "3.12.7",
+    "spend_total_usd": 4.055897,
+    "started_at": "2026-10-18T20:40:53Z"
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "arms": {
+    "code": {
+      "correct": 5,
+      "median_actions": 6.0,
+      "median_cost_usd": 0.012,
+      "median_model_calls": 6.0,
+      "median_model_seconds": 5.871,
+      "median_output_tokens": 350.0,
+      "median_prompt_tokens": 12738.0,
+      "median_run_seconds": 21.532,
+      "median_screenshots_sent": 0.0,
+      "runs": 5,
+      "runs_under_load": 5,
+      "total_cost_usd": 0.0584
+    },
+    "every_turn": {
+      "correct": 5,
+      "median_actions": 13.0,
+      "median_cost_usd": 0.075,
+      "median_model_calls": 5.0,
+      "median_model_seconds": 9.717,
+      "median_output_tokens": 533.0,
+      "median_prompt_tokens": 73303.0,
+      "median_run_seconds": 26.009,
+      "median_screenshots_sent": 14.0,
+      "runs": 5,
+      "runs_under_load": 5,
+      "total_cost_usd": 0.3752
+    },
+    "selective": {
+      "correct": 5,
+      "median_actions": 6.0,
+      "median_cost_usd": 0.014,
+      "median_model_calls": 5.0,
+      "median_model_seconds": 5.825,
+      "median_output_tokens": 359.0,
+      "median_prompt_tokens": 10332.0,
+      "median_run_seconds": 24.022,
+      "median_screenshots_sent": 1.0,
+      "runs": 5,
+      "runs_under_load": 5,
+      "total_cost_usd": 0.0714
+    }
+  },
+  "environment": {
+    "app": "MockMed fault server, ?fault=ok&idempotency=demo, 1280x800",
+    "effort": "medium",
+    "engine_commit": "d3b8efc4",
+    "load_limit_1m": 12.0,
+    "measured_at": "2026-10-18T19:52:33Z",
+    "model": "claude-sonnet-5-5",
+    "platform": "macOS-15.7.3-arm64-arm-64bit",
+    "python": "3.12.7",
+    "spend_total_usd": 4.055897
+  },
+  "replays": {
+    "model_calls_total": 0,
+    "runs": 2,
+    "verified": 2
+  }
+}
