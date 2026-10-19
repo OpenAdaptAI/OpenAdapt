@@ -11209,6 +11209,38 @@ class Replayer:
         params: Mapping[str, RuntimeParamScalar],
         **kwargs: Any,
     ) -> Optional[str]:
+        """Perform the step's action.
+
+        A click recorded as closing its own popup (``Step.closes_surface``)
+        arms the page backend's one-shot expectation first
+        (:class:`~openadapt_flow.backend.PageCloseExpectationBackend`), so a
+        "page closed" report from that click counts as delivery once the page
+        is confirmed closed. Every other step leaves such a report uncertain.
+        """
+
+        expect = (
+            getattr(self.backend, "expect_page_close", None)
+            if step.closes_surface
+            else None
+        )
+        if not callable(expect):
+            return self._act_answering_dialog(step, resolution, params, **kwargs)
+        backend = self.backend
+        expect()
+        try:
+            return self._act_answering_dialog(step, resolution, params, **kwargs)
+        finally:
+            cancel = getattr(backend, "cancel_page_close", None)
+            if callable(cancel):
+                cancel()
+
+    def _act_answering_dialog(
+        self,
+        step: Step,
+        resolution: Optional[Resolution],
+        params: Mapping[str, RuntimeParamScalar],
+        **kwargs: Any,
+    ) -> Optional[str]:
         """Perform the step's action, answering the dialog it raises, if any.
 
         A step with a recorded ``dialog`` arms a one-shot answer on the

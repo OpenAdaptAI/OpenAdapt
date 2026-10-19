@@ -1281,6 +1281,13 @@ def surface_contract_errors(workflow: "Workflow") -> list[str]:
     for step in all_steps:
         if step.surface is not None and step.surface not in by_id:
             errors.append(f"step {step.id!r} names undeclared surface")
+        if step.closes_surface and not (
+            step.surface in by_id and by_id[step.surface].is_page
+        ):
+            errors.append(
+                f"step {step.id!r} closes its surface, but it does not run on "
+                "a page a step opened"
+            )
         declared = [sid for _, sid in sorted(expected_opens.get(step.id, []))]
         if list(step.opens) != declared:
             errors.append(
@@ -1519,6 +1526,17 @@ class Step(BaseModel):
             " the target page showed when the demonstration switched to it."
         ),
     )
+    closes_surface: bool = Field(
+        default=False,
+        description=(
+            "A click on a page surface (a popup or tab a step opened) that "
+            "closed that page in the demonstration, such as an approval "
+            "window's final button. At replay, the browser backend may then "
+            "count the click as delivered when the browser reports the page "
+            "closed during the click and the page is confirmed closed. "
+            "Without it, that error leaves delivery uncertain."
+        ),
+    )
     dialog: Optional[DialogResponse] = Field(
         default=None,
         description=(
@@ -1534,6 +1552,11 @@ class Step(BaseModel):
         for sid in self.opens:
             if not re.fullmatch(SURFACE_ID_PATTERN, sid):
                 raise ValueError("opens holds an invalid surface id")
+        if self.closes_surface:
+            if self.action not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
+                raise ValueError("closes_surface is valid only on a click")
+            if self.surface is None:
+                raise ValueError("closes_surface needs the page surface it closes")
         if self.action is not ActionKind.SWITCH_SURFACE:
             if self.surface_origin is not None:
                 raise ValueError("surface_origin is valid only on SWITCH_SURFACE")

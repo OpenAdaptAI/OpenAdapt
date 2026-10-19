@@ -2573,6 +2573,8 @@ def compile_recording(
                 stamped.surface = str(event["surface"])
             if event.get("opens"):
                 stamped.opens = [str(sid) for sid in event["opens"]]
+            if event.get("closes_surface") is True:
+                stamped.closes_surface = True
 
     # Collapse a demonstrated native/pixel option selection into one explicit
     # SELECT_OPTION contract. This is deliberately evidence-gated and remote-only:
