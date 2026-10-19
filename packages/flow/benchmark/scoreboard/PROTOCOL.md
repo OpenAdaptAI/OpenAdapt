@@ -254,3 +254,14 @@ is MockMed only.
 - **Engine of an import.** An imported run's `meta.json` names the engine
   that made the rows (the study's engine tag, or the batch's own record),
   not the importer's checkout.
+
+## Amendment 5 (2026-10-19): the quiet window overlapped other work
+
+Another session ran headless MockMed walks, pytest and vitest from about
+10:00 to 11:45, overlapping the OpenEMR worklist runs (10:50 to 11:26).
+Each row carries the 1-minute load measured at its start and end, and the
+`timed` flag follows it. No row with a recorded load over 12 is marked
+timed:
+- arm 3: 8 of 9 rows timed (loads 7.3 to 11.0);
+- arm 4: 4 of 17 rows timed (loads 10.2 to 15.2);
+- arm 6: none (self-loaded; Amendment 4).
