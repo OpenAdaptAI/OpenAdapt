@@ -63,6 +63,24 @@ _EVIDENCE_RE = re.compile(r"^[a-z0-9][a-z0-9_.:-]{0,127}$")
 _RULE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
 
 
+#: ``risk_explanation`` prefix of a local edit the compiler classified from
+#: recorded evidence (openadapt_flow.compiler.local_edit).
+LOCAL_EDIT_PREFIX = "local edit:"
+
+
+def is_local_edit(step: Step) -> bool:
+    """A step the compiler classified as a local edit, with its check sealed.
+
+    Both halves are part of the sealed bundle: the explanation, and the
+    ``local_edit`` postcondition the runtime checks after the action.
+    """
+
+    return bool(
+        (step.risk_explanation or "").startswith(LOCAL_EDIT_PREFIX)
+        and any(p.kind is PostconditionKind.LOCAL_EDIT for p in step.expect)
+    )
+
+
 @dataclass(frozen=True)
 class RiskInference:
     """Compile-time classification plus its qualification disposition."""
@@ -702,6 +720,12 @@ def infer_step_risk(
                 "submission/deletion key has retained consequential-write context",
                 (action_evidence, f"write_keyword:{write_keyword}"),
             )
+        if is_local_edit(step):
+            return RiskInference(
+                "reversible",
+                (step.risk_explanation or LOCAL_EDIT_PREFIX)[:512],
+                (action_evidence, "pattern:local_edit"),
+            )
         configured = _application_rule_inference(step, rules)
         if configured is not None:
             return configured
@@ -736,6 +760,12 @@ def infer_step_risk(
             "irreversible",
             "retained action context names a consequential state change",
             (action_evidence, f"write_keyword:{write_keyword}"),
+        )
+    if is_local_edit(step) and step.action is ActionKind.CLICK:
+        return RiskInference(
+            "reversible",
+            (step.risk_explanation or LOCAL_EDIT_PREFIX)[:512],
+            (action_evidence, "pattern:local_edit"),
         )
     configured = _application_rule_inference(step, rules)
     if configured is not None:
