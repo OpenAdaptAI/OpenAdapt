@@ -494,6 +494,9 @@ class CountersignReport:
     effect_verdict: Optional[str]
     outcome: Optional[str]
     oracle_tier: Optional[int]
+    #: The check level the receipt states, or None on a receipt
+    #: issued before ``checked_how`` existed.
+    checked_how: Optional[str] = None
     seal: dict[str, Any] = field(default_factory=dict)
     evidence: dict[str, Any] = field(default_factory=dict)
     statement: dict[str, Any] = field(default_factory=dict)
@@ -616,6 +619,7 @@ def verify_countersigned(
         effect_verdict=receipt.get("effect_verdict"),
         outcome=receipt.get("outcome"),
         oracle_tier=receipt.get("oracle_tier"),
+        checked_how=receipt.get("checked_how"),
         accept_non_flow=accept_non_flow,
     )
     if schema not in (EXECUTE_RECEIPT_SCHEMA, EFFECT_RECEIPT_SCHEMA):
@@ -629,6 +633,14 @@ def verify_countersigned(
         )
     ):
         report.problems.append("verified_without_independent_readback")
+    if schema == EFFECT_RECEIPT_SCHEMA and "checked_how" in receipt:
+        from openadapt_types.approval import CHECKED_HOW_TIER
+
+        stated_tier = {str(k): v for k, v in CHECKED_HOW_TIER.items()}.get(
+            str(receipt.get("checked_how"))
+        )
+        if stated_tier is None or stated_tier != receipt.get("verification_tier"):
+            report.problems.append("checked_how_mismatch")
     # Seal signature: openadapt_types.seal, unchanged.
     try:
         keys = parse_key_registry(list(registry))
@@ -663,6 +675,8 @@ def verify_countersigned(
                 != receipt.get("executor_kind")
                 or (ev.get("readback") or {}).get("verification_tier")
                 != receipt.get("verification_tier")
+                or (ev.get("readback") or {}).get("checked_how")
+                != receipt.get("checked_how")
             )
         report.evidence = {
             "status": "evidence_mismatch" if mismatch else "bound",
