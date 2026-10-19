@@ -1,0 +1,44 @@
+# Keep every native build ecosystem and pinned workflow action current through
+# reviewable pull requests. Minor/patch updates are grouped to reduce noise;
+# major changes remain isolated for deliberate compatibility review.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      python-minor:
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: build
+
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor:
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: build
+
+  - package-ecosystem: cargo
+    directory: "/src-tauri"
+    schedule:
+      interval: weekly
+    groups:
+      cargo-minor:
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: build

@@ -38,6 +38,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import hmac
+import io
 import json
 import math
 import os
@@ -6901,6 +6902,7 @@ class Replayer:
                     run_dir, evidence_step_id, "before", before_png
                 )
                 last_frame = before_png
+                pre_identity_halt = (result.safety_halt, result.failure_category)
                 error = self._identity_gate_error(
                     step,
                     resolution,
@@ -6911,6 +6913,77 @@ class Replayer:
                     result,
                     evidence_run_dir=run_dir,
                 )
+                if (
+                    error is not None
+                    and result.identity is not None
+                    and result.identity.status == "mismatch"
+                    # A signal-quorum conflict or a parameter mismatch names
+                    # another record outright: final, never re-observed.
+                    and result.identity.mode not in ("signal_quorum", "param")
+                    and not result.identity.param
+                    # Qualification drills bind the refusal to the injected
+                    # frame; a second look would read a different one.
+                    and self.qualification_fault_driver is None
+                    and time.monotonic() < deadline
+                    and self._identity_band_still_changing(step, resolution, before_png)
+                ):
+                    # The read raced a re-render: the target's band changed
+                    # right after it (a list or menu re-rendering under slow
+                    # lookups). Keep the first read as evidence, then look
+                    # once more on a fresh settled frame and act only if
+                    # identity verifies there. A second mismatch halts.
+                    result.identity_first_read = result.identity
+                    result.identity_first_frame_png = self._save_step_png(
+                        run_dir, evidence_step_id, "identity_first_read", before_png
+                    )
+                    result.identity_reobserved = True
+                    time.sleep(self.poll_interval_s)
+                    fresh_png = self.vision.wait_settled(self.backend)
+                    fresh_resolution, fresh_region, fresh_error = self._resolve_step(
+                        step, fresh_png, bundle_dir, workflow
+                    )
+                    fresh_drift = (
+                        self._layout_drift_error(step, fresh_png, bundle_dir, workflow)
+                        if fresh_error is None and fresh_resolution is not None
+                        else None
+                    )
+                    if fresh_drift is not None:
+                        # The re-render landed on a different screen: halt on
+                        # the drift, as the step would have before resolving.
+                        error = fresh_drift
+                        result.safety_halt = True
+                        result.failure_category = "safety_halt"
+                    elif fresh_error is None and fresh_resolution is not None:
+                        before_png = fresh_png
+                        result.before_png = self._save_step_png(
+                            run_dir, evidence_step_id, "before", before_png
+                        )
+                        last_frame = before_png
+                        resolution = fresh_resolution
+                        if fresh_region is not None:
+                            assert step.anchor is not None
+                            resolution = self._retain_visual_resolution_evidence(
+                                workflow=workflow,
+                                anchor=step.anchor,
+                                resolution=resolution,
+                                matched_region=fresh_region,
+                                frame_png=before_png,
+                                bundle_dir=bundle_dir,
+                                run_dir=run_dir,
+                            )
+                        result.resolution = resolution
+                        # The first read's halt flags belong to that read.
+                        result.safety_halt, result.failure_category = pre_identity_halt
+                        error = self._identity_gate_error(
+                            step,
+                            resolution,
+                            before_png,
+                            params,
+                            workflow,
+                            bundle_dir,
+                            result,
+                            evidence_run_dir=run_dir,
+                        )
                 if error is not None and result.identity is not None:
                     code: Literal["identity_conflict", "identity_unverifiable"] = (
                         "identity_conflict"
@@ -8974,6 +9047,43 @@ class Replayer:
 
         result.effect_verified = True
         return None
+
+    def _identity_band_still_changing(
+        self, step: Step, resolution: Resolution, read_png: bytes
+    ) -> bool:
+        """Whether the screen was still changing at an identity read.
+
+        Takes a second frame right after the read and compares the target's
+        identity band (the full-width rows around the resolved point, as tall
+        as the anchor's template plus a margin). Where the backend reports
+        page activity (browser DOM and network quiescence), activity counts
+        too. Any doubt reads as stable: a mismatch on a stable screen is
+        final.
+        """
+
+        try:
+            from PIL import Image, ImageChops
+
+            again = self.backend.screenshot()
+            first = Image.open(io.BytesIO(read_png)).convert("RGB")
+            second = Image.open(io.BytesIO(again)).convert("RGB")
+            if first.size != second.size:
+                return True
+            height = step.anchor.region[3] if step.anchor is not None else 64
+            half = max(int(height), 20) // 2 + 16
+            y = int(resolution.point[1])
+            box = (0, max(0, y - half), first.size[0], min(first.size[1], y + half))
+            if ImageChops.difference(first.crop(box), second.crop(box)).getbbox():
+                return True
+        except Exception:
+            return False
+        probe = getattr(self.backend, "page_quiescent", None)
+        if callable(probe):
+            try:
+                return probe(0.2) is False
+            except Exception:
+                return False
+        return False
 
     def _identity_gate_error(
         self,

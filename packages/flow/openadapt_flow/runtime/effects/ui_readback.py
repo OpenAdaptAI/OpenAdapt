@@ -21,6 +21,16 @@ other than GET, HEAD, or OPTIONS is aborted, except POSTs to read endpoints an
 operator declares explicitly. A blocked request makes the read uncertain, so
 the verdict is INDETERMINATE and the run halts.
 
+When the record's identifier is only known after the save (an application
+that issues a claim, submission, or confirmation number), declare
+``reference``: right after the save the verifier reads that identifier once
+from the run's own session (the page URL, or the screen through local OCR),
+then opens the record page by it in the separate session as above. The
+captured value only says which record to open; the identity check on the
+record page and the field diff decide the verdict. There is no record page to
+read before the save, so effects that need a pre-action baseline (duplicate
+counts, collateral loss, exact new sets) refuse to run in this mode.
+
 What this is not. The read goes through the same application, so it is not a
 system-of-record read. It declares
 :attr:`~openadapt_flow.verification.VerificationTier.INDEPENDENT_SESSION`
@@ -41,6 +51,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import time
 from contextlib import AbstractContextManager
@@ -122,11 +133,59 @@ class RecordIdentity(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     reader: FieldReader
-    #: The identifier the page must show, usually a run parameter.
-    value: ValueExpr
+    #: The identifier the page must show, usually a run parameter. Omitted
+    #: when :attr:`UiReadbackSpec.reference` captures it after the save.
+    value: Optional[ValueExpr] = None
     #: When set, the confirmed identifier is added to every row under this
     #: field name, so an effect can match on it (for example ``patient_id``).
     field: Optional[str] = None
+
+
+#: Placeholder reference used only to bind the URL for configuration checks
+#: and the sign-in probe, before a real reference has been captured.
+_PROBE_REFERENCE = "reference-not-captured-yet"
+
+
+class ReferenceCapture(BaseModel):
+    """Read the saved record's identifier from the run's own session.
+
+    Some applications only issue the identifier at the save: a claim number,
+    a submission reference, a confirmation number. Right after the save the
+    verifier reads it once, here, and opens the record page by it in the
+    separate session. ``source`` is ``"url"`` (the page URL the run's session
+    shows, from a backend that exposes ``url``) or ``"screen"`` (local OCR of
+    the run's current screenshot, optionally limited to ``region``).
+    ``pattern`` is a regular expression with exactly one capture group; it
+    must match exactly one distinct value, or the check is INDETERMINATE.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The ``{name}`` placeholder in ``record_url`` that the reference fills.
+    url_param: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+    source: Literal["url", "screen"] = "url"
+    pattern: str = Field(min_length=1, max_length=512)
+    #: ``(x, y, w, h)`` screen region to OCR (``source: screen`` only).
+    region: Optional[tuple[int, int, int, int]] = None
+
+    @model_validator(mode="after")
+    def _shape(self) -> "ReferenceCapture":
+        try:
+            compiled = re.compile(self.pattern)
+        except re.error as exc:
+            raise ValueError(
+                f"ui_readback.reference.pattern is invalid: {exc}"
+            ) from exc
+        if compiled.groups != 1:
+            raise ValueError(
+                "ui_readback.reference.pattern must have exactly one capture group"
+            )
+        if self.region is not None:
+            if self.source != "screen":
+                raise ValueError("ui_readback.reference.region needs source: screen")
+            if self.region[2] <= 0 or self.region[3] <= 0:
+                raise ValueError("ui_readback.reference.region must have a size")
+        return self
 
 
 class UiReadbackSpec(BaseModel):
@@ -154,6 +213,9 @@ class UiReadbackSpec(BaseModel):
     #: Record field name -> how to read it from a row.
     fields: dict[str, FieldReader]
     identity: RecordIdentity
+    #: Optional: capture the record identifier from the run's own session
+    #: after the save, instead of taking it from a run parameter.
+    reference: Optional[ReferenceCapture] = None
     #: Path prefixes on the record page's origin that the page may POST to
     #: in order to READ data (for example a GraphQL query endpoint). Empty by
     #: default: every POST after sign-in is blocked.
@@ -191,6 +253,27 @@ class UiReadbackSpec(BaseModel):
             raise ValueError("ui_readback.fields must name at least one field")
         if self.identity.field is not None and self.identity.field in self.fields:
             raise ValueError("ui_readback.identity.field must not also be a row field")
+        if self.reference is None and self.identity.value is None:
+            raise ValueError(
+                "ui_readback.identity.value is required unless ui_readback.reference "
+                "captures the identifier after the save"
+            )
+        if self.reference is not None:
+            if self.identity.value is not None:
+                raise ValueError(
+                    "ui_readback.identity.value must be omitted when "
+                    "ui_readback.reference captures the identifier"
+                )
+            name = self.reference.url_param
+            if name in self.url_params:
+                raise ValueError(
+                    f"ui_readback.reference.url_param {name!r} is also in url_params"
+                )
+            if "{" + name + "}" not in self.record_url:
+                raise ValueError(
+                    f"ui_readback.record_url has no {{{name}}} placeholder for the "
+                    "captured reference"
+                )
         if not self.identity.reader.selector.strip():
             raise ValueError(
                 "ui_readback.identity.reader.selector must name the element that "
@@ -219,12 +302,27 @@ class ResolvedReadback:
 
 
 def resolve_spec(
-    spec: UiReadbackSpec, params: Optional[Mapping[str, object]] = None
+    spec: UiReadbackSpec,
+    params: Optional[Mapping[str, object]] = None,
+    *,
+    reference: Optional[str] = None,
 ) -> ResolvedReadback:
-    """Bind ``spec`` to the run parameters, failing loud on a missing one."""
+    """Bind ``spec`` to the run parameters, failing loud on a missing one.
+
+    ``reference`` is the identifier captured after the save; it is required
+    when ``spec.reference`` is declared and refused otherwise.
+    """
 
     values = dict(params or {})
     resolved: dict[str, str] = {}
+    if spec.reference is not None:
+        if reference is None or not reference.strip():
+            raise ValueError(
+                "ui_readback.reference is declared but no reference was captured"
+            )
+        resolved[spec.reference.url_param] = quote(reference, safe="")
+    elif reference is not None:
+        raise ValueError("a reference was given but ui_readback.reference is not set")
     for name, expr in spec.url_params.items():
         value = expr.resolve(values)
         if value is None:
@@ -243,11 +341,14 @@ def resolve_spec(
         raise ValueError("ui_readback.record_url has an unfilled placeholder")
     if _origin(record_url) != _origin(spec.record_url.split("{", 1)[0] or record_url):
         raise ValueError("ui_readback.url_params must not change the URL origin")
-    identity_value = spec.identity.value.resolve(values)
+    if spec.identity.value is None:
+        identity_value: Optional[str] = reference
+    else:
+        identity_value = spec.identity.value.resolve(values)
     if identity_value is None:
         raise ValueError(
             "ui_readback.identity.value references run parameter "
-            f"{spec.identity.value.param!r}, which was not supplied"
+            f"{getattr(spec.identity.value, 'param', None)!r}, which was not supplied"
         )
     return ResolvedReadback(
         spec=spec, record_url=record_url, identity_value=identity_value
@@ -777,6 +878,14 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
             A session that runs past it is abandoned and the verdict is
             INDETERMINATE.
         environ: Where credentials are read from (``os.environ`` by default).
+        params: The run parameters, kept so a captured reference can be bound
+            to the spec after the save.
+        backend: The run's own replay backend, read once after the save when
+            the spec declares ``reference``. Usually bound later through
+            :meth:`bind_backend`.
+        vision: Namespace exposing ``ocr(png, region=...)`` for
+            ``reference.source: screen``; defaults to
+            :mod:`openadapt_flow.vision`.
     """
 
     substrate = SUBSTRATE
@@ -794,8 +903,14 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         poll_interval_s: float = 0.25,
         session_timeout_s: Optional[float] = None,
         environ: Optional[Mapping[str, str]] = None,
+        params: Optional[Mapping[str, object]] = None,
+        backend: Any = None,
+        vision: Any = None,
     ) -> None:
         self._target = target
+        self._params: dict[str, object] = dict(params or {})
+        self._backend = backend
+        self._vision = vision
         self._driver: ReadbackDriver = driver or PlaywrightReadbackDriver()
         self.poll_interval_s = poll_interval_s
         self._session_timeout_s = session_timeout_s
@@ -808,6 +923,84 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
                     "which is not set (or empty); refusing to wire a read-back "
                     "session that cannot sign in"
                 )
+
+    # -- the reference captured after the save -------------------------------------
+    @property
+    def _reference(self) -> Optional[ReferenceCapture]:
+        return self._target.spec.reference
+
+    def bind_backend(self, backend: Any) -> None:
+        """Attach the run's own replay backend (read only for ``reference``)."""
+        self._backend = backend
+
+    def requires_readable_pre_state_for(self, effect: Effect) -> bool:
+        """Whether ``effect`` needs a pre-action read of the record page.
+
+        With a captured reference there is no record page before the save, so
+        any effect that judges against a baseline must refuse before input
+        rather than halt after it.
+        """
+        base = bool(effect.requires_baseline or effect.forbid_collateral_loss)
+        if self._reference is None:
+            return base
+        return base or effect.count_new_only or effect.kind is EffectKind.EXACT_NEW_SET
+
+    def _capture_reference(self) -> tuple[Optional[str], str]:
+        """Read the record's reference from the run's own session, once.
+
+        Returns ``(reference, failure_reason)``. Never raises; the reason
+        never carries the screen text.
+        """
+        capture = self._reference
+        assert capture is not None
+        if self._backend is None:
+            return None, "no run session is bound to read the record reference from"
+        text: Optional[str] = None
+        try:
+            if capture.source == "url":
+                url = getattr(self._backend, "url", None)
+                text = url() if callable(url) else url
+                if not isinstance(text, str):
+                    return None, "the run's session does not expose its page URL"
+            else:
+                vision = self._vision
+                if vision is None:
+                    from openadapt_flow import vision as _vision
+
+                    vision = _vision
+                png = self._backend.screenshot()
+                lines = vision.ocr(png, region=capture.region)
+                text = "\n".join(line.text for line in lines)
+        except Exception as exc:  # noqa: BLE001 - never raise out of a verdict
+            return None, f"reading the record reference failed ({type(exc).__name__})"
+        found = {
+            m.group(1).strip()
+            for m in re.finditer(capture.pattern, text)
+            if m.group(1) and m.group(1).strip()
+        }
+        where = "page URL" if capture.source == "url" else "screen"
+        if not found:
+            return None, f"the run's {where} shows no record reference"
+        if len(found) > 1:
+            return None, (
+                f"the run's {where} shows {len(found)} different record references; "
+                "refusing to pick one"
+            )
+        return found.pop(), ""
+
+    def _bound_target(self) -> tuple[Optional[ResolvedReadback], str]:
+        if self._reference is None:
+            return self._target, ""
+        reference, failure = self._capture_reference()
+        if reference is None:
+            return None, failure
+        try:
+            return (
+                resolve_spec(self._target.spec, self._params, reference=reference),
+                "",
+            )
+        except ValueError as exc:
+            return None, f"the captured record reference cannot be used ({exc})"
 
     # -- session plumbing ----------------------------------------------------------
     def _credentials(self) -> tuple[str, str]:
@@ -827,6 +1020,7 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         work: Callable[[ReadbackSession], Any],
         *,
         budget_s: float,
+        target: Optional[ResolvedReadback] = None,
     ) -> tuple[Optional[Any], str, Optional[SessionFacts]]:
         """Run ``work`` in a fresh session on a worker thread.
 
@@ -835,11 +1029,12 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         """
 
         outcome: dict[str, Any] = {}
+        bound = target or self._target
 
         def run() -> None:
             username, password = self._credentials()
             try:
-                with self._driver.open(self._target, username, password) as session:
+                with self._driver.open(bound, username, password) as session:
                     outcome["facts"] = session.facts
                     if not (
                         session.facts.own_browser
@@ -867,8 +1062,11 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         return outcome.get("result"), "", outcome.get("facts")
 
     # -- normalization of one read ----------------------------------------------------
-    def _normalize(self, raw: RawPage) -> _NormalizedPage:
-        spec = self._target.spec
+    def _normalize(
+        self, raw: RawPage, target: Optional[ResolvedReadback] = None
+    ) -> _NormalizedPage:
+        target = target or self._target
+        spec = target.spec
         if not raw.ok:
             return _NormalizedPage(
                 False,
@@ -892,7 +1090,7 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
             return _NormalizedPage(True, "", [], set(), 0, True)
         identity, parsed = normalize_value(raw.identity, spec.identity.reader)
         expected_identity = normalize_expected(
-            self._target.identity_value, spec.identity.reader
+            target.identity_value, spec.identity.reader
         )
         if identity is None or not parsed:
             return _NormalizedPage(
@@ -947,12 +1145,14 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
                     uncertain.add((index, name))
                 record[name] = normalized
             if spec.identity.field is not None:
-                record[spec.identity.field] = self._target.identity_value
+                record[spec.identity.field] = target.identity_value
             records.append(record)
         return _NormalizedPage(True, "", records, uncertain, 0, False)
 
-    def _normalized_effect(self, effect: Effect) -> Effect:
-        return normalized_effect(effect, self._target.spec.fields)
+    def _normalized_effect(
+        self, effect: Effect, target: Optional[ResolvedReadback] = None
+    ) -> Effect:
+        return normalized_effect(effect, (target or self._target).spec.fields)
 
     @staticmethod
     def _uncertain_fields(effect: Effect, page: _NormalizedPage) -> list[str]:
@@ -980,7 +1180,11 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         return detail
 
     def _judge(
-        self, effect: Effect, before: EffectState, page: _NormalizedPage
+        self,
+        effect: Effect,
+        before: EffectState,
+        page: _NormalizedPage,
+        target: Optional[ResolvedReadback] = None,
     ) -> EffectVerdict:
         if not page.readable:
             return EffectVerdict(
@@ -990,7 +1194,7 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
                 reason=f"{page.reason}; cannot certify the save; HALT",
                 unavailable=True,
             )
-        normalized = self._normalized_effect(effect)
+        normalized = self._normalized_effect(effect, target)
         shortened = self._uncertain_fields(normalized, page)
         if shortened:
             return EffectVerdict(
@@ -1024,6 +1228,18 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         return self._normalize(raw), "", facts
 
     def capture_pre_state(self, context: Any = None) -> EffectState:
+        if self._reference is not None:
+            return EffectState(
+                substrate=self.substrate,
+                reachable=False,
+                records=[],
+                detail={
+                    **self._detail(None, None),
+                    "reason": "the record reference is captured after the save, so "
+                    "there is no record page to read before it",
+                    "reference_source": self._reference.source,
+                },
+            )
         page, failure, facts = self._read_once()
         if page is None or not page.readable:
             return EffectState(
@@ -1043,8 +1259,26 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         )
 
     def test_connection(self, context: Any = None) -> ConnectionProbe:
-        """Sign in in a fresh session and read the record page once."""
+        """Sign in in a fresh session and read the record page once.
 
+        With a captured reference there is no record to read yet, so the
+        probe stops after a fresh, signed-in session opens.
+        """
+
+        if self._reference is not None:
+            opened, failure, _facts = self._in_session(
+                lambda session: True, budget_s=self._session_budget()
+            )
+            return ConnectionProbe(
+                ok=opened is True,
+                substrate=self.substrate,
+                reason=(
+                    "signed in to a separate session; the record page is opened "
+                    "by the reference captured after the save"
+                    if opened is True
+                    else failure
+                ),
+            )
         page, failure, _facts = self._read_once()
         if page is None:
             return ConnectionProbe(ok=False, substrate=self.substrate, reason=failure)
@@ -1065,17 +1299,29 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         CONFIRMED or ``expected.timeout_s`` passes, reloading between reads."""
 
         timeout_s = max(0.0, expected.timeout_s)
+        target, failure = self._bound_target()
+        if target is None:
+            return EffectVerdict(
+                verdict=Verdict.INDETERMINATE,
+                kind=expected.kind,
+                substrate=self.substrate,
+                reason=f"{failure}; cannot find the saved record to check; HALT",
+                unavailable=True,
+                assurance=UNCHECKED,
+            )
 
         def work(session: ReadbackSession) -> EffectVerdict:
             deadline = time.monotonic() + timeout_s
             while True:
-                verdict = self._judge(expected, before, self._normalize(session.read()))
+                verdict = self._judge(
+                    expected, before, self._normalize(session.read(), target), target
+                )
                 if verdict.confirmed or time.monotonic() >= deadline:
                     return verdict
                 time.sleep(self.poll_interval_s)
 
         verdict, failure, _facts = self._in_session(
-            work, budget_s=self._session_budget(timeout_s)
+            work, budget_s=self._session_budget(timeout_s), target=target
         )
         if verdict is None:
             return EffectVerdict(
@@ -1150,20 +1396,31 @@ def build_ui_readback_verifier(
     poll_interval_s: float = 0.25,
     driver: Optional[ReadbackDriver] = None,
     environ: Optional[Mapping[str, str]] = None,
+    backend: Any = None,
+    vision: Any = None,
 ) -> SeparateSessionReadbackVerifier:
     """Build the verifier for one run (the ``effects.kind: ui_readback`` path).
 
     ``timeout_s`` is the deployment's ``effects.timeout_s``; it bounds session
-    setup on top of the navigation timeout.
+    setup on top of the navigation timeout. With ``spec.reference`` the URL is
+    bound to a placeholder now (to check the configuration and to sign in for
+    the connection probe) and to the captured reference after the save.
     """
 
-    target = resolve_spec(spec, params)
+    target = resolve_spec(
+        spec,
+        params,
+        reference=_PROBE_REFERENCE if spec.reference is not None else None,
+    )
     return SeparateSessionReadbackVerifier(
         target,
         driver=driver,
         poll_interval_s=poll_interval_s,
         session_timeout_s=4 * spec.navigation_timeout_s + max(0.0, timeout_s),
         environ=environ,
+        params=params,
+        backend=backend,
+        vision=vision,
     )
 
 
@@ -1176,6 +1433,7 @@ __all__ = [
     "ReadbackSession",
     "ReadbackSessionError",
     "RecordIdentity",
+    "ReferenceCapture",
     "ResolvedReadback",
     "SUBSTRATE",
     "SeparateSessionReadbackVerifier",

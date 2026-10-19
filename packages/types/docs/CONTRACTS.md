@@ -298,6 +298,11 @@ consequential step, when a step waits, and how a save was checked.
   unknown maps to `unchecked`. `per_item_review_reason` returns a reason for
   every save except a confirmed independent read-back, so a screen-only or
   missing check always goes to a person.
+- `CheckedHowLabel` is the effect receipt's optional `checked_how`, the
+  check level: `unchecked`, `same_screen`, `reopened`, `separate_session`,
+  `system_of_record`, `counterparty_confirmed`. `checked_how_for_flow_tier` maps a Flow tier onto it, and
+  `CHECKED_HOW_TIER` gives the `verification_tier` each value must agree
+  with.
 - `ApproverIdentityV1` carries RFC-0002's `authorization.approver` fields
   (`kind`, opaque `id`, `policy_ref`), plus `auth`, `auth_method` and
   `on_behalf_of`, which say how the approver was identified.
