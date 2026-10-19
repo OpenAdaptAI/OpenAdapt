@@ -217,9 +217,13 @@ longer and run 2 is unchanged. Compiling run 1 into the draft took about 8 s
 after the read-back. A person's admission (`compile-agent admit`, one attended
 canary) took 8 s.
 
-No API step was proposed: MockMed saves with a JSON request built by script,
-and the compiler proposes API steps only for form posts. The program runs
-its GUI steps.
+Run 2 ran under the JIT standard profile: durable, with governed
+authorization. No API step was proposed. The compiler's recorded reason is
+"the recording has no parameters to map into a request" (the attached
+recorder marks no parameters; inputs are lifted after compile). MockMed's
+save is also a JSON request built by script, which isn't proposed either, and
+an API step doesn't run in a durable or governed run. So the program ran its
+GUI steps, and the run-2 times are GUI times.
 
 ## Limits
 
