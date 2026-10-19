@@ -158,6 +158,23 @@ class SaveField(BaseModel):
     after: Optional[str] = Field(default=None, max_length=_MAX_FIELD_VALUE)
 
 
+class ApiRequestRef(BaseModel):
+    """The request an API step sends, when the save is an API step.
+
+    The person approves this request, not a screenshot of a form: the API
+    step fills no form. ``payload_sha256`` covers every byte the request
+    sends; the request's ``form_state_sha256`` is the operation digest that
+    binds it to the record and the record check
+    (:func:`openadapt_flow.runtime.actuators.web_form.operation_digest`).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    method: str = Field(min_length=1, max_length=16)
+    path: str = Field(min_length=1, max_length=1024)
+    payload_sha256: str = Field(pattern=PREFIXED_SHA256_PATTERN)
+
+
 class ItemApprovalRequest(BaseModel):
     """What the person is asked to approve: one save of one item."""
 
@@ -179,7 +196,9 @@ class ItemApprovalRequest(BaseModel):
     screenshot_sha256: str = Field(pattern=_HEX_SHA256)
     #: How the field state was read: the page's own form controls, or the
     #: text on the screen where the application exposes no form controls.
-    form_state_kind: Literal["dom", "screen_text"]
+    #: ``api_request`` when the save is an API step: the digest is then the
+    #: exact request, the record and the record check (``api_request``).
+    form_state_kind: Literal["dom", "screen_text", "api_request"]
     form_state_sha256: str = Field(pattern=PREFIXED_SHA256_PATTERN)
     created_at: str
     expires_at: str
@@ -195,6 +214,9 @@ class ItemApprovalRequest(BaseModel):
     fields: Optional[tuple[SaveField, ...]] = Field(
         default=None, min_length=1, max_length=MAX_SAVE_FIELDS
     )
+    #: The request an API step sends, when this save is one. Left out of the
+    #: file when absent, so earlier requests keep their digest.
+    api_request: Optional[ApiRequestRef] = None
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -203,6 +225,8 @@ class ItemApprovalRequest(BaseModel):
             data.pop("step_class", None)
         if self.fields is None:
             data.pop("fields", None)
+        if self.api_request is None:
+            data.pop("api_request", None)
         return data
 
     @model_validator(mode="after")
@@ -215,6 +239,8 @@ class ItemApprovalRequest(BaseModel):
             raise ValueError("an approval request may not outlive its window")
         if self.screenshot != f"{APPROVAL_DIRNAME}/{self.request_id}.png":
             raise ValueError("the request screenshot must be its own file")
+        if (self.form_state_kind == "api_request") != (self.api_request is not None):
+            raise ValueError("an API step's request names the request it sends")
         return self
 
     def digest(self) -> str:
@@ -691,11 +717,13 @@ class ItemApprovalStore:
         ttl_s: float = REQUEST_TTL_S,
         step_class: StepClass = StepClass.CONSEQUENTIAL,
         fields: Optional[Sequence[SaveField]] = None,
+        api_request: Optional[ApiRequestRef] = None,
     ) -> ItemApprovalRequest:
         """Write the screenshot and the request. Returns the request.
 
         ``fields`` are the values the save writes, shown on the phone. An
-        empty list is stored as none.
+        empty list is stored as none. ``api_request`` names the request an
+        API step sends; ``form_state`` is then ``("api_request", digest)``.
         """
 
         self._checked_dir(create=True)
@@ -721,6 +749,7 @@ class ItemApprovalStore:
             qualification_case_kind=qualification_case_kind,
             step_class=step_class,
             fields=tuple(fields) if fields else None,
+            api_request=api_request,
         )
         _write_exclusive(self.dir / f"{request_id}.png", frame_png)
         _write_exclusive(
@@ -1100,6 +1129,11 @@ def request_summary(
         "qualification_case_kind": request.qualification_case_kind,
         "step_class": request.step_class.value,
         "decided_by": decided_by_summary(store, request),
+        "api_request": (
+            request.api_request.model_dump(mode="json")
+            if request.api_request is not None
+            else None
+        ),
     }
 
 

@@ -1,0 +1,343 @@
+{
+  "model": "claude-opus-5-5",
+  "effort": "medium",
+  "tool": "computer_toolset_20260801",
+  "price_per_mtok_usd": {
+    "input": 4.0,
+    "output": 20.0,
+    "cache_read": 0.2,
+    "cache_write": 5.0
+  },
+  "started_at": 1792346181.357887,
+  "finished_at": 1792346226.11074,
+  "model_calls": 8,
+  "actions": 32,
+  "cost_usd": 0.117583,
+  "final_text": "Claim CDXKM is saved for Kaur Asha (999000110, active policy) with diagnosis A389 Scarlet fever, uncomplicated, an A1 General Consultation service at $400.00, and the requested explanation, though the form says this is the insuree's first visit.",
+  "refused_actions": [],
+  "calls": [
+    {
+      "turn": 1,
+      "started_s": 1792346181.3578932,
+      "ended_s": 1792346184.130199,
+      "input_tokens": 4,
+      "output_tokens": 122,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 5219,
+      "cost_usd": 0.028551,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              368,
+              220
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "999000110"
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Tab"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 3
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgA8iee1C98y46ut4SMcp",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 2,
+      "started_s": 1792346187.540035,
+      "ended_s": 1792346190.707229,
+      "input_tokens": 2,
+      "output_tokens": 219,
+      "cache_read_input_tokens": 5219,
+      "cache_creation_input_tokens": 1554,
+      "cost_usd": 0.0132018,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              988,
+              288
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "CDXKM"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              735,
+              288
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Scarlet"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgA8j6WGDc1KDduwGeC6t",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 3,
+      "started_s": 1792346194.359055,
+      "ended_s": 1792346197.01498,
+      "input_tokens": 2,
+      "output_tokens": 158,
+      "cache_read_input_tokens": 6773,
+      "cache_creation_input_tokens": 1644,
+      "cost_usd": 0.0127426,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              746,
+              514
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "scroll",
+          "input": {
+            "coordinate": [
+              746,
+              514
+            ],
+            "scroll_direction": "down",
+            "scroll_amount": 5
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgA8jbcDYv7cPbJVDsam4",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 4,
+      "started_s": 1792346200.238225,
+      "ended_s": 1792346202.989145,
+      "input_tokens": 2,
+      "output_tokens": 146,
+      "cache_read_input_tokens": 8417,
+      "cache_creation_input_tokens": 1581,
+      "cost_usd": 0.0125164,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              230,
+              535
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "General"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgA8k2tzsZE26KFT1Cbak",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 5,
+      "started_s": 1792346206.0910778,
+      "ended_s": 1792346208.5077178,
+      "input_tokens": 2,
+      "output_tokens": 98,
+      "cache_read_input_tokens": 9998,
+      "cache_creation_input_tokens": 1555,
+      "cost_usd": 0.0117426,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              142,
+              582
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgA8kTniCvzo4Tc7jLvN3",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 6,
+      "started_s": 1792346211.042927,
+      "ended_s": 1792346214.094891,
+      "input_tokens": 2,
+      "output_tokens": 187,
+      "cache_read_input_tokens": 11553,
+      "cache_creation_input_tokens": 1496,
+      "cost_usd": 0.0135386,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              410,
+              215
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Second visit, symptoms improving (#0)"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "scroll",
+          "input": {
+            "coordinate": [
+              410,
+              215
+            ],
+            "scroll_direction": "up",
+            "scroll_amount": 5
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgA8kq968hehS8wmhnE1Q",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 7,
+      "started_s": 1792346218.107073,
+      "ended_s": 1792346220.7455502,
+      "input_tokens": 2,
+      "output_tokens": 111,
+      "cache_read_input_tokens": 13049,
+      "cache_creation_input_tokens": 1621,
+      "cost_usd": 0.012942799999999999,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              1243,
+              752
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 3
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgA8mM7Q3f7BLU2LUVDpa",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 8,
+      "started_s": 1792346223.593028,
+      "ended_s": 1792346226.110251,
+      "input_tokens": 2,
+      "output_tokens": 93,
+      "cache_read_input_tokens": 14670,
+      "cache_creation_input_tokens": 1509,
+      "cost_usd": 0.012347,
+      "actions": [],
+      "request_id": "req_011CgA8mkhy4PZTvrd6QU7oj",
+      "stop_reason": "end_turn"
+    }
+  ]
+}

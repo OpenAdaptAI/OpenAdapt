@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-19T10:36:29-04:00 (git HEAD commit date)",
+  "generated_at": "2026-10-19T11:08:21-04:00 (git HEAD commit date)",
   "green_check_run": false,
   "green_check_job": null,
   "green_check_scope": [],
@@ -703,6 +703,34 @@
           "ci_job": "test",
           "junit_status": null,
           "proves": "Only same-origin fetch, XHR and form writes sent after the mark are kept, never beacons, other origins, requests already in flight or service-worker answers, and never a URL, path or body; a real Chromium save produces one; a 201 answer with an unconfirmed read-back still ends RECONCILIATION_REQUIRED and not billable; a redirect counts as not an error; the receipt counts answers without changing its evidence tier; results without answers serialize as before."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "deferred-report-check",
+      "claim": "A save that only a later report can confirm (an X12 999 or 277CA acknowledgment, a CSV export, a saved status page) ends SAVED_AWAITING_CHECK: never VERIFIED or billable until a matching accepting report row settles it, and RECONCILIATION_REQUIRED when the report rejects it or no row arrives by the deadline.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "The report confirms acceptance of the item with that key, not its field values. The hosted runner and the Execute v1 and production-receipt wire formats carry the outcome as RECONCILIATION_REQUIRED."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_deferred_report.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Synthetic 999, 277CA, CSV and text reports parse into accepted, rejected, pending and conflicting rows (a 999 can only reject; a provider-level 277CA trace is ignored); the ledger keeps keys only as private digests; a real replayer run ends SAVED_AWAITING_CHECK and not billable; an unchecked second effect, a failed run or anything else uncertain stays RECONCILIATION_REQUIRED; an accepting row settles VERIFIED, while a rejecting row, a duplicate key, the deadline (checked before any report), a report older than the save, or a report read another way does not; the CLI settles it and never rewrites report.json; verify-run refuses the kind."
         }
       ],
       "errors": []
