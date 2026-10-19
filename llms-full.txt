@@ -416,9 +416,10 @@ shipping in the next release; a pull request number means it is being merged.
    review, campaign, canary, rollback), agent-demonstrated fixes for a halted
    run, and fleet drift patches shared with no patient data are released.
    Self-repair, where an agent proposes a fix and Flow probes it up to the save
-   without saving, is on main; fixes of up to three new steps are in review.
-9. **Is a safety layer underneath any agent.** An agent's MCP calls, a guarded
-   save around any agent's write
+   without saving, is on main, and so are fixes of up to three new steps.
+9. **Is a safety layer underneath any agent.** An agent's MCP calls, a task
+   ledger that keeps a long job's rules, items, questions and checked saves on
+   the server ([#1332](https://github.com/OpenAdaptAI/OpenAdapt/pull/1332)), a guarded save around any agent's write
    ([#1258](https://github.com/OpenAdaptAI/OpenAdapt/pull/1258)), `verify-run`
    to judge any executor's write from the system of record, and Agent Skills and
    a CLI for coding agents. Released except where a PR is named.
@@ -480,6 +481,7 @@ improvising or retrying when something is off.
 | Capability | Status | Evidence | Where |
 | --- | --- | --- | --- |
 | Compile one or more demonstrations into a deterministic program | Released | Real app (OpenEMR referral, 62 timed runs) | `openadapt-flow record`, `compile`; [packages/flow](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/README.md) |
+| Classify common local edits without a person (select-all, Enter in a field or dropdown, an in-form tab, an informational dialog's dismiss), only when the recording's network capture shows no write and a runtime check confirms only the expected change | In review ([#1366](https://github.com/OpenAdaptAI/OpenAdapt/pull/1366)) | Synthetic; OpenEMR referral recording re-admitted offline (violations 12 to 1 under `permissive`) | [LOCAL_EDIT_CLASSIFICATION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/design/LOCAL_EDIT_CLASSIFICATION.md), `compiler/local_edit.py` |
 | Right-record check before any write (structure, then OCR, then pixels) | Released | Real app and synthetic | [RESOLUTION_LADDER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/RESOLUTION_LADDER.md), `runtime/identity.py` |
 | Read the saved record back from the system of record (API, database, FHIR, separate session) | Released | Real app (OpenEMR 12 of 12 fields) | [VERIFICATION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFICATION.md), `runtime/effects/` |
 | Read values out of an app as a workflow step (READ), with a records format, a signed review queue and export to CSV or a database | On main ([#1229](https://github.com/OpenAdaptAI/OpenAdapt/pull/1229), [#1215](https://github.com/OpenAdaptAI/OpenAdapt/pull/1215), [#1218](https://github.com/OpenAdaptAI/OpenAdapt/pull/1218)–[#1224](https://github.com/OpenAdaptAI/OpenAdapt/pull/1224)) | Synthetic (mock desktop apps) | `openadapt_flow/interchange/` |
@@ -574,6 +576,7 @@ improvising or retrying when something is off.
 | Code as action: the run-1 agent acts through one terminal tool (structure first, actions by role and name, a sandboxed read-only shell, screenshots on request); every action is a structured step checked against the compiled program | In review ([#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)) | Real app (local OpenEMR) and synthetic | `ClaudeAgent(vision="code")`, `CODE_AS_ACTION.md` ([#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)) |
 | Admit a draft by a person, an admitter key, or an agent under a person-signed policy, including self-admission when the policy allows it | Released | Unit tests | [JIT_ADMISSION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT_ADMISSION.md) |
 | MCP server: your agent decides what to enter, OpenAdapt makes the entry and checks it | Released | Synthetic sandbox | `openadapt-agent`, [packages/agent](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/README.md) |
+| Task ledger per job: rules locked when the job opens and enforced on every run, item status set only from OpenAdapt's own results, and yes-or-no questions a person answers on the phone or in Desktop, including when a run stops | In review ([#1332](https://github.com/OpenAdaptAI/OpenAdapt/pull/1332)) | Synthetic (30-item MockMed worklist, scripted agent, no model calls) | MCP tools `open_job`, `get_job`, `add_items`, `record_evidence`, `ask_user`, `get_answer`, `change_constraint`, `close_job`; [Track a long job](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/README.md#track-a-long-job) |
 | Compile an agent's first verified run from a prompt (`compile-agent`), and a code-as-action authoring agent | In review ([#1277](https://github.com/OpenAdaptAI/OpenAdapt/pull/1277), [#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)); the agent harness behind it runs on every backend, on main ([#1283](https://github.com/OpenAdaptAI/OpenAdapt/pull/1283)) | Synthetic | `compile-agent` |
 | Score harness optimizers (Harness², Meta-Harness) on GUI tasks with the record read-back as the reward, with full trace export | On main ([#1299](https://github.com/OpenAdaptAI/OpenAdapt/pull/1299), [#1300](https://github.com/OpenAdaptAI/OpenAdapt/pull/1300), [#1301](https://github.com/OpenAdaptAI/OpenAdapt/pull/1301)) | Synthetic (scripted proposer) | `integrations/harness2/` |
 | One scoreboard comparing the agent alone with OpenAdapt across tasks (correctness by read-back, cost, time, items per hour) | In progress ([#1303](https://github.com/OpenAdaptAI/OpenAdapt/pull/1303)) | Synthetic and local OpenEMR and openIMIS test copies | `benchmark/scoreboard/` |
@@ -591,19 +594,112 @@ improvising or retrying when something is off.
 
 ## Every command, by capability
 
-Each `openadapt-flow` command, grouped by the capability it serves. A test
-fails when a command is added without being listed here.
+Each `openadapt-flow` command, grouped by the capability it serves. Each
+command has one file under
+[`packages/flow/docs/commands/`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/commands/): to add a
+command, add `<group>/<verb>.md` and run `python scripts/build_command_map.py`.
+A test fails when a command has no file or this list is out of date.
 
-- **Record and build a program:** `record`, `demo-record`, `compile`, `induce`, `disambiguate`, `for-each`, `compose`, `process`, `intake`, `visualize`, `pull`, `variants`, `route`, `compile-agent`.
-- **Check and admit:** `lint`, `scaffold-verifier`, `check`, `api`, `bind-record-checks`, `certify`, `qualify`, `propose-qualification`, `known-ids`, `jit`, `admit`, `approver-grant`.
-- **Run and answer:** `run`, `replay`, `resume`, `approve`, `item-approval`, `triage`, `business-decisions`, `explain`, `console`, `deferred`.
-- **Judge any executor's write:** `verify-run`, `serve-reward` (scores agent training episodes by reading the system of record).
-- **Repair and learn from halts:** `teach`, `teach-branch`, `repair`, `fleet`, `undo` (the undo steps a person approves after a stop).
-- **Give agents the program:** `emit-skill`, `emit-mcp`, `serve-execute`.
-- **Proof:** `seal`, `local-seal`, `countersign`, `attach-seal`.
-- **Run on premises:** `service`, `no-outbound`.
-- **Share safely with OpenAdapt Cloud:** `sanitize`, `review-sanitized`, `approve-sanitized`, `materialize-approved`, `push`, `validate-hosted`, `report-break`, `report-run`, `connect`, `login`, `connector`.
-- **Try it and measure it:** `demo`, `tutorial`, `bench`, `benchmark`.
+<!-- BEGIN generated by scripts/build_command_map.py -->
+
+**Record and build a program:**
+
+- `compile-agent`
+- `compile`
+- `compose`
+- `demo-record`
+- `disambiguate`
+- `for-each`
+- `induce`
+- `intake`
+- `process`
+- `pull`
+- `record`
+- `route`
+- `variants`
+- `visualize`
+
+**Check and admit:**
+
+- `admit`
+- `api`
+- `approver-grant`
+- `bind-record-checks`
+- `certify`
+- `check`
+- `jit`
+- `known-ids`
+- `lint`
+- `propose-qualification`
+- `qualify`
+- `scaffold-verifier`
+
+**Run and answer:**
+
+- `approve`
+- `business-decisions`
+- `console`
+- `deferred`
+- `explain`
+- `item-approval`
+- `replay`
+- `resume`
+- `run`
+- `triage`
+
+**Judge any executor's write:**
+
+- `serve-reward`: Scores agent training episodes by reading the system of record.
+- `verify-run`
+
+**Repair and learn from halts:**
+
+- `fleet`
+- `repair`
+- `teach-branch`
+- `teach`
+- `undo`: The undo steps a person approves after a stop.
+
+**Give agents the program:**
+
+- `emit-mcp`
+- `emit-skill`
+- `serve-execute`
+
+**Proof:**
+
+- `attach-seal`
+- `countersign`
+- `local-seal`
+- `seal`
+
+**Run on premises:**
+
+- `no-outbound`
+- `service`
+
+**Share safely with OpenAdapt Cloud:**
+
+- `approve-sanitized`
+- `connect`
+- `connector`
+- `login`
+- `materialize-approved`
+- `push`
+- `report-break`
+- `report-run`
+- `review-sanitized`
+- `sanitize`
+- `validate-hosted`
+
+**Try it and measure it:**
+
+- `bench`
+- `benchmark`
+- `demo`
+- `tutorial`
+
+<!-- END generated by scripts/build_command_map.py -->
 
 ## Measured results
 
@@ -1128,6 +1224,30 @@ halts with a named reason when the confirmation is missing
 before and after numbers are in
 [`benchmark/known_ids/KNOWN_IDS.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/../benchmark/known_ids/KNOWN_IDS.md).
 
+Before a step stops on a look-alike identifier, the replayer takes extra looks
+that change nothing
+([`openadapt_flow/runtime/identity_looks.py`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/../openadapt_flow/runtime/identity_looks.py)):
+the same read on two fresh screenshots, the 2x re-read, the known-ID list when
+one is configured, and, where the surface allows it, a select-and-copy of the
+identifier's text box (`runtime.identity_copy_look`). OCR looks can't settle
+the record on their own, because a look-alike twin can read the same on every
+frame and at every size. Only two looks can: the known-ID list, and a copied
+identifier that equals a run parameter in the identity band. A look that names
+another record stops the run. Each look is recorded on the step's identity
+check.
+
+The copy look has limits. It needs a surface where selecting the identifier
+and copying it changes nothing, and a clipboard that reaches the machine Flow
+runs on (RDP or Citrix clipboard redirection). It drags across only the one
+text box that holds the identifier, and the run stops if the screen changes
+anywhere else during the look. A canvas with no selectable text has no copy
+look. A recording's own identifier is OCR text and can be a misread (the RDP
+kiosk recorded `A1001` as `Alo01`), so in a workflow that always opens the
+recorded record, the copy can stop a run but never confirm one. It confirms
+only a record chosen by a run parameter. Governed and qualification runs never
+take it. The check just before the click takes no input; it reuses the copy
+only when the identifier's pixels are unchanged since the look.
+
 Permissive `replay` may proceed on an unreadable reversible target and reports
 that condition. Governed `run` requires an affirmative live verdict for every
 identity-required admitted step; mismatch, unreadable, or abstain halts before
@@ -1155,6 +1275,39 @@ click after the last entry is presumed to commit that record: it compiles
 irreversible, and qualification requires its record check. An icon-only click
 that only navigates after data entry is therefore over-classified until an
 operator reclassifies it.
+
+On a pixel surface an icon-only click carries no text that names its control.
+When the recorder can move the pointer without clicking
+(`Recorder(capture_hover=True)` on a backend with `hover`), it rests the
+pointer on each click target first and keeps that frame. For a click with no
+other identity evidence, the compiler stores what changed near the target, such
+as the control's highlight or tooltip, as the step's hover evidence
+([`openadapt_flow/runtime/hover_evidence.py`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/../openadapt_flow/runtime/hover_evidence.py)).
+At replay, on the pixel rungs, the runtime rests the pointer on the resolved
+target, waits the same 0.8 s, and compares. A different response, or a
+response where the recording saw none, stops the run before the click. A
+missing response, or one that can't be compared (another render with no
+readable text), is recorded on the step and changes nothing. A tooltip that
+opens later than the wait looks like a different response and stops the run.
+Controls that don't answer the pointer, such as most text fields, get no
+evidence this way. The browser, remote-display (Citrix and RDP client window)
+and FreeRDP backends can hover. The Aardwolf RDP transport and the native
+Windows, macOS and Linux backends can't move the pointer without a button
+yet, so they take no hover look.
+
+A pixel step is checked on one frame and clicked a moment later. Consequential
+identity-gated clicks were already bound to the exact checked frame. Every
+other pixel click now gets a check-to-click guard (`Replayer._pixel_recheck`):
+right before the click, the runtime takes a fresh frame and compares the
+target region, the identity region and the hover response with the frame the
+step was checked on. If one changed (a dialog opened, the list re-sorted), it
+doesn't click. It re-resolves the target and re-runs the identity check on
+the fresh frame, with no input, and clicks only when the next frame matches
+that one. After two re-observations that still see a change, or when the
+target or its identity can't be confirmed again, it refuses the click. Each
+change is recorded on the step (`StepResult.check_to_click`). A change smaller
+than 4 pixels, or under 24 levels per channel, doesn't count. Structured
+targets are bound by element tokens instead and aren't rechecked.
 
 A consequential click must be tied to a record before Flow delivers it. Inside
 a table row, the row is that record. An icon-only Save that floats beside a

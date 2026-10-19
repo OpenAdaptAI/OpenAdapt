@@ -16986,24 +16986,35 @@ class Replayer:
         return True
 
     def _field_value_shown(self, pc: Any) -> bool:
-        """The focused dropdown shows this run's value of ``pc.param``."""
+        """The focused field shows this run's value of ``pc.param``.
+
+        A dropdown's selected label matches up to spacing and case; a text
+        field's value must match exactly. Unobservable is a failure.
+        """
 
         params = getattr(self, "_current_params", None) or {}
         if not pc.param or pc.param not in params:
             return False
-        reader = getattr(self.backend, "focused_select_label", None)
-        if not callable(reader):
-            return False
-        try:
-            shown = reader()
-        except Exception:  # noqa: BLE001 - unobservable is a failure
-            return False
+        expected = runtime_param_text(params[pc.param])
+
+        def read(name: str) -> Optional[str]:
+            reader = getattr(self.backend, name, None)
+            if not callable(reader):
+                return None
+            try:
+                value = reader()
+            except Exception:  # noqa: BLE001 - unobservable is a failure
+                return None
+            return value if isinstance(value, str) else None
 
         def squash(value: str) -> str:
             return " ".join(value.split()).casefold()
 
-        expected = runtime_param_text(params[pc.param])
-        return isinstance(shown, str) and squash(shown) == squash(expected)
+        label = read("focused_select_label")
+        if label is not None:
+            return squash(label) == squash(expected)
+        value = read("focused_text_value")
+        return value is not None and value == expected
 
     @staticmethod
     def _describe_postcondition(pc: Any) -> str:
