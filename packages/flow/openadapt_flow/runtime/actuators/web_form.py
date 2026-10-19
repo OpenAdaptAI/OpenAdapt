@@ -273,17 +273,20 @@ def native_problem(name: str, control: dict[str, Any], value: str) -> Optional[s
         number = _number(value)
         if number is None:
             return f"{name} is not a number"
-        for attr, bad in (("min", number.__lt__), ("max", number.__gt__)):
-            limit = _number(str(control.get(attr) or ""))
-            if limit is not None and bad(limit):
-                return f"{name} is outside the form's {attr} {control.get(attr)}"
+        low = _number(str(control.get("min") or ""))
+        high = _number(str(control.get("max") or ""))
+        if low is not None and number < low:
+            return f"{name} is outside the form's min {control.get('min')}"
+        if high is not None and number > high:
+            return f"{name} is outside the form's max {control.get('max')}"
     if kind == "date":
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
             return f"{name} is not a date (YYYY-MM-DD)"
-        for attr, bad in (("min", value.__lt__), ("max", value.__gt__)):
-            limit = control.get(attr)
-            if limit and bad(limit):
-                return f"{name} is outside the form's {attr} {limit}"
+        low_date, high_date = control.get("min"), control.get("max")
+        if low_date and value < str(low_date):
+            return f"{name} is outside the form's min {low_date}"
+        if high_date and value > str(high_date):
+            return f"{name} is outside the form's max {high_date}"
     return None
 
 
