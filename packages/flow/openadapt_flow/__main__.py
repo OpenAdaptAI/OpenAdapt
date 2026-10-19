@@ -691,6 +691,40 @@ def _refuse_missing_citrix_readiness(backend_cfg: object, *, operation: str) -> 
     return True
 
 
+def _refuse_shared_readback_session(
+    cfg: object,
+    backend_cfg: object,
+    *,
+    operation: str,
+    surfaces: Optional[dict] = None,
+) -> bool:
+    """Refuse a desktop read-back session that is the session that types.
+
+    The deployment loader checks this too, but ``--backend``, ``--agent-url``,
+    ``--rdp-host`` and the bundle's recorded target can change the typing
+    backend after loading. This checks the backend the run will really use.
+    """
+    from openadapt_flow.deployment import desktop_readback_session_overlap
+
+    effects = getattr(cfg, "effects", None)
+    if effects is None:
+        return False
+    for section in [effects, *getattr(effects, "candidates", [])]:
+        spec = getattr(section, "desktop_readback", None)
+        if spec is None:
+            continue
+        problem = desktop_readback_session_overlap(
+            spec, [backend_cfg, *(surfaces or {}).values()]
+        )
+        if problem is not None:
+            print(
+                f"{operation} REFUSED: effects.desktop_readback.session {problem}. "
+                "Nothing was executed."
+            )
+            return True
+    return False
+
+
 _SAFE_BUNDLE_LOAD_GUIDANCE = (
     "Verify the bundle path and integrity; for a sealed bundle, set "
     "OPENADAPT_BUNDLE_KEY."
@@ -2322,6 +2356,10 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     if refused is not None:
         return refused
     surface_cfgs = _resolve_surface_bindings(args, cfg, workflow)
+    if _refuse_shared_readback_session(
+        cfg, backend_cfg, operation=operation, surfaces=surface_cfgs
+    ):
+        return 2
     # Opt-in attest pre-state snapshot: the earliest point where the run is
     # ADMITTED (every gate above passed) and the run directory is final, but
     # NO actuation has begun on either the desktop or the web path below.
@@ -3007,6 +3045,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
     refused = _enforce_surface_binding(args, workflow, backend_cfg, operation="run")
     if refused is not None:
         return refused
+    if _refuse_shared_readback_session(cfg, backend_cfg, operation="run"):
+        return 2
     if _refuse_missing_citrix_readiness(backend_cfg, operation="run"):
         return 2
     will_actuate = not bool(getattr(args, "dry_run", False))
@@ -3641,6 +3681,8 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     if refused is not None:
         return refused
     if _refuse_missing_citrix_readiness(backend_cfg, operation="Resume"):
+        return 2
+    if _refuse_shared_readback_session(cfg, backend_cfg, operation="Resume"):
         return 2
 
     where = (
@@ -10610,6 +10652,9 @@ def _attended_service_from_args(args: argparse.Namespace) -> Iterator[Any]:
         backend_cfg = _resolve_backend_config(args, cfg)
     except (FileNotFoundError, ValueError) as exc:
         raise SystemExit(str(exc)) from exc
+    readback_cfg = cfg.model_copy(update={"effects": effects_cfg})
+    if _refuse_shared_readback_session(readback_cfg, backend_cfg, operation="console"):
+        raise SystemExit(2)
     allow_egress = bool(
         cfg.runtime.allow_model_grounding
         or getattr(args, "allow_model_grounding", False)

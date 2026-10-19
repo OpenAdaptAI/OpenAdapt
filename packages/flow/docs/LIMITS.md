@@ -379,12 +379,16 @@ grade is `screen_readback`, never `independent_readback`.
 
 **Without a read that is independent of the acting session, the run cannot
 be `VERIFIED`.** That read is either a system-of-record read (REST, FHIR, SQL,
-file; tier 1) or the application's record page read in a separate signed-in
-session (`ui_readback` for web, `fresh_session` for desktop and RDP,
-tested on mocks only; tier 2). The second goes through the same
-application, so it is not a system-of-record read and has its own limits
-([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback)).
-A pixel-only Citrix or RDP session with neither is that case. Reopening the
+file; tier 1) or the application's own screens read in a separate signed-in
+session (tier 2): a record page in a separate browser (`ui_readback`), a
+relaunched desktop app or a second RDP session (`fresh_session`, tested on
+mocks only), or a look-up in a separate desktop, RDP or Citrix session
+(`desktop_readback`, tier 2 with its own RDP logon). None of them goes around
+the application, so none is a system-of-record read, and each has its own
+limits ([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback),
+[`desktop_readback`](EFFECT_KIT.md#separate-session-desktop-read-back-desktop_readback)).
+If a person can look the record up, the check can too. A pixel-only Citrix or
+RDP deployment that declares no such check is the remaining case. Reopening the
 record in the acting session (tier 3) is reported as its own check level,
 `reopened` ("Reopened in the same session"), and is not `VERIFIED`: a
 confirmed reopen ends `COMPLETED_UNVERIFIED`, and the agent result says

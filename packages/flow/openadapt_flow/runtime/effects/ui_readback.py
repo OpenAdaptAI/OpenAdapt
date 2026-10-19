@@ -794,6 +794,74 @@ def _is_truncated(text: Optional[str], markers: list[str]) -> bool:
     return any(marker and stripped.endswith(marker) for marker in markers)
 
 
+class _Normalizer(Protocol):
+    date_format: Optional[str]
+    casefold: bool
+
+
+def normalized_effect(effect: Effect, readers: Mapping[str, _Normalizer]) -> Effect:
+    """A local copy of ``effect`` whose expected values are normalized
+    exactly as displayed values are. The caller's effect is not touched."""
+
+    def norm(name: str, expr: Optional[ValueExpr]) -> Optional[ValueExpr]:
+        if expr is None or expr.literal is None or name not in readers:
+            return expr
+        return ValueExpr(
+            literal=normalize_expected(expr.literal, readers[name])  # type: ignore[arg-type]
+        )
+
+    match = {k: norm(k, v) or v for k, v in effect.match.items()}
+    value = norm(effect.field, effect.value) if effect.field else effect.value
+    return effect.model_copy(update={"match": match, "value": value}, deep=True)
+
+
+def blocking_uncertain_fields(
+    effect: Effect,
+    records: list[dict[str, Any]],
+    uncertain: set[tuple[int, str]],
+) -> list[str]:
+    """Fields whose shortened or unparseable display blocks a verdict.
+
+    A row is a candidate for the effect unless one of its CERTAIN selector
+    values rules it out. If a selector value is uncertain the row's
+    candidacy is unknown, so the read cannot certify anything. For
+    ``field_equals`` the compared field also must be certain on every
+    candidate row. Uncertain values on rows the selector rules out (an
+    older encounter with a long note, say) do not block the verdict.
+    """
+
+    if not uncertain:
+        return []
+    selector_fields = set(effect.match)
+    if effect.idempotency_key is not None:
+        selector_fields.add(effect.key_field)
+    if effect.kind is EffectKind.EXACT_NEW_SET:
+        for member in effect.new_records:
+            selector_fields.update(member)
+        selector_fields.add(effect.identity_field)
+    compared = (
+        {effect.field}
+        if effect.kind is EffectKind.FIELD_EQUALS and effect.field
+        else set()
+    )
+    wanted = {k: str(v) for k, v in effect.match.items()}
+    if effect.idempotency_key is not None:
+        wanted[effect.key_field] = str(effect.idempotency_key)
+    blocking: set[str] = set()
+    for index, record in enumerate(records):
+        unsure = {name for row, name in uncertain if row == index}
+        if not unsure:
+            continue
+        ruled_out = any(
+            name not in unsure and str(record.get(name)) != want
+            for name, want in wanted.items()
+        )
+        if ruled_out and effect.kind is not EffectKind.EXACT_NEW_SET:
+            continue
+        blocking.update(unsure & (selector_fields | compared))
+    return sorted(blocking)
+
+
 # -- the verifier -------------------------------------------------------------------
 
 
@@ -1084,62 +1152,11 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
     def _normalized_effect(
         self, effect: Effect, target: Optional[ResolvedReadback] = None
     ) -> Effect:
-        """A local copy of ``effect`` whose expected values are normalized
-        exactly as displayed values are. The caller's effect is not touched."""
-
-        readers = (target or self._target).spec.fields
-
-        def norm(name: str, expr: Optional[ValueExpr]) -> Optional[ValueExpr]:
-            if expr is None or expr.literal is None or name not in readers:
-                return expr
-            return ValueExpr(literal=normalize_expected(expr.literal, readers[name]))
-
-        match = {k: norm(k, v) or v for k, v in effect.match.items()}
-        value = norm(effect.field, effect.value) if effect.field else effect.value
-        return effect.model_copy(update={"match": match, "value": value}, deep=True)
+        return normalized_effect(effect, (target or self._target).spec.fields)
 
     @staticmethod
     def _uncertain_fields(effect: Effect, page: _NormalizedPage) -> list[str]:
-        """Fields whose shortened or unparseable display blocks a verdict.
-
-        A row is a candidate for the effect unless one of its CERTAIN selector
-        values rules it out. If a selector value is uncertain the row's
-        candidacy is unknown, so the read cannot certify anything. For
-        ``field_equals`` the compared field also must be certain on every
-        candidate row. Uncertain values on rows the selector rules out (an
-        older encounter with a long note, say) do not block the verdict.
-        """
-
-        if not page.uncertain:
-            return []
-        selector_fields = set(effect.match)
-        if effect.idempotency_key is not None:
-            selector_fields.add(effect.key_field)
-        if effect.kind is EffectKind.EXACT_NEW_SET:
-            for member in effect.new_records:
-                selector_fields.update(member)
-            selector_fields.add(effect.identity_field)
-        compared = (
-            {effect.field}
-            if effect.kind is EffectKind.FIELD_EQUALS and effect.field
-            else set()
-        )
-        wanted = {k: str(v) for k, v in effect.match.items()}
-        if effect.idempotency_key is not None:
-            wanted[effect.key_field] = str(effect.idempotency_key)
-        blocking: set[str] = set()
-        for index, record in enumerate(page.records):
-            unsure = {name for row, name in page.uncertain if row == index}
-            if not unsure:
-                continue
-            ruled_out = any(
-                name not in unsure and str(record.get(name)) != want
-                for name, want in wanted.items()
-            )
-            if ruled_out and effect.kind is not EffectKind.EXACT_NEW_SET:
-                continue
-            blocking.update(unsure & (selector_fields | compared))
-        return sorted(blocking)
+        return blocking_uncertain_fields(effect, page.records, page.uncertain)
 
     def _detail(
         self, facts: Optional[SessionFacts], page: Optional[_NormalizedPage]
@@ -1197,7 +1214,7 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
             page.records,
             substrate=self.substrate,
         )
-        return _without_absence_claim(_relabel(verdict))
+        return without_absence_claim(_relabel(verdict))
 
     # -- adapter lifecycle -------------------------------------------------------------
     def _read_once(
@@ -1324,7 +1341,7 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         )
 
 
-def _without_absence_claim(verdict: EffectVerdict) -> EffectVerdict:
+def without_absence_claim(verdict: EffectVerdict) -> EffectVerdict:
     """Never let a record page establish that nothing was saved.
 
     A REFUTED verdict with an observed count of zero means "affirmatively
@@ -1349,15 +1366,23 @@ def _without_absence_claim(verdict: EffectVerdict) -> EffectVerdict:
 
 
 def _relabel(verdict: EffectVerdict) -> EffectVerdict:
+    return relabel_screen_read(
+        verdict, "the record page (separate session)", "record page"
+    )
+
+
+def relabel_screen_read(
+    verdict: EffectVerdict, long_name: str, short_name: str
+) -> EffectVerdict:
     """Say "record page" where the shared judge says "system of record".
 
     The shared judge's reasons are written for system-of-record reads. This
     read is not one, and its evidence must not say it is.
     """
 
-    reason = verdict.reason.replace(
-        "the system of record", "the record page (separate session)"
-    ).replace("system of record", "record page")
+    reason = verdict.reason.replace("the system of record", long_name).replace(
+        "system of record", short_name
+    )
     if reason == verdict.reason:
         return verdict
     return verdict.model_copy(update={"reason": reason})
@@ -1415,8 +1440,12 @@ __all__ = [
     "SessionFacts",
     "SignInSpec",
     "UiReadbackSpec",
+    "blocking_uncertain_fields",
     "build_ui_readback_verifier",
     "normalize_expected",
+    "normalized_effect",
+    "relabel_screen_read",
+    "without_absence_claim",
     "normalize_value",
     "resolve_spec",
 ]
