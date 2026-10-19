@@ -384,6 +384,13 @@ class AttendedActionService:
                 "remove those keys to let the attended service open its own "
                 "visible browser. Nothing was executed."
             )
+        kind = str(backend.kind or "").strip().lower()
+        if kind == "citrix" and not str(backend.rdp_readiness_text or "").strip():
+            raise ValueError(
+                "attended Citrix actions require a stable current-frame "
+                "readiness marker before any action: set "
+                "backend.rdp_readiness_text. Nothing was executed."
+            )
         self._deployment = deployment.model_copy(deep=True)
         self._key = key
         self._owner = _ThreadOwnedAttendedExecutor(

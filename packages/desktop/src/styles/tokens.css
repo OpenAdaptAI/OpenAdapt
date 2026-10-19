@@ -340,14 +340,16 @@
 
 /* -----------------------------------------------------------------------------
    4. TYPOGRAPHY
-      Two faces (Clinical Calm). The serif carries what a person reads as a
-      statement or a measurement: page titles, the question on a stop, big
-      numbers, compared values. The sans carries everything a person operates.
+      One face. The sans carries titles, numbers and everything a person
+      operates, the same as OpenAdapt Cloud and the phone decision portal.
+      --font-heading is the single switch: set it back to var(--font-serif)
+      (and --fw-heading to 430) to restore serif titles.
       Monospace is only for run IDs and code inside Technical details.
    -------------------------------------------------------------------------- */
 :root {
   --font-ui: var(--font-sans);
-  --font-heading: var(--font-serif);
+  --font-heading: var(--font-sans);
+  --fw-heading: 600;
 
   /* Type scale (px), tuned for dense product UI. Canonical carries a rem scale
      sized for editorial layout; this one is a product scale, which is a scale

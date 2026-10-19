@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass
 from typing import Any
 
 from openadapt_flow.backend import Backend
+from openadapt_flow.runtime.step_timing import timed_span
 from openadapt_flow.vision.hashing import phash_distance, phash_png
 
 logger = logging.getLogger(__name__)
@@ -39,6 +41,7 @@ class SettleResult:
     mode: str = "pixel"
 
 
+@timed_span("settle")
 def wait_settled_result(
     backend: Backend,
     *,
@@ -157,6 +160,15 @@ def _poll_settled(
 # Granularity of the page-quiescence poll. The quiet WINDOW is still the
 # screenshot settle's interval; only how often we look is finer.
 PAGE_POLL_S = 0.02
+#: How long the page must stay quiet before it counts as settled. None uses
+#: ``(stable_frames - 1) * interval_s`` (100 ms by default), the span two
+#: identical screenshots must cover. ``OPENADAPT_FLOW_PAGE_QUIET_MS`` overrides
+#: it, for measuring the tradeoff (docs/THROUGHPUT.md).
+PAGE_QUIET_WINDOW_S: float | None = (
+    float(os.environ["OPENADAPT_FLOW_PAGE_QUIET_MS"]) / 1000.0
+    if os.environ.get("OPENADAPT_FLOW_PAGE_QUIET_MS")
+    else None
+)
 
 
 def _page_settled(
@@ -197,6 +209,8 @@ def _page_settled(
         else None
     )
     window_s = max(interval_s, interval_s * (stable_frames - 1))
+    if PAGE_QUIET_WINDOW_S is not None:
+        window_s = PAGE_QUIET_WINDOW_S
     while True:
         try:
             quiet = probe(window_s)
@@ -267,6 +281,7 @@ def _page_settled(
         time.sleep(PAGE_POLL_S)
 
 
+@timed_span("settle")
 def wait_settled_seeded(
     backend: Backend,
     seed: SettleSeed | None,
@@ -307,6 +322,7 @@ def wait_settled_seeded(
     return result
 
 
+@timed_span("settle")
 def wait_settled(
     backend: Backend,
     *,

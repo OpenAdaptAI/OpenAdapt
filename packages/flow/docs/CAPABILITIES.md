@@ -23,6 +23,13 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   authoring time rather than emitting a bad bundle. This turns a replay of
   one recorded path into governed execution over a queue:
   `openadapt-flow for-each bundle --records worklist.csv --out queue-bundle`.
+- **Parallel worklists.** `replay` and `run` with `--workers N` enter a
+  for-each bundle's items on N sessions at once, each signed in as its own
+  user from the deployment file, with every check still on per item. Each
+  item is claimed once from a durable queue, a halt on any worker stops new
+  items on all of them, and `--readback-window K` lets a worker start its
+  next item while the last save is still being read back. See
+  [`THROUGHPUT.md`](THROUGHPUT.md).
 - **Compose separately recorded bundles.** `compose` takes named compiled
   child bundles and a handoff contract and writes a parent artifact that
   `certify` and `run` execute. Each child keeps the surface it was recorded

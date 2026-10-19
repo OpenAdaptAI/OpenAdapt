@@ -101,9 +101,9 @@ export function Runner() {
       </div>
 
       <Callout tone="info" title="How this works">
-        When you turn this on, OpenAdapt Cloud can send approved tasks here.
+        When you turn this on, OpenAdapt Cloud can send approved workflows here.
         This computer reaches out to Cloud, and Cloud can't reach in. Each
-        task's approval is checked here before it runs, and only results with
+        workflow's approval is checked here before it runs, and only results with
         no PHI go back.
       </Callout>
 

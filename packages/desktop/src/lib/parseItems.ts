@@ -114,7 +114,7 @@ export function parseItems(
   if (inputs.length === 0) {
     return {
       ...empty,
-      error: "This task doesn't take any values, so there's nothing to paste.",
+      error: "This workflow doesn't take any values, so there's nothing to paste.",
     };
   }
 
