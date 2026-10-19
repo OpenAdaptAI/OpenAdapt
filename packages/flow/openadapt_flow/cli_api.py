@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 from typing import Callable, Optional
 
+from openadapt_flow.cli_hints import command
 from openadapt_flow.compiler.api_proposal import (
     ApiProposalError,
     admit_api_step,
@@ -73,19 +74,20 @@ def cmd_api_show(args: argparse.Namespace) -> int:
     if sidecar.is_file():
         reasons = json.loads(sidecar.read_text()).get("reasons") or []
     if args.as_json:
-        rows = [
-            {
-                "step": s.id,
-                "method": s.api_binding.method,
-                "path": s.api_binding.url_template,
-                "replaces_steps": s.api_binding.web_form.replaces_steps,
-                "admitted": s.api_binding.admitted(),
-                "admitted_by": s.api_binding.admission.admitted_by
-                if s.api_binding.admission
-                else None,
-            }
-            for s in found
-        ]
+        rows = []
+        for s in found:
+            b = s.api_binding
+            assert b is not None and b.web_form is not None
+            rows.append(
+                {
+                    "step": s.id,
+                    "method": b.method,
+                    "path": b.url_template,
+                    "replaces_steps": b.web_form.replaces_steps,
+                    "admitted": b.admitted(),
+                    "admitted_by": b.admission.admitted_by if b.admission else None,
+                }
+            )
         print(
             json.dumps(
                 {"api_steps": rows, "not_proposed_because": reasons},
@@ -103,9 +105,10 @@ def cmd_api_show(args: argparse.Namespace) -> int:
     for step in found:
         print(describe_api_step(step))
         binding = step.api_binding
+        assert binding is not None
         state = (
             f"admitted by {binding.admission.admitted_by}"
-            if binding.admitted()
+            if binding.admitted() and binding.admission is not None
             else "NOT admitted"
         )
         print(f"  -> {state}\n")
@@ -136,7 +139,7 @@ def cmd_api_propose(args: argparse.Namespace) -> int:
         return 1
     workflow.save(bundle)
     print(describe_api_step(step))
-    print("\nNot admitted yet: a person runs 'openadapt-flow api admit'.")
+    print(f"\nNot admitted yet: a person runs '{command('api admit')}'.")
     return 0
 
 

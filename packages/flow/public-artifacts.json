@@ -352,6 +352,242 @@
       "sha256": "30de6dbb43ad0db4fd8b55737d765d06747b896ffae04522b6957d567dcfd89c"
     },
     {
+      "path": "benchmark/openemr_api_tier/spike/api_bundle/compile_report.json",
+      "sha256": "9bea1fdb1e7caa3cd4e25d2dcf6c46bb82871a35aa18c4dbb471d2c4fb6321bc"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/api_bundle/manifest.json",
+      "sha256": "a28c75e5b28720f1b2119b9dcd44541826796d79163e814f240ee71d6da2607a"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/api_bundle/session_form.json",
+      "sha256": "81e1500db0c805f822328b17cf5e4d477bc2901aadf362770ffdb12828703ae5"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/api_bundle/workflow.json",
+      "sha256": "173f37bee50d01fec4973caae617c34e230ea10e5973876dc672a4d6e11e5fb1"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/capture_r1.json",
+      "sha256": "52a786d4584c2af9605116f9dc10f20fb8997f106faaa5428e16d90beba080d5"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/figures.json",
+      "sha256": "2dfadb15def3d2d7f3c9389b7a922c4c0c1994f3c549ea5694481922147ae26f"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/har_summary.json",
+      "sha256": "a785fd26a6138b5093783309e1e7a03d6c1b9def30675e414003dedf4f0310b2"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/probes.json",
+      "sha256": "e2bc44a2cf1ec51a69019477c693691470dcf97e08c7cabaca8f3f803e4cd1a8"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs.csv",
+      "sha256": "88c8d45800c7c9842b5e92dd758976f3ef3bc0c719b15d87b27c22913f5a7165"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b01-api-1-r1-nadia-brennan.json",
+      "sha256": "c9998b75665e936d98781769a2836836e771565c14db96878595ecec283b4600"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b01-api-2-r2-marcus-feld.json",
+      "sha256": "ea84b9479f128d33c4fca08d8d46ad7cf6721eeed35aeb71b9d3b3eafc8920d9"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b01-api-3-r3-ines-carvalho.json",
+      "sha256": "d185a61b528446b9aa8a6588a713cf145cb77ed2468bd26b84fbc61a6aa93bb3"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b01-api-4-r4-theo-lindqvist.json",
+      "sha256": "16e0c93362d0f89a21fff39f7c973441e080ebf66be9388619df9305df6c5b74"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b01-browser-1-r1-nadia-brennan.json",
+      "sha256": "0bf1e8ac429d317db9cc606474f8eef1d43044b6bf6799ba731a9b5ce80d351f"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b01-browser-2-r2-marcus-feld.json",
+      "sha256": "0f0a28fae53cbb42badf23d462bef2540c24b0976e395d2698ee34ab9230bdb9"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b01-browser-3-r3-ines-carvalho.json",
+      "sha256": "e702a002fef6129387cd122f860d3ebc683ab587f40837067150d1ad3dd67bbc"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b01-browser-4-r4-theo-lindqvist.json",
+      "sha256": "ed9ea92b213923adca7ebf0aa1ef481de68f6e06ed3b9a60859a67b85db15221"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b02-api-1-r5-grace-adeyemi.json",
+      "sha256": "d571b617334c5c586daee4a7162e5b5c6ed4e0016aab16e495a67a09a735103a"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b02-api-2-r6-rosa-delgado.json",
+      "sha256": "88a8f14bad50acff47642b023c1251c825538d9495d0f026f6a78c2f98f919a9"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b02-api-3-r7-arlo-whitcombe.json",
+      "sha256": "3d0ace99acd9bea35431f5a28695b0331e36e273e713dc9f2893d9545a6dc03e"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b02-api-4-r8-priya-raman.json",
+      "sha256": "d013528e313b5fbf3f401bccfbc0eebc25c2d111389e20e468584654e67f18c2"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b02-browser-1-r5-grace-adeyemi.json",
+      "sha256": "034c2a95a36b48832525391240058efac23e9f9b332c18c9d1a73ab978ea4ae0"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b02-browser-2-r6-rosa-delgado.json",
+      "sha256": "9e6027e762f02d99ecf6d8441bfaedf9fa34144a1d11d96fcef0434c9fd5b0a2"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b02-browser-3-r7-arlo-whitcombe.json",
+      "sha256": "f55527b0987042045df25ed0300b63a99cbc96e0852715884d6d13f4848e9ee6"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b02-browser-4-r8-priya-raman.json",
+      "sha256": "d2e2b0342d63851350ad284fb367d0fd826a3692d139aca34f206e1e8a8c179b"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b03-api-1-r1-nadia-brennan.json",
+      "sha256": "deaa37829b39804a5de8734f651c49d3ed1183973874d97c21cff2a5c7282cba"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b03-api-2-r2-marcus-feld.json",
+      "sha256": "c40ff9d86db97799cb4870dbf88e21119a5e1b8238248bc06b5a1beea0c97e76"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b03-api-3-r3-ines-carvalho.json",
+      "sha256": "0a94e502e5b7598af0868e52582d47aefeccf1f147211e5746f0e0a25bce566f"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b03-api-4-r4-theo-lindqvist.json",
+      "sha256": "1dab70fa34fbcacf0f7f4757201d92da8502f1650900f3489912491a93072701"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b03-browser-1-r1-nadia-brennan.json",
+      "sha256": "93557f41a8f1e479ed7a6440c18174da667c833e868d892376388fc5777228b4"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b03-browser-2-r2-marcus-feld.json",
+      "sha256": "9f52083028bb48d004b0ec4a2f6a81dc85c84c882029086acde544e29732def6"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b03-browser-3-r3-ines-carvalho.json",
+      "sha256": "ba055846fc2380d542ec08411fde97f2f5d251712eb43ca86d01051c0276f556"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b03-browser-4-r4-theo-lindqvist.json",
+      "sha256": "b6900aa408ea1d03b0c846da2d63eba4e898c1a5d6db1f5c2388bc1ff52b487b"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b04-api-1-r5-grace-adeyemi.json",
+      "sha256": "db90478da75a75ae367e01d07434adccaa4928e7cf019d07d76868398fb256fa"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b04-api-2-r6-rosa-delgado.json",
+      "sha256": "15e69d0b2ef02f9ec6cd9abeb1e2b93227f8fd1e1187c6f9bf15a7a217e65069"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b04-api-3-r7-arlo-whitcombe.json",
+      "sha256": "687eae24be79cb05abe3737aa05a728cb434d67e531b30e257d97acce06dbb3b"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b04-api-4-r8-priya-raman.json",
+      "sha256": "3f4ef99e1242d192279f014758e687661ecce4015181832e705e51b19adbb8ea"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b04-browser-1-r5-grace-adeyemi.json",
+      "sha256": "4644b5e244603bbaed4d815b641b5c0eb7bf3d1b74a02f41fd1d5520ba13d41b"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b04-browser-2-r6-rosa-delgado.json",
+      "sha256": "4b5b63eb73ad4726594eb02bc5cd1219a7d4444b310de1f26e9d2487109f9971"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b04-browser-3-r7-arlo-whitcombe.json",
+      "sha256": "7879121889f8208d92d64b25a260bae304ea050f44cda0d367aad68a47b5448e"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b04-browser-4-r8-priya-raman.json",
+      "sha256": "18c1e2a51dc92eae332228901670f9289ab24b67cd211e42e8a4f4cd4e4cb002"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b05-api-1-r1-nadia-brennan.json",
+      "sha256": "6c329078538d13333744eb580bee310a0b44b5f943eccd040fb48cc910755af9"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b05-api-2-r2-marcus-feld.json",
+      "sha256": "afdd13fb374e493e089e42dcc7a85d4a7608ec5e361087a064be7bdb112bcea8"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b05-api-3-r3-ines-carvalho.json",
+      "sha256": "c64de15bc39fcecf4e5e71e497b26bc741e14afa962bc09e3468d7c4e266da5f"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b05-api-4-r4-theo-lindqvist.json",
+      "sha256": "200ef7c41b6a656f59b75230befe8fdaadc5b1110a3c696f72d9335b9da6675e"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b05-browser-1-r1-nadia-brennan.json",
+      "sha256": "7e3fb05b60a7b9d22ee2a8deed6cf4ecfcb4d23e40b63181ff572d4780941972"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b05-browser-2-r2-marcus-feld.json",
+      "sha256": "84f5a27e0ebdce33a29aa9d18faa33d570addd53d56509dd0b86fd0783d5a5b9"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b05-browser-3-r3-ines-carvalho.json",
+      "sha256": "310c28dba2e2bdebf93266ebcd8118e51fd1b3cb9593cd922f8b6abecd4a9b96"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/b05-browser-4-r4-theo-lindqvist.json",
+      "sha256": "6cf215e713b9e0c32fcdbe6e4185402a304cfc4d3ebcb18807b46bdf3165410e"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/block-01-api.json",
+      "sha256": "f4706b3f0f2014591826f210d02dede35384ab93a995a9f062791965d2fc08cd"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/block-01-browser.json",
+      "sha256": "8145af8f87f344fb42e27cf69346999152dd81889b7641ea57594ad643820127"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/block-02-api.json",
+      "sha256": "9a6787443d77f1dbc19f374699bdd089a4f2ae26e0cf49d09fa2e5c67172a976"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/block-02-browser.json",
+      "sha256": "38d5ac77cd7c80d22ce30577fa4d00fc3f33c4b9fb7c22eacc469c8c5cca3cbc"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/block-03-api.json",
+      "sha256": "a2b4c01c3b7e7279648eb4d0a98504bb06bb31d18414755fa6f5346651c2c89b"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/block-03-browser.json",
+      "sha256": "a612d0db4d11d22762189120d4b08eb2886a908be88f330be1cfe7024a74e9a4"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/block-04-api.json",
+      "sha256": "6ace481c86799ac876cf227163a5fd2d45ec6e4b0b0238dfea733b37b8c95efd"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/block-04-browser.json",
+      "sha256": "969b390048f9f6a749f89f175aeb5a9002cbda0ae388ddd05c8f5f32bb9999aa"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/block-05-api.json",
+      "sha256": "893f4f4f0ed6fdb0d6fd0304b9c883f7600f39145e7b292fb2883e8320e14045"
+    },
+    {
+      "path": "benchmark/openemr_api_tier/spike/results/runs/block-05-browser.json",
+      "sha256": "9b5d494a088d20b0ac92017991ed0eb0473134ba205d4ffb53ebbc8ae4d8215c"
+    },
+    {
       "path": "benchmark/openemr_live/docker-compose.yml",
       "sha256": "14981f7552e8dba82bf7e9020c7959780845a455a02192150cedfa297c038aa8"
     },

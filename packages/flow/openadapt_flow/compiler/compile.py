@@ -3189,7 +3189,11 @@ def compile_recording(
         from openadapt_flow.compiler.api_proposal import propose_api_step
 
         workflow, _api_step, _api_reasons = propose_api_step(workflow, recording)
-        if _api_step is not None:
+        if (
+            _api_step is not None
+            and _api_step.api_binding is not None
+            and _api_step.api_binding.web_form is not None
+        ):
             logger.info(
                 "proposed an API step for %s (%d GUI steps); a person admits it "
                 "with 'api admit'",
