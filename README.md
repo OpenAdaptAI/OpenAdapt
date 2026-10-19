@@ -46,6 +46,16 @@ This is a coverage test over a small, hand-written set of faults, not a
 real-world error rate. [EFFECT_E2E.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)
 has the method and raw results.
 
+An agent working alone can't see these faults either. Claude Sonnet 5.5, using
+computer use, did a task on a test app whose server broke the save in 6 ways,
+5 times each. The agent reported all 30 bad saves as done. Given the agent's
+run, `openadapt-flow verify-run` read each record back: it flagged all 30 and
+confirmed all 10 clean saves, with no false alarms. The test app shows "saved"
+before the server answers, so the screen gave the agent nothing to notice. That
+gap is what the read-back closes.
+[SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back)
+has the method, the raw runs and the cost.
+
 ## Try it in one command
 
 ```bash

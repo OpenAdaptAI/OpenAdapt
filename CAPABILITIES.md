@@ -246,6 +246,13 @@ fails when a command is added without being listed here.
   complete database read path caught all 72. This is a coverage test over a
   small, hand-authored set of faults, not a real-world error rate:
   [EFFECT_E2E.md](packages/flow/benchmark/effect_e2e/EFFECT_E2E.md).
+- **An agent's claims versus the read-back.** Claude Sonnet 5.5 computer use,
+  working alone on a test app whose server broke the save in 6 ways (5 items
+  each), reported all 30 bad saves as done. `verify-run` flagged all 30 and
+  confirmed all 10 clean saves, with no false alarms. The app shows "saved"
+  before the server answers, so this measures what the screen can't show, not
+  the agent's care. Not yet run on OpenEMR:
+  [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back).
 
 ## What is not done yet
 
