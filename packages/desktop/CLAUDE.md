@@ -1,0 +1,106 @@
+# Claude Code Instructions for openadapt-desktop
+
+## MANDATORY: Branches and Pull Requests
+
+**NEVER push directly to main. ALWAYS use feature branches and pull requests.**
+
+1. Create a feature branch: `git checkout -b feat/description` or `fix/description`
+2. Make commits on the branch
+3. Push the branch: `git push -u origin branch-name`
+4. Create a PR: `gh pr create --title "..." --body "..."`
+5. Only merge via PR (never `git push origin main`)
+
+### Commits Use Conventional Commit Format
+
+This package lives in the OpenAdapt monorepo at `packages/desktop`. Commits keep
+the conventional format, because they decide the next version:
+
+```
+fix: short description          -> patch bump (0.0.x)
+feat: short description         -> minor bump (0.x.0; a breaking change is also minor while on 0.x)
+perf: short description         -> patch bump
+```
+
+**Types**: feat, fix, docs, style, refactor, perf, test, chore, ci, build
+
+### Releasing
+
+A pull request with a `feat`, `fix` or `perf` commit must bump the version, or
+the `desktop release intent` check fails. Run
+`python scripts/prepare_release.py` in `packages/desktop`, review the new
+`CHANGELOG.md` section, and commit. After merge, `desktop-release.yml` publishes
+the version to PyPI and tags `openadapt-desktop-vX.Y.Z`. See RELEASES.md.
+
+---
+
+## Overview
+
+Cross-platform desktop app for continuous screen recording and AI training data collection. Built with Tauri 2.x (Rust shell) + Python sidecar (recording engine).
+
+## Quick Start
+
+```bash
+uv sync --extra dev
+uv run pytest tests/ -v
+uv run ruff check openadapt_desktop/ tests/
+```
+
+## Architecture
+
+Two-process model:
+- **Tauri shell** (Rust + WebView): system tray, native window, IPC dispatch
+- **Python engine** (sidecar): recording, scrubbing, storage, upload
+
+Communication via JSON-over-stdin/stdout IPC protocol (see DESIGN.md Appendix B).
+
+## Key Design Decisions
+
+1. **Raw-then-review scrubbing**: Recordings saved raw to disk. Scrubbing is a separate user-reviewed step. `check_egress_allowed()` gates ALL outbound paths.
+2. **Build-time trust**: Tauri Cargo.toml feature flags physically exclude upload code. Enterprise binary verifiable with `strings`.
+3. **Multiple storage backends**: StorageBackend protocol in `openadapt_desktop/backends/protocol.py`. All backends conform to the same interface.
+4. **Network audit logging**: Every outbound request logged to `audit.jsonl` (JSONL format).
+
+## File Map
+
+| File | Purpose |
+|------|---------|
+| `openadapt_desktop/controller.py` | Recording lifecycle (start/stop/pause) |
+| `openadapt_desktop/review.py` | Upload review state machine (the egress gate) |
+| `openadapt_desktop/scrubber.py` | PII scrubbing orchestration |
+| `openadapt_desktop/config.py` | Settings (pydantic-settings, OPENADAPT_ prefix) |
+| `openadapt_desktop/audit.py` | Network audit logger |
+| `openadapt_desktop/backends/protocol.py` | StorageBackend protocol definition |
+| `openadapt_desktop/backends/s3.py` | S3/R2/MinIO backend |
+| `src-tauri/src/commands.rs` | IPC commands (13 endpoints) |
+| `src-tauri/src/main.rs` | Tauri entry point |
+| `DESIGN.md` | Comprehensive design document (v2.0, 1800 lines) |
+
+## Running Tests
+
+```bash
+uv run pytest tests/ -v              # all tests
+uv run ruff check openadapt_desktop/ tests/     # lint
+```
+
+## Hosted loop modules (engine rewire)
+
+| File | Purpose |
+|------|---------|
+| `openadapt_desktop/auth/provider.py` | `AuthProvider` Protocol + `Credential` TypedDict (shared contract) |
+| `openadapt_desktop/auth/store.py` | Keychain store (`keyring`, service `ai.openadapt.desktop`) + `auth_header()` |
+| `openadapt_desktop/auth/paste.py` | `PasteTokenProvider` (token paste / headless env) |
+| `openadapt_desktop/auth/browser_pkce.py` | `BrowserPkceProvider` (system browser + loopback PKCE) |
+| `openadapt_desktop/backends/hosted_ingest.py` | `HostedIngestBackend` -> `POST /api/ingest` (bearer) |
+| `openadapt_desktop/hosted.py` | `push` (zip -> ingest) + `report_break` (`/api/runs/ingest-report`) |
+| `openadapt_desktop/flow_bridge.py` | Wraps the `openadapt-flow` CLI (record/compile/replay/run/teach) |
+| `openadapt_desktop/dispatch.py` | Shared command dispatcher (frontend `engine.ts` CMD names -> engine actions) used by BOTH local wires |
+| `openadapt_desktop/ipc.py` | Tauri stdin/stdout JSON-lines wire -> `EngineDispatcher` |
+| `openadapt_desktop/socket_server.py` | Tray loopback TCP server + `~/.openadapt/desktop_ipc.json` discovery file (spec 3d) |
+
+## Dependencies
+
+- Python: `openadapt-capture` (recording), `openadapt-privacy` (scrubbing),
+  `pydantic-settings`, `httpx` (hosted ingest), `keyring` (credential store)
+- Rust: `tauri`, `tauri-plugin-shell`, `tauri-plugin-notification`, `tauri-plugin-updater`
+- Optional: `boto3` (S3, BYOC customer-owned storage)
+- Loop engine: `openadapt-flow` (wrapped, not vendored)

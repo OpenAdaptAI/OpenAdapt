@@ -12,11 +12,11 @@ from typing import Any
 import pytest
 
 pytest.importorskip("fastapi")
-pytest.importorskip("openadapt_flow.contracts.reward")
+pytest.importorskip("openadapt_types.reward")
 
 from fastapi.testclient import TestClient  # noqa: E402
-from openadapt_flow.contracts.oracle import OracleChannel  # noqa: E402
-from openadapt_flow.contracts.reward import (  # noqa: E402
+from openadapt_types.oracle import OracleChannel  # noqa: E402
+from openadapt_types.reward import (  # noqa: E402
     RewardCalibrationScopeV1,
     RewardCertificateV1,
     RewardEvidenceReceiptV1,
@@ -198,7 +198,7 @@ def test_verified_tier2_expired_certificate_is_not_certified(
 def test_current_certificate_must_satisfy_full_policy(
     seeded: dict[str, Any], field: str, value: float, reason: str
 ) -> None:
-    from openadapt_flow.contracts.process_capability import canonical_json_bytes
+    from openadapt_types.process_capability import canonical_json_bytes
 
     from openadapt_flow.execute.keys import load_or_create_private_key
 
@@ -463,7 +463,7 @@ def test_reward_evidence_excludes_other_subjects(seeded: dict[str, Any]) -> None
     names this patient.
     """
 
-    from openadapt_flow.contracts.process_capability import canonical_json_bytes
+    from openadapt_types.process_capability import canonical_json_bytes
 
     worker = _worker(seeded)
     envelope = _run(worker, seeded, MOCKMED_HONEST_PATIENT, "episode_scope_01")

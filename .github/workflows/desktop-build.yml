@@ -1,0 +1,403 @@
+# OpenAdapt Desktop (packages/desktop): frontend, Python distribution, frozen
+# sidecar, and native installer builds.
+#
+# Called from packages.yml when a change touches packages/desktop, so its jobs
+# feed the required packages-gate. Ported from openadapt-desktop's build.yml.
+# scripts/classify_build_changes.py still decides, from the Desktop-relative
+# changed paths, whether a push to main repeats the full native matrix.
+name: Desktop build
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: packages/desktop
+
+jobs:
+  artifact-scope:
+    name: Select artifact scope
+    runs-on: ubuntu-22.04
+    outputs:
+      run_sidecar: ${{ steps.scope.outputs.run_sidecar }}
+      run_native: ${{ steps.scope.outputs.run_native }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+
+      - name: Classify changed files before expensive builds
+        id: scope
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed_paths="${RUNNER_TEMP}/openadapt-desktop-changed-paths.txt"
+          : > "${changed_paths}"
+          if [ "${EVENT_NAME}" = "push" ]; then
+            before="${BEFORE_SHA}"
+            if [ -z "${before}" ] || [ "${before}" = "0000000000000000000000000000000000000000" ]; then
+              before="$(git rev-parse HEAD^)"
+            fi
+            if ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
+              # A push of several commits leaves `before` outside this shallow
+              # clone. Without a diff, build everything.
+              echo "Push base ${before} is not fetched; selecting the full matrix."
+              echo ".github/workflows/build.yml" > "${changed_paths}"
+            else
+              # Paths relative to packages/desktop, as the classifier expects.
+              git diff --relative --name-only "${before}" HEAD > "${changed_paths}"
+              # The workflows that build Desktop live at the monorepo root now.
+              # A change to them still demands the full native matrix.
+              if git diff --name-only "${before}" HEAD -- \
+                  ../../.github/workflows/desktop-build.yml \
+                  ../../.github/workflows/packages.yml | grep -q .; then
+                echo ".github/workflows/build.yml" >> "${changed_paths}"
+              fi
+            fi
+          fi
+          python scripts/classify_build_changes.py \
+            --event "${EVENT_NAME}" \
+            --paths-file "${changed_paths}" \
+            --github-output "${GITHUB_OUTPUT}"
+
+  frontend:
+    name: Frontend behavior and build
+    needs: artifact-scope
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/desktop/package-lock.json
+
+      - name: Install locked frontend dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Exercise qualification interaction and build
+        run: npm run test:ui && npm run build
+
+      # The offline half of this guard runs in test:ui above. This half needs
+      # the network: it fails when openadapt-web publishes the canonical palette and
+      # the vendored copy here does not follow, which is how the installed app
+      # and the marketing site drift into looking like two products.
+      - name: Check the vendored design tokens against openadapt-web
+        run: npm run tokens:check
+
+  python-distribution:
+    name: Python distribution
+    needs: artifact-scope
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: packages/desktop/uv.lock
+
+      - name: Build wheel and source distribution
+        run: uv build --wheel --sdist
+
+      - name: Inspect the built Python archives
+        run: uv run python scripts/verify_build_artifact.py python-distribution
+
+      - name: Enforce the public source boundary
+        run: python scripts/check_source_boundary.py --require-dist
+
+      - name: Upload Python distributions
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: python-distribution
+          path: packages/desktop/dist/openadapt_desktop-*
+          if-no-files-found: error
+          retention-days: ${{ github.event_name == 'pull_request' && 3 || 14 }}
+
+  python-sidecar:
+    name: Python sidecar (${{ matrix.os }})
+    needs: artifact-scope
+    if: needs.artifact-scope.outputs.run_sidecar == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        # PRs prove the frozen-engine contract once on Linux. Main repeats the
+        # complete matrix for dependency, toolchain, packaging, and native
+        # changes. Immutable native release tags rebuild every supported OS.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04"]' || '["ubuntu-22.04", "macos-14", "windows-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: packages/desktop/uv.lock
+
+      - name: Install locked sidecar dependencies
+        run: python scripts/sync_frozen_dependencies.py
+
+      - name: Build platform-native sidecar
+        run: uv run python scripts/build_frozen_engine.py
+
+      - name: Smoke-test sidecar executable
+        run: uv run python scripts/verify_build_artifact.py sidecar
+
+      - name: Install Linux Chromium runtime libraries
+        if: runner.os == 'Linux'
+        run: uv run python -m playwright install-deps chromium
+
+      - name: Alias lowercase X11 names for Flow 1.34.0
+        if: runner.os == 'Linux'
+        run: sudo python scripts/alias_lowercase_x11_sonames.py
+
+      - name: Prove frozen browser record, compile, and replay
+        run: uv run python scripts/smoke_test_frozen_flow.py
+
+      - name: Upload sidecar executable
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: python-sidecar-${{ runner.os }}-${{ runner.arch }}
+          path: packages/desktop/dist/openadapt-engine*
+          if-no-files-found: error
+          retention-days: ${{ github.event_name == 'pull_request' && 3 || 14 }}
+
+  native-installers:
+    name: Native installer (${{ matrix.label }})
+    needs: artifact-scope
+    # Main runs this evidence for dependency, toolchain, packaging, and native
+    # changes. Application-only merges already pass the PR checks and the
+    # exact-main frontend, distribution, and cross-platform test jobs. Every
+    # immutable desktop-v* release tag rebuilds and tests all installers in the
+    # separate Native Installer Release workflow.
+    if: needs.artifact-scope.outputs.run_native == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS arm64
+            os: macos-15
+            platform: macos
+            architecture: arm64
+            target: aarch64-apple-darwin
+            bundles: dmg
+            signing: adhoc
+          - label: macOS Intel
+            os: macos-15-intel
+            platform: macos
+            architecture: x86_64
+            target: x86_64-apple-darwin
+            bundles: dmg
+            signing: adhoc
+          - label: Windows x86_64
+            os: windows-2022
+            platform: windows
+            architecture: x86_64
+            target: x86_64-pc-windows-msvc
+            bundles: msi,nsis
+            signing: unsigned
+          - label: Linux x86_64
+            os: ubuntu-22.04
+            platform: linux
+            architecture: x86_64
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
+            signing: unsigned
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        timeout-minutes: 10
+        run: |
+          set -uo pipefail
+          # The hosted runner resolves its Ubuntu mirror through
+          # /etc/apt/apt-mirrors.txt, which points at azure.archive.ubuntu.com.
+          # That mirror fails intermittently, and each failure costs minutes of
+          # apt retries. Prefer the canonical archive. Best-effort: an absent or
+          # already-canonical file changes nothing.
+          sudo sed -i \
+            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          update_ok=""
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              update_ok=1
+              break
+            fi
+            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
+            sleep $((attempt * 10))
+          done
+          if [ -z "$update_ok" ]; then
+            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
+            exit 1
+          fi
+          set -e
+          sudo apt-get install -y --no-install-recommends \
+            libayatana-appindicator3-dev \
+            patchelf \
+            librsvg2-dev \
+            xdg-utils \
+            libwebkit2gtk-4.1-dev \
+            dbus \
+            xvfb
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.97.0"
+          targets: ${{ matrix.target }}
+          components: rustfmt
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/desktop/package-lock.json
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install locked Tauri CLI
+        run: npm ci --ignore-scripts
+
+      - name: Build engine sidecar for Tauri externalBin
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check uv==0.11.29
+          python scripts/sync_frozen_dependencies.py
+          uv run python scripts/build_frozen_engine.py
+          uv run python scripts/verify_build_artifact.py sidecar
+          mkdir -p src-tauri/binaries
+          ext=""
+          if [ "${RUNNER_OS}" = "Windows" ]; then ext=".exe"; fi
+          cp "dist/openadapt-engine${ext}" \
+            "src-tauri/binaries/openadapt-engine-${{ matrix.target }}${ext}"
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+      - name: Build native installer packages
+        run: >-
+          npm run tauri build --
+          --bundles ${{ matrix.bundles }}
+          --target ${{ matrix.target }}
+          --config src-tauri/tauri.adhoc.conf.json
+
+      # Reuse the installer build's compiled dependencies. These tests protect
+      # the native URL and deep-link dispatch boundaries before artifact upload.
+      - name: Test native command and deep-link contracts
+        run: >-
+          cargo test --locked --release
+          --manifest-path src-tauri/Cargo.toml
+          --target ${{ matrix.target }}
+
+      - name: Smoke-test macOS DMG install, launch, and uninstall
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifacts=(src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg)
+          test "${#artifacts[@]}" -eq 1
+          python scripts/smoke_test_native_installer.py \
+            --artifact "${artifacts[0]}" \
+            --app-path "${RUNNER_TEMP}/OpenAdapt Desktop.app" \
+            --expected-architecture "${{ matrix.architecture }}" \
+            --signing-mode adhoc \
+            --launch-seconds 20
+
+      - name: Smoke-test Windows MSI and NSIS install, launch, and uninstall
+        if: runner.os == 'Windows'
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          $Msi = @(Get-ChildItem "src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi")
+          $Nsis = @(Get-ChildItem "src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe")
+          if ($Msi.Count -ne 1 -or $Nsis.Count -ne 1) { throw "Expected one MSI and one NSIS installer" }
+          python scripts/smoke_test_native_installer.py `
+            --artifact $Msi[0].FullName `
+            --app-path "$env:ProgramFiles/OpenAdapt Desktop/openadapt-desktop.exe" `
+            --expected-architecture x86_64 `
+            --allow-system-install `
+            --launch-seconds 20
+          python scripts/smoke_test_native_installer.py `
+            --artifact $Nsis[0].FullName `
+            --app-path "$env:LOCALAPPDATA/OpenAdapt Desktop/openadapt-desktop.exe" `
+            --uninstaller-path "$env:LOCALAPPDATA/OpenAdapt Desktop/uninstall.exe" `
+            --expected-architecture x86_64 `
+            --allow-system-install `
+            --launch-seconds 20
+
+      - name: Smoke-test Linux DEB and AppImage install, launch, and uninstall
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          # WebKitGTK's DMA-BUF renderer is unreliable under Xvfb on CI.
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+        run: |
+          set -euo pipefail
+          deb=(src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb)
+          appimage=(src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage)
+          test "${#deb[@]}" -eq 1
+          test "${#appimage[@]}" -eq 1
+          dbus-run-session -- xvfb-run --auto-servernum \
+            python scripts/smoke_test_native_installer.py \
+            --artifact "${deb[0]}" \
+            --app-path /usr/bin/openadapt-desktop \
+            --expected-architecture x86_64 \
+            --allow-system-install \
+            --launch-seconds 20
+          dbus-run-session -- xvfb-run --auto-servernum \
+            python scripts/smoke_test_native_installer.py \
+            --artifact "${appimage[0]}" \
+            --app-path "${RUNNER_TEMP}/OpenAdapt-Desktop.AppImage" \
+            --expected-architecture x86_64 \
+            --launch-seconds 20
+
+      - name: Stage accurately labelled native artifacts
+        run: >-
+          python scripts/native_release.py stage
+          --bundle-root src-tauri/target/${{ matrix.target }}/release/bundle
+          --output dist/native
+          --platform ${{ matrix.platform }}
+          --architecture ${{ matrix.architecture }}
+          --signing ${{ matrix.signing }}
+
+      - name: Generate and verify CI artifact checksums
+        shell: bash
+        run: |
+          # `verify-checksums` requires the manifest to be named exactly
+          # SHA256SUMS. Each matrix job owns its own dist/native directory and
+          # uploads under a distinct artifact name, so the plain name is
+          # unambiguous here.
+          python scripts/native_release.py checksums \
+            --directory dist/native \
+            --output dist/native/SHA256SUMS
+          python scripts/native_release.py verify-checksums \
+            --directory dist/native \
+            --manifest dist/native/SHA256SUMS
+
+      - name: Upload native installers
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-${{ matrix.platform }}-${{ matrix.architecture }}
+          path: packages/desktop/dist/native/*
+          if-no-files-found: error
+          retention-days: 14

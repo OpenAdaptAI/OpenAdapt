@@ -30,6 +30,7 @@ def serve(
     attended_service: Optional[AttendedActionService] = None,
     decision_supervisor: Optional[DecisionSupervisorThread] = None,
     port: int = DEFAULT_PORT,
+    repair_store: Path | str | None = None,
 ) -> None:
     """Build the app and serve it on ``http://127.0.0.1:<port>`` (blocking).
 
@@ -55,6 +56,7 @@ def serve(
         attend=attend,
         access_token=access_token,
         attended_service=attended_service,
+        repair_store=repair_store,
     )
     # URL fragments are consumed entirely by the browser and are never sent in
     # HTTP requests or uvicorn access logs.  The UI removes the fragment before

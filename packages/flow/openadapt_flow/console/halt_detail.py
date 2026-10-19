@@ -9,7 +9,7 @@ module projects those facts into the **local** decision detail.
 Two projections, deliberately kept apart
 ----------------------------------------
 
-* :class:`~openadapt_flow.contracts.HumanDecisionTaskV1` -- the signed, Cloud-safe task.
+* :class:`~openadapt_types.HumanDecisionTaskV1` -- the signed, Cloud-safe task.
   Closed enums, opaque ids, digests, counts and expiry only; every
   ``question.safe_slots`` value stays ``None`` and
   ``evidence.sensitive_evidence_local_only`` stays ``True``.  **Nothing here

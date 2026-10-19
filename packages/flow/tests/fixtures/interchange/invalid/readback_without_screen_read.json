@@ -1,0 +1,86 @@
+{
+  "schema_version": "openadapt.records-interchange/v0",
+  "exchange_id": "ex-ref-0007-r",
+  "direction": "from_executor",
+  "workflow": "example.referral_triage",
+  "session_id": "fax-2026-10-29",
+  "in_reply_to": "ex-ref-0007",
+  "artifacts": [
+    {
+      "artifact_id": "chart",
+      "kind": "structured_observation",
+      "source_type": "rdp_screen",
+      "file_number": "TEST-0007",
+      "date": "2026-10-29",
+      "doctype": "triage-entry"
+    }
+  ],
+  "fields": [
+    {
+      "name": "record_id",
+      "type": "code",
+      "value": "REC-100045",
+      "confidence": 0.99,
+      "grade": "reopened",
+      "reads": [
+        {
+          "channel": "clipboard",
+          "value": "REC-100045",
+          "artifact_id": "chart",
+          "session": "acting"
+        },
+        {
+          "channel": "ocr",
+          "value": "REC-100045",
+          "artifact_id": "chart",
+          "session": "reopened"
+        }
+      ]
+    },
+    {
+      "name": "priority",
+      "type": "enum",
+      "value": "urgent",
+      "confidence": 0.99,
+      "grade": "reopened",
+      "reads": []
+    }
+  ],
+  "identities": [
+    {
+      "identity_id": "subject",
+      "role": "subject",
+      "fields": [
+        "record_id"
+      ],
+      "match": {
+        "status": "new",
+        "record_ref": "REC-100045",
+        "candidates": 0,
+        "checked_by": {
+          "kind": "executor",
+          "id": "openadapt-flow@site-runner-1"
+        }
+      }
+    }
+  ],
+  "outcome": "committed",
+  "provenance": {
+    "tool_name": "fixture-generator",
+    "tool_version": "0",
+    "producer": {
+      "kind": "executor",
+      "id": "openadapt-flow@site-runner-1"
+    },
+    "captured_at": "2026-10-29T14:00:00+00:00",
+    "checksum": "sha256:f50c28b1bc9b8102157be412a65aec9dda5cb2f4d1872a6fb268c1a1f8a538b7"
+  },
+  "seals": [
+    {
+      "kind": "openadapt.seal/offline-ed25519",
+      "covers": "sha256:f50c28b1bc9b8102157be412a65aec9dda5cb2f4d1872a6fb268c1a1f8a538b7",
+      "key_id": "site-key-1",
+      "uri": "seals/run-0001.seal.json"
+    }
+  ]
+}

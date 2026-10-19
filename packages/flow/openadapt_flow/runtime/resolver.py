@@ -18,7 +18,10 @@ implemented here are:
 3. ``ocr``              — uniquely established fuzzy text match on
    ``anchor.ocr_text`` in the anchor's padded local region, then globally only
    after a local miss. Repeated labels require independent retained locality
-   or landmark evidence; candidate order is never used.
+   or landmark evidence; candidate order is never used. When both miss, a
+   font-tolerant match compares the label under OCR's glyph-confusion classes
+   (``1``/``l``, ``0``/``O``, ``rn``/``m``), and only inside the padded local
+   region, where it must be the single candidate.
 4. ``geometry``         — locate landmark text and offset by
    relation/distance to estimate the target point.
 5. ``grounder``         — optional injected model-backed grounding.
@@ -36,6 +39,7 @@ and ``find_text``. The ``structural`` argument is an optional object exposing
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import math
@@ -153,6 +157,7 @@ def visual_resolution_evaluator_contract_sha256() -> str:
         "ambiguity": "unique-or-independent-retained-evidence",
         "ocr_candidates": "full-frame-enumeration-then-local-region-filter",
         "identity_armed_template_landmark_binding": "corroborate-and-snap",
+        "ocr_font_tolerant": "glyph-confusion-canonical-unique-in-local-region",
     }
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -468,6 +473,49 @@ def _select_ocr_candidate(
         f"{len(candidates)} OCR target candidates remain after retained-evidence "
         "disambiguation"
     )
+
+
+def _font_tolerant_ocr_match(
+    anchor: Anchor,
+    screen_png: bytes,
+    vision: Any,
+    viewport: tuple[int, int],
+) -> Optional[Match]:
+    """The one OCR line in the local region that reads ``anchor.ocr_text``
+    under the glyph-confusion classes, or None.
+
+    Raises:
+        AmbiguousOcrMatchError: More than one local line qualifies.
+    """
+    ocr = getattr(vision, "ocr", None)
+    if ocr is None or not anchor.ocr_text:
+        return None
+    from openadapt_flow.runtime.identity import ocr_canonical
+    from openadapt_flow.vision.ocr import normalize_text
+
+    target = ocr_canonical(normalize_text(anchor.ocr_text))
+    if not target:
+        return None
+    local = pad_region(anchor.region, anchor.search_pad, viewport)
+    hits: list[tuple[float, Any]] = []
+    for line in ocr(screen_png):
+        x, y, w, h = line.region
+        if not _point_in_region((x + w // 2, y + h // 2), local):
+            continue
+        ratio = difflib.SequenceMatcher(
+            None, ocr_canonical(normalize_text(line.text)), target
+        ).ratio()
+        if ratio >= OCR_MIN_RATIO:
+            hits.append((ratio, line))
+    if not hits:
+        return None
+    if len(hits) > 1:
+        raise AmbiguousOcrMatchError(
+            f"{len(hits)} local OCR lines match the target under glyph confusion"
+        )
+    ratio, line = hits[0]
+    x, y, w, h = line.region
+    return Match(point=(x + w // 2, y + h // 2), region=line.region, confidence=ratio)
 
 
 def _select_geometry_estimates(
@@ -894,6 +942,23 @@ def resolve(
                 ),
             )
             return resolution, tuple(match.region)
+
+        # A different rasterizer (ClearType off, another display scale) can
+        # make OCR read the same label with confusable glyphs: "MRN A1001"
+        # as "MRN Al001" scores 0.89 and misses. Compare under the
+        # glyph-confusion classes, but only where the target was recorded and
+        # only when exactly one line there qualifies. The identity check
+        # still judges the record; this only finds the control.
+        tolerant = _font_tolerant_ocr_match(anchor, screen_png, vision, viewport)
+        if tolerant is not None:
+            resolution = Resolution(
+                rung="ocr",
+                point=(int(tolerant.point[0]), int(tolerant.point[1])),
+                confidence=float(tolerant.confidence),
+                elapsed_ms=elapsed_ms(),
+                resolution_evidence_regions=(full_frame_region,),
+            )
+            return resolution, tolerant.region
 
     # Rung 4: geometry from landmarks.
     evidence = identity_landmark_evidence()

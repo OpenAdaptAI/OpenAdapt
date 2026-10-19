@@ -23,7 +23,7 @@ from __future__ import annotations
 import time
 from typing import Any, Optional
 
-from openadapt_flow.runtime.effects._common import judge_records
+from openadapt_flow.runtime.effects._common import drop_record_fields, judge_records
 from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
     Effect,
@@ -51,6 +51,10 @@ class RestRecordVerifier(VerifierAdapterBase):
         timeout_s: Per-request timeout in seconds.
         poll_interval_s: Gap between reachability retries while polling for
             the write to land within ``Effect.timeout_s``.
+        drop_fields: Record fields removed before judging (``["id"]`` judges
+            records by their whole content, so a change to another record
+            reads as that record removed and a new one added, and the
+            collateral-loss check catches it). Empty -> records as read.
     """
 
     substrate = "rest"
@@ -66,8 +70,10 @@ class RestRecordVerifier(VerifierAdapterBase):
         headers: Optional[dict[str, str]] = None,
         timeout_s: float = 5.0,
         poll_interval_s: float = 0.2,
+        drop_fields: tuple[str, ...] = (),
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        self.drop_fields = tuple(drop_fields)
         self.records_path = records_path
         self.records_key = records_key
         self.headers = dict(headers) if headers else None
@@ -134,7 +140,9 @@ class RestRecordVerifier(VerifierAdapterBase):
             return None
         if not isinstance(records, list):
             return None
-        return [r for r in records if isinstance(r, dict)]
+        return drop_record_fields(
+            [r for r in records if isinstance(r, dict)], self.drop_fields
+        )
 
     # -- EffectVerifier protocol --------------------------------------------
 
