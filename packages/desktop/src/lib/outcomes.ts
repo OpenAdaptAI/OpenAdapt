@@ -188,7 +188,7 @@ export function resultCopy(plain: Pick<PlainResult, "key" | "nothingWritten">): 
         : {
             label: "Didn't finish",
             sentence:
-              "It couldn't complete the task, and it can't tell whether anything was saved.",
+              "It couldn't complete the workflow, and it can't tell whether anything was saved.",
             next: "Check the record before you try again.",
             tone: "crit",
           };

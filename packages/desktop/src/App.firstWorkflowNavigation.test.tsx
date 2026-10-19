@@ -25,7 +25,7 @@ vi.mock("./screens/Welcome", () => ({
   Welcome: ({ onShow, onSample }: { onShow: () => void; onSample: () => void }) => (
     <div>
       <button type="button" onClick={onShow}>
-        Show OpenAdapt your task
+        Show OpenAdapt your workflow
       </button>
       <button type="button" onClick={onSample}>
         See it work on a sample app
@@ -121,7 +121,7 @@ it("stays on the welcome screen when its durable stage cannot be saved", async (
 
   render(<App />);
   const start = await screen.findByRole("button", {
-    name: "Show OpenAdapt your task",
+    name: "Show OpenAdapt your workflow",
   });
   fireEvent.click(start);
 
@@ -129,10 +129,10 @@ it("stays on the welcome screen when its durable stage cannot be saved", async (
   expect(alert.textContent).toContain(
     "Desktop couldn't save your place in setup. Check the local engine, then try again.",
   );
-  expect(screen.getByRole("button", { name: "Show OpenAdapt your task" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Show OpenAdapt your workflow" })).toBeTruthy();
   expect(screen.queryByText("First workflow recording")).toBeNull();
 
-  fireEvent.click(screen.getByRole("button", { name: "Show OpenAdapt your task" }));
+  fireEvent.click(screen.getByRole("button", { name: "Show OpenAdapt your workflow" }));
   await waitFor(() =>
     expect(screen.getByText("First workflow recording")).toBeTruthy(),
   );
@@ -259,7 +259,7 @@ it("keeps navigation locked while the supervised run is running", async () => {
 
   await waitFor(() =>
     expect(
-      (screen.getByRole("button", { name: "Tasks" }) as HTMLButtonElement)
+      (screen.getByRole("button", { name: "Workflows" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true),
   );
@@ -303,7 +303,7 @@ it("keeps navigation locked from recording stop until Check it opens", async () 
       capture_id: "capture-1",
     });
   });
-  const tasks = screen.getByRole("button", { name: "Tasks" });
+  const tasks = screen.getByRole("button", { name: "Workflows" });
   expect((tasks as HTMLButtonElement).disabled).toBe(true);
 
   firstState = { ...firstState, stage: "review", workflow_id: "workflow-1" };
@@ -333,9 +333,9 @@ it("puts Settings and every expert tool behind the gear", async () => {
   });
 
   render(<App />);
-  expect(await screen.findByRole("heading", { name: "Tasks" })).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "Workflows" })).toBeTruthy();
   const nav = screen.getByRole("navigation", { name: "Desktop navigation" });
-  expect(nav.textContent).toBe("TasksNeeds youResults");
+  expect(nav.textContent).toBe("WorkflowsNeeds youResults");
 
   fireEvent.click(screen.getByRole("button", { name: "Settings and advanced tools" }));
   expect(screen.getByRole("menuitem", { name: /^Settings/ })).toBeTruthy();
@@ -371,12 +371,12 @@ it("leaves loading when authoring status is missing", async () => {
 
   render(<App />);
   expect(
-    await screen.findByRole("button", { name: "Show OpenAdapt your task" }),
+    await screen.findByRole("button", { name: "Show OpenAdapt your workflow" }),
   ).toBeTruthy();
   expect(screen.queryByText("Loading…")).toBeNull();
 });
 
-it("won't start another task while an uncertain first run is unchecked", async () => {
+it("won't start another workflow while an uncertain first run is unchecked", async () => {
   vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
     const boot = bootDefaults(command);
     if (boot !== undefined) return boot;
@@ -394,13 +394,13 @@ it("won't start another task while an uncertain first run is unchecked", async (
 
   render(<App />);
   expect(await screen.findByText("First supervised replay")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+  fireEvent.click(screen.getByRole("button", { name: "Workflows" }));
   fireEvent.click(
-    await screen.findByRole("button", { name: "Show OpenAdapt a new task" }),
+    await screen.findByRole("button", { name: "Record a workflow" }),
   );
 
   expect((await screen.findByRole("alert")).textContent).toContain(
-    "Check the target of your last run before you record another task.",
+    "Check the target of your last run before you record another workflow.",
   );
   expect(await screen.findByText("First supervised replay")).toBeTruthy();
   expect(screen.queryByText("First workflow recording")).toBeNull();
@@ -427,7 +427,7 @@ it("says Local only, not synced, when nothing is backed up to Cloud", async () =
   bootTasks({ authenticated: true }, () => ({ state: "local", queued: 0 }));
 
   render(<App />);
-  expect(await screen.findByRole("heading", { name: "Tasks" })).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "Workflows" })).toBeTruthy();
   const status = screen.getByLabelText("Desktop status");
   await waitFor(() => expect(status.textContent).toContain("Local only"));
   expect(status.textContent).not.toMatch(/synced/i);
@@ -439,7 +439,7 @@ it("never shows a sync state the engine didn't report", async () => {
   bootTasks({ authenticated: true }, (fallback) => fallback);
 
   render(<App />);
-  expect(await screen.findByRole("heading", { name: "Tasks" })).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: "Workflows" })).toBeTruthy();
   const status = screen.getByLabelText("Desktop status");
   expect(status.textContent).not.toMatch(/synced|local/i);
 });

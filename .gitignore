@@ -45,6 +45,8 @@ build_scripts/OpenAdapt.iss
 # Temporary files
 install.sh
 *.txt
+# The review brief for AI reviewers is generated but published.
+!/llms-full.txt
 output.png
 
 # Legacy untracked directories (not part of repo)

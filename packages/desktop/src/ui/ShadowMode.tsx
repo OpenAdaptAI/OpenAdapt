@@ -142,7 +142,7 @@ export function ShadowPromptBanner({
   }
 
   return (
-    <div className="shadow-prompts" aria-label="Repeated tasks">
+    <div className="shadow-prompts" aria-label="Repeated workflows">
       {status.pending.map((prompt) => (
         <Callout key={prompt.motif_id} title={prompt.title}>
           <p>{prompt.body}</p>
@@ -293,7 +293,7 @@ export function ShadowModeCard() {
     <Card>
       <CardHead
         title="Shadow mode"
-        sub="Off unless you turn it on. When on, OpenAdapt notices a task you repeat and offers to make a draft. It never runs anything. Its encrypted buffer on this computer is cleared at least every 24 hours, and when you turn it off or quit."
+        sub="Off unless you turn it on. When on, OpenAdapt notices a workflow you repeat and offers to make a draft. It never runs anything. Its encrypted buffer on this computer is cleared at least every 24 hours, and when you turn it off or quit."
       />
       {!status.known ? (
         <p className="page-sub">Checking shadow mode…</p>

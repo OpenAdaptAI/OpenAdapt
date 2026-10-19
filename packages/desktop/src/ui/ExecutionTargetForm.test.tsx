@@ -103,7 +103,7 @@ it("never claims Available before detection arrives", () => {
 it("keeps every surface selectable even when not available", () => {
   const changes: ExecutionTarget[] = [];
   renderForm({ backend: "web" }, report(), (t) => changes.push(t));
-  const select = screen.getByLabelText("Application surface") as HTMLSelectElement;
+  const select = screen.getByLabelText("App type") as HTMLSelectElement;
   expect(select.options.length).toBe(6);
   fireEvent.change(select, { target: { value: "citrix" } });
   expect(changes).toEqual([{ backend: "citrix" }]);

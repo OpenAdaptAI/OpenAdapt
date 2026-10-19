@@ -6,7 +6,7 @@ import { ChoiceButton } from "../ui/simple";
 const STEPS = [
   {
     title: "Show it",
-    body: "Do the task on test data, in the app where you already do it.",
+    body: "Do the workflow on test data, in the app where you already do it.",
   },
   {
     title: "Check it",
@@ -30,7 +30,7 @@ export function Welcome({
   return (
     <div className="content simple welcome">
       <section className="welcome-hero">
-        <h1>Hand off the last step of a task</h1>
+        <h1>Hand off the last step of a workflow</h1>
         <p className="welcome-lead">
           OpenAdapt enters approved information into the apps you already use,
           like EMRs, payer portals, and desktop or Citrix apps, and checks that
@@ -61,14 +61,14 @@ export function Welcome({
           onClick={onSample}
         />
         <ChoiceButton
-          title="Show OpenAdapt your task"
-          sub="Pick the app, then do the task while OpenAdapt watches."
+          title="Show OpenAdapt your workflow"
+          sub="Pick the app, then do the workflow while OpenAdapt watches."
           onClick={onShow}
         />
       </div>
 
       <p className="welcome-foot">
-        OpenAdapt doesn't send your recordings or tasks anywhere unless you
+        OpenAdapt doesn't send your recordings or workflows anywhere unless you
         choose to share or upload them. Backup, sync, and security software on
         this computer can still copy its files.{" "}
         <button type="button" className="link-button" onClick={onConnectCloud}>
