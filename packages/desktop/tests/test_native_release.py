@@ -189,24 +189,18 @@ def test_native_workflows_are_pinned_and_preserve_candidate_boundary() -> None:
         assert retired not in text
 
 
-def test_qualification_pins_and_runs_the_exact_tray_protocol_peer() -> None:
+def test_qualification_runs_the_in_tree_tray_protocol_peer() -> None:
+    # The Tray client is packages/tray in the same monorepo commit, so the
+    # contract needs no checkout of another repository.
     workflow = _workflow("test.yml")
     steps = workflow["jobs"]["qualification-contract"]["steps"]
-    checkout = next(
-        step for step in steps if step.get("name") == "Checkout the exact Tray protocol peer"
-    )
-    assert checkout["uses"] == ("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1")
-    assert checkout["with"] == {
-        "repository": "OpenAdaptAI/openadapt-tray",
-        "ref": "3d6ffbeda50af2fc4769ae0f1ce55e3d5d49435c",
-        "path": "packages/desktop/.integration/openadapt-tray",
-        "persist-credentials": False,
-    }
+    assert not any("repository" in (step.get("with") or {}) for step in steps)
     contract = next(
         step for step in steps if step.get("name") == "Exercise the Desktop and Tray IPC contract"
     )
-    assert contract["env"] == {"OPENADAPT_TRAY_SOURCE": ".integration/openadapt-tray/src"}
+    assert contract["env"] == {"OPENADAPT_TRAY_SOURCE": "../tray/src"}
     assert contract["run"] == "uv run pytest tests/test_tray_integration.py -v"
+    assert (ROOT / contract["env"]["OPENADAPT_TRAY_SOURCE"] / "openadapt_tray" / "ipc.py").is_file()
 
 
 def test_linux_sidecar_installs_browser_libraries_before_the_frozen_smoke() -> None:
