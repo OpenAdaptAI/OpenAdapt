@@ -2446,6 +2446,13 @@ class Replayer:
                 )
             elif not binding.admitted():
                 reason = "the API step is not admitted (openadapt-flow api admit)"
+            elif save.identity_armed and not binding.identity:
+                # The GUI save checks the right record on screen. The API step
+                # must check it too, so it needs a right-record contract.
+                reason = (
+                    "the save checks the right record on screen, and the API "
+                    "step names no right-record contract"
+                )
             elif list(binding.effects) != list(save.effects):
                 reason = (
                     "the save step's record check differs from the one admitted "

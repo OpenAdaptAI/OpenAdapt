@@ -221,6 +221,8 @@ steps run instead, when:
   production qualification admission (see [Under governance](#under-governance));
 - the step isn't admitted, or the program's steps, on-screen checks or the
   save's record check changed since it was proposed or admitted;
+- the save checks the right record on screen and the API step names no
+  right-record contract;
 - there's no live browser session (`--backend web` only).
 
 `Replayer(api_steps=False)` keeps a run on the GUI.
