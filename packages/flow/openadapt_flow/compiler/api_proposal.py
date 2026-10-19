@@ -50,6 +50,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow import network_capture as nc
 from openadapt_flow.ir import (
     ActionKind,
@@ -81,7 +82,7 @@ def _events(recording: Path) -> list[dict[str, Any]]:
     path = recording / "events.jsonl"
     return [
         json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
+        for line in _sealed.read_text(path).splitlines()
         if line.strip()
     ]
 
@@ -138,7 +139,7 @@ def propose_api_step(
             None,
             ["the program has branches; API steps cover linear programs only"],
         )
-    meta = json.loads((recording / "meta.json").read_text(encoding="utf-8"))
+    meta = json.loads(_sealed.read_text(recording / "meta.json"))
     params = {k: str(v) for k, v in (meta.get("params") or {}).items()}
     if not params:
         return workflow, None, ["the recording has no parameters to map into a request"]

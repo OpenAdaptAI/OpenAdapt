@@ -637,6 +637,38 @@ def _enforce_surface_binding(
     return None
 
 
+def _recording_encryption_key(args: argparse.Namespace, backend: str) -> Optional[str]:
+    """The passphrase that encrypts this recording, or ``None`` for plaintext.
+
+    An explicit ``OPENADAPT_RECORDING_KEY`` turns encryption on. Where the
+    recorder can encrypt every file from the first frame (the web recorder),
+    a configured ``OPENADAPT_BUNDLE_KEY`` turns it on by default too, so a
+    deployment that seals its bundles does not leave the recordings they come
+    from in plaintext. ``--no-encrypt`` opts out. The desktop recorders write
+    a raw capture session through openadapt-capture that Flow cannot encrypt
+    yet, so an explicit recording key refuses them rather than write
+    plaintext.
+    """
+    import os
+
+    from openadapt_flow import crypto, sealed_set
+
+    if getattr(args, "no_encrypt", False):
+        return None
+    explicit = os.environ.get(sealed_set.RECORDING_ENV_KEY) or None
+    if backend != "web":
+        if explicit:
+            raise SystemExit(
+                f"record: {sealed_set.RECORDING_ENV_KEY} is set, but the "
+                f"{backend} recorder writes its raw capture session (database, "
+                "video) through openadapt-capture, which Flow cannot encrypt "
+                "yet. Nothing was recorded. Record on an encrypted volume and "
+                "pass --no-encrypt, or use --backend web."
+            )
+        return None
+    return explicit or crypto.resolve_key(None)
+
+
 def _stamp_recording_surface(recording_dir: Path, surface: str) -> None:
     """Stamp the recorded surface into ``meta.json`` (additive, Section 5).
 
@@ -650,15 +682,19 @@ def _stamp_recording_surface(recording_dir: Path, surface: str) -> None:
     """
     import json
 
+    from openadapt_flow import sealed_set
+
     meta_path = Path(recording_dir) / "meta.json"
     try:
-        meta = json.loads(meta_path.read_text())
+        meta = json.loads(sealed_set.read_text(meta_path))
+    except sealed_set.SealedSetError:
+        raise
     except (OSError, ValueError):
         return
     if meta.get("surface") == surface:
         return
     meta["surface"] = surface
-    meta_path.write_text(json.dumps(meta, indent=2))
+    sealed_set.write_text(meta_path, json.dumps(meta, indent=2))
 
 
 def _report_backend_kind(kind: object) -> "ExecutionTargetKind":
@@ -1259,6 +1295,7 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
         getattr(args, "browser_cdp_endpoint", None)
         or getattr(args, "browser_page_url", None)
     )
+    recording_key = _recording_encryption_key(args, backend)
     if backend in ("windows", "macos", "linux", "rdp", "citrix"):
         if getattr(args, "capture_network", False):
             raise SystemExit(
@@ -1323,11 +1360,17 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
             stop_when=_record_until_stop(args),
             surface="web",
             capture_network=bool(getattr(args, "capture_network", False)),
+            encryption_key=recording_key,
         )
     except BrowserAttachError as exc:
         raise SystemExit(f"record: browser attachment refused: {exc}") from exc
     _stamp_recording_surface(out, "web")
     print(f"Recording written to {out}")
+    if recording_key:
+        print(
+            "Encrypted at rest: frames, events, metadata and network capture "
+            "were sealed with AES-256-GCM before they reached the disk."
+        )
     secrets = sorted(args.secret or ())
     if secrets:
         print(
@@ -1352,8 +1395,10 @@ def _recording_privacy_notices(recording_dir: Path) -> list[str]:
     """
     import json
 
+    from openadapt_flow import sealed_set
+
     try:
-        meta = json.loads((Path(recording_dir) / "meta.json").read_text())
+        meta = json.loads(sealed_set.read_text(Path(recording_dir) / "meta.json"))
     except (OSError, ValueError):
         return []
     notices: list[str] = []
@@ -4693,6 +4738,7 @@ def _cmd_seal(args: argparse.Namespace) -> int:
         return 2
     print(f"Sealed bundle: {sealed.path}")
     print(f"Content digest: sha256:{sealed.content_digest}")
+    print(f"Sealed file set: sha256:{sealed.set_digest}")
     if sealed.certification_invalidated:
         print(
             "Prior certification invalidated: certify the sealed destination "
@@ -7714,6 +7760,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--no-encrypt",
+        action="store_true",
+        help=(
+            "Write the recording in plaintext even when OPENADAPT_BUNDLE_KEY "
+            "or OPENADAPT_RECORDING_KEY is set (web recordings are encrypted "
+            "by default when a key is configured)"
+        ),
+    )
+    p.add_argument(
         "--capture-network",
         action="store_true",
         help=(
@@ -9077,9 +9132,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "seal",
         help=(
-            "Copy a bundle to a new path, encrypt its workflow and template "
-            "evidence with OPENADAPT_BUNDLE_KEY, verify integrity, and publish "
-            "it atomically"
+            "Encrypt every file of a bundle that can hold patient data with "
+            "OPENADAPT_BUNDLE_KEY, bind the whole file set to one sealed "
+            "index, verify it, and publish it atomically at a new path"
         ),
     )
     p.add_argument("source", help="Existing workflow bundle directory")

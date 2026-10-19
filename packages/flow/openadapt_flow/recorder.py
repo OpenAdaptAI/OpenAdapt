@@ -59,6 +59,7 @@ from typing import Any, Callable, Optional
 
 from PIL import Image, ImageDraw
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.backend import (
     Backend,
     PageCloseExpectationBackend,
@@ -140,6 +141,8 @@ class Recorder:
         surface_id: str = PRIMARY_SURFACE_ID,
         surface_kind: Optional[str] = None,
         page_backend_factory: Optional[Callable[[Any], Backend]] = None,
+        encryption_key: Optional[str] = None,
+        finalize_on_finish: bool = True,
     ) -> None:
         # ``_backend`` is always the ACTIVE surface's backend; on a
         # single-surface recording it never changes.
@@ -166,10 +169,22 @@ class Recorder:
         self._known_pages: list[Any] = []
         self._remember_pages(backend)
         self._dir = Path(out_dir)
+        # Encrypted recording (docs/phi_at_rest.md): with a key, every frame,
+        # event line and the metadata are sealed in memory and only
+        # ciphertext is written, from the first frame on. The directory is a
+        # sealed set that is finalized (indexed) when the recording finishes.
+        self._sealed_writer: Optional[_sealed.SealedSetWriter] = None
+        self._finalize_on_finish = finalize_on_finish
+        if encryption_key:
+            self._sealed_writer = _sealed.SealedSetWriter(
+                self._dir, "recording", encryption_key
+            )
+            _sealed.register_writer(self._sealed_writer)
         self._frames_dir = self._dir / "frames"
         self._frames_dir.mkdir(parents=True, exist_ok=True)
         self._events_path = self._dir / "events.jsonl"
-        self._events_path.write_text("")  # truncate any stale file
+        # Truncate any stale file.
+        _sealed.write_bytes(self._events_path, b"")
         self._app_url = app_url
         # This observer belongs to recording, not the execution backend. A GUI
         # backend must never advertise an authoritative business-effect oracle
@@ -344,8 +359,35 @@ class Recorder:
                 },
                 *self._surface_meta,
             ]
-        (self._dir / "meta.json").write_text(json.dumps(meta, indent=2))
+        _sealed.write_text(self._dir / "meta.json", json.dumps(meta, indent=2))
+        if self._finalize_on_finish:
+            self.finalize_encryption()
         return self._dir
+
+    @property
+    def encrypted(self) -> bool:
+        return self._sealed_writer is not None
+
+    def finalize_encryption(self) -> Optional[str]:
+        """Index and seal an encrypted recording; returns its set digest.
+
+        A no-op for a plaintext recording. Callers that still need to amend
+        ``meta.json`` construct the recorder with ``finalize_on_finish=False``
+        and call this once they are done.
+        """
+        writer, self._sealed_writer = self._sealed_writer, None
+        if writer is None:
+            return None
+        try:
+            return writer.finalize()
+        finally:
+            _sealed.unregister_writer(writer)
+
+    def abandon_encryption(self) -> None:
+        """Stop routing writes for an aborted encrypted recording."""
+        writer, self._sealed_writer = self._sealed_writer, None
+        if writer is not None:
+            _sealed.unregister_writer(writer)
 
     # -- multi-surface (docs/MULTI_SURFACE.md) ---------------------------------
 
@@ -802,8 +844,8 @@ class Recorder:
         if redact_region is not None:
             before_png = self._redact(before_png, redact_region)
             after_png = self._redact(after_png, redact_region)
-        (self._frames_dir / f"{i:04d}_before.png").write_bytes(before_png)
-        (self._frames_dir / f"{i:04d}_after.png").write_bytes(after_png)
+        _sealed.write_bytes(self._frames_dir / f"{i:04d}_before.png", before_png)
+        _sealed.write_bytes(self._frames_dir / f"{i:04d}_after.png", after_png)
         with Image.open(io.BytesIO(before_png)) as before_image:
             before_viewport = [int(before_image.width), int(before_image.height)]
         with Image.open(io.BytesIO(after_png)) as after_image:
@@ -823,8 +865,7 @@ class Recorder:
         for key, value in structural_after.items():
             line[f"{key}_after"] = value
         line["t"] = round(time.monotonic() - self._t0, 3)
-        with self._events_path.open("a") as f:
-            f.write(json.dumps(line) + "\n")
+        _sealed.append_line(self._events_path, json.dumps(line))
         self._i += 1
 
     def _structural_locator_at(self, x: int, y: int) -> Optional[StructuralLocator]:

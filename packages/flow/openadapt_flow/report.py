@@ -277,9 +277,9 @@ def render_run_report(run_dir: Path | str) -> Path:
         FileNotFoundError: If ``run_dir/report.json`` does not exist.
     """
     run = Path(run_dir)
-    report = RunReport.model_validate_json(
-        (run / "report.json").read_text(encoding="utf-8")
-    )
+    from openadapt_flow import sealed_set
+
+    report = RunReport.model_validate_json(sealed_set.read_text(run / "report.json"))
     _warn_if_plaintext_phi(report)
 
     ok_count = sum(1 for r in report.results if r.ok)
@@ -655,7 +655,8 @@ def render_run_report(run_dir: Path | str) -> Path:
     lines.append("")
 
     out = run / "REPORT.md"
-    out.write_text("\n".join(lines), encoding="utf-8")
+    # Encrypted when the run directory is a sealed set.
+    sealed_set.write_text(out, "\n".join(lines))
     return out
 
 

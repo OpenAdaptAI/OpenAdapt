@@ -410,8 +410,16 @@ def interstitial_asset_paths(interstitials: Iterable[Interstitial]) -> set[str]:
     return refs
 
 
-def compute_file_hashes(workflow: "Workflow", bundle_dir: Path | str) -> dict[str, str]:
+def compute_file_hashes(
+    workflow: "Workflow",
+    bundle_dir: Path | str,
+    *,
+    assets: Optional[dict[str, bytes]] = None,
+) -> dict[str, str]:
     """SHA-256 every template/image asset in the bundle.
+
+    ``assets`` (bundle-relative path -> plaintext) replaces the disk scan for
+    a sealed bundle, whose assets exist only as ciphertext on disk.
 
     Hashes the union of (a) every file under ``templates/`` and (b) every
     bundle-relative image path the IR references, that actually exists on disk.
@@ -419,6 +427,8 @@ def compute_file_hashes(workflow: "Workflow", bundle_dir: Path | str) -> dict[st
     manifest. Missing referenced files are simply omitted (the structural
     validator reports dangling references separately; the digest reflects what
     is actually present)."""
+    if assets is not None:
+        return {rel: _sha256_bytes(assets[rel]) for rel in sorted(assets)}
     bundle = Path(bundle_dir)
     paths: set[str] = set()
 
@@ -503,7 +513,12 @@ def compute_parameter_schema_digest(workflow: "Workflow") -> str:
     return _sha256_bytes(canonical.encode("utf-8"))
 
 
-def build_manifest(workflow: "Workflow", bundle_dir: Path | str) -> BundleManifest:
+def build_manifest(
+    workflow: "Workflow",
+    bundle_dir: Path | str,
+    *,
+    assets: Optional[dict[str, bytes]] = None,
+) -> BundleManifest:
     """Compute a fresh :class:`BundleManifest` for ``workflow`` in ``bundle_dir``.
 
     Recomputes the asset hashes and content digest, stamps the current compiler
@@ -516,7 +531,7 @@ def build_manifest(workflow: "Workflow", bundle_dir: Path | str) -> BundleManife
     prior = workflow.manifest
     prior_prov = prior.provenance if prior is not None else None
 
-    file_hashes = compute_file_hashes(workflow, bundle_dir)
+    file_hashes = compute_file_hashes(workflow, bundle_dir, assets=assets)
     digest = compute_content_digest(workflow, file_hashes)
 
     provenance = BundleProvenance(

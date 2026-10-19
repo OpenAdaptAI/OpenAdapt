@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
 import numpy as np
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow import volatility
 from openadapt_flow.ir import (
     ActionKind,
@@ -219,7 +220,7 @@ logger = logging.getLogger(__name__)
 def _load_events(recording_dir: Path) -> list[dict]:
     """Parse events.jsonl into a list of event dicts."""
     events = []
-    with (recording_dir / "events.jsonl").open() as f:
+    with _sealed.open_text(recording_dir / "events.jsonl") as f:
         for line in f:
             line = line.strip()
             if line:
@@ -229,7 +230,7 @@ def _load_events(recording_dir: Path) -> list[dict]:
 
 def _read_png(path: Path) -> Optional[bytes]:
     """Read PNG bytes, or None if the file does not exist."""
-    return path.read_bytes() if path.exists() else None
+    return _sealed.read_bytes(path) if _sealed.is_file(path) else None
 
 
 def _png_viewport(png: bytes, *, source: str) -> tuple[int, int]:
@@ -1073,7 +1074,7 @@ def _postconditions(
         template_rel: Optional[str] = None
         if bundle is not None and step_id is not None:
             template_rel = f"templates/{step_id}_expect.png"
-            (bundle / template_rel).write_bytes(_crop_png(after_png, padded))
+            _sealed.write_bytes(bundle / template_rel, _crop_png(after_png, padded))
         expect.append(
             Postcondition(
                 kind=PostconditionKind.REGION_STABLE,
@@ -1511,7 +1512,7 @@ def _emit_identifier_crop(
             return None, None, reason
     crop_rel = f"{IDENTIFIER_CROP_DIR}/{step_id}.png"
     (bundle / IDENTIFIER_CROP_DIR).mkdir(parents=True, exist_ok=True)
-    (bundle / crop_rel).write_bytes(_crop_png(before_png, region))
+    _sealed.write_bytes(bundle / crop_rel, _crop_png(before_png, region))
     return crop_rel, region, None
 
 
@@ -1819,6 +1820,47 @@ def compile_recording(
     out_bundle_dir: Path | str,
     *,
     name: str,
+    **kwargs: Any,
+) -> Workflow:
+    """Compile a recording directory into a workflow bundle.
+
+    See :func:`_compile_recording` for the compiler itself. This wrapper
+    decides where the output's bytes go. An encrypted recording (a sealed
+    set, see :mod:`openadapt_flow.sealed_set`) is read in memory and compiles
+    into a sealed bundle: every crop, sidecar and ``workflow.json`` is
+    encrypted before it reaches the disk, under ``OPENADAPT_BUNDLE_KEY`` or,
+    when that is unset, the recording's own key. Without a key the compile
+    refuses before reading anything.
+    """
+    recording = Path(recording_dir)
+    bundle = Path(out_bundle_dir)
+    sealed_input = _sealed.is_sealed(recording)
+    sealed_output = _sealed.is_sealed(bundle)
+    if _sealed.active_writer(bundle) is not None or not (
+        sealed_input or sealed_output
+    ):
+        return _compile_recording(recording, bundle, name=name, **kwargs)
+    if sealed_input:
+        # Opening the recording verifies its whole file set before compiling.
+        _sealed.open_set(recording)
+    passphrase = _sealed.passphrase_for("bundle") or _sealed.recording_key()
+    if not passphrase:
+        raise _sealed.SealedSetKeyError(_sealed.missing_key_message(bundle, "bundle"))
+    if not sealed_output and bundle.exists() and any(bundle.iterdir()):
+        raise _sealed.SealedSetError(
+            f"{bundle} already holds an unencrypted bundle; compile an "
+            "encrypted recording into a new directory so no plaintext is mixed "
+            "into the sealed output"
+        )
+    with _sealed.writing(bundle, "bundle", passphrase, resume=sealed_output):
+        return _compile_recording(recording, bundle, name=name, **kwargs)
+
+
+def _compile_recording(
+    recording_dir: Path | str,
+    out_bundle_dir: Path | str,
+    *,
+    name: str,
     risk_overrides: Optional[dict[str, str]] = None,
     param_overrides: Optional[dict[str, str]] = None,
     secret_param_steps: Optional[Iterable[str]] = None,
@@ -1982,7 +2024,7 @@ def compile_recording(
     bundle = Path(out_bundle_dir)
     (bundle / "templates").mkdir(parents=True, exist_ok=True)
 
-    meta = json.loads((recording / "meta.json").read_text())
+    meta = json.loads(_sealed.read_text(recording / "meta.json"))
     backend_hints_raw = meta.get("backend_hints")
     backend_hints: Optional[BackendHints] = None
     if backend_hints_raw is not None:
@@ -2075,8 +2117,8 @@ def compile_recording(
         step_id = f"step_{i:03d}"
         before_path = recording / "frames" / f"{i:04d}_before.png"
         after_path = recording / "frames" / f"{i:04d}_after.png"
-        if before_path.is_file() != after_path.is_file():
-            missing = before_path if not before_path.is_file() else after_path
+        if _sealed.is_file(before_path) != _sealed.is_file(after_path):
+            missing = before_path if not _sealed.is_file(before_path) else after_path
             raise FileNotFoundError(
                 f"incomplete frame pair for {kind} event {i}: missing {missing}"
             )
@@ -2142,7 +2184,7 @@ def compile_recording(
             )
             template_bytes = _crop_png(before_png, crop_region)
             template_rel = f"templates/{step_id}.png"
-            (bundle / template_rel).write_bytes(template_bytes)
+            _sealed.write_bytes(bundle / template_rel, template_bytes)
 
             ocr_text = _best_target_text(
                 ocr(before_png, region=crop_region),
@@ -2265,7 +2307,7 @@ def compile_recording(
                     )
                     if selected_target is not None:
                         anchor_region, anchor_ocr_text = selected_target
-                        (bundle / template_rel).write_bytes(
+                        _sealed.write_bytes(bundle / template_rel, 
                             _crop_png(before_png, anchor_region)
                         )
                         if event.get("identifier_scope") == "dialog":
@@ -2306,7 +2348,7 @@ def compile_recording(
                 )
                 end_crop_region = _discriminative_crop_region(frame, drag_end)
                 end_template_rel = f"templates/{step_id}_drag_end.png"
-                (bundle / end_template_rel).write_bytes(
+                _sealed.write_bytes(bundle / end_template_rel, 
                     _crop_png(before_png, end_crop_region)
                 )
                 end_ocr_text = _best_crop_text(
@@ -2533,7 +2575,7 @@ def compile_recording(
                     raise ValueError(f"read event {i} has a label box but no frame")
                 lx, ly, lw, lh = (int(v) for v in label_region)
                 label_rel = f"templates/{step_id}.png"
-                (bundle / label_rel).write_bytes(
+                _sealed.write_bytes(bundle / label_rel, 
                     _crop_png(before_png, (lx, ly, lw, lh))
                 )
                 read_anchor = Anchor(
@@ -3088,7 +3130,7 @@ def compile_recording(
     )
 
     source_recording_sha256: Optional[str] = None
-    if (recording / ".openadapt-approval.json").is_file():
+    if _sealed.is_file(recording / ".openadapt-approval.json"):
         from openadapt_flow.sanitized_artifact import load_valid_approval
 
         source_recording_sha256 = load_valid_approval(recording)[
@@ -3162,7 +3204,7 @@ def compile_recording(
                 drop_region,
                 _mask_value(drop_text),
             )
-        (bundle / "param_hygiene.json").write_text(
+        _sealed.write_text(bundle / "param_hygiene.json", 
             json.dumps(
                 {
                     "note": (
@@ -3185,7 +3227,7 @@ def compile_recording(
             )
         )
     else:
-        (bundle / "param_hygiene.json").unlink(missing_ok=True)
+        _sealed.unlink(bundle / "param_hygiene.json", missing_ok=True)
 
     # DETERMINISTIC field-label parameter proposals (no model, $0, always on):
     # a typed constant whose step carries field_label evidence yields a
@@ -3223,7 +3265,7 @@ def compile_recording(
                 }
             )
     if label_proposals:
-        (bundle / "param_proposals.json").write_text(
+        _sealed.write_text(bundle / "param_proposals.json", 
             json.dumps(
                 {
                     "note": (
@@ -3248,7 +3290,7 @@ def compile_recording(
     else:
         # A recompile after the confirm pass must not leave a stale sidecar
         # behind: the sidecar always reflects the OUTSTANDING proposals.
-        (bundle / "param_proposals.json").unlink(missing_ok=True)
+        _sealed.unlink(bundle / "param_proposals.json", missing_ok=True)
 
     # Opt-in COMPILE-TIME model annotation (off by default). Runs LAST, over the
     # fully-built workflow. Applies model proposals with the confirm-don't-trust
@@ -3262,7 +3304,7 @@ def compile_recording(
         ann = annotator if annotator is not None else AnthropicStepAnnotator()
         result = apply_annotations(workflow, ann)
         workflow = result.workflow
-        (bundle / "annotations.json").write_text(
+        _sealed.write_text(bundle / "annotations.json", 
             result.model_dump_json(indent=2, exclude={"workflow"})
         )
         for flag in result.flagged:
@@ -3280,7 +3322,7 @@ def compile_recording(
     # check that can't be compiled fails the compile rather than being dropped.
     from openadapt_flow.compiler.readback_authoring import CHECK_FILE, apply_check
 
-    if (recording / CHECK_FILE).is_file():
+    if _sealed.is_file(recording / CHECK_FILE):
         workflow, _check = apply_check(workflow, recording)
         logger.info(
             "compiled the demonstrated check: %d field(s) on %s (%s)",
@@ -3294,7 +3336,7 @@ def compile_recording(
     # after a person admits it (openadapt-flow api admit).
     from openadapt_flow.network_capture import NETWORK_FILE
 
-    if (recording / NETWORK_FILE).is_file():
+    if _sealed.is_file(recording / NETWORK_FILE):
         from openadapt_flow.compiler.api_proposal import propose_api_step
 
         workflow, _api_step, _api_reasons = propose_api_step(workflow, recording)
@@ -3312,7 +3354,7 @@ def compile_recording(
         else:
             logger.info("no API step proposed: %s", "; ".join(_api_reasons))
         # Say what happened either way, so "no API step" is never silent.
-        (bundle / "api_proposal.json").write_text(
+        _sealed.write_text(bundle / "api_proposal.json", 
             json.dumps(
                 {
                     "proposed": _api_step is not None,
@@ -3358,7 +3400,8 @@ def compile_recording(
     if layout_fingerprints:
         fp_path = bundle / _layout.FINGERPRINT_ASSET
         fp_path.parent.mkdir(parents=True, exist_ok=True)
-        fp_path.write_bytes(
+        _sealed.write_bytes(
+            fp_path,
             _layout.dump_bundle_fingerprints(
                 layout_fingerprints,
                 scale_landmarks={"salt": scale_salt, "steps": scale_landmarks},
@@ -3367,7 +3410,7 @@ def compile_recording(
 
     write_compile_notes(bundle, compile_notes)
     workflow.save(bundle)
-    (bundle / "workflow.py").write_text(render_workflow_py(workflow))
+    _sealed.write_text(bundle / "workflow.py", render_workflow_py(workflow))
     return workflow
 
 

@@ -129,6 +129,8 @@ def is_encrypted(data: bytes) -> bool:
     ``format`` field is the module magic. Plaintext ``workflow.json`` / a
     checkpoint JSON fails this, so the unencrypted path is never misrouted.
     """
+    if data[: len(SET_FILE_MAGIC)] == SET_FILE_MAGIC:
+        return True
     try:
         obj = json.loads(data)
     except (ValueError, TypeError):
@@ -201,3 +203,69 @@ def decrypt_bytes(container: bytes, key: Optional[str], *, aad: bytes) -> bytes:
             "decryption failed: wrong key or the ciphertext was tampered with "
             "(authentication tag mismatch). The payload was NOT loaded."
         ) from exc
+
+
+# -- one derived key for a whole sealed set ----------------------------------
+#
+# ``encrypt_bytes`` runs scrypt for every payload, which is right for one
+# workflow.json and wrong for a recording that writes a frame every few hundred
+# milliseconds. A sealed set (a sealed bundle or an encrypted recording; see
+# :mod:`openadapt_flow.sealed_set`) runs scrypt ONCE over a per-set random salt
+# and then seals each file with AES-256-GCM under that key, a fresh random
+# 96-bit nonce per file, and the file's set-relative path in the associated
+# data. Nothing here is a new primitive: the KDF and the AEAD are the same
+# :mod:`cryptography` objects used above.
+
+#: Prefix of a per-file container sealed under a :class:`SetKey`.
+SET_FILE_MAGIC: Final[bytes] = b"OAFLOW-SEALED-1\n"
+
+
+class SetKey:
+    """An AES-256-GCM key derived once from a passphrase and a set salt."""
+
+    __slots__ = ("_aead",)
+
+    def __init__(self, data_key: bytes) -> None:
+        if len(data_key) != _KEY_LEN:
+            raise CryptoError("a set key must be 32 bytes")
+        self._aead = AESGCM(data_key)
+
+    @classmethod
+    def derive(
+        cls,
+        passphrase: str,
+        salt: bytes,
+        *,
+        n: int = _SCRYPT_N,
+        r: int = _SCRYPT_R,
+        p: int = _SCRYPT_P,
+    ) -> "SetKey":
+        return cls(_derive(passphrase, salt, n=n, r=r, p=p))
+
+    @staticmethod
+    def new_salt() -> bytes:
+        return secrets.token_bytes(_SALT_LEN)
+
+    def seal(self, plaintext: bytes, *, aad: bytes) -> bytes:
+        nonce = secrets.token_bytes(_NONCE_LEN)
+        return SET_FILE_MAGIC + nonce + self._aead.encrypt(nonce, plaintext, aad)
+
+    def open(self, container: bytes, *, aad: bytes) -> bytes:
+        if not container.startswith(SET_FILE_MAGIC):
+            raise DecryptionError("not an openadapt-flow sealed-set file")
+        body = container[len(SET_FILE_MAGIC) :]
+        nonce, ciphertext = body[:_NONCE_LEN], body[_NONCE_LEN:]
+        if len(nonce) != _NONCE_LEN:
+            raise DecryptionError("truncated sealed-set file")
+        try:
+            return self._aead.decrypt(nonce, ciphertext, aad)
+        except InvalidTag as exc:
+            raise DecryptionError(
+                "decryption failed: wrong key, or the file was tampered with, "
+                "renamed or moved from another sealed set. Nothing was loaded."
+            ) from exc
+
+
+def kdf_parameters() -> dict[str, int]:
+    """The scrypt work factors new containers record."""
+    return {"kdf_n": _SCRYPT_N, "kdf_r": _SCRYPT_R, "kdf_p": _SCRYPT_P}

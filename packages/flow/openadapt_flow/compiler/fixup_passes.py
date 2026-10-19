@@ -75,6 +75,7 @@ import io
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.ir import ActionKind, Postcondition, PostconditionKind, Step
 
 #: Frames per step id: ``(before_png, after_png)``; either may be ``None``.
@@ -271,7 +272,7 @@ def apply_fixup_passes(
                 changed = True
                 rel = f"templates/{step.id}_expect.png"
                 (bundle_dir / rel).parent.mkdir(parents=True, exist_ok=True)
-                (bundle_dir / rel).write_bytes(crop_png(after, region))  # type: ignore[arg-type]
+                _sealed.write_bytes(bundle_dir / rel, crop_png(after, region))  # type: ignore[arg-type]
                 new.expect = [
                     Postcondition(
                         kind=PostconditionKind.REGION_STABLE,
@@ -311,7 +312,7 @@ def apply_fixup_passes(
                 region = tuple(int(v) for v in step.anchor.region)
                 rel = f"templates/identifiers/{step.id}.png"
                 (bundle_dir / rel).parent.mkdir(parents=True, exist_ok=True)
-                (bundle_dir / rel).write_bytes(crop_png(before, region))  # type: ignore[arg-type]
+                _sealed.write_bytes(bundle_dir / rel, crop_png(before, region))  # type: ignore[arg-type]
                 assert new.anchor is not None
                 new.anchor.identifier_crop = rel
                 new.anchor.identifier_region = region  # type: ignore[assignment]
@@ -335,11 +336,14 @@ def write_compile_notes(bundle_dir: Path, notes: list[dict[str, Any]]) -> None:
 
     import json
 
+    from openadapt_flow import sealed_set
+
     path = Path(bundle_dir) / COMPILE_NOTES_FILE
     if not notes:
-        path.unlink(missing_ok=True)
+        sealed_set.unlink(path, missing_ok=True)
         return
-    path.write_text(
+    sealed_set.write_text(
+        path,
         json.dumps(
             {
                 "schema": COMPILE_NOTES_SCHEMA,
