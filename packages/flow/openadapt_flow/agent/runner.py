@@ -57,6 +57,7 @@ from openadapt_flow.agent.contract import (
     parse_failed_checks,
     reason_for_run,
 )
+from openadapt_flow.readback_ladder import checked_how_from_report
 
 __all__ = [
     "FlowRunner",
@@ -358,6 +359,7 @@ class RunOutcome:
                 else None
             ),
             approval_mode=self.approval_mode,
+            checked_how=checked_how_from_report(self.report),
         )
 
     def to_dict(self, *, include_protected: bool = False) -> dict:

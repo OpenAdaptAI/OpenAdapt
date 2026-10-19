@@ -2447,6 +2447,12 @@ class Workflow(BaseModel):
     # None for every pre-qualification bundle and omitted from its serialized
     # bytes by ``_serialize_compatible`` below.
     qualification: Optional["QualificationProject"] = None
+    #: Raises the check level every save must reach for the run to be
+    #: VERIFIED (:mod:`openadapt_flow.readback_ladder`): ``separate_session``
+    #: (the default floor) or ``system_of_record``. It can't lower the floor.
+    #: None means the profile's floor; omitted from the serialized bytes when
+    #: unset.
+    minimum_readback: Optional[Literal["separate_session", "system_of_record"]] = None
     # Multi-surface workflows (docs/MULTI_SURFACE.md): every browser tab,
     # popup, and backend the workflow runs on, primary first. Empty (the
     # default) for a single-surface bundle, and then omitted from serialized
@@ -2503,6 +2509,8 @@ class Workflow(BaseModel):
             data.pop("execution_mode", None)
         if self.qualification is None:
             data.pop("qualification", None)
+        if self.minimum_readback is None:
+            data.pop("minimum_readback", None)
         if not self.surfaces:
             data.pop("surfaces", None)
         if self.origin is None:
@@ -4353,6 +4361,44 @@ class LoopIterationBinding(BaseModel):
     params: dict[str, Union[str, bool, int, float]] = Field(default_factory=dict)
 
 
+_CheckLevelName = Literal[
+    "unchecked",
+    "same_screen",
+    "reopened",
+    "separate_session",
+    "system_of_record",
+    "counterparty_confirmed",
+]
+
+
+class ReadbackSave(BaseModel):
+    """How one save was checked (:mod:`openadapt_flow.readback_ladder`)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    step_id: str
+    #: The weakest check level among the save's effect checks.
+    checked_how: _CheckLevelName
+    #: The weakest Flow tier among the save's confirmed checks; None when any
+    #: of its checks did not confirm.
+    flow_tier: Optional[int] = Field(default=None, ge=1, le=4)
+
+
+class ReadbackLadder(BaseModel):
+    """How the run's saves were checked, written to ``report.json``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The weakest check level that counts toward VERIFIED for this run.
+    minimum: _CheckLevelName
+    #: The weakest check level among the run's saves.
+    checked_how: _CheckLevelName
+    label: str
+    #: True when every save was confirmed but one is below :attr:`minimum`.
+    below_minimum: bool = False
+    saves: list[ReadbackSave] = Field(default_factory=list)
+
+
 class VariantRouteStamp(BaseModel):
     """Which admitted variant of a workflow ran, as chosen by the variant router.
 
@@ -4419,6 +4465,14 @@ class RunReport(BaseModel):
         description=(
             "Versioned PHI-free outcome, contract coverage, evidence classes, "
             "model calls, and external-network-call observability."
+        ),
+    )
+    readback: Optional[ReadbackLadder] = Field(
+        default=None,
+        description=(
+            "How each save was checked (unchecked, same_screen, reopened, "
+            "separate_session, system_of_record) against the weakest level "
+            "that counts toward VERIFIED. None for a run that made no save."
         ),
     )
     # -- Section 3: explicit transaction / reconciliation semantics ------------

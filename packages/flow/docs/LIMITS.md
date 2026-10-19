@@ -372,13 +372,39 @@ file; tier 1) or the application's record page read in a separate signed-in
 browser session (`ui_readback`; tier 2). The second goes through the same
 application, so it is not a system-of-record read and has its own limits
 ([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback)).
-A pixel-only Citrix or RDP session with neither is that case. The on-screen
+A pixel-only Citrix or RDP session with neither is that case. Reopening the
+record in the acting session (tier 3) is reported as its own check level,
+`reopened` ("Reopened in the same session"), and is not `VERIFIED`: a
+confirmed reopen ends `COMPLETED_UNVERIFIED`, and the agent result says
+`not_sure_if_saved` with `checked_below_minimum`
+([`READBACK_LADDER.md`](READBACK_LADDER.md)). A workflow's `minimum_readback`
+can raise the floor to `system_of_record`, never lower it. The on-screen
 oracle can still halt when the region is unreadable or wrong. If a
-consequential write may already have been delivered, the production
-`transaction_outcome` is `RECONCILIATION_REQUIRED`, never `VERIFIED`.
-Halt-on-doubt is unchanged. This is not live Citrix Production evidence; a
-live ICA/HDX session is a deployment-specific qualification. Wire the
-independent read before paying a sprint for a `VERIFIED` outcome.
+consequential write may already have been delivered and the check did not
+confirm it, the production `transaction_outcome` is `RECONCILIATION_REQUIRED`,
+never `VERIFIED`. Halt-on-doubt is unchanged. This is not live Citrix
+Production evidence; a live ICA/HDX session is a deployment-specific
+qualification. Wire the independent read before paying a sprint for a
+`VERIFIED` outcome.
+
+The reopen itself has limits. It earns the `reopened` level only when its
+navigation contains a recognized state reset; without one it is
+`same_screen`. A read-only guard refuses any reopen step that presses a
+delete key, or `s`, Enter, Return or Delete with a modifier held (any
+spelling: `control+s`, `Meta+S`, `ctrl+shift+s`, `alt+s`, `shift+delete`).
+It refuses a click on a control labelled with a commit word (Save, Submit,
+Delete, Sign, Send, ...), a click where OCR reads no label (an icon-only
+button may be Save), and a click whose label can't be read at all. It reads
+labels by OCR, so a control drawn with text that doesn't say what it does
+passes, Enter alone is allowed (a search needs it), and typed text is not
+checked. A whole-word match can also refuse a harmless control ("Post-op
+notes"); the check then halts. A reference number is read from one screen
+region and must be the only match there; two different numbers, or none, halt
+the check. A search by a run input (this run's patient) can open an older
+record with the same value, and Flow can't read the record before the save
+without leaving the form, so such a check confirms only when the reopened
+record shows this save's reference number and no other; an application that
+shows no reference number halts there.
 
 ### 4. Model assistance can convert a halt into a false pass
 

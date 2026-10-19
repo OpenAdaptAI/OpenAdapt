@@ -1515,6 +1515,11 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         for added in ("ui_readback", "smart_backend"):
             if isinstance(candidate, dict) and candidate.get(added) is None:
                 candidate.pop(added, None)
+    # The same rule one level down: ``ui_readback.reference`` came later.
+    for holder in [config, *(config.get("candidates") or [])]:
+        section = holder.get("ui_readback") if isinstance(holder, dict) else None
+        if isinstance(section, dict) and section.get("reference") is None:
+            section.pop("reference", None)
     payload = {
         "schema": "openadapt.effect-verifier-identity/v1",
         "implementation": (
