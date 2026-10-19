@@ -512,6 +512,32 @@ claims:
         production-receipt wire formats carry the outcome as
         RECONCILIATION_REQUIRED.
 
+  - id: lookup-teaches-the-check
+    claim: >-
+      When a recording shows the person or the agent look the record up after
+      saving, Flow proposes that look-up as the record check with no marking
+      or configuration: a same-session check and, for desktop, RDP and Citrix
+      recordings, a separate-session desktop_readback. Every proposal waits
+      for a person.
+    surfaces: [docs]
+    tier: supported
+    evidence:
+      - path: tests/test_lookup_detect.py
+        proves: >-
+          On a synthetic recording of the RDP kiosk: finds the save by its
+          OCR label, the search, and only the values the look-up brought onto
+          the screen (not the saved form still showing the same text);
+          proposes nothing without a look-up; the proposed desktop_readback,
+          with only its address filled in, confirms the booking through real
+          OCR from separate sessions; check accept writes check.json and
+          never overwrites one; record --verify needs no file and ends with
+          the look-up prompt when none is found.
+    caveats:
+      - >-
+        Measured on one synthetic kiosk recording. The detector needs a save
+        button with a save word, a typed and submitted search, and the saved
+        values readable by OCR on the last frame.
+
   # --------------------------------------------------- identity gate / halt
   - id: identity-gate-halt-armed
     claim: >-

@@ -465,6 +465,19 @@ class Recording:
             )
         except AuthoringError as exc2:
             return owner._capture_refused("capture_failed", str(exc2), computer)
+        compiled_dir = session.compiled_recording_dir or session.recording_dir
+        if compiled_dir is not None:
+            # The agent looked the record up after saving: propose that
+            # look-up as the check, beside the recording that compiles (the
+            # distilled copy, whose event numbers the recompile reads).
+            from openadapt_flow.compiler.lookup_detect import propose_from_recording
+
+            _proposal, _written, lines = propose_from_recording(
+                compiled_dir, session_kind="web", values=self._values
+            )
+            for line in lines:
+                if owner.on_warning is not None:
+                    owner.on_warning(line)
         return owner._write_draft(
             session, compiled, computer, self._values, self._dialect
         )
