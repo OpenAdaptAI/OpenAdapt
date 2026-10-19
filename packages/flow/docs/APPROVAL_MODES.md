@@ -38,6 +38,12 @@ in its run directory and waits:
   (at most 4 hours).
 - `item-approval/<id>.png`: the filled form the person is shown.
 
+When the save is an API step ([`API_TIER.md`](API_TIER.md)), the person
+approves the request it sends instead of a screenshot: the image and the
+phone's rows list the values, the record the check reads back and the
+request line. The request's `form_state_kind` is `api_request`, and its
+digest binds every byte the save sends, the record and the record check.
+
 Desktop reads the requests and answers one of them:
 
 ```bash
@@ -63,7 +69,9 @@ openadapt-flow item-approval decline RUN_DIR ... --reason wrong_values
   and right-record check again. At the last point before the input, the run
   reads the form again; a field that changed while waiting stops the item
   before the save. In a browser the run reads the page's form controls;
-  elsewhere it reads the words on the screen.
+  elsewhere it reads the words on the screen. An API step prepares its
+  request again instead; a request whose digest changed stops the item
+  before the save, and the GUI steps don't run in its place.
 - A decline stops the item before that save. Earlier saves of the same
   item stay as they are.
 - `--approval-wait SECONDS` (default 900, at most 14,400) sets how long the

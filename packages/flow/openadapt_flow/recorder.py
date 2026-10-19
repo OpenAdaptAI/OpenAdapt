@@ -74,6 +74,11 @@ from openadapt_flow.ir import (
 
 #: Bound on waiting for a newly opened page's first navigation.
 _NEW_PAGE_LOAD_TIMEOUT_S = 10.0
+
+# Mirrors openadapt_flow.runtime.hover_evidence.HOVER_DWELL_MS. Not imported:
+# the recorder must not pull in the runtime's vision dependencies.
+HOVER_DWELL_MS = 800
+
 # How long a recorded action that raises a browser dialog waits for it.
 _DIALOG_WAIT_S = 5.0
 
@@ -136,13 +141,24 @@ class Recorder:
         settle_interval_s: float = 0.1,
         settle_stable_frames: int = 2,
         settle_timeout_s: float = 3.0,
+        network_capture: Optional[Any] = None,
         surface_id: str = PRIMARY_SURFACE_ID,
         surface_kind: Optional[str] = None,
         page_backend_factory: Optional[Callable[[Any], Backend]] = None,
+        capture_hover: bool = False,
     ) -> None:
+        # Pixel surfaces: before each click, rest the pointer on the target
+        # and keep that frame (frames/{i}_hover.png) so the compiler can store
+        # the hover response as identity evidence (runtime.hover_evidence).
+        # Needs a backend with ``hover(x, y)``; ignored otherwise.
+        self._capture_hover = capture_hover
         # ``_backend`` is always the ACTIVE surface's backend; on a
         # single-surface recording it never changes.
         self._backend = backend
+        # Opt-in ``record --capture-network``: a started
+        # :class:`openadapt_flow.network_capture.NetworkCapture`, written beside
+        # the events by :meth:`finish`.
+        self._network_capture = network_capture
         # Builds the backend for a browser page an action opened. The
         # interactive recorder passes one that applies its privacy masking
         # and scrubbed structural reads to every page it follows.
@@ -322,6 +338,15 @@ class Recorder:
             "params": dict(self._params),
             "secret_params": sorted(self._secret_params),
         }
+        if self._network_capture is not None:
+            from openadapt_flow.network_capture import NETWORK_FILE
+
+            self._network_capture.stop()
+            self._network_capture.write(self._dir, self._t0)
+            meta["network_capture"] = {
+                "file": NETWORK_FILE,
+                "exchanges": self._network_capture.count,
+            }
         if self._multi_surface:
             meta["surfaces"] = [
                 {
@@ -651,6 +676,9 @@ class Recorder:
         )
         if page_backend is not None:
             page_backend.expect_page_close()
+        hover_png = self._hover_frame(event)
+        if hover_png is not None:
+            event = {**event, "hover_dwell_ms": HOVER_DWELL_MS}
         try:
             act()
         finally:
@@ -678,7 +706,28 @@ class Recorder:
         # click that closes it.
         if self._closed_its_page(event):
             event = {**event, "closes_surface": True}
+        if hover_png is not None:
+            (self._frames_dir / f"{self._i:04d}_hover.png").write_bytes(hover_png)
         self._commit(event, before, after, structural_before)
+
+    def _hover_frame(self, event: dict[str, Any]) -> Optional[bytes]:
+        """Rest the pointer on a click target and capture the settled frame.
+
+        Only with ``capture_hover`` and a backend that can hover, and only for
+        click events. The pointer stays there for the click that follows.
+        """
+        if not self._capture_hover or event.get("kind") not in (
+            "click",
+            "double_click",
+            "right_click",
+        ):
+            return None
+        hover = getattr(self._backend, "hover", None)
+        if not callable(hover):
+            return None
+        hover(int(event["x"]), int(event["y"]))
+        time.sleep(HOVER_DWELL_MS / 1000.0)
+        return self._wait_settled()
 
     def record_observed(
         self,

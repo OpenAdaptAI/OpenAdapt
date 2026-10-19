@@ -1,0 +1,102 @@
+{
+ "arm": "browser",
+ "ref": "r6-rosa-delgado",
+ "mismatch": true,
+ "error": null,
+ "engine_success": false,
+ "outcome": "HALTED",
+ "steps": 40,
+ "step_errors": [
+  [
+   "step_039",
+   "Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'No matches were found.' \u2014 run aborted"
+  ]
+ ],
+ "actuation": [
+  "dom"
+ ],
+ "effect_verified": [
+  null
+ ],
+ "new_charts": 0,
+ "readback": "0/12",
+ "correct": true,
+ "field_check": [
+  {
+   "field": "title",
+   "want": "Mrs.",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "fname",
+   "want": "Rosa",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "lname",
+   "want": "Delgado",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "DOB",
+   "want": "1958-03-22",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "sex",
+   "want": "Female",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "street",
+   "want": "7 MILL ROAD",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "city",
+   "want": "EXAMPLETON",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "state",
+   "want": "MA",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "postal_code",
+   "want": "02139",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "phone_home",
+   "want": "555-0188",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "email",
+   "want": "rosa.delgado@example.invalid",
+   "got": null,
+   "match": false
+  },
+  {
+   "field": "country_code",
+   "want": "USA",
+   "got": null,
+   "match": false
+  }
+ ],
+ "wall_s": 34.35,
+ "setup_s": 1.581,
+ "task_s": 32.767,
+ "readback_s": 1.584
+}

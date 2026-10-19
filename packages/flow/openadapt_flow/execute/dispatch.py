@@ -145,6 +145,17 @@ def live_replay(
             f"admitted bundle could not be loaded: {type(exc).__name__}",
             pre_effect=True,
         ) from exc
+    from openadapt_flow.emit.skill import bundle_surface
+
+    surface = bundle_surface(workflow)
+    if surface != "web":
+        raise DispatchError(
+            "the reference Execute worker drives a browser only, and this "
+            f"bundle was recorded on {surface!r}; run it with `openadapt-flow "
+            "run BUNDLE --config deploy.yaml` or through `openadapt-flow "
+            "connector run`. Nothing was executed.",
+            pre_effect=True,
+        )
     stop: Optional[Callable[[], None]] = None
     try:
         if admission.target_url:
@@ -272,6 +283,11 @@ def _map_outcome(coarse: str, txn: Any) -> ExecuteTerminalOutcomeV1:
         TransactionOutcome.FAILED_PLATFORM: ExecuteTerminalOutcomeV1.FAILED_PLATFORM,
         TransactionOutcome.ROLLED_BACK: ExecuteTerminalOutcomeV1.ROLLED_BACK_VERIFIED,
         TransactionOutcome.RECONCILIATION_REQUIRED: (
+            ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED
+        ),
+        # Execute v1 has no "waiting for a later report": the closest wire
+        # value is the one that forbids a retry and asks for a check.
+        TransactionOutcome.SAVED_AWAITING_CHECK: (
             ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED
         ),
         # The run executed but did not prove its effect. Execute has no

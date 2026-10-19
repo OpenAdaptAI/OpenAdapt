@@ -43,6 +43,7 @@ from openadapt_flow.ir import (
     DialogResponse,
     ExecutionMode,
     ExecutionTargetKind,
+    HoverEvidence,
     Landmark,
     ParamKind,
     ParamSpec,
@@ -1426,6 +1427,56 @@ def _marked_identifier_region(value: object, *, source: str) -> Optional[Region]
     return (int(value[0]), int(value[1]), int(value[2]), int(value[3]))
 
 
+HOVER_CROP_DIR = "templates/hover"
+
+
+def _hover_evidence(
+    bundle: Path,
+    step_id: str,
+    before_png: bytes,
+    hover_path: Path,
+    click: Point,
+    *,
+    dwell_ms: object = None,
+) -> Optional[HoverEvidence]:
+    """The recorded hover response for a click with no record identity.
+
+    The recorder saved ``frames/{i}_hover.png`` after resting the pointer on
+    the target (``Recorder(capture_hover=True)``). What changed near the
+    target between the before frame and that frame is the response
+    (:func:`openadapt_flow.runtime.hover_evidence.measure_response`); its
+    pixels land under ``templates/hover/`` so they are sealed with the other
+    image crops. None when there is no hover frame, nothing near the target
+    changed, or the frames cannot be compared.
+    """
+    from openadapt_flow.runtime import hover_evidence as hover_mod
+
+    if not hover_path.is_file():
+        return None
+    hover_png = hover_path.read_bytes()
+    try:
+        response = hover_mod.measure_response(before_png, hover_png, click)
+    except ValueError:
+        logger.warning("hover frame for %s differs in size; no hover evidence", step_id)
+        return None
+    dwell = (
+        int(dwell_ms)
+        if isinstance(dwell_ms, int) and 0 <= dwell_ms <= 5000
+        else hover_mod.HOVER_DWELL_MS
+    )
+    if response is None:
+        return None  # nothing answered the pointer: no evidence to keep
+    crop_rel = f"{HOVER_CROP_DIR}/{step_id}.png"
+    (bundle / HOVER_CROP_DIR).mkdir(parents=True, exist_ok=True)
+    (bundle / crop_rel).write_bytes(response.crop)
+    return HoverEvidence(
+        response=True,
+        region=hover_mod.relative(response.region, click),
+        crop=crop_rel,
+        dwell_ms=dwell,
+    )
+
+
 def _emit_identifier_crop(
     bundle: Path,
     step_id: str,
@@ -2357,6 +2408,18 @@ def compile_recording(
                     ),
                     exclude_region=crop_region,
                 )
+            hover = (
+                _hover_evidence(
+                    bundle,
+                    step_id,
+                    before_png,
+                    recording / "frames" / f"{i:04d}_hover.png",
+                    click,
+                    dwell_ms=event.get("hover_dwell_ms"),
+                )
+                if not identity_armed and kind != "drag"
+                else None
+            )
             if kind == "drag":
                 destination = drag_end_anchor.ocr_text if drag_end_anchor else None
                 intent = "drag " + (
@@ -2395,6 +2458,7 @@ def compile_recording(
                         identity_armed=identity_armed,
                         identity_unarmed_reason=unarmed_reason,
                         identifier_crop_missing_reason=idcrop_missing,
+                        hover=hover,
                     ),
                     before_png,
                     after_png,
@@ -3287,6 +3351,41 @@ def compile_recording(
             len(_check.fields),
             _check.save_step,
             _check.tier,
+        )
+
+    # A web recording made with --capture-network: propose an API step for
+    # the save when its request can be explained field by field. It runs only
+    # after a person admits it (openadapt-flow api admit).
+    from openadapt_flow.network_capture import NETWORK_FILE
+
+    if (recording / NETWORK_FILE).is_file():
+        from openadapt_flow.compiler.api_proposal import propose_api_step
+
+        workflow, _api_step, _api_reasons = propose_api_step(workflow, recording)
+        if (
+            _api_step is not None
+            and _api_step.api_binding is not None
+            and _api_step.api_binding.web_form is not None
+        ):
+            logger.info(
+                "proposed an API step for %s (%d GUI steps); a person admits it "
+                "with 'api admit'",
+                _api_step.id,
+                len(_api_step.api_binding.web_form.replaces_steps),
+            )
+        else:
+            logger.info("no API step proposed: %s", "; ".join(_api_reasons))
+        # Say what happened either way, so "no API step" is never silent.
+        (bundle / "api_proposal.json").write_text(
+            json.dumps(
+                {
+                    "proposed": _api_step is not None,
+                    "step": None if _api_step is None else _api_step.id,
+                    "reasons": _api_reasons,
+                },
+                indent=2,
+            )
+            + "\n"
         )
 
     # Bind each consequential click on an unlabeled control to the form whose

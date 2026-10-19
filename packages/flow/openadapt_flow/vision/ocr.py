@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+import os
 import threading
 from collections import OrderedDict
 from typing import Any, Callable, Iterable
@@ -20,6 +21,7 @@ import numpy as np
 from pydantic import BaseModel
 
 from openadapt_flow.ir import Region
+from openadapt_flow.runtime.step_timing import timed_span
 from openadapt_flow.vision import imgops
 from openadapt_flow.vision.match import Match, _clamp_region
 
@@ -61,7 +63,15 @@ def _get_engine() -> Any:
                 else:
                     from rapidocr_onnxruntime import RapidOCR
 
-                    _engine = RapidOCR()
+                    # Parallel worklist workers share this engine; capping its
+                    # threads stops N concurrent calls from each claiming
+                    # every core. Unset keeps onnxruntime's default.
+                    threads = os.environ.get("OPENADAPT_FLOW_OCR_THREADS")
+                    _engine = (
+                        RapidOCR(intra_op_num_threads=int(threads))
+                        if threads
+                        else RapidOCR()
+                    )
     return _engine
 
 
@@ -162,6 +172,7 @@ def _ocr_from_source(
     return out
 
 
+@timed_span("ocr")
 def ocr(screen_png: bytes, *, region: Region | None = None) -> list[OcrLine]:
     """Run OCR on a screenshot (optionally restricted to a region).
 

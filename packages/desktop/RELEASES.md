@@ -2,8 +2,11 @@
 
 ## Releasing from the OpenAdapt monorepo
 
-OpenAdapt Desktop lives in the OpenAdapt monorepo at `packages/desktop`. The
-engine (PyPI) lane releases from there:
+OpenAdapt Desktop lives in the OpenAdapt monorepo at `packages/desktop`. Each
+version is **one immutable release**, `openadapt-desktop-vX.Y.Z`, carrying the
+Python wheel and sdist (also published to PyPI as `openadapt-desktop`), the
+native installers, and the release's own attested channel. `v*` tags stay the
+launcher's.
 
 1. A pull request that should ship bumps the version and the changelog itself:
    `python scripts/prepare_release.py` (or `--bump patch|minor|major`, or
@@ -15,17 +18,33 @@ engine (PyPI) lane releases from there:
    the command above. It also requires every version source, native included,
    to carry the one version.
 3. When the bump merges, `.github/workflows/desktop-release.yml` waits for that
-   exact commit's Packages run to pass, then dispatches `release-package.yml`.
-   That publishes `openadapt-desktop` to PyPI and creates the immutable
-   `openadapt-desktop-vX.Y.Z` tag and GitHub Release. No bot commit lands on
-   main, and `v*` tags stay the launcher's.
+   exact commit's Packages run (its desktop test and build jobs must have
+   passed), then builds the wheel, the sdist and every installer and
+   smoke-tests them. The `native-release` environment's reviewer approves the
+   signing jobs. It attests the exact bytes and writes the channel, which binds
+   `SHA256SUMS` and the provenance by hash, states each platform's signing
+   mode, and names the previous release's channel by hash.
+4. The openadapt-release App creates the tag and a draft release with every
+   asset and verifies the draft's bytes. PyPI then gets the same wheel and sdist
+   through Trusted Publishing, and the draft is published once. If any build
+   fails, nothing is published. A later failure resumes by re-running the
+   failed jobs of the same run; a new run refuses a half-published version.
+5. Signing is stated, never implied. macOS DMGs are ad-hoc signed until
+   Developer ID credentials exist. Windows goes through SignPath when the four
+   `SIGNPATH_*` secrets are set in `native-release`: one request deep-signs the
+   MSI and the program files in it and signs the NSIS setup. Otherwise Windows
+   ships unsigned. File names, the website manifest, the channel and the
+   release notes all carry each mode.
 
-Engine tags through `v0.20.0` and every `desktop-v*` native release live in the
-OpenAdaptAI/openadapt-desktop repository. The native installer,
-candidate channel and Production channel lanes below have not moved yet: they
-update published releases in place, and OpenAdapt's releases are immutable.
-Their workflows are kept, inert, under `.github/` here. The rest of this
-document describes those lanes as they ran in openadapt-desktop.
+Consumers pick the newest valid `openadapt-desktop-v*` release; there is no
+standing channel release, and nothing is mirrored between releases.
+
+Engine tags through `v0.20.0`, every earlier `desktop-v*` native release, and
+the `desktop-channel` index live in OpenAdaptAI/openadapt-desktop. The
+Production channel and the managed FFmpeg runtime lanes have not moved: they
+rewrite published releases, which OpenAdapt's immutable releases refuse, and
+the Production lane also needs a release-authority policy change. The rest of
+this document describes the lanes as they ran in openadapt-desktop.
 
 ## Two lanes in openadapt-desktop
 
