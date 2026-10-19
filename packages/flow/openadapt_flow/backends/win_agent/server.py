@@ -14,6 +14,8 @@ matching the Windows Agent Arena Flask contract (the WAADirect pattern):
     POST /uia/text-at-point -> structured row text for identity verification
     POST /uia/find          -> zero / unique / ambiguous exact candidates
     POST /uia/act           -> unique native UIA action + delivery receipt
+    POST /uia/read          -> read-only text of one unique control (value or
+                               name) and, on request, the text of its rows
     POST /execute_windows   -> legacy WAA-shaped input commands, DISABLED by
                                default (``--allow-legacy-commands``). Commands
                                are parsed into an allow-listed set of
@@ -732,6 +734,112 @@ def _structured_text_at(auto: Any, x: int, y: int) -> Optional[str]:
     return value or None
 
 
+_ROW_TYPES = frozenset(
+    {
+        "DataItemControl",
+        "ListItemControl",
+        "TreeItemControl",
+        "TableRowControl",
+        "CustomControl",
+    }
+)
+_MAX_READ_TEXT = 4_096
+_MAX_READ_ROWS = 200
+_MAX_ROW_DEPTH = 4
+
+
+def _value_text(control: object) -> Optional[str]:
+    """The text a person sees in ``control``: its value, else its name.
+
+    Read-only. Edit boxes and grid cells expose their content through the
+    Value pattern (an empty box reads as empty, never as its name); other
+    controls through the legacy MSAA value or their Name.
+    """
+    method = _control_value(control, "GetValuePattern", None)
+    if callable(method):
+        try:
+            pattern = method()
+            value = getattr(pattern, "Value", None) if pattern is not None else None
+        except Exception:  # noqa: BLE001 - pattern not supported
+            value = None
+        if isinstance(value, str):
+            return value[:_MAX_READ_TEXT]
+    method = _control_value(control, "GetLegacyIAccessiblePattern", None)
+    if callable(method):
+        try:
+            value = getattr(method(), "Value", None)
+        except Exception:  # noqa: BLE001 - pattern not supported
+            value = None
+        if isinstance(value, str) and value:
+            return value[:_MAX_READ_TEXT]
+    name = _control_value(control, "Name", "")
+    if isinstance(name, str) and name:
+        return name[:_MAX_READ_TEXT]
+    return None
+
+
+def _children(control: object) -> list[object]:
+    method = _control_value(control, "GetChildren", None)
+    try:
+        return list(method()) if callable(method) else []
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _row_text(row: object) -> Optional[str]:
+    parts = [text for text in (_value_text(c) for c in _children(row)) if text]
+    if not parts:
+        own = _value_text(row)
+        return " ".join(own.split()) if own else None
+    return " ".join(" ".join(parts).split())[:_MAX_READ_TEXT] or None
+
+
+def _read_rows(container: object) -> tuple[list[dict[str, Any]], bool]:
+    """Row-type descendants of ``container`` (grid or list rows), in order."""
+    rows: list[dict[str, Any]] = []
+    stack: list[tuple[object, int]] = [
+        (child, 1) for child in reversed(_children(container))
+    ]
+    truncated = False
+    while stack:
+        control, depth = stack.pop()
+        if str(_control_value(control, "ControlTypeName", "")) in _ROW_TYPES:
+            bounds = _bounds(control)
+            text = _row_text(control)
+            if bounds is not None and text:
+                cells = []
+                for cell in _children(control)[:_MAX_READ_ROWS]:
+                    cell_bounds = _bounds(cell)
+                    cell_text = _value_text(cell)
+                    if cell_bounds is not None and cell_text:
+                        cells.append(
+                            {
+                                "text": " ".join(cell_text.split()),
+                                "point": [
+                                    int((cell_bounds[0] + cell_bounds[2]) / 2),
+                                    int((cell_bounds[1] + cell_bounds[3]) / 2),
+                                ],
+                            }
+                        )
+                rows.append(
+                    {
+                        "text": text,
+                        "point": [
+                            int((bounds[0] + bounds[2]) / 2),
+                            int((bounds[1] + bounds[3]) / 2),
+                        ],
+                        "cells": cells,
+                    }
+                )
+                if len(rows) >= _MAX_READ_ROWS:
+                    truncated = True
+                    break
+            continue
+        if depth < _MAX_ROW_DEPTH:
+            stack.extend((c, depth + 1) for c in reversed(_children(control)))
+    return rows, truncated
+
+
 def _perform_uia_initialized(
     auto: Any, operation: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
@@ -798,6 +906,38 @@ def _perform_uia_initialized(
                 ),
             }
         return {"status": "ok", "locator": _locator_from_control(actionable or element)}
+
+    if operation == "read":
+        data = _exact_object(
+            payload,
+            required=frozenset({"locator"}),
+            optional=frozenset({"rows"}),
+            label="uia read",
+        )
+        if not isinstance(data.get("rows", False), bool):
+            raise AgentRequestError(400, "invalid_schema", "rows must be a boolean")
+        locator = _locator_payload(data["locator"])
+        found, truncated = _find_candidates(locator, auto)
+        if len(found) != 1 or truncated:
+            return {
+                "status": "ok",
+                "match": "ambiguous" if found or truncated else "not_found",
+                "candidate_count": len(found),
+                "text": None,
+            }
+        control, candidate = found[0]
+        result: dict[str, Any] = {
+            "status": "ok",
+            "match": "unique",
+            "candidate_count": 1,
+            "text": _value_text(control),
+            "point": candidate["point"],
+        }
+        if data.get("rows"):
+            rows, rows_truncated = _read_rows(control)
+            result["rows"] = rows
+            result["rows_truncated"] = rows_truncated
+        return result
 
     data = _exact_object(
         payload,
@@ -1254,6 +1394,7 @@ def make_handler_class(
                             "typed_input_v1",
                             "guarded_input_v1",
                             "uia_v1",
+                            "uia_read_v1",
                             *(
                                 ["legacy_waa_input_v1"]
                                 if config.allow_legacy_exec
@@ -1293,6 +1434,7 @@ def make_handler_class(
                 "/uia/text-at-point": ("uia", "text-at-point"),
                 "/uia/find": ("uia", "find"),
                 "/uia/act": ("uia", "act"),
+                "/uia/read": ("uia", "read"),
             }
             is_legacy = self.path == "/execute_windows" and config.allow_legacy_exec
             if self.path not in typed_routes and not is_legacy:

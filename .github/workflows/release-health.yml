@@ -37,7 +37,7 @@ on:
     - cron: '41 */3 * * *'
   workflow_dispatch:
   workflow_run:
-    workflows: ["Release and PyPI Publish"]
+    workflows: ["Release and PyPI Publish", "Release package", "Desktop release"]
     types: [completed]
   pull_request:
     paths:

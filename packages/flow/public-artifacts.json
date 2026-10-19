@@ -897,7 +897,7 @@
     },
     {
       "path": "claims.yaml",
-      "sha256": "4b5e156e7ffdb0f8a704baea0440f24736a87439c1603af2108d964575436106"
+      "sha256": "f121929e16de2d0a5a0897a4b246ca97219464d4e09eee205575e8a2d2820179"
     },
     {
       "path": "deploy/on-prem/docker-compose.yml",
@@ -937,7 +937,7 @@
     },
     {
       "path": "docs/deployment.example.yaml",
-      "sha256": "465772e485ac08e711886bba1dde04f5912389fbdcec35bae01813fe4cf027e6"
+      "sha256": "9a91357075a1c860e66ed13847e88550566128cdd8ed6ef4629dd36e6ab4f44d"
     },
     {
       "path": "docs/program-workbench.png",
@@ -2133,7 +2133,7 @@
     },
     {
       "path": "docs/verification.json",
-      "sha256": "38e06bea3b2eeda468e5f1a3ec2c42c99066f0d3a8735c715abd86c8c8cf200c"
+      "sha256": "40232425d440bd3b20ebd418f21cf543f1cbaa0b6c38fa53984f9085612c6461"
     },
     {
       "path": "examples/claude-code-demo/demo.gif",
