@@ -413,9 +413,11 @@ class InductionResult(BaseModel):
                 }.get(ng.certified_by or "", ng.certified_by or "")
                 verdict = f"CERTIFIED ({how})"
             elif ng.status == "contradicted":
-                verdict = "REFUSED (recording " + ", ".join(
-                    str(t) for t in ng.contradict
-                ) + " contradicts it)"
+                verdict = (
+                    "REFUSED (recording "
+                    + ", ".join(str(t) for t in ng.contradict)
+                    + " contradicts it)"
+                )
             else:
                 verdict = "proposed, NOT trusted"
             lines.append(
@@ -2000,7 +2002,9 @@ def _narrated_candidate(columns, lo, hi, narration, fields, descriptors, interpr
         ]
         if len(about) != 1:
             continue
-        cand = nr.candidate_from_rule(rule, trace=t, step_id=line.step_id, fields=fields)
+        cand = nr.candidate_from_rule(
+            rule, trace=t, step_id=line.step_id, fields=fields
+        )
         cand.target_arm = about[0]
         return cand
     if interpreter is None or len(descriptors) != 1:
@@ -2020,7 +2024,7 @@ def _narrated_candidate(columns, lo, hi, narration, fields, descriptors, interpr
             data = None
         if not data:
             continue
-        cand = nr.candidate_from_model(
+        answer = nr.candidate_from_model(
             data,
             sentence=line.text,
             trace=t,
@@ -2028,9 +2032,9 @@ def _narrated_candidate(columns, lo, hi, narration, fields, descriptors, interpr
             fields=fields,
             source=getattr(interpreter, "source", "narration+model"),
         )
-        if cand is not None:
-            cand.target_arm = 0
-            return cand
+        if answer is not None:
+            answer.target_arm = 0
+            return answer
     return None
 
 
@@ -2042,8 +2046,16 @@ _HOW = {
 
 
 def _decide_narrated(
-    cand, *, location, rule, expected, screen_step, fields, screen_texts,
-    probe_resolutions, accepted,
+    cand,
+    *,
+    location,
+    rule,
+    expected,
+    screen_step,
+    fields,
+    screen_texts,
+    probe_resolutions,
+    accepted,
 ) -> NarratedGuard:
     from openadapt_flow.compiler.narration_rules import check_against_recordings
 
@@ -2125,14 +2137,11 @@ def _flag_on_uncertainty(result, uncertainty_location, ng, proposal) -> None:
         u.proposal = proposal
         if ng.status == "contradicted":
             u.detail += (
-                f" Narration suggested {ng.rule!r}, but {ng.detail}, so it is "
-                "not used."
+                f" Narration suggested {ng.rule!r}, but {ng.detail}, so it is not used."
             )
             continue
         u.detail += f" Narration suggests: {ng.rule} ({ng.detail})."
-        u.record_next = (
-            (u.record_next + " ") if u.record_next else ""
-        ) + (
+        u.record_next = ((u.record_next + " ") if u.record_next else "") + (
             "Or accept the narrated rule: induce --accept-narrated "
             f"{ng.location}@{ng.guard_id} --accepted-by NAME."
         )
@@ -2203,13 +2212,27 @@ def _branch_node(idx: int, guard: Predicate, arm_steps, target: int) -> _Node:
     for tr, entry in ((t_rule, entries[target]), (t_else, entries[other])):
         if entry is None:
             node.exits.append(tr)
-    node.states[bid] = State(id=bid, kind=StateKind.BRANCH, transitions=[t_rule, t_else])
+    node.states[bid] = State(
+        id=bid, kind=StateKind.BRANCH, transitions=[t_rule, t_else]
+    )
     return node
 
 
 def _apply_narration(
-    *, result, columns, decisions, nodes, optional_nodes, divergences, narration,
-    n, screen_texts, interpreter, probe_resolutions, accepted, guard_sources,
+    *,
+    result,
+    columns,
+    decisions,
+    nodes,
+    optional_nodes,
+    divergences,
+    narration,
+    n,
+    screen_texts,
+    interpreter,
+    probe_resolutions,
+    accepted,
+    guard_sources,
 ) -> None:
     fields = _param_fields(columns, decisions, n)
 
@@ -2239,7 +2262,9 @@ def _apply_narration(
             rule=cand.describe(f"run {step0.intent!r}"),
             expected={t: t in col.tokens for t in range(n)},
             screen_step={
-                t: col.tokens[t].step.id if t in col.tokens else _next_step_id(columns, idx, t)
+                t: col.tokens[t].step.id
+                if t in col.tokens
+                else _next_step_id(columns, idx, t)
                 for t in range(n)
             },
             fields=fields,
@@ -2250,7 +2275,9 @@ def _apply_narration(
         result.narrated_guards.append(ng)
         if ng.status == "certified":
             state.step.guard = Guard(predicate=cand.guard, on_unmet="skip")
-            result.uncertainties = [u for u in result.uncertainties if u.location != sid]
+            result.uncertainties = [
+                u for u in result.uncertainties if u.location != sid
+            ]
             result.inferred = [
                 line
                 for line in result.inferred
@@ -2258,7 +2285,7 @@ def _apply_narration(
             ]
             result.inferred.append(
                 f"guard at {sid}: {ng.rule} -- suggested by narration, "
-                f"certified: {_HOW[ng.certified_by]}"
+                f"certified: {_HOW.get(ng.certified_by or '', '')}"
             )
             guard_sources[sid] = _guard_source(ng)
             for dec in decisions:
@@ -2329,10 +2356,12 @@ def _apply_narration(
         result.narrated_guards.append(ng)
         if ng.status == "certified":
             nodes.insert(pos, _branch_node(idx, cand.guard, arm_steps, target))
-            result.uncertainties = [u for u in result.uncertainties if u.location != where]
+            result.uncertainties = [
+                u for u in result.uncertainties if u.location != where
+            ]
             result.inferred.append(
                 f"branch at {location}: {ng.rule} -- suggested by narration, "
-                f"certified: {_HOW[ng.certified_by]}"
+                f"certified: {_HOW.get(ng.certified_by or '', '')}"
             )
             guard_sources[f"branch_div_{idx}"] = _guard_source(ng)
             for dec in decisions:

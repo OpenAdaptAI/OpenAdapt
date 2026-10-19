@@ -1942,7 +1942,9 @@ def _induce_narration_args(args: argparse.Namespace) -> Any:
     return {
         "narration": narration,
         "screen_texts": recording_screen_texts(frames) if frames else None,
-        "interpreter": AnthropicNarrationInterpreter() if args.narration_model else None,
+        "interpreter": AnthropicNarrationInterpreter()
+        if args.narration_model
+        else None,
         "accepted_narration": accepted or None,
     }
 
@@ -2027,7 +2029,9 @@ def _cmd_narration_attach(args: argparse.Namespace) -> int:
 
         scrubber = require_scrubber()  # refuse before any transcription
         if args.audio:
-            result = transcribe_audio(args.audio, model=args.model, backend=args.backend)
+            result = transcribe_audio(
+                args.audio, model=args.model, backend=args.backend
+            )
         else:
             result = json.loads(Path(args.transcript).read_text(encoding="utf-8"))
         path = attach_narration(

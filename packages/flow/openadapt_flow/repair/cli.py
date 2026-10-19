@@ -153,7 +153,9 @@ def _print_narrated_guards(candidate: RepairCandidate) -> None:
     for where, source in sorted(workflow.guard_sources.items()):
         who = f" by {source.accepted_by}" if source.accepted_by else ""
         print(f"    - {where}: {source.rule or 'guard'}")
-        print(f"      said: {source.sentence!r} (certified: {source.certified_by}{who})")
+        print(
+            f"      said: {source.sentence!r} (certified: {source.certified_by}{who})"
+        )
 
 
 def cmd_review(args: argparse.Namespace) -> int:

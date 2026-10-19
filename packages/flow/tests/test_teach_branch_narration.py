@@ -62,9 +62,16 @@ def _setup(tmp_path, sentence):
             r1, Narration(lines=[NarrationLine(t_start=0.0, t_end=2.0, text=sentence)])
         )
     normal_dir = tmp_path / "normal"
-    report, _ = _replay(wf, bundle, normal_dir, text=AETNA, blocking=False, params=normal)
+    report, _ = _replay(
+        wf, bundle, normal_dir, text=AETNA, blocking=False, params=normal
+    )
     assert report.success
-    return wf, bundle, [BranchExample(run_dir=r1, fix=fix), BranchExample(run_dir=r2, fix=fix)], normal_dir
+    return (
+        wf,
+        bundle,
+        [BranchExample(run_dir=r1, fix=fix), BranchExample(run_dir=r2, fix=fix)],
+        normal_dir,
+    )
 
 
 def test_without_narration_two_separating_parameters_are_refused(tmp_path):
@@ -91,14 +98,20 @@ def test_narration_picks_the_parameter_when_every_run_agrees(tmp_path):
         screen_texts=_normal_texts({normal_dir: [AETNA]}),
     )
     assert result.promoted, result.summary()
-    assert (result.signature.param, result.signature.value) == ("payer_type", "medicaid")
+    assert (result.signature.param, result.signature.value) == (
+        "payer_type",
+        "medicaid",
+    )
     assert (result.narration, result.narration_status) == (RULE, "certified")
     assert "narration:" in result.summary()
     learned = Workflow.load(out)
     (source,) = learned.guard_sources.values()
     assert source.sentence == RULE and source.certified_by == "recordings_agree"
     report, backend = _replay(
-        learned, out, tmp_path / "m", text=HUMANA,
+        learned,
+        out,
+        tmp_path / "m",
+        text=HUMANA,
         params={"payer_type": "medicaid", "plan_tier": "gold"},
     )
     assert report.success and _dismissed(backend)

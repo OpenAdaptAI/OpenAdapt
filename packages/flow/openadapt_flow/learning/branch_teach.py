@@ -50,7 +50,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Callable, Optional, Sequence
+from typing import Any, Callable, Optional, Sequence
 
 from pydantic import BaseModel, Field
 
@@ -599,23 +599,23 @@ def teach_branch(
     ]
     text = clean[0] if clean else candidates[0]
     overlapping = [
-        runtime_params_for_gui(r.params)
-        for r, t in negative_runs
-        if _contains(t, text)
+        runtime_params_for_gui(r.params) for r, t in negative_runs if _contains(t, text)
     ]
-    sentences = [
-        line for ex in examples for line in _example_narration(ex, ())
-    ] + [line.text for nar in narration for line in nar.lines]
+    sentences = [line for ex in examples for line in _example_narration(ex, ())] + [
+        line.text for nar in narration for line in nar.lines
+    ]
     spoken = _narrated_param(
         sentences,
         loaded,
         base,
         [runtime_params_for_gui(r.params) for r, _ in negative_runs],
     )
-    spoken_ok = spoken is not None and all(
-        ex.params.get(spoken[0]) == spoken[1] for ex in loaded
-    ) and all(n.get(spoken[0]) not in (None, spoken[1]) for n in overlapping)
-    said = {
+    spoken_ok = (
+        spoken is not None
+        and all(ex.params.get(spoken[0]) == spoken[1] for ex in loaded)
+        and all(n.get(spoken[0]) not in (None, spoken[1]) for n in overlapping)
+    )
+    said: dict[str, Any] = {
         "narration": spoken[2] if spoken else None,
         "narration_status": (
             None if spoken is None else "certified" if spoken_ok else "contradicted"

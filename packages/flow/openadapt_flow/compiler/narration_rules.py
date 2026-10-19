@@ -60,7 +60,9 @@ _COPULA = re.compile(
     r"equals|says|shows|reads|=)\s+(?P<val>.+)$",
     re.IGNORECASE,
 )
-_PRONOUN_SUBJECTS = frozenset({"", "it", "this", "that", "they", "he", "she", "its", "it's"})
+_PRONOUN_SUBJECTS = frozenset(
+    {"", "it", "this", "that", "they", "he", "she", "its", "it's"}
+)
 
 
 @dataclass(frozen=True)
@@ -106,7 +108,9 @@ def _clean_value(text: str) -> str:
 
 
 _OTHERWISE = re.compile(r",?\s*\b(?:otherwise|or else|else)\b", re.I)
-_UNCLEAR_NEGATION = re.compile(r"\b(?:not|no|never|n't|isn't|aren't|won't|don't)\b", re.I)
+_UNCLEAR_NEGATION = re.compile(
+    r"\b(?:not|no|never|n't|isn't|aren't|won't|don't)\b", re.I
+)
 _NOT_NEEDED = re.compile(
     r"^(?P<obj>.+?)\s+(?:is not|isn't|are not|aren't)\s+(?:needed|required|necessary)$"
     r"|^(?P<obj2>.+?)\s+(?:is|are)\s+(?:not needed|not required|unnecessary)$",
@@ -134,7 +138,9 @@ def _split_action(action: str) -> tuple[str, Optional[bool]]:
     for verb in _SKIP_VERBS:
         if low.startswith(verb + " ") or low == verb:
             rest = a[len(verb) :].strip()
-            rest = re.sub(r"^(?:need to|have to|bother|fill in|do)\s+", "", rest, flags=re.I)
+            rest = re.sub(
+                r"^(?:need to|have to|bother|fill in|do)\s+", "", rest, flags=re.I
+            )
             # "don't skip X": a double negative is too easy to misread.
             if any(rest.lower().startswith(v + " ") for v in _SKIP_VERBS):
                 return rest, None
@@ -238,8 +244,9 @@ class NarrationInterpreter(Protocol):
 
     source: str
 
-    def interpret(self, sentence: str, context: dict[str, Any]) -> Optional[dict[str, Any]]:
-        ...
+    def interpret(
+        self, sentence: str, context: dict[str, Any]
+    ) -> Optional[dict[str, Any]]: ...
 
 
 class AnthropicNarrationInterpreter:
@@ -257,7 +264,9 @@ class AnthropicNarrationInterpreter:
         self._client = client
         self._model = model
 
-    def interpret(self, sentence: str, context: dict[str, Any]) -> Optional[dict[str, Any]]:
+    def interpret(
+        self, sentence: str, context: dict[str, Any]
+    ) -> Optional[dict[str, Any]]:
         import json
 
         from openadapt_flow import privacy
@@ -289,7 +298,9 @@ class AnthropicNarrationInterpreter:
             model=model, max_tokens=200, messages=[{"role": "user", "content": prompt}]
         )
         raw = "".join(
-            getattr(b, "text", "") for b in response.content if getattr(b, "type", "") == "text"
+            getattr(b, "text", "")
+            for b in response.content
+            if getattr(b, "type", "") == "text"
         ).strip()
         try:
             data = json.loads(raw)
@@ -429,7 +440,11 @@ def candidate_from_model(
         if f is None:
             return None
         recorded = next(
-            (v for v in f.values if v is not None and _norm_value(v) == _norm_value(value)),
+            (
+                v
+                for v in f.values
+                if v is not None and _norm_value(v) == _norm_value(value)
+            ),
             None,
         )
         if recorded is None:

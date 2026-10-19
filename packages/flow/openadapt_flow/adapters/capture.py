@@ -1324,9 +1324,7 @@ def _write_capture_narration(
         return
     from openadapt_flow.narration import Narration, align, write_narration
 
-    sentences = [
-        (u.start - started_at, u.end - started_at, u.text) for u in utterances
-    ]
+    sentences = [(u.start - started_at, u.end - started_at, u.text) for u in utterances]
     write_narration(
         out_dir,
         Narration(

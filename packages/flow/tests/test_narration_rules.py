@@ -24,14 +24,16 @@ from openadapt_flow.narration import (
     attach_narration,
     load_narration,
 )
-from tests.test_replayer import FakeBackend, FakeVision
 from openadapt_flow.runtime.replayer import Replayer
+from tests.test_replayer import FakeBackend, FakeVision
 
 RULE = "If the insurance is Medicare, skip the copay screen."
 
 
 def _type(sid: str, field: str, value: str, *, risk: str = "reversible") -> Step:
-    return Step(id=sid, intent=f"type {field}", action=ActionKind.TYPE, text=value, risk=risk)
+    return Step(
+        id=sid, intent=f"type {field}", action=ActionKind.TYPE, text=value, risk=risk
+    )
 
 
 def _key(sid: str, key: str, intent: str, *, risk: str = "reversible") -> Step:
@@ -40,7 +42,10 @@ def _key(sid: str, key: str, intent: str, *, risk: str = "reversible") -> Step:
 
 def visit(payer: str, copay: bool) -> Workflow:
     """Check in a visit. The copay is a consequential write, done for some payers."""
-    steps = [_type("step_000", "patient", "Test Patient"), _type("step_001", "insurance", payer)]
+    steps = [
+        _type("step_000", "patient", "Test Patient"),
+        _type("step_001", "insurance", payer),
+    ]
     if copay:
         steps.append(_type("step_002", "copay", "20", risk="irreversible"))
     steps.append(_key("step_003", "Enter", "press Enter to finish"))
@@ -48,7 +53,9 @@ def visit(payer: str, copay: bool) -> Workflow:
 
 
 def said(text: str, step_id: str) -> Narration:
-    return Narration(lines=[NarrationLine(t_start=1.0, t_end=3.0, text=text, step_id=step_id)])
+    return Narration(
+        lines=[NarrationLine(t_start=1.0, t_end=3.0, text=text, step_id=step_id)]
+    )
 
 
 def _opt(result):
@@ -64,7 +71,9 @@ def _run(workflow, tmp_path, params):
     bundle = tmp_path / "bundle"
     bundle.mkdir(exist_ok=True)
     report = Replayer(backend, vision=FakeVision(), poll_interval_s=0.01).run(
-        workflow, bundle_dir=bundle, run_dir=tmp_path / f"run-{len(list(tmp_path.iterdir()))}",
+        workflow,
+        bundle_dir=bundle,
+        run_dir=tmp_path / f"run-{len(list(tmp_path.iterdir()))}",
         params=params,
     )
     return backend, report
@@ -77,17 +86,36 @@ def _run(workflow, tmp_path, params):
     "sentence,value,skip,runs",
     [
         (RULE, "Medicare", True, False),
-        ("Skip the copay screen when the insurance is Medicare.", "Medicare", True, False),
+        (
+            "Skip the copay screen when the insurance is Medicare.",
+            "Medicare",
+            True,
+            False,
+        ),
         ("Since it's Medicare, I don't fill in the copay.", "Medicare", True, False),
-        ("If the insurance is not Medicare, enter the copay.", "Medicare", False, False),
+        (
+            "If the insurance is not Medicare, enter the copay.",
+            "Medicare",
+            False,
+            False,
+        ),
         ("Unless the payer is Aetna, leave the referral blank.", "Aetna", True, True),
-        ("If it says Prior Auth Required, click Request Auth.", "Prior Auth Required", False, True),
+        (
+            "If it says Prior Auth Required, click Request Auth.",
+            "Prior Auth Required",
+            False,
+            True,
+        ),
     ],
 )
 def test_sentences_parse_into_condition_and_action(sentence, value, skip, runs):
     rule = parse_rule(sentence)
     assert rule is not None
-    assert (rule.value, rule.skip, rule.runs_when_condition_holds) == (value, skip, runs)
+    assert (rule.value, rule.skip, rule.runs_when_condition_holds) == (
+        value,
+        skip,
+        runs,
+    )
 
 
 def test_plain_narration_is_not_a_rule():
@@ -103,7 +131,13 @@ def test_a_narrated_branch_becomes_a_proposed_guard():
     element. Nothing checked it, so it is a flagged proposal and the point
     stays refused."""
     traces = [
-        Workflow(name="c", steps=[_type("step_000", "patient", "A"), _key("step_003", "Enter", "finish")]),
+        Workflow(
+            name="c",
+            steps=[
+                _type("step_000", "patient", "A"),
+                _key("step_003", "Enter", "finish"),
+            ],
+        ),
         Workflow(
             name="c",
             steps=[
@@ -185,14 +219,18 @@ def test_healthy_runs_make_no_model_calls(tmp_path):
 
     traces = [visit("Medicare", False), visit("Aetna", True)]
     result = induce_program(
-        traces, narration=[said(RULE, "step_003"), None], interpreter=CountingInterpreter()
+        traces,
+        narration=[said(RULE, "step_003"), None],
+        interpreter=CountingInterpreter(),
     )
     assert result.certified
     # The parser read the sentence, so the compile-time model was not asked.
     assert CountingInterpreter.calls == 0
     pname = result.narrated_guards[0].guard.operands[0].param
     for payer in ("Medicare", "Aetna"):
-        _, report = _run(result.workflow, tmp_path, {**result.workflow.params, pname: payer})
+        _, report = _run(
+            result.workflow, tmp_path, {**result.workflow.params, pname: payer}
+        )
         assert report.success
         assert report.model_calls == 0
         assert report.est_model_cost_usd == 0.0
@@ -202,7 +240,13 @@ def test_the_transcript_is_scrubbed_before_it_is_stored(tmp_path):
     rec = tmp_path / "rec"
     rec.mkdir()
     (rec / "events.jsonl").write_text(
-        "\n".join(json.dumps(e) for e in [{"i": 0, "kind": "type", "t": 1.0}, {"i": 1, "kind": "key", "t": 4.0}])
+        "\n".join(
+            json.dumps(e)
+            for e in [
+                {"i": 0, "kind": "type", "t": 1.0},
+                {"i": 1, "kind": "key", "t": 4.0},
+            ]
+        )
         + "\n"
     )
 
@@ -241,7 +285,13 @@ def test_the_transcript_is_scrubbed_before_it_is_stored(tmp_path):
 
 def test_a_person_can_accept_a_guard_nothing_contradicts():
     traces = [
-        Workflow(name="c", steps=[_type("step_000", "patient", "A"), _key("step_003", "Enter", "finish")]),
+        Workflow(
+            name="c",
+            steps=[
+                _type("step_000", "patient", "A"),
+                _key("step_003", "Enter", "finish"),
+            ],
+        ),
         Workflow(
             name="c",
             steps=[
@@ -255,21 +305,35 @@ def test_a_person_can_accept_a_guard_nothing_contradicts():
     pinned = f"opt_1@{first.narrated_guards[0].guard_id}"
     # A bare location does not accept anything: the id pins the exact guard.
     bare = induce_program(
-        traces, narration=[said(RULE, "step_003"), None], accepted_narration={"opt_1": "R. Reviewer"}
+        traces,
+        narration=[said(RULE, "step_003"), None],
+        accepted_narration={"opt_1": "R. Reviewer"},
     )
     assert not bare.certified
     result = induce_program(
-        traces, narration=[said(RULE, "step_003"), None], accepted_narration={pinned: "R. Reviewer"}
+        traces,
+        narration=[said(RULE, "step_003"), None],
+        accepted_narration={pinned: "R. Reviewer"},
     )
     (ng,) = result.narrated_guards
-    assert (ng.status, ng.certified_by, ng.accepted_by) == ("certified", "person", "R. Reviewer")
+    assert (ng.status, ng.certified_by, ng.accepted_by) == (
+        "certified",
+        "person",
+        "R. Reviewer",
+    )
     assert result.certified
     assert result.workflow.guard_sources["opt_1"].accepted_by == "R. Reviewer"
 
 
 def test_a_screen_element_guard_certifies_from_the_recorded_screens():
     traces = [
-        Workflow(name="c", steps=[_type("step_000", "patient", "A"), _key("step_003", "Enter", "finish")]),
+        Workflow(
+            name="c",
+            steps=[
+                _type("step_000", "patient", "A"),
+                _key("step_003", "Enter", "finish"),
+            ],
+        ),
         Workflow(
             name="c",
             steps=[
@@ -295,11 +359,17 @@ def test_a_narrated_divergence_becomes_a_branch(tmp_path):
         decide = (
             _key("step_002", "M", "press M to bill medicare", risk="irreversible")
             if payer == "Medicare"
-            else _key("step_002", "C", "press C to collect the copay", risk="irreversible")
+            else _key(
+                "step_002", "C", "press C to collect the copay", risk="irreversible"
+            )
         )
         return Workflow(
             name="bill",
-            steps=[_type("step_001", "insurance", payer), decide, _key("step_003", "Enter", "finish")],
+            steps=[
+                _type("step_001", "insurance", payer),
+                decide,
+                _key("step_003", "Enter", "finish"),
+            ],
         )
 
     plain = induce_program([trace("Medicare"), trace("Aetna")])
@@ -313,19 +383,29 @@ def test_a_narrated_divergence_becomes_a_branch(tmp_path):
     (ng,) = result.narrated_guards
     assert ng.location.startswith("divergence_") and ng.status == "certified"
     assert result.certified, result.render()
-    branch = next(s for s in result.program.states.values() if s.kind is StateKind.BRANCH)
+    branch = next(
+        s for s in result.program.states.values() if s.kind is StateKind.BRANCH
+    )
     assert branch.id in result.workflow.guard_sources
     pname = ng.guard.param
-    backend, report = _run(result.workflow, tmp_path, {**result.workflow.params, pname: "Medicare"})
+    backend, report = _run(
+        result.workflow, tmp_path, {**result.workflow.params, pname: "Medicare"}
+    )
     assert report.success and ("press", "M") in backend.actions
-    backend, report = _run(result.workflow, tmp_path, {**result.workflow.params, pname: "Humana"})
+    backend, report = _run(
+        result.workflow, tmp_path, {**result.workflow.params, pname: "Humana"}
+    )
     assert report.success and ("press", "C") in backend.actions
 
 
 def test_a_sentence_about_another_step_is_not_used():
     traces = [visit("Medicare", False), visit("Aetna", True)]
     result = induce_program(
-        traces, narration=[said("If the insurance is Medicare, skip the referral.", "step_003"), None]
+        traces,
+        narration=[
+            said("If the insurance is Medicare, skip the referral.", "step_003"),
+            None,
+        ],
     )
     assert result.narrated_guards == []
     assert not result.certified
@@ -352,7 +432,9 @@ def test_narration_is_the_same_for_every_backend(tmp_path, backend):
             {"i": int(s.id.split("_")[1]), "kind": s.action.value, "t": 2.0 * k}
             for k, s in enumerate(wf.steps)
         ]
-        (rec / "events.jsonl").write_text("\n".join(json.dumps(e) for e in events) + "\n")
+        (rec / "events.jsonl").write_text(
+            "\n".join(json.dumps(e) for e in events) + "\n"
+        )
         if sentences:
             attach_narration(rec, sentences, scrubber=Scrubber())
         return rec
@@ -366,7 +448,11 @@ def test_narration_is_the_same_for_every_backend(tmp_path, backend):
     assert narration[0].lines[0].step_id == "step_003"
     result = induce_program(traces, narration=narration)
     (ng,) = result.narrated_guards
-    assert (ng.status, ng.certified_by, ng.location) == ("certified", "recordings_agree", "opt_2")
+    assert (ng.status, ng.certified_by, ng.location) == (
+        "certified",
+        "recordings_agree",
+        "opt_2",
+    )
 
 
 def test_alignment_attaches_a_sentence_to_the_next_action():
@@ -384,7 +470,10 @@ def test_capture_narration_is_carried_into_the_recording(tmp_path):
         narration=lambda: [SimpleNamespace(start=103.0, end=104.0, text=RULE)]
     )
     _write_capture_narration(
-        session, tmp_path, 100.0, [{"i": 0, "t": 1.0, "kind": "type"}, {"i": 1, "t": 3.5, "kind": "key"}]
+        session,
+        tmp_path,
+        100.0,
+        [{"i": 0, "t": 1.0, "kind": "type"}, {"i": 1, "t": 3.5, "kind": "key"}],
     )
     nar = load_narration(tmp_path)
     assert nar.source == "openadapt-capture"
@@ -427,10 +516,17 @@ def test_synthetic_speech_end_to_end(tmp_path):
     traces = [visit("Medicare", False), visit("Aetna", True)]
     rec = tmp_path / "rec"
     rec.mkdir()
-    events = [{"i": int(s.id.split("_")[1]), "kind": "x", "t": 3.0 * k} for k, s in enumerate(traces[0].steps)]
+    events = [
+        {"i": int(s.id.split("_")[1]), "kind": "x", "t": 3.0 * k}
+        for k, s in enumerate(traces[0].steps)
+    ]
     (rec / "events.jsonl").write_text("\n".join(json.dumps(e) for e in events) + "\n")
-    result = transcribe_audio(FIXTURE, model=str(Path(cached).parent), backend="faster-whisper")
-    attach_narration(rec, sentences_from_transcript(result, offset=1.5), scrubber=Scrubber())
+    result = transcribe_audio(
+        FIXTURE, model=str(Path(cached).parent), backend="faster-whisper"
+    )
+    attach_narration(
+        rec, sentences_from_transcript(result, offset=1.5), scrubber=Scrubber()
+    )
     assert "john smith" not in (rec / "narration.json").read_text().lower()
     induced = induce_program(traces, narration=[load_narration(rec), None])
     (ng,) = induced.narrated_guards
@@ -440,7 +536,9 @@ def test_synthetic_speech_end_to_end(tmp_path):
 # -- probing on a test copy -----------------------------------------------------
 
 
-def test_probing_confirms_a_narrated_guard_the_recordings_cannot_check(tmp_path, monkeypatch):
+def test_probing_confirms_a_narrated_guard_the_recordings_cannot_check(
+    tmp_path, monkeypatch
+):
     """Coverage shows on screen and is never typed, so the recordings cannot
     check "skip the copay when it's Medicare". The scripted test copy can:
     the narrated reading produces the recorded effect in both contexts and
@@ -472,13 +570,17 @@ def test_probing_confirms_a_narrated_guard_the_recordings_cannot_check(tmp_path,
         def run(self, workflow, *, bundle_dir, run_dir, params):
             patient = params["patient_id"]
             backend = FakeBackend()
-            report = Replayer(backend, vision=ScreenVision(patient), poll_interval_s=0.01).run(
-                workflow, bundle_dir=bundle_dir, run_dir=run_dir, params=params
-            )
+            report = Replayer(
+                backend, vision=ScreenVision(patient), poll_interval_s=0.01
+            ).run(workflow, bundle_dir=bundle_dir, run_dir=run_dir, params=params)
             copay = ("type", "20") in backend.actions
             # The recorded effect: a copay exactly when coverage is not Medicare.
-            self.last[patient] = report.success and copay == (coverage[patient] != "Medicare")
-            return probing.RunSignal(probing.runtime_signal_of(report), report.model_calls)
+            self.last[patient] = report.success and copay == (
+                coverage[patient] != "Medicare"
+            )
+            return probing.RunSignal(
+                probing.runtime_signal_of(report), report.model_calls
+            )
 
     target = TestCopy()
 
@@ -492,10 +594,13 @@ def test_probing_confirms_a_narrated_guard_the_recordings_cannot_check(tmp_path,
         def judge(self, identity, signal, before):
             ok = target.last.get(identity["patient_id"], False)
             return SimpleNamespace(
-                outcome=SimpleNamespace(value="verified" if ok else "wrong_effect"), reason=""
+                outcome=SimpleNamespace(value="verified" if ok else "wrong_effect"),
+                reason="",
             )
 
-    bundle = SimpleNamespace(identity_keys=("patient_id",), check_identity=lambda i: None)
+    bundle = SimpleNamespace(
+        identity_keys=("patient_id",), check_identity=lambda i: None
+    )
     monkeypatch.setattr(probing, "_Scorer", Scorer)
     monkeypatch.setattr(RewardBundle, "load", classmethod(lambda cls, x: x))
 
@@ -511,7 +616,9 @@ def test_probing_confirms_a_narrated_guard_the_recordings_cannot_check(tmp_path,
         )
 
     traces = [recording("p-med", False), recording("p-aet", True)]
-    plain = induce_program([t.workflow for t in traces], narration=[said(RULE, "step_003"), None])
+    plain = induce_program(
+        [t.workflow for t in traces], narration=[said(RULE, "step_003"), None]
+    )
     assert plain.narrated_guards[0].status == "proposed" and not plain.certified
 
     result = probing.probe_and_induce(
@@ -536,7 +643,13 @@ def test_probing_confirms_a_narrated_guard_the_recordings_cannot_check(tmp_path,
 
 def _screen_only_traces():
     return [
-        Workflow(name="c", steps=[_type("step_000", "patient", "A"), _key("step_003", "Enter", "finish")]),
+        Workflow(
+            name="c",
+            steps=[
+                _type("step_000", "patient", "A"),
+                _key("step_003", "Enter", "finish"),
+            ],
+        ),
         Workflow(
             name="c",
             steps=[
@@ -570,12 +683,30 @@ def test_cli_induce_accepts_a_narrated_guard_only_with_a_name(tmp_path, capsys):
     assert main(["induce", *dirs, "--out", str(out), "--accept-narrated", pinned]) == 2
     assert "--accepted-by" in capsys.readouterr().out
     rc = main(
-        ["induce", *dirs, "--out", str(out), "--accept-narrated", "opt_1", "--accepted-by", "R. Reviewer"]
+        [
+            "induce",
+            *dirs,
+            "--out",
+            str(out),
+            "--accept-narrated",
+            "opt_1",
+            "--accepted-by",
+            "R. Reviewer",
+        ]
     )
     assert rc == 2 and "LOCATION@GUARD_ID" in capsys.readouterr().out
 
     rc = main(
-        ["induce", *dirs, "--out", str(out), "--accept-narrated", pinned, "--accepted-by", "R. Reviewer"]
+        [
+            "induce",
+            *dirs,
+            "--out",
+            str(out),
+            "--accept-narrated",
+            pinned,
+            "--accepted-by",
+            "R. Reviewer",
+        ]
     )
     assert rc == 0, capsys.readouterr().out
     written = Workflow.load(out)
@@ -589,10 +720,22 @@ def test_cli_narration_attach_scrubs_a_transcript(tmp_path, capsys):
 
     rec = tmp_path / "rec"
     rec.mkdir()
-    (rec / "events.jsonl").write_text(json.dumps({"i": 0, "kind": "type", "t": 2.0}) + "\n")
+    (rec / "events.jsonl").write_text(
+        json.dumps({"i": 0, "kind": "type", "t": 2.0}) + "\n"
+    )
     transcript = tmp_path / "t.json"
     transcript.write_text(
-        json.dumps({"segments": [{"start": 0.5, "end": 1.5, "text": "Patient John Smith is Medicare."}]})
+        json.dumps(
+            {
+                "segments": [
+                    {
+                        "start": 0.5,
+                        "end": 1.5,
+                        "text": "Patient John Smith is Medicare.",
+                    }
+                ]
+            }
+        )
     )
 
     class Scrubber:
@@ -601,10 +744,16 @@ def test_cli_narration_attach_scrubs_a_transcript(tmp_path, capsys):
 
     privacy.set_text_scrubber(None)
     try:
-        assert main(["narration", "attach", str(rec), "--transcript", str(transcript)]) == 2
+        assert (
+            main(["narration", "attach", str(rec), "--transcript", str(transcript)])
+            == 2
+        )
         assert not (rec / "narration.json").exists()
         privacy.set_text_scrubber(Scrubber())
-        assert main(["narration", "attach", str(rec), "--transcript", str(transcript)]) == 0
+        assert (
+            main(["narration", "attach", str(rec), "--transcript", str(transcript)])
+            == 0
+        )
     finally:
         privacy.reset_scrubbers()
     out = capsys.readouterr().out
@@ -634,7 +783,9 @@ def test_visualize_shows_each_guard_with_the_sentence_that_suggested_it(tmp_path
     assert "narrated rule" in node.badges
     assert "insurance" in node.guard and node.guard_on_unmet == "skip"
     assert RULE in render_html(spec)
-    assert "narrated rule" in render_mermaid(spec) and "because:" in render_mermaid(spec)
+    assert "narrated rule" in render_mermaid(spec) and "because:" in render_mermaid(
+        spec
+    )
 
     # Off this machine the sentence is recorded text, so it is dropped.
     for profile in ("remote-safe", "public-synthetic"):
@@ -651,7 +802,9 @@ def test_visualize_shows_a_narrated_branch_on_its_edge():
         decide = (
             _key("step_002", "M", "press M to bill medicare", risk="irreversible")
             if payer == "Medicare"
-            else _key("step_002", "C", "press C to collect the copay", risk="irreversible")
+            else _key(
+                "step_002", "C", "press C to collect the copay", risk="irreversible"
+            )
         )
         return Workflow(name="b", steps=[_type("step_001", "insurance", payer), decide])
 
@@ -681,7 +834,7 @@ def test_a_refused_capture_narration_is_left_out_not_fatal(tmp_path):
 
 
 def test_recorded_values_are_compared_exactly_like_the_runtime():
-    """"medicare" and "Medicare" are different run-time values, so a recording
+    """ "medicare" and "Medicare" are different run-time values, so a recording
     that typed one must not vouch for the other."""
     traces = [visit("Medicare", False), visit("medicare", False), visit("Aetna", True)]
     result = induce_program(traces, narration=[said(RULE, "step_003"), None, None])
@@ -692,7 +845,9 @@ def test_recorded_values_are_compared_exactly_like_the_runtime():
 
 def test_a_divergence_with_a_step_inside_it_stays_refused():
     def trace(steps):
-        return Workflow(name="d", steps=[_type("step_000", "insurance", steps[0])] + steps[1])
+        return Workflow(
+            name="d", steps=[_type("step_000", "insurance", steps[0])] + steps[1]
+        )
 
     a = _key("step_001", "B", "press B for beta", risk="irreversible")
     z = _key("step_003", "Z", "press Z for zeta", risk="irreversible")
@@ -728,19 +883,57 @@ def test_an_unclear_double_negative_is_not_a_rule():
 
 
 def test_model_answers_are_validated():
-    from openadapt_flow.compiler.narration_rules import FieldValues, candidate_from_model
+    from openadapt_flow.compiler.narration_rules import (
+        FieldValues,
+        candidate_from_model,
+    )
 
-    fields = [FieldValues(param="insurance", label="insurance", values=["Medicare", "Aetna"])]
-    kw = dict(sentence="Medicare ones go straight through", trace=0, step_id=None, fields=fields, source="m")
+    fields = [
+        FieldValues(param="insurance", label="insurance", values=["Medicare", "Aetna"])
+    ]
+    kw = dict(
+        sentence="Medicare ones go straight through",
+        trace=0,
+        step_id=None,
+        fields=fields,
+        source="m",
+    )
     # A string "false" is not a boolean; the answer is dropped.
-    assert candidate_from_model({"field": "insurance", "value": "Medicare", "step_runs_when_true": "false"}, **kw) is None
+    assert (
+        candidate_from_model(
+            {"field": "insurance", "value": "Medicare", "step_runs_when_true": "false"},
+            **kw,
+        )
+        is None
+    )
     # A field that was not offered, or a value no recording had, is dropped.
-    assert candidate_from_model({"field": "payer", "value": "Medicare", "step_runs_when_true": False}, **kw) is None
-    assert candidate_from_model({"field": "insurance", "value": "Cigna", "step_runs_when_true": False}, **kw) is None
+    assert (
+        candidate_from_model(
+            {"field": "payer", "value": "Medicare", "step_runs_when_true": False}, **kw
+        )
+        is None
+    )
+    assert (
+        candidate_from_model(
+            {"field": "insurance", "value": "Cigna", "step_runs_when_true": False}, **kw
+        )
+        is None
+    )
     # Screen text must be words the person said.
-    assert candidate_from_model({"text": "Prior auth", "value": "x", "step_runs_when_true": True}, **kw) is None
-    ok = candidate_from_model({"field": "insurance", "value": "medicare", "step_runs_when_true": False}, **kw)
-    assert ok is not None and ok.condition.value == "Medicare" and not ok.runs_when_condition_holds
+    assert (
+        candidate_from_model(
+            {"text": "Prior auth", "value": "x", "step_runs_when_true": True}, **kw
+        )
+        is None
+    )
+    ok = candidate_from_model(
+        {"field": "insurance", "value": "medicare", "step_runs_when_true": False}, **kw
+    )
+    assert (
+        ok is not None
+        and ok.condition.value == "Medicare"
+        and not ok.runs_when_condition_holds
+    )
 
 
 def test_a_malformed_narration_file_is_skipped_by_the_cli(tmp_path, capsys):
@@ -751,6 +944,8 @@ def test_a_malformed_narration_file_is_skipped_by_the_cli(tmp_path, capsys):
         d = tmp_path / f"b{i}"
         wf.save(d)
         dirs.append(str(d))
-    (Path(dirs[0]) / "narration.json").write_text('{"schema": "openadapt.flow.narration/v1", "scrubbed": true, "lines": [{"t_start": "x"}]}')
+    (Path(dirs[0]) / "narration.json").write_text(
+        '{"schema": "openadapt.flow.narration/v1", "scrubbed": true, "lines": [{"t_start": "x"}]}'
+    )
     assert main(["induce", *dirs, "--out", str(tmp_path / "out")]) == 2
     assert "Narration not used" in capsys.readouterr().out

@@ -539,9 +539,7 @@ def probe_and_induce(
         scorer = _Scorer(bundle)
         points = optional_points(workflows)
         narrated = {
-            ng.location: ng
-            for ng in first.narrated_guards
-            if ng.status == "proposed"
+            ng.location: ng for ng in first.narrated_guards if ng.status == "proposed"
         }
         for u in first.uncertainties:
             point = points.get(u.location)

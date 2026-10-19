@@ -1965,7 +1965,7 @@
     },
     {
       "path": "openadapt_flow/visualize/static/program_graph.js",
-      "sha256": "468a2849dea3027ca170429c320898c9a5406db5c44087706c349f8f9cb6c047"
+      "sha256": "35ac4a521833d86bfb351d7dcc9deec5a990166389697fb88bea577278290fc9"
     },
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v1/artifacts/bundle/manifest.json",
@@ -6009,7 +6009,7 @@
     },
     {
       "path": "schemas/program-graph-v2.json",
-      "sha256": "bd675b831d87b2f57e619fdff1f405d89465225b6ce193e0e983e256a38054b8"
+      "sha256": "ea1089dfb385f1bbb74f6ba25253ad3d38f6f7ccb470e526e8bbb6a6e4b60b26"
     },
     {
       "path": "schemas/public-demo-evidence-v1.json",

@@ -217,7 +217,9 @@ def attach_narration(
         try:
             scrubbed = scrubber.scrub_text(str(text))
         except Exception as exc:  # noqa: BLE001 - not scrubbed means not written
-            raise NarrationRefused(f"the scrubber failed, nothing written: {exc}") from exc
+            raise NarrationRefused(
+                f"the scrubber failed, nothing written: {exc}"
+            ) from exc
         clean.append((start, end, scrubbed))
     narration = Narration(
         scrubbed=True,
