@@ -16,6 +16,12 @@ the benchmark scoreboard, against the same program on the GUI (`program`),
 with the same record check. The harness and the earlier spike are in
 [benchmark/openemr_api_tier](../benchmark/openemr_api_tier/README.md).
 
+Under per-item approval and a durable run (no run gate; the harness answers
+the approvals and their wait is left out), the API step saved each new
+referral correctly with one approval at a median 1.12 s of engine time,
+against 15.95 s and two approvals with API steps off (20 runs each,
+2026-10-19): [results](../benchmark/openemr_api_tier/results/approval_durable/README.md).
+
 ## How to use it
 
 ```bash
