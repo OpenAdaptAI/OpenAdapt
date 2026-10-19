@@ -6,9 +6,24 @@
 
 [![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml) [![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml) [![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/) [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE) [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
-[Documentation](https://docs.openadapt.ai) · [Quickstart](https://docs.openadapt.ai/tutorials/quickstart/) · [Live demo](https://app.openadapt.ai/demo) · [Website](https://openadapt.ai) · [Discord](https://discord.gg/yF527cQbDG)
+[What it can do](CAPABILITIES.md) · [Documentation](https://docs.openadapt.ai) · [Quickstart](https://docs.openadapt.ai/tutorials/quickstart/) · [Live demo](https://app.openadapt.ai/demo) · [Website](https://openadapt.ai) · [Discord](https://discord.gg/yF527cQbDG)
 
 </div>
+
+## What OpenAdapt does
+
+- **Learns from any successful run**, a person's demonstration or a computer-use agent's verified run, and compiles it into a program that runs with no model calls.
+- **Uses the fastest layer the app allows**: direct API calls where possible, then page structure (DOM, UI Automation, Accessibility), and pixels only for remote desktops.
+- **Builds branching programs** from several demonstrations, repeated halts and background runs, and routes each item to the right verified variant.
+- **Works across surfaces**: web, Windows, macOS, RDP and Citrix, in one workflow.
+- **Confirms the right record before every write and reads the saved record back** from the system of record, never just the screen.
+- **Stops instead of guessing**, never retries an uncertain save, and says what changed before a stop.
+- **Binds each approval to exactly what will be saved**, with one-tap answers on a paired phone.
+- **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it.
+- **Works as a safety layer under any agent**: MCP tools, a guarded save, Agent Skills and a CLI.
+- **Runs locally**: no model calls on healthy runs, patient data redacted, signed receipts.
+
+Status, evidence and code for each, including the few still being merged: [CAPABILITIES.md](CAPABILITIES.md).
 
 ```bash
 uvx --python 3.12 openadapt quickstart --break-it
@@ -177,8 +192,8 @@ MCP server. The product packages live in this repository:
 | [`openadapt-agent`](https://pypi.org/project/openadapt-agent/) | The MCP server and Agent Skills | [`packages/agent/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent) |
 | [`openadapt-types`](https://pypi.org/project/openadapt-types/) | Shared request, result, and receipt models | [`packages/types/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/types) |
 | [`openadapt-capture`](https://pypi.org/project/openadapt-capture/) | The desktop recorder: `openadapt[capture]` | [`packages/capture/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/capture) |
-| [`openadapt-privacy`](https://pypi.org/project/openadapt-privacy/) | Finds and redacts personal and health data: `openadapt[privacy]` | Moving into `packages/` |
-| [`openadapt-desktop`](https://pypi.org/project/openadapt-desktop/) | OpenAdapt Desktop ([download](https://openadapt.ai/download)) | Moving into `packages/` |
+| [`openadapt-privacy`](https://pypi.org/project/openadapt-privacy/) | Finds and redacts personal and health data: `openadapt[privacy]` | [`packages/privacy/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/privacy) |
+| [`openadapt-desktop`](https://pypi.org/project/openadapt-desktop/) | OpenAdapt Desktop ([download](https://openadapt.ai/download)) | [`packages/desktop/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/desktop) |
 
 Research on GUI agents lives in separate repositories:
 [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) (benchmarks)

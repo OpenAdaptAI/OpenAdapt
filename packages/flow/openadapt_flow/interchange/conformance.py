@@ -297,13 +297,13 @@ def check(doc: dict[str, Any], *, base_dir: Optional[Path] = None) -> list[Viola
     # Uniqueness and references.
     artifact_ids = {a.artifact_id for a in ex.artifacts}
     field_names = {f.name for f in ex.fields}
-    for label, values in (
+    for label, ids in (
         ("artifacts", [a.artifact_id for a in ex.artifacts]),
         ("fields", [f.name for f in ex.fields]),
         ("identities", [i.identity_id for i in ex.identities]),
         ("decisions", [d.decision_id for d in ex.decisions]),
     ):
-        for dup in sorted(_dupes(values)):
+        for dup in sorted(_dupes(ids)):
             add("IX021", label, f"{dup!r} is used twice")
 
     producer = ex.provenance.producer
@@ -453,10 +453,12 @@ def check(doc: dict[str, Any], *, base_dir: Optional[Path] = None) -> list[Viola
         decided = _time(na.decided_at)
         by_name = {f.name: f for f in ex.fields}
         for name in na.evidence:
-            f = by_name.get(name)
-            if f is None:
+            evidence_field = by_name.get(name)
+            if evidence_field is None:
                 continue
-            reads = [r for r in f.reads if r.channel in APPLICATION_CHANNELS]
+            reads = [
+                r for r in evidence_field.reads if r.channel in APPLICATION_CHANNELS
+            ]
             before = decided is not None and any(
                 r.session == "acting"
                 and (t := _time(r.observed_at)) is not None

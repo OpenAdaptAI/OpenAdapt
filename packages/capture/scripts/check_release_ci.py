@@ -13,8 +13,14 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Callable
 
-# The hosted workflow proves the portable package lifecycle. The live workflow
-# separately proves the exact candidate on a qualified Linux desktop.
+# Every release requirement runs on GitHub-hosted runners. The hosted workflow
+# proves the portable package lifecycle, the live recorder on macOS and
+# Windows, and the Linux recorder, X RECORD input, and AT-SPI structure on
+# Xvfb. Since 2026-10-17 the release no longer requires the self-hosted
+# live-qualification.yml lanes: no qualified desktop was ever registered, so a
+# release could not pass. The release therefore no longer proves multiple
+# monitors or real input hardware; live-qualification.yml still does, weekly
+# and outside the gate, once a qualified desktop exists.
 EXPECTED_QUALIFICATION_JOBS = frozenset(
     {
         "Build candidate distributions",
@@ -23,15 +29,7 @@ EXPECTED_QUALIFICATION_JOBS = frozenset(
         "Clean candidate wheel (windows-latest)",
         "Hosted live recorder qualification (macos-latest)",
         "Hosted live recorder qualification (windows-latest)",
-    }
-)
-EXPECTED_LIVE_QUALIFICATION_JOBS = frozenset(
-    {
-        "Select live qualification platforms",
-        "Build candidate distributions",
-        "Interactive qualification (Linux X64)",
-        "Interactive qualification (macOS ARM64)",
-        "Interactive qualification (Windows X64)",
+        "Hosted Linux live qualification (ubuntu-latest, Xvfb)",
     }
 )
 ACTIVE_STATES = frozenset({"queued", "in_progress", "waiting", "pending", "requested"})
@@ -58,11 +56,6 @@ REQUIREMENTS = (
         "production-qualification.yml",
         ("workflow_dispatch",),
         {"candidate_sha": "{sha}"},
-    ),
-    WorkflowRequirement(
-        "live-qualification.yml",
-        ("workflow_dispatch",),
-        {"candidate_sha": "{sha}", "platform": "linux"},
     ),
 )
 
@@ -180,58 +173,6 @@ def validate_test_jobs(jobs: list[dict[str, Any]]) -> None:
         )
 
 
-def validate_live_linux_jobs(jobs: list[dict[str, Any]]) -> None:
-    """Require exact-candidate evidence from the qualified Linux runner."""
-
-    names = [str(job.get("name")) for job in jobs]
-    duplicates = sorted({name for name in names if names.count(name) > 1})
-    if duplicates:
-        raise ReleaseEvidenceError(f"live qualification has duplicate jobs: {duplicates}")
-    actual = set(names)
-    if actual != EXPECTED_LIVE_QUALIFICATION_JOBS:
-        missing = sorted(EXPECTED_LIVE_QUALIFICATION_JOBS - actual)
-        unexpected = sorted(actual - EXPECTED_LIVE_QUALIFICATION_JOBS)
-        raise ReleaseEvidenceError(
-            "live qualification job set differs from the release contract: "
-            f"missing={missing}, unexpected={unexpected}"
-        )
-    required = {
-        "Select live qualification platforms",
-        "Build candidate distributions",
-        "Interactive qualification (Linux X64)",
-    }
-    incomplete = [
-        f"{job.get('name')}={job.get('status')}/{job.get('conclusion')}"
-        for job in jobs
-        if job.get("name") in required
-        and (job.get("status") != "completed" or job.get("conclusion") != "success")
-    ]
-    if incomplete:
-        raise ReleaseEvidenceError(
-            "live Linux qualification has incomplete jobs: " + ", ".join(incomplete)
-        )
-
-
-def _run_has_live_linux_job(
-    *,
-    base: str,
-    run: dict[str, Any],
-    token: str,
-    get_json: Callable[[str, str], dict[str, Any]],
-) -> bool:
-    """Return true when a run selected Linux instead of another live platform."""
-
-    payload = get_json(
-        f"{base}/actions/runs/{run['id']}/jobs?filter=latest&per_page=100",
-        token,
-    )
-    jobs = payload.get("jobs")
-    if not isinstance(jobs, list):
-        return False
-    linux = [job for job in jobs if job.get("name") == "Interactive qualification (Linux X64)"]
-    return len(linux) == 1 and linux[0].get("conclusion") != "skipped"
-
-
 def _workflow_runs(
     *,
     base: str,
@@ -276,17 +217,6 @@ def dispatch_missing_qualifications(
             for run in runs
             if run.get("head_sha") == sha and run.get("event") in requirement.events
         ]
-        if requirement.file_name == "live-qualification.yml":
-            matching = [
-                run
-                for run in matching
-                if _run_has_live_linux_job(
-                    base=base,
-                    run=run,
-                    token=token,
-                    get_json=get_json,
-                )
-            ]
         if not any(
             run.get("head_sha") == sha and run.get("event") in requirement.events
             for run in matching
@@ -341,16 +271,6 @@ def check_once(
     if not isinstance(jobs, list):
         raise EvidencePending("GitHub returned no production qualification jobs list")
     validate_qualification_jobs(jobs)
-
-    live = selected["live-qualification.yml"]
-    live_jobs_payload = get_json(
-        f"{base}/actions/runs/{live['id']}/jobs?filter=latest&per_page=100",
-        token,
-    )
-    live_jobs = live_jobs_payload.get("jobs")
-    if not isinstance(live_jobs, list):
-        raise EvidencePending("GitHub returned no live qualification jobs list")
-    validate_live_linux_jobs(live_jobs)
     return {name: int(run["id"]) for name, run in selected.items()}
 
 
