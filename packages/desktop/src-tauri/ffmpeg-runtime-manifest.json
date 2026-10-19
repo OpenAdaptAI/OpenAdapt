@@ -1,0 +1,561 @@
+{
+  "schema_version": 1,
+  "runtime": "ffmpeg",
+  "runtime_version": "8.1.2-r1",
+  "artifacts": [
+    {
+      "archive_max_bytes": 7908219,
+      "archive_sha256": "7cd08f97a97d3032f2093f06227fea1d12d4078dbb2c75e1109a9d3d24d7a266",
+      "build_id": "ffmpeg-8.1.2-r1-aarch64-apple-darwin",
+      "files": [
+        {
+          "destination": "LICENSES/FFmpeg-LGPL-2.1-or-later.txt",
+          "max_bytes": 1075093,
+          "member": "LICENSES/FFmpeg-LGPL-2.1-or-later.txt",
+          "sha256": "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30"
+        },
+        {
+          "destination": "LICENSES/FFmpeg-LICENSE.md",
+          "max_bytes": 1052922,
+          "member": "LICENSES/FFmpeg-LICENSE.md",
+          "sha256": "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af"
+        },
+        {
+          "destination": "PROVENANCE/BUILD.json",
+          "max_bytes": 1049137,
+          "member": "PROVENANCE/BUILD.json",
+          "sha256": "a92f41ca8ad73bb2da91179b4ab0583f8b99f8fd146d88506f8968334d10b80e"
+        },
+        {
+          "destination": "PROVENANCE/SOURCE.json",
+          "max_bytes": 1048880,
+          "member": "PROVENANCE/SOURCE.json",
+          "sha256": "d0f106418cf0a8c6795fd7d6fc23302e3932c75d364c83cb669e1645d9a47822"
+        },
+        {
+          "destination": "PROVENANCE/configure-args.txt",
+          "max_bytes": 1049251,
+          "member": "PROVENANCE/configure-args.txt",
+          "sha256": "3b432e240d428ead3dffd5ac545859f2043e4b936f20467698c056ec1a36a064"
+        },
+        {
+          "destination": "PROVENANCE/ffmpeg-buildconf.txt",
+          "max_bytes": 1050537,
+          "member": "PROVENANCE/ffmpeg-buildconf.txt",
+          "sha256": "4e4a10bd78ac72927c3cbc2e04d810b32c4dd33d927ddef3fada1d5531afd85f"
+        },
+        {
+          "destination": "PROVENANCE/ffmpeg-encoders.txt",
+          "max_bytes": 1048964,
+          "member": "PROVENANCE/ffmpeg-encoders.txt",
+          "sha256": "21e0de55b20c0c75836cddd38575cbd180e89db70b5f0257b79fde6265771756"
+        },
+        {
+          "destination": "PROVENANCE/ffmpeg-muxers.txt",
+          "max_bytes": 1048774,
+          "member": "PROVENANCE/ffmpeg-muxers.txt",
+          "sha256": "af77eb6b41f7d51a4d8ffa03408ccda69a8f04143f3f1f5b16f56f56e78bbf81"
+        },
+        {
+          "destination": "PROVENANCE/ffmpeg-version.txt",
+          "max_bytes": 1049704,
+          "member": "PROVENANCE/ffmpeg-version.txt",
+          "sha256": "5f0ee666d12a22d38a311ee2607c49adc96a12214443047024ee37e06818e1f1"
+        },
+        {
+          "destination": "PROVENANCE/ffprobe-buildconf.txt",
+          "max_bytes": 1050512,
+          "member": "PROVENANCE/ffprobe-buildconf.txt",
+          "sha256": "f78fa0722ad91b803e2672cb2d2b8f15b4ddd0dd4e5a16b947b3b9e552e0c829"
+        },
+        {
+          "destination": "PROVENANCE/ffprobe-version.txt",
+          "max_bytes": 1049679,
+          "member": "PROVENANCE/ffprobe-version.txt",
+          "sha256": "a8bd9ebcf5f1ade058d4475ee1131f4e595c43c306a08415447e9d2c1d18c1a0"
+        },
+        {
+          "destination": "PROVENANCE/hardware-probe.txt",
+          "max_bytes": 1048648,
+          "member": "PROVENANCE/hardware-probe.txt",
+          "sha256": "59c36623ad151eb73edf563731244c517581adfe9acdd056e10d8360395a1a5a"
+        },
+        {
+          "destination": "PROVENANCE/native-dependencies.txt",
+          "max_bytes": 1049500,
+          "member": "PROVENANCE/native-dependencies.txt",
+          "sha256": "b3cf88cbca600a83cf16c907e3bcdc3b4437ca6c41ddd06fe115723426c951fc"
+        },
+        {
+          "destination": "bin/ffmpeg",
+          "max_bytes": 5889424,
+          "member": "bin/ffmpeg",
+          "role": "ffmpeg",
+          "sha256": "bc0189969e8ca336e4e49b63ef84effb5d301b1cf3209fc214a20abc0679b585"
+        },
+        {
+          "destination": "bin/ffprobe",
+          "max_bytes": 5535568,
+          "member": "bin/ffprobe",
+          "role": "ffprobe",
+          "sha256": "a0dbc88c6d1b971c044121bbee55ac761b691ca9a0b9f6e39fa63613499d12d4"
+        },
+        {
+          "destination": "SHA256SUMS",
+          "max_bytes": 1049980,
+          "member": "SHA256SUMS",
+          "sha256": "0f6f59a261bc29b2573792b33df774d8f726811a17a37897c913b9310bb2d317"
+        }
+      ],
+      "license": {
+        "expression": "LGPL-2.1-or-later",
+        "license_destination": "LICENSES/FFmpeg-LGPL-2.1-or-later.txt"
+      },
+      "probe": {
+        "ffprobe_version_contains": "ffprobe version 8.1.2",
+        "forbidden_build_flags": [
+          "--enable-gpl",
+          "--enable-nonfree"
+        ],
+        "required_build_flags": [
+          "--disable-gpl",
+          "--disable-nonfree",
+          "--disable-version3",
+          "--disable-network"
+        ],
+        "required_encoders": [
+          "mpeg4",
+          "png"
+        ],
+        "required_muxers": [
+          "mp4",
+          "image2pipe"
+        ],
+        "version_contains": "ffmpeg version 8.1.2"
+      },
+      "source": {
+        "build_workflow": ".github/workflows/ffmpeg-runtime.yml",
+        "sha256": "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c",
+        "signature_url": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc",
+        "signing_key_fingerprint": "FCF986EA15E6E293A5644F10B4322F04D67658D8",
+        "url": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz"
+      },
+      "target": "aarch64-apple-darwin",
+      "url": "https://github.com/OpenAdaptAI/openadapt-desktop/releases/download/ffmpeg-runtime-v8.1.2-r1/openadapt-ffmpeg-8.1.2-r1-aarch64-apple-darwin.zip"
+    },
+    {
+      "archive_max_bytes": 8185775,
+      "archive_sha256": "a45ac3c766d94ff4bf77c87e1b2baccc29e1aca806b270d495f1698e6bf6776b",
+      "build_id": "ffmpeg-8.1.2-r1-x86_64-apple-darwin",
+      "files": [
+        {
+          "destination": "LICENSES/FFmpeg-LGPL-2.1-or-later.txt",
+          "max_bytes": 1075093,
+          "member": "LICENSES/FFmpeg-LGPL-2.1-or-later.txt",
+          "sha256": "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30"
+        },
+        {
+          "destination": "LICENSES/FFmpeg-LICENSE.md",
+          "max_bytes": 1052922,
+          "member": "LICENSES/FFmpeg-LICENSE.md",
+          "sha256": "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af"
+        },
+        {
+          "destination": "PROVENANCE/BUILD.json",
+          "max_bytes": 1049136,
+          "member": "PROVENANCE/BUILD.json",
+          "sha256": "e0ec10f59f4f2a98dc4ca6df3747cdf752bc7eeca59cf023217908563b653676"
+        },
+        {
+          "destination": "PROVENANCE/SOURCE.json",
+          "max_bytes": 1048880,
+          "member": "PROVENANCE/SOURCE.json",
+          "sha256": "d0f106418cf0a8c6795fd7d6fc23302e3932c75d364c83cb669e1645d9a47822"
+        },
+        {
+          "destination": "PROVENANCE/configure-args.txt",
+          "max_bytes": 1049251,
+          "member": "PROVENANCE/configure-args.txt",
+          "sha256": "3f93d4a4c6ab218622ea30d7dfdf91bb185743981a243b4ab2b88e63872e82de"
+        },
+        {
+          "destination": "PROVENANCE/ffmpeg-buildconf.txt",
+          "max_bytes": 1050537,
+          "member": "PROVENANCE/ffmpeg-buildconf.txt",
+          "sha256": "4e1c9d91b900bd52316422fae1d84f42a6b8aba20de254346c0cc36d50cfec8c"
+        },
+        {
+          "destination": "PROVENANCE/ffmpeg-encoders.txt",
+          "max_bytes": 1048964,
+          "member": "PROVENANCE/ffmpeg-encoders.txt",
+          "sha256": "21e0de55b20c0c75836cddd38575cbd180e89db70b5f0257b79fde6265771756"
+        },
+        {
+          "destination": "PROVENANCE/ffmpeg-muxers.txt",
+          "max_bytes": 1048774,
+          "member": "PROVENANCE/ffmpeg-muxers.txt",
+          "sha256": "af77eb6b41f7d51a4d8ffa03408ccda69a8f04143f3f1f5b16f56f56e78bbf81"
+        },
+        {
+          "destination": "PROVENANCE/ffmpeg-version.txt",
+          "max_bytes": 1049704,
+          "member": "PROVENANCE/ffmpeg-version.txt",
+          "sha256": "29bf59d510b432196ee3e6dfc5e0d099b67382f606bb269a8a7417461ed97d2e"
+        },
+        {
+          "destination": "PROVENANCE/ffprobe-buildconf.txt",
+          "max_bytes": 1050512,
+          "member": "PROVENANCE/ffprobe-buildconf.txt",
+          "sha256": "b0471397b6c4ea134114ecccf749a46e073a0fa56c5e92a7ca381261b7111bba"
+        },
+        {
+          "destination": "PROVENANCE/ffprobe-version.txt",
+          "max_bytes": 1049679,
+          "member": "PROVENANCE/ffprobe-version.txt",
+          "sha256": "be07976ce0a69379806b9c496aa1f9fcf1ba49521624a886ec6f4e7b23a3de1e"
+        },
+        {
+          "destination": "PROVENANCE/hardware-probe.txt",
+          "max_bytes": 1049730,
+          "member": "PROVENANCE/hardware-probe.txt",
+          "sha256": "fd5a72f0b17abaf9c51d6e6724a16b3976dd253f62783a9cc254ca0de896420d"
+        },
+        {
+          "destination": "PROVENANCE/native-dependencies.txt",
+          "max_bytes": 1049499,
+          "member": "PROVENANCE/native-dependencies.txt",
+          "sha256": "6fcb29fc03b7def2c7db1456df19ac1470b3cebd21ea84b2c5d49a96376e04a3"
+        },
+        {
+          "destination": "bin/ffmpeg",
+          "max_bytes": 7331584,
+          "member": "bin/ffmpeg",
+          "role": "ffmpeg",
+          "sha256": "dfb2197b1ef2b3da19ad41f4fbc337f2c50000390d75697a81e3516a32f1293a"
+        },
+        {
+          "destination": "bin/ffprobe",
+          "max_bytes": 6948320,
+          "member": "bin/ffprobe",
+          "role": "ffprobe",
+          "sha256": "b4da8255066f2a99604ef532cc54a08c73fef9de8bdf8eecdebaddd8c0b7797c"
+        },
+        {
+          "destination": "SHA256SUMS",
+          "max_bytes": 1049980,
+          "member": "SHA256SUMS",
+          "sha256": "26bfd1f57248c23d16702c7ad5d16633e1bea2fabd4d0837988983feeac189d5"
+        }
+      ],
+      "license": {
+        "expression": "LGPL-2.1-or-later",
+        "license_destination": "LICENSES/FFmpeg-LGPL-2.1-or-later.txt"
+      },
+      "probe": {
+        "ffprobe_version_contains": "ffprobe version 8.1.2",
+        "forbidden_build_flags": [
+          "--enable-gpl",
+          "--enable-nonfree"
+        ],
+        "required_build_flags": [
+          "--disable-gpl",
+          "--disable-nonfree",
+          "--disable-version3",
+          "--disable-network"
+        ],
+        "required_encoders": [
+          "mpeg4",
+          "png"
+        ],
+        "required_muxers": [
+          "mp4",
+          "image2pipe"
+        ],
+        "version_contains": "ffmpeg version 8.1.2"
+      },
+      "source": {
+        "build_workflow": ".github/workflows/ffmpeg-runtime.yml",
+        "sha256": "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c",
+        "signature_url": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc",
+        "signing_key_fingerprint": "FCF986EA15E6E293A5644F10B4322F04D67658D8",
+        "url": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz"
+      },
+      "target": "x86_64-apple-darwin",
+      "url": "https://github.com/OpenAdaptAI/openadapt-desktop/releases/download/ffmpeg-runtime-v8.1.2-r1/openadapt-ffmpeg-8.1.2-r1-x86_64-apple-darwin.zip"
+    },
+    {
+      "archive_max_bytes": 8285917,
+      "archive_sha256": "bd88874357d3ea6490e22e7911f31df777e4e291b3ba83f3bfef9dc9bd366080",
+      "build_id": "ffmpeg-8.1.2-r1-x86_64-pc-windows-msvc",
+      "files": [
+        {
+          "destination": "LICENSES/FFmpeg-LGPL-2.1-or-later.txt",
+          "max_bytes": 1075093,
+          "member": "LICENSES/FFmpeg-LGPL-2.1-or-later.txt",
+          "sha256": "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30"
+        },
+        {
+          "destination": "LICENSES/FFmpeg-LICENSE.md",
+          "max_bytes": 1052922,
+          "member": "LICENSES/FFmpeg-LICENSE.md",
+          "sha256": "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af"
+        },
+        {
+          "destination": "LICENSES/zlib.txt",
+          "max_bytes": 1049578,
+          "member": "LICENSES/zlib.txt",
+          "sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2"
+        },
+        {
+          "destination": "PROVENANCE/BUILD.json",
+          "max_bytes": 1049143,
+          "member": "PROVENANCE/BUILD.json",
+          "sha256": "91a178e8d7f7dd329431f3635c645fd33aba0445992aa46fcdb702e762b809fd"
+        },
+        {
+          "destination": "PROVENANCE/SOURCE.json",
+          "max_bytes": 1048886,
+          "member": "PROVENANCE/SOURCE.json",
+          "sha256": "ddc99297e6fe5622b2ba5de62b6fca067daca44905fc6c803e2e105e4a865746"
+        },
+        {
+          "destination": "PROVENANCE/configure-args.txt",
+          "max_bytes": 1049270,
+          "member": "PROVENANCE/configure-args.txt",
+          "sha256": "5adb3fe0194bf584a6249bab9928e71c4d90831bf0833fec06b75781bf01930b"
+        },
+        {
+          "destination": "PROVENANCE/ffmpeg-buildconf.txt",
+          "max_bytes": 1050621,
+          "member": "PROVENANCE/ffmpeg-buildconf.txt",
+          "sha256": "75851ac492db725c6ef86cded56de2de8313ce6ffed837fb2e08e23d3e1df7a2"
+        },
+        {
+          "destination": "PROVENANCE/ffmpeg-encoders.txt",
+          "max_bytes": 1048934,
+          "member": "PROVENANCE/ffmpeg-encoders.txt",
+          "sha256": "7ea19f4a554aa75386de4eb0d5c8f65a5f9bc86638fa0e7c5f08ef5db87719c1"
+        },
+        {
+          "destination": "PROVENANCE/ffmpeg-muxers.txt",
+          "max_bytes": 1048784,
+          "member": "PROVENANCE/ffmpeg-muxers.txt",
+          "sha256": "a350ec22725e4fe0cca2c379548f7bb65f965cc23deaa5b0904a48fd1c8434b6"
+        },
+        {
+          "destination": "PROVENANCE/ffmpeg-version.txt",
+          "max_bytes": 1049730,
+          "member": "PROVENANCE/ffmpeg-version.txt",
+          "sha256": "0e720e78220f29ca0ddd7110a18d8ecac1cfc428d3212603e6ab3ae18d0f4ad4"
+        },
+        {
+          "destination": "PROVENANCE/ffprobe-buildconf.txt",
+          "max_bytes": 1050594,
+          "member": "PROVENANCE/ffprobe-buildconf.txt",
+          "sha256": "c10543c972f1d425b5efa4ec6213f17245bc22d564b2a89762f3023ae252bbc8"
+        },
+        {
+          "destination": "PROVENANCE/ffprobe-version.txt",
+          "max_bytes": 1049703,
+          "member": "PROVENANCE/ffprobe-version.txt",
+          "sha256": "bc699260a6847e3d4acbad8c4d90fe97ef2a4d59fdd2791ae536a07b490ee0f4"
+        },
+        {
+          "destination": "PROVENANCE/native-dependencies.txt",
+          "max_bytes": 5531936,
+          "member": "PROVENANCE/native-dependencies.txt",
+          "sha256": "e02dad7e124dda2fa93cebd490100a188e6def0b33c557953ad09a0687fd1b13"
+        },
+        {
+          "destination": "bin/ffmpeg.exe",
+          "max_bytes": 6898688,
+          "member": "bin/ffmpeg.exe",
+          "role": "ffmpeg",
+          "sha256": "33e322b544f07118d4c1a8a56e9e84e5a5c06f86c9fcbf749359b2a1042eebd3"
+        },
+        {
+          "destination": "bin/ffprobe.exe",
+          "max_bytes": 6568960,
+          "member": "bin/ffprobe.exe",
+          "role": "ffprobe",
+          "sha256": "f65a1b8874446cce3bda7112b89c6172a8c12983eade2b040cf3672e4fa5740b"
+        },
+        {
+          "destination": "SHA256SUMS",
+          "max_bytes": 1049991,
+          "member": "SHA256SUMS",
+          "sha256": "bfde3e2e99d40bf8c50e3c1898ef1b60e7340ddc5bc353330e0736ad3c5e3244"
+        }
+      ],
+      "license": {
+        "expression": "LGPL-2.1-or-later",
+        "license_destination": "LICENSES/FFmpeg-LGPL-2.1-or-later.txt"
+      },
+      "probe": {
+        "ffprobe_version_contains": "ffprobe version 8.1.2",
+        "forbidden_build_flags": [
+          "--enable-gpl",
+          "--enable-nonfree"
+        ],
+        "required_build_flags": [
+          "--disable-gpl",
+          "--disable-nonfree",
+          "--disable-version3",
+          "--disable-network"
+        ],
+        "required_encoders": [
+          "mpeg4",
+          "png"
+        ],
+        "required_muxers": [
+          "mp4",
+          "image2pipe"
+        ],
+        "version_contains": "ffmpeg version 8.1.2"
+      },
+      "source": {
+        "build_workflow": ".github/workflows/ffmpeg-runtime.yml",
+        "sha256": "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c",
+        "signature_url": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc",
+        "signing_key_fingerprint": "FCF986EA15E6E293A5644F10B4322F04D67658D8",
+        "url": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz"
+      },
+      "target": "x86_64-pc-windows-msvc",
+      "url": "https://github.com/OpenAdaptAI/openadapt-desktop/releases/download/ffmpeg-runtime-v8.1.2-r1/openadapt-ffmpeg-8.1.2-r1-x86_64-pc-windows-msvc.zip"
+    },
+    {
+      "archive_max_bytes": 8018223,
+      "archive_sha256": "05b36093f1bc9476f7116056de504224f160fdec75484fe63ec539d6744c1ba8",
+      "build_id": "ffmpeg-8.1.2-r1-x86_64-unknown-linux-gnu",
+      "files": [
+        {
+          "destination": "LICENSES/FFmpeg-LGPL-2.1-or-later.txt",
+          "max_bytes": 1075093,
+          "member": "LICENSES/FFmpeg-LGPL-2.1-or-later.txt",
+          "sha256": "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30"
+        },
+        {
+          "destination": "LICENSES/FFmpeg-LICENSE.md",
+          "max_bytes": 1052922,
+          "member": "LICENSES/FFmpeg-LICENSE.md",
+          "sha256": "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af"
+        },
+        {
+          "destination": "PROVENANCE/BUILD.json",
+          "max_bytes": 1049120,
+          "member": "PROVENANCE/BUILD.json",
+          "sha256": "521c36eca112ef5909fcdc81583b7dd83e3d1733e42d324263b000baafe4e80b"
+        },
+        {
+          "destination": "PROVENANCE/SOURCE.json",
+          "max_bytes": 1048880,
+          "member": "PROVENANCE/SOURCE.json",
+          "sha256": "d0f106418cf0a8c6795fd7d6fc23302e3932c75d364c83cb669e1645d9a47822"
+        },
+        {
+          "destination": "PROVENANCE/configure-args.txt",
+          "max_bytes": 1049241,
+          "member": "PROVENANCE/configure-args.txt",
+          "sha256": "8e54304fae7f8ceb79bd24ec50297d91a7f259540a23b4f48bb3752e430a6741"
+        },
+        {
+          "destination": "PROVENANCE/ffmpeg-buildconf.txt",
+          "max_bytes": 1050510,
+          "member": "PROVENANCE/ffmpeg-buildconf.txt",
+          "sha256": "746ac0913c8cb07da88077f2aeb0ca9b20e1c76edc96693907021b9854c1e002"
+        },
+        {
+          "destination": "PROVENANCE/ffmpeg-encoders.txt",
+          "max_bytes": 1048921,
+          "member": "PROVENANCE/ffmpeg-encoders.txt",
+          "sha256": "8b7a14e6a40028b66c156384dab983d5ab7d58cf1f212c578992ae42fc4456b5"
+        },
+        {
+          "destination": "PROVENANCE/ffmpeg-muxers.txt",
+          "max_bytes": 1048774,
+          "member": "PROVENANCE/ffmpeg-muxers.txt",
+          "sha256": "af77eb6b41f7d51a4d8ffa03408ccda69a8f04143f3f1f5b16f56f56e78bbf81"
+        },
+        {
+          "destination": "PROVENANCE/ffmpeg-version.txt",
+          "max_bytes": 1049687,
+          "member": "PROVENANCE/ffmpeg-version.txt",
+          "sha256": "79b556cc09f82aaf3921bc931ec743a87fbf7289809fa1d1fbee5ffe9332074a"
+        },
+        {
+          "destination": "PROVENANCE/ffprobe-buildconf.txt",
+          "max_bytes": 1050485,
+          "member": "PROVENANCE/ffprobe-buildconf.txt",
+          "sha256": "c31dbe4257beb6f9f9405873caf21bd5aae5943bbcc4bdb59aa69d804262cdc2"
+        },
+        {
+          "destination": "PROVENANCE/ffprobe-version.txt",
+          "max_bytes": 1049662,
+          "member": "PROVENANCE/ffprobe-version.txt",
+          "sha256": "b15a18891460c78f941fba1e1e103368fff45dfd293908471cf457b1f9b809b9"
+        },
+        {
+          "destination": "PROVENANCE/native-dependencies.txt",
+          "max_bytes": 1048865,
+          "member": "PROVENANCE/native-dependencies.txt",
+          "sha256": "66d1a73f2850ce49e3a351c2f536118d5870f62c3a87a98f485da314b3a71cf9"
+        },
+        {
+          "destination": "bin/ffmpeg",
+          "max_bytes": 7143856,
+          "member": "bin/ffmpeg",
+          "role": "ffmpeg",
+          "sha256": "d1bb7bea5173ee9ef20b9fa7f6a290d53ae2d19fbdc90f14f491215a48b1c2b1"
+        },
+        {
+          "destination": "bin/ffprobe",
+          "max_bytes": 6766896,
+          "member": "bin/ffprobe",
+          "role": "ffprobe",
+          "sha256": "6fd9ffcfa0a870c82b7cd0bf7b87cb75c8d44b82a157a415af5d5c2d3bee0d76"
+        },
+        {
+          "destination": "SHA256SUMS",
+          "max_bytes": 1049884,
+          "member": "SHA256SUMS",
+          "sha256": "9cf8c494e22e12a3b8e1ff6d15815a6686a55360c1dd489ffecf1e9285f87a65"
+        }
+      ],
+      "license": {
+        "expression": "LGPL-2.1-or-later",
+        "license_destination": "LICENSES/FFmpeg-LGPL-2.1-or-later.txt"
+      },
+      "probe": {
+        "ffprobe_version_contains": "ffprobe version 8.1.2",
+        "forbidden_build_flags": [
+          "--enable-gpl",
+          "--enable-nonfree"
+        ],
+        "required_build_flags": [
+          "--disable-gpl",
+          "--disable-nonfree",
+          "--disable-version3",
+          "--disable-network"
+        ],
+        "required_encoders": [
+          "mpeg4",
+          "png"
+        ],
+        "required_muxers": [
+          "mp4",
+          "image2pipe"
+        ],
+        "version_contains": "ffmpeg version 8.1.2"
+      },
+      "source": {
+        "build_workflow": ".github/workflows/ffmpeg-runtime.yml",
+        "sha256": "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c",
+        "signature_url": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz.asc",
+        "signing_key_fingerprint": "FCF986EA15E6E293A5644F10B4322F04D67658D8",
+        "url": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz"
+      },
+      "target": "x86_64-unknown-linux-gnu",
+      "url": "https://github.com/OpenAdaptAI/openadapt-desktop/releases/download/ffmpeg-runtime-v8.1.2-r1/openadapt-ffmpeg-8.1.2-r1-x86_64-unknown-linux-gnu.zip"
+    }
+  ]
+}

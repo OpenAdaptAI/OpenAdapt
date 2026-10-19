@@ -164,8 +164,9 @@ def test_declares_tier_two_and_never_a_system_of_record_read() -> None:
     assert verifier_effect_tier(verifier, _written()) is not (
         VerificationTier.INDEPENDENT_SYSTEM
     )
-    # It must never be handed the acting session's backend.
-    assert not hasattr(verifier, "bind_backend")
+    # It reads the acting session only to capture a declared reference
+    # number; this spec declares none, so it never looks at that session.
+    assert verifier._reference is None
 
 
 def test_halt_messages_do_not_call_it_a_system_of_record() -> None:

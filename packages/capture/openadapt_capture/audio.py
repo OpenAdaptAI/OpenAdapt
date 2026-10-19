@@ -53,9 +53,25 @@ def _import_audio_deps() -> None:
             _np = np
         except ImportError as e:
             raise ImportError(
-                "Audio dependencies required. Install with: "
-                "pip install sounddevice soundfile numpy"
+                "Recording audio needs the audio extra. Install it with: "
+                "pip install 'openadapt-capture[audio]'"
             ) from e
+        except OSError as e:
+            # sounddevice loads the PortAudio system library at import.
+            raise ImportError(
+                "Recording audio needs the PortAudio library. Install it with "
+                "your package manager (for example libportaudio2 on Debian and "
+                f"Ubuntu, or portaudio with Homebrew): {e}"
+            ) from e
+
+
+def require_audio_dependencies() -> None:
+    """Refuse before a microphone is opened when the audio extra is missing.
+
+    Raises:
+        ImportError: Naming ``pip install 'openadapt-capture[audio]'``.
+    """
+    _import_audio_deps()
 
 
 def _import_whisper() -> None:
@@ -97,6 +113,7 @@ NO_LOCAL_BACKEND_MESSAGE = (
     "No on-device transcription backend is installed. Audio is transcribed "
     "locally and is never uploaded, so there is no remote fallback. Install "
     "one with:\n"
+    '    pip install "openadapt-capture[audio]"             # microphone and faster-whisper\n'
     '    pip install "openadapt-capture[transcribe-fast]"   # faster-whisper\n'
     '    pip install "openadapt-capture[transcribe]"        # openai-whisper'
 )

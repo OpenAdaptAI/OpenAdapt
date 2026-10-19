@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    The signed sidecar loads only the exact-hash OpenCV wheel provisioned from
+    the embedded release manifest. Hardened-runtime library validation would
+    otherwise reject that separately licensed native extension because it is
+    not signed by OpenAdapt's Developer ID.
+  -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>
