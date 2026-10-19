@@ -29,6 +29,7 @@ from typing import Any, Callable, Literal, Mapping, Optional
 
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     field_validator,
     model_serializer,
@@ -46,6 +47,7 @@ from openadapt_flow.remote_frame_contract import RemoteFrameContract
 # with the exact ``{param: ...}`` / ``{literal: ...}`` form bundles use.
 from openadapt_flow.runtime.effects.auth import AuthRef, ResolvedSecrets
 from openadapt_flow.runtime.effects.effect import Region, ValueExpr
+from openadapt_flow.runtime.effects.fresh_session import FreshSessionSpec
 from openadapt_flow.runtime.effects.smart_auth import SmartBackendConfig
 from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
 
@@ -304,7 +306,9 @@ class EffectsConfig(BaseModel):
     #: ``ui_readback`` reads the saved record back through the application's
     #: own record page in a separate, freshly signed-in, read-only browser
     #: session (tier 2, ``INDEPENDENT_SESSION``): independent of the session
-    #: that typed, but not a system-of-record read.
+    #: that typed, but not a system-of-record read. ``fresh_session`` does the
+    #: same for a desktop app (a relaunched process) or RDP (a second session
+    #: with separate credentials), by replaying the effect's learned reopen.
     kind: str = "none"
 
     #: Reviewed alternatives for the same effect contract.  This is useful
@@ -349,6 +353,11 @@ class EffectsConfig(BaseModel):
     #: ``docs/EFFECT_KIT.md``. Required for ``kind: ui_readback``; ignored
     #: otherwise.
     ui_readback: Optional[UiReadbackSpec] = None
+
+    # -- fresh_session (desktop relaunch or a second RDP session) -------------
+    #: Required for ``kind: fresh_session``; ignored otherwise. See
+    #: ``runtime/effects/fresh_session.py`` and ``docs/READBACK_LADDER.md``.
+    fresh_session: Optional[FreshSessionSpec] = None
 
     # -- rest (JSON REST system of record, e.g. MockMed /api/db) -------------
     base_url: Optional[str] = None
@@ -823,6 +832,34 @@ class IdempotencySection(BaseModel):
     key_env: Optional[str] = None
 
 
+class ProbeCopySection(BaseModel):
+    """Declares that this deployment drives a resettable test copy.
+
+    Only ``induce --probe-on`` reads it. Probing replays guessed
+    interpretations of a recording disagreement, some of which are wrong on
+    purpose, so it runs only where the operator has said in writing that the
+    target is a disposable copy. See docs/PROBE_INDUCTION.md.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The operator's declaration that every system this file names (the GUI,
+    #: the read-back store, the reset hook) is a test copy, not production.
+    #: Probing refuses unless this is exactly ``true``.
+    declared: bool = False
+    #: Restores the copy to its baseline before each probe run: an HTTP POST
+    #: to this URL. One of ``reset_url`` / ``reset_command`` is required.
+    reset_url: Optional[str] = None
+    #: Restores the copy to its baseline before each probe run: a command run
+    #: without a shell, as an argv list.
+    reset_command: list[str] = Field(default_factory=list)
+    #: Reward contract bundle directory, in the ``serve-reward`` format. Its
+    #: required and forbidden effects say what "the recorded effect" is, and
+    #: its oracle recipe is the read-back. A relative path resolves against
+    #: the deployment file's directory.
+    reward_contract: Optional[str] = None
+
+
 #: Sentinel written by ``config init`` for fields the operator must fill.
 UNRESOLVED = "UNRESOLVED"
 
@@ -851,6 +888,9 @@ class DeploymentConfig(BaseModel):
     #: declares. ``--surface NAME=...`` flags apply over these entries. Empty
     #: (and omitted when serialized) otherwise.
     surfaces: dict[str, BackendConfig] = Field(default_factory=dict)
+    #: Declares the target a resettable test copy (``induce --probe-on``
+    #: only). None (and omitted when serialized) otherwise.
+    test_copy: Optional[ProbeCopySection] = None
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -859,6 +899,8 @@ class DeploymentConfig(BaseModel):
         data: dict[str, Any] = handler(self)
         if not self.surfaces:
             data.pop("surfaces", None)
+        if self.test_copy is None:
+            data.pop("test_copy", None)
         return data
 
 
@@ -1508,11 +1550,11 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
     config = _identity_config_dump(cfg)
     # Fields added after identities were first issued enter the digest only
     # when they are set, so every existing verifier keeps its identity.
-    for added in ("ui_readback", "smart_backend"):
+    for added in ("ui_readback", "smart_backend", "fresh_session"):
         if config.get(added) is None:
             config.pop(added, None)
     for candidate in config.get("candidates") or []:
-        for added in ("ui_readback", "smart_backend"):
+        for added in ("ui_readback", "smart_backend", "fresh_session"):
             if isinstance(candidate, dict) and candidate.get(added) is None:
                 candidate.pop(added, None)
     # The same rule one level down: ``ui_readback.reference`` came later.
@@ -1571,6 +1613,17 @@ def _build_effect_verifier_unredacted(
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
         )
+
+    if kind in ("fresh_session", "fresh-session"):
+        if cfg.fresh_session is None:
+            raise ValueError(
+                "effects.kind 'fresh_session' requires an effects.fresh_session section"
+            )
+        from openadapt_flow.runtime.effects.fresh_session import (
+            build_fresh_session_verifier,
+        )
+
+        return build_fresh_session_verifier(cfg.fresh_session)
 
     if kind == "surfaces":
         from openadapt_flow.runtime.effects.surfaces import SurfaceRoutedVerifier
@@ -1789,7 +1842,8 @@ def _build_effect_verifier_unredacted(
 
     raise ValueError(
         f"unknown effects.kind {cfg.kind!r} "
-        "(expected: none | onscreen | ui_readback | rest | graphql | fhir | sql | "
+        "(expected: none | onscreen | ui_readback | fresh_session | rest | graphql | "
+        "fhir | sql | "
         "file | email | document | document-hash, or a registered plugin kind)"
     )
 

@@ -43,6 +43,12 @@ from pydantic import (
 
 from openadapt_flow.approval_mode.model import ApprovalModeItemEvidence
 from openadapt_flow.qualification_faults import FaultMutationReceipt
+from openadapt_flow.records.schema import (
+    FieldRead,
+    FieldSpec,
+    GradeGate,
+    ReadProof,
+)
 
 if TYPE_CHECKING:
     # Type-only import for the Step.effects forward reference. The RUNTIME
@@ -92,6 +98,11 @@ class ActionKind(str, Enum):
     HOTKEY = "hotkey"
     WAIT = "wait"
     SCROLL = "scroll"
+    #: Read one field off the screen into a typed value (see
+    #: :class:`ReadStepSpec`). Never writes. Additive: bundles without READ
+    #: steps are unchanged, and a runtime that predates READ refuses to load a
+    #: bundle that has one instead of skipping it.
+    READ = "read"
     # Move execution to another declared surface (a browser tab or popup this
     # run opened, or another backend such as a native Windows app or an RDP
     # window). It delivers no input. It is typed so an older runtime, which
@@ -1033,6 +1044,44 @@ class SubmitBinding(BaseModel):
     )
 
 
+class ReadStepSpec(BaseModel):
+    """What a READ step reads and how much proof it collects.
+
+    ``region`` is the field's value box on the recorded frame. When the step
+    has an ``anchor`` (usually the field's label), the runtime re-resolves it
+    on the live frame and moves ``region`` by the same offset, so the read
+    follows the field when the layout shifts. Without an anchor, ``region`` is
+    used as recorded.
+
+    Proof is opt-in (:class:`~openadapt_flow.records.schema.ReadProof`): by
+    default one channel is read (the clipboard when the runtime has one,
+    otherwise OCR), the value is ``unchecked`` and carries no Seal. OCR and
+    the clipboard are deterministic channels; a READ step makes no model
+    calls.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_name: str = Field(description="The RecordSchema this field belongs to.")
+    field: FieldSpec
+    region: Region
+    proof: ReadProof = Field(default_factory=ReadProof)
+    copy_keys: list[str] = Field(
+        default_factory=lambda: ["Meta+a", "Meta+c"],
+        max_length=4,
+        description="Keys pressed to copy the focused field for a clipboard read.",
+    )
+    on_review: Literal["halt", "continue"] = Field(
+        default="halt",
+        description=(
+            "What to do when the read needs review (channels disagree, an"
+            " invalid value, a missing second channel). ``halt`` stops the run"
+            " and asks a person; ``continue`` records the field for the review"
+            " queue and goes on."
+        ),
+    )
+
+
 # -- multi-surface workflows (docs/MULTI_SURFACE.md) ---------------------------
 #
 # A workflow can span browser tabs, popups, and backends. Every surface it uses
@@ -1232,6 +1281,13 @@ def surface_contract_errors(workflow: "Workflow") -> list[str]:
     for step in all_steps:
         if step.surface is not None and step.surface not in by_id:
             errors.append(f"step {step.id!r} names undeclared surface")
+        if step.closes_surface and not (
+            step.surface in by_id and by_id[step.surface].is_page
+        ):
+            errors.append(
+                f"step {step.id!r} closes its surface, but it does not run on "
+                "a page a step opened"
+            )
         declared = [sid for _, sid in sorted(expected_opens.get(step.id, []))]
         if list(step.opens) != declared:
             errors.append(
@@ -1434,6 +1490,14 @@ class Step(BaseModel):
     # ``guard``: a deterministic precondition evaluated on the entry frame.
     # Unmet => HALT (default) or SKIP the step (see Guard.on_unmet).
     guard: Optional[Guard] = None
+    # Reading records (openadapt_flow.records). Both OPTIONAL and additive.
+    # ``read`` is required on, and valid only on, a READ step.
+    read: Optional[ReadStepSpec] = None
+    # ``read_gate``: the minimum read grade this step accepts for values read
+    # earlier in the run (by field name). Below it, missing, or still under
+    # review => HALT before acting. Meant for steps that write read values
+    # into a system of record.
+    read_gate: Optional[GradeGate] = None
     # Multi-surface workflows (docs/MULTI_SURFACE.md). All three are None/empty
     # on a single-surface bundle, which replays exactly as before.
     surface: Optional[str] = Field(
@@ -1462,6 +1526,17 @@ class Step(BaseModel):
             " the target page showed when the demonstration switched to it."
         ),
     )
+    closes_surface: bool = Field(
+        default=False,
+        description=(
+            "A click on a page surface (a popup or tab a step opened) that "
+            "closed that page in the demonstration, such as an approval "
+            "window's final button. At replay, the browser backend may then "
+            "count the click as delivered when the browser reports the page "
+            "closed during the click and the page is confirmed closed. "
+            "Without it, that error leaves delivery uncertain."
+        ),
+    )
     dialog: Optional[DialogResponse] = Field(
         default=None,
         description=(
@@ -1477,6 +1552,11 @@ class Step(BaseModel):
         for sid in self.opens:
             if not re.fullmatch(SURFACE_ID_PATTERN, sid):
                 raise ValueError("opens holds an invalid surface id")
+        if self.closes_surface:
+            if self.action not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
+                raise ValueError("closes_surface is valid only on a click")
+            if self.surface is None:
+                raise ValueError("closes_surface needs the page surface it closes")
         if self.action is not ActionKind.SWITCH_SURFACE:
             if self.surface_origin is not None:
                 raise ValueError("surface_origin is valid only on SWITCH_SURFACE")
@@ -1512,6 +1592,10 @@ class Step(BaseModel):
     def _validate_rich_action_contract(self) -> "Step":
         if self.action is not ActionKind.DRAG and self.drag_end_anchor is not None:
             raise ValueError("drag_end_anchor is valid only for DRAG steps")
+        if (self.action is ActionKind.READ) != (self.read is not None):
+            raise ValueError("a READ step needs `read`, and only READ steps may set it")
+        if self.action is ActionKind.READ and self.risk != "reversible":
+            raise ValueError("a READ step never writes, so its risk is reversible")
 
         if self.action is ActionKind.HOTKEY:
             if not self.key or not self.modifiers:
@@ -3700,6 +3784,8 @@ class StepResult(BaseModel):
     # (recorded for audit; empty unless an appliance is configured).
     postcondition_drift_rescues: list[str] = Field(default_factory=list)
     drift_oracle_calls: int = 0  # VLM state-verifier calls this step
+    #: READ steps only: the value read, with its channels, grade and region.
+    field_read: Optional[FieldRead] = None
     # The first identity check on this step mismatched WHILE the screen was
     # still changing (its identity band differed in a frame taken right
     # after the read, or the page reported activity), so one more check ran
@@ -4361,6 +4447,88 @@ class LoopIterationBinding(BaseModel):
     params: dict[str, Union[str, bool, int, float]] = Field(default_factory=dict)
 
 
+class SelfRepairStepRecord(BaseModel):
+    """One stage of a self-repair (:mod:`openadapt_flow.repair.self_repair`).
+
+    ``stage`` is a closed word (``halt``, ``propose``, ``patch``, ``probe``,
+    ``campaign``, ``approval``, ``resume``). ``model_calls`` and
+    ``est_model_cost_usd`` are what the repair agent reported for this stage;
+    every other stage is deterministic and records zero.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    stage: Literal[
+        "halt", "propose", "patch", "probe", "campaign", "approval", "resume"
+    ]
+    passed: bool
+    detail: str = Field(default="", max_length=1024)
+    attempt: Optional[int] = Field(default=None, ge=1)
+    model_calls: int = Field(default=0, ge=0)
+    est_model_cost_usd: float = Field(default=0.0, ge=0.0)
+
+
+class StandardChangeEvidence(BaseModel):
+    """A self-repair that applied without a person, under a signed policy.
+
+    Written by :mod:`openadapt_flow.repair.standard_change`. ``change_class``
+    says which class the person allowed in advance; ``preflight_outcome`` is
+    the test record's run of the repaired bundle. ``revert_command`` undoes it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    change_class: Literal["relabel_or_move", "dismiss_dialog", "menu_path"]
+    detail: str = Field(default="", max_length=512)
+    policy_id: str = Field(max_length=128)
+    policy_sha256: str = Field(pattern="^[a-f0-9]{64}$")
+    policy_signed_by: str = Field(max_length=128)
+    test_record: str = Field(max_length=128)
+    preflight_outcome: str = Field(max_length=64)
+    preflight_run_dir: Optional[str] = None
+    applied_at: str
+    revert_command: str = Field(max_length=512)
+
+
+class SelfRepairEvidence(BaseModel):
+    """What ``run --self-repair`` did for this item, step by step.
+
+    Present only on runs started with self-repair on. A healthy run records
+    ``status="not_needed"`` with zero model calls and zero cost. The run's own
+    ``model_calls`` stays the count for the deterministic run itself; the
+    repair agent's calls and their cost are counted here.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal[
+        "not_needed",
+        "not_repairable",
+        "no_fix",
+        "needs_fault_probes",
+        "declined",
+        "awaiting_approval",
+        "resumed",
+        "resume_failed",
+    ]
+    reason: str = Field(default="", max_length=1024)
+    halted_run_dir: Optional[str] = None
+    halted_step_id: Optional[str] = None
+    agent_id: Optional[str] = Field(default=None, max_length=256)
+    agent_dialect: Optional[str] = Field(default=None, max_length=64)
+    attempts: int = Field(default=0, ge=0)
+    model_calls: int = Field(default=0, ge=0)
+    est_model_cost_usd: float = Field(default=0.0, ge=0.0)
+    candidate_id: Optional[str] = None
+    prior_bundle_digest: Optional[str] = Field(default=None, pattern="^[a-f0-9]{64}$")
+    patched_bundle_digest: Optional[str] = Field(default=None, pattern="^[a-f0-9]{64}$")
+    approved_by: Optional[str] = Field(default=None, max_length=256)
+    approval_route: Optional[str] = Field(default=None, max_length=64)
+    steps: list[SelfRepairStepRecord] = Field(default_factory=list)
+    #: Set when the fix applied without a person, under a signed policy.
+    standard_change: Optional[StandardChangeEvidence] = None
+
+
 _CheckLevelName = Literal[
     "unchecked",
     "same_screen",
@@ -4767,6 +4935,11 @@ class RunReport(BaseModel):
     # any run whose halt path predates this field) — additive/back-compatible.
     halt: Optional["HaltObservation"] = None
     rung_counts: dict[str, int] = Field(default_factory=dict)
+    # Display-scale estimate (runtime.render_scale) on a pixel-path run:
+    # ``status`` is ``normalized`` (with the fitted scale, offset and how many
+    # recorded labels agreed), ``recorded_geometry``, or ``no_estimate`` (with
+    # the reason). None when no estimate was tried.
+    render_scale: Optional[dict[str, Any]] = None
     heal_count: int = 0
     model_calls: int = 0
     external_network_calls: Literal["none", "observed", "unknown"] = "unknown"
@@ -4796,6 +4969,17 @@ class RunReport(BaseModel):
         description=(
             "PHI-free approval-mode evidence for this item. The engine's "
             "outcome words are unchanged by it."
+        ),
+    )
+    # Present only when the run was started with self-repair on
+    # (``run --self-repair``), so every other report serializes as before.
+    self_repair: Optional[SelfRepairEvidence] = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "What self-repair did for this item: each stage, the repair "
+            "agent's model calls and their cost, the candidate and who "
+            "approved it."
         ),
     )
     # Variant-router stamp: present only when the deterministic pre-run router

@@ -252,6 +252,53 @@ class ColumnDecision(BaseModel):
     note: str = ""
 
 
+class ProbeRun(BaseModel):
+    """One replay of one interpretation in one recording's context.
+
+    Written for every run ``induce --probe-on`` makes on the test copy,
+    whether or not it decided anything (:mod:`openadapt_flow.compiler.probing`).
+    """
+
+    location: str = Field(description="The underdetermined point probed")
+    interpretation: str = Field(description="'incidental' | 'conditional'")
+    context: str = Field(description="Label of the recording whose context ran")
+    runtime_signal: str = Field(
+        description="'completed' | 'halted_before_effect' | 'refused' | "
+        "'failed_platform', from the replay"
+    )
+    outcome: str = Field(
+        description="The serve-reward judge's outcome for the read-back"
+    )
+    produced_recorded_effect: bool = Field(
+        description="True only when the judge says VERIFIED."
+    )
+    conclusive: bool = Field(
+        description="False when the read-back could not decide (store "
+        "unreachable, effect uncertain, platform failure)."
+    )
+    reason: str = ""
+    model_calls: int = 0
+
+
+class ProbeVerdict(BaseModel):
+    """What probing decided about one underdetermined point."""
+
+    location: str
+    kind: str = Field(description="The uncertainty kind that was probed")
+    interpretations: dict[str, str] = Field(
+        default_factory=dict,
+        description="interpretation -> 'passed' | 'failed' | 'inconclusive' "
+        "| 'not_run'",
+    )
+    certified: Optional[str] = Field(
+        default=None,
+        description="The one interpretation that produced the recorded effect "
+        "in every context while every other one conclusively failed; None "
+        "when the point stays refused.",
+    )
+    detail: str = ""
+
+
 class InductionResult(BaseModel):
     """The induced program (or an honest refusal) plus the full audit trail."""
 
@@ -280,6 +327,18 @@ class InductionResult(BaseModel):
             "uncovered-branch notes on an emitted program (non-blocking)."
         ),
     )
+    probe_target: Optional[str] = Field(
+        default=None,
+        description="Name of the declared test copy probed (None: no probing).",
+    )
+    probe_runs: list[ProbeRun] = Field(
+        default_factory=list,
+        description="Every probe run, in the order it ran.",
+    )
+    probe_verdicts: list[ProbeVerdict] = Field(
+        default_factory=list,
+        description="One verdict per underdetermined point probing looked at.",
+    )
 
     @property
     def underdetermined(self) -> bool:
@@ -303,6 +362,24 @@ class InductionResult(BaseModel):
             lines.append(f"  [proposed]  {p.target}: {p.content}  (NOT trusted)")
         for u in self.uncertainties:
             lines.append(f"  [REFUSED]   {u.location}: {u.detail}")
+        if self.probe_target is not None:
+            lines.append(
+                f"probes on test copy {self.probe_target!r}: "
+                f"{len(self.probe_runs)} run(s)"
+            )
+            for run in self.probe_runs:
+                lines.append(
+                    f"  [probe]     {run.location} {run.interpretation} in "
+                    f"{run.context}: {run.outcome} ({run.runtime_signal})"
+                    + (f" -- {run.reason}" if run.reason else "")
+                )
+            for pv in self.probe_verdicts:
+                shown = ", ".join(f"{k}={v}" for k, v in pv.interpretations.items())
+                head = f"certified {pv.certified}" if pv.certified else "still refused"
+                lines.append(
+                    f"  [verdict]   {pv.location}: {head} [{shown}]"
+                    + (f" -- {pv.detail}" if pv.detail else "")
+                )
         verdict = "CERTIFIED" if self.certified else "NOT CERTIFIED"
         lines.append(
             f"Certification: {verdict}"
@@ -894,7 +971,10 @@ class _Node:
 
 
 def induce_program(
-    traces: list[TraceInput], *, propose: Optional[Proposer] = None
+    traces: list[TraceInput],
+    *,
+    propose: Optional[Proposer] = None,
+    probe_resolutions: Optional[dict[str, str]] = None,
 ) -> InductionResult:
     """Induce a parameterized :class:`ProgramGraph` from multiple demonstrations
     of the same task -- the RFC §3 induction loop (step [4] + [5]).
@@ -909,6 +989,12 @@ def induce_program(
         traces: Two or more traces (compiled ``Workflow``s or recording dirs)
             of the SAME task. One trace is the degenerate bootstrap.
         propose: Optional compile-time interpretation proposer (advisory).
+        probe_resolutions: Optional ``{location: interpretation}`` for
+            consequential optional points that probing on a declared test copy
+            settled (:func:`openadapt_flow.compiler.probing.probe_and_induce`
+            is the only caller that sets it). ``"incidental"`` drops the step;
+            ``"conditional"`` keeps it guarded on its own presence. A point
+            not listed here is refused exactly as without probing.
 
     Returns:
         An :class:`InductionResult` with the induced program (or a refusal) and
@@ -981,8 +1067,11 @@ def induce_program(
             continue
 
         # --- single step present in SOME traces: branch or optional -------
-        node, dec = _emit_optional_single(idx, col, present, n, result, propose)
-        nodes.append(node)
+        node, dec = _emit_optional_single(
+            idx, col, present, n, result, propose, probe_resolutions or {}
+        )
+        if node is not None:
+            nodes.append(node)
         decisions.append(dec)
 
     result.column_decisions = decisions
@@ -1270,11 +1359,132 @@ def _emit_required_single(idx, col, present, taken, param_specs, result, propose
     return node, dec
 
 
-def _emit_optional_single(idx, col, present, n, result, propose):
+def optional_guard(step: Step) -> Guard:
+    """The skip-when-absent guard induction puts on an optional step.
+
+    A dialog step runs when its dialog text is on screen; any other step runs
+    when its own target resolves (or, with no anchor, its field text shows).
+    Probing replays exactly this guard for the ``conditional`` interpretation.
+    """
+    field = _field_key(step)
+    if _looks_like_dialog(step):
+        predicate = Predicate(
+            kind=PredicateKind.TEXT_PRESENT,
+            text=_dialog_text(step),
+            intent="optional dialog is present",
+        )
+    elif step.anchor is not None:
+        predicate = Predicate(
+            kind=PredicateKind.ANCHOR_RESOLVES,
+            anchor=step.anchor,
+            intent=f"optional step '{field}' target present",
+        )
+    else:
+        predicate = Predicate(
+            kind=PredicateKind.TEXT_PRESENT,
+            text=field,
+            intent=f"optional step '{field}' present",
+        )
+    return Guard(predicate=predicate, on_unmet="skip")
+
+
+class OptionalPoint(BaseModel):
+    """A consequential step some traces have and others lack.
+
+    These are the points induction refuses as ``unconfirmed_optional`` or
+    ``unconfirmed_branch``, located well enough to replay each recording with
+    the step dropped or kept (see :mod:`openadapt_flow.compiler.probing`).
+    """
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    location: str
+    kind: str
+    column: int
+    source_trace: int = Field(description="First trace that has the step")
+    step: Step
+    #: trace -> index of the step in that trace's ``steps`` (present traces).
+    index_in_trace: dict[int, int] = Field(default_factory=dict)
+    #: trace -> index the step would be inserted at (absent traces).
+    insert_at: dict[int, int] = Field(default_factory=dict)
+
+
+def optional_points(traces: list[TraceInput]) -> dict[str, OptionalPoint]:
+    """Locate every consequential optional point, keyed by its location id.
+
+    Uses the same reduction, alignment and location ids as
+    :func:`induce_program`, so a key here matches an
+    :attr:`Uncertainty.location` there.
+    """
+    workflows = [_as_workflow(t) for t in traces]
+    n = len(workflows)
+    columns = _align([_reduce_trace(wf.steps) for wf in workflows])
+    positions = [{id(step): k for k, step in enumerate(wf.steps)} for wf in workflows]
+
+    def last_index(tok: Any, t: int) -> int:
+        if tok.kind == "loop":
+            return positions[t][id(tok.iterations[-1][-1])]
+        return positions[t][id(tok.step)]
+
+    points: dict[str, OptionalPoint] = {}
+    for idx, col in enumerate(columns):
+        present = sorted(col.tokens)
+        if (
+            col.divergent_group is not None
+            or col.kind != "single"
+            or not 0 < len(present) < n
+        ):
+            continue
+        step0 = col.tokens[present[0]].step
+        if not _step_consequential(step0):
+            continue
+        is_dialog = _looks_like_dialog(step0)
+        point = OptionalPoint(
+            location=f"branch_{idx}" if is_dialog else f"opt_{idx}",
+            kind="unconfirmed_branch" if is_dialog else "unconfirmed_optional",
+            column=idx,
+            source_trace=present[0],
+            step=step0,
+        )
+        for t in range(n):
+            if t in col.tokens:
+                point.index_in_trace[t] = positions[t][id(col.tokens[t].step)]
+                continue
+            before = 0
+            for prev in reversed(columns[:idx]):
+                if t in prev.tokens:
+                    before = last_index(prev.tokens[t], t) + 1
+                    break
+            point.insert_at[t] = before
+        points[point.location] = point
+    return points
+
+
+def _emit_optional_single(idx, col, present, n, result, propose, resolutions=None):
     tok = col.tokens[present[0]]
     step0 = tok.step
     field = _field_key(step0)
     is_dialog = _looks_like_dialog(step0)
+    location = f"branch_{idx}" if is_dialog else f"opt_{idx}"
+    resolved = (resolutions or {}).get(location)
+    if resolved is not None and not _step_consequential(step0):
+        # Probing only ever settles a point induction refused; a step that
+        # was never refused keeps its ordinary interpretation.
+        resolved = None
+    if resolved == "incidental":
+        result.inferred.append(
+            f"step '{field}' at column {idx} (present in {present}/{n} "
+            "traces) is incidental -- dropped; certified by probing on a "
+            "declared test copy"
+        )
+        return None, ColumnDecision(
+            index=idx,
+            kind="incidental",
+            align_sig=str(col.align_sig),
+            field=field,
+            present_in=present,
+            note=f"incidental step '{field}' dropped (probe-certified)",
+        )
 
     if is_dialog:
         # A DETECTABLE condition (the dialog's own presence) -> a guarded BRANCH
@@ -1326,7 +1536,12 @@ def _emit_optional_single(idx, col, present, n, result, propose):
         # evidence -- running (or skipping) an irreversible action on a GUESSED
         # condition is exactly the failure class to avoid -- so ALSO emit an
         # Uncertainty requiring operator confirmation (certified stays False).
-        if _step_consequential(do_step):
+        if resolved == "conditional":
+            result.inferred.append(
+                f"guard TEXT_PRESENT({dialog_text!r}) at {branch_id} certified "
+                "by probing on a declared test copy"
+            )
+        elif _step_consequential(do_step):
             _add_uncertainty(
                 result,
                 kind="unconfirmed_branch",
@@ -1372,20 +1587,7 @@ def _emit_optional_single(idx, col, present, n, result, propose):
     sid = f"opt_{idx}"
     step = step0.model_copy(deep=True)
     exit_tr = Transition(target="__PATCH__")
-    guard_pred = (
-        Predicate(
-            kind=PredicateKind.ANCHOR_RESOLVES,
-            anchor=step.anchor,
-            intent=f"optional step '{field}' target present",
-        )
-        if step.anchor is not None
-        else Predicate(
-            kind=PredicateKind.TEXT_PRESENT,
-            text=field,
-            intent=f"optional step '{field}' present",
-        )
-    )
-    step.guard = Guard(predicate=guard_pred, on_unmet="skip")
+    step.guard = optional_guard(step0)
     node = _Node(sid)
     node.states[sid] = State(
         id=sid, kind=StateKind.ACTION, step=step, transitions=[exit_tr]
@@ -1398,7 +1600,13 @@ def _emit_optional_single(idx, col, present, n, result, propose):
     # not cover the case is UNDERDETERMINED, and auto-skipping an irreversible
     # action on an unconfirmed guard is not a safe default. So it becomes a
     # QUESTION (Uncertainty), not a silent skip -- certified stays False.
-    if _step_consequential(step0):
+    if resolved == "conditional":
+        result.inferred.append(
+            f"optional step '{field}' at column {idx} (present in "
+            f"{present}/{n} traces) -- run when present, skip when absent; "
+            "certified by probing on a declared test copy"
+        )
+    elif _step_consequential(step0):
         _add_uncertainty(
             result,
             kind="unconfirmed_optional",

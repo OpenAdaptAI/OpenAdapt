@@ -47,6 +47,7 @@ def test_action_kind_map_covers_losslessly_shared_values() -> None:
     }
     assert set(interop.ACTION_KIND_TO_ACTION_TYPE) == set(ir.ActionKind) - {
         ir.ActionKind.SELECT_OPTION,
+        ir.ActionKind.READ,
         ir.ActionKind.SWITCH_SURFACE,
     }
     assert interop.ACTION_KIND_TO_ACTION_TYPE == expected
@@ -75,6 +76,23 @@ def test_select_option_refuses_lossy_shared_type_conversion() -> None:
         anchor=anchor,
         selection_commit_key="Enter",
         selection_region=anchor.region,
+    )
+    with pytest.raises(ValueError, match="not representable"):
+        interop.step_to_action(step)
+
+
+def test_read_refuses_lossy_shared_type_conversion() -> None:
+    from openadapt_flow.records.schema import FieldSpec
+
+    step = ir.Step(
+        id="read",
+        intent="read amount",
+        action=ir.ActionKind.READ,
+        read=ir.ReadStepSpec(
+            schema_name="ledger_entry",
+            field=FieldSpec(name="amount", kind="decimal"),
+            region=(0, 0, 10, 10),
+        ),
     )
     with pytest.raises(ValueError, match="not representable"):
         interop.step_to_action(step)

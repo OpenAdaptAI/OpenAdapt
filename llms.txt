@@ -28,8 +28,8 @@ being merged now.
    halts fixed the same way (`teach-branch`), candidate branches mined from many
    real runs in the background (shadow mode,
    [#1212](https://github.com/OpenAdaptAI/OpenAdapt/pull/1212)), and a router
-   that sends each item to the right verified variant (landing). Released
-   except where a PR is named.
+   that sends each item to the right verified variant. Shadow mining and the
+   router are on main; the rest is released.
 4. **Works across surfaces in one workflow.** Web, native Windows and macOS,
    RDP and Citrix. Programs chain across surfaces passing confirmed values
    (`compose`, `process`, released), and one program can switch surfaces, tabs
@@ -42,8 +42,8 @@ being merged now.
 6. **Stops instead of improvising, and never retries an uncertain save.** A run
    that can't prove a save ends `HALTED_BEFORE_EFFECT` or
    `RECONCILIATION_REQUIRED`, never "success". A ledger of what changed before
-   a stop, with undo steps a person approves, is landing. Released except the
-   ledger.
+   a stop, with undo steps a person approves, is on main. The rest is
+   released.
 7. **Approvals are bound to exactly what will be saved.** Each save waits for a
    person by default and can be answered on a paired phone with one card per
    decision. The approval is bound to the exact screenshot and form state, and
@@ -62,7 +62,7 @@ being merged now.
 10. **Runs locally and keeps data private.** Healthy runs make no model calls
     and send nothing out. Personal and health data are redacted from text,
     screenshots and structure (scrub-by-default for anything that leaves the
-    machine is landing); a strict no-outbound mode, an unattended on-prem
+    machine is on main); a strict no-outbound mode, an unattended on-prem
     service, and signed, timestamped receipts are released.
 
 ## Often missed
