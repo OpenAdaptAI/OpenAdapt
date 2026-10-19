@@ -112,7 +112,7 @@ jobs:
           agent="$(hit "^packages/(agent|flow|types)/|$wf")"
           capture="$(hit "^packages/capture/|$wf")"
           privacy="$(hit "^packages/privacy/|$wf")"
-          desktop="$(hit "^packages/desktop/|^\.github/workflows/desktop-(test|build)\.yml$|$wf")"
+          desktop="$(hit "^packages/desktop/|^\.github/workflows/desktop-[a-z-]+\.yml$|$wf")"
           # Any package's metadata, or the launcher's, can change what an
           # install pulls in.
           weight="$(hit "^packages/|^pyproject\.toml$|^openadapt/|^hatch_build\.py$|^scripts/install_weight/|$wf")"

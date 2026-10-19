@@ -272,3 +272,22 @@ human_decisions:
 policy:
   # A policy YAML path, or a shipped built-in name (permissive, clinical-write).
   policy: clinical-write
+
+# -- worklist: parallel worklist runs (docs/THROUGHPUT.md) --------------------
+# Omit this section to run one item at a time. `--workers N` above
+# max_workers is refused; each worker signs in with its own account and the
+# file holds only the NAMES of environment variables, never a credential.
+# worklist:
+#   max_workers: 4            # sessions this app tolerates at once
+#   items_independent: true   # rows touch different records, in any order
+#   readback_window: 0        # 0 = read each save back before the next item
+#   on_halt: stop             # or skip_unwritten
+#   sign_in_bundle: ./sign-in-bundle
+#   entry_url: https://emr.example.test/patients/new
+#   accounts:
+#     - name: clerk-1
+#       params_env: {username: EMR_USER_1}
+#       secrets_env: {password: EMR_PASS_1}
+#     - name: clerk-2
+#       params_env: {username: EMR_USER_2}
+#       secrets_env: {password: EMR_PASS_2}

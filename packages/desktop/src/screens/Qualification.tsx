@@ -120,9 +120,9 @@ function signalNeedsExtraction(source: QualificationIdentitySourceKind): boolean
 }
 
 function identityLabel(node: QualificationNode): string {
-  if (!node.identity?.applicable) return "not applicable";
-  if (node.identity.armed) return "armed";
-  return node.identity.reason || "not armed";
+  if (!node.identity?.applicable) return "not needed";
+  if (node.identity.armed) return "checked";
+  return node.identity.reason || "not checked";
 }
 
 function actionTitle(node: QualificationNode): string {
@@ -1259,7 +1259,7 @@ export function Qualification({
                     }}
                   >
                     <Pill tone={selectedControls.identity.armed ? "ok" : "warn"}>
-                      {selectedControls.identity.armed ? "armed" : "not armed"}
+                      {selectedControls.identity.armed ? "checked" : "not checked"}
                     </Pill>
                     {selectedControls.identity.policy && (
                       <Pill

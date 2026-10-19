@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "content_digest": "e5c038601681335df2537e2816dcb8d613193d88781aada637bc038961c1a2b1",
+  "file_hashes": {},
+  "provenance": {
+    "compiler_version": "2.2.0",
+    "source_recording_sha256": "241803615513807b7f5236413f1efaaa520f1edc831dbd9e2c86ce9d144f10b9",
+    "compiler_config_sha256": "b12e6c6e0943d452f357b90258b55555593fd95e2fcdb6026330a0222204ed24",
+    "created_at": "2026-10-15T01:01:43.647330+00:00",
+    "policy_name": null,
+    "certified": false,
+    "certification_status": null,
+    "certified_at": null,
+    "expires_at": null,
+    "certification_invalidated_at": null,
+    "certification_invalidation_reason": null,
+    "governed_authorization_template": null
+  },
+  "encrypted": false
+}

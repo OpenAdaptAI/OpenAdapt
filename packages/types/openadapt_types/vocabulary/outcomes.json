@@ -13,14 +13,14 @@
       "repository": "OpenAdaptAI/openadapt-flow",
       "symbol": "openadapt_flow/transaction.py TransactionOutcome",
       "read_at": "origin/main 6e4e4ed0, read 2026-10-09",
-      "values": ["VERIFIED", "HALTED_BEFORE_EFFECT", "RECONCILIATION_REQUIRED", "FAILED_PLATFORM", "CANCELED", "REJECTED_POLICY", "COMPLETED_UNVERIFIED", "ROLLED_BACK"]
+      "values": ["VERIFIED", "HALTED_BEFORE_EFFECT", "RECONCILIATION_REQUIRED", "FAILED_PLATFORM", "CANCELED", "REJECTED_POLICY", "COMPLETED_UNVERIFIED", "ROLLED_BACK", "SAVED_AWAITING_CHECK"]
     },
     {
       "source": "transaction_outcome",
       "repository": "OpenAdaptAI/openadapt-flow",
       "symbol": "openadapt_flow/ir.py RunReport.transaction_outcome (report.json)",
       "read_at": "origin/main 6e4e4ed0, read 2026-10-09",
-      "values": ["VERIFIED", "HALTED_BEFORE_EFFECT", "RECONCILIATION_REQUIRED", "FAILED_PLATFORM", "CANCELED", "REJECTED_POLICY", "COMPLETED_UNVERIFIED", "ROLLED_BACK"]
+      "values": ["VERIFIED", "HALTED_BEFORE_EFFECT", "RECONCILIATION_REQUIRED", "FAILED_PLATFORM", "CANCELED", "REJECTED_POLICY", "COMPLETED_UNVERIFIED", "ROLLED_BACK", "SAVED_AWAITING_CHECK"]
     },
     {
       "source": "transaction_outcome",
@@ -267,6 +267,13 @@
           "safe_to_retry": true,
           "next_action": "Nothing was written. A rule, an approval, or the right-record check blocked this run. Fix that, then run it again.",
           "execution_outcomes": ["HALTED", "FAILED"]
+        },
+        "SAVED_AWAITING_CHECK": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "It saved the entry and is waiting for the later report that confirms it. Don't run it again; it counts as done only when that report does.",
+          "execution_outcomes": ["HALTED"]
         },
         "COMPLETED_UNVERIFIED": {
           "result": "finished_not_checked",

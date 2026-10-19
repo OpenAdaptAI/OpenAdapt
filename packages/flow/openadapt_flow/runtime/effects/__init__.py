@@ -89,6 +89,10 @@ from openadapt_flow.runtime.effects.compensation import (  # noqa: F401
     reconcile_or_escalate,
     record_digest,
 )
+from openadapt_flow.runtime.effects.desktop_readback import (  # noqa: F401
+    DesktopReadbackSpec,
+    DesktopReadbackVerifier,
+)
 from openadapt_flow.runtime.effects.document_arrival import (  # noqa: F401
     DocumentArrivalVerifier,
 )
@@ -205,4 +209,6 @@ __all__ = [
     "ArrivalTransport",
     "SeparateSessionReadbackVerifier",
     "UiReadbackSpec",
+    "DesktopReadbackSpec",
+    "DesktopReadbackVerifier",
 ]

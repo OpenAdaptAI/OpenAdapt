@@ -39,7 +39,7 @@ export function ReplayMonitor({
     <div>
       <div className="monitor-head">
         <span>
-          REPLAY ▸ {workflowName}
+          {workflowName}
         </span>
         <span className="tnum">
           {done}/{total} steps

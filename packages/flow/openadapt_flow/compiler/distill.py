@@ -45,6 +45,25 @@ Typing never takes part in a dead end. The longest qualifying run from the
 earliest start wins, and the scan resumes after it, so the result does not
 depend on anything but the recording.
 
+The correction rule needs the system-of-record snapshots. An agent types a
+value into the wrong field, presses Save, the app refuses (validation), the
+agent types the same value into the right field and presses Save again. The
+refused save is dropped when all of these hold:
+
+* it is a click on a control whose label names a write, the
+  system-of-record snapshot did not change across it, and its URL, title and
+  page count stayed the same;
+* a later click hits the same control (same selector, or same accessible
+  name when there is no selector), nothing was written in between, and at
+  least one step in between types text.
+
+Inside such a correction, a literal value typed before the refused save is
+dropped when the same literal is typed into a different field between the
+two saves, and the record the run finally saved holds that value under the
+second field's name but has no field named like the first. The click that
+focused the first field and an Enter that closed it go with it. When any
+condition fails, nothing is dropped.
+
 "Visible effect" means at least one pixel changed outside a caret-sized
 column (width <= 2 px, height <= 40 px). A blinking caret is not an effect.
 """
@@ -53,6 +72,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import shutil
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -61,7 +81,13 @@ from typing import Any, Optional
 import numpy as np
 from PIL import Image
 
-__all__ = ["DistillReport", "DroppedStep", "distill_recording", "frames_unchanged"]
+__all__ = [
+    "DistillReport",
+    "DroppedStep",
+    "distill_recording",
+    "field_key",
+    "frames_unchanged",
+]
 
 _DROPPABLE_KINDS = {"click", "double_click", "scroll", "key", "hotkey"}
 _ACTING_KEYS = {"enter", "return", "tab", "escape", "esc", "kp_enter"}
@@ -198,6 +224,165 @@ def _same_structure(first: dict[str, Any], last: dict[str, Any]) -> bool:
     return True
 
 
+def field_key(label: Optional[str]) -> str:
+    """A field or record-field name reduced for an exact comparison.
+
+    ``#form_sex``, ``form_sex`` and ``sex`` all give ``sex``.
+    ``form_sex_identified`` gives ``sexidentified``, which never equals
+    ``sex``: names are compared whole, never by substring.
+    """
+
+    text = str(label or "").strip().lower().lstrip("#")
+    text = re.sub(r"^form[_\-\s]+", "", text)
+    return re.sub(r"[^0-9a-z]", "", text)
+
+
+def _sor_unchanged(event: dict[str, Any]) -> bool:
+    """True when the event recorded both snapshots and they are equal."""
+
+    return (
+        "sor_before" in event
+        and "sor_after" in event
+        and event["sor_before"] == event["sor_after"]
+    )
+
+
+def _control(event: dict[str, Any]) -> Optional[tuple[Any, ...]]:
+    structural = event.get("structural") or {}
+    frame = tuple(structural.get("frame_path") or ())
+    if structural.get("selector"):
+        return (frame, "selector", structural["selector"])
+    if structural.get("name"):
+        return (frame, "name", structural["name"])
+    return None
+
+
+def _refused_save(event: dict[str, Any]) -> bool:
+    """A click on a write-labelled control that wrote nothing and went nowhere."""
+
+    from openadapt_flow.risk import is_write_shaped
+
+    if event.get("kind") != "click" or event.get("param") or event.get("secret"):
+        return False
+    if not _sor_unchanged(event) or _structure_changed(event):
+        return False
+    if _control(event) is None:
+        return False
+    return any(is_write_shaped(label) for label in _target_labels(event))
+
+
+def _literal_type(event: dict[str, Any]) -> bool:
+    return (
+        event.get("kind") == "type"
+        and not event.get("param")
+        and not event.get("secret")
+        and bool(event.get("text"))
+        and bool(field_key(event.get("field_label")))
+        and _sor_unchanged(event)
+    )
+
+
+def _saved_rows(events: list[dict[str, Any]]) -> Optional[list[dict[str, Any]]]:
+    """Rows the run added or changed, from its first and last snapshots."""
+
+    if not events:
+        return None
+    first = events[0].get("sor_before")
+    last = events[-1].get("sor_after")
+    if not isinstance(first, list) or not isinstance(last, list):
+        return None
+    return [row for row in last if isinstance(row, dict) and row not in first]
+
+
+def _record_moved(
+    saved: list[dict[str, Any]], value: str, from_field: str, to_field: str
+) -> bool:
+    """True when the saved record holds ``value`` under ``to_field`` and has
+    no field named ``from_field`` at all."""
+
+    columns = {field_key(key) for row in saved for key in row}
+    holders = {
+        field_key(key)
+        for row in saved
+        for key, held in row.items()
+        if held is not None and str(held) == value
+    }
+    return to_field in holders and from_field not in columns
+
+
+def _focuses(event: dict[str, Any], field: str) -> bool:
+    structural = event.get("structural") or {}
+    return event.get("kind") == "click" and field in {
+        field_key(structural.get("selector")),
+        field_key(structural.get("name")),
+    }
+
+
+def _corrections(events: list[dict[str, Any]], dropped: dict[int, str]) -> None:
+    """A save the app refused, corrected, then pressed again (module doc)."""
+
+    saved = _saved_rows(events)
+    if not saved:
+        return
+    for s1, first in enumerate(events):
+        if s1 in dropped or not _refused_save(first):
+            continue
+        s2 = next(
+            (
+                j
+                for j in range(s1 + 1, len(events))
+                if events[j].get("kind") == "click"
+                and _control(events[j]) == _control(first)
+            ),
+            None,
+        )
+        if s2 is None:
+            continue
+        if not all(_sor_unchanged(event) for event in events[:s2]):
+            continue
+        if not any(event.get("kind") == "type" for event in events[s1 + 1 : s2]):
+            continue
+        dropped[s1] = "save_retried"
+        for t2 in range(s1 + 1, s2):
+            later = events[t2]
+            if not _literal_type(later):
+                continue
+            value = str(later["text"])
+            to_field = field_key(later.get("field_label"))
+            for t1 in range(s1):
+                early = events[t1]
+                if t1 in dropped or not _literal_type(early) or early["text"] != value:
+                    continue
+                from_field = field_key(early.get("field_label"))
+                if from_field == to_field:
+                    continue
+                if any(
+                    event.get("kind") == "type"
+                    and field_key(event.get("field_label")) == from_field
+                    for event in events[t1 + 1 :]
+                ):
+                    continue
+                if not _record_moved(saved, value, from_field, to_field):
+                    continue
+                dropped[t1] = "entry_corrected"
+                focus = t1 - 1
+                if (
+                    focus >= 0
+                    and focus not in dropped
+                    and _focuses(events[focus], from_field)
+                    and not _structure_changed(events[focus])
+                ):
+                    dropped[focus] = "entry_corrected"
+                enter = t1 + 1
+                if (
+                    enter < s1
+                    and events[enter].get("kind") == "key"
+                    and str(events[enter].get("key", "")).lower() in ("enter", "return")
+                    and not _structure_changed(events[enter])
+                ):
+                    dropped[enter] = "entry_corrected"
+
+
 def _load(recording_dir: Path) -> list[dict[str, Any]]:
     lines = (recording_dir / "events.jsonl").read_text().splitlines()
     return [json.loads(line) for line in lines if line.strip()]
@@ -266,6 +451,9 @@ def distill_recording(recording_dir: Path | str, out_dir: Path | str) -> Distill
                 dropped[pos] = "selection_replaced"
                 if enter is not None and not _structure_changed(events[enter]):
                     dropped[enter] = "selection_replaced"
+
+    # The correction rule (see the module doc), before the frame rules.
+    _corrections(events, dropped)
 
     # Rule 3: a dead end, a run of steps that ends where it started.
     pos = 0

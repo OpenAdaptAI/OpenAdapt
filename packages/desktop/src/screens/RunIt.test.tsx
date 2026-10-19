@@ -108,13 +108,13 @@ it("stops the list when a save may have gone through", async () => {
   expect(screen.getAllByText("Check the record").length).toBeGreaterThan(0);
 });
 
-it("sends an unchecked task to Check it first", async () => {
+it("sends an unchecked workflow to Check it first", async () => {
   engine("checking");
   const onCheck = vi.fn();
   render(<RunIt workflowId="wf-1" onCheck={onCheck} onNeedsYou={() => {}} onResults={() => {}} />);
 
   await paste("member_id,note\nM-1,Reviewed");
-  expect(await screen.findByText("Check this task first")).toBeTruthy();
+  expect(await screen.findByText("Check this workflow first")).toBeTruthy();
   expect((screen.getByRole("button", { name: "Run 1 item" }) as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Check it" }));
   await waitFor(() => expect(onCheck).toHaveBeenCalledWith("wf-1"));

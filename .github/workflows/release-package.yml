@@ -10,11 +10,10 @@
 #   agent    openadapt-agent  pypi-agent
 #   capture  openadapt-capture  pypi-capture
 #   privacy  openadapt-privacy  pypi-privacy
-#   desktop  openadapt-desktop  pypi-desktop
 #
 # Manual dispatch only: there is no tag or push trigger, so nothing here runs
-# unless someone starts it. desktop-release.yml starts the desktop release this
-# way when a merged packages/desktop version is not on PyPI yet. It refuses any ref other than the current tip of
+# unless someone starts it. openadapt-desktop is not here: desktop-release.yml
+# publishes its wheel, sdist and native installers as one release. It refuses any ref other than the current tip of
 # main, a version that does not match the package's pyproject.toml, and a
 # version that already exists on PyPI. The publish job holds the only
 # id-token permission and runs in the package's environment, so the
@@ -37,7 +36,7 @@ on:
         description: "Package directory under packages/"
         required: true
         type: choice
-        options: [flow, types, agent, capture, privacy, desktop]
+        options: [flow, types, agent, capture, privacy]
       version:
         description: "Version to publish; must equal packages/<package>/pyproject.toml"
         required: true
@@ -97,7 +96,6 @@ jobs:
               "agent": "openadapt-agent",
               "capture": "openadapt-capture",
               "privacy": "openadapt-privacy",
-              "desktop": "openadapt-desktop",
           }[pkg]
           if project["name"] != expected:
               sys.exit(f"packages/{pkg} is {project['name']!r}, expected {expected!r}")
@@ -134,7 +132,6 @@ jobs:
       - name: Build sdist and wheel
         env:
           PACKAGE: ${{ inputs.package }}
-          VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
           python -m pip install 'build==1.6.1' 'twine==7.0.0'
@@ -145,19 +142,6 @@ jobs:
             # that carry only the public source boundary.
             python packages/capture/scripts/check_changelog.py --skip-tags
             python packages/capture/scripts/verify_distribution.py dist/*
-          fi
-          if [ "$PACKAGE" = desktop ]; then
-            # Desktop's release contract: every version source agrees with the
-            # built archives, the native installer version matches the engine,
-            # and the archives carry only the public source boundary.
-            cp -R dist packages/desktop/dist
-            (
-              cd packages/desktop
-              python scripts/check_release_consistency.py --require-dist
-              test "$(python scripts/native_release.py version)" = "$VERSION"
-              python scripts/check_source_boundary.py --require-dist
-              python scripts/verify_build_artifact.py python-distribution
-            )
           fi
           ls -l dist
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -177,7 +161,7 @@ jobs:
     steps:
       - name: Create a repository-scoped release App token
         id: release-app
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
           private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
@@ -247,7 +231,7 @@ jobs:
     steps:
       - name: Create a repository-scoped release App token
         id: release-app
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
           private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}

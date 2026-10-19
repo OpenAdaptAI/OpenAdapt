@@ -202,3 +202,31 @@ were made:
   policy (#1294) and no fault probe (`repair_arm.py`). A repair approval, if
   one is asked, is answered by the script standing in for a person, as in arm
   2. The program is the one arm 3 uses (`launch-4`).
+
+## Amendment 3 (2026-10-19): the agent's claims versus the read-back
+
+A separate experiment, not an arm (`claims.py`, `raw/mockmed/claims/`).
+Claude Sonnet 5.5 computer use works alone on MockMed while the fault server
+breaks the save: `no_persist`, `partial`, `duplicate`, `wrong_record`,
+`stale` (a concurrent clinician's record is lost: collateral loss), and
+`optimistic`. There are 5 items per fault and 5 clean controls (`ok`). Per
+item:
+- The agent's claim is the agent arm's rule (`run.reported_success`). Every
+  claimed success is hand-checked against the ledger (`hand_check.json`).
+- `openadapt-flow verify-run` judges the write from `GET /api/db`, with a
+  baseline captured before the agent starts. The contract is one new
+  `record_written` for p1, Triage, this item's note, with collateral loss
+  forbidden (the default).
+- Ground truth compares the store before and after directly.
+
+A bad save is any item whose ground truth is not `correct`. verify-run
+"catches" a bad save when its outcome is not `verified`. A false alarm is a
+clean save that verify-run does not verify.
+
+Run `2026-10-19-a` was discarded before any figure was read: verify-run
+refused its run record, a config error. Its spend is in the ledger. In run
+`2026-10-19-b`, items 16 to 20 opened the page with `idempotency=demo`, so
+their double send was de-duplicated. They are relabelled `duplicate_keyed`
+(clean saves; see `meta.json`), and items 36 to 40 are the duplicate fault
+without a key. OpenEMR's fixture has no fault injection, so the experiment
+is MockMed only.

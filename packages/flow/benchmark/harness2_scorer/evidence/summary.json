@@ -1,0 +1,53 @@
+{
+  "base": {
+    "runs": 70,
+    "passed": 39,
+    "verified": 37,
+    "wrong_record": 8,
+    "duplicate": 17,
+    "safe_stop": 3,
+    "unscored": 5,
+    "mean_reward": 0.185,
+    "outcomes": {
+      "verified": 37,
+      "reconciliation_required": 17,
+      "wrong_effect": 13,
+      "halted_before_effect": 3
+    },
+    "usd": 0.0437
+  },
+  "harness2": {
+    "runs": 70,
+    "passed": 41,
+    "verified": 27,
+    "wrong_record": 0,
+    "duplicate": 22,
+    "safe_stop": 13,
+    "unscored": 7,
+    "mean_reward": 0.071,
+    "outcomes": {
+      "verified": 27,
+      "wrong_effect": 9,
+      "reconciliation_required": 21,
+      "halted_before_effect": 13
+    },
+    "usd": 0.2722
+  },
+  "harness2_readback": {
+    "runs": 70,
+    "passed": 40,
+    "verified": 27,
+    "wrong_record": 0,
+    "duplicate": 23,
+    "safe_stop": 10,
+    "unscored": 9,
+    "mean_reward": 0.057,
+    "outcomes": {
+      "wrong_effect": 5,
+      "verified": 27,
+      "reconciliation_required": 28,
+      "halted_before_effect": 10
+    },
+    "usd": 0.2834
+  }
+}

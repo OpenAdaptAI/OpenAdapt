@@ -153,6 +153,23 @@ _BY_OUTCOME: dict[TransactionOutcome, PlainResult] = {
         tone="unchecked",
         transaction_outcome=TransactionOutcome.COMPLETED_UNVERIFIED.value,
     ),
+    TransactionOutcome.SAVED_AWAITING_CHECK: PlainResult(
+        key="saved_awaiting_check",
+        label="Saved, waiting for its check",
+        meaning=(
+            "It saved the entry. A later report (an acknowledgment, an export, "
+            "a status page) confirms it, and it isn't counted as done until "
+            "that report does."
+        ),
+        next_step=(
+            "Don't run it again. Settle it when the report arrives "
+            "(openadapt-flow deferred settle); if no report confirms it by the "
+            "deadline, check the record."
+        ),
+        write_status="possible",
+        tone="check",
+        transaction_outcome=TransactionOutcome.SAVED_AWAITING_CHECK.value,
+    ),
 }
 
 
