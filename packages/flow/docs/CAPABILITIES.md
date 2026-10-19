@@ -65,6 +65,10 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   underdetermined. The healthy replay path still makes no model call.
   [`LEARN_FROM_MANY_RUNS.md`](LEARN_FROM_MANY_RUNS.md) covers `induce`,
   `teach-branch` and shadow mining together, with each one's status.
+  With `--probe-on test-copy.yaml`, a refused optional step is instead
+  replayed both ways on a declared test copy and scored by reading the record
+  back; it is certified only when exactly one reading works for every
+  recording ([`PROBE_INDUCTION.md`](PROBE_INDUCTION.md)).
 - **Effect verification against the system of record.** The read-back checks
   our own work: a wrong field, a wrong record, a duplicate submit, or a partial
   save can all look like success on screen. A step

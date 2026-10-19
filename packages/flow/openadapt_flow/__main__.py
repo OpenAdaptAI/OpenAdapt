@@ -1847,8 +1847,19 @@ def _cmd_induce(args: argparse.Namespace) -> int:
         else:
             traces.append(path)
 
-    result = induce_program(traces)
+    if args.probe_on:
+        probed = _induce_with_probes(args, traces)
+        if isinstance(probed, int):
+            return probed
+        result = probed
+    else:
+        result = induce_program(traces)
     print(result.render())
+    if args.report:
+        report_path = Path(args.report)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(result.model_dump_json(indent=2) + "\n")
+        print(f"Induction report written to {report_path}")
 
     if args.held_out and len(traces) >= 2:
         print(validate_held_out(traces).render())
@@ -1874,6 +1885,64 @@ def _cmd_induce(args: argparse.Namespace) -> int:
         f"{len(result.column_decisions)} column decision(s))."
     )
     return 0
+
+
+def _induce_with_probes(args: argparse.Namespace, traces: list) -> Any:
+    """``induce --probe-on``: refuse a non-test target, else probe and induce.
+
+    Returns the InductionResult, or an exit code when the target is refused.
+    """
+    import tempfile
+
+    from openadapt_flow.compiler import probing
+    from openadapt_flow.deployment import load_deployment
+
+    deployment = Path(args.probe_on)
+    try:
+        cfg = load_deployment(deployment)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"PROBE REFUSED: {exc}")
+        return 3
+    reasons = probing.probe_target_refusals(cfg)
+    if reasons:
+        print("PROBE REFUSED: nothing was reset or replayed.")
+        for reason in reasons:
+            print(f"  - {reason}")
+        return 3
+    contract = Path(str(cfg.test_copy.reward_contract)).expanduser()
+    if not contract.is_absolute():
+        contract = deployment.parent / contract
+
+    def _run(work: Path) -> Any:
+        from openadapt_flow.compiler.compile import compile_recording
+        from openadapt_flow.ir import Workflow
+
+        probe_traces = []
+        seen: set[str] = set()
+        for i, (arg, trace) in enumerate(zip(args.recording, traces)):
+            path = Path(arg)
+            label = path.name if path.name not in seen else f"{path.name}#{i}"
+            seen.add(label)
+            if isinstance(trace, Workflow):
+                bundle = path
+            else:
+                bundle = work / "compiled" / f"{i}-{path.name}"
+                trace = compile_recording(path, bundle, name=path.name)
+            probe_traces.append(
+                probing.ProbeTrace(workflow=trace, bundle_dir=bundle, label=label)
+            )
+        target = probing.DeploymentProbeTarget(cfg)
+        print(f"Probing on declared test copy {cfg.name!r} (read-back: {contract})")
+        return probing.probe_and_induce(
+            probe_traces, target=target, reward_contract=contract, work_dir=work
+        )
+
+    if args.probe_work_dir:
+        work = Path(args.probe_work_dir)
+        work.mkdir(parents=True, exist_ok=True)
+        return _run(work)
+    with tempfile.TemporaryDirectory(prefix="induce-probe-") as tmp:
+        return _run(Path(tmp))
 
 
 def _cmd_for_each(args: argparse.Namespace) -> int:
@@ -7429,6 +7498,31 @@ def build_parser() -> argparse.ArgumentParser:
             "Also run leave-one-out held-out validation and print the per-fold "
             "reproduction scores (needs >= 2 traces)"
         ),
+    )
+    p.add_argument(
+        "--probe-on",
+        default=None,
+        metavar="DEPLOYMENT",
+        help=(
+            "Settle refused optional steps by replaying each reading (step "
+            "dropped / step kept when present) in a fresh session on the test "
+            "copy this deployment file declares (test_copy.declared: true), "
+            "scored by its reward contract's read-back. Refuses any target "
+            "not declared a test copy. See docs/PROBE_INDUCTION.md"
+        ),
+    )
+    p.add_argument(
+        "--probe-work-dir",
+        default=None,
+        help=(
+            "Keep probe bundles and run directories here (default: a "
+            "temporary directory, removed afterwards)"
+        ),
+    )
+    p.add_argument(
+        "--report",
+        default=None,
+        help="Write the induction report (JSON, every probe run included) here",
     )
     p.set_defaults(func=_cmd_induce)
 
