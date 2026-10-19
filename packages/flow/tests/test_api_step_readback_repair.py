@@ -130,3 +130,34 @@ def test_a_probe_or_resumed_run_never_sends_the_api_step(tmp_path):
 
     assert actuator.calls == 0
     assert report.results[0].api_fallback == REPAIR_GUI_ONLY
+
+
+def test_a_standard_change_test_record_run_is_gui_only(tmp_path):
+    from openadapt_flow.repair.standard_change import TestRecord, run_preflight
+
+    url, db, stop = fault_serve()
+    url = url.rstrip("/")
+    try:
+        workflow, bundle = _sealed(tmp_path, _span_workflow(), encrypted=False)
+        actuator = ScriptedActuator(url, ActuationStatus.ACTUATED)
+        backend = EnterWritesBackend(url)
+        target = ReplayTarget(
+            lambda _fault: _Session(backend),
+            effect_verifier=RestRecordVerifier(url),
+            policy="permissive",
+            profile="demo",
+            replayer_kwargs={
+                "vision": FakeVision(),
+                "web_form_actuator": actuator,
+                "poll_interval_s": 0.01,
+            },
+        )
+        record = TestRecord("TEST-001", target)
+        result = run_preflight(record, bundle, tmp_path / "preflight", gui_only=True)
+        assert actuator.calls == 0
+        assert result.report.results[0].api_fallback == REPAIR_GUI_ONLY
+        # The pre-flight of the bundle the items will run may use the API step.
+        run_preflight(record, bundle, tmp_path / "preflight-original")
+        assert actuator.calls == 1
+    finally:
+        stop()

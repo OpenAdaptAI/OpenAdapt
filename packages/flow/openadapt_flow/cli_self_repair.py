@@ -203,6 +203,7 @@ class CliTarget:
         run_dir: Path,
         *,
         approval_gate: Any = None,
+        gui_only: bool = False,
     ) -> Any:
         from urllib.parse import urlsplit
 
@@ -263,7 +264,9 @@ class CliTarget:
             deployment_surface=self.backend_cfg.deployment_surface,
             # A probe or the resumed run of a repaired bundle runs the GUI
             # step the person approved (repair.self_repair.keep_gui_for_repair).
-            api_steps_off_reason=None if original else REPAIR_GUI_ONLY,
+            api_steps_off_reason=(
+                None if original and not gui_only else REPAIR_GUI_ONLY
+            ),
         )
 
 

@@ -235,7 +235,9 @@ class SelfRepairTarget(Protocol):
     fault name opens a session that presents that fault (for the fault
     probes). ``execute`` admits ``workflow`` through the run gate and runs it
     with a fresh authorization; it must raise :class:`SelfRepairRefused` when
-    the gate refuses.
+    the gate refuses. ``gui_only`` (and any ``approval_gate``, which only
+    probes and resumed runs pass) runs the GUI steps only
+    (:func:`keep_gui_for_repair`).
     """
 
     def open(self, fault: Optional[str] = None) -> AppSession: ...
@@ -248,6 +250,7 @@ class SelfRepairTarget(Protocol):
         run_dir: Path,
         *,
         approval_gate: Optional[ApprovalGate] = None,
+        gui_only: bool = False,
     ) -> RunReport: ...
 
 
@@ -307,6 +310,7 @@ class ReplayTarget:
         run_dir: Path,
         *,
         approval_gate: Optional[ApprovalGate] = None,
+        gui_only: bool = False,
     ) -> RunReport:
         from openadapt_flow.deployment import DeploymentConfig, PolicySection
         from openadapt_flow.execution_profiles import (
@@ -350,7 +354,7 @@ class ReplayTarget:
             approval_gate=approval_gate,
             **self.replayer_kwargs,
         )
-        if approval_gate is not None:
+        if approval_gate is not None or gui_only:
             keep_gui_for_repair(replayer)
         return replayer.run(
             workflow.model_copy(deep=True),
