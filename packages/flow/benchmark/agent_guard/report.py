@@ -264,7 +264,9 @@ def render(results: dict[str, Any]) -> str:
                 + "\n"
             )
     out.append("## Reproduce\n")
-    out.append("```bash\npython -m benchmark.agent_guard.run --n 2 --pairs 5\npython -m benchmark.agent_guard.report\n```\n")
+    out.append(
+        "```bash\npython -m benchmark.agent_guard.run --n 2 --pairs 5\npython -m benchmark.agent_guard.report\n```\n"
+    )
     return "\n".join(out)
 
 
