@@ -220,6 +220,9 @@ Not yet covered, so the GUI steps run with that reason:
   probes and resumed run use the GUI steps, because the repair and the
   person's approval are about the GUI step ([SELF_REPAIR.md](SELF_REPAIR.md)).
 
+Every feature under every run profile, and the API step with each other
+feature, is in [COMPATIBILITY.md](COMPATIBILITY.md).
+
 ## When it doesn't run
 
 The API step runs only in a plain linear run. It doesn't run, and the GUI

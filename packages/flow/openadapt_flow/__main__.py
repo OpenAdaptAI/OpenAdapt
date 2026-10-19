@@ -3603,12 +3603,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
         # Parallel worklist (docs/THROUGHPUT.md): every item gets its own
         # single-use authorization, bound to that item's one-row worklist and
         # otherwise identical to the run's (same gate, policy, approvals).
-        if dispatch_file or qualification_case is not None:
-            print(
-                "run REFUSED: --workers and --readback-window apply to local "
-                "runs, not a managed dispatch or a qualification case. Nothing "
-                "was executed."
-            )
+        from openadapt_flow.cli_worklist_pool import pool_profile_refusal
+
+        pool_refused = pool_profile_refusal(
+            managed=bool(dispatch_file),
+            qualification_case=qualification_case is not None,
+        )
+        if pool_refused is not None:
+            print(f"run REFUSED: {pool_refused}. Nothing was executed.")
             return 2
         try:
             relation = loop_relation(workflow)
