@@ -697,8 +697,7 @@ class SelfRepair:
             if report.transaction_outcome not in (None, "HALTED_BEFORE_EFFECT"):
                 return self._finish(
                     "not_repairable",
-                    f"the run ended {report.transaction_outcome}; self-repair "
-                    "handles only a halt before any effect",
+                    _not_before_effect(report),
                     evidence,
                     report,
                     run_dir,
@@ -2150,6 +2149,31 @@ def _recorded_crop(workflow: Workflow, bundle_dir: Path, step: Step) -> Optional
         return crop
     path = bundle_dir / step.anchor.template
     return path.read_bytes() if path.is_file() else None
+
+
+def _not_before_effect(report: RunReport) -> str:
+    """Why a halt that may have left an effect is not repaired, and by whom."""
+
+    from openadapt_flow.transaction import steps_requiring_reconciliation
+
+    reason = (
+        f"the run ended {report.transaction_outcome}; self-repair handles only "
+        "a halt before any effect"
+    )
+    unsettled = steps_requiring_reconciliation(report)
+    if not unsettled:
+        return reason
+    reason += f" (effect not settled at {', '.join(unsettled[:8])})"
+    unreviewed = {r.step_id for r in report.results if r.risk_review_required}
+    if unreviewed.issuperset(unsettled):
+        # Only steps nobody classified keep this run from an absence claim.
+        # A person reviews them once; the rule itself stays fail-closed.
+        reason += (
+            "; each acted with a risk nobody reviewed, so a write cannot be "
+            "ruled out. A person can classify them with `openadapt-flow "
+            "qualify set-risk`"
+        )
+    return reason[:1024]
 
 
 def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, str, Any] | str":

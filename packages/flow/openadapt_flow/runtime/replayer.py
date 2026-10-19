@@ -583,6 +583,16 @@ class EgressNotPermitted(RuntimeError):
 #: scroll counts it as ready.
 SCROLL_POSITION_SLACK_FRACTION = 0.25
 
+#: Rungs that show the target itself on screen: what closed-loop scroll
+#: readiness accepts, and all a step accepts after its scroll missed it.
+_DIRECT_TARGET_RUNGS = frozenset({"structural", "template", "template_global", "ocr"})
+
+#: Steps that own the halt when the closed-loop scroll before them never found
+#: their target (see ``Replayer._act_scroll``).
+_SCROLL_HANDOFF_ACTIONS = frozenset(
+    {ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.RIGHT_CLICK}
+)
+
 
 def _scroll_target_positioned(
     recorded: tuple[int, int],
@@ -1066,6 +1076,11 @@ class Replayer:
         self.web_form_actuator = web_form_actuator
         self._web_form_span_active = False
         self._web_form_fallback_reason: Optional[str] = None
+        # (step id, reason) set when a closed-loop scroll used up its budget
+        # because the next step's target never resolved. That step then
+        # resolves on direct deterministic rungs only, and halts on its own
+        # target, so the halt names the control that changed, not the scroll.
+        self._scroll_missed_target: Optional[tuple[str, str]] = None
         # Under an approval mode, the API request a person was asked about
         # (prepared before the gate), keyed by the save step's result, and
         # the operation digest the gate's last-point check re-reads.
@@ -1623,6 +1638,7 @@ class Replayer:
             else uuid.uuid4().hex
         )
         self._field_reads = {}
+        self._scroll_missed_target = None
         self._idempotency_reservation_owned = False
         self._qualification_fault_mutations = []
         self._qualification_fault_public_key = None
@@ -6929,6 +6945,13 @@ class Replayer:
                 failure_category="safety_halt",
             )
             return refused
+        # A closed-loop scroll that never found this step's target hands the
+        # miss to this step (see ``_act_scroll``); only this step consumes it.
+        target_missed: Optional[str] = None
+        missed = self._scroll_missed_target
+        if missed is not None and missed[0] == step.id:
+            self._scroll_missed_target = None
+            target_missed = missed[1]
         router = self._surface_router
         if router is None:
             if step.action is ActionKind.SWITCH_SURFACE:
@@ -6946,6 +6969,7 @@ class Replayer:
                 run_dir=run_dir,
                 new_crops=new_crops,
                 graph_ctx=graph_ctx,
+                target_missed=target_missed,
             )
         refusal = router.entry_refusal(step)
         if refusal is None and step.action is not ActionKind.SWITCH_SURFACE:
@@ -6978,6 +7002,7 @@ class Replayer:
             run_dir=run_dir,
             new_crops=new_crops,
             graph_ctx=graph_ctx,
+            target_missed=target_missed,
         )
         # Receipt: the surface this step ran on. The entry check above proved
         # it is the step's declared surface; the outcome classifier re-checks
@@ -7092,6 +7117,7 @@ class Replayer:
         run_dir: Path,
         new_crops: dict[str, bytes],
         graph_ctx: Optional["_GraphStepContext"] = None,
+        target_missed: Optional[str] = None,
     ) -> StepResult:
         """Execute a single step; never raises (failures land in the result).
 
@@ -7424,8 +7450,8 @@ class Replayer:
                 )
                 result.elapsed_ms = (time.monotonic() - t0) * 1000.0
                 return result
-            resolution, matched_region, error = self._resolve_step(
-                step, before_png, bundle_dir, workflow
+            resolution, matched_region, error = self._resolve_step_target(
+                step, before_png, bundle_dir, workflow, target_missed
             )
             # Retry ladder failures with fresh settled frames until
             # ``step.timeout_s``: a remote app can present a settled-looking
@@ -7445,8 +7471,8 @@ class Replayer:
                     run_dir, evidence_step_id, "before", before_png
                 )
                 last_frame = before_png
-                resolution, matched_region, error = self._resolve_step(
-                    step, before_png, bundle_dir, workflow
+                resolution, matched_region, error = self._resolve_step_target(
+                    step, before_png, bundle_dir, workflow, target_missed
                 )
             if resolution is not None and matched_region is not None:
                 assert step.anchor is not None
@@ -10787,6 +10813,39 @@ class Replayer:
         self._active_delivery_resolution = fresh_resolution
         self._active_delivery_region = fresh_region
         return fresh_resolution, fresh_region, fresh_png, error
+
+    def _resolve_step_target(
+        self,
+        step: Step,
+        screen_png: bytes,
+        bundle_dir: Path,
+        workflow: Workflow,
+        target_missed: Optional[str],
+    ) -> tuple[Optional[Resolution], Optional[Region], Optional[str]]:
+        """Resolve the step's target; stricter after a scroll that missed it.
+
+        ``target_missed`` is set when the preceding closed-loop scroll used
+        up its budget without this target resolving. The step then accepts
+        only the rungs scroll readiness accepts (direct deterministic
+        evidence, no model): a weaker rung would act where the scroll could
+        not find the target. Otherwise the step halts on its own target with
+        the ordinary "Could not resolve target" error and sends no input.
+        """
+        if target_missed is None:
+            return self._resolve_step(step, screen_png, bundle_dir, workflow)
+        resolution, region, error = self._resolve_step(
+            step, screen_png, bundle_dir, workflow, allow_grounder=False
+        )
+        if resolution is not None and resolution.rung in _DIRECT_TARGET_RUNGS:
+            return resolution, region, error
+        if resolution is None and step.anchor is None:
+            return resolution, region, error
+        return (
+            None,
+            None,
+            f"Could not resolve target for step '{step.id}' ({step.intent}): "
+            f"{target_missed}",
+        )
 
     @timed_span("resolve")
     def _resolve_step(
@@ -15875,6 +15934,7 @@ class Replayer:
         bundle_dir: Path,
         params: Mapping[str, RuntimeParamScalar],
         scroll_delta: Optional[tuple[int, int]] = None,
+        misses: Optional[list[str]] = None,
     ) -> bool:
         """Resolve an implicit scroll target and honor its armed identity.
 
@@ -15891,9 +15951,20 @@ class Replayer:
         the preceding scroll a false no-op. Structural resolution stays
         available, model grounding stays disabled, and an identity-armed target
         is ready only when the same pre-action identity gate verifies it.
+
+        When not ready, ``misses`` (if given) gets why: ``unresolved`` (no
+        direct deterministic rung found the target), ``offscreen`` (the page
+        reports the recorded element outside the viewport), ``position`` or
+        ``identity``.
         """
-        if step.anchor is None:
+
+        def miss(reason: str) -> bool:
+            if misses is not None:
+                misses.append(reason)
             return False
+
+        if step.anchor is None:
+            return miss("unresolved")
         structural = (
             self.backend
             if self.use_structural and hasattr(self.backend, "locate_structural")
@@ -15908,8 +15979,9 @@ class Replayer:
             # The page itself shows the unique recorded target exists below
             # (or above) the viewport: not ready, keep scrolling. Stricter
             # than letting a visual rung find a look-alike on screen, and it
-            # skips a full-frame OCR search per probe.
-            return False
+            # skips a full-frame OCR search per probe. The control exists, so
+            # this miss never hands the halt to the click (#1331).
+            return miss("offscreen")
         template_png = self._asset_bytes(
             bundle_dir, step.anchor.template, workflow=workflow
         )
@@ -15929,9 +16001,9 @@ class Replayer:
             # candidate means that the target is not ready yet, so the scroll
             # loop must continue. The later target action runs the full
             # resolver again and still halts on the same ambiguity.
-            return False
+            return miss("unresolved")
         if resolved is None:
-            return False
+            return miss("unresolved")
         resolution, _matched_region = resolved
         # Geometry estimates a point from surrounding landmarks; it does not
         # prove that the target itself is visible. In particular, a fixed
@@ -15940,23 +16012,18 @@ class Replayer:
         # readiness therefore requires direct deterministic target evidence.
         # Model grounding is disabled above and future weaker rungs must opt in
         # deliberately rather than silently acquiring readiness authority.
-        if resolution.rung not in {
-            "structural",
-            "template",
-            "template_global",
-            "ocr",
-        }:
-            return False
+        if resolution.rung not in _DIRECT_TARGET_RUNGS:
+            return miss("unresolved")
         if scroll_delta is not None and not _scroll_target_positioned(
             step.anchor.click_point, resolution.point, scroll_delta, frame_png
         ):
-            return False
+            return miss("position")
         if not step.identity_armed:
             return True
         check = self._verify_identity(
             step, resolution, frame_png, params, workflow, bundle_dir
         )
-        return check.status == "verified"
+        return check.status == "verified" or miss("identity")
 
     def _act_scroll(
         self,
@@ -16037,6 +16104,9 @@ class Replayer:
         # Until a wheel edge stops moving the page, readiness also requires
         # the target at (or past) its demonstrated position.
         position_required = [True]
+        # Why each readiness probe of the next target failed; they decide who
+        # owns a budget-exhaustion halt (see below).
+        misses: list[str] = []
 
         def readiness_holds(frame_png: bytes) -> bool:
             if implicit_target_readiness:
@@ -16048,6 +16118,7 @@ class Replayer:
                     bundle_dir=bundle_dir,
                     params=params,
                     scroll_delta=(dx, dy) if position_required[0] else None,
+                    misses=misses,
                 )
             return self._predicate_holds(
                 stop_pred,
@@ -16128,6 +16199,32 @@ class Replayer:
         )
         if following is not None and following.action is ActionKind.SCROLL:
             # The next SCROLL step continues the loop with its own budget.
+            return None
+        if (
+            graph_ctx is None
+            and implicit_target_readiness
+            and next_step is not None
+            and following is next_step
+            and next_step.action in _SCROLL_HANDOFF_ACTIONS
+            and misses
+            and all(miss == "unresolved" for miss in misses)
+            and not step.risk_review_required
+            and not self._step_is_consequential(step, workflow)
+        ):
+            # The scroll did its bounded work; what failed is the next click's
+            # target, which never resolved on any frame (a relabelled or moved
+            # control). Halting here would name the scroll and hide the
+            # control that changed. Hand the miss to that click instead: it
+            # resolves on direct deterministic rungs only and, when they find
+            # nothing, halts on its own target before any input. A target
+            # that resolved but sat out of position or failed its identity
+            # check still halts here, as before.
+            self._scroll_missed_target = (
+                next_step.id,
+                f"the preceding scroll '{step.id}' used {scrolled:.0f}px of its "
+                f"{budget:.0f}px budget and the target never came into view; "
+                "no deterministic rung found it, so no input was sent",
+            )
             return None
         target_desc = (
             f"the anchor of step '{next_step.id}' ({next_step.intent})"

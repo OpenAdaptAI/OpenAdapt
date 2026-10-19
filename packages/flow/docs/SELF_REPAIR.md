@@ -31,6 +31,19 @@ Module: `openadapt_flow.repair.self_repair`. CLI: `openadapt-flow run
 
    A halt on the record check (an identity mismatch) is never repaired, and
    neither is an item a person declined at the approval gate.
+
+   When a closed-loop scroll runs out of budget because the next click's
+   target never resolved, the halt is on that click, not on the scroll. The
+   click accepts only direct rungs (page structure, template, OCR) and no
+   model, so it sends no input. A target that resolved but was out of place or
+   failed its record check still halts on the scroll.
+
+   A run that ends `RECONCILIATION_REQUIRED` is never repaired. A key press or
+   click whose risk nobody reviewed (`risk_review_required`) may have written,
+   so the run ends that way even when the halt itself sent nothing. The
+   refusal names those steps. A person who reviews them with
+   `openadapt-flow qualify set-risk` makes the same halt
+   `HALTED_BEFORE_EFFECT`, and self-repair can take it.
 2. **Propose.** The repair agent is shown the step's intent, the recorded
    evidence (the target crop, its label, its place), the live screen, the
    halt kind, and for `after` the text of the screen the step expected. It
