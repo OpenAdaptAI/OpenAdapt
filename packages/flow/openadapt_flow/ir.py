@@ -3766,6 +3766,20 @@ class EffectFieldCheck(BaseModel):
     verification_tier: Optional[int] = None
 
 
+class CheckToClickRecheck(BaseModel):
+    """The screen changed between a pixel step's check and its click.
+
+    Records which checked regions changed on the fresh frame taken just
+    before the click, and what the runtime did: re-observed the target and
+    its identity on that frame, or refused the click. No pixels.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    changed: list[Literal["target", "identity", "hover", "frame_size"]]
+    outcome: Literal["reobserved", "aborted"]
+
+
 class StepResult(BaseModel):
     step_id: str
     intent: str
@@ -3891,6 +3905,10 @@ class StepResult(BaseModel):
     identity_reobserved: bool = False
     identity_first_read: Optional[IdentityCheck] = None
     identity_first_frame_png: Optional[str] = None
+    #: Pixel clicks only: each time the target, identity or hover region
+    #: changed between the step's check and its click (see
+    #: ``Replayer._pixel_recheck``). Empty, and omitted, when nothing changed.
+    check_to_click: list[CheckToClickRecheck] = Field(default_factory=list)
     heal: Optional[HealEvent] = None
     error: Optional[str] = None
     before_png: Optional[str] = None  # run-dir-relative paths
@@ -3911,6 +3929,8 @@ class StepResult(BaseModel):
             data.pop("surface", None)
         if isinstance(data, dict) and not self.effect_field_checks:
             data.pop("effect_field_checks", None)
+        if isinstance(data, dict) and not self.check_to_click:
+            data.pop("check_to_click", None)
         return data
 
 

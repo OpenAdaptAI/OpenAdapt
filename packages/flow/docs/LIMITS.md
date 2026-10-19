@@ -234,6 +234,20 @@ and FreeRDP backends can hover. The Aardwolf RDP transport and the native
 Windows, macOS and Linux backends can't move the pointer without a button
 yet, so they take no hover look.
 
+A pixel step is checked on one frame and clicked a moment later. Consequential
+identity-gated clicks were already bound to the exact checked frame. Every
+other pixel click now gets a check-to-click guard (`Replayer._pixel_recheck`):
+right before the click, the runtime takes a fresh frame and compares the
+target region, the identity region and the hover response with the frame the
+step was checked on. If one changed (a dialog opened, the list re-sorted), it
+doesn't click. It re-resolves the target and re-runs the identity check on
+the fresh frame, with no input, and clicks only when the next frame matches
+that one. After two re-observations that still see a change, or when the
+target or its identity can't be confirmed again, it refuses the click. Each
+change is recorded on the step (`StepResult.check_to_click`). A change smaller
+than 4 pixels, or under 24 levels per channel, doesn't count. Structured
+targets are bound by element tokens instead and aren't rechecked.
+
 A consequential click must be tied to a record before Flow delivers it. Inside
 a table row, the row is that record. An icon-only Save that floats beside a
 form (openIMIS's claim Save has no text, accessible name, or tooltip) has no
