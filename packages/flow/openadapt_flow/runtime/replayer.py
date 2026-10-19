@@ -7441,6 +7441,8 @@ class Replayer:
         so a linear run is byte-for-byte unchanged.
         """
         t0 = time.monotonic()
+        # Where a locating or restoring undo keeps its pre-save values.
+        self._undo_prior_run_dir = run_dir
         evidence_step_id = self._new_step_evidence_key(run_dir, step.id)
         result = StepResult(
             step_id=step.id,
@@ -8546,6 +8548,10 @@ class Replayer:
                         f"postcondition ({type(exc).__name__})"
                     )
 
+            if effect_pre_state is not None:
+                self._keep_undo_prior_state(
+                    workflow, step, effect_pre_state, resolved_effects, params
+                )
             # Independent system-of-record verification, AFTER the screen
             # postconditions passed: the screen oracle cannot see a partial
             # save, a phantom optimistic-UI success, a duplicate write, or a
@@ -9125,6 +9131,7 @@ class Replayer:
                 "send the request — run aborted"
             )
             return True
+        self._keep_undo_prior_state(workflow, step, before, effects, params)
         refusal = self._profile_effect_tier_refusal(
             workflow,
             step,
@@ -9613,6 +9620,34 @@ class Replayer:
                     f"preflight ({probe.substrate}: {probe.reason})"
                 )
         return verifier.capture_pre_state()
+
+    def _keep_undo_prior_state(
+        self,
+        workflow: Workflow,
+        step: Step,
+        before: Any,
+        effects: Optional[list["Effect"]],
+        params: Mapping[str, Any],
+    ) -> None:
+        """Keep what a locating or restoring undo of ``step`` needs.
+
+        Reads only the pre-action baseline already captured; never raises and
+        never changes the step's result (``after_stop.keep_prior_state``).
+        """
+        run_dir = getattr(self, "_undo_prior_run_dir", None)
+        if run_dir is None or not workflow.undo_steps or not effects:
+            return
+        try:
+            state = self._effect_pre_state_for(before, effects[0])
+        except Exception:  # noqa: BLE001 - bookkeeping never stops a run
+            return
+        if getattr(state, "reachable", None) is not True:
+            return
+        from openadapt_flow.after_stop import keep_prior_state
+
+        keep_prior_state(
+            workflow, step, list(getattr(state, "records", []) or []), params, run_dir
+        )
 
     @staticmethod
     def _effect_pre_state_for(before: Any, effect: "Effect") -> Any:

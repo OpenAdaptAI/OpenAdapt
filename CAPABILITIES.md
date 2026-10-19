@@ -139,6 +139,7 @@ improvising or retrying when something is off.
 | Checked later: a save confirmed by a later report or acknowledgment, never counted as done until then | In review ([#1297](https://github.com/OpenAdaptAI/OpenAdapt/pull/1297)) | Synthetic | `SAVED_AWAITING_CHECK` |
 | Keep the server's own answer to a save as lower-level evidence on the receipt | In review ([#1298](https://github.com/OpenAdaptAI/OpenAdapt/pull/1298)) | Synthetic | receipts |
 | A ledger of what changed before a stop, a write-ordering lint, and undo steps a person approves | On main ([#1263](https://github.com/OpenAdaptAI/OpenAdapt/pull/1263)) | Synthetic (MockMed) | change ledger |
+| Propose an undo for each saving step (another recording, captured traffic, or the old value), keep it only if a test copy shows every record restored, and offer it after a stop once a person approves it | In review ([#1346](https://github.com/OpenAdaptAI/OpenAdapt/pull/1346)) | Synthetic (MockMed, MockLoan, live browser) | `openadapt-flow undo propose`, `undo accept`; [AFTER_A_STOP.md](packages/flow/docs/AFTER_A_STOP.md) |
 
 ## Approvals
 
@@ -304,7 +305,7 @@ A test fails when a command has no file or this list is out of date.
 - `repair`
 - `teach-branch`
 - `teach`
-- `undo`: The undo steps a person approves after a stop.
+- `undo`: The undo steps a person approves after a stop; `undo propose` finds and verifies them on a test copy, `undo accept` is a person's one-time approval of a proposal.
 
 **Give agents the program:**
 
