@@ -42,11 +42,15 @@ def requested_pool(args: Any, cfg: Any) -> Optional[PoolPolicy]:
 
     workers = getattr(args, "workers", None)
     window = getattr(args, "readback_window", None)
-    section = cfg.worklist
+    section = getattr(cfg, "worklist", None)
     if window is None:
-        window = section.readback_window
+        window = getattr(section, "readback_window", 0) if section is not None else 0
     if workers is None and window == 0:
         return None
+    if section is None:
+        from openadapt_flow.deployment import WorklistSection
+
+        section = WorklistSection()
     return PoolPolicy(
         workers=int(workers or 1),
         readback_window=int(window),
