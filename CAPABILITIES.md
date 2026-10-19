@@ -62,9 +62,10 @@ shipping in the next release; a pull request number means it is being merged.
    review, campaign, canary, rollback), agent-demonstrated fixes for a halted
    run, and fleet drift patches shared with no patient data are released.
    Self-repair, where an agent proposes a fix and Flow probes it up to the save
-   without saving, is on main; fixes of up to three new steps are in review.
-9. **Is a safety layer underneath any agent.** An agent's MCP calls, a guarded
-   save around any agent's write
+   without saving, is on main, and so are fixes of up to three new steps.
+9. **Is a safety layer underneath any agent.** An agent's MCP calls, a task
+   ledger that keeps a long job's rules, items, questions and checked saves on
+   the server ([#1332](https://github.com/OpenAdaptAI/OpenAdapt/pull/1332)), a guarded save around any agent's write
    ([#1258](https://github.com/OpenAdaptAI/OpenAdapt/pull/1258)), a guard for
    an agent you already run that holds its browser's saves with no change to
    the agent ([#1357](https://github.com/OpenAdaptAI/OpenAdapt/pull/1357)), `verify-run`
@@ -192,6 +193,9 @@ improvising or retrying when something is off.
 | Capture a recording's network traffic and compile a clean save into an API step, with the same record check | In review ([#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269)) | Synthetic patients on a local OpenEMR test copy | network capture, `ApiBinding` |
 | Fall back from the API step to page structure when the API is unavailable, before anything is sent | In review ([#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269)) | Synthetic | [#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269) |
 | Approve an API step's exact request under per-item approval: one digest binds the request bytes, the record and the record check, and a changed request is not sent | In review ([#1355](https://github.com/OpenAdaptAI/OpenAdapt/pull/1355)) | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#under-an-approval-mode) |
+| Run an API step in a durable run: checkpoint the span after the save is sent, never resend or redo a save that may have landed, and reconcile it by reading the record back | In review ([#1358](https://github.com/OpenAdaptAI/OpenAdapt/pull/1358)) | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#in-a-durable-run) |
+| Run an admitted API step under a governed run authorization and the Standard or Regulated profile: the authorization names the API step by digest, the person who admits it names the right-record parameter, and the outcome reads `VERIFIED` | In review ([#1361](https://github.com/OpenAdaptAI/OpenAdapt/pull/1361)) | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#under-governance) |
+| Defer an API save's read-back with pipelined read-back, as for a GUI save, and keep self-repair's probes and resumed run on the repaired GUI step | In review ([#1362](https://github.com/OpenAdaptAI/OpenAdapt/pull/1362)) | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#with-parallel-workers-pipelined-read-back-and-self-repair) |
 | Run a worklist on several workers at once, one signed-in session each, each item claimed once, with a stop on any worker stopping all | In review ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic patients on a local OpenEMR test copy | `--workers`, [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md) |
 | Read a save back while the next item runs (pipelined read-back, REST, FHIR, GraphQL or SQL record checks) | In review ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic | `--readback-window`, [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md) |
 | A faster speed profile that keeps every check (one insert per plain text field, shorter page-quiet wait) | In review ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic | `runtime.speed: fast`, [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md) |
@@ -205,6 +209,7 @@ improvising or retrying when something is off.
 | A calling agent demonstrates the fix for a halted run; the result is a repair candidate | Released (2.1.0) | Synthetic | `run --hold-on-halt`, `repair/agent_teach.py` |
 | Font and layout drift halts with a named reason | Released | Synthetic | `runtime/layout_drift.py` |
 | Self-repair: an agent proposes a fix for one halted click, Flow probes it up to the save without saving, a person approves | On main ([#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265)) | Synthetic (MockMed redesign) | `run --self-repair`, [#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265) |
+| A scroll that never finds the next click's target halts on that click, so self-repair can take a relabelled control behind a scroll; the refusal for unreviewed-risk steps names them | In review ([#1337](https://github.com/OpenAdaptAI/OpenAdapt/pull/1337)) | Synthetic; openIMIS drift row checked offline on its recorded frames, not re-run | `runtime/replayer.py`, `qualify set-risk` |
 | Self-repair across several new steps: a bridge of up to three actions for a new required dialog or a control moved into a menu, each new step armed with a record check and probed up to the save, one person approving | In review ([#1325](https://github.com/OpenAdaptAI/OpenAdapt/pull/1325)) | Synthetic (MockMed menu and provider drifts) | `run --self-repair`, [SELF_REPAIR.md](packages/flow/docs/SELF_REPAIR.md) |
 | Keep pixel-path runs working across display scaling and font smoothing changes | On main ([#1286](https://github.com/OpenAdaptAI/OpenAdapt/pull/1286)) | Synthetic (in-process RDP and canvas renderings: 17 of 24 healthy runs across 100–175%, up from 3; 0 wrong saves) | [benchmark/pixel_scale](packages/flow/benchmark/pixel_scale/README.md) |
 | Pre-approved repairs: a signed policy lists low-risk changes that apply without a person, a test-record run before each queue, and one approval for every item halted the same way | On main ([#1294](https://github.com/OpenAdaptAI/OpenAdapt/pull/1294)) | Synthetic | standard changes |
@@ -220,6 +225,7 @@ improvising or retrying when something is off.
 | MCP server: your agent decides what to enter, OpenAdapt makes the entry and checks it | Released | Synthetic sandbox | `openadapt-agent`, [packages/agent](packages/agent/README.md) |
 | Teach over MCP: an agent does a new task once through OpenAdapt; the run is read back, compiled and admitted (a person confirms the record check; the agent admits only under a person-signed policy), and becomes a tool it calls with no model calls. Web, and Windows, macOS, Linux, RDP and Citrix with a person approving each save | In review ([#1335](https://github.com/OpenAdaptAI/OpenAdapt/pull/1335)) | Synthetic (MockMed over MCP, and through the real RDP and Citrix backends) | `openadapt-agent serve --teach`, [packages/agent](packages/agent/README.md#teach-a-new-workflow-from-your-agent) |
 | Guard an agent you already run: attach to its own Chromium over CDP (one added line), hold each save until the record on screen is the one the task names, block it and tell the agent why when it isn't, read the save back; a run that reads back correctly becomes a draft program with a record check from scaffold-verifier, which a person confirms and admits, then a `taught_*` tool with no model calls. `--observe-only` never blocks | In review ([#1357](https://github.com/OpenAdaptAI/OpenAdapt/pull/1357), stacked on [#1335](https://github.com/OpenAdaptAI/OpenAdapt/pull/1335)) | Synthetic (MockMed, scripted Playwright agent, `effect_e2e` faults) | `openadapt-flow guard`, [GUARD_AN_AGENT.md](packages/flow/docs/GUARD_AN_AGENT.md) |
+| Task ledger per job: rules locked when the job opens and enforced on every run, item status set only from OpenAdapt's own results, and yes-or-no questions a person answers on the phone or in Desktop, including when a run stops | In review ([#1332](https://github.com/OpenAdaptAI/OpenAdapt/pull/1332)) | Synthetic (30-item MockMed worklist, scripted agent, no model calls) | MCP tools `open_job`, `get_job`, `add_items`, `record_evidence`, `ask_user`, `get_answer`, `change_constraint`, `close_job`; [Track a long job](packages/agent/README.md#track-a-long-job) |
 | Compile an agent's first verified run from a prompt (`compile-agent`), and a code-as-action authoring agent | In review ([#1277](https://github.com/OpenAdaptAI/OpenAdapt/pull/1277), [#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)); the agent harness behind it runs on every backend, on main ([#1283](https://github.com/OpenAdaptAI/OpenAdapt/pull/1283)) | Synthetic | `compile-agent` |
 | Score harness optimizers (Harness², Meta-Harness) on GUI tasks with the record read-back as the reward, with full trace export | On main ([#1299](https://github.com/OpenAdaptAI/OpenAdapt/pull/1299), [#1300](https://github.com/OpenAdaptAI/OpenAdapt/pull/1300), [#1301](https://github.com/OpenAdaptAI/OpenAdapt/pull/1301)) | Synthetic (scripted proposer) | `integrations/harness2/` |
 | One scoreboard comparing the agent alone with OpenAdapt across tasks (correctness by read-back, cost, time, items per hour) | In progress ([#1303](https://github.com/OpenAdaptAI/OpenAdapt/pull/1303)) | Synthetic and local OpenEMR and openIMIS test copies | `benchmark/scoreboard/` |
@@ -237,21 +243,116 @@ improvising or retrying when something is off.
 
 ## Every command, by capability
 
-Each `openadapt-flow` command, grouped by the capability it serves. A test
-fails when a command is added without being listed here.
+Each `openadapt-flow` command, grouped by the capability it serves. Each
+command has one file under
+[`packages/flow/docs/commands/`](packages/flow/docs/commands/): to add a
+command, add `<group>/<verb>.md` and run `python scripts/build_command_map.py`.
+A test fails when a command has no file or this list is out of date.
 
-- **Record and build a program:** `record`, `demo-record`, `compile`, `induce`, `disambiguate`, `for-each`, `compose`, `process`, `intake`, `visualize`, `pull`, `variants`, `route`, `compile-agent`.
-- **Check and admit:** `lint`, `scaffold-verifier`, `check`, `api`, `bind-record-checks`, `certify`, `qualify`, `propose-qualification`, `known-ids`, `jit`, `admit`, `approver-grant`.
-- **Run and answer:** `run`, `replay`, `resume`, `approve`, `item-approval`, `triage`, `business-decisions`, `explain`, `console`, `deferred`.
-- **Judge any executor's write:** `verify-run`, `serve-reward` (scores agent training episodes by reading the system of record).
-- **Guard an agent you already run:** `guard` (attaches to the agent's own Chromium over CDP, holds each save until the right record is on screen, reads it back, and hands a verified run to the teach dir).
-- **Repair and learn from halts:** `teach`, `teach-branch`, `repair`, `fleet`, `undo` (the undo steps a person approves after a stop).
-- **Give agents the program:** `emit-skill`, `emit-mcp`, `serve-execute`.
-- **Let an agent teach itself a workflow (MCP):** `openadapt-agent serve --teach` adds `teach_start`, `teach_observe`, `teach_act`, `teach_screen`, `teach_finish`, `teach_abort`, `teach_status`, `teach_confirm_checks`, `teach_admit`, and a `taught_<name>` tool per admitted program; a person admits a waiting draft with `compile-agent admit`.
-- **Proof:** `seal`, `local-seal`, `countersign`, `attach-seal`.
-- **Run on premises:** `service`, `no-outbound`.
-- **Share safely with OpenAdapt Cloud:** `sanitize`, `review-sanitized`, `approve-sanitized`, `materialize-approved`, `push`, `validate-hosted`, `report-break`, `report-run`, `connect`, `login`, `connector`.
-- **Try it and measure it:** `demo`, `tutorial`, `bench`, `benchmark`.
+<!-- BEGIN generated by scripts/build_command_map.py -->
+
+**Record and build a program:**
+
+- `compile-agent`
+- `compile`
+- `compose`
+- `demo-record`
+- `disambiguate`
+- `for-each`
+- `induce`
+- `intake`
+- `process`
+- `pull`
+- `record`
+- `route`
+- `variants`
+- `visualize`
+
+**Check and admit:**
+
+- `admit`
+- `api`
+- `approver-grant`
+- `bind-record-checks`
+- `certify`
+- `check`
+- `jit`
+- `known-ids`
+- `lint`
+- `propose-qualification`
+- `qualify`
+- `scaffold-verifier`
+
+**Run and answer:**
+
+- `approve`
+- `business-decisions`
+- `console`
+- `deferred`
+- `explain`
+- `item-approval`
+- `replay`
+- `resume`
+- `run`
+- `triage`
+
+**Judge any executor's write:**
+
+- `serve-reward`: Scores agent training episodes by reading the system of record.
+- `verify-run`
+
+**Repair and learn from halts:**
+
+- `fleet`
+- `repair`
+- `teach-branch`
+- `teach`
+- `undo`: The undo steps a person approves after a stop.
+
+**Give agents the program:**
+
+- `emit-mcp`
+- `emit-skill`
+- `serve-execute`
+
+**Proof:**
+
+- `attach-seal`
+- `countersign`
+- `local-seal`
+- `seal`
+
+**Run on premises:**
+
+- `no-outbound`
+- `service`
+
+**Share safely with OpenAdapt Cloud:**
+
+- `approve-sanitized`
+- `connect`
+- `connector`
+- `login`
+- `materialize-approved`
+- `push`
+- `report-break`
+- `report-run`
+- `review-sanitized`
+- `sanitize`
+- `validate-hosted`
+
+**Try it and measure it:**
+
+- `bench`
+- `benchmark`
+- `demo`
+- `tutorial`
+
+**Guard an agent you already run:**
+
+- `guard`: Attaches to the agent's own Chromium over CDP, holds each save until the right record is on screen, reads it back, and hands a verified run to the teach dir.
+
+<!-- END generated by scripts/build_command_map.py -->
 
 ## Measured results
 

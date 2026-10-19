@@ -88,10 +88,12 @@ class _FormParser(HTMLParser):
             else:
                 value = a.get("value", "on" if kind in ("checkbox", "radio") else "")
             self._form["controls"].setdefault(
-                name, {"kind": kind, "default": value, "options": None}
+                name,
+                {"kind": kind, "default": value, "options": None, "id": a.get("id")},
             )
         elif tag == "select" and name:
             self._select = {
+                "id": a.get("id"),
                 "kind": "select",
                 "default": None,
                 "options": [],
@@ -106,7 +108,12 @@ class _FormParser(HTMLParser):
             }
             self._select["options"].append(self._option)
         elif tag == "textarea" and name:
-            self._textarea = {"kind": "textarea", "default": "", "options": None}
+            self._textarea = {
+                "kind": "textarea",
+                "default": "",
+                "options": None,
+                "id": a.get("id"),
+            }
             self._form["controls"].setdefault(name, self._textarea)
 
     def handle_data(self, data: str) -> None:
@@ -184,6 +191,36 @@ def folded_checks_digest(steps: Any) -> str:
     payload = [[s.id, [p.model_dump(mode="json") for p in s.expect]] for s in steps]
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def web_form_pointer_template(binding: Any, pointer: str) -> Optional[str]:
+    """The template a ``web_form`` save sends at ``/body/<field name>``.
+
+    ``"{param}"`` when that form field sends a run parameter as-is, else None.
+    A form field's name is the page's, not the record's (``form_lname``
+    versus ``lname``), so an identity binding ties the field to the record
+    check by the parameter both use, not by name.
+    """
+
+    spec = getattr(binding, "web_form", None)
+    if spec is None:
+        return None
+    root, _, name = pointer.lstrip("/").partition("/")
+    if root != "body":
+        return None
+    for field in spec.fields:
+        if field.name == name and field.source == "param" and field.param:
+            return "{" + field.param + "}"
+    return None
+
+
+def effect_selector_rows(effect: Any) -> list[Any]:
+    """The selector rows of a record check: ``match``, then ``new_records``.
+
+    A create's record check names the new record in ``new_records``.
+    """
+
+    return [effect.match, *getattr(effect, "new_records", [])]
 
 
 # -- transport -------------------------------------------------------------------
@@ -418,13 +455,16 @@ class WebFormActuator:
         if spec is None:
             return unavailable("the binding has no recorded form")
         try:
-            page = self.transport.get(spec.form_path)
+            # Record identifiers in the URLs are run parameters (fill_url).
+            form_path = fill_url(spec.form_path, params)
+            save_path = fill_url(binding.url_template, params)
+            page = self.transport.get(form_path)
             self.log.append({"stage": "read_form", "status": page.status})
             if page.status != 200:
                 return unavailable(
                     f"the form page returned HTTP {page.status} (signed out?)"
                 )
-            controls = form_controls(page.text, binding.url_template)
+            controls = form_controls(page.text, up.urlsplit(save_path).path)
             if controls is None:
                 return unavailable("the form page no longer has the recorded form")
             if spec.controls and sorted(controls) != sorted(spec.controls):
@@ -466,9 +506,9 @@ class WebFormActuator:
             return unavailable(f"a read before the save failed ({type(exc).__name__})")
         return PreparedSave(
             method=binding.method,
-            path=binding.url_template,
+            path=save_path,
             body=tuple(body),
-            referer=self.transport.base_url + spec.form_path,
+            referer=self.transport.base_url + form_path,
             session_fields=frozenset(
                 f.name for f in spec.fields if f.source == "session"
             ),
@@ -575,6 +615,34 @@ class WebFormActuator:
 
 class _Missing(KeyError):
     pass
+
+
+def fill_url(template: str, params: dict[str, str]) -> str:
+    """Fill a URL template's ``{param}`` placeholders, URL-encoded.
+
+    A path segment is quoted whole (``/`` included); a query value is
+    form-encoded. Anything not a placeholder is kept as recorded. Raises
+    ``KeyError`` for a parameter the run doesn't have.
+    """
+
+    path, sep, query = template.partition("?")
+    path = re.sub(
+        r"\{([A-Za-z_][A-Za-z0-9_]*)\}",
+        lambda m: up.quote(str(_value(params, m.group(1))), safe=""),
+        path,
+    )
+    if not sep:
+        return path
+    pairs = [
+        (k, _fill(v, params)) for k, v in up.parse_qsl(query, keep_blank_values=True)
+    ]
+    return path + "?" + up.urlencode(pairs)
+
+
+def _value(params: dict[str, str], key: str) -> str:
+    if key not in params:
+        raise _Missing(key)
+    return str(params[key])
 
 
 def _fill(template: str, params: dict[str, str]) -> str:

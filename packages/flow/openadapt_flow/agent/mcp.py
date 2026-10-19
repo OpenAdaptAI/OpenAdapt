@@ -224,6 +224,7 @@ def _server_instructions(
     authoring: AuthoringBridge | None,
     bridge: AgentBridge | None = None,
     guard: Any = None,
+    ledger: Any = None,
     teach: Any = None,
 ) -> str:
     text = ""
@@ -291,6 +292,10 @@ def _server_instructions(
             "Once admitted, it is in list_workflows and has a taught_<name> tool "
             "that runs with no model calls."
         )
+    if ledger is not None:
+        from openadapt_flow.agent.ledger import LEDGER_INSTRUCTIONS
+
+        text += " " + LEDGER_INSTRUCTIONS
     return text.strip()
 
 
@@ -298,6 +303,7 @@ def build_server(
     bridge: AgentBridge | None = None,
     authoring: AuthoringBridge | None = None,
     guard: Any = None,
+    ledger: Any = None,
     teach: Any = None,
 ) -> Server:
     """Wrap workflow, authoring, guard and/or teach bridges in an MCP Server
@@ -305,11 +311,16 @@ def build_server(
 
     ``guard`` is a :class:`~openadapt_flow.agent.guard_tools.GuardBridge`;
     ``teach`` is a :class:`~openadapt_flow.agent.teach.TeachBridge`.
+    ``ledger`` is a :class:`~openadapt_flow.agent.ledger.TaskLedger`; it adds
+    the job tools and reads every run and guard result this server returns.
     """
     if bridge is None and authoring is None and guard is None and teach is None:
         raise ValueError(
             "MCP server requires a workflow, authoring or guarded-save bridge"
         )
+    if ledger is None:
+        # ``serve`` attaches the ledger to the bridge it serves.
+        ledger = getattr(bridge, "ledger", None) or getattr(guard, "ledger", None)
 
     def _tool_specs():
         return (
@@ -317,6 +328,7 @@ def build_server(
             *(authoring.list_tool_specs() if authoring is not None else ()),
             *(guard.list_tool_specs() if guard is not None else ()),
             *(teach.list_tool_specs() if teach is not None else ()),
+            *(ledger.list_tool_specs() if ledger is not None else ()),
         )
 
     async def _list_tools(context: Any = None) -> list[types.Tool]:
@@ -403,6 +415,26 @@ def build_server(
 
             def call() -> dict[str, Any]:
                 payload = dict(arguments or {})
+                if ledger is None:
+                    return dispatch(payload)
+                if ledger.handles(name):
+                    return ledger.dispatch(name, payload)
+                # A taught workflow's own tool is a run_workflow call.
+                taught_run = teaching and name in teach.taught
+                if name == "run_workflow" or taught_run:
+                    ledger.check_run(payload)
+                result = dispatch(payload)
+                # Item status comes only from this server's own results. A
+                # ledger failure never hides a run's result from the caller.
+                try:
+                    ledger.observe(
+                        "run_workflow" if taught_run else name, payload, result
+                    )
+                except Exception:
+                    _LOG.exception("could not record a result in the task ledger")
+                return result
+
+            def dispatch(payload: dict[str, Any]) -> dict[str, Any]:
                 if guard is not None and guard.handles(name):
                     return guard.dispatch(name, payload)
                 if teaching:
@@ -471,7 +503,9 @@ def build_server(
         server = Server(
             SERVER_NAME,
             version=__version__,
-            instructions=_server_instructions(authoring, bridge, guard, teach),
+            instructions=_server_instructions(
+                authoring, bridge, guard, ledger=ledger, teach=teach
+            ),
         )
 
         async def _list_v1() -> list[types.Tool]:
@@ -496,7 +530,9 @@ def build_server(
         server = Server(
             SERVER_NAME,
             version=__version__,
-            instructions=_server_instructions(authoring, bridge, guard, teach),
+            instructions=_server_instructions(
+                authoring, bridge, guard, ledger=ledger, teach=teach
+            ),
             on_list_tools=_list_v2,
             on_call_tool=_call_v2,
         )

@@ -645,6 +645,9 @@ class AuthoringSession:
             settle_stable_frames=self._settle_stable_frames,
             settle_timeout_s=self._settle_timeout_s,
             system_of_record_reader=self._system_of_record_reader,
+            # Remote sessions are screen-only: keep each click target's hover
+            # response as identity evidence (runtime.hover_evidence).
+            capture_hover=self._kind in ("rdp", "citrix"),
         )
         self._actors = {}
 
