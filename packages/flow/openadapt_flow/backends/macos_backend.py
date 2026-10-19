@@ -64,6 +64,7 @@ from openadapt_flow.ir import (
     StructuralHandle,
     StructuralLocator,
 )
+from openadapt_flow.runtime.step_timing import timed_span
 
 
 class MacOSBackendError(RemoteDisplayError):
@@ -635,6 +636,7 @@ class MacOSBackend(RemoteDisplayBackend):
             and self._mac_client.exact_window_focused_main(window)
         )
 
+    @timed_span("screenshot")
     def screenshot(self) -> bytes:
         if self._require_capture_trust and not self._mac_client.capture_trusted():
             raise MacOSBackendError(

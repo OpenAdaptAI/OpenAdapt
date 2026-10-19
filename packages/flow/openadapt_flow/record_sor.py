@@ -92,7 +92,9 @@ class SystemOfRecordObserver:
 
 
 #: Kinds that never read the system of record; refused before building.
-_NOT_SYSTEM_OF_RECORD = frozenset({"none", "onscreen", "ui_readback"})
+_NOT_SYSTEM_OF_RECORD = frozenset(
+    {"none", "onscreen", "ui_readback", "desktop_readback", "desktop-readback"}
+)
 
 
 def _not_tier_one(kind: str) -> RecordSorError:

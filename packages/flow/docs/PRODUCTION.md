@@ -99,6 +99,8 @@ map, and it refuses to start while a backend surface is unbound. A program
 (graph) resume of such a bundle is still refused.
 Worklists repeat that bundle over input
 records, and subflows reuse steps inside it. Neither one switches backends.
+`--workers N` enters a worklist's items on N signed-in sessions at once, each
+item still fully checked ([THROUGHPUT.md](THROUGHPUT.md)).
 Browser recording follows popups and new tabs in a browser Flow launched and,
 in attach mode, only pages a followed page opened on the declared origin. macOS and Linux bind one exact app and window, while a
 governed Windows run binds its application identity.

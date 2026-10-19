@@ -3934,6 +3934,12 @@ class StepResult(BaseModel):
     before_png: Optional[str] = None  # run-dir-relative paths
     after_png: Optional[str] = None
     elapsed_ms: float = 0.0
+    #: Where this step's time went, in milliseconds of exclusive time per span
+    #: (settle_before, screenshot, resolve, identity, ocr, actuate,
+    #: settle_after, postcondition, readback, artifact_write, other); see
+    #: ``runtime/step_timing.py``. None when the step was not timed, and then
+    #: omitted from the serialized result.
+    timings: Optional[dict[str, float]] = None
     #: Multi-surface runs only (docs/MULTI_SURFACE.md): the id of the surface
     #: this step ran on (for a SWITCH_SURFACE step, the surface it made
     #: active; for a refused switch, the surface the run stayed on). None on
@@ -3947,6 +3953,8 @@ class StepResult(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.surface is None:
             data.pop("surface", None)
+        if self.timings is None and isinstance(data, dict):
+            data.pop("timings", None)
         if isinstance(data, dict) and not self.effect_field_checks:
             data.pop("effect_field_checks", None)
         return data
