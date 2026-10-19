@@ -367,6 +367,19 @@ it. Tests: `tests/test_agent_teach_branch.py`. A reference number in the
 title makes the one-demonstration path abstain on identity too; the tests use
 payer names.
 
+## Repairs proposed during a run (self-repair)
+
+`openadapt-flow run --self-repair` and
+`openadapt_flow.repair.self_repair.SelfRepair` handle a run that halts before
+any effect because a screen changed. A repair agent proposes a fix, and Flow
+probes it up to the save without saving. A passing probe becomes a candidate
+here: source `model_suggestion`, provenance `repaired_by: self_repair`. The
+campaigns run on the evidence frames, or on live probes when the step's
+identity is read from the DOM. One person's answer records the review and the
+approval. The approved bundle is staged and enters its canary window, and its
+first canary run is the resumed item. The agent can't review or approve the
+candidate. See [SELF_REPAIR.md](SELF_REPAIR.md).
+
 ## Fleet drift patches
 
 A repair a person approved can be contributed to the fleet hub, which

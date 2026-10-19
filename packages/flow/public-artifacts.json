@@ -1933,7 +1933,7 @@
     },
     {
       "path": "openadapt_flow/mockmed/static/app.js",
-      "sha256": "1b6e72c9bb26a0ddacd64efbbc9acc77ad2ffe0bb3e988dde8dd78109ae56031"
+      "sha256": "f39e10b67004dbd4b3cba5e73a9938890cf79afdb37191c2abef7742a3016e72"
     },
     {
       "path": "openadapt_flow/mockmed/static/index.html",
@@ -1941,7 +1941,7 @@
     },
     {
       "path": "openadapt_flow/mockmed/static/styles.css",
-      "sha256": "d84b17e18411f74414d839a0b2ef9f062c5fc470d093dc7925c98a379021d5a5"
+      "sha256": "1c78a27b94655f1742d6555f5197c059df32548591bf065d84f78c2d5c55e020"
     },
     {
       "path": "openadapt_flow/mockmed/static/widgets.html",
