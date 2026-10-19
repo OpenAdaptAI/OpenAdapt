@@ -226,7 +226,7 @@ fails when a command is added without being listed here.
 - **Proof:** `seal`, `local-seal`, `countersign`, `attach-seal`.
 - **Run on premises:** `service`, `no-outbound`.
 - **Share safely with OpenAdapt Cloud:** `sanitize`, `review-sanitized`, `approve-sanitized`, `materialize-approved`, `push`, `validate-hosted`, `report-break`, `report-run`, `connect`, `login`, `connector`.
-- **Try it and measure it:** `demo`, `tutorial`, `bench`, `benchmark`.
+- **Try it and measure it:** `demo`, `tutorial`, `bench`, `benchmark`, `silent-saves` (scores any GUI agent on injected bad saves, from the source checkout).
 
 ## Measured results
 
