@@ -347,7 +347,7 @@ def _selector_values(effect: Effect, params: Mapping[str, Any]) -> dict[str, str
     out: dict[str, str] = {}
     for key, expr in effect.match.items():
         value = expr.resolve(params)
-        if value not in (None, ""):
+        if value is not None and value != "":
             out[key] = value
     return out
 
