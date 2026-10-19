@@ -165,8 +165,9 @@ encode-and-decode test and refuses to start if it fails.
 ## Microphone narration
 
 `capture record --audio` also records your voice and transcribes it on this
-computer. It's off by default. It needs a local transcription backend and
-openadapt-privacy, because the transcript is scrubbed before it is stored:
+computer. It's off by default. It needs the `audio` extra (the microphone
+libraries and faster-whisper) and the `privacy` extra, because the transcript
+is scrubbed before it is stored:
 
 ```bash
 pip install "openadapt-capture[audio,privacy]"
@@ -265,8 +266,14 @@ are qualified are covered in [docs/COMPLIANCE.md](https://github.com/OpenAdaptAI
 
 ## Extras
 
+A plain `pip install openadapt-capture` records and reads captures. The
+extras add optional features:
+
 | Extra | Adds |
 | --- | --- |
+| `audio` | Microphone narration (`capture record --audio`) with on-device transcription |
+| `plot` | The performance plot (`PLOT_PERFORMANCE`), `CaptureStats.plot`, and `plot_comparison` |
+| `profile` | Memory profiling during a recording (`LOG_MEMORY`) |
 | `transcribe-fast` | Local transcription with faster-whisper |
 | `transcribe` | Local transcription with openai-whisper |
 | `privacy` | `openadapt-privacy`, which `capture share send` needs to scrub a recording |

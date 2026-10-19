@@ -9,6 +9,3 @@ contact_links:
   - name: openadapt-viewer issues
     url: https://github.com/OpenAdaptAI/openadapt-viewer/issues
     about: For issues related to HTML visualization
-  - name: openadapt-privacy issues
-    url: https://github.com/OpenAdaptAI/openadapt-privacy/issues
-    about: For issues related to PII/PHI scrubbing

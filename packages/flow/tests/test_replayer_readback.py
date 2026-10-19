@@ -27,6 +27,7 @@ from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectKind,
     ReadbackNav,
+    ReadbackReset,
     ReadbackSpec,
 )
 from openadapt_flow.runtime.replayer import Replayer
@@ -79,7 +80,12 @@ def _readback_workflow() -> Workflow:
         kind=EffectKind.FIELD_EQUALS,
         value=NOTE,
         risk="irreversible",
-        readback=ReadbackSpec(region=REGION, different_path=True, renavigation=RENAV),
+        readback=ReadbackSpec(
+            region=REGION,
+            different_path=True,
+            renavigation=RENAV,
+            reset=ReadbackReset(kind="reopen_window", at=0),
+        ),
     )
     return Workflow(
         name="save",

@@ -4,6 +4,9 @@ OpenAdapt drives six execution surfaces through one governed runtime:
 `web`, `windows`, `macos`, `linux`, `rdp`, and `citrix`. The browser is one
 surface among six, not a privileged default.
 
+[BACKEND_PARITY.md](BACKEND_PARITY.md) lists every command and Python entry
+point against the six surfaces: tested, works, or refused with its reason.
+
 ## Surface selection is explicit in production
 
 - Under `--profile standard` or `--profile regulated`, `record` and `run`

@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from openadapt_flow import offline_seal
-from openadapt_flow.contracts.seal import parse_key_registry
+from openadapt_types.seal import parse_key_registry
 from openadapt_flow.offline_seal import (
     LocalSealError,
     public_key_entry,

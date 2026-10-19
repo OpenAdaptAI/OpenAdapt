@@ -296,11 +296,15 @@ must:
   hosted Windows runner, prove a real first frame, prove the capture database,
   prove bounded memory, and prove a clean shutdown, in three counted trials per
   operating system with no skip;
+- on a hosted Ubuntu runner under Xvfb, with openbox, the AT-SPI bus, and a
+  focused GTK text field, run the same recorder lifecycle plus throughput,
+  capture round-trip, XTEST input reaching the X RECORD listener, and AT-SPI
+  structural evidence, in three counted trials of eight tests each;
 - record the exact display topology each trial ran against; and
 - retain machine-readable test and topology evidence.
 
-`scripts/check_release_ci.py` also requires a successful `test.yml` run and a
-successful live Linux qualification on the same exact commit. `test.yml` runs
+`scripts/check_release_ci.py` also requires a successful `test.yml` run on the
+same exact commit. `test.yml` runs
 the complete headless suite and the byte-for-byte synthetic fixture check.
 
 The release workflow accepts only a successful, complete job set for its exact
@@ -309,10 +313,13 @@ commit. Missing, stale, skipped, partial, or failed evidence blocks publication.
 ## Live qualification
 
 `live-qualification.yml` runs the interactive lanes that need a physical
-desktop. The release gate requires the exact-commit Linux lane. Weekly runs
-maintain the macOS and Windows evidence when those qualified runners exist.
+desktop. They are not part of the release gate. Until 2026-10-17 the release
+required the exact-commit Linux lane, but no qualified Linux desktop was ever
+registered, so no release could pass. The hosted Linux Xvfb lane in
+`production-qualification.yml` replaced it in the gate. Weekly runs exercise
+the physical lanes when qualified runners exist, and fail when none does.
 
-Those lanes prove:
+Those lanes prove, and a release therefore no longer proves:
 
 - that global input injected through the operating system reaches the native
   listeners and is written into the capture;
@@ -321,9 +328,14 @@ Those lanes prove:
 - live window movement and resize under window-scoped capture; and
 - live native structural observation through AX, UIA, and AT-SPI.
 
-No GitHub-hosted runner can prove these. Measured on 2026-08-28, every hosted
-runner reports exactly one monitor, and Xvfb with two screens and `+xinerama`,
-and a RandR `--setmonitor` split, both still report one monitor to MSS.
+No GitHub-hosted runner can prove all of these. Measured on 2026-08-28 and
+again on 2026-10-17, every hosted runner reports exactly one monitor, and Xvfb
+with two screens and `+xinerama`, and a RandR `--setmonitor` split, both still
+report one monitor to MSS. On Linux, XTEST input into Xvfb reaches X RECORD
+and AT-SPI works against a GTK window, so the hosted Linux lane covers input
+delivery and structural observation, but only through a virtual X server with
+injected events: not real input hardware, a real compositor, or real window
+movement and resize.
 Injected input reaches no native hook on any of the three hosted operating
 systems. Each lane needs a host with two monitors, a logged-in desktop
 session, and real input and screen permissions.
