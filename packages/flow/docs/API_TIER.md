@@ -228,6 +228,17 @@ Not yet covered, so the GUI steps run with that reason:
 - **Managed (Cloud) dispatch.** Cloud's run authorization doesn't list API
   steps yet.
 
+## With parallel workers, pipelined read-back and self-repair
+
+- **Workers** (`--workers`): each item has its own run, authorization and
+  approval gate, so the API step runs in each, as in a single run.
+- **Pipelined read-back** (`--readback-window`): an API save's record check
+  is deferred like a GUI save's (same check, later timing). Durable runs
+  verify inline and say why ([THROUGHPUT.md](THROUGHPUT.md)).
+- **Self-repair**: the first run can use the API step. A repaired bundle's
+  probes and resumed run use the GUI steps, because the repair and the
+  person's approval are about the GUI step ([SELF_REPAIR.md](SELF_REPAIR.md)).
+
 ## When it doesn't run
 
 The API step runs only in a plain linear run. It doesn't run, and the GUI
@@ -242,7 +253,8 @@ steps run instead, when:
   save's record check changed since it was proposed or admitted;
 - the save checks the right record on screen and the API step names no
   right-record contract;
-- there's no live browser session (`--backend web` only).
+- there's no live browser session (`--backend web` only);
+- it is a self-repair probe or the resumed run of a repaired bundle.
 
 `Replayer(api_steps=False)` keeps a run on the GUI.
 

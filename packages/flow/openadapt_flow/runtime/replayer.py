@@ -1083,6 +1083,8 @@ class Replayer:
         # ``api_steps=False`` keeps every run on the GUI. ``web_form_actuator``
         # replaces the live-session actuator (tests, other transports).
         self.api_steps = api_steps
+        #: Why ``api_steps`` is off, when a caller says (for the report).
+        self.api_steps_off_reason: Optional[str] = None
         self.web_form_actuator = web_form_actuator
         self._web_form_span_active = False
         self._web_form_fallback_reason: Optional[str] = None
@@ -2483,7 +2485,7 @@ class Replayer:
                 continue
             ids = [s.id for s in workflow.steps[step_index : end_index + 1]]
             if not self.api_steps:
-                reason = "API steps are off for this run"
+                reason = self.api_steps_off_reason or "API steps are off for this run"
             elif getattr(self, "_surface_router", None) is not None:
                 reason = "a run across several windows or tabs uses the GUI steps"
             elif self._approval_gated() and not callable(
@@ -9168,6 +9170,16 @@ class Replayer:
             current_step=overlay_current,
             total_steps=overlay_total,
         )
+        if self._may_pipeline_readback(effect_verifier):
+            # Pipelined read-back (runtime/readback_pipeline.py), as for a GUI
+            # save: the same record check on the side thread. The item's
+            # report stays unsuccessful until it settles with the verdict.
+            self._defer_readback(
+                step, before, result, effects=effects, verifier=effect_verifier
+            )
+            result.ok = True
+            result.error = None
+            return True
         try:
             error = self._verify_effects(
                 step,
