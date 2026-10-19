@@ -102,6 +102,7 @@ def render_mermaid(spec: ProgramGraphSpec) -> str:
     irrev: list[str] = []
     halt: list[str] = []
     id_map: dict[str, str] = {}
+    reasons: list[str] = []
     for i, node in enumerate(spec.nodes):
         nid = f"n{i}"
         id_map[node.id] = nid
@@ -141,6 +142,8 @@ def render_mermaid(spec: ProgramGraphSpec) -> str:
             if node.risk == "irreversible":
                 badges.append("irreversible")
                 irrev.append(nid)
+            if node.guard_reason:
+                badges.append("narrated rule")
             suffix = (
                 f"<br/><small>{_mm(' · '.join(badges), 40)}</small>" if badges else ""
             )
@@ -155,9 +158,12 @@ def render_mermaid(spec: ProgramGraphSpec) -> str:
             if node.outcome in ("halt", "escalate"):
                 halt.append(nid)
         else:
-            lines.append(f'  {nid}{{"{label}"}}')
+            extra = "<br/><small>narrated rule</small>" if node.guard_reason else ""
+            lines.append(f'  {nid}{{"{label}{extra}"}}')
         if node.halts:
             halt.append(nid)
+        if node.guard_reason:
+            reasons.append(f"  %% {nid} because: {_mm(node.guard_reason, 160)}")
     for edge in spec.edges:
         src = id_map.get(edge.source)
         tgt = id_map.get(edge.target)
@@ -168,6 +174,7 @@ def render_mermaid(spec: ProgramGraphSpec) -> str:
             lines.append(f"  {src} -->|{label}| {tgt}")
         else:
             lines.append(f"  {src} --> {tgt}")
+    lines.extend(reasons)
     lines.append("  classDef irreversible stroke:#b4530a,stroke-width:2px;")
     lines.append("  classDef halt stroke:#b21f2d,stroke-width:2px;")
     if irrev:

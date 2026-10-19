@@ -257,6 +257,7 @@ A test fails when a command has no file or this list is out of date.
 - `for-each`
 - `induce`
 - `intake`
+- `narration`
 - `process`
 - `pull`
 - `record`
