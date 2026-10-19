@@ -114,7 +114,7 @@ export function RunIt({
       setMode(approval && approval.ok ? approval : null);
       setWorkflow((Array.isArray(list) ? list : []).find((item) => item.id === workflowId) ?? null);
       if (!details.ok) {
-        setLoadError(details.error || "Desktop couldn't read this task's inputs.");
+        setLoadError(details.error || "Desktop couldn't read this workflow's inputs.");
         setInputs([]);
         return;
       }
@@ -322,13 +322,13 @@ export function RunIt({
       />
 
       {loadError && (
-        <Callout tone="warn" title="Desktop couldn't read this task">
+        <Callout tone="warn" title="Desktop couldn't read this workflow">
           {loadError}
         </Callout>
       )}
       {notReady && (
-        <Callout tone="info" title="Check this task first">
-          OpenAdapt runs a task on real items only after it's checked and
+        <Callout tone="info" title="Check this workflow first">
+          OpenAdapt runs a workflow on real items only after it's checked and
           approved.
           <div className="callout-actions">
             <Button size="sm" variant="primary" onClick={() => onCheck(workflowId)}>
@@ -369,7 +369,7 @@ export function RunIt({
         {source === "paste" && (
           <Field
             label="Paste rows from a spreadsheet or a list"
-            hint="Put the column names in the first row. For a task with one value, one item per line is enough."
+            hint="Put the column names in the first row. For a workflow with one value, one item per line is enough."
             htmlFor={`${idPrefix}-paste`}
           >
             <textarea

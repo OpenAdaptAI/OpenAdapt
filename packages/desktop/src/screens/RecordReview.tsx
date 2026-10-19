@@ -357,16 +357,16 @@ export function RecordReview({
         <div className="titles">
           <h1>
             {firstWorkflow
-              ? "Show OpenAdapt a task"
+              ? "Show OpenAdapt a workflow"
               : "Record with all options"}
           </h1>
         </div>
       </div>
 
       {firstWorkflow && (
-        <Callout title="Pick a task you can check yourself">
-          Do the task on a test record, the way you normally would. A
-          good task takes a minute or two and ends with a save you can see.
+        <Callout title="Pick a workflow you can check yourself">
+          Do the workflow on a test record, the way you normally would. A
+          good workflow takes a minute or two and ends with a save you can see.
           OpenAdapt doesn't send this recording anywhere unless you choose to
           share or upload it.
         </Callout>
@@ -376,13 +376,13 @@ export function RecordReview({
         <CardHead
           title={
             firstWorkflow
-              ? "Which app, and what's the task?"
+              ? "Which app, and what's the workflow?"
               : "What are you recording?"
           }
           sub={
             firstWorkflow
-              ? "Open the app first. Choose its type here, then say in a few words what the task does."
-              : "OpenAdapt will run this task in the same place you record it."
+              ? "Open the app first. Choose its type here, then say in a few words what the workflow does."
+              : "OpenAdapt will run this workflow in the same place you record it."
           }
         />
         <ExecutionTargetForm
@@ -403,10 +403,10 @@ export function RecordReview({
           </Button>
         )}
         <Field
-          label={firstWorkflow ? "What does this task do?" : "Task description"}
+          label={firstWorkflow ? "What does this workflow do?" : "Workflow description"}
           hint={
             firstWorkflow
-              ? "For example: Add a claim status note. This name shows on the task's card."
+              ? "For example: Add a claim status note. This name shows on the workflow's card."
               : "Optional. Saved with the recording. OpenAdapt doesn't send it anywhere unless you choose to upload the recording."
           }
           htmlFor={`${fieldPrefix}-record-task`}
@@ -427,9 +427,9 @@ export function RecordReview({
           />
         </Field>
         {firstWorkflow && (taskMissing || targetIssue) && (
-          <Callout tone="info" title="Finish the task setup">
+          <Callout tone="info" title="Finish the workflow setup">
             {taskMissing
-              ? "Describe the task you want to record."
+              ? "Describe the workflow you want to record."
               : targetIssue}
           </Callout>
         )}
@@ -449,7 +449,7 @@ export function RecordReview({
         )}
         <p className="page-sub">
           OpenAdapt keeps what you enter here out of its logs, and doesn't
-          send it anywhere unless you choose to deploy the task.
+          send it anywhere unless you choose to deploy the workflow.
         </p>
         {target.backend === "web" && runtime && runtime.state !== "ready" && (
           <Callout
@@ -492,7 +492,7 @@ export function RecordReview({
               disabled={busy || (firstWorkflow && !firstWorkflowReady)}
               onClick={start}
             >
-              {firstWorkflow ? "Record this task" : "Start recording"}
+              {firstWorkflow ? "Record this workflow" : "Start recording"}
             </Button>
           ) : (
             <>
@@ -539,16 +539,16 @@ export function RecordReview({
           <CardHead
             title={
               phase === "compiling"
-                ? "Building the task from your recording"
+                ? "Building the workflow from your recording"
                 : phase === "failed"
-                  ? "OpenAdapt couldn't build the task"
+                  ? "OpenAdapt couldn't build the workflow"
                   : "Your recording is saved"
             }
             sub={`capture ${lastCapture}`}
           />
           <div role="status" aria-live="polite">
             {phase === "compiling" && (
-              <Callout tone="info" title="Building the task">
+              <Callout tone="info" title="Building the workflow">
                 OpenAdapt is turning your recording into steps it can repeat
                 exactly. Your recording stays as it was.
               </Callout>
@@ -576,7 +576,7 @@ export function RecordReview({
                 ? "Building…"
                 : phase === "failed"
                   ? "Try building again"
-                  : "Build the task"}
+                  : "Build the workflow"}
             </Button>
             <Button
               variant="ghost"

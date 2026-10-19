@@ -334,7 +334,12 @@ app and one that drops the save, which return results without opening a
 browser.
 
 `openadapt-flow emit-mcp bundle --out server.py` writes a standalone MCP
-server for one bundle. It replays without the record check.
+server for one bundle. It replays without the record check. A web bundle's
+tool takes the app's URL. A bundle recorded on Windows, macOS, Linux, RDP or
+Citrix takes none: start the server with `python server.py --config
+deploy.yaml`. Each call then runs `openadapt-flow run bundle --config
+deploy.yaml`, the governed path, so the file's app, record check, policy and
+approvals all apply.
 
 ### From Claude Code
 

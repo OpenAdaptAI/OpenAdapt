@@ -1219,6 +1219,11 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
         or getattr(args, "browser_page_url", None)
     )
     if backend in ("windows", "macos", "linux", "rdp", "citrix"):
+        if getattr(args, "capture_network", False):
+            raise SystemExit(
+                "record: --capture-network applies only to --backend web; a "
+                "desktop, RDP or Citrix session has no page requests to capture"
+            )
         if browser_attach_requested:
             raise SystemExit(
                 "record: --browser-cdp-endpoint and --browser-page-url apply "
@@ -1276,6 +1281,7 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
             browser_page_url=getattr(args, "browser_page_url", None),
             stop_when=_record_until_stop(args),
             surface="web",
+            capture_network=bool(getattr(args, "capture_network", False)),
         )
     except BrowserAttachError as exc:
         raise SystemExit(f"record: browser attachment refused: {exc}") from exc
@@ -3631,6 +3637,9 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     # the bundle's real substrate rather than always the browser. The default
     # (web / no flag) reproduces the historical Playwright path below exactly.
     backend_cfg = _resolve_backend_config(args, cfg, workflow)
+    refused = _enforce_surface_binding(args, workflow, backend_cfg, operation="resume")
+    if refused is not None:
+        return refused
     if _refuse_missing_citrix_readiness(backend_cfg, operation="Resume"):
         return 2
 
@@ -3671,6 +3680,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             replayer,
             key=ckpt_key,
             execution_target_kind=_report_backend_kind(backend_cfg.kind),
+            surface_override=bool(getattr(args, "_surface_override", False)),
         )
 
     try:
@@ -4072,9 +4082,25 @@ def _cmd_bench(args: argparse.Namespace) -> int:
     from contextlib import contextmanager
 
     from openadapt_flow.bench import run_bench
+    from openadapt_flow.emit.skill import bundle_surface
+    from openadapt_flow.ir import Workflow
     from openadapt_flow.mockmed.server import serve
     from openadapt_flow.report import render_bench_report
 
+    try:
+        surface = bundle_surface(Workflow.load(Path(args.bundle)))
+    except Exception:  # noqa: BLE001 - run_bench reports load errors itself
+        surface = None
+    if surface not in (None, "web"):
+        from openadapt_flow.cli_hints import command
+
+        print(
+            "BENCH REFUSED: bench replays a bundle against the bundled MockMed "
+            f"web app, and this bundle was recorded on {surface!r}. Measure it "
+            "on its own app with repeated "
+            f"`{command('run BUNDLE --config deploy.yaml')}`. Nothing was executed."
+        )
+        return 2
     url, stop = serve(port=0)
     target_url = _with_drift(url, args.drift)
 
@@ -7364,6 +7390,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--capture-network",
+        action="store_true",
+        help=(
+            "Web only: also keep the page's requests (network.jsonl; cookies, "
+            "passwords and session tokens withheld). compile then proposes an "
+            "API step for a save it can repeat as one request; a person admits "
+            "it with 'api admit'"
+        ),
+    )
+    p.add_argument(
         "--with-check",
         action="store_true",
         help=(
@@ -10520,10 +10556,12 @@ def build_parser() -> argparse.ArgumentParser:
     pr.set_defaults(func=_cmd_connector)
 
     from openadapt_flow.cli_admit import register_admit_parser
+    from openadapt_flow.cli_api import register_api_parser
     from openadapt_flow.cli_check import register_check_parser
 
     register_admit_parser(sub)
     register_check_parser(sub)
+    register_api_parser(sub)
 
     from openadapt_flow.cli_undo import register as _register_undo
 
