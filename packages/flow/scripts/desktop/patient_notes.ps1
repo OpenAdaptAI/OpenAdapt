@@ -131,6 +131,17 @@ $noteLabel.Location = New-Object System.Drawing.Point(20, 295)
 $noteLabel.Size = New-Object System.Drawing.Size(200, 22)
 $form.Controls.Add($noteLabel)
 
+# Record header: names the open patient, the way a chart header does. The
+# separate-session read-back (desktop_readback) confirms identity here before
+# it reads the note. No AccessibleName: UI Automation then reports the label's
+# text as its Name, and Control.Name as its AutomationId.
+$patientHeader = New-Object System.Windows.Forms.Label
+$patientHeader.Name = "patientHeader"
+$patientHeader.Text = ""
+$patientHeader.Location = New-Object System.Drawing.Point(230, 295)
+$patientHeader.Size = New-Object System.Drawing.Size(380, 22)
+$form.Controls.Add($patientHeader)
+
 $noteBox = New-Object System.Windows.Forms.TextBox
 $noteBox.Name = "noteBox"
 $noteBox.AccessibleName = "noteBox"
@@ -185,7 +196,10 @@ $grid.Add_SelectionChanged({
         if ($id) {
             $j = Invoke-Db -DbArgs @("get", "$id")
             $p = $j | ConvertFrom-Json
-            if ($p) { $noteBox.Text = $p.note }
+            if ($p) {
+                $noteBox.Text = $p.note
+                $patientHeader.Text = "Patient: " + $p.first + " " + $p.last + " (" + $p.dob + ")"
+            }
         }
     }
 })

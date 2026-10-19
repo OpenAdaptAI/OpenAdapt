@@ -696,6 +696,7 @@ def resume(
     worklists: Optional[dict[str, list[dict[str, str]]]] = None,
     save_healed_to: Optional[Path | str] = None,
     execution_target_kind: Optional[ExecutionTargetKind] = None,
+    surface_override: bool = False,
     now: Optional[datetime] = None,
     key: Optional[str] = None,
 ) -> RunReport:
@@ -743,6 +744,7 @@ def resume(
                 worklists=worklists,
                 save_healed_to=save_healed_to,
                 execution_target_kind=execution_target_kind,
+                surface_override=surface_override,
                 now=now,
                 key=resolved_key,
             )
@@ -760,6 +762,7 @@ def _resume_under_lease(
     worklists: Optional[dict[str, list[dict[str, str]]]] = None,
     save_healed_to: Optional[Path | str] = None,
     execution_target_kind: Optional[ExecutionTargetKind] = None,
+    surface_override: bool = False,
     now: Optional[datetime] = None,
     key: Optional[str] = None,
 ) -> RunReport:
@@ -999,6 +1002,7 @@ def _resume_under_lease(
             live_bundle_version=live_bundle_version,
             run_id=(manifest.run_id if manifest is not None else None),
             execution_target_kind=execution_target_kind,
+            surface_override=surface_override,
             manifest=manifest,
             pending=pending,
             approval=approved,
@@ -1091,6 +1095,7 @@ def _resume_under_lease(
         run_id=effective_run_id,
         idempotency_key=(manifest.idempotency_key if manifest is not None else None),
         execution_target_kind=execution_target_kind,
+        surface_override=surface_override,
         prior_screenshots_may_leave_box=(
             manifest.screenshots_may_leave_box if manifest is not None else False
         ),
@@ -1115,6 +1120,7 @@ def _resume_program(
     live_bundle_version: str,
     run_id: str,
     execution_target_kind: Optional[ExecutionTargetKind],
+    surface_override: bool,
     manifest: RunManifest,
     pending: PendingEscalation,
     approval: ApprovalRecord,
@@ -1237,6 +1243,7 @@ def _resume_program(
         run_id=effective_run_id,
         idempotency_key=manifest.idempotency_key,
         execution_target_kind=execution_target_kind,
+        surface_override=surface_override,
         prior_screenshots_may_leave_box=(
             manifest.screenshots_may_leave_box if manifest is not None else False
         ),

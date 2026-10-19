@@ -61,7 +61,7 @@ export function Login({
       <Card className="auth-card">
         <CardHead
           title="Connect to OpenAdapt Cloud"
-          sub="Sign in to share tasks and run history with your team. You can keep using OpenAdapt on this computer without an account."
+          sub="Sign in to share workflows and run history with your team. You can keep using OpenAdapt on this computer without an account."
         />
 
         <Button

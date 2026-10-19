@@ -97,8 +97,10 @@ def verify_config_sha256(verifier_identity: str, effects: list[Any]) -> str:
 
 
 #: Verifier substrates that read through the application's UI. A separate
-#: signed-in UI session (``ui_readback``) is still the UI.
-UI_SUBSTRATES = frozenset({"ui-readback", "ui_readback", "onscreen"})
+#: signed-in UI session (``ui_readback``, ``desktop_readback``) is still the UI.
+UI_SUBSTRATES = frozenset(
+    {"ui-readback", "ui_readback", "desktop-readback", "desktop_readback", "onscreen"}
+)
 
 
 def readback_tier(

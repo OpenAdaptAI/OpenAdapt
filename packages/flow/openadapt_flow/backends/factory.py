@@ -51,6 +51,7 @@ def build_backend(
     window_client: Optional["WindowClient"] = None,
     macos_client: Optional["MacOSClient"] = None,
     linux_client: Optional["LinuxClient"] = None,
+    rdp_connect: bool = True,
 ) -> "Backend":
     """Construct the backend selected by ``cfg.kind``.
 
@@ -68,6 +69,8 @@ def build_backend(
             client is used (macOS Quartz or Win32). Primarily a test seam.
         macos_client: An injected native macOS client for ``kind: macos``.
         linux_client: An injected native Linux/AT-SPI client for ``kind: linux``.
+        rdp_connect: False when ``rdp_transport`` is already connected (a
+            :class:`~openadapt_flow.backends.xfreerdp.SessionPool` slot).
 
     Returns:
         A live backend implementing the :class:`Backend` protocol.
@@ -147,6 +150,7 @@ def build_backend(
             rdp_transport=rdp_transport,
             window_client=window_client,
             citrix=(cfg.kind or "").strip().lower() == "citrix",
+            connect=rdp_connect,
         )
 
     raise ValueError(
@@ -161,6 +165,7 @@ def _build_rdp_backend(
     rdp_transport: Optional["RDPTransport"],
     window_client: Optional["WindowClient"],
     citrix: bool = False,
+    connect: bool = True,
 ) -> "Backend":
     """Build the ``rdp`` backend: network RDP (FreeRDP) or local client window.
 
@@ -220,6 +225,7 @@ def _build_rdp_backend(
             )
         return FreeRDPBackend(
             transport,
+            connect=connect or rdp_transport is None,
             max_frame_age_s=cfg.rdp_max_frame_age_s,
             readiness_probe=readiness_probe,
             application_marker=cfg.rdp_application_marker,

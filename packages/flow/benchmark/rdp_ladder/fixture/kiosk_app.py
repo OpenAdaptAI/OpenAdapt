@@ -255,6 +255,84 @@ def main() -> None:
             fg="#1a7f37",
         )
 
+    # -- look-up panel ----------------------------------------------------------
+    # How a person checks a booking: type the request ID, press Find, read the
+    # appointment. The separate-session read-back (desktop_readback) uses this
+    # panel from its own RDP session. It only reads the database.
+    tk.Label(
+        root,
+        text="Find appointment",
+        font=("DejaVu Sans", 16, "bold"),
+        bg=BG,
+        fg=FG,
+    ).place(x=50, y=330)
+    lookup = tk.Entry(
+        root,
+        font=("DejaVu Sans", 18),
+        width=17,
+        bg=ROW_BG,
+        fg=FG,
+        insertbackground=FG,
+        insertofftime=0,
+    )
+    lookup.place(x=50, y=370)
+    lookup.bind(
+        "<Button-1>",
+        lambda _event: (root.focus_force(), lookup.focus_set()),
+    )
+    found_lbl = tk.Label(
+        root,
+        text="",
+        font=("DejaVu Sans", 16),
+        justify="left",
+        anchor="nw",
+        bg=BG,
+        fg=FG,
+    )
+    found_lbl.place(x=50, y=430, width=440, height=230)
+
+    def find(_event=None):
+        request = lookup.get().strip()
+        if not request:
+            found_lbl.config(text="")
+            return
+        connection = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+        try:
+            row = connection.execute(
+                """
+                SELECT request_id, patient_name, patient_mrn, appointment_slot,
+                       visit_type, status
+                FROM appointments WHERE request_id = ?
+                """,
+                (request,),
+            ).fetchone()
+        finally:
+            connection.close()
+        if row is None:
+            found_lbl.config(text="No appointment found")
+            return
+        found_lbl.config(
+            text=(
+                f"Request ID: {row[0]}\n"
+                f"Patient: {row[1]}\n"
+                f"MRN: {row[2]}\n"
+                f"Slot: {row[3]}\n"
+                f"Visit type: {row[4]}\n"
+                f"Status: {row[5]}"
+            )
+        )
+
+    lookup.bind("<Return>", find)
+    tk.Button(
+        root,
+        text="Find",
+        font=("DejaVu Sans", 16, "bold"),
+        width=5,
+        bg=ROW_BG,
+        fg=FG,
+        command=find,
+    ).place(x=380, y=366)
+
     tk.Button(
         root,
         text="Save appointment",
@@ -288,8 +366,9 @@ def main() -> None:
     def _apply_reset() -> None:
         state["active"] = None
         state["saved"] = False
-        for field in (slot, visit_type, request_id):
+        for field in (slot, visit_type, request_id, lookup):
             field.delete(0, tk.END)
+        found_lbl.config(text="")
         active_lbl.config(text="Active record: (none)")
         status_lbl.config(text="", fg="#1a7f37")
         for b in row_btns:
