@@ -203,12 +203,12 @@ export function Tasks({
   return (
     <div className="content simple">
       <PageHead
-        title="Tasks"
-        sub="What OpenAdapt does for you, and what each task needs next."
+        title="Workflows"
+        sub="What OpenAdapt does for you, and what each workflow needs next."
         action={
           tasks.length > 0 ? (
             <Button variant="primary" onClick={actions.onShow}>
-              Show OpenAdapt a new task
+              Record a workflow
             </Button>
           ) : undefined
         }
@@ -218,16 +218,16 @@ export function Tasks({
         <p className="simple-sub">Loading…</p>
       ) : tasks.length === 0 ? (
         <section className="first-task" aria-label="Get started">
-          <h2>Hand off your first task</h2>
+          <h2>Hand off your first workflow</h2>
           <p>
-            Show OpenAdapt a task in the app where you already do it.
+            Show OpenAdapt a workflow in the app where you already do it.
             OpenAdapt repeats it, checks each saved record, and stops to ask you
             when something doesn't match.
           </p>
           <div className="choice-row">
             <ChoiceButton
               tone="primary"
-              title="Show OpenAdapt your task"
+              title="Show OpenAdapt your workflow"
               sub="Do it once on test data while OpenAdapt watches."
               onClick={actions.onShow}
             />

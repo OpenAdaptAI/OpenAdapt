@@ -79,7 +79,7 @@ it("shows automatic compile progress and retries a retained recording", async ()
   act(() => {
     eventMocks.handlers.get(EVT.RECORDING_STOPPED)?.({ capture_id: "cap-1" });
   });
-  expect(await screen.findByText("Building the task from your recording")).toBeTruthy();
+  expect(await screen.findByText("Building the workflow from your recording")).toBeTruthy();
   expect(screen.getByText(/recording stays as it was/i)).toBeTruthy();
 
   act(() => {
@@ -90,7 +90,7 @@ it("shows automatic compile progress and retries a retained recording", async ()
       recording_retained: true,
     });
   });
-  expect(await screen.findByText("OpenAdapt couldn't build the task")).toBeTruthy();
+  expect(await screen.findByText("OpenAdapt couldn't build the workflow")).toBeTruthy();
   expect(screen.getByText(/raw recording was retained/i)).toBeTruthy();
 
   vi.mocked(engineInvoke).mockResolvedValue({
@@ -164,7 +164,7 @@ it("opens one workflow when the event and command return report the same compile
   });
 });
 
-it("requires a real target and a named task for the first workflow", async () => {
+it("requires a real target and a named workflow for the first workflow", async () => {
   vi.mocked(engineTry).mockImplementation(async (command) => {
     if (command === CMD.GET_CAPABILITIES) return capabilityReport();
     return {
@@ -183,12 +183,12 @@ it("requires a real target and a named task for the first workflow", async () =>
   render(<RecordReview firstWorkflow onCompiled={() => {}} />);
 
   const recordButton = screen.getByRole("button", {
-    name: "Record this task",
+    name: "Record this workflow",
   }) as HTMLButtonElement;
   expect(recordButton.disabled).toBe(true);
-  expect(screen.getByText("Describe the task you want to record.")).toBeTruthy();
+  expect(screen.getByText("Describe the workflow you want to record.")).toBeTruthy();
 
-  fireEvent.change(screen.getByLabelText("What does this task do?"), {
+  fireEvent.change(screen.getByLabelText("What does this workflow do?"), {
     target: { value: "Save one test value" },
   });
   expect(
@@ -230,7 +230,7 @@ it("keeps an invalid or unavailable target out of recording and rechecks it", as
   });
 
   render(<RecordReview firstWorkflow onCompiled={() => {}} />);
-  fireEvent.change(screen.getByLabelText("What does this task do?"), {
+  fireEvent.change(screen.getByLabelText("What does this workflow do?"), {
     target: { value: "Read one test record" },
   });
   fireEvent.change(screen.getByLabelText("Page URL"), {
@@ -245,14 +245,14 @@ it("keeps an invalid or unavailable target out of recording and rechecks it", as
     (await screen.findAllByText(/Browser capture permission is required/)).length,
   ).toBeGreaterThan(0);
   expect(
-    (screen.getByRole("button", { name: "Record this task" }) as HTMLButtonElement)
+    (screen.getByRole("button", { name: "Record this workflow" }) as HTMLButtonElement)
       .disabled,
   ).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Check again" }));
   await waitFor(() =>
     expect(
       (screen.getByRole("button", {
-        name: "Record this task",
+        name: "Record this workflow",
       }) as HTMLButtonElement).disabled,
     ).toBe(false),
   );
@@ -277,7 +277,7 @@ it("shows a recording failure and lets the user retry", async () => {
   });
 
   render(<RecordReview firstWorkflow onCompiled={() => {}} />);
-  fireEvent.change(screen.getByLabelText("What does this task do?"), {
+  fireEvent.change(screen.getByLabelText("What does this workflow do?"), {
     target: { value: "Read one test record" },
   });
   fireEvent.change(screen.getByLabelText("Page URL"), {
@@ -286,7 +286,7 @@ it("shows a recording failure and lets the user retry", async () => {
   await waitFor(() =>
     expect(
       (screen.getByRole("button", {
-        name: "Record this task",
+        name: "Record this workflow",
       }) as HTMLButtonElement).disabled,
     ).toBe(false),
   );
@@ -323,7 +323,7 @@ it("never tells a first-time user to leave the page URL blank", async () => {
   });
 
   render(<RecordReview firstWorkflow onCompiled={() => {}} />);
-  fireEvent.change(screen.getByLabelText("What does this task do?"), {
+  fireEvent.change(screen.getByLabelText("What does this workflow do?"), {
     target: { value: "Save one test value" },
   });
 
@@ -334,7 +334,7 @@ it("never tells a first-time user to leave the page URL blank", async () => {
     screen.getByText("Enter the page URL for the app you want to record."),
   ).toBeTruthy();
   const recordButton = screen.getByRole("button", {
-    name: "Record this task",
+    name: "Record this workflow",
   }) as HTMLButtonElement;
   expect(recordButton.disabled).toBe(true);
 });
