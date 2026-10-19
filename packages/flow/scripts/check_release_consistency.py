@@ -608,6 +608,10 @@ def _walk_public_source_files(root: Path) -> dict[str, Path]:
                     f"public source tree contains a symlink/special file: {relative}"
                 )
             files[relative] = candidate
+    # Git-ignored files are local state, not source: the package build leaves
+    # them out, so the inventory writer and its validator both skip them.
+    for path in _git_ignored_paths(root):
+        files.pop(path, None)
     return files
 
 
@@ -622,7 +626,16 @@ def _in_git_checkout(root: Path) -> bool:
         check=False,
         capture_output=True,
     )
-    return result.returncode == 0 and result.stdout.strip() == b"true"
+    if result.returncode != 0 or result.stdout.strip() != b"true":
+        return False
+    # A directory git itself ignores (for example a pytest temp dir placed
+    # inside the checkout) is scratch space, not the package's source tree.
+    ignored = subprocess.run(
+        ["git", "-C", str(root), "check-ignore", "-q", "."],
+        check=False,
+        capture_output=True,
+    )
+    return ignored.returncode != 0
 
 
 def _git_ignored_paths(root: Path) -> set[str]:
@@ -656,8 +669,6 @@ def _git_ignored_paths(root: Path) -> set[str]:
 def build_public_artifact_inventory(root: Path = ROOT) -> dict[str, object]:
     """Build the deterministic inventory document for explicit human review."""
     files = _walk_public_source_files(root)
-    for path in _git_ignored_paths(root):
-        files.pop(path, None)
     artifacts = [
         {"path": path, "sha256": _sha256_file(files[path])}
         for path in sorted(files)
