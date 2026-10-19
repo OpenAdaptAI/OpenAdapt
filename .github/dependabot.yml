@@ -78,6 +78,8 @@ updates:
         update-types: ["minor", "patch"]
     ignore:
       # The Rust side of the Tauri pairs above; bumped with them, by hand.
+      # Build the Linux installer before taking a plugin bump: for example,
+      # tauri-plugin-deep-link 2.6.2 does not compile against rust-ini 0.21.3.
       - dependency-name: "tauri"
       - dependency-name: "tauri-*"
   - package-ecosystem: "github-actions"
