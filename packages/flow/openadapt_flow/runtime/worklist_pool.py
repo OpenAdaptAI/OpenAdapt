@@ -864,6 +864,7 @@ def _child_main(conn: Any, factory: str, kwargs: dict[str, Any]) -> None:
                     # that is already done settles only after this send.
                     send(("ok", out.state, out.detail, token))
                     if out.pending_readback is not None:
+                        assert token is not None
 
                         def _settled(fut: Future, token: str = token) -> None:
                             try:
@@ -930,10 +931,10 @@ class ProcessWorker:
             if msg[0] == "settled":
                 _, token, state, detail, error = msg
                 with self._lock:
-                    fut = self._pending.pop(token, None)
-                    if fut is None:
+                    if token not in self._pending:
                         self._early[token] = (state, detail, error)
                         continue
+                    fut = self._pending.pop(token)
                 _resolve(fut, state, detail, error)
             elif msg[0] == "ok" and len(msg) == 4 and msg[3] is not None:
                 # A run reply with a pending read-back: register its future

@@ -2544,12 +2544,14 @@ class Replayer:
         if handed_off:
             assert pending is not None and self.readback_pipeline is not None
             self._pipelined_readback = None
-            self.readback_pipeline.hand_off(
-                pending,
-                lambda error, entry=pending: self._settle_pipelined_readback(
+            entry = pending
+
+            def _settle(error: Optional[str]) -> RunReport:
+                return self._settle_pipelined_readback(
                     report, workflow, run_dir, entry, error
-                ),
-            )
+                )
+
+            self.readback_pipeline.hand_off(entry, _settle)
         return report
 
     # -- pipelined read-back (runtime/readback_pipeline.py) ------------------
