@@ -5416,6 +5416,16 @@ class Replayer:
     ) -> None:
         """Re-evaluate an exact retained postcondition contract or refuse."""
 
+        # A local-edit check is relative to its step's start (focus, URL,
+        # title, page count) and can't be re-run after a restart. These steps
+        # had no postcondition at all before they were classified, so leaving
+        # the check out of resume revalidation keeps it exactly as strict.
+        conditions = [
+            condition
+            for condition in conditions
+            if condition.kind
+            not in {PostconditionKind.LOCAL_EDIT, PostconditionKind.FIELD_VALUE}
+        ]
         if not conditions:
             return
         non_replayable = [
@@ -17027,10 +17037,67 @@ class Replayer:
             return "the content recorded in the highlighted region is present"
         return None
 
+    def _local_edit_held(self, pc: Any, start_state: dict[str, Any]) -> bool:
+        """A compiler-classified local edit stayed local (fail closed).
+
+        URL, title and page count must be observable and unchanged from the
+        step's start, and focus must still be in ``pc.field_selector`` when
+        one is set. Anything unobservable fails the check: the classification
+        rests on this evidence (docs/design/LOCAL_EDIT_CLASSIFICATION.md).
+        """
+
+        for key in ("url", "page_title", "page_count"):
+            if self._structural_changed(key, start_state) is not False:
+                return False
+        if pc.field_selector:
+            reader = getattr(self.backend, "focused_element_matches", None)
+            if not callable(reader):
+                return False
+            try:
+                return reader(pc.field_selector) is True
+            except Exception:  # noqa: BLE001 - unobservable is a failure
+                return False
+        return True
+
+    def _field_value_shown(self, pc: Any) -> bool:
+        """The focused field shows this run's value of ``pc.param``.
+
+        A dropdown's selected label matches up to spacing and case; a text
+        field's value must match exactly. Unobservable is a failure.
+        """
+
+        params = getattr(self, "_current_params", None) or {}
+        if not pc.param or pc.param not in params:
+            return False
+        expected = runtime_param_text(params[pc.param])
+
+        def read(name: str) -> Optional[str]:
+            reader = getattr(self.backend, name, None)
+            if not callable(reader):
+                return None
+            try:
+                value = reader()
+            except Exception:  # noqa: BLE001 - unobservable is a failure
+                return None
+            return value if isinstance(value, str) else None
+
+        def squash(value: str) -> str:
+            return " ".join(value.split()).casefold()
+
+        label = read("focused_select_label")
+        if label is not None:
+            return squash(label) == squash(expected)
+        value = read("focused_text_value")
+        return value is not None and value == expected
+
     @staticmethod
     def _describe_postcondition(pc: Any) -> str:
         """Human-readable one-liner for a postcondition (for error messages)."""
         kind = pc.kind.value if hasattr(pc.kind, "value") else pc.kind
+        if kind == "local_edit":
+            return "local_edit (URL, title, page count and focus unchanged)"
+        if kind == "field_value":
+            return f"field_value (the focused field shows {{{pc.param}}})"
         if kind in ("text_present", "text_absent"):
             return f"{kind} {pc.text!r}"
         if kind in ("url_changed", "title_changed", "new_tab_opened"):
@@ -17077,6 +17144,10 @@ class Replayer:
     ) -> bool:
         """Evaluate a single postcondition against a frame."""
         kind = pc.kind.value if hasattr(pc.kind, "value") else pc.kind
+        if kind == "local_edit":
+            return self._local_edit_held(pc, start_state or {})
+        if kind == "field_value":
+            return self._field_value_shown(pc)
         if kind in ("url_changed", "title_changed", "new_tab_opened"):
             key = {
                 "url_changed": "url",

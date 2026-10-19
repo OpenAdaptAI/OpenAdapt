@@ -465,6 +465,14 @@ class PostconditionKind(str, Enum):
     URL_CHANGED = "url_changed"  # page URL differs from the step's start
     TITLE_CHANGED = "title_changed"  # page title differs from the step's start
     NEW_TAB_OPENED = "new_tab_opened"  # browser page count increased
+    # A compiler-classified local edit (docs/design/LOCAL_EDIT_CLASSIFICATION.md):
+    # URL, title and page count are unchanged from the step's start and, when
+    # ``field_selector`` is set, focus is still in that field. Unlike the
+    # *_changed kinds, an unobservable property fails the check.
+    LOCAL_EDIT = "local_edit"
+    # The focused dropdown shows the run's value of ``param`` (its selected
+    # option's label, whitespace-squashed and case-insensitive).
+    FIELD_VALUE = "field_value"
 
 
 class Postcondition(BaseModel):
@@ -482,6 +490,24 @@ class Postcondition(BaseModel):
             " near, not exactly at, the recorded region)"
         ),
     )
+    #: LOCAL_EDIT: the structural selector of the field focus must stay in.
+    field_selector: Optional[str] = None
+    #: FIELD_VALUE: the run parameter whose value the field must show.
+    param: Optional[str] = Field(
+        default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+    )
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Leave the local-edit fields out when unset, so every existing
+        postcondition (and bundle digest) serializes exactly as before."""
+
+        data: dict[str, Any] = handler(self)
+        if self.field_selector is None:
+            data.pop("field_selector", None)
+        if self.param is None:
+            data.pop("param", None)
+        return data
 
 
 IdentitySignalKeyValue = Literal[
