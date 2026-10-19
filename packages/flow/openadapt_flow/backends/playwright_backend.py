@@ -61,6 +61,16 @@ _TRANSIENT_SCREENSHOT_ERRORS = (
     "Execution context was destroyed",
 )
 
+# How long a click that reported its page closed waits for the page to read
+# as closed before the close counts as confirmed.
+_PAGE_CLOSE_CONFIRM_S = 1.0
+
+
+def _is_target_closed_error(exc: BaseException) -> bool:
+    """Whether Playwright reported the page, context or browser closed."""
+    return type(exc).__name__ == "TargetClosedError"
+
+
 _MODIFIER_ALIASES = {
     "meta": "Meta",
     "cmd": "Meta",
@@ -1081,6 +1091,9 @@ class PlaywrightBackend:
         self._fill_store_key = f"__oaflow_filled_{uuid.uuid4().hex}"
         self._structural_tokens: dict[str, _StructuralGuard] = {}
         self._guarded_coordinate: Optional[_CoordinateGuard] = None
+        # One-shot expectation that the next click closes this page surface
+        # (Step.closes_surface; see expect_page_close).
+        self._page_close_expected = False
         self._guarded_keyboard: Optional[_KeyboardGuard] = None
         self._qualification_environment: Optional[tuple[str, str, str, str]] = None
         self._qualification_input_guard: Optional[Callable[[], None]] = None
@@ -2142,6 +2155,8 @@ class PlaywrightBackend:
             # cannot declare (for example a browser inside a managed remote
             # session), so the DOM guard alone is not sufficient.
             self._assert_qualification_environment_current()
+            close_expected = self._take_page_close_expectation()
+            open_before = not self._page_is_closed()
             try:
                 if double:
                     token_locator.dblclick(timeout=1000)
@@ -2152,13 +2167,18 @@ class PlaywrightBackend:
                 # this call.  Once Playwright begins its action, an exception
                 # (notably frame detach/navigation) cannot prove that the
                 # browser emitted no input.  Surface a typed uncertainty so the
-                # runtime verifies the effect exactly once and never retries.
-                raise ActionDeliveryUncertain(
-                    operation="dom_double_click" if double else "dom_click",
-                    native=False,
-                    target_fingerprint=fingerprint,
-                    cause_type=type(exc).__name__,
-                ) from exc
+                # runtime verifies the effect exactly once and never retries,
+                # unless this page was expected to close itself on this click.
+                if not (
+                    _is_target_closed_error(exc)
+                    and self._closed_itself_as_expected(close_expected, open_before)
+                ):
+                    raise ActionDeliveryUncertain(
+                        operation="dom_double_click" if double else "dom_click",
+                        native=False,
+                        target_fingerprint=fingerprint,
+                        cause_type=type(exc).__name__,
+                    ) from exc
         except ActionDeliveryUncertain:
             raise
         except StructuralResolutionRefused:
@@ -2548,6 +2568,8 @@ class PlaywrightBackend:
                     "pre-dispatch actionability trial"
                 )
             self._assert_qualification_environment_current()
+            close_expected = self._take_page_close_expectation()
+            open_before = not self._page_is_closed()
             try:
                 if double:
                     token_locator.dblclick(position=position, timeout=1000)
@@ -2558,12 +2580,16 @@ class PlaywrightBackend:
                         button=button,
                     )
             except Exception as exc:
-                raise ActionDeliveryUncertain(
-                    operation=operation,
-                    native=False,
-                    target_fingerprint=pending.fingerprint,
-                    cause_type=type(exc).__name__,
-                ) from exc
+                if not (
+                    _is_target_closed_error(exc)
+                    and self._closed_itself_as_expected(close_expected, open_before)
+                ):
+                    raise ActionDeliveryUncertain(
+                        operation=operation,
+                        native=False,
+                        target_fingerprint=pending.fingerprint,
+                        cause_type=type(exc).__name__,
+                    ) from exc
         except ActionDeliveryUncertain:
             raise
         except StructuralResolutionRefused:
@@ -3130,12 +3156,77 @@ class PlaywrightBackend:
         )
 
     def click(self, x: int, y: int, *, double: bool = False) -> None:
-        """Click (or double-click) at pixel coordinates via the mouse."""
+        """Click (or double-click) at pixel coordinates via the mouse.
+
+        A click that closes its own page surface completes normally when that
+        close was expected (:meth:`expect_page_close`). An unexpected report
+        that the page closed during the click raises
+        :class:`~openadapt_flow.backend.ActionDeliveryUncertain`.
+        """
         self._assert_qualification_environment_current()
-        if double:
-            self.page.mouse.dblclick(x, y)
-        else:
-            self.page.mouse.click(x, y)
+        expected = self._take_page_close_expectation()
+        open_before = not self._page_is_closed()
+        try:
+            if double:
+                self.page.mouse.dblclick(x, y)
+            else:
+                self.page.mouse.click(x, y)
+        except Exception as exc:
+            if not _is_target_closed_error(exc):
+                raise
+            if self._closed_itself_as_expected(expected, open_before):
+                return
+            raise ActionDeliveryUncertain(
+                operation="coordinate_double_click" if double else "coordinate_click",
+                native=False,
+                cause_type=type(exc).__name__,
+            ) from exc
+
+    # -- a click that closes its own popup ---------------------------------
+
+    def expect_page_close(self) -> None:
+        """Expect the next click on this page to close it (one-shot).
+
+        Only a page surface (``closed_page_frame=True``: a popup or tab a step
+        opened) honours it. On the primary page a close during a click stays
+        an uncertain delivery.
+        """
+        self._page_close_expected = True
+
+    def cancel_page_close(self) -> None:
+        """Drop an expectation no click consumed."""
+        self._page_close_expected = False
+
+    def page_closed(self) -> bool:
+        """Whether this page has closed."""
+        return self._page_is_closed()
+
+    def _take_page_close_expectation(self) -> bool:
+        expected, self._page_close_expected = self._page_close_expected, False
+        return expected and self._closed_page_frame
+
+    def _closed_itself_as_expected(self, expected: bool, open_before: bool) -> bool:
+        """Whether a click that raised "page closed" was delivered.
+
+        It was when the step expected its page to close, the page was open
+        when the click started, and the page is confirmed closed now. The
+        browser reports the close only after the page began handling input,
+        and an open page cannot close itself without running its own script.
+        """
+        if not (expected and open_before):
+            return False
+        deadline = time.monotonic() + _PAGE_CLOSE_CONFIRM_S
+        while True:
+            if self._page_is_closed():
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            try:
+                # The sync API applies the page's close event only while it
+                # is inside a call; a short wait lets it arrive.
+                self.page.wait_for_timeout(20)
+            except Exception:
+                time.sleep(0.02)
 
     def right_click(self, x: int, y: int) -> None:
         """Open the context menu at a resolved point."""

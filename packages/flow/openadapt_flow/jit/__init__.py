@@ -25,10 +25,13 @@ from openadapt_flow.jit.authority import (
 )
 from openadapt_flow.jit.compile_agent import (
     RECORDING_WARNING,
+    SURFACE_KINDS,
+    App,
     CompiledAgent,
     ComputerUseAgent,
     JitResult,
     Recording,
+    SurfaceApp,
     TaskRequest,
     WebApp,
     compile_agent,
@@ -42,6 +45,7 @@ from openadapt_flow.jit.lifecycle import AdmissionError, BundleState
 from openadapt_flow.jit.signature import ParamError, TaskSignature
 
 __all__ = [
+    "App",
     "AdmissionPolicy",
     "AuthorityError",
     "Principal",
@@ -50,6 +54,7 @@ __all__ = [
     "principal_from_key",
     "DIALECTS",
     "RECORDING_WARNING",
+    "SURFACE_KINDS",
     "AdmissionError",
     "BundleState",
     "CaptureComputer",
@@ -61,6 +66,7 @@ __all__ = [
     "Observation",
     "ParamError",
     "Recording",
+    "SurfaceApp",
     "TaskRequest",
     "TaskSignature",
     "UnsupportedAction",
