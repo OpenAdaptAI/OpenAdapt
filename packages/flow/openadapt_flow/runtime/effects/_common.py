@@ -11,6 +11,7 @@ fault-model study uses for ``classify``).
 
 from __future__ import annotations
 
+import json
 from typing import Any, Iterable, Optional
 
 from openadapt_flow.runtime.effects.effect import (
@@ -261,6 +262,17 @@ def _judge_exact_new_set(
     )
 
 
+def _same_value(value: Any) -> str:
+    """A value in a form where key order and number formatting don't matter.
+
+    A baseline round-trips through canonical JSON (sorted keys), so a nested
+    record (an address list) can come back with its keys in another order;
+    that is not a change.
+    """
+
+    return json.dumps(value, sort_keys=True, default=str)
+
+
 def _judge_record_written(
     effect: Effect,
     before: EffectState,
@@ -299,7 +311,7 @@ def _judge_record_written(
             fields = sorted(
                 k
                 for k in set(r) | set(after)
-                if str(r.get(k, "")) != str(after.get(k, ""))
+                if _same_value(r.get(k)) != _same_value(after.get(k))
             )
             if fields:
                 collateral_changed.append((r, fields))

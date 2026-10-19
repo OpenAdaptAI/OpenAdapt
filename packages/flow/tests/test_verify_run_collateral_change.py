@@ -72,6 +72,24 @@ def test_untouched_neighbours_confirm() -> None:
     assert verdict.verdict is Verdict.CONFIRMED
 
 
+def test_nested_key_order_is_not_a_change() -> None:
+    # A baseline file stores records as canonical JSON (sorted keys); OpenEMR
+    # returns its nested addresses in another key order.
+    before = EffectState(
+        substrate="rest",
+        reachable=True,
+        records=[{**EXISTING, "addresses": [{"zip": "02139", "city": "EXAMPLETON"}]}],
+    )
+    after = [
+        {**EXISTING, "addresses": [{"city": "EXAMPLETON", "zip": "02139"}]},
+        TARGET,
+    ]
+    verdict = judge_records(
+        _effect(forbid_collateral_change=True), before, after, substrate="rest"
+    )
+    assert verdict.verdict is Verdict.CONFIRMED
+
+
 def test_a_vanished_neighbour_is_still_collateral_loss() -> None:
     verdict = _judge(_effect(forbid_collateral_change=True), [TARGET])
     assert verdict.verdict is Verdict.REFUTED
