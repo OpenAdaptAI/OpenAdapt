@@ -108,7 +108,10 @@ def learn_record_check(
     if not (recording_dir / "network.jsonl").is_file():
         return {
             "found": False,
-            "reason": "The recording holds no network capture, so OpenAdapt didn't see a read after the save.",
+            "reason": (
+                "The recording holds no network capture, so OpenAdapt didn't see a read "
+                "after the save."
+            ),
         }
     params = {
         name: value
@@ -126,21 +129,19 @@ def learn_record_check(
             "reason": (
                 "OpenAdapt didn't find the saved record in any read after the save."
                 if not targets
-                else "The saved record showed up in more than one read, so OpenAdapt won't pick one."
+                else "The saved record showed up in more than one read, so OpenAdapt won't "
+                "pick one."
             ),
         }
     surface = targets[0]
     config = {key: value for key, value in surface.config.items() if not key.startswith("_")}
-    if config.get("kind") not in _BINDABLE_READS:
+    kind = str(config.get("kind"))
+    if kind not in _BINDABLE_READS:
         return {
             "found": False,
-            "reason": f"OpenAdapt found the read, but Desktop can't run a {config.get('kind')} read yet.",
+            "reason": f"OpenAdapt found the read, but Desktop can't run a {kind} read yet.",
         }
-    bound = {
-        field: param
-        for field, param in sorted(surface.bound.items())
-        if param in params
-    }
+    bound = {field: param for field, param in sorted(surface.bound.items()) if param in params}
     if not bound:
         return {
             "found": False,
@@ -149,11 +150,7 @@ def learn_record_check(
     # Select the record by an id-like value when there is one, else by the
     # first value the record holds. Every other recorded value is matched too.
     match_field, match_param = next(
-        (
-            (field, param)
-            for field, param in bound.items()
-            if " " not in str(params.get(param, ""))
-        ),
+        ((field, param) for field, param in bound.items() if " " not in str(params.get(param, ""))),
         next(iter(bound.items())),
     )
     extra_match: dict[str, dict[str, str]] = {
@@ -184,7 +181,9 @@ def learn_record_check(
     match = {match_field: ValueExpr(param=match_param)}
     for field, expr in extra_match.items():
         match[field] = (
-            ValueExpr(param=expr["param"]) if "param" in expr else ValueExpr(literal=expr["literal"])
+            ValueExpr(param=expr["param"])
+            if "param" in expr
+            else ValueExpr(literal=expr["literal"])
         )
     effect = Effect(
         kind=EffectKind.RECORD_WRITTEN,
@@ -207,7 +206,10 @@ def learn_record_check(
     if not clean_pass:
         return {
             "found": False,
-            "reason": "The read OpenAdapt found would stop the recorded save itself, so it isn't proposed.",
+            "reason": (
+                "The read OpenAdapt found would stop the recorded save itself, so it isn't "
+                "proposed."
+            ),
         }
     return {
         "found": True,
@@ -263,7 +265,8 @@ def quiet_steps(recording_dir: Path) -> dict[str, Any] | None:
         "evidence": (
             "In your recording the app sent data to its server only when you saved."
             if len(writes) == 1
-            else f"In your recording the app sent its {len(writes)} save requests only when you saved."
+            else f"In your recording the app sent its {len(writes)} save requests only when "
+            "you saved."
         ),
     }
 
@@ -279,9 +282,7 @@ def _recording_params(recording_dir: Path) -> dict[str, str]:
     return {str(name): str(value) for name, value in params.items() if value is not None}
 
 
-def value_proposals(
-    inputs: list[dict[str, Any]], recordings: list[Path]
-) -> list[dict[str, Any]]:
+def value_proposals(inputs: list[dict[str, Any]], recordings: list[Path]) -> list[dict[str, Any]]:
     """Which inputs change per item, from one recording or several.
 
     With one recording every typed value is proposed as changing per item:
@@ -474,7 +475,10 @@ def get_check_setup(dispatcher: Any, workflow_id: str) -> dict[str, Any]:
     plan = _plan(qualification) if qualification.get("ok") else {"writes": [], "unproven": []}
 
     if recording is None:
-        learned: dict[str, Any] = {"found": False, "reason": "OpenAdapt can't find this workflow's recording."}
+        learned: dict[str, Any] = {
+            "found": False,
+            "reason": "OpenAdapt can't find this workflow's recording.",
+        }
     else:
         learned = learn_record_check(
             recording,
@@ -484,7 +488,10 @@ def get_check_setup(dispatcher: Any, workflow_id: str) -> dict[str, Any]:
     if learned.get("found") and len(plan["writes"]) != 1:
         learned = {
             "found": False,
-            "reason": "This workflow saves in more than one step, so OpenAdapt won't guess which step the read belongs to.",
+            "reason": (
+                "This workflow saves in more than one step, so OpenAdapt won't guess which "
+                "step the read belongs to."
+            ),
         }
     quiet = quiet_steps(recording) if recording is not None else None
     recordings = _sibling_recordings(dispatcher, workflow_id)
@@ -532,7 +539,8 @@ def _start_project(dispatcher: Any, workflow_id: str) -> None:
     environment = pins.get("environment") or {}
     if application.get("status") == "missing" or environment.get("status") == "missing":
         raise CheckSetupError(
-            "OpenAdapt couldn't tell which app this is from the recording. Say which app in Check it."
+            "OpenAdapt couldn't tell which app this is from the recording. "
+            "Say which app in Check it."
         )
     app = application.get("payload") or {}
     env = environment.get("payload") or {}
@@ -600,7 +608,8 @@ def accept_record_check(dispatcher: Any, workflow_id: str, *, answered_by: str) 
     learned = setup["record_check"]
     if not learned.get("found"):
         raise CheckSetupError(
-            "OpenAdapt has no record check to propose for this workflow. Answer the questions in Check it."
+            "OpenAdapt has no record check to propose for this workflow. "
+            "Answer the questions in Check it."
         )
     current = dispatcher.get_qualification(workflow_id=workflow_id, policy=POLICY)
     if not current.get("project") or current.get("draft_environment"):
@@ -737,10 +746,24 @@ def run_checks(dispatcher: Any, workflow_id: str) -> dict[str, Any]:
     """
 
     setup = get_check_setup(dispatcher, workflow_id)
-    if "record_check" not in setup["answers"]:
-        current = dispatcher.get_qualification(workflow_id=workflow_id, policy=POLICY)
-        if not current.get("project"):
-            raise CheckSetupError("Answer \"Is this the right record check?\" first.")
+    current = dispatcher.get_qualification(workflow_id=workflow_id, policy=POLICY)
+    if "record_check" not in setup["answers"] and not current.get("project"):
+        raise CheckSetupError('Answer "Is this the right record check?" first.')
+    if not ((current.get("graph") or {}).get("bundle") or {}).get("encrypted"):
+        # Flow binds each case result to the exact executable workflow, so
+        # the cases run on the sealed version that will be approved and run.
+        sealed = dispatcher.seal_qualification_workflow(workflow_id=workflow_id)
+        if not sealed.get("ok") or not sealed.get("workflow_id"):
+            raise CheckSetupError(f"Locking this version: {sealed.get('error') or 'refused'}")
+        dispatcher.emit(
+            "check_setup",
+            {
+                "workflow_id": workflow_id,
+                "sealed_id": sealed["workflow_id"],
+                "answered_by": "agent",
+            },
+        )
+        workflow_id = str(sealed["workflow_id"])
     values = {
         str(item["name"]): str(item["example"])
         for item in dispatcher._task_inputs(workflow_id)
@@ -748,7 +771,11 @@ def run_checks(dispatcher: Any, workflow_id: str) -> dict[str, Any]:
     }
     parameters = json.dumps(values, sort_keys=True)
     target = dispatcher._task_target(workflow_id)
-    common: dict[str, Any] = {"workflow_id": workflow_id, "policy": POLICY, "parameters_json": parameters}
+    common: dict[str, Any] = {
+        "workflow_id": workflow_id,
+        "policy": POLICY,
+        "parameters_json": parameters,
+    }
     if target:
         common["target"] = target
 
@@ -776,22 +803,37 @@ def run_checks(dispatcher: Any, workflow_id: str) -> dict[str, Any]:
             ),
             "Setting up the practice item",
         )
-    revision = (dispatcher.get_qualification(workflow_id=workflow_id, policy=POLICY).get("project") or {}).get("revision")
+    revision = (
+        dispatcher.get_qualification(workflow_id=workflow_id, policy=POLICY).get("project") or {}
+    ).get("revision")
     practice = next(case for case in cases() if case["id"] == practice_id)
     summary: dict[str, Any] = {"practice": None, "drills": []}
     if not passed(practice, revision):
         result = dispatcher.run_qualification_case(**common, case_id=practice_id)
         if result.get("not_approved"):
             summary["practice"] = "not approved: nothing was saved"
-            return {"ok": False, "workflow_id": workflow_id, **summary, "error": result.get("error")}
+            return {
+                "ok": False,
+                "workflow_id": workflow_id,
+                **summary,
+                "error": result.get("error"),
+            }
         if not result.get("ok"):
             summary["practice"] = "did not pass"
-            return {"ok": False, "workflow_id": workflow_id, **summary, "error": result.get("error")}
+            return {
+                "ok": False,
+                "workflow_id": workflow_id,
+                **summary,
+                "error": result.get("error"),
+            }
     summary["practice"] = "passed"
     for case in cases():
         if case.get("kind") in {"representative", "nominal"}:
             continue
-        revision = (dispatcher.get_qualification(workflow_id=workflow_id, policy=POLICY).get("project") or {}).get("revision")
+        revision = (
+            dispatcher.get_qualification(workflow_id=workflow_id, policy=POLICY).get("project")
+            or {}
+        ).get("revision")
         if passed(case, revision):
             summary["drills"].append({"kind": case["kind"], "result": "passed"})
             continue
@@ -805,7 +847,12 @@ def run_checks(dispatcher: Any, workflow_id: str) -> dict[str, Any]:
             {"kind": case["kind"], "result": "passed" if result.get("ok") else "did not pass"}
         )
         if not result.get("ok"):
-            return {"ok": False, "workflow_id": workflow_id, **summary, "error": result.get("error")}
+            return {
+                "ok": False,
+                "workflow_id": workflow_id,
+                **summary,
+                "error": result.get("error"),
+            }
     return {
         "ok": True,
         "workflow_id": workflow_id,

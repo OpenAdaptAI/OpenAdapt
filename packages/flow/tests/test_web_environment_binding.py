@@ -47,9 +47,9 @@ class _Page:
         if script == "window.devicePixelRatio":
             return 1
         if "timeOrigin" in script:
-            return (
-                '{"origin":"%s","timeOrigin":%s,"userAgent":"x"}'
-                % (ORIGIN, self.time_origin)
+            return '{"origin":"%s","timeOrigin":%s,"userAgent":"x"}' % (
+                ORIGIN,
+                self.time_origin,
             )
         raise AssertionError(script)
 
@@ -109,7 +109,10 @@ def test_every_digest_is_still_compared() -> None:
     backend = _Backend()
     other = _boundary(backend, environment_digest="0" * 64)
     refusal, _observed, _ids = _replayer(backend)._bind_qualification_boundary(other)
-    assert refusal == "observed qualification environment digest does not match the project"
+    assert (
+        refusal
+        == "observed qualification environment digest does not match the project"
+    )
 
     version = _boundary(backend, application_version="9.9")
     refusal, _observed, _ids = _replayer(backend)._bind_qualification_boundary(version)

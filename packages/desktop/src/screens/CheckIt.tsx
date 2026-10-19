@@ -16,7 +16,7 @@
 // answer in plain words: what it changes, how it makes sure it's the right
 // record, how it confirms the save. The full contract stays reachable under
 // "Advanced: exact checks".
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { CMD, EVT, engineInvoke, engineTry, onEngineEvent } from "../lib/engine";
 import {
   TIER_CHOICES,
@@ -437,6 +437,13 @@ export function CheckIt({
   onReplaced?: (workflowId: string) => void;
 }) {
   const idPrefix = useId();
+  // The version Check it works on. It seals the workflow before the practice
+  // item, so the cases, the approval and the runs all bind the one sealed
+  // version that runs. Engine calls read the ref; the sealed id replaces it.
+  const activeId = useRef(workflowId);
+  if (activeId.current !== workflowId && !activeId.current.startsWith(`${workflowId}-v`)) {
+    activeId.current = workflowId;
+  }
   const [name, setName] = useState("");
   const [project, setProject] = useState<QualificationProject | null>(null);
   const [proposal, setProposal] = useState<Proposal | null>(null);
@@ -476,15 +483,15 @@ export function CheckIt({
     try {
       const [list, details, response, filled] = await Promise.all([
         engineTry<Workflow[]>(CMD.GET_WORKFLOWS, {}, []),
-        engineTry<TaskInputs>(CMD.GET_TASK_INPUTS, { workflow_id: workflowId }, {
+        engineTry<TaskInputs>(CMD.GET_TASK_INPUTS, { workflow_id: activeId.current }, {
           ok: false,
-          workflow_id: workflowId,
+          workflow_id: activeId.current,
         }),
         engineInvoke<QualificationResponse>(CMD.GET_QUALIFICATION, {
-          workflow_id: workflowId,
+          workflow_id: activeId.current,
           policy: POLICY,
         }),
-        engineTry<CheckSetup | null>(CMD.GET_CHECK_SETUP, { workflow_id: workflowId }, null),
+        engineTry<CheckSetup | null>(CMD.GET_CHECK_SETUP, { workflow_id: activeId.current }, null),
       ]);
       setSetup(filled && filled.ok ? filled : null);
       const workflow = (Array.isArray(list) ? list : []).find((item) => item.id === workflowId);
@@ -509,7 +516,7 @@ export function CheckIt({
       if (!response.project || response.draft_environment) {
         const draft = await engineTry<{ ok: boolean; proposal?: Proposal; error?: string }>(
           CMD.PROPOSE_QUALIFICATION_FROM_DEMO,
-          { workflow_id: workflowId, policy_pack: "community", accept: false },
+          { workflow_id: activeId.current, policy_pack: "community", accept: false },
           { ok: false },
         );
         setProposal(draft.proposal ?? null);
@@ -530,10 +537,12 @@ export function CheckIt({
   // The person's agent can answer the first two questions over the local
   // socket. Show its answers as soon as it gives them.
   useEffect(() => {
-    const unlisten = onEngineEvent<{ workflow_id?: string; answered_by?: string }>(
+    const unlisten = onEngineEvent<{ workflow_id?: string; answered_by?: string; sealed_id?: string }>(
       EVT.CHECK_SETUP,
       (payload) => {
-        if (payload?.workflow_id === workflowId && payload.answered_by === "agent") void load();
+        if (payload?.workflow_id !== workflowId && payload?.workflow_id !== activeId.current) return;
+        if (payload.sealed_id) activeId.current = payload.sealed_id;
+        if (payload.answered_by === "agent") void load();
       },
     ).catch(() => null);
     return () => {
@@ -544,7 +553,7 @@ export function CheckIt({
 
   async function call(cmd: string, params: Record<string, unknown>): Promise<QualificationResponse & Record<string, unknown>> {
     return engineInvoke<QualificationResponse & Record<string, unknown>>(cmd, {
-      workflow_id: workflowId,
+      workflow_id: activeId.current,
       policy: POLICY,
       ...params,
     });
@@ -710,14 +719,14 @@ export function CheckIt({
   }
 
   /** Runs the practice item; returns the project when it passed. */
-  async function runPractice(): Promise<QualificationProject | null> {
-    if (!plan || !target) return null;
+  async function runPractice(from: CheckPlan | null = plan): Promise<QualificationProject | null> {
+    if (!from || !target) return null;
     setBusy("practice");
     fail("");
     setPracticeNote("");
     try {
       const parameters = caseParameters();
-      let caseId = plan.practice?.id ?? null;
+      let caseId = from.practice?.id ?? null;
       if (!caseId) {
         const added = await call(CMD.ADD_QUALIFICATION_CASE, {
           case_id: PRACTICE_CASE,
@@ -824,7 +833,7 @@ export function CheckIt({
     fail("");
     try {
       const answered = await engineInvoke<CheckSetup>(CMD.ANSWER_CHECK_SETUP, {
-        workflow_id: workflowId,
+        workflow_id: activeId.current,
         question: "record_check",
         answer: "yes",
         answered_by: "person",
@@ -856,7 +865,7 @@ export function CheckIt({
         .filter((item) => isChanging(item.name, item.changes))
         .map((item) => item.name);
       const answered = await engineInvoke<CheckSetup>(CMD.ANSWER_CHECK_SETUP, {
-        workflow_id: workflowId,
+        workflow_id: activeId.current,
         question: "values",
         changes,
         answered_by: "person",
@@ -876,7 +885,39 @@ export function CheckIt({
     } finally {
       setBusy(null);
     }
-    const practiced = plan?.practiceState === "done" ? project : await runPractice();
+    // Seal first: Flow binds each case result to the exact executable
+    // workflow, so the practice item and drills run on the version that
+    // will be approved and run.
+    let current = project;
+    if (current && !current.graph.bundle.encrypted && plan?.practiceState !== "done") {
+      setBusy("practice");
+      try {
+        const sealed = await engineInvoke<{ ok: boolean; workflow_id?: string; error?: string }>(
+          CMD.SEAL_QUALIFICATION_WORKFLOW,
+          { workflow_id: activeId.current },
+        );
+        if (!sealed.ok || !sealed.workflow_id) {
+          fail("OpenAdapt couldn't lock this version for the practice item.", String(sealed.error || ""));
+          return;
+        }
+        activeId.current = sealed.workflow_id;
+        onReplaced?.(sealed.workflow_id);
+        const reloaded = await call(CMD.GET_QUALIFICATION, {});
+        if (!reloaded.ok) {
+          fail("OpenAdapt couldn't read the locked version.", String(reloaded.error || ""));
+          return;
+        }
+        current = reloaded as QualificationProject;
+        setProject(current);
+      } catch (error) {
+        fail("OpenAdapt couldn't lock this version for the practice item.", String(error));
+        return;
+      } finally {
+        setBusy(null);
+      }
+    }
+    const practiced =
+      plan?.practiceState === "done" ? project : await runPractice(current ? checkPlan(current) : null);
     if (practiced && !attachedBrowser(target)) await runDrills(practiced);
   }
 
@@ -902,7 +943,7 @@ export function CheckIt({
       if (current && !current.graph.bundle.encrypted) {
         const sealed = await engineInvoke<{ ok: boolean; workflow_id?: string; error?: string }>(
           CMD.SEAL_QUALIFICATION_WORKFLOW,
-          { workflow_id: workflowId },
+          { workflow_id: activeId.current },
         );
         if (!sealed.ok || !sealed.workflow_id) {
           fail("OpenAdapt approved the workflow but couldn't lock this version.", String(sealed.error || ""));
@@ -912,7 +953,7 @@ export function CheckIt({
         onReplaced?.(sealed.workflow_id);
         return;
       }
-      setApprovedId(workflowId);
+      setApprovedId(activeId.current);
     } catch (error) {
       fail("OpenAdapt couldn't approve this workflow.", String(error));
     } finally {
@@ -1025,7 +1066,7 @@ export function CheckIt({
             : "OpenAdapt filled this in from your recording. Confirm each part. It won't guess anything you leave unconfirmed."
         }
         action={
-          <Button size="sm" onClick={() => onExactChecks(workflowId)}>
+          <Button size="sm" onClick={() => onExactChecks(activeId.current)}>
             Advanced: exact checks
           </Button>
         }
@@ -1365,8 +1406,9 @@ export function CheckIt({
             {plan.drills.length > 0 && (
               <details className="technical" open={!checksPassed && practicePassed}>
                 <summary>
-                  Safety drills: {plan.drills.filter((drill) => drill.status === "passed").length} of{" "}
-                  {plan.drills.length} passed
+                  {plan.drills.every((drill) => drill.status === "not_run")
+                    ? `The ${plan.drills.length} safety drills`
+                    : `Safety drills: ${plan.drills.filter((drill) => drill.status === "passed").length} of ${plan.drills.length} passed`}
                 </summary>
                 <ul className="drill-list technical-body">
                   {plan.drills.map((drill: CaseView) => (
@@ -1433,7 +1475,7 @@ export function CheckIt({
                   computer. It&rsquo;s ready to run on real items, and it stops
                   to ask you only when something doesn&rsquo;t match.
                 </p>
-                <Button variant="primary" onClick={() => onRun(approvedId ?? workflowId)}>
+                <Button variant="primary" onClick={() => onRun(approvedId ?? activeId.current)}>
                   Run it
                 </Button>
               </div>

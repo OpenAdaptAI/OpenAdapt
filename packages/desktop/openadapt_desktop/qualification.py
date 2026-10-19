@@ -1654,7 +1654,9 @@ def bind_action_effect(
         if not isinstance(expr, dict) or len(expr) != 1 or not (
             set(expr) <= {"param", "literal"}
         ):
-            raise QualificationError("each extra_match value must be {param: ...} or {literal: ...}")
+            raise QualificationError(
+                "each extra_match value must be {param: ...} or {literal: ...}"
+            )
         if "param" in expr:
             extra_params.add(str(expr["param"]))
     if idempotency_param is not None and idempotency_literal is not None:
@@ -2143,6 +2145,11 @@ def seal_qualification_bundle(
         provenance.certified = False
         provenance.certification_status = "expired"
         provenance.expires_at = datetime.now(timezone.utc).isoformat()
+    if provenance is not None and getattr(provenance, "governed_authorization_template", None):
+        # Derived from the certification cleared above. Left in place, the
+        # sealed copy can't be loaded: Flow rebuilds the template from the
+        # certification on load and refuses when it can't.
+        provenance.governed_authorization_template = None
 
     try:
         copy_bundle_version(source, destination)

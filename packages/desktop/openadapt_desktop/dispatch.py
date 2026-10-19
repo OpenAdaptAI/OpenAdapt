@@ -4043,7 +4043,8 @@ class EngineDispatcher:
             if question == "record_check":
                 if params.get("answer") != "yes":
                     raise CheckSetupError(
-                        "Only yes is answered here. To change the record check, use the form in Check it."
+                        "Only yes is answered here. To change the record check, use the "
+                        "form in Check it."
                     )
                 result = accept_record_check(self, workflow_id, answered_by=answered_by)
             elif question == "values":
@@ -4072,9 +4073,19 @@ class EngineDispatcher:
 
         workflow_id = str(params.get("workflow_id") or "")
         try:
-            return run_checks(self, workflow_id)
+            result = run_checks(self, workflow_id)
         except Exception as exc:
-            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+            result = {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+        # The window shows the results without a click.
+        self.emit(
+            "check_setup",
+            {
+                "workflow_id": result.get("workflow_id") or workflow_id,
+                "question": "checks",
+                "answered_by": "agent",
+            },
+        )
+        return result
 
     def get_task_inputs(self, **params: Any) -> dict:
         """Return the inputs one run of a task needs and where it was recorded.

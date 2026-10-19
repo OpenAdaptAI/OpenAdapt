@@ -30,7 +30,12 @@ class _Dispatcher:
         return {
             "ok": True,
             "workflow_id": "wf1",
-            "record_check": {"found": True, "read": "GET /api/db", "binding": {"x": 1}, "effects": {}},
+            "record_check": {
+                "found": True,
+                "read": "GET /api/db",
+                "binding": {"x": 1},
+                "effects": {},
+            },
             "quiet_steps": {"evidence": "sent nothing"},
             "values": [{"name": "note", "changes": True}],
             "answers": {},
@@ -71,7 +76,12 @@ def test_agent_reads_and_answers_through_the_running_desktop(desktop: _Dispatche
 def test_an_agent_claiming_to_be_the_person_is_recorded_as_the_agent(desktop: _Dispatcher) -> None:
     agent_mcp.call_desktop(
         "answer_check_setup",
-        {"workflow_id": "wf1", "question": "record_check", "answer": "yes", "answered_by": "person"},
+        {
+            "workflow_id": "wf1",
+            "question": "record_check",
+            "answer": "yes",
+            "answered_by": "person",
+        },
     )
     (params,) = [params for cmd, params in desktop.calls if cmd == "answer_check_setup"]
     assert params["answered_by"] == "agent"
@@ -92,7 +102,9 @@ def test_the_socket_never_approves_or_answers_a_save() -> None:
         assert "approve" not in tool
 
 
-def test_no_desktop_running_is_a_plain_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_no_desktop_running_is_a_plain_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv(agent_mcp.DISCOVERY_ENV, str(tmp_path / "missing.json"))
     with pytest.raises(agent_mcp.DesktopUnavailable, match="isn't running"):
         agent_mcp.handle("list_workflows", {})

@@ -58,9 +58,23 @@ def _recording(
 
     root.mkdir(parents=True)
     events = [
-        {"i": 0, "kind": "click", "x": 10, "y": 10, "t": 1.0, "structural": {"role": "button", "name": "Open"}},
+        {
+            "i": 0,
+            "kind": "click",
+            "x": 10,
+            "y": 10,
+            "t": 1.0,
+            "structural": {"role": "button", "name": "Open"},
+        },
         {"i": 1, "kind": "type", "text": NOTE, "param": "note", "t": 1.5},
-        {"i": 2, "kind": "click", "x": 300, "y": 400, "t": 2.0, "structural": {"role": "button", "name": "Save encounter"}},
+        {
+            "i": 2,
+            "kind": "click",
+            "x": 300,
+            "y": 400,
+            "t": 2.0,
+            "structural": {"role": "button", "name": "Save encounter"},
+        },
     ]
     (root / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
     (root / "meta.json").write_text(json.dumps({"params": params or {"note": NOTE}}))
@@ -84,13 +98,17 @@ def _recording(
         _line(len(lines) + 1, "GET", "/api/db", 2.4, text=json.dumps({"records": [saved]})),
     ]
     with (root / "network.jsonl").open("w") as fh:
-        fh.write(json.dumps({"schema": "openadapt.network-capture/1", "exchanges": len(lines)}) + "\n")
+        fh.write(
+            json.dumps({"schema": "openadapt.network-capture/1", "exchanges": len(lines)}) + "\n"
+        )
         for line in lines:
             fh.write(json.dumps(line) + "\n")
     return root
 
 
-def test_learns_the_binding_a_person_would_type_from_the_read_after_the_save(tmp_path: Path) -> None:
+def test_learns_the_binding_a_person_would_type_from_the_read_after_the_save(
+    tmp_path: Path,
+) -> None:
     learned = learn_record_check(_recording(tmp_path / "rec"), inputs={"note": {}})
 
     assert learned["found"] is True
@@ -173,7 +191,10 @@ class _Dispatcher:
         self.has_project = project
         db = type("DB", (), {})()
         db.get_bundle = lambda _id: {"capture_id": "cap"}
-        db.get_capture = lambda _id: {"capture_path": str(recording), "task_description": "Add a note"}
+        db.get_capture = lambda _id: {
+            "capture_path": str(recording),
+            "task_description": "Add a note",
+        }
         db.list_captures = lambda limit=200: []
         self.services = type("S", (), {"db": db})()
 
@@ -195,7 +216,10 @@ class _Dispatcher:
             "graph": {"nodes": nodes},
             "controls": {
                 "actions": {
-                    "step_002": {"identity": {"can_arm": True, "armed": True, "policy": None}, "effects": []}
+                    "step_002": {
+                        "identity": {"can_arm": True, "armed": True, "policy": None},
+                        "effects": [],
+                    }
                 }
             },
         }

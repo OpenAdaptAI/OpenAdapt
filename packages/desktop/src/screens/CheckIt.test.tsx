@@ -262,6 +262,7 @@ it("runs the practice item on test values from the recording", async () => {
   engine(project());
   const after = project({ cases: [{ id: "practice-1", kind: "representative", status: "passed" }] });
   vi.mocked(engineInvoke).mockImplementation(async (command, params) => {
+    if (command === CMD.SEAL_QUALIFICATION_WORKFLOW) return { ok: true, workflow_id: "wf-1-v2-a1" };
     if (command === CMD.GET_QUALIFICATION) return project();
     if (command === CMD.ADD_QUALIFICATION_CASE) {
       expect(params).toEqual(
@@ -405,6 +406,7 @@ it("counts nothing when the practice save wasn't approved, and passes IT's setti
   engine(project());
   const calls: Record<string, unknown>[] = [];
   vi.mocked(engineInvoke).mockImplementation(async (command, params) => {
+    if (command === CMD.SEAL_QUALIFICATION_WORKFLOW) return { ok: true, workflow_id: "wf-1-v2-a1" };
     if (command === CMD.GET_QUALIFICATION) return project();
     if (command === CMD.ADD_QUALIFICATION_CASE) {
       return project({ cases: [{ id: "practice-1", kind: "representative", status: null }] });
@@ -482,6 +484,7 @@ it("says where and why a practice run that ran didn't pass", async () => {
   engine(project());
   const failed = project({ cases: [{ id: "practice-1", kind: "representative", status: "failed" as never }] });
   vi.mocked(engineInvoke).mockImplementation(async (command) => {
+    if (command === CMD.SEAL_QUALIFICATION_WORKFLOW) return { ok: true, workflow_id: "wf-1-v2-a1" };
     if (command === CMD.GET_QUALIFICATION) return project();
     if (command === CMD.ADD_QUALIFICATION_CASE) {
       return project({ cases: [{ id: "practice-1", kind: "representative", status: null }] });
@@ -602,9 +605,12 @@ it("Change shows the plain parts instead of the learned check", async () => {
 it("answers which values change, then runs the practice item", async () => {
   guidedEngine(project(), learnedSetup({ record_check: { by: "person", at: "x", answer: "yes" } }));
   const order: string[] = [];
+  const ids: string[] = [];
   let changes: unknown;
   vi.mocked(engineInvoke).mockImplementation(async (command, params) => {
     order.push(command);
+    ids.push((params as { workflow_id?: string } | undefined)?.workflow_id ?? "");
+    if (command === CMD.SEAL_QUALIFICATION_WORKFLOW) return { ok: true, workflow_id: "wf-1-v2-a1" };
     if (command === CMD.GET_QUALIFICATION) return project();
     if (command === CMD.ANSWER_CHECK_SETUP) {
       changes = (params as { changes: unknown }).changes;
@@ -629,10 +635,16 @@ it("answers which values change, then runs the practice item", async () => {
 
   expect(await screen.findByText(/Done and checked/)).toBeTruthy();
   expect(changes).toEqual(["note"]);
-  expect(order.filter((command) => command !== CMD.GET_QUALIFICATION).slice(0, 3)).toEqual([
-    CMD.ANSWER_CHECK_SETUP,
-    CMD.ADD_QUALIFICATION_CASE,
-    CMD.RUN_QUALIFICATION_CASE,
+  const steps = order
+    .map((command, index) => [command, ids[index]])
+    .filter(([command]) => command !== CMD.GET_QUALIFICATION);
+  // The version is sealed before the practice item, and the practice item
+  // runs on the sealed version: that is the version approved and run.
+  expect(steps.slice(0, 4)).toEqual([
+    [CMD.ANSWER_CHECK_SETUP, "wf-1"],
+    [CMD.SEAL_QUALIFICATION_WORKFLOW, "wf-1"],
+    [CMD.ADD_QUALIFICATION_CASE, "wf-1-v2-a1"],
+    [CMD.RUN_QUALIFICATION_CASE, "wf-1-v2-a1"],
   ]);
 });
 

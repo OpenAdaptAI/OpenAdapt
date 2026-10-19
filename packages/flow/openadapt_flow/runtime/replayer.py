@@ -12188,9 +12188,6 @@ class Replayer:
                 # A run has one configured observer. A surface whose boundary
                 # names another observer uses that observer's own route below.
                 configured_observer = None
-        from openadapt_flow.qualification_environment import (
-            BackendQualificationEnvironmentObserver,
-        )
         from openadapt_flow.qualification_web_session import (
             SIGNED_IN_WEB_SESSION_OBSERVER_ID,
             SignedInWebSessionObserver,
