@@ -176,9 +176,14 @@ _This release uses the MIT License._
   and recheck protected `main` immediately before the release tag. Clean-wheel
   qualification now installs and probes the pinned FFmpeg runtime on all three
   operating systems. The Linux lane also installs the wheel's `linux` extra.
-  Publication requires three live trials on a qualified Linux desktop for the
-  same commit. Separate runner flags prevent a Linux release check from waiting
-  for absent macOS or Windows runners.
+  Separate runner flags prevent a Linux live check from waiting for absent
+  macOS or Windows runners.
+- **release**: Gate releases on a hosted Linux lane instead of a self-hosted
+  Linux desktop that was never registered. Three trials on Xvfb with openbox,
+  AT-SPI, and a focused GTK window run the recorder, XTEST input reaching X
+  RECORD, and AT-SPI structural tests. The gate no longer proves more than one
+  monitor or real input hardware. The physical-desktop lanes still run weekly,
+  outside the gate, once a qualified desktop is registered.
 - **windows**: Fail when ffmpeg install is absent
   ([#99](https://github.com/OpenAdaptAI/openadapt-capture/pull/99),
   [`682f77d`](https://github.com/OpenAdaptAI/openadapt-capture/commit/682f77d168bdff60d55285a1682a7c0ebf726847))

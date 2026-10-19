@@ -179,7 +179,7 @@ def child_run_via_execute_client(
                 "this path"
             )
         try:
-            from openadapt_flow.contracts.execute import (
+            from openadapt_types.execute import (
                 EffectStrengthV1,
                 ExecuteAuthorizationContextV1,
                 ExecuteLifecycleStateV1,

@@ -15,7 +15,7 @@ REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 # The launcher tags v<version>. A package from packages/ tags
 # <pypi-project>-v<version>; the project names are an exact list.
 RELEASE_TAG = re.compile(
-    r"^(?:openadapt-(?:agent|flow|types)-)?"
+    r"^(?:openadapt-(?:agent|capture|desktop|flow|privacy|types)-)?"
     r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"
 )
 REQUIRED_TAG_RULES = frozenset({"creation", "update", "deletion"})

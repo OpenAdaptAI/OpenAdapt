@@ -213,7 +213,7 @@ def plot_comparison(
         import matplotlib.pyplot as plt
     except ImportError:
         raise ImportError(
-            "matplotlib is required for plotting. Install with: uv add matplotlib"
+            "Plotting needs the plot extra. Install it with: pip install 'openadapt-capture[plot]'"
         )
 
     if not report.comparisons:

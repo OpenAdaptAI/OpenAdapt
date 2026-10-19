@@ -84,6 +84,12 @@ class ExecutionProfileContract:
     #: REPRESENT. A future scrubbed tier would not have that property, and this
     #: field is where ``regulated`` refuses it.
     max_remote_decision_tier: DecisionDeliveryTier
+    #: Whether a reopen of the record in the acting session (check level
+    #: ``reopened``, tier 3) counts toward ``VERIFIED``. False keeps
+    #: ``VERIFIED`` at a separate session or the system of record
+    #: (:data:`~openadapt_flow.verification.VERIFIED_EFFECT_TIER`). A profile
+    #: has to opt in explicitly; no built-in profile does.
+    reopened_counts_as_verified: bool = False
 
 
 _CONTRACTS = {
@@ -193,6 +199,34 @@ def requires_signed_qualification_admission(
     return execution_profile_contract(value).production
 
 
+def verified_tier_floor(
+    workflow: Any, profile: ExecutionProfile | str | ExecutionProfileContract
+) -> VerificationTier:
+    """The weakest tier that counts toward ``VERIFIED`` for this workflow.
+
+    :data:`~openadapt_flow.verification.VERIFIED_EFFECT_TIER` (a separate
+    session) unless the profile opts in to ``reopened`` (tier 3). The
+    workflow's ``minimum_readback`` can only raise it.
+    """
+
+    from openadapt_flow.readback_ladder import workflow_tier_floor
+
+    contract = (
+        profile
+        if isinstance(profile, ExecutionProfileContract)
+        else execution_profile_contract(profile)
+    )
+    floor = (
+        VerificationTier.PERSISTED_STATE_REACQUISITION
+        if contract.reopened_counts_as_verified
+        else VERIFIED_EFFECT_TIER
+    )
+    raised = workflow_tier_floor(workflow)
+    if raised is not None and int(raised) < int(floor):
+        floor = raised
+    return floor
+
+
 def required_effect_tier(
     workflow: Workflow,
     profile: ExecutionProfile | str,
@@ -203,6 +237,16 @@ def required_effect_tier(
     required = contract.minimum_effect_tier
     if not contract.production:
         return required
+    # A workflow that sets ``minimum_readback`` raises the gate with it, so a
+    # verifier weaker than the workflow asks for refuses to actuate. Without
+    # one the profile's gate is unchanged: Standard still admits a reopen
+    # (tier 3) so a pixel-only run executes with halt-on-doubt, and the
+    # outcome classifier keeps VERIFIED at a separate session or stronger.
+    from openadapt_flow.readback_ladder import workflow_tier_floor
+
+    raised = workflow_tier_floor(workflow)
+    if raised is not None and (required is None or int(raised) < int(required)):
+        required = raised
     project_minimum = getattr(workflow.qualification, "minimum_effect_tier", None)
     if project_minimum is not None:
         candidate = VerificationTier(project_minimum)
@@ -1372,12 +1416,15 @@ def classify_execution_outcome(
     Demo success is always visibly non-production.  Standard and Regulated
     success becomes ``VERIFIED`` only when every executed consequential action
     has a confirmed effect at or above both the workflow's required evidence
-    tier and :data:`~openadapt_flow.verification.VERIFIED_EFFECT_TIER`.
-    Therefore an approved-unverified, immediate-screen, or persisted-state
-    (on-screen different-path) result can never be reported as ``VERIFIED``
-    under either production profile. A pixel-only Citrix run with neither a
-    system-of-record read nor a separate-session read-back cannot be
-    ``VERIFIED``.
+    tier and :func:`verified_tier_floor`: a separate-session read-back or a
+    system-of-record read (:data:`~openadapt_flow.verification.VERIFIED_EFFECT_TIER`),
+    raised by the workflow's ``minimum_readback``. An approved-unverified,
+    same-screen (tier 4) or same-session reopen (tier 3) result is never
+    ``VERIFIED`` under either production profile; it is reported with its
+    own check level (:mod:`openadapt_flow.readback_ladder`). A pixel-only
+    Citrix run with neither a system-of-record read nor a separate-session
+    read-back cannot be ``VERIFIED``. A reopen counts only under a profile
+    whose contract sets ``reopened_counts_as_verified``; none does.
     """
 
     resolved = resolve_execution_profile(profile)
@@ -2014,9 +2061,10 @@ def classify_execution_outcome(
             # The Standard gate still admits persisted-state so a pixel-only
             # Citrix run can execute with halt-on-doubt. VERIFIED itself
             # requires a read independent of the acting session: tier 1
-            # (system of record) or tier 2 (separate-session read-back).
+            # (system of record) or tier 2 (separate-session read-back), or
+            # stronger when the workflow's minimum_readback raises it.
             required_tier = VerificationTier(
-                min(int(required_tier), int(VERIFIED_EFFECT_TIER))
+                min(int(required_tier), int(verified_tier_floor(workflow, resolved)))
             )
             try:
                 effect_hash = effect.resolved_contract_hash(
@@ -2044,6 +2092,32 @@ def classify_execution_outcome(
             ):
                 return ExecutionOutcome.COMPLETED_UNVERIFIED
     return ExecutionOutcome.VERIFIED
+
+
+def _readback_ladder(
+    report: RunReport,
+    workflow: Workflow,
+    profile: ExecutionProfile,
+    outcome: ExecutionOutcome,
+) -> Any:
+    """The run's ``readback`` block: check level per save and for the run.
+
+    ``below_minimum`` is kept only where it explains the outcome: a production
+    run that was not ``VERIFIED`` although every save was confirmed.
+    """
+
+    from openadapt_flow.ir import ReadbackLadder
+    from openadapt_flow.readback_ladder import summarize_report
+
+    summary = summarize_report(report, verified_tier_floor(workflow, profile))
+    if summary is None:
+        return None
+    summary["below_minimum"] = bool(
+        summary["below_minimum"]
+        and execution_profile_contract(profile).production
+        and outcome is ExecutionOutcome.COMPLETED_UNVERIFIED
+    )
+    return ReadbackLadder.model_validate(summary)
 
 
 def stamp_execution_outcome(
@@ -2074,6 +2148,7 @@ def stamp_execution_outcome(
     )
     report.execution_profile = resolved.value
     report.execution_outcome = outcome.value
+    report.readback = _readback_ladder(report, workflow, resolved, outcome)
     report.production_eligible = bool(
         execution_profile_contract(resolved).production
         and outcome is ExecutionOutcome.VERIFIED

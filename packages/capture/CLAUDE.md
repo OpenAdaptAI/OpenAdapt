@@ -111,6 +111,17 @@ uv run pytest tests/ -v -m slow
 uv run pytest tests/ -v
 ```
 
+## Releasing
+
+This package lives in the OpenAdapt monorepo at `packages/capture`. To release,
+open a PR that bumps `version` in `pyproject.toml` and `uv.lock` and adds a
+`## vX.Y.Z (YYYY-MM-DD)` section at the top of `CHANGELOG.md`. After it merges,
+run the root `Release package` workflow (`release-package.yml`) from `main` with
+`package: capture`. It publishes `openadapt-capture` to PyPI through the
+`pypi-capture` environment and tags `openadapt-capture-vX.Y.Z`. Tags through
+`v1.3.0` live in the archived OpenAdaptAI/openadapt-capture repository, and the
+workflows under `.github/` here are kept for reference only; they do not run.
+
 ## Related Projects
 
 - [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) - Train models on captures
