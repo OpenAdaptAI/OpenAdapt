@@ -45,6 +45,7 @@ from __future__ import annotations
 import base64
 import fnmatch
 import hashlib
+import hmac
 import io
 import json
 import os
@@ -584,10 +585,10 @@ def _reconcile_run_files(
         out[rel] = {"codec": codec, "sha256": _sha256(raw)}
     for rel, entry in out.items():
         if entry["codec"] != "set":
-            physical = root / rel
-            if physical.is_file():
+            owned = root / rel
+            if owned.is_file():
                 # Owned and authenticated by its own store; track its bytes.
-                entry["sha256"] = _sha256(physical.read_bytes())
+                entry["sha256"] = _sha256(owned.read_bytes())
     return out
 
 
@@ -801,7 +802,7 @@ class SealedSetWriter:
 # write through it.
 
 _WRITERS: dict[str, SealedSetWriter] = {}
-_OPENED: dict[tuple[str, str], SealedSet] = {}
+_OPENED: dict[tuple[str, str], tuple[str, SealedSet]] = {}
 _STATE_LOCK = threading.RLock()
 
 
@@ -875,14 +876,18 @@ def open_set(root: Path | str, key: Optional[str] = None) -> SealedSet:
     base = _abs(root)
     header = read_header(base)
     passphrase = _require_passphrase(Path(base), str(header["kind"]), key)
-    cache_key = (base, _sha256(passphrase.encode("utf-8")) + str(header.get("index")))
+    # Keyed by the sealed index, never by any digest of the passphrase; a
+    # cached set is reused only for the same passphrase (constant-time check).
+    cache_key = (base, str(header.get("index")))
     with _STATE_LOCK:
         cached = _OPENED.get(cache_key)
-    if cached is not None:
-        return cached
+    if cached is not None and hmac.compare_digest(
+        cached[0].encode("utf-8"), passphrase.encode("utf-8")
+    ):
+        return cached[1]
     opened = SealedSet.open(base, passphrase)
     with _STATE_LOCK:
-        _OPENED[cache_key] = opened
+        _OPENED[cache_key] = (passphrase, opened)
     return opened
 
 

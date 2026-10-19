@@ -48,3 +48,7 @@ eb78575c688f06d7edc04afc69389aad10e1f5fa:packages/flow/tests/fixtures/terminal_v
 # branch commit that added them. The lines carry gitleaks:allow from the next commit on.
 3f0df2191a649540e79a621ac5406ebe2ff228e2:packages/flow/openadapt_flow/jit/authority.py:generic-api-key:101
 3f0df2191a649540e79a621ac5406ebe2ff228e2:packages/flow/openadapt_flow/jit/authority.py:generic-api-key:390
+# PR #1354: false positive on the code `Workflow.load(source_path, key=key,
+# verify_integrity=True)` in bundle_sealing.py; no secret (the key comes from
+# OPENADAPT_BUNDLE_KEY at run time).
+a94ffbebccba96d9c2f9ca2016413f10c7526ff1:packages/flow/openadapt_flow/bundle_sealing.py:generic-api-key:282

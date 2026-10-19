@@ -2757,7 +2757,11 @@ class InteractiveRecorder:
                 meta["viewport_mode"] = "per-event"
                 meta["viewport_history"] = list(self._viewport_history)
             _sealed.write_text(meta_path, json.dumps(meta, indent=2))
-            self.recorder.finalize_encryption()
+            # A test double may stand in for the recorder; only the real one
+            # can hold an encrypted recording.
+            finalize = getattr(self.recorder, "finalize_encryption", None)
+            if callable(finalize):
+                finalize()
             if self._listener_error is not None:
                 raise self._listener_error
             self._assert_no_new_pages()
@@ -2775,7 +2779,9 @@ class InteractiveRecorder:
         self.done = True
         self._pyq.clear()
         if self.recorder is not None:
-            self.recorder.abandon_encryption()
+            abandon = getattr(self.recorder, "abandon_encryption", None)
+            if callable(abandon):
+                abandon()
         try:
             self._cleanup_page_listeners()
         finally:

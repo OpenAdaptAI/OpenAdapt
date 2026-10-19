@@ -194,7 +194,8 @@ class Recorder:
         self._settle_stable_frames = settle_stable_frames
         self._settle_timeout_s = settle_timeout_s
         self._params: dict[str, str] = {}
-        self._secret_params: set[str] = set()
+        # Names of parameters declared secret (never their values).
+        self._withheld_param_names: set[str] = set()
         self._i = 0
         self._t0 = time.monotonic()
 
@@ -340,7 +341,7 @@ class Recorder:
             "coordinate_space": "page",
             "app_url": self._app_url,
             "params": dict(self._params),
-            "secret_params": sorted(self._secret_params),
+            "secret_params": sorted(self._withheld_param_names),
         }
         if self._network_capture is not None:
             from openadapt_flow.network_capture import NETWORK_FILE
@@ -796,7 +797,7 @@ class Recorder:
             if secret:
                 event["secret"] = True
                 event.pop("text", None)
-                self._secret_params.add(param)
+                self._withheld_param_names.add(param)
             else:
                 self._params[param] = str(event.get("text", ""))
         # A caller that already captured the settled after-frame at the right
