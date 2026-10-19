@@ -354,6 +354,7 @@ A test fails when a command has no file or this list is out of date.
 - `bench`
 - `benchmark`
 - `demo`
+- `silent-saves`: Scores any GUI agent on injected bad saves, from the source checkout.
 - `tutorial`
 
 **Guard an agent you already run:**
