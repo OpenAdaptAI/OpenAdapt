@@ -1,0 +1,1460 @@
+name: Native Installer Release
+
+# This workflow publishes an exact, verified release candidate. It does not
+# create Production state. Only production-channel.yml can cache an already
+# active central OpenAdaptAI/.github admission.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Reviewed main native version to publish (X.Y.Z)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # One protected-main transaction owns tag creation, byte publication,
+  # mirroring, and candidate-channel update. Never run two transactions at once.
+  group: native-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate reviewed main release source
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      native_tag: ${{ steps.release.outputs.native_tag }}
+      source_commit: ${{ steps.release.outputs.source_commit }}
+      engine_tag: ${{ steps.release.outputs.engine_tag }}
+      engine_commit: ${{ steps.release.outputs.engine_commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Enforce the public source boundary
+        run: python scripts/check_source_boundary.py
+
+      - name: Require current reviewed main and the signed engine receipt
+        id: release
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force origin main:refs/remotes/origin/main --tags
+          current_main="$(git rev-parse --verify refs/remotes/origin/main)"
+          if [ "${current_main}" != "${GITHUB_SHA}" ]; then
+            echo "error: dispatch source ${GITHUB_SHA} is not current main ${current_main}" >&2
+            exit 1
+          fi
+          version="$(python scripts/native_release.py version)"
+          if [ "${REQUESTED_VERSION}" != "${version}" ]; then
+            echo "error: requested version ${REQUESTED_VERSION} is not reviewed main version ${version}" >&2
+            exit 1
+          fi
+          native_tag="desktop-v${version}"
+          python scripts/native_release.py validate-tag "${native_tag}"
+          engine_tag="v${version}"
+          engine_commit="$(git rev-parse --verify "${engine_tag}^{commit}")" || {
+            echo "error: matching engine tag ${engine_tag} does not exist" >&2
+            exit 1
+          }
+          if ! git merge-base --is-ancestor "${engine_commit}" "${GITHUB_SHA}"; then
+            echo "error: ${engine_tag} is not an ancestor of reviewed main" >&2
+            exit 1
+          fi
+          python scripts/native_release.py validate-version-transform \
+            --base-ref "${engine_commit}" \
+            --candidate-ref "${GITHUB_SHA}" \
+            --version "${version}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${native_tag}" >/dev/null; then
+            echo "error: immutable native tag ${native_tag} already exists" >&2
+            exit 1
+          fi
+          git ls-remote --tags origin > remote-native-tags.txt
+          python scripts/native_release.py validate-release-order \
+            --candidate-tag "${native_tag}" \
+            --tags remote-native-tags.txt
+
+          gh release view "${engine_tag}" \
+            --json databaseId,isDraft,isPrerelease,publishedAt,tagName,url \
+            > engine-release.json
+          mkdir engine-assets
+          gh release download "${engine_tag}" --dir engine-assets \
+            --pattern '*.whl' \
+            --pattern '*.tar.gz' \
+            --pattern 'openadapt-desktop-engine-release-provenance.json'
+          receipt=engine-assets/openadapt-desktop-engine-release-provenance.json
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/heads/main"
+          gh attestation verify "${receipt}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners
+          python scripts/native_release.py validate-engine-provenance \
+            --file "${receipt}" \
+            --directory engine-assets \
+            --release engine-release.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --engine-tag "${engine_tag}" \
+            --engine-commit "${engine_commit}"
+          receipt_parent="$(jq -r '.workflow_commit' "${receipt}")"
+          observed_parent="$(git rev-parse --verify "${engine_commit}^")"
+          if [ "${receipt_parent}" != "${observed_parent}" ]; then
+            echo "error: engine receipt does not bind the semantic release parent" >&2
+            exit 1
+          fi
+
+          {
+            echo "native_tag=${native_tag}"
+            echo "source_commit=${GITHUB_SHA}"
+            echo "engine_tag=${engine_tag}"
+            echo "engine_commit=${engine_commit}"
+          } >> "${GITHUB_OUTPUT}"
+
+  build-macos:
+    name: macOS ${{ matrix.architecture }}
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    # The protected environment owns the Developer ID identity and notary
+    # credentials. A native release cannot fall back to an ad-hoc artifact.
+    environment: native-release
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            architecture: arm64
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            architecture: x86_64
+            target: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.97.0"
+          targets: ${{ matrix.target }}
+
+      - name: Validate complete-or-absent Apple signing credentials
+        id: signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: >-
+          python scripts/native_signing.py preflight
+          --platform macos
+          --require-mode developer-id-notarized
+          --github-output "${GITHUB_OUTPUT}"
+
+      - name: Import Developer ID certificate into an ephemeral keychain
+        if: steps.signing.outputs.mode == 'developer-id-notarized'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          certificate_path="${RUNNER_TEMP}/openadapt-developer-id.p12"
+          keychain_path="${RUNNER_TEMP}/openadapt-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 32)"
+          printf '%s' "${APPLE_CERTIFICATE}" | base64 --decode > "${certificate_path}"
+          security create-keychain -p "${keychain_password}" "${keychain_path}"
+          security set-keychain-settings -lut 21600 "${keychain_path}"
+          security unlock-keychain -p "${keychain_password}" "${keychain_path}"
+          security import "${certificate_path}" -k "${keychain_path}" \
+            -P "${APPLE_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "${keychain_password}" "${keychain_path}"
+          security list-keychain -d user -s "${keychain_path}"
+          echo "OPENADAPT_APPLE_KEYCHAIN=${keychain_path}" >> "${GITHUB_ENV}"
+          echo "OPENADAPT_APPLE_CERTIFICATE=${certificate_path}" >> "${GITHUB_ENV}"
+
+      - name: Install locked Tauri CLI
+        run: npm ci --ignore-scripts
+
+      - name: Build engine sidecar for Tauri externalBin
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ steps.signing.outputs.mode == 'developer-id-notarized' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check uv==0.11.29
+          python scripts/sync_frozen_dependencies.py
+          uv run python scripts/build_frozen_engine.py
+          uv run python scripts/verify_build_artifact.py sidecar
+          uv run python scripts/smoke_test_frozen_flow.py
+          mkdir -p src-tauri/binaries
+          cp dist/openadapt-engine \
+            "src-tauri/binaries/openadapt-engine-${{ matrix.target }}"
+
+      - name: Build Developer ID signed and notarized DMG
+        if: steps.signing.outputs.mode == 'developer-id-notarized'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: >-
+          npm run tauri build --
+          --bundles dmg
+          --target ${{ matrix.target }}
+
+      - name: Build ad-hoc signed DMG
+        if: steps.signing.outputs.mode == 'adhoc'
+        env:
+          APPLE_SIGNING_IDENTITY: "-"
+        run: >-
+          npm run tauri build --
+          --bundles dmg
+          --target ${{ matrix.target }}
+          --config src-tauri/tauri.adhoc.conf.json
+
+      - name: Smoke-test DMG install, signature policy, launch, and uninstall
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifacts=(src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg)
+          test "${#artifacts[@]}" -eq 1
+          python scripts/smoke_test_native_installer.py \
+            --artifact "${artifacts[0]}" \
+            --app-path "${RUNNER_TEMP}/OpenAdapt Desktop.app" \
+            --expected-architecture "${{ matrix.architecture }}" \
+            --signing-mode "${{ steps.signing.outputs.mode }}" \
+            --signing-identity "${APPLE_SIGNING_IDENTITY}" \
+            --signing-team-id "${APPLE_TEAM_ID}" \
+            --launch-seconds 20
+
+      - name: Stage exact native DMG
+        run: >-
+          python scripts/native_release.py stage
+          --bundle-root src-tauri/target/${{ matrix.target }}/release/bundle
+          --output dist/native
+          --platform macos
+          --architecture ${{ matrix.architecture }}
+          --signing ${{ steps.signing.outputs.mode }}
+
+      - name: Upload smoke-tested DMG
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-macos-${{ matrix.architecture }}
+          path: dist/native/*
+          if-no-files-found: error
+
+      - name: Remove ephemeral Apple signing material
+        if: always() && steps.signing.outputs.mode == 'developer-id-notarized'
+        shell: bash
+        run: |
+          security delete-keychain "${OPENADAPT_APPLE_KEYCHAIN}" || true
+          rm -f "${OPENADAPT_APPLE_CERTIFICATE}"
+
+  build-windows:
+    name: Windows x86_64
+    needs: validate
+    runs-on: windows-2022
+    # The protected environment owns either Azure Trusted Signing or the PFX
+    # identity. A native release cannot fall back to unsigned installers.
+    environment: native-release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.97.0"
+          targets: x86_64-pc-windows-msvc
+
+      - name: Validate complete-or-absent Windows signing credentials
+        id: signing
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          TRUSTED_SIGNING_ENDPOINT: ${{ secrets.TRUSTED_SIGNING_ENDPOINT }}
+          TRUSTED_SIGNING_ACCOUNT: ${{ secrets.TRUSTED_SIGNING_ACCOUNT }}
+          TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+        shell: pwsh
+        run: >-
+          python scripts/native_signing.py preflight
+          --platform windows
+          --require-mode authenticode
+          --github-output "$env:GITHUB_OUTPUT"
+
+      - name: Import Authenticode certificate and write signing config
+        if: steps.signing.outputs.mode == 'authenticode' && steps.signing.outputs.method == 'pfx'
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+        shell: pwsh
+        run: |
+          $CertificatePath = Join-Path $env:RUNNER_TEMP "openadapt-code-signing.pfx"
+          [IO.File]::WriteAllBytes(
+            $CertificatePath,
+            [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+          )
+          $Password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $Certificate = Import-PfxCertificate `
+            -FilePath $CertificatePath `
+            -CertStoreLocation Cert:\CurrentUser\My `
+            -Password $Password | Where-Object HasPrivateKey | Select-Object -First 1
+          if ($null -eq $Certificate) { throw "PFX did not import a private code-signing key" }
+          $Expected = $env:WINDOWS_CERTIFICATE_THUMBPRINT.Replace(" ", "").ToUpperInvariant()
+          if ($Certificate.Thumbprint -ne $Expected) { throw "Imported certificate thumbprint mismatch" }
+          $ConfigPath = Join-Path $env:RUNNER_TEMP "openadapt-windows-signing.json"
+          python scripts/native_signing.py windows-config `
+            --output $ConfigPath `
+            --thumbprint $Expected
+          "OPENADAPT_WINDOWS_SIGNING_CONFIG=$ConfigPath" | Out-File $env:GITHUB_ENV -Append
+          "OPENADAPT_WINDOWS_CERTIFICATE_PATH=$CertificatePath" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Install Trusted Signing CLI and write signing config
+        if: steps.signing.outputs.method == 'trusted-signing'
+        env:
+          TRUSTED_SIGNING_ENDPOINT: ${{ secrets.TRUSTED_SIGNING_ENDPOINT }}
+          TRUSTED_SIGNING_ACCOUNT: ${{ secrets.TRUSTED_SIGNING_ACCOUNT }}
+          TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+        shell: pwsh
+        run: |
+          # Azure Trusted Signing mints a short-lived, publicly trusted
+          # certificate per signature and timestamps it (RFC 3161), so no
+          # thumbprint is pinned. trusted-signing-cli authenticates from the
+          # AZURE_* service-principal environment via DefaultAzureCredential.
+          cargo install trusted-signing-cli --version 0.5.3 --locked
+          $ConfigPath = Join-Path $env:RUNNER_TEMP "openadapt-windows-signing.json"
+          python scripts/native_signing.py windows-trusted-signing-config `
+            --output $ConfigPath `
+            --endpoint $env:TRUSTED_SIGNING_ENDPOINT `
+            --account $env:TRUSTED_SIGNING_ACCOUNT `
+            --certificate-profile $env:TRUSTED_SIGNING_CERTIFICATE_PROFILE
+          "OPENADAPT_WINDOWS_SIGNING_CONFIG=$ConfigPath" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Install locked Tauri CLI
+        run: npm ci --ignore-scripts
+
+      - name: Build engine sidecar for Tauri externalBin
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check uv==0.11.29
+          python scripts/sync_frozen_dependencies.py
+          uv run python scripts/build_frozen_engine.py
+          uv run python scripts/verify_build_artifact.py sidecar
+          uv run python scripts/smoke_test_frozen_flow.py
+          mkdir -p src-tauri/binaries
+          cp dist/openadapt-engine.exe \
+            src-tauri/binaries/openadapt-engine-x86_64-pc-windows-msvc.exe
+
+      - name: Build signed MSI and NSIS installers
+        if: steps.signing.outputs.mode == 'authenticode'
+        env:
+          # Consumed only by the Trusted Signing method (empty otherwise);
+          # trusted-signing-cli reads these during `tauri build`.
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        shell: pwsh
+        run: >-
+          npm run tauri build --
+          --bundles msi,nsis
+          --target x86_64-pc-windows-msvc
+          --config "$env:OPENADAPT_WINDOWS_SIGNING_CONFIG"
+
+      - name: Build unsigned MSI and NSIS installers
+        if: steps.signing.outputs.mode == 'unsigned'
+        run: >-
+          npm run tauri build --
+          --bundles msi,nsis
+          --target x86_64-pc-windows-msvc
+
+      - name: Smoke-test MSI and NSIS install, signature policy, launch, and uninstall
+        timeout-minutes: 15
+        env:
+          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+        shell: pwsh
+        run: |
+          $Msi = @(Get-ChildItem "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi")
+          $Nsis = @(Get-ChildItem "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe")
+          if ($Msi.Count -ne 1 -or $Nsis.Count -ne 1) { throw "Expected one MSI and one NSIS installer" }
+          $Signature = @("--signing-mode", "${{ steps.signing.outputs.mode }}")
+          # Trusted Signing rotates short-lived certificates per signature, so
+          # only the importable pfx method has a stable thumbprint to pin. Both
+          # methods still require a Valid, publicly trusted Authenticode chain.
+          if ("${{ steps.signing.outputs.method }}" -eq "pfx") {
+            $Signature += @("--signing-fingerprint", $env:WINDOWS_CERTIFICATE_THUMBPRINT)
+          }
+          python scripts/smoke_test_native_installer.py `
+            --artifact $Msi[0].FullName `
+            --app-path "$env:ProgramFiles/OpenAdapt Desktop/openadapt-desktop.exe" `
+            --expected-architecture x86_64 `
+            --allow-system-install `
+            --launch-seconds 20 @Signature
+          python scripts/smoke_test_native_installer.py `
+            --artifact $Nsis[0].FullName `
+            --app-path "$env:LOCALAPPDATA/OpenAdapt Desktop/openadapt-desktop.exe" `
+            --uninstaller-path "$env:LOCALAPPDATA/OpenAdapt Desktop/uninstall.exe" `
+            --expected-architecture x86_64 `
+            --allow-system-install `
+            --launch-seconds 20 @Signature
+
+      - name: Stage exact native Windows installers
+        run: >-
+          python scripts/native_release.py stage
+          --bundle-root src-tauri/target/x86_64-pc-windows-msvc/release/bundle
+          --output dist/native
+          --platform windows
+          --architecture x86_64
+          --signing ${{ steps.signing.outputs.mode }}
+
+      - name: Upload smoke-tested Windows installers
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-windows-x86_64
+          path: dist/native/*
+          if-no-files-found: error
+
+      - name: Remove ephemeral Windows signing material
+        if: always() && steps.signing.outputs.mode == 'authenticode' && steps.signing.outputs.method == 'pfx'
+        env:
+          WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
+        shell: pwsh
+        run: |
+          Get-ChildItem Cert:\CurrentUser\My | Where-Object {
+            $_.Thumbprint -eq $env:WINDOWS_CERTIFICATE_THUMBPRINT.Replace(" ", "").ToUpperInvariant()
+          } | Remove-Item -Force
+          Remove-Item -LiteralPath $env:OPENADAPT_WINDOWS_CERTIFICATE_PATH -Force -ErrorAction SilentlyContinue
+
+  build-linux:
+    name: Linux x86_64 (GitHub-attested bytes)
+    needs: validate
+    runs-on: ubuntu-22.04
+    # DEB and AppImage have no one shared native signing format. The attest job
+    # below uses GitHub OIDC to sign provenance for the exact staged bytes and
+    # verifies those attestations before any release can be created.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Linux bundle dependencies
+        timeout-minutes: 10
+        run: |
+          set -uo pipefail
+          # The hosted runner resolves its Ubuntu mirror through
+          # /etc/apt/apt-mirrors.txt, which points at azure.archive.ubuntu.com.
+          # That mirror fails intermittently, and each failure costs minutes of
+          # apt retries. Prefer the canonical archive. Best-effort: an absent or
+          # already-canonical file changes nothing.
+          sudo sed -i \
+            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          update_ok=""
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              update_ok=1
+              break
+            fi
+            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
+            sleep $((attempt * 10))
+          done
+          if [ -z "$update_ok" ]; then
+            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
+            exit 1
+          fi
+          set -e
+          sudo apt-get install -y --no-install-recommends \
+            dbus \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libwebkit2gtk-4.1-dev \
+            patchelf \
+            xdg-utils \
+            xvfb
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.97.0"
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Install locked Tauri CLI
+        run: npm ci --ignore-scripts
+
+      - name: Build engine sidecar for Tauri externalBin
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check uv==0.11.29
+          python scripts/sync_frozen_dependencies.py
+          uv run python scripts/build_frozen_engine.py
+          uv run python scripts/verify_build_artifact.py sidecar
+          uv run python -m playwright install-deps chromium
+          sudo python scripts/alias_lowercase_x11_sonames.py
+          uv run python scripts/smoke_test_frozen_flow.py
+          mkdir -p src-tauri/binaries
+          cp dist/openadapt-engine \
+            src-tauri/binaries/openadapt-engine-x86_64-unknown-linux-gnu
+
+      - name: Build DEB and AppImage
+        run: >-
+          npm run tauri build --
+          --bundles deb,appimage
+          --target x86_64-unknown-linux-gnu
+
+      - name: Smoke-test DEB and AppImage install, launch, and uninstall
+        shell: bash
+        env:
+          # WebKitGTK's DMA-BUF renderer is unreliable under Xvfb on CI.
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+        run: |
+          set -euo pipefail
+          deb=(src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb)
+          appimage=(src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage)
+          test "${#deb[@]}" -eq 1
+          test "${#appimage[@]}" -eq 1
+          dbus-run-session -- xvfb-run --auto-servernum \
+            python scripts/smoke_test_native_installer.py \
+            --artifact "${deb[0]}" \
+            --app-path /usr/bin/openadapt-desktop \
+            --expected-architecture x86_64 \
+            --allow-system-install \
+            --launch-seconds 20
+          dbus-run-session -- xvfb-run --auto-servernum \
+            python scripts/smoke_test_native_installer.py \
+            --artifact "${appimage[0]}" \
+            --app-path "${RUNNER_TEMP}/OpenAdapt-Desktop.AppImage" \
+            --expected-architecture x86_64 \
+            --launch-seconds 20
+
+      - name: Stage exact native Linux packages
+        run: >-
+          python scripts/native_release.py stage
+          --bundle-root src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
+          --output dist/native
+          --platform linux
+          --architecture x86_64
+          --signing github-attested
+
+      - name: Upload smoke-tested Linux packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-linux-x86_64
+          path: dist/native/*
+          if-no-files-found: error
+
+  attest:
+    name: Checksum and attest exact release bytes
+    needs: [validate, build-macos, build-windows, build-linux]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      NATIVE_TAG: ${{ needs.validate.outputs.native_tag }}
+      SOURCE_COMMIT: ${{ needs.validate.outputs.source_commit }}
+      ENGINE_TAG: ${{ needs.validate.outputs.engine_tag }}
+      ENGINE_COMMIT: ${{ needs.validate.outputs.engine_commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Download all smoke-tested platform artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: native-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Reject missing, duplicate, or unexpected release files
+        run: python scripts/native_release.py validate-set --directory release-assets
+
+      - name: Generate a machine-readable SBOM from the exact installer set
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: release-assets
+          format: cyclonedx-json
+          output-file: release-assets/OpenAdapt-Desktop-${{ needs.validate.outputs.native_tag }}.cyclonedx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Refuse an empty or malformed release SBOM
+        run: >-
+          python scripts/native_release.py validate-sbom
+          --file release-assets/OpenAdapt-Desktop-${{ needs.validate.outputs.native_tag }}.cyclonedx.json
+
+      - name: Generate website-readable release manifest
+        run: >-
+          python scripts/native_release.py website-manifest
+          --directory release-assets
+          --tag "${{ needs.validate.outputs.native_tag }}"
+          --sbom release-assets/OpenAdapt-Desktop-${{ needs.validate.outputs.native_tag }}.cyclonedx.json
+
+      - name: Resolve the exact published engine release identity
+        id: engine_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "${ENGINE_TAG}" \
+            --json databaseId,isDraft,isPrerelease,publishedAt,tagName,url \
+            > engine-release.json
+          python scripts/native_release.py validate-engine-release \
+            --file engine-release.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --engine-tag "${ENGINE_TAG}" \
+            --engine-commit "${ENGINE_COMMIT}" \
+            --github-output "${GITHUB_OUTPUT}"
+
+          mkdir engine-assets
+          gh release download "${ENGINE_TAG}" --dir engine-assets \
+            --pattern '*.whl' \
+            --pattern '*.tar.gz' \
+            --pattern 'openadapt-desktop-engine-release-provenance.json'
+          receipt=engine-assets/openadapt-desktop-engine-release-provenance.json
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/heads/main"
+          gh attestation verify "${receipt}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners
+          python scripts/native_release.py validate-engine-provenance \
+            --file "${receipt}" \
+            --directory engine-assets \
+            --release engine-release.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --engine-tag "${ENGINE_TAG}" \
+            --engine-commit "${ENGINE_COMMIT}"
+          receipt_parent="$(jq -r '.workflow_commit' "${receipt}")"
+          observed_parent="$(git rev-parse --verify "${ENGINE_COMMIT}^")"
+          if [ "${receipt_parent}" != "${observed_parent}" ]; then
+            echo "error: engine receipt does not bind the semantic release parent" >&2
+            exit 1
+          fi
+
+      - name: Bind the exact source, engine release, and workflow invocation
+        env:
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/native_release.py write-provenance \
+            --output release-assets/openadapt-desktop-native-release-provenance.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${NATIVE_TAG}" \
+            --source-commit "${SOURCE_COMMIT}" \
+            --workflow-ref "${WORKFLOW_REF}" \
+            --workflow-commit "${WORKFLOW_COMMIT}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --runner-environment "${RUNNER_ENVIRONMENT}" \
+            --engine-tag "${ENGINE_TAG}" \
+            --engine-commit "${ENGINE_COMMIT}" \
+            --engine-release-id "${{ steps.engine_release.outputs.engine_release_id }}" \
+            --engine-release-url "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${ENGINE_TAG}"
+
+      - name: Add the standalone exact-inventory verifier
+        run: >-
+          cp scripts/verify_native_release_download.py
+          release-assets/verify-openadapt-native-release.py
+
+      - name: Generate and verify final checksums
+        run: |
+          python scripts/native_release.py checksums \
+            --directory release-assets \
+            --output release-assets/SHA256SUMS
+          python scripts/native_release.py verify-checksums \
+            --directory release-assets \
+            --manifest release-assets/SHA256SUMS
+
+      - name: Validate website manifest against exact checksummed bytes
+        run: >-
+          python scripts/native_release.py validate-website-manifest
+          --file release-assets/openadapt-desktop-release-manifest.json
+          --checksums release-assets/SHA256SUMS
+
+      - name: Attest the exact files named by SHA256SUMS
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-checksums: release-assets/SHA256SUMS
+
+      - name: Attest SHA256SUMS as the consumer trust root
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: release-assets/SHA256SUMS
+
+      - name: Verify the signed workflow and exact subject inventory before upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          provenance=release-assets/openadapt-desktop-native-release-provenance.json
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/native-release.yml@refs/heads/main"
+          gh attestation verify "${provenance}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners \
+            --format json > attestation.json
+          gh attestation verify release-assets/SHA256SUMS \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners
+          python scripts/native_release.py validate-attestation \
+            --file attestation.json \
+            --directory release-assets \
+            --checksums release-assets/SHA256SUMS \
+            --provenance "${provenance}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${NATIVE_TAG}" \
+            --source-commit "${SOURCE_COMMIT}"
+
+      - name: Upload exact attested release set
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-release-${{ needs.validate.outputs.native_tag }}
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish-native:
+    name: Publish the verified candidate prerelease
+    needs: [validate, attest]
+    runs-on: ubuntu-22.04
+    # This is the irreversible boundary. One environment approval authorizes
+    # the exact reviewed-main transaction. The job refuses an existing tag or
+    # release and never replaces published bytes.
+    environment: native-release
+    permissions:
+      contents: write
+      attestations: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NATIVE_TAG: ${{ needs.validate.outputs.native_tag }}
+      SOURCE_COMMIT: ${{ needs.validate.outputs.source_commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Download exact attested release set
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-release-${{ needs.validate.outputs.native_tag }}
+          path: release-assets
+
+      - name: Reverify exact bytes before upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          provenance=release-assets/openadapt-desktop-native-release-provenance.json
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/native-release.yml@refs/heads/main"
+          python scripts/native_release.py verify-checksums \
+            --directory release-assets \
+            --manifest release-assets/SHA256SUMS
+          gh attestation verify "${provenance}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners \
+            --format json > attestation.json
+          gh attestation verify release-assets/SHA256SUMS \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners
+          python scripts/native_release.py validate-attestation \
+            --file attestation.json \
+            --directory release-assets \
+            --checksums release-assets/SHA256SUMS \
+            --provenance "${provenance}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${NATIVE_TAG}" \
+            --source-commit "${SOURCE_COMMIT}"
+
+      - name: Create or safely resume the immutable public prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force origin main:refs/remotes/origin/main --tags
+          current_main="$(git rev-parse --verify refs/remotes/origin/main)"
+          if [ "${current_main}" != "${SOURCE_COMMIT}" ]; then
+            echo "error: main advanced to ${current_main}; refusing stale publication" >&2
+            exit 1
+          fi
+          tag_exists=false
+          if git ls-remote --exit-code --tags origin "refs/tags/${NATIVE_TAG}" >/dev/null; then
+            tag_exists=true
+            git fetch --force origin "refs/tags/${NATIVE_TAG}:refs/tags/${NATIVE_TAG}"
+            observed="$(git rev-parse --verify "${NATIVE_TAG}^{commit}")"
+            if [ "${observed}" != "${SOURCE_COMMIT}" ]; then
+              echo "error: immutable ${NATIVE_TAG} resolves to ${observed}" >&2
+              exit 1
+            fi
+          fi
+          git ls-remote --tags origin > remote-native-tags.txt
+          python scripts/native_release.py validate-release-order \
+            --candidate-tag "${NATIVE_TAG}" \
+            --tags remote-native-tags.txt
+          title="OpenAdapt Desktop release candidate ${NATIVE_TAG#desktop-v}"
+          if gh release view "${NATIVE_TAG}" \
+            --json assets,body,isDraft,isPrerelease,tagName > native-release.json 2>/dev/null; then
+            if ! jq -e --arg tag "${NATIVE_TAG}" \
+              '.tagName == $tag and .isDraft == false and .isPrerelease == true and
+               (.body | contains("<!-- installer-release -->"))' \
+              native-release.json >/dev/null; then
+              echo "error: existing native release has the wrong public identity" >&2
+              exit 1
+            fi
+            mkdir existing-release-assets
+            jq -r '.assets[].name' native-release.json > existing-assets.txt
+            while IFS= read -r name; do
+              if [ -z "${name}" ]; then
+                continue
+              fi
+              if [ "$(basename "${name}")" != "${name}" ] || \
+                 [ ! -f "release-assets/${name}" ]; then
+                echo "error: existing release has an unexpected asset: ${name}" >&2
+                exit 1
+              fi
+              gh release download "${NATIVE_TAG}" --dir existing-release-assets \
+                --pattern "${name}"
+              cmp "release-assets/${name}" "existing-release-assets/${name}"
+            done < existing-assets.txt
+            for path in release-assets/*; do
+              name="$(basename "${path}")"
+              if ! grep -qxF "${name}" existing-assets.txt; then
+                gh release upload "${NATIVE_TAG}" "${path}"
+              fi
+            done
+          else
+            create_ref=(--target "${SOURCE_COMMIT}")
+            if [ "${tag_exists}" = true ]; then
+              create_ref=(--verify-tag)
+            fi
+            gh release create "${NATIVE_TAG}" \
+              "${create_ref[@]}" \
+              --prerelease \
+              --title "${title}" \
+              --notes-file docs/RELEASE_CANDIDATE_INSTALLERS.md \
+              release-assets/*
+          fi
+          mkdir published-release-assets
+          gh release download "${NATIVE_TAG}" --dir published-release-assets --pattern '*'
+          cmp release-assets/SHA256SUMS published-release-assets/SHA256SUMS
+          python scripts/native_release.py verify-checksums \
+            --directory published-release-assets \
+            --manifest published-release-assets/SHA256SUMS
+
+  verify-published-release:
+    name: Verify the published native release
+    needs: [validate, publish-native]
+    runs-on: ubuntu-22.04
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NATIVE_TAG: ${{ needs.validate.outputs.native_tag }}
+      SOURCE_COMMIT: ${{ needs.validate.outputs.source_commit }}
+      ENGINE_TAG: ${{ needs.validate.outputs.engine_tag }}
+      ENGINE_COMMIT: ${{ needs.validate.outputs.engine_commit }}
+    outputs:
+      native_tag: ${{ needs.validate.outputs.native_tag }}
+      source_commit: ${{ needs.validate.outputs.source_commit }}
+      verifier_commit: ${{ steps.verifier.outputs.verifier_commit }}
+      verified_artifact: ${{ steps.artifact.outputs.verified_artifact }}
+      engine_tag: ${{ needs.validate.outputs.engine_tag }}
+      engine_commit: ${{ needs.validate.outputs.engine_commit }}
+    steps:
+      # The verifier must be the exact protected-main workflow commit that
+      # GitHub binds into this run's attestation. Never execute verification
+      # code supplied by the release tag that is under review, or a later main
+      # commit that is outside this workflow invocation.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.source_commit }}
+          fetch-depth: 0
+
+      - name: Bind all later write jobs to this reviewed verifier commit
+        id: verifier
+        shell: bash
+        run: echo "verifier_commit=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Download the exact public release and resolve its immutable tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir release-assets
+          gh release download "${NATIVE_TAG}" --dir release-assets --pattern '*'
+          git fetch --force origin "refs/tags/${NATIVE_TAG}:refs/tags/${NATIVE_TAG}"
+          observed="$(git rev-parse --verify "${NATIVE_TAG}^{commit}")"
+          if [ "${observed}" != "${SOURCE_COMMIT}" ]; then
+            echo "error: ${NATIVE_TAG} resolves to ${observed}, not ${SOURCE_COMMIT}" >&2
+            exit 1
+          fi
+
+      - name: Verify exact assets, signer identity, source, and invocation
+        id: proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          provenance=release-assets/openadapt-desktop-native-release-provenance.json
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/native-release.yml@refs/heads/main"
+          python scripts/native_release.py verify-checksums \
+            --directory release-assets \
+            --manifest release-assets/SHA256SUMS
+          gh attestation verify "${provenance}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners \
+            --format json > attestation.json
+          gh attestation verify release-assets/SHA256SUMS \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners
+          python scripts/native_release.py validate-attestation \
+            --file attestation.json \
+            --directory release-assets \
+            --checksums release-assets/SHA256SUMS \
+            --provenance "${provenance}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${NATIVE_TAG}" \
+            --source-commit "${SOURCE_COMMIT}" \
+            --github-output "${GITHUB_OUTPUT}"
+
+      - name: Revalidate the exact signed engine release lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force origin "refs/tags/${ENGINE_TAG}:refs/tags/${ENGINE_TAG}"
+          observed="$(git rev-parse --verify "${ENGINE_TAG}^{commit}")"
+          if [ "${observed}" != "${ENGINE_COMMIT}" ]; then
+            echo "error: engine tag moved after the signed native build" >&2
+            exit 1
+          fi
+          gh release view "${ENGINE_TAG}" \
+            --json databaseId,isDraft,isPrerelease,publishedAt,tagName,url \
+            > engine-release.json
+          python scripts/native_release.py validate-engine-release \
+            --file engine-release.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --engine-tag "${ENGINE_TAG}" \
+            --engine-commit "${ENGINE_COMMIT}" \
+            --provenance release-assets/openadapt-desktop-native-release-provenance.json
+          mkdir engine-assets
+          gh release download "${ENGINE_TAG}" --dir engine-assets \
+            --pattern '*.whl' \
+            --pattern '*.tar.gz' \
+            --pattern 'openadapt-desktop-engine-release-provenance.json'
+          receipt=engine-assets/openadapt-desktop-engine-release-provenance.json
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/heads/main"
+          gh attestation verify "${receipt}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners
+          python scripts/native_release.py validate-engine-provenance \
+            --file "${receipt}" \
+            --directory engine-assets \
+            --release engine-release.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --engine-tag "${ENGINE_TAG}" \
+            --engine-commit "${ENGINE_COMMIT}"
+          receipt_parent="$(jq -r '.workflow_commit' "${receipt}")"
+          observed_parent="$(git rev-parse --verify "${ENGINE_COMMIT}^")"
+          if [ "${receipt_parent}" != "${observed_parent}" ]; then
+            echo "error: engine receipt does not bind the semantic release parent" >&2
+            exit 1
+          fi
+
+      - name: Retain the exact verified bytes for the write jobs
+        id: artifact
+        shell: bash
+        run: echo "verified_artifact=verified-published-native-${GITHUB_RUN_ID}" >> "${GITHUB_OUTPUT}"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verified-published-native-${{ github.run_id }}
+          path: release-assets/*
+          if-no-files-found: error
+
+  point-engine-release:
+    name: Point the engine release at these installers
+    # GitHub's /releases/latest excludes prereleases by definition, so the engine
+    # release vX.Y.Z is what a human landing on "Latest" sees -- and it carries
+    # only the wheel and sdist. Without this the canonical download path shows no
+    # installer at all, which is the link cited in launch material.
+    #
+    # It writes the notes block; `mirror-installers-to-engine-release` below
+    # copies the actual bytes. The pointer still names desktop-vX.Y.Z because
+    # that tag stays the canonical provenance home and the one download pages
+    # select from.
+    needs: [verify-published-release, mirror-installers-to-engine-release]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NATIVE_TAG: ${{ needs.verify-published-release.outputs.native_tag }}
+      SOURCE_COMMIT: ${{ needs.verify-published-release.outputs.source_commit }}
+      ENGINE_TAG: ${{ needs.verify-published-release.outputs.engine_tag }}
+      ENGINE_COMMIT: ${{ needs.verify-published-release.outputs.engine_commit }}
+      WORKFLOW_REF: ${{ github.workflow_ref }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify-published-release.outputs.verifier_commit }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.verify-published-release.outputs.verified_artifact }}
+          path: mirror
+
+      - name: Prepend an idempotent installer pointer to the engine release
+        shell: bash
+        run: |
+          set -euo pipefail
+          engine_tag="${ENGINE_TAG}"
+
+          python scripts/native_release.py verify-checksums \
+            --directory mirror \
+            --manifest mirror/SHA256SUMS
+          python scripts/native_release.py validate-provenance \
+            --file mirror/openadapt-desktop-native-release-provenance.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${NATIVE_TAG}" \
+            --source-commit "${SOURCE_COMMIT}"
+          git fetch --force origin "refs/tags/${engine_tag}:refs/tags/${engine_tag}"
+          observed="$(git rev-parse --verify "${engine_tag}^{commit}")"
+          if [ "${observed}" != "${ENGINE_COMMIT}" ]; then
+            echo "error: engine tag differs from signed native provenance" >&2
+            exit 1
+          fi
+          gh release view "${engine_tag}" \
+            --json databaseId,isDraft,isPrerelease,publishedAt,tagName,url \
+            > engine-release.json
+          python scripts/native_release.py validate-engine-release \
+            --file engine-release.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --engine-tag "${engine_tag}" \
+            --engine-commit "${ENGINE_COMMIT}" \
+            --provenance mirror/openadapt-desktop-native-release-provenance.json
+
+          # The reviewed-main validation job verifies the engine release and its
+          # signed receipt. A missing release here means that invariant broke.
+          if ! gh release view "${engine_tag}" >/dev/null 2>&1; then
+            echo "error: engine release ${engine_tag} does not exist." >&2
+            echo "the release transaction verified ${engine_tag} before building" >&2
+            echo "the installers; investigate before retrying." >&2
+            exit 1
+          fi
+
+          gh release view "${engine_tag}" --json body -q .body > engine-notes.md
+          result="$(
+            python scripts/native_release.py installer-pointer-notes \
+              --native-tag "${NATIVE_TAG}" \
+              --notes-file engine-notes.md \
+              --output engine-notes.updated.md \
+              --repo "${REPO}"
+          )"
+          if [ "${result}" = "skip" ]; then
+            echo "${engine_tag} already points at ${NATIVE_TAG}."
+          else
+            gh release edit "${engine_tag}" --notes-file engine-notes.updated.md
+            echo "${engine_tag} now points at ${NATIVE_TAG}."
+          fi
+
+  mirror-installers-to-engine-release:
+    name: Mirror the attested installers onto the engine release
+    # A notes-only pointer still leaves /releases/latest with no downloadable
+    # installer -- a visitor has to read a paragraph and click through. This job
+    # copies the exact attested asset set onto the engine release vX.Y.Z so
+    # "Latest" carries both the wheel and a working installer.
+    #
+    # Why this does not overstate maturity: every filename encodes its trust
+    # state. macOS requires Developer ID and notarization. Windows requires
+    # Authenticode. Linux requires an OIDC attestation over the exact bytes.
+    # The pointer names these contracts and `desktop-vX.Y.Z` stays a prerelease.
+    #
+    # Machine consumers do not trust release-note markers. This job publishes a
+    # separately attested closed index after it verifies the exact mirrored set.
+    # The index binds the native and engine release identities and cannot move
+    # to a lower version.
+    #
+    # Cost: ~757 MB duplicated per release. GitHub release storage and bandwidth
+    # are not billed for public repositories, so the recurring cost is the
+    # download+upload minutes in this one job, not storage spend.
+    needs: verify-published-release
+    runs-on: ubuntu-22.04
+    permissions:
+      actions: read
+      attestations: write
+      contents: write
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NATIVE_TAG: ${{ needs.verify-published-release.outputs.native_tag }}
+      SOURCE_COMMIT: ${{ needs.verify-published-release.outputs.source_commit }}
+      ENGINE_TAG: ${{ needs.verify-published-release.outputs.engine_tag }}
+      ENGINE_COMMIT: ${{ needs.verify-published-release.outputs.engine_commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify-published-release.outputs.verifier_commit }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.verify-published-release.outputs.verified_artifact }}
+          path: mirror
+
+      - name: Mirror and re-download the exact verified asset set
+        shell: bash
+        run: |
+          set -euo pipefail
+          engine_tag="${ENGINE_TAG}"
+
+          python scripts/native_release.py verify-checksums \
+            --directory mirror \
+            --manifest mirror/SHA256SUMS
+          python scripts/native_release.py validate-provenance \
+            --file mirror/openadapt-desktop-native-release-provenance.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${NATIVE_TAG}" \
+            --source-commit "${SOURCE_COMMIT}"
+          git fetch --force origin "refs/tags/${engine_tag}:refs/tags/${engine_tag}"
+          observed="$(git rev-parse --verify "${engine_tag}^{commit}")"
+          if [ "${observed}" != "${ENGINE_COMMIT}" ]; then
+            echo "error: engine tag differs from signed native provenance" >&2
+            exit 1
+          fi
+          gh release view "${engine_tag}" \
+            --json databaseId,isDraft,isPrerelease,publishedAt,tagName,url \
+            > engine-release.json
+          python scripts/native_release.py validate-engine-release \
+            --file engine-release.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --engine-tag "${engine_tag}" \
+            --engine-commit "${ENGINE_COMMIT}" \
+            --provenance mirror/openadapt-desktop-native-release-provenance.json
+          gh release upload "${engine_tag}" mirror/* --clobber
+
+          mkdir remote-mirror
+          gh release download "${engine_tag}" --dir remote-mirror \
+            --pattern 'OpenAdapt-Desktop-Candidate-*' \
+            --pattern 'OpenAdapt-Desktop-desktop-v*.cyclonedx.json' \
+            --pattern 'openadapt-desktop-release-manifest.json' \
+            --pattern 'openadapt-desktop-native-release-provenance.json' \
+            --pattern 'verify-openadapt-native-release.py' \
+            --pattern 'SHA256SUMS'
+          cmp mirror/SHA256SUMS remote-mirror/SHA256SUMS
+          python scripts/native_release.py verify-checksums \
+            --directory remote-mirror \
+            --manifest remote-mirror/SHA256SUMS
+          echo "${engine_tag} carries the exact verified ${NATIVE_TAG} asset set."
+
+      - name: Write the monotonic verified release index
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir existing-index
+          # Decide from the authenticated asset list, never from the absence of
+          # a downloaded file. A swallowed download error would otherwise drop
+          # the monotonicity check that --existing exists to demand.
+          gh release view "${ENGINE_TAG}" --json assets --jq '.assets[].name' \
+            > engine-release-assets.txt
+          existing=()
+          if grep -qxF 'openadapt-desktop-verified-release.json' engine-release-assets.txt; then
+            gh release download "${ENGINE_TAG}" \
+              --dir existing-index \
+              --pattern 'openadapt-desktop-verified-release.json'
+            existing=(--existing existing-index/openadapt-desktop-verified-release.json)
+          fi
+          python scripts/native_release.py write-verified-index \
+            --output openadapt-desktop-verified-release.json \
+            --directory mirror \
+            --checksums mirror/SHA256SUMS \
+            --provenance mirror/openadapt-desktop-native-release-provenance.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${NATIVE_TAG}" \
+            --source-commit "${{ needs.verify-published-release.outputs.source_commit }}" \
+            --engine-release engine-release.json \
+            "${existing[@]}"
+
+      - name: Attest the verified release index
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: openadapt-desktop-verified-release.json
+
+      - name: Publish and verify the release index
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force origin "refs/tags/${ENGINE_TAG}:refs/tags/${ENGINE_TAG}"
+          observed="$(git rev-parse --verify "${ENGINE_TAG}^{commit}")"
+          if [ "${observed}" != "${ENGINE_COMMIT}" ]; then
+            echo "error: engine tag differs before the verified-index write" >&2
+            exit 1
+          fi
+          gh release view "${ENGINE_TAG}" \
+            --json databaseId,isDraft,isPrerelease,publishedAt,tagName,url \
+            > engine-release-current.json
+          python scripts/native_release.py validate-engine-release \
+            --file engine-release-current.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --engine-tag "${ENGINE_TAG}" \
+            --engine-commit "${ENGINE_COMMIT}" \
+            --provenance mirror/openadapt-desktop-native-release-provenance.json
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/native-release.yml@refs/heads/main"
+          gh attestation verify openadapt-desktop-verified-release.json \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners
+          gh release upload "${ENGINE_TAG}" openadapt-desktop-verified-release.json --clobber
+          mkdir remote-index
+          gh release download "${ENGINE_TAG}" --dir remote-index \
+            --pattern 'openadapt-desktop-verified-release.json'
+          cmp openadapt-desktop-verified-release.json \
+            remote-index/openadapt-desktop-verified-release.json
+          python scripts/native_release.py validate-verified-index \
+            --file remote-index/openadapt-desktop-verified-release.json
+          gh attestation verify remote-index/openadapt-desktop-verified-release.json \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners
+
+      - name: Write the monotonic candidate channel descriptor
+        shell: bash
+        run: |
+          set -euo pipefail
+          channel_tag=desktop-channel
+          existing=()
+          reuse=false
+          if gh release view "${channel_tag}" --json isDraft,isPrerelease,assets \
+            > channel-release.json 2>/dev/null; then
+            if [ "$(jq -r '.isDraft' channel-release.json)" != "false" ] || \
+               [ "$(jq -r '.isPrerelease' channel-release.json)" != "true" ]; then
+              echo "error: ${channel_tag} is not the expected public prerelease authority" >&2
+              exit 1
+            fi
+            if ! jq -e '.assets | any(.name == "openadapt-desktop-channel.json")' \
+              channel-release.json >/dev/null; then
+              echo "error: ${channel_tag} exists without its channel descriptor" >&2
+              exit 1
+            fi
+            mkdir prior-channel
+            gh release download "${channel_tag}" --dir prior-channel \
+              --pattern 'openadapt-desktop-channel.json'
+            identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/native-release.yml@refs/heads/main"
+            gh attestation verify prior-channel/openadapt-desktop-channel.json \
+              --repo "${GITHUB_REPOSITORY}" \
+              --cert-identity "${identity}" \
+              --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+              --deny-self-hosted-runners
+            python scripts/native_release.py validate-release-channel \
+              --file prior-channel/openadapt-desktop-channel.json
+            prior_tag="$(jq -r '.native_tag' prior-channel/openadapt-desktop-channel.json)"
+            if [ "${prior_tag}" = "${NATIVE_TAG}" ]; then
+              expected_index="$(jq -r '.verified_index.sha256' \
+                prior-channel/openadapt-desktop-channel.json)"
+              observed_index="$(sha256sum remote-index/openadapt-desktop-verified-release.json | cut -d ' ' -f 1)"
+              expected_checksums="$(jq -r '.checksums.sha256' \
+                prior-channel/openadapt-desktop-channel.json)"
+              observed_checksums="$(sha256sum mirror/SHA256SUMS | cut -d ' ' -f 1)"
+              prior_source="$(jq -r '.native_source_commit' \
+                prior-channel/openadapt-desktop-channel.json)"
+              if [ "${expected_index}" != "${observed_index}" ] || \
+                 [ "${expected_checksums}" != "${observed_checksums}" ] || \
+                 [ "${prior_source}" != "${SOURCE_COMMIT}" ]; then
+                echo "error: existing channel conflicts with this release transaction" >&2
+                exit 1
+              fi
+              cp prior-channel/openadapt-desktop-channel.json \
+                openadapt-desktop-channel.json
+              reuse=true
+            else
+              existing=(--existing prior-channel/openadapt-desktop-channel.json)
+            fi
+          fi
+          if [ "${reuse}" = false ]; then
+            python scripts/native_release.py write-release-channel \
+              --output openadapt-desktop-channel.json \
+              --index remote-index/openadapt-desktop-verified-release.json \
+              --repository "${GITHUB_REPOSITORY}" \
+              --workflow-ref "${WORKFLOW_REF}" \
+              --workflow-commit "${SOURCE_COMMIT}" \
+              --run-id "${GITHUB_RUN_ID}" \
+              --run-attempt "${GITHUB_RUN_ATTEMPT}" \
+              "${existing[@]}"
+          fi
+
+      - name: Attest the monotonic candidate channel descriptor
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: openadapt-desktop-channel.json
+
+      - name: Publish and reverify the candidate channel authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          channel_tag=desktop-channel
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/native-release.yml@refs/heads/main"
+          gh attestation verify openadapt-desktop-channel.json \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners
+          if gh release view "${channel_tag}" >/dev/null 2>&1; then
+            gh release upload "${channel_tag}" openadapt-desktop-channel.json --clobber
+          else
+            gh release create "${channel_tag}" \
+              --target "${SOURCE_COMMIT}" \
+              --prerelease \
+              --title "OpenAdapt Desktop native release-candidate channel" \
+              --notes "Machine-readable signed index for the latest verified, unadmitted release candidate." \
+              openadapt-desktop-channel.json
+          fi
+          mkdir published-channel
+          gh release download "${channel_tag}" --dir published-channel \
+            --pattern 'openadapt-desktop-channel.json'
+          cmp openadapt-desktop-channel.json \
+            published-channel/openadapt-desktop-channel.json
+          python scripts/native_release.py validate-release-channel \
+            --file published-channel/openadapt-desktop-channel.json
+          gh attestation verify published-channel/openadapt-desktop-channel.json \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners
+
+  supersede-published-native:
+    name: Mark every lower native prerelease superseded
+    needs: [verify-published-release, mirror-installers-to-engine-release]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SELECTED_TAG: ${{ needs.verify-published-release.outputs.native_tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify-published-release.outputs.verifier_commit }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # This includes an older release that triggered the current event after a
+      # newer release was already public. No lower event can retarget consumers.
+      - name: Prepend a superseded notice to every lower native prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate \
+            --jq '.[] | select(.draft == false and .prerelease == true)
+                  | select(.tag_name | startswith("desktop-v"))
+                  | select(.body | contains("<!-- installer-release -->"))
+                  | .tag_name' > native-tags.txt
+          while IFS= read -r tag; do
+            if [ -z "${tag}" ] || [ "${tag}" = "${SELECTED_TAG}" ]; then
+              continue
+            fi
+            gh release view "${tag}" --json body --jq .body > candidate-notes.md
+            result="$(python scripts/native_release.py supersede-notes \
+              --newer-tag "${SELECTED_TAG}" \
+              --candidate-tag "${tag}" \
+              --notes-file candidate-notes.md \
+              --output superseded-notes.md \
+              --repo "${GITHUB_REPOSITORY}")"
+            echo "${tag}: ${result}"
+            if [ "${result}" = "update" ]; then
+              gh release edit "${tag}" --notes-file superseded-notes.md
+            fi
+          done < native-tags.txt
