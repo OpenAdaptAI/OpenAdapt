@@ -142,9 +142,12 @@ Create `client` with `request.model_key.secret()`, the customer key you
 passed to `compile_agent`. An agent that calls a model is not recorded
 without one. An agent that calls no model sets `requires_model_key = False`.
 
-This sketch is not shipped or tested. The tests and the example use
-`openadapt_flow.jit.recorded.RecordedTrajectoryAgent`, which replays a saved
-trajectory and refuses a request with other inputs.
+This sketch is not shipped. The shipped, tested live loop is
+`openadapt_flow.compile_agent.ClaudeAgent`, which `openadapt-flow compile-agent`
+runs inside a harness that observes structure first and checks the record
+before each save ([COMPILE_AGENT.md](COMPILE_AGENT.md)). The JIT tests and the
+example use `openadapt_flow.jit.recorded.RecordedTrajectoryAgent`, which
+replays a saved trajectory and refuses a request with other inputs.
 
 ### Your own loop
 
