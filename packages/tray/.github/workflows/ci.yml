@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: quality and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --locked --extra dev
+
+      # The whole repository, not just src/tests/scripts. The narrower form
+      # left examples/ and the four root-level helper scripts outside every
+      # gate -- 15 findings sat there unreported while CI showed a green lint.
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Verify the locked release tools
+        run: |
+          uv sync --locked --project scripts/release --python 3.12
+          uv run --locked --project scripts/release python scripts/check_release_runtime.py
+
+      - name: Build distributions with the locked release backend
+        run: uv run --locked --project scripts/release uv build --no-build-isolation
+
+      - name: Verify the public distribution boundary
+        run: python scripts/check_source_boundary.py --require-dist
+
+  test:
+    name: test (${{ matrix.os }}, Python ${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.10"
+          - os: ubuntu-latest
+            python: "3.11"
+          - os: ubuntu-latest
+            python: "3.12"
+          - os: macos-latest
+            python: "3.12"
+          - os: windows-latest
+            python: "3.12"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --locked --extra dev --python ${{ matrix.python }}
+
+      - name: Run tests
+        env:
+          PYNPUT_BACKEND: ${{ matrix.os == 'ubuntu-latest' && 'dummy' || '' }}
+          PYSTRAY_BACKEND: ${{ matrix.os == 'ubuntu-latest' && 'dummy' || '' }}
+        run: uv run --python ${{ matrix.python }} pytest tests -q

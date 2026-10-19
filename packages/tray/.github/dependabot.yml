@@ -1,0 +1,40 @@
+# SOC 2: automated dependency updates (OA-C-23).
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+  - package-ecosystem: "pip"
+    directory: "/scripts/release"
+    schedule:
+      interval: "weekly"
+    # Each release-tool update requires the matching reviewed wrapper contract.
+    open-pull-requests-limit: 1
+    labels:
+      - "dependencies"
+    ignore:
+      # PSR 10.6.2 requires Click <8.2.dev0. Remove this ignore when a reviewed
+      # PSR update supports newer Click. Patch updates in 8.1 remain eligible.
+      - dependency-name: "click"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    # github/codeql-action/init and .../analyze must run at the SAME version;
+    # a run with mismatched versions aborts with "Loaded a configuration file
+    # for version X, but running version Y". Ungrouped, Dependabot opens one
+    # PR per sub-action, so each one is red on its own and neither can merge.
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
