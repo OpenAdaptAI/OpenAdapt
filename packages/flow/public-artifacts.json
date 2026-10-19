@@ -1492,6 +1492,14 @@
       "sha256": "292a4aa7245875fa1b707c43a8ddd5b5e8b1bce629adf5cc77461e768bd9b6ea"
     },
     {
+      "path": "benchmark/silent_saves/baselines.json",
+      "sha256": "e883c4d3ba789709971c8746bccf0a2f1704da8d2a0a3e062a29a80de290a33e"
+    },
+    {
+      "path": "benchmark/silent_saves/fault_set.json",
+      "sha256": "745ceef1f66c28255cc11cc895ad1e5b1fab6afce66e822ae185e20af54f1532"
+    },
+    {
       "path": "benchmark/silent_wrong_action/results.json",
       "sha256": "af71ce1db2b0bf065230d775ec63251891f4dbe1cd0d95d44974740acd3cc38a"
     },
