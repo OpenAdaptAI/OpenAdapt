@@ -79,8 +79,9 @@ def _send(page: _Page, request: _Request, status: int, url: str, **kw: Any) -> N
 def test_only_the_saves_own_writes_are_kept_without_values() -> None:
     page = _Page()
     log = ServerResponseLog(page)
+    log.mark()  # an earlier save armed the log
     in_flight = _Request("POST")
-    page.handlers["request"](in_flight)  # an autosave sent before the save
+    page.handlers["request"](in_flight)  # an autosave sent before this save
     mark = log.mark()
     page.handlers["response"](_Response(in_flight, 200, "https://emr.test/autosave"))
     _send(page, _Request("POST"), 201, "https://emr.test/api/encounters?p=MRN-1")
@@ -100,6 +101,7 @@ def test_only_the_saves_own_writes_are_kept_without_values() -> None:
 def test_a_form_redirect_is_not_an_error_but_a_500_is() -> None:
     page = _Page()
     log = ServerResponseLog(page)
+    log.mark()
     _send(page, _Request("POST", "document"), 302, "https://emr.test/save")
     _send(page, _Request("PUT"), 500, "https://emr.test/api/x")
     redirect, failure = log.since(0)
@@ -290,3 +292,18 @@ def test_the_browser_backend_keeps_the_answer_to_a_real_save(save_server: str) -
     assert answer.method == "POST" and answer.status == 201
     assert answer.content_type == "application/json"
     assert "MRN-9" not in answer.model_dump_json()
+
+
+def test_the_page_gets_no_listeners_until_a_save_and_they_can_be_removed() -> None:
+    class Page(_Page):
+        def remove_listener(self, event: str, handler: Any) -> None:
+            if self.handlers.get(event) == handler:
+                del self.handlers[event]
+
+    page = Page()
+    log = ServerResponseLog(page)
+    assert page.handlers == {}  # nothing until the first save marks the log
+    log.mark()
+    assert set(page.handlers) == {"request", "response"}
+    log.close()
+    assert page.handlers == {}

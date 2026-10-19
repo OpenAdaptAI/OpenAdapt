@@ -30,6 +30,7 @@ from typing import Any, Callable, Literal, Mapping, Optional
 
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     field_validator,
     model_serializer,
@@ -853,6 +854,34 @@ class IdempotencySection(BaseModel):
     key_env: Optional[str] = None
 
 
+class ProbeCopySection(BaseModel):
+    """Declares that this deployment drives a resettable test copy.
+
+    Only ``induce --probe-on`` reads it. Probing replays guessed
+    interpretations of a recording disagreement, some of which are wrong on
+    purpose, so it runs only where the operator has said in writing that the
+    target is a disposable copy. See docs/PROBE_INDUCTION.md.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The operator's declaration that every system this file names (the GUI,
+    #: the read-back store, the reset hook) is a test copy, not production.
+    #: Probing refuses unless this is exactly ``true``.
+    declared: bool = False
+    #: Restores the copy to its baseline before each probe run: an HTTP POST
+    #: to this URL. One of ``reset_url`` / ``reset_command`` is required.
+    reset_url: Optional[str] = None
+    #: Restores the copy to its baseline before each probe run: a command run
+    #: without a shell, as an argv list.
+    reset_command: list[str] = Field(default_factory=list)
+    #: Reward contract bundle directory, in the ``serve-reward`` format. Its
+    #: required and forbidden effects say what "the recorded effect" is, and
+    #: its oracle recipe is the read-back. A relative path resolves against
+    #: the deployment file's directory.
+    reward_contract: Optional[str] = None
+
+
 #: Sentinel written by ``config init`` for fields the operator must fill.
 UNRESOLVED = "UNRESOLVED"
 
@@ -881,6 +910,9 @@ class DeploymentConfig(BaseModel):
     #: declares. ``--surface NAME=...`` flags apply over these entries. Empty
     #: (and omitted when serialized) otherwise.
     surfaces: dict[str, BackendConfig] = Field(default_factory=dict)
+    #: Declares the target a resettable test copy (``induce --probe-on``
+    #: only). None (and omitted when serialized) otherwise.
+    test_copy: Optional[ProbeCopySection] = None
 
     @model_validator(mode="after")
     def _desktop_readback_is_its_own_session(self) -> "DeploymentConfig":
@@ -905,6 +937,8 @@ class DeploymentConfig(BaseModel):
         data: dict[str, Any] = handler(self)
         if not self.surfaces:
             data.pop("surfaces", None)
+        if self.test_copy is None:
+            data.pop("test_copy", None)
         return data
 
 

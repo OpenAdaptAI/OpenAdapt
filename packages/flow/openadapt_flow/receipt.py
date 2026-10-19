@@ -156,6 +156,20 @@ class ReceiptError(ValueError):
     """A receipt could not be built or written."""
 
 
+class ReceiptStandardChange(BaseModel):
+    """A repair that applied without a person, under a signed policy.
+
+    Closed class, the policy's digest and the opaque candidate id only. Who
+    signed the policy and what changed stay in the private run evidence.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    change_class: Literal["relabel_or_move", "dismiss_dialog", "menu_path"]
+    policy_sha256: str = Field(pattern="^[a-f0-9]{64}$")
+    candidate_id: str = Field(pattern="^[a-f0-9]{16}$")
+
+
 class ReceiptVariant(BaseModel):
     """Which admitted variant ran, when the variant router chose the bundle.
 
@@ -230,6 +244,9 @@ class RunReceipt(BaseModel):
     provenance: ReceiptProvenance
     receipt_builder_version: str = Field(pattern=_FLOW_VERSION_RE.pattern)
     external_network_calls: ReceiptNetworkObservation
+    #: Set when the run's bundle came from a repair a signed policy applied
+    #: without a person. Left out otherwise, so older receipts keep their bytes.
+    standard_change: Optional[ReceiptStandardChange] = None
 
     #: Exact content digest of the bundle that ran.  This is what makes the
     #: receipt checkable: a third party can run the same public bundle and
@@ -317,6 +334,8 @@ class RunReceipt(BaseModel):
             data.pop("effect_assurance", None)
         if self.server_responses is None:
             data.pop("server_responses", None)
+        if self.standard_change is None:
+            data.pop("standard_change", None)
         if self.variant is None:
             data.pop("variant", None)
         return data
@@ -927,6 +946,11 @@ def _build_receipt(
                 "ok": sum(1 for answer in answers if answer.ok),
                 "check_level": "same_screen",
             }
+        from openadapt_flow.repair.standard_change import receipt_fields
+
+        standard_change = receipt_fields(report)
+        if standard_change is not None:
+            payload["standard_change"] = standard_change
         if variant is not None:
             payload["variant"] = variant
     except ValueError as exc:
@@ -982,6 +1006,15 @@ def render_receipt_markdown(receipt: RunReceipt) -> str:
         *(
             [f"| read-back assurance | `{receipt.effect_assurance}` |"]
             if receipt.effect_assurance
+            else []
+        ),
+        *(
+            [
+                "| repaired without a person | "
+                f"`{receipt.standard_change.change_class}` under policy "
+                f"`{receipt.standard_change.policy_sha256[:16]}` |"
+            ]
+            if receipt.standard_change
             else []
         ),
         f"| identity-armed steps | {identity} |",

@@ -278,6 +278,17 @@ clear reason: a popup whose *first* action closes it before Flow captured any
 frame of it. Nothing would anchor that action. Act in the popup once more
 first, or record that step with the scripted recorder.
 
+The browser can report the popup closed while the closing click is still
+being delivered ("Target page, context or browser has been closed"). The
+recorder marks a click that left its popup closed as `closes_surface`, and
+that step is the only one for which the report counts as a delivered click.
+At replay the browser backend accepts it when three things hold: the step is
+marked `closes_surface`, the click ran on a page surface that was open when
+the click started, and the page reads as closed within a second. Any other
+"page closed" report, including one on the primary page or on a step not
+marked, leaves delivery uncertain, and the run goes on only as far as its
+postconditions and effect checks confirm.
+
 A click in a new page within the first poll tick after it loads can arrive
 before the listener is installed and is not recorded. Replay then halts at the
 next step rather than skipping it silently.

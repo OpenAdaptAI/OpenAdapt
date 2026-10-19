@@ -98,6 +98,8 @@ ALLOWED_FIELDS = {
     "provenance",
     "receipt_builder_version",
     "external_network_calls",
+    # Closed: a change class, a policy digest and an opaque candidate id.
+    "standard_change",
     "bundle_digest",
     # Variant-router digests (ReceiptVariant): set and variant digests plus the
     # variant's admission id. No variant or set name.
@@ -567,6 +569,45 @@ def _api_verified_report() -> RunReport:
 
 def test_receipt_field_set_is_exactly_the_allow_list() -> None:
     assert set(RunReceipt.model_fields) == ALLOWED_FIELDS
+
+
+def test_a_standard_change_adds_only_closed_fields() -> None:
+    from openadapt_flow.ir import SelfRepairEvidence, StandardChangeEvidence
+    from openadapt_flow.receipt import ReceiptStandardChange
+
+    plain = build_receipt(_report())
+    assert "standard_change" not in json.loads(plain.canonical_json())
+    report = _report()
+    report.self_repair = SelfRepairEvidence(
+        status="resumed",
+        candidate_id="0123456789abcdef",
+        standard_change=StandardChangeEvidence(
+            change_class="relabel_or_move",
+            detail="SECRET-BUTTON-LABEL is now SECRET-NOTE-VALUE",
+            policy_id="SECRET-WORKFLOW-NAME",
+            policy_sha256="c" * 64,
+            policy_signed_by="SECRET-MRN",
+            test_record="SECRET-MRN",
+            preflight_outcome="VERIFIED",
+            applied_at="2026-10-18T00:00:00+00:00",
+            revert_command="openadapt-flow repair revert 0123456789abcdef",
+        ),
+    )
+    receipt = build_receipt(report)
+    assert receipt.standard_change == ReceiptStandardChange(
+        change_class="relabel_or_move",
+        policy_sha256="c" * 64,
+        candidate_id="0123456789abcdef",
+    )
+    assert set(ReceiptStandardChange.model_fields) == {
+        "change_class",
+        "policy_sha256",
+        "candidate_id",
+    }
+    text = receipt.canonical_json().decode("utf-8") + render_receipt_markdown(receipt)
+    for tracer in ("SECRET-WORKFLOW-NAME", "SECRET-NOTE-VALUE", "SECRET-MRN"):
+        assert tracer not in text
+    assert "relabel_or_move" in render_receipt_markdown(receipt)
 
 
 def test_unknown_keys_are_refused_not_dropped() -> None:

@@ -55,13 +55,35 @@ class ServerResponseLog:
         self._issued: dict[int, int] = {}
         self._seq = 0
         self._log: deque[tuple[int, ServerResponseEvidence]] = deque(maxlen=_MAX_LOG)
+        #: Listeners are added at the first :meth:`mark` (the first save), not
+        #: before: nothing earlier is kept, and a page that never saves gets
+        #: no extra listeners.
         self.armed = False
+
+    def _arm(self) -> None:
+        if self.armed:
+            return
         try:
-            page.on("request", self._on_request)
-            page.on("response", self._on_response)
+            self._page.on("request", self._on_request)
+            self._page.on("response", self._on_response)
             self.armed = True
         except Exception:  # noqa: BLE001 - evidence only
             self.armed = False
+
+    def close(self) -> None:
+        """Remove the listeners (the backend is done with the page)."""
+
+        if not self.armed:
+            return
+        for event, listener in (
+            ("request", self._on_request),
+            ("response", self._on_response),
+        ):
+            try:
+                self._page.remove_listener(event, listener)
+            except Exception:  # noqa: BLE001 - best-effort teardown
+                pass
+        self.armed = False
 
     def _on_request(self, request: Any) -> None:
         try:
@@ -98,6 +120,7 @@ class ServerResponseLog:
     def mark(self) -> int:
         """Requests sent after this mark belong to what comes next."""
 
+        self._arm()
         with self._lock:
             return self._seq
 
