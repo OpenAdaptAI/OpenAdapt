@@ -157,6 +157,80 @@ to `add_read()`. For `system_of_record`, pass a database or API read, or an expo
 (`channel_read(spec, "export", value, source_kind="committed_store")`). A live-session export gives at most `same_screen`. A later read that disagrees sends
 the field to review.
 
+## Read steps in a workflow
+
+A workflow can read as well as act. A step with `action: read` carries a
+`read` spec: the schema name, the `FieldSpec`, the value box, the proof
+settings, the copy keys, and what to do when the read needs review
+(`on_review`: `halt`, the default, or `continue`).
+
+```python
+from openadapt_flow.ir import ActionKind, ReadStepSpec, Step
+from openadapt_flow.records.schema import FieldSpec, ReadProof
+
+Step(
+    id="read-amount",
+    intent="read amount due",
+    action=ActionKind.READ,
+    read=ReadStepSpec(
+        schema_name="invoice",
+        field=FieldSpec(name="amount_due", kind="decimal"),
+        region=(412, 188, 160, 22),
+        proof=ReadProof(double_read=True),
+    ),
+)
+```
+
+On replay, the step reads the field with `read_field()` and puts the result in
+`StepResult.field_read`. With an anchor, the value box moves with the anchor,
+as clicks do. The channels are OCR and the clipboard, both deterministic, so a
+healthy read step makes no model calls. Pass the clipboard to the replayer as
+`Replayer(..., read_clipboard=SystemClipboard())`. Without one, a step that
+needs a double read halts with "no clipboard channel"; a step that does not
+reads by OCR alone. A read step is never irreversible, and it declares no
+postconditions because it changes nothing.
+
+To record a read, mark the value box during a recording. A marked label box
+becomes the step's anchor:
+
+```python
+recorder.mark_read(
+    FieldSpec(name="account_number", kind="code"),
+    (120, 80, 160, 22),
+    schema_name="ledger_account",
+    label_region=(20, 80, 90, 22),
+    label_text="Account",
+)
+```
+
+`compile_recording()` turns each marked read into a READ step, and
+`render_workflow_py()` renders it as `record["account_number"] =
+flow.read(...)`.
+
+### Seals from run receipts
+
+A read step with `proof=ReadProof(seal=True)` gets a `SealRef` naming the run.
+When the run's receipt is written (`report-run`), Flow writes `records.json`
+next to `receipt.json`: every field read in the run, with each requested Seal
+pointing at the receipt by sha256 and path. The same is available as
+`openadapt_flow.records.run.seal_record()`.
+
+The run receipt covers the run, not each value, so `field_commitment` stays
+unset. When offline Seals with per-field commitments are available, they fill
+it. A Seal pointer never claims more than the receipt it points at.
+
+### Format compatibility
+
+The read step adds three optional fields: `Step.read`, `Step.read_gate` and
+`StepResult.field_read`. The bundle schema stays at version 2, which is how
+this repo adds optional fields. A workflow without read steps loads unchanged
+and keeps its sealed digest: absent `read` and `read_gate` are omitted from
+the digest, by reviewed rules in `bundle_validation`. A runtime from before
+this change refuses a bundle that contains a read step, because it does not
+know the `read` action. It never runs one with the read silently dropped.
+A read step is not exported to the shared `openadapt-types` action schema,
+which has no typed field read.
+
 ## Requiring a grade before a write
 
 A step that writes a read value into a system of record can declare the
@@ -167,6 +241,14 @@ from openadapt_flow.records.schema import GradeGate
 
 GradeGate(min_grade="reopened", fields=("amount_due",)).check(record)
 # raises GradeTooLow if amount_due is weaker, missing or still needs review
+```
+
+In a workflow, set `read_gate` on the writing step. Replay checks it against
+the values read so far in the run and halts before the step acts:
+
+```python
+Step(id="post", intent="post amount", action=ActionKind.CLICK, anchor=save,
+     read_gate=GradeGate(min_grade="same_screen", fields=("amount_due",)))
 ```
 
 These grades describe how a read value was checked. Write checks keep their

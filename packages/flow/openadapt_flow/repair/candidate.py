@@ -254,7 +254,11 @@ class RepairProvenance(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    repaired_by: Literal["calling_agent"] = "calling_agent"
+    #: ``calling_agent``: an MCP client demonstrated the fix
+    #: (:mod:`openadapt_flow.repair.agent_teach`). ``self_repair``: a repair
+    #: agent proposed it during ``run --self-repair``
+    #: (:mod:`openadapt_flow.repair.self_repair`) and a probe checked it.
+    repaired_by: Literal["calling_agent", "self_repair"] = "calling_agent"
     agent_id: str = Field(min_length=1, max_length=256)
     halted_run_id: str = Field(min_length=1, max_length=256)
     halted_step_id: str = Field(min_length=1, max_length=256)
@@ -415,8 +419,13 @@ class RepairCandidate(BaseModel):
             f"  proposed {self.proposed_content_digest}",
         ]
         if self.provenance is not None:
+            who = (
+                "proposed by self-repair agent"
+                if self.provenance.repaired_by == "self_repair"
+                else "taught by calling agent"
+            )
             lines.append(
-                f"  taught by calling agent {self.provenance.agent_id!r} for run "
+                f"  {who} {self.provenance.agent_id!r} for run "
                 f"{self.provenance.halted_run_id} at step "
                 f"{self.provenance.halted_step_id}"
             )
