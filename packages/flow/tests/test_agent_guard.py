@@ -487,3 +487,57 @@ def test_config_parses_and_refuses(tmp_path):
     ):
         with pytest.raises(ConfigError):
             parse_config(bad, base=tmp_path)
+
+
+# -- run 2's inputs and record fields ---------------------------------------------------
+
+
+def test_handoff_inputs_are_the_typed_values_and_the_rest_pins_the_record(tmp_path):
+    from openadapt_flow.agent_guard.handoff import _expect, _record_match, typed_inputs
+    from openadapt_flow.compile_agent.pipeline import _claims_new_record
+
+    recording = tmp_path / "rec"
+    recording.mkdir()
+    (recording / "events.jsonl").write_text(
+        json.dumps({"kind": "click", "i": 0})
+        + "\n"
+        + json.dumps({"kind": "type", "i": 1, "text": NOTE})
+        + "\n"
+    )
+    task = GuardTask(
+        task_id="task-guard-0002",
+        expected_record={"patient_id": "p1", "name": "Jane Sample"},
+        intended_fields={"type": "Triage", "note": NOTE},
+    )
+    assert typed_inputs(recording, task) == ["note"]
+    verify = tmp_path / "verify.yaml"
+    verify.write_text(
+        "schema_version: openadapt.verify/v1\n"
+        "verifier: {kind: rest, base_url: 'http://127.0.0.1:1', records_path: /r}\n"
+        "effects:\n"
+        "  - kind: record_written\n"
+        "    match:\n"
+        "      patient_id: {param: patient_id}\n"
+        "      type: {param: type}\n"
+        "      note: {param: note}\n"
+        "      source: {literal: replay}\n"
+        "    expected_count: 1\n"
+        "    count_new_only: true\n"
+    )
+    cfg = parse_config(
+        {
+            "schema_version": "openadapt.agent-guard/v1",
+            "app_url": APP,
+            "verify": str(verify),
+            "teach": {"dir": "t"},
+        },
+        base=tmp_path,
+    )
+    expect = _expect(_record_match(cfg), task, ["note"])
+    # The name is on screen but isn't a field of the record: not expected.
+    assert expect == {"patient_id": "p1", "type": "Triage", "source": "replay"}
+    assert _claims_new_record({"kind": "record_written", "count_new_only": True})
+    assert not _claims_new_record(
+        {"kind": "record_written", "count_new_only": True, "expected_count": 0}
+    )
+    assert not _claims_new_record({"kind": "field_equals", "count_new_only": True})

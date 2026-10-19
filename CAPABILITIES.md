@@ -235,6 +235,7 @@ fails when a command is added without being listed here.
 - **Check and admit:** `lint`, `scaffold-verifier`, `check`, `api`, `bind-record-checks`, `certify`, `qualify`, `propose-qualification`, `known-ids`, `jit`, `admit`, `approver-grant`.
 - **Run and answer:** `run`, `replay`, `resume`, `approve`, `item-approval`, `triage`, `business-decisions`, `explain`, `console`.
 - **Judge any executor's write:** `verify-run`, `serve-reward` (scores agent training episodes by reading the system of record).
+- **Guard an agent you already run:** `guard` (attaches to the agent's own Chromium over CDP, holds each save until the right record is on screen, reads it back, and hands a verified run to the teach dir).
 - **Repair and learn from halts:** `teach`, `teach-branch`, `repair`, `fleet`, `undo` (the undo steps a person approves after a stop).
 - **Give agents the program:** `emit-skill`, `emit-mcp`, `serve-execute`.
 - **Let an agent teach itself a workflow (MCP):** `openadapt-agent serve --teach` adds `teach_start`, `teach_observe`, `teach_act`, `teach_screen`, `teach_finish`, `teach_abort`, `teach_status`, `teach_confirm_checks`, `teach_admit`, and a `taught_<name>` tool per admitted program; a person admits a waiting draft with `compile-agent admit`.

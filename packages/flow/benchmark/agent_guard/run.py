@@ -121,7 +121,13 @@ SCENARIOS: tuple[Scenario, ...] = (
 # -- files the developer writes -------------------------------------------------
 
 
-def write_setup(work: Path, base: str, *, teach_dir: Optional[Path]) -> dict[str, Path]:
+def write_setup(
+    work: Path,
+    base: str,
+    *,
+    teach_dir: Optional[Path],
+    db_path: Optional[Path] = None,
+) -> dict[str, Path]:
     """verify.yaml, guard.yaml and task.json, as a developer writes them."""
 
     work.mkdir(parents=True, exist_ok=True)
@@ -149,7 +155,8 @@ def write_setup(work: Path, base: str, *, teach_dir: Optional[Path]) -> dict[str
         "teach:\n"
         f"  dir: {teach_dir}\n"
         "  name: triage_note\n"
-        f"  db: {work / 'app.sqlite'}\n"
+        + (f"  db: {db_path}\n" if db_path else "")
+        + f"  key_dir: {work / 'keys'}\n"
         if teach_dir
         else ""
     )
@@ -467,7 +474,9 @@ def run_benchmark(n: int, think_s: float, arms: tuple[str, ...], port: int) -> d
         app = serve(work / "app.sqlite")
         try:
             teach_dir = work / "teach"
-            files = write_setup(work, app.base_url, teach_dir=teach_dir)
+            files = write_setup(
+                work, app.base_url, teach_dir=teach_dir, db_path=app.db_path
+            )
             plain = write_setup(work / "plain", app.base_url, teach_dir=None)
             results["setup_lines"] = setup_lines(files)
             results["setup_files"] = {
