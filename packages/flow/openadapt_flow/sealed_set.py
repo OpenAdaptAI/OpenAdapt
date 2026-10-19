@@ -156,6 +156,11 @@ BUNDLE_FILES: Final[tuple[FileKind, ...]] = (
         "a local-development admission record",
     ),
     FileKind(
+        "qualification-proposal.draft.json",
+        "phi",
+        "an admission's draft check proposal",
+    ),
+    FileKind(
         "admission-decision.json",
         "phi",
         "a signed admission decision with the decider's identity",
@@ -346,6 +351,9 @@ def _atomic_write(path: Path, data: bytes) -> None:
 
 
 def _disk_files(root: Path) -> list[str]:
+    """Every file under ``root`` except the header. A subdirectory that is
+    itself a sealed set (an undo run inside a run directory) is a separate,
+    separately verified set and is skipped."""
     out: list[str] = []
     for current, dirnames, filenames in os.walk(root, followlinks=False):
         here = Path(current)
@@ -355,6 +363,7 @@ def _disk_files(root: Path) -> list[str]:
                     "sealed set contains a symlink: "
                     f"{(here / name).relative_to(root).as_posix()}"
                 )
+        dirnames[:] = [name for name in dirnames if not is_sealed(here / name)]
         for name in filenames:
             path = here / name
             rel = path.relative_to(root).as_posix()

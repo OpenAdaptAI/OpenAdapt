@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 from typing import Callable, Literal, Optional, Sequence
 
+from openadapt_flow import sealed_set
 from openadapt_flow.after_stop import (
     UndoRefused,
     approve_undo,
@@ -204,7 +205,7 @@ def _cmd_undo_list(args: argparse.Namespace) -> int:
         result = read_undo_result(run_dir, offer.undo_id)
         approval = read_undo_approval(run_dir, offer.undo_id)
         approved = approval is not None and approval.offer_digest == offer.offer_digest
-        claimed = (run_dir / "undo" / offer.undo_id / "claim.json").exists()
+        claimed = sealed_set.exists(run_dir / "undo" / offer.undo_id / "claim.json")
         state = (
             f"ran: {result.status}"
             if result
@@ -311,9 +312,13 @@ def _cmd_undo_run(args: argparse.Namespace) -> int:
         print(f"undo run REFUSED: {exc}. Nothing was executed.", file=sys.stderr)
         return 3
     params_path = prepared.undo_run_dir.parent / "params.json"
-    fd = os.open(params_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        json.dump(prepared.params, handle)
+    if sealed_set.is_sealed_path(params_path):
+        # Parameter values are patient data; keep them sealed with the run.
+        sealed_set.write_text(params_path, json.dumps(prepared.params))
+    else:
+        fd = os.open(params_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(prepared.params, handle)
     replay_args = argparse.Namespace(**vars(args))
     replay_args.run_dir = str(prepared.undo_run_dir)
     replay_args.param = None
@@ -329,10 +334,8 @@ def _cmd_undo_run(args: argparse.Namespace) -> int:
         args._undo_replay(replay_args)
     finally:
         report_path = prepared.undo_run_dir / "report.json"
-        if report_path.is_file():
-            report = RunReport.model_validate_json(
-                report_path.read_text(encoding="utf-8")
-            )
+        if sealed_set.is_file(report_path):
+            report = RunReport.model_validate_json(sealed_set.read_text(report_path))
         result = finish_undo_run(run_dir, prepared, report)
     if result.status == "verified":
         print(f"Undo {result.undo_id} VERIFIED: {result.reason}.")

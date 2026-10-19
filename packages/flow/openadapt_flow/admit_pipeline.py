@@ -210,8 +210,14 @@ def _bundle_digest(bundle: Path) -> str:
     )
     from openadapt_flow.ir import Workflow
 
+    from openadapt_flow import sealed_set
+
     workflow = Workflow.load(bundle)
-    return compute_content_digest(workflow, compute_file_hashes(workflow, bundle))
+    # A sealed bundle's crops are ciphertext on disk; hash the plaintext.
+    assets = workflow.decrypted_templates() if sealed_set.is_sealed(bundle) else None
+    return compute_content_digest(
+        workflow, compute_file_hashes(workflow, bundle, assets=assets)
+    )
 
 
 def _is_bundle(path: Path) -> bool:
@@ -350,7 +356,7 @@ def prepare_admission(
     for index, path in enumerate(paths):
         if not path.is_dir():
             raise AdmissionError(f"{path} is not a directory")
-        if recording_meta is None and (path / "meta.json").is_file():
+        if recording_meta is None and _sealed_is_file(path / "meta.json"):
             recording_meta = path
         if _is_bundle(path):
             compiled.append(path)
@@ -377,14 +383,32 @@ def prepare_admission(
         workflow = result.workflow
         induced = True
     workflow = workflow.model_copy(update={"name": name})
-    _copy_templates(compiled, bundle_dir)
-    workflow.save(bundle_dir)
+    from openadapt_flow import sealed_set
+
+    sealed = any(sealed_set.is_sealed(path) for path in compiled)
+    if sealed:
+        # Encrypted recordings or bundles admit into a sealed bundle: the
+        # crops are merged in memory and never copied out as plaintext.
+        passphrase = sealed_set.passphrase_for("bundle") or sealed_set.recording_key()
+        if not passphrase:
+            raise AdmissionError(sealed_set.missing_key_message(compiled[0], "bundle"))
+        templates: dict[str, bytes] = {}
+        for source in compiled:
+            for item in sealed_set.list_files(source / "templates"):
+                rel = item.relative_to(source).as_posix()
+                templates.setdefault(rel, sealed_set.read_bytes(item))
+        workflow._decrypted_templates = templates
+        with sealed_set.writing(bundle_dir, "bundle", passphrase):
+            workflow.save(bundle_dir)
+    else:
+        _copy_templates(compiled, bundle_dir)
+        workflow.save(bundle_dir)
     workflow = Workflow.load(bundle_dir)
 
     proposal = propose_qualification(
         workflow, recording_dir=recording_meta, policy_pack=policy_pack
     )
-    write_proposal(proposal, target / PROPOSAL_FILE)
+    write_proposal(proposal, _proposal_path(target))
     steps = list(iter_workflow_steps(workflow))
     detail: dict[str, Any] = {
         "recordings": len(compiled),
@@ -409,6 +433,23 @@ def prepare_admission(
     pending = PendingAdmission(status="needs_decision", **base, **detail)
     _write_signed(target / PENDING_FILE, pending.model_dump(mode="json"), key_dir)
     return pending
+
+
+def _sealed_is_file(path: Path) -> bool:
+    from openadapt_flow import sealed_set
+
+    return sealed_set.is_file(path)
+
+
+def _proposal_path(target: Path) -> Path:
+    """The draft proposal sits beside the bundle, or inside it (encrypted)
+    when the bundle is sealed."""
+    from openadapt_flow import sealed_set
+
+    bundle = target / BUNDLE_DIR
+    if sealed_set.is_sealed(bundle):
+        return bundle / PROPOSAL_FILE
+    return target / PROPOSAL_FILE
 
 
 def _copy_templates(compiled: Sequence[Path], bundle_dir: Path) -> None:
@@ -452,7 +493,10 @@ def load_pending(
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", "utf-8")
+    from openadapt_flow import sealed_set
+
+    # Sealed in memory when ``path`` is inside a sealed bundle.
+    sealed_set.write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
 def _key_dir(key_dir: Optional[Path | str]) -> Path:
@@ -676,7 +720,7 @@ def decide_admission(
         )
         record["approver_grant"] = signed.model_dump(mode="json", by_alias=True)
     if decision == "accept":
-        proposal = load_proposal(target / PROPOSAL_FILE)
+        proposal = load_proposal(_proposal_path(target))
         if proposal.sha256() != pending.proposal_sha256:
             raise AdmissionError("the check proposal changed since it was shown")
         workflow = Workflow.load(bundle)
@@ -732,11 +776,13 @@ def admitted_approval_mode(
     longer verifies, names the reason and gives no mode. Never raises.
     """
 
+    from openadapt_flow import sealed_set
+
     path = Path(bundle) / DECISION_FILE
-    if not path.is_file() or path.is_symlink():
+    if not sealed_set.is_file(path) or path.is_symlink():
         return AdmittedMode()
     try:
-        data = json.loads(path.read_text("utf-8"))
+        data = json.loads(sealed_set.read_text(path))
     except (OSError, ValueError):
         return AdmittedMode(refusal="admission_unreadable")
     if not _signed(data, key_dir):

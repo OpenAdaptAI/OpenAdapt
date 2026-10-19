@@ -304,7 +304,9 @@ def _replay_params(
     if params_file:
         path = Path(params_file)
         try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
+            from openadapt_flow import sealed_set
+
+            raw = json.loads(sealed_set.read_text(path))
         except (OSError, json.JSONDecodeError) as exc:
             raise SystemExit(f"--params-file could not be read as JSON: {exc}") from exc
         if not isinstance(raw, dict):
@@ -1946,13 +1948,25 @@ def _cmd_induce(args: argparse.Namespace) -> int:
     # (a dir containing workflow.json -> loaded as a Workflow). Detecting the
     # bundle case CLI-side keeps induce usable on artifacts the operator
     # already has, without touching the library API.
+    from openadapt_flow import sealed_set
+
     traces: list = []
+    sealed_inputs = False
     for d in args.recording:
         path = Path(d)
-        if (path / "workflow.json").is_file():
+        sealed_inputs = sealed_inputs or sealed_set.is_sealed(path)
+        if (path / "workflow.json").is_file() or (path / "workflow.json.enc").is_file():
             traces.append(Workflow.load(path))
         else:
             traces.append(path)
+    if sealed_inputs and (args.report or args.probe_on):
+        # Both write the induced program (or probe bundles) outside any
+        # sealed set; refuse rather than write plaintext.
+        print(
+            "induce REFUSED: --report and --probe-on are not available for "
+            "encrypted inputs yet. Nothing was written."
+        )
+        return 2
 
     if args.probe_on:
         probed = _induce_with_probes(args, traces)
@@ -1984,7 +1998,14 @@ def _cmd_induce(args: argparse.Namespace) -> int:
     if args.name:
         workflow = workflow.model_copy(update={"name": args.name})
     out = Path(args.out)
-    workflow.save(out)
+    if sealed_inputs:
+        # Encrypted demonstrations induce an encrypted program.
+        passphrase = sealed_set.passphrase_for("bundle") or sealed_set.recording_key()
+        assert passphrase is not None  # the CLI guard refused a missing key
+        with sealed_set.writing(out, "bundle", passphrase):
+            workflow.save(out)
+    else:
+        workflow.save(out)
     print(
         f"\nCERTIFIED — induced program bundle written to {out} "
         f"(workflow: {workflow.name!r}, "
@@ -5193,9 +5214,11 @@ def _retain_drill_evidence(run_dir: Path, driver) -> None:
     from openadapt_flow.ir import RunReport
     from openadapt_flow.qualification_drills import write_drill_evidence
 
+    from openadapt_flow import sealed_set
+
     try:
         report = RunReport.model_validate_json(
-            (run_dir / "report.json").read_text(encoding="utf-8")
+            sealed_set.read_text(run_dir / "report.json")
         )
     except (OSError, ValueError):
         report = None
@@ -5740,6 +5763,18 @@ def _cmd_qualify_proposal(args: argparse.Namespace) -> int:
         workflow = Workflow.load(bundle)
     except (OSError, ValueError) as exc:
         raise SystemExit(f"could not load bundle: {exc}") from exc
+    from openadapt_flow import sealed_set
+
+    out_arg = getattr(args, "out", None)
+    if (
+        out_arg
+        and sealed_set.is_sealed_path(bundle)
+        and not sealed_set.is_sealed_path(Path(out_arg))
+    ):
+        raise SystemExit(
+            f"qualify {verb} REFUSED: the bundle is encrypted, so --out must be "
+            "inside it (or omitted). Nothing was written."
+        )
 
     if verb == "propose":
         try:
@@ -5833,7 +5868,9 @@ def _cmd_qualify_proposal(args: argparse.Namespace) -> int:
             if args.out
             else bundle / "qualification-admission.local-dev.json"
         )
-        out.write_text(local.model_dump_json(indent=2), encoding="utf-8")
+        from openadapt_flow import sealed_set
+
+        sealed_set.write_text(out, local.model_dump_json(indent=2))
         print(local.model_dump_json(indent=2))
         return 0
 
