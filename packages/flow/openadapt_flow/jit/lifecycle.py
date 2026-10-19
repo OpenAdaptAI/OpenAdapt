@@ -981,11 +981,16 @@ def record_canary(
     target_origin: str,
     run_dir: Optional[Path],
     key_dir: Optional[Path] = None,
+    environment: Optional[str] = None,
 ) -> dict[str, Any]:
     """Record an attended canary run. It passes only when it ended
     ``VERIFIED`` with zero model calls and every write step had an
     independent read-back. Every run is also appended to ``canaries.jsonl``,
-    which an admission policy's ``min_clean_canaries`` counts."""
+    which an admission policy's ``min_clean_canaries`` counts.
+
+    ``environment`` is the app environment the canary ran in (the app's
+    origin plus, when the caller names one, its environment id). The
+    admission pins it, and a run in another environment is refused."""
 
     program = Path(program_dir)
     _require_draft(program)
@@ -1005,6 +1010,9 @@ def record_canary(
         "readback": list(readback),
         "passed": outcome == "VERIFIED" and model_calls == 0 and not problems,
     }
+    if environment is not None:
+        # Only written when known, so canaries recorded before it verify.
+        record["environment"] = environment
     record["signature"] = _sign_record(record, key_dir)
     _write(program / CANARY_FILE, record)
     with (program / CANARIES_FILE).open("a") as f:
@@ -1181,8 +1189,13 @@ def _write_manifest(
                 "target_origin",
                 "outcome",
                 "model_calls",
+                "environment",
             )
+            if k in canary
         },
+        # What the person approved, apart from the anchors: a repair that
+        # re-anchors a step keeps it, a changed record check does not.
+        "record_check_digest": _record_check_digest(program),
         "readback": canary["readback"],
         "recorded_by": recorder.get("recorded_by"),
         "agent_principal_id": recorder.get("agent_principal_id"),
@@ -1206,6 +1219,12 @@ def _write_manifest(
     # verify this manifest.
     _event(program, "admitted", principal_id=name, digest=digest, mode=mode)
     return manifest
+
+
+def _record_check_digest(program: Path) -> str:
+    from openadapt_flow.jit.signature import record_check_digest
+
+    return record_check_digest(_load_workflow(program / "bundle"))
 
 
 def admit_with_key(
