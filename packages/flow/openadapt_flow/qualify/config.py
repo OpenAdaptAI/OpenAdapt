@@ -18,8 +18,11 @@ the read-back contract, the same shape ``verify-run`` reads:
   expands to that list (record fields from inputs, the selecting fields, the
   duplicate key). With neither, the effects the compiler mined from the
   demonstration are used;
-- ``minimum_effect_strength``: ``independent_system_of_record`` (default) or
-  ``independent_session``;
+- ``minimum_readback``: the check level the verifier must reach,
+  ``system_of_record`` or ``separate_session``
+  (:mod:`openadapt_flow.readback_ladder`). The older
+  ``minimum_effect_strength`` (``independent_system_of_record``, the default,
+  or ``independent_session``) means the same; give one or the other;
 - ``qualification_id`` / ``environment_id``: optional opaque ids.
 
 Qualify adds what a campaign needs on top:
@@ -51,6 +54,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from openadapt_flow.deployment import EffectsConfig
 from openadapt_flow.lookup_capabilities import DeclaredSurface
 from openadapt_flow.runtime.effects import Effect, ValueExpr
+from openadapt_flow.verification import VerificationTier
 
 SCHEMA_VERSION = "openadapt.verify/v1"
 EffectStrength = Literal["independent_system_of_record", "independent_session"]
@@ -277,6 +281,11 @@ class VerifyConfig(BaseModel):
     qualification_id: Optional[str] = Field(default=None, pattern=_OPAQUE)
     environment_id: Optional[str] = Field(default=None, pattern=_OPAQUE)
     minimum_effect_strength: EffectStrength = "independent_system_of_record"
+    #: The check level the verifier must reach (``separate_session`` or
+    #: ``system_of_record``; :mod:`openadapt_flow.readback_ladder`). Written
+    #: to the qualified workflow, so runs enforce the same minimum. Replaces
+    #: ``minimum_effect_strength``, which stays as an alias; give one, not both.
+    minimum_readback: Optional[Literal["separate_session", "system_of_record"]] = None
     verifier: SystemOfRecordConfig
     effects: Optional[list[Effect]] = None
     app: AppConfig
@@ -305,6 +314,34 @@ class VerifyConfig(BaseModel):
     @property
     def system_of_record(self) -> SystemOfRecordConfig:
         return self.verifier
+
+    @model_validator(mode="before")
+    @classmethod
+    def _minimum_readback(cls, data: Any) -> Any:
+        if not isinstance(data, dict) or data.get("minimum_readback") is None:
+            return data
+        if "minimum_effect_strength" in data:
+            raise ValueError(
+                "give minimum_readback or its older alias minimum_effect_strength, "
+                "not both"
+            )
+        from openadapt_flow.readback_ladder import parse_minimum_readback
+
+        data = dict(data)
+        data["minimum_readback"] = parse_minimum_readback(data["minimum_readback"])
+        return data
+
+    def minimum_tier(self) -> VerificationTier:
+        """The weakest verifier tier this file accepts."""
+
+        from openadapt_flow.readback_ladder import (
+            minimum_from_effect_strength,
+            tier_floor,
+        )
+
+        if self.minimum_readback is not None:
+            return tier_floor(self.minimum_readback)
+        return minimum_from_effect_strength(self.minimum_effect_strength)
 
     @model_validator(mode="after")
     def _record(self) -> "VerifyConfig":
