@@ -6,17 +6,22 @@
     "The founder-approved release App creates only its annotated tag.",
     "The tag run publishes through the protected pypi environment and verifies",
     "the PyPI and GitHub bytes. The detector remains state-based: it asks",
-    "whether a release is still unpublished, not whether one run failed."
+    "whether a release is still unpublished, not whether one run failed.",
+    "openadapt-desktop releases from packages/desktop: desktop-release.yml publishes one openadapt-desktop-vX.Y.Z release per version with the wheel, sdist, and native installers, and the same wheel and sdist to PyPI. It does not track main, because unrelated packages share main; the desktop release-intent check in packages.yml stops a feat or fix from merging without a version bump."
   ],
   "repository": "OpenAdaptAI/OpenAdapt",
   "branch": "main",
-  "ci_workflows": ["main.yml"],
+  "ci_workflows": [
+    "main.yml"
+  ],
   "lanes": [
     {
       "id": "launcher",
       "name": "PyPI package",
       "tag_pattern": "^v(\\d+\\.\\d+\\.\\d+)$",
-      "release_workflows": ["release-and-publish.yml"],
+      "release_workflows": [
+        "release-and-publish.yml"
+      ],
       "pypi_package": "openadapt",
       "tracks_main": true,
       "acknowledged_tags": {
@@ -26,6 +31,19 @@
       "tag_without_release_grace_hours": 1,
       "pypi_lag_grace_minutes": 30,
       "remediation": "# First merge the reviewed version, changelog, lockfile, and candidate state. Then create the tag from exact main.\ngh workflow run release-and-publish.yml --repo OpenAdaptAI/OpenAdapt --ref main -f version=<reviewed-version>\n# If that exact tag run partially failed, rerun it. Do not create a recovery tag.\ngh run rerun --repo OpenAdaptAI/OpenAdapt <tag-run-id>"
+    },
+    {
+      "id": "desktop",
+      "name": "OpenAdapt Desktop (PyPI and installers)",
+      "tag_pattern": "^openadapt-desktop-v(\\d+\\.\\d+\\.\\d+)$",
+      "release_workflows": [
+        "desktop-release.yml"
+      ],
+      "pypi_package": "openadapt-desktop",
+      "tracks_main": false,
+      "tag_without_release_grace_hours": 6,
+      "pypi_lag_grace_minutes": 30,
+      "remediation": "# A half-published version resumes by re-running the failed jobs of its run:\ngh run rerun --failed --repo OpenAdaptAI/OpenAdapt <desktop-release run id>\n# A merged version that never started releases with:\ngh workflow run desktop-release.yml --repo OpenAdaptAI/OpenAdapt --ref main"
     }
   ]
 }

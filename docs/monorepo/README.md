@@ -40,6 +40,13 @@ A folded package releases from here: run the `Release package` workflow from
 `<pypi-project>-v<version>`. Tags from before the fold stay in the source
 repository.
 
+openadapt-desktop releases differently, because its native installers belong in
+the same release: when a reviewed version bump merges, `desktop-release.yml`
+builds the wheel, the sdist and every installer, then publishes one immutable
+`openadapt-desktop-vX.Y.Z` release and the PyPI package (see
+`packages/desktop/RELEASES.md`). Its Production channel and FFmpeg runtime
+lanes have not moved.
+
 A source repository is archived, never deleted, after its package has
 published one release from this repository. Its commits are the "old" side of
 the commit map.

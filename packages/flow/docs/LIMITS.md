@@ -45,6 +45,31 @@ class named with `--allow-halt`. A handoff copies an effect-bound parameter
 from a confirmed receipt. Missing evidence HALTs. Subflows and worklists
 stay inside each child, on that child's surface.
 
+## Parallel worklists
+
+`--workers N` runs a worklist's items on N signed-in sessions at once
+([`THROUGHPUT.md`](THROUGHPUT.md)). Every item keeps every check. The run
+refuses N above the deployment's `worklist.max_workers`, fewer accounts than
+workers, two accounts for the same user, two workers sharing one session, a
+program with steps outside its loop, and rows not declared
+`items_independent`. It can't tell on its own whether two rows touch the same
+record; that declaration is yours. A halt on any worker stops new items on
+all of them, and an item claimed before a crash is never run again
+automatically: it is marked `uncertain` for a person to check. The pipelined
+read-back window applies only to an item's last save and only to read-backs
+that don't use the screen; durable runs, which include the Standard and
+Regulated profiles, always read back inline. Parallel RDP runs use the
+FreeRDP session pool and have unit tests only. Throughput figures come from
+one machine and a local OpenEMR test copy, not from a production EMR.
+
+## Short parameter values
+
+The right-record check binds a typed value into its expected text only when
+the value has at least 4 characters. An item whose bound value is shorter,
+such as the first name "Bo", halts at the identity check instead of saving.
+This is deliberate: a short value matches too much unrelated text to identify
+a record.
+
 ## Save triage
 
 `openadapt-flow triage` orders verified saves for review under
@@ -259,6 +284,17 @@ identifier corpus**. Until then, verify is reachable only when a caller opts in
 per risk class (`verify_pixel_identity(..., enable_verify=True)`); mismatch and
 abstain remain always-on and can only ever add a halt.
 
+**Pixel tier and a different rasterizer.** Those thresholds hold only between
+crops drawn by the same rasterizer. When ClearType was switched, the tier saw
+glyph-sized differences at every edge and reported a different record for the
+right one. It now abstains when the recorded and live crops differ in colour
+fringing or anti-aliasing, and on a run replayed at another display scale. The
+OCR tier then decides, and an identifier OCR cannot confirm, such as one with
+1/l or 0/O, still halts. In the display-scaling sweep
+([`benchmark/pixel_scale`](../benchmark/pixel_scale/README.md)) the RDP
+fixture's own IDs (`MRN A1001`) halted at the identity check at every render
+other than the recorded one.
+
 ### 2. A postcondition verifies only what it observes
 
 The compiler mines visual and, where available, structural changes from one
@@ -368,17 +404,48 @@ grade is `screen_readback`, never `independent_readback`.
 
 **Without a read that is independent of the acting session, the run cannot
 be `VERIFIED`.** That read is either a system-of-record read (REST, FHIR, SQL,
-file; tier 1) or the application's record page read in a separate signed-in
-browser session (`ui_readback`; tier 2). The second goes through the same
-application, so it is not a system-of-record read and has its own limits
-([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback)).
-A pixel-only Citrix or RDP session with neither is that case. The on-screen
+file; tier 1) or the application's own screens read in a separate signed-in
+session (tier 2): a record page in a separate browser (`ui_readback`), a
+relaunched desktop app or a second RDP session (`fresh_session`, tested on
+mocks only), or a look-up in a separate desktop, RDP or Citrix session
+(`desktop_readback`, tier 2 with its own RDP logon). None of them goes around
+the application, so none is a system-of-record read, and each has its own
+limits ([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback),
+[`desktop_readback`](EFFECT_KIT.md#separate-session-desktop-read-back-desktop_readback)).
+If a person can look the record up, the check can too. A pixel-only Citrix or
+RDP deployment that declares no such check is the remaining case. Reopening the
+record in the acting session (tier 3) is reported as its own check level,
+`reopened` ("Reopened in the same session"), and is not `VERIFIED`: a
+confirmed reopen ends `COMPLETED_UNVERIFIED`, and the agent result says
+`not_sure_if_saved` with `checked_below_minimum`
+([`READBACK_LADDER.md`](READBACK_LADDER.md)). A workflow's `minimum_readback`
+can raise the floor to `system_of_record`, never lower it. The on-screen
 oracle can still halt when the region is unreadable or wrong. If a
-consequential write may already have been delivered, the production
-`transaction_outcome` is `RECONCILIATION_REQUIRED`, never `VERIFIED`.
-Halt-on-doubt is unchanged. This is not live Citrix Production evidence; a
-live ICA/HDX session is a deployment-specific qualification. Wire the
-independent read before paying a sprint for a `VERIFIED` outcome.
+consequential write may already have been delivered and the check did not
+confirm it, the production `transaction_outcome` is `RECONCILIATION_REQUIRED`,
+never `VERIFIED`. Halt-on-doubt is unchanged. This is not live Citrix
+Production evidence; a live ICA/HDX session is a deployment-specific
+qualification. Wire the independent read before paying a sprint for a
+`VERIFIED` outcome.
+
+The reopen itself has limits. It earns the `reopened` level only when its
+navigation contains a recognized state reset; without one it is
+`same_screen`. A read-only guard refuses any reopen step that presses a
+delete key, or `s`, Enter, Return or Delete with a modifier held (any
+spelling: `control+s`, `Meta+S`, `ctrl+shift+s`, `alt+s`, `shift+delete`).
+It refuses a click on a control labelled with a commit word (Save, Submit,
+Delete, Sign, Send, ...), a click where OCR reads no label (an icon-only
+button may be Save), and a click whose label can't be read at all. It reads
+labels by OCR, so a control drawn with text that doesn't say what it does
+passes, Enter alone is allowed (a search needs it), and typed text is not
+checked. A whole-word match can also refuse a harmless control ("Post-op
+notes"); the check then halts. A reference number is read from one screen
+region and must be the only match there; two different numbers, or none, halt
+the check. A search by a run input (this run's patient) can open an older
+record with the same value, and Flow can't read the record before the save
+without leaving the form, so such a check confirms only when the reopened
+record shows this save's reference number and no other; an application that
+shows no reference number halts there.
 
 ### 4. Model assistance can convert a halt into a false pass
 
@@ -489,7 +556,7 @@ and exposes independently verifiable outcomes.
 
 | Condition | Current boundary |
 | --- | --- |
-| Zoom, DPI, font, layout, viewport, or monitor changes | Browser attach recording accepts a stable viewport or device-scale change between actions, starts a new exact geometry epoch, and refuses an action that overlaps the transition. Native offline conversion can normalize a stable source-window move, resize, monitor change, or scale change into one fixed output viewport when every timeline row carries valid mapping metadata. It refuses a malformed timeline or a changed output viewport. RDP and Citrix live backends can rebaseline geometry between actions and refuse a change during the exact-frame lease. Other rescale or reflow behavior remains workflow-specific. |
+| Zoom, DPI, font, layout, viewport, or monitor changes | Browser attach recording accepts a stable viewport or device-scale change between actions, starts a new exact geometry epoch, and refuses an action that overlaps the transition. Native offline conversion can normalize a stable source-window move, resize, monitor change, or scale change into one fixed output viewport when every timeline row carries valid mapping metadata. It refuses a malformed timeline or a changed output viewport. RDP and Citrix live backends can rebaseline geometry between actions and refuse a change during the exact-frame lease. On remote-desktop replays, a session redrawn at another display scale is detected at the first step: the runtime fits one scale from the recorded labels and continues on a view resampled to the recorded geometry, with every check unchanged. In the [display-scaling sweep](../benchmark/pixel_scale/README.md) (in-process renderings of the RDP and canvas kiosks, 100 to 175%, ClearType on and off) this took healthy runs from 3 of 24 to 17 of 24 with no wrong write. A reflowed layout, a font change without a scale change, a scale change during the run, and a changed pinned FreeRDP session profile still halt. Browser zoom on the web path still halts at the first step ([`cosmetic_drift`](../benchmark/cosmetic_drift/COSMETIC_DRIFT.md)). Other rescale or reflow behavior remains workflow-specific. |
 | Native select menus, file choosers, permission prompts, and secure desktops | OS or browser chrome may not appear in the captured surface and may be unrecordable or undrivable. Prefer an application-level or keyboard/API path. |
 | New tabs and windows | A bundle recorded with `Recorder` can declare the popups and tabs a step opens, act in them after an explicit surface switch, and halt on any page it did not declare ([MULTI_SURFACE.md](MULTI_SURFACE.md)). Such bundles run governed, qualified, and durable. Resume re-binds surfaces by identity, and managed Cloud dispatch needs only the `surfaces:` map. A program (graph) resume is refused. `record --url` and attach mode (`--cdp`, only pages a followed page opened) capture popups and tabs, and `--surface NAME=KIND[:TARGET]` binds backend surfaces at replay. Native windows and JavaScript dialogs are screen states, not surfaces. A dialog is answered by the step that raises it (browser backend, scripted recorder), and a hidden native window is reached by an explicit focus step. |
 | Drag and drop or gesture-heavy controls | Not a general supported primitive. Use a structured/API alternative or validate a purpose-built workflow. |

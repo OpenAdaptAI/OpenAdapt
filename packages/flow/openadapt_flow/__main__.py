@@ -691,6 +691,40 @@ def _refuse_missing_citrix_readiness(backend_cfg: object, *, operation: str) -> 
     return True
 
 
+def _refuse_shared_readback_session(
+    cfg: object,
+    backend_cfg: object,
+    *,
+    operation: str,
+    surfaces: Optional[dict] = None,
+) -> bool:
+    """Refuse a desktop read-back session that is the session that types.
+
+    The deployment loader checks this too, but ``--backend``, ``--agent-url``,
+    ``--rdp-host`` and the bundle's recorded target can change the typing
+    backend after loading. This checks the backend the run will really use.
+    """
+    from openadapt_flow.deployment import desktop_readback_session_overlap
+
+    effects = getattr(cfg, "effects", None)
+    if effects is None:
+        return False
+    for section in [effects, *getattr(effects, "candidates", [])]:
+        spec = getattr(section, "desktop_readback", None)
+        if spec is None:
+            continue
+        problem = desktop_readback_session_overlap(
+            spec, [backend_cfg, *(surfaces or {}).values()]
+        )
+        if problem is not None:
+            print(
+                f"{operation} REFUSED: effects.desktop_readback.session {problem}. "
+                "Nothing was executed."
+            )
+            return True
+    return False
+
+
 _SAFE_BUNDLE_LOAD_GUIDANCE = (
     "Verify the bundle path and integrity; for a sealed bundle, set "
     "OPENADAPT_BUNDLE_KEY."
@@ -798,14 +832,17 @@ def _build_and_run_replayer(
     surface_override: bool = False,
     execution_origin: Optional[str] = None,
     execution_entry_url: Optional[str] = None,
+    execution_target_origin: Optional[str] = None,
     run_id: Optional[str] = None,
     approval_gate=None,
     qualification_fault_driver=None,
     surface_backends=None,
     deployment_surface: Optional[str] = None,
+    readback_pipeline=None,
+    secret_env_overrides: Optional[Mapping[str, str]] = None,
 ):
     """Build the shared Replayer configuration and execute one workflow."""
-    return _configured_replayer(
+    replayer = _configured_replayer(
         backend,
         workflow=workflow,
         allow_egress=allow_egress,
@@ -825,7 +862,12 @@ def _build_and_run_replayer(
         qualification_fault_driver=qualification_fault_driver,
         surface_backends=surface_backends,
         deployment_surface=deployment_surface,
-    ).run(
+    )
+    # Worklist workers (cli_worklist_pool): a per-worker read-back pipeline
+    # and per-account secret sources. Both default to the serial behavior.
+    replayer.readback_pipeline = readback_pipeline
+    replayer.secret_env_overrides = dict(secret_env_overrides or {})
+    return replayer.run(
         workflow,
         params=params,
         worklists=worklists,
@@ -836,6 +878,7 @@ def _build_and_run_replayer(
         surface_override=surface_override,
         execution_origin=execution_origin,
         execution_entry_url=execution_entry_url,
+        execution_target_origin=execution_target_origin,
         run_id=(
             remote_delivery_run_id
             if delivery_authority_kind == "cloud_runner"
@@ -1086,6 +1129,7 @@ def _replay_desktop(
             qualification_campaign_guard=qualification_campaign_guard,
             runtime_config=runtime_config,
             execution_target_kind=_report_backend_kind(backend_cfg.kind),
+            execution_target_origin=_surface_target_origin_or_none(backend_cfg),
             surface_override=bool(getattr(args, "_surface_override", False)),
             run_id=run_id,
             approval_gate=approval_gate,
@@ -1101,6 +1145,18 @@ def _replay_desktop(
     return _finish_replay(
         run_dir, report, args, backend_kind=_report_backend_kind(backend_cfg.kind)
     )
+
+
+def _surface_target_origin_or_none(backend_cfg) -> Optional[str]:
+    """The non-web app's ``<kind>://<target>``, for an admitted JIT program's
+    canary match. A section that can't name one gives None, which that match
+    refuses; every other bundle ignores it."""
+    from openadapt_flow.surface_selection import surface_target_origin
+
+    try:
+        return surface_target_origin(backend_cfg)
+    except ValueError:
+        return None
 
 
 def _record_until_stop(args: argparse.Namespace):
@@ -1120,6 +1176,13 @@ def _cmd_record(args: argparse.Namespace) -> int:
     with_check = bool(getattr(args, "with_check", False))
     observation = None
     verify_path = getattr(args, "verify", None)
+    # A bare --verify needs no file: the look-up the person records after
+    # the save becomes the check.
+    from_lookup = verify_path == ""
+    if from_lookup:
+        from openadapt_flow.compiler.lookup_detect import LOOKUP_GUIDANCE
+
+        print(LOOKUP_GUIDANCE)
     if verify_path:
         from openadapt_flow.record_sor import RecordingObservation, RecordSorError
 
@@ -1144,6 +1207,8 @@ def _cmd_record(args: argparse.Namespace) -> int:
         contract, proposal, diff = observation.finish(Path(args.out))
         for line in summary_lines(contract, proposal, diff):
             print(line)
+    if code == 0 and (Path(args.out) / "events.jsonl").is_file():
+        _propose_lookup_check(args, from_lookup=from_lookup)
     if code == 0 and with_check:
         from openadapt_flow.cli_check import guided_check
         from openadapt_flow.cli_hints import command
@@ -1159,6 +1224,64 @@ def _cmd_record(args: argparse.Namespace) -> int:
         else:
             guided_check(recording)
     return code
+
+
+def _recorded_surface(recording: Path) -> Optional[str]:
+    """The surface stamped into the recording's ``meta.json``, if any."""
+
+    import json
+
+    try:
+        surface = json.loads((recording / "meta.json").read_text()).get("surface")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return str(surface) if surface else None
+
+
+def _propose_lookup_check(args: argparse.Namespace, *, from_lookup: bool) -> None:
+    """Find a look-up after the save and propose it as the record check."""
+
+    from openadapt_flow.cli_hints import command
+    from openadapt_flow.compiler.lookup_detect import (
+        LOOKUP_GUIDANCE,
+        READBACK_PROPOSAL_FILE,
+        propose_from_recording,
+    )
+
+    recording = Path(args.out)
+    kind = _recorded_surface(recording) or str(getattr(args, "backend", None) or "")
+    proposal, written, lines = propose_from_recording(recording, session_kind=kind)
+    for line in lines:
+        if line == LOOKUP_GUIDANCE and getattr(args, "with_check", False):
+            continue  # the guided check asks for the check next
+        print(line)
+    if proposal is None:
+        return
+    print(
+        "Accept the same-session check with "
+        f"'{command(f'check accept {recording}')}'; a person still admits it."
+    )
+    readback = recording / READBACK_PROPOSAL_FILE
+    if readback in written:
+        print(
+            f"{readback.name} checks from a separate session: fill in its "
+            "UNRESOLVED values and review each effect."
+        )
+        if from_lookup:
+            from openadapt_flow.record_sor import PROPOSED_CONTRACT_NAME, _write_private
+
+            target = recording / PROPOSED_CONTRACT_NAME
+            try:
+                _write_private(target, readback.read_text())
+            except OSError as exc:
+                print(f"record --verify: could not write {target.name} ({exc})")
+            else:
+                print(f"Proposed contract: {target}")
+    elif from_lookup:
+        print(
+            "record --verify: a web recording's look-up becomes the same-session "
+            "check only; a separate-session check needs effects.kind ui_readback."
+        )
 
 
 def _cmd_record_capture(args: argparse.Namespace) -> int:
@@ -1204,6 +1327,11 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
         or getattr(args, "browser_page_url", None)
     )
     if backend in ("windows", "macos", "linux", "rdp", "citrix"):
+        if getattr(args, "capture_network", False):
+            raise SystemExit(
+                "record: --capture-network applies only to --backend web; a "
+                "desktop, RDP or Citrix session has no page requests to capture"
+            )
         if browser_attach_requested:
             raise SystemExit(
                 "record: --browser-cdp-endpoint and --browser-page-url apply "
@@ -1261,6 +1389,7 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
             browser_page_url=getattr(args, "browser_page_url", None),
             stop_when=_record_until_stop(args),
             surface="web",
+            capture_network=bool(getattr(args, "capture_network", False)),
         )
     except BrowserAttachError as exc:
         raise SystemExit(f"record: browser attachment refused: {exc}") from exc
@@ -1847,8 +1976,19 @@ def _cmd_induce(args: argparse.Namespace) -> int:
         else:
             traces.append(path)
 
-    result = induce_program(traces)
+    if args.probe_on:
+        probed = _induce_with_probes(args, traces)
+        if isinstance(probed, int):
+            return probed
+        result = probed
+    else:
+        result = induce_program(traces)
     print(result.render())
+    if args.report:
+        report_path = Path(args.report)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(result.model_dump_json(indent=2) + "\n")
+        print(f"Induction report written to {report_path}")
 
     if args.held_out and len(traces) >= 2:
         print(validate_held_out(traces).render())
@@ -1874,6 +2014,64 @@ def _cmd_induce(args: argparse.Namespace) -> int:
         f"{len(result.column_decisions)} column decision(s))."
     )
     return 0
+
+
+def _induce_with_probes(args: argparse.Namespace, traces: list) -> Any:
+    """``induce --probe-on``: refuse a non-test target, else probe and induce.
+
+    Returns the InductionResult, or an exit code when the target is refused.
+    """
+    import tempfile
+
+    from openadapt_flow.compiler import probing
+    from openadapt_flow.deployment import load_deployment
+
+    deployment = Path(args.probe_on)
+    try:
+        cfg = load_deployment(deployment)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"PROBE REFUSED: {exc}")
+        return 3
+    reasons = probing.probe_target_refusals(cfg)
+    if reasons:
+        print("PROBE REFUSED: nothing was reset or replayed.")
+        for reason in reasons:
+            print(f"  - {reason}")
+        return 3
+    contract = Path(str(cfg.test_copy.reward_contract)).expanduser()
+    if not contract.is_absolute():
+        contract = deployment.parent / contract
+
+    def _run(work: Path) -> Any:
+        from openadapt_flow.compiler.compile import compile_recording
+        from openadapt_flow.ir import Workflow
+
+        probe_traces = []
+        seen: set[str] = set()
+        for i, (arg, trace) in enumerate(zip(args.recording, traces)):
+            path = Path(arg)
+            label = path.name if path.name not in seen else f"{path.name}#{i}"
+            seen.add(label)
+            if isinstance(trace, Workflow):
+                bundle = path
+            else:
+                bundle = work / "compiled" / f"{i}-{path.name}"
+                trace = compile_recording(path, bundle, name=path.name)
+            probe_traces.append(
+                probing.ProbeTrace(workflow=trace, bundle_dir=bundle, label=label)
+            )
+        target = probing.DeploymentProbeTarget(cfg)
+        print(f"Probing on declared test copy {cfg.name!r} (read-back: {contract})")
+        return probing.probe_and_induce(
+            probe_traces, target=target, reward_contract=contract, work_dir=work
+        )
+
+    if args.probe_work_dir:
+        work = Path(args.probe_work_dir)
+        work.mkdir(parents=True, exist_ok=True)
+        return _run(work)
+    with tempfile.TemporaryDirectory(prefix="induce-probe-") as tmp:
+        return _run(Path(tmp))
 
 
 def _cmd_for_each(args: argparse.Namespace) -> int:
@@ -2232,6 +2430,10 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     if refused is not None:
         return refused
     surface_cfgs = _resolve_surface_bindings(args, cfg, workflow)
+    if _refuse_shared_readback_session(
+        cfg, backend_cfg, operation=operation, surfaces=surface_cfgs
+    ):
+        return 2
     # Opt-in attest pre-state snapshot: the earliest point where the run is
     # ADMITTED (every gate above passed) and the run directory is final, but
     # NO actuation has begun on either the desktop or the web path below.
@@ -2242,6 +2444,25 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         policy_name=getattr(args, "policy", None) or cfg.policy.policy,
     )
     fault_driver = getattr(args, "_qualification_fault_driver", None)
+    from openadapt_flow.cli_worklist_pool import requested_pool
+
+    pool_policy = requested_pool(args, cfg)
+    if pool_policy is not None:
+        return _replay_worklist_pool(
+            args,
+            cfg,
+            backend_cfg,
+            pool_policy,
+            workflow=workflow,
+            params=params,
+            worklists=worklists,
+            bundle=bundle,
+            run_dir=run_dir,
+            allow_egress=allow_egress,
+            durable=durable,
+            fault_driver=fault_driver,
+            surface_cfgs=surface_cfgs,
+        )
     if _normalize_kind(backend_cfg.kind) != "web":
         return _replay_desktop(
             args,
@@ -2422,6 +2643,198 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     return _finish_replay(
         run_dir, report, args, backend_kind=_report_backend_kind(backend_cfg.kind)
     )
+
+
+def _replay_worklist_pool(
+    args: argparse.Namespace,
+    cfg,
+    backend_cfg,
+    policy,
+    *,
+    workflow,
+    params,
+    worklists,
+    bundle: Path,
+    run_dir: Path,
+    allow_egress: bool,
+    durable: bool,
+    fault_driver,
+    surface_cfgs,
+) -> int:
+    """Run a worklist program's items on N workers (docs/THROUGHPUT.md)."""
+    import hashlib
+    import os
+    from functools import partial
+
+    from openadapt_flow import cli_worklist_pool as cwp
+    from openadapt_flow.backends.factory import _normalize_kind, build_backend
+    from openadapt_flow.runtime.worklist_pool import PoolRefusal
+
+    kind = _normalize_kind(backend_cfg.kind)
+    url = args.url or cfg.backend.url
+    try:
+        if (
+            fault_driver is not None
+            or getattr(args, "_qualification_case_execution", None) is not None
+        ):
+            raise PoolRefusal("qualification runs are serial")
+        if surface_cfgs:
+            raise PoolRefusal("multi-surface bundles run on one session")
+        if (
+            getattr(args, "drift", None)
+            or getattr(args, "record_video", None) is not None
+            or float(getattr(args, "hold_on_halt", 0.0) or 0.0) > 0
+            or getattr(args, "save_healed_to", None)
+        ):
+            raise PoolRefusal(
+                "--drift, --record-video, --hold-on-halt and --save-healed-to "
+                "apply to a single session"
+            )
+        if kind not in ("web", "rdp"):
+            raise PoolRefusal(f"--workers supports web and RDP sessions, not {kind}")
+        if kind == "web" and not url:
+            raise PoolRefusal("--workers needs --url or backend.url")
+        if kind == "rdp" and not backend_cfg.rdp_host:
+            raise PoolRefusal("--workers over RDP needs backend.rdp_host")
+        if policy.refusal() is not None:
+            raise PoolRefusal(policy.refusal())
+        relation = cwp.loop_relation(workflow)
+        rows = cwp.pool_rows(workflow, worklists, relation)
+        accounts = cwp.check_accounts(policy, cfg.worklist, kind)
+        entry_workflow = (
+            cwp.load_entry_bundle(Path(cfg.worklist.entry_bundle))
+            if cfg.worklist.entry_bundle and kind == "web"
+            else None
+        )
+    except PoolRefusal as exc:
+        print(f"REFUSED: {exc}. Nothing was executed.")
+        return 2
+
+    item_authorization = getattr(args, "_item_authorization", None)
+    policy_name = getattr(args, "policy", None) or cfg.policy.policy
+    entry_url = cfg.worklist.entry_url or url
+
+    def run_item(wiring, source, idx, row, item_dir, pipeline, *, page_mode: bool):
+        _cfg, effect_verifier, api_actuator, _durable, _egress = wiring
+        backend = build_backend(backend_cfg, page=source) if page_mode else source
+        item_dir.mkdir(parents=True, exist_ok=True)
+        origin = None
+        if page_mode:
+            origin = f"{urlsplit(source.url).scheme}://{urlsplit(source.url).netloc}"
+        return _build_and_run_replayer(
+            backend,
+            workflow=workflow,
+            params=params,
+            worklists={relation: [dict(row)]},
+            bundle=bundle,
+            run_dir=item_dir,
+            save_healed_to=None,
+            allow_egress=allow_egress,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+            durable=durable,
+            use_structural=True,
+            pixel_verify_enabled=cfg.runtime.pixel_verify_enabled,
+            governed_authorization=(
+                item_authorization([dict(row)]) if item_authorization else None
+            ),
+            production_qualification_guard=getattr(
+                args, "_production_qualification_guard", None
+            ),
+            runtime_config=cfg.runtime,
+            execution_target_kind=(
+                "web" if page_mode else _report_backend_kind(backend_cfg.kind)
+            ),
+            surface_override=bool(getattr(args, "_surface_override", False)),
+            execution_origin=origin,
+            execution_entry_url=entry_url if page_mode else None,
+            approval_gate=_approval_gate_for_run(
+                args, item_dir, policy_name=policy_name
+            ),
+            deployment_surface=backend_cfg.deployment_surface,
+            readback_pipeline=pipeline,
+        )
+
+    # One effect verifier / API actuator per worker: they hold HTTP sessions
+    # and are not shared across threads.
+    wirings = [_deployment_runtime(args, params=params) for _ in accounts]
+    salt = getattr(getattr(workflow, "manifest", None), "content_digest", "") or ""
+
+    if kind == "web":
+        workers = []
+        for i, account in enumerate(accounts):
+            name = account.name if account is not None else "worker-1"
+            sign_in = None
+            if account is None:
+                sign_in = partial(lambda page, u: page.goto(u), u=url)
+            elif not account.browser_cdp_endpoint:
+                sign_in = partial(
+                    cwp.sign_in_with_bundle,
+                    bundle=Path(cfg.worklist.sign_in_bundle),
+                    account=account,
+                    backend_factory=lambda page: build_backend(backend_cfg, page=page),
+                    url=url,
+                    run_dir=run_dir / "sign-in" / name,
+                )
+            open_entry = None
+            if entry_workflow is not None:
+                open_entry = partial(
+                    cwp.entry_with_bundle,
+                    url=entry_url,
+                    workflow=entry_workflow,
+                    bundle=Path(cfg.worklist.entry_bundle),
+                    backend_factory=lambda page: build_backend(backend_cfg, page=page),
+                    run_dir=run_dir / "entry" / name,
+                )
+            workers.append(
+                cwp.WebPoolWorker(
+                    name=name,
+                    entry_url=entry_url,
+                    run_item_on_page=partial(run_item, wirings[i], page_mode=True),
+                    sign_in=sign_in,
+                    open_entry=open_entry,
+                    cdp_endpoint=account.browser_cdp_endpoint if account else None,
+                    headed=bool(args.headed or cfg.backend.headed),
+                    readback_window=policy.readback_window,
+                )
+            )
+        return cwp.run_pool(rows, workers, run_dir=run_dir, policy=policy, salt=salt)
+
+    # RDP: one FreeRDP session per account, connected together by the pool.
+    from openadapt_flow.backends.xfreerdp import (
+        RdpTarget,
+        SessionPool,
+        XFreeRDPTransport,
+    )
+
+    transports = [
+        XFreeRDPTransport(
+            RdpTarget(
+                host=backend_cfg.rdp_host,
+                port=backend_cfg.rdp_port,
+                username=account.rdp_username,
+                domain=backend_cfg.rdp_domain,
+            ),
+            password=(lambda env=account.rdp_password_env: os.environ[env]),
+        )
+        for account in accounts
+    ]
+    with SessionPool(transports) as session_pool:
+        workers = [
+            cwp.BackendPoolWorker(
+                name=account.name,
+                backend=build_backend(
+                    backend_cfg, rdp_transport=session, rdp_connect=False
+                ),
+                run_item_on_backend=partial(run_item, wirings[i], page_mode=False),
+                fingerprint=hashlib.sha256(
+                    f"{backend_cfg.rdp_host}|{account.rdp_username}".encode()
+                ).hexdigest(),
+                readback_window=policy.readback_window,
+            )
+            for i, (account, session) in enumerate(zip(accounts, session_pool.sessions))
+        ]
+        return cwp.run_pool(rows, workers, run_dir=run_dir, policy=policy, salt=salt)
 
 
 def _refuse_unverified_managed_qualification_admission(
@@ -2917,6 +3330,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
     refused = _enforce_surface_binding(args, workflow, backend_cfg, operation="run")
     if refused is not None:
         return refused
+    if _refuse_shared_readback_session(cfg, backend_cfg, operation="run"):
+        return 2
     if _refuse_missing_citrix_readiness(backend_cfg, operation="run"):
         return 2
     will_actuate = not bool(getattr(args, "dry_run", False))
@@ -3174,12 +3589,93 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if refused is not None:
         return refused
 
+    from openadapt_flow.cli_worklist_pool import loop_relation, requested_pool
+    from openadapt_flow.runtime.worklist_pool import PoolRefusal
+
+    if requested_pool(args, cfg) is not None:
+        # Parallel worklist (docs/THROUGHPUT.md): every item gets its own
+        # single-use authorization, bound to that item's one-row worklist and
+        # otherwise identical to the run's (same gate, policy, approvals).
+        if dispatch_file or qualification_case is not None:
+            print(
+                "run REFUSED: --workers and --readback-window apply to local "
+                "runs, not a managed dispatch or a qualification case. Nothing "
+                "was executed."
+            )
+            return 2
+        try:
+            relation = loop_relation(workflow)
+        except PoolRefusal as exc:
+            print(f"run REFUSED: {exc}. Nothing was executed.")
+            return 2
+        base_authorization = args._governed_run_authorization
+
+        def _item_authorization(rows, base=base_authorization):
+            fresh = build_runtime_authorization(
+                workflow,
+                report,
+                params=runtime_params,
+                worklists={relation: rows},
+            )
+            keep = {"authorization_id", "created_at", "runtime_inputs_digest"}
+            return fresh.model_copy(
+                update={
+                    name: getattr(base, name)
+                    for name in type(base).model_fields
+                    if name not in keep
+                }
+            )
+
+        args._item_authorization = _item_authorization
+
     if qualification_case is not None and not _claim_qualification_case_attempt(args):
         return 2
 
     # Admitted. A deployment run is not the drift-demo; force it off and delegate
     # to the shared replay executor (which reads all deployment wiring itself).
     args.drift = None
+    if getattr(args, "self_repair", False):
+        from openadapt_flow.cli_self_repair import cmd_run_self_repair
+
+        exit_code = cmd_run_self_repair(
+            args,
+            workflow=workflow,
+            bundle=bundle,
+            cfg=cfg,
+            backend_cfg=backend_cfg,
+            gate_kwargs={
+                "deployment": cfg,
+                "effect_verifier": effect_verifier,
+                "api_actuator": api_actuator,
+                "policy_source": policy_source,
+                "approval_available": bool(
+                    getattr(args, "approve_unverified_writes", False)
+                ),
+                "strict_templates": bool(getattr(args, "strict_templates", False)),
+                "require_encryption": not bool(
+                    getattr(args, "allow_unencrypted", False)
+                ),
+                "pinned_compiler_version": getattr(args, "pin_version", None),
+                "profile_contract": profile,
+                "effective_durable": effective_durable if profile is not None else None,
+                "effective_require_settled": (
+                    effective_require_settled if profile is not None else None
+                ),
+            },
+            params=runtime_params,
+            worklists=runtime_worklists,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+            durable=effective_durable,
+            allow_egress=bool(_egress),
+            run_replayer=_build_and_run_replayer,
+            approval_gate_for_run=_approval_gate_for_run,
+            finish=_finish_replay,
+            default_run_dir=_default_run_dir,
+            attest_pre_state=_maybe_attest_pre_state,
+        )
+        _attach_cloud_seal(args)
+        return exit_code
     exit_code = _cmd_replay(args)
     _attach_cloud_seal(args)
     return exit_code
@@ -3505,7 +4001,12 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     # the bundle's real substrate rather than always the browser. The default
     # (web / no flag) reproduces the historical Playwright path below exactly.
     backend_cfg = _resolve_backend_config(args, cfg, workflow)
+    refused = _enforce_surface_binding(args, workflow, backend_cfg, operation="resume")
+    if refused is not None:
+        return refused
     if _refuse_missing_citrix_readiness(backend_cfg, operation="Resume"):
+        return 2
+    if _refuse_shared_readback_session(cfg, backend_cfg, operation="Resume"):
         return 2
 
     where = (
@@ -3545,6 +4046,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             replayer,
             key=ckpt_key,
             execution_target_kind=_report_backend_kind(backend_cfg.kind),
+            surface_override=bool(getattr(args, "_surface_override", False)),
         )
 
     try:
@@ -3946,9 +4448,25 @@ def _cmd_bench(args: argparse.Namespace) -> int:
     from contextlib import contextmanager
 
     from openadapt_flow.bench import run_bench
+    from openadapt_flow.emit.skill import bundle_surface
+    from openadapt_flow.ir import Workflow
     from openadapt_flow.mockmed.server import serve
     from openadapt_flow.report import render_bench_report
 
+    try:
+        surface = bundle_surface(Workflow.load(Path(args.bundle)))
+    except Exception:  # noqa: BLE001 - run_bench reports load errors itself
+        surface = None
+    if surface not in (None, "web"):
+        from openadapt_flow.cli_hints import command
+
+        print(
+            "BENCH REFUSED: bench replays a bundle against the bundled MockMed "
+            f"web app, and this bundle was recorded on {surface!r}. Measure it "
+            "on its own app with repeated "
+            f"`{command('run BUNDLE --config deploy.yaml')}`. Nothing was executed."
+        )
+        return 2
     url, stop = serve(port=0)
     target_url = _with_drift(url, args.drift)
 
@@ -6300,6 +6818,11 @@ def _emit_local_receipt(args: argparse.Namespace) -> int:
     print("Receipt written (LOCAL ONLY, nothing was uploaded):")
     for path in (paths["png"], paths["json"], paths["markdown"]):
         print(f"  {path}")
+    from openadapt_flow.records.run import write_sealed_reads
+
+    records_path = write_sealed_reads(report, paths["json"])
+    if records_path is not None:
+        print(f"  {records_path} (values read, Seal pointers to this receipt)")
     print(
         "\nEvery byte that would leave this machine is in receipt.json. "
         "Publishing is a separate, explicit step."
@@ -6840,6 +7363,31 @@ def _add_deployment_flags(
                 "sole loop relation."
             ),
         )
+        p.add_argument(
+            "--workers",
+            type=int,
+            default=None,
+            metavar="N",
+            help=(
+                "Run a worklist program's items on N workers at once, each in "
+                "its own signed-in session (docs/THROUGHPUT.md). The deployment "
+                "must declare worklist.max_workers >= N, one account per "
+                "worker, and items_independent: true. Each item is claimed "
+                "once; a halt on any worker stops new items on all of them."
+            ),
+        )
+        p.add_argument(
+            "--readback-window",
+            type=int,
+            default=None,
+            metavar="K",
+            help=(
+                "Let a worker start its next item while up to K earlier saves "
+                "still wait for their system-of-record read-back (default: "
+                "worklist.readback_window, normally 0). A failed read-back "
+                "stops the run and names the items written after it."
+            ),
+        )
 
 
 def _add_attest_flags(p: argparse.ArgumentParser) -> None:
@@ -7233,6 +7781,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--capture-network",
+        action="store_true",
+        help=(
+            "Web only: also keep the page's requests (network.jsonl; cookies, "
+            "passwords and session tokens withheld). compile then proposes an "
+            "API step for a save it can repeat as one request; a person admits "
+            "it with 'api admit'"
+        ),
+    )
+    p.add_argument(
         "--with-check",
         action="store_true",
         help=(
@@ -7243,6 +7801,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--verify",
+        nargs="?",
+        const="",
         default=None,
         metavar="VERIFY_YAML",
         help=(
@@ -7250,7 +7810,8 @@ def build_parser() -> argparse.ArgumentParser:
             "file (rest, sql, fhir, graphql or file) before and after the "
             "recording, and propose the checks for what changed in "
             "verify.proposed.yaml. Both reads go to sor_snapshots.json "
-            "(mode 0600)"
+            "(mode 0600). With no file, look the record up after you save: "
+            "that look-up becomes the proposed check"
         ),
     )
     _add_backend_flags(p)
@@ -7429,6 +7990,31 @@ def build_parser() -> argparse.ArgumentParser:
             "Also run leave-one-out held-out validation and print the per-fold "
             "reproduction scores (needs >= 2 traces)"
         ),
+    )
+    p.add_argument(
+        "--probe-on",
+        default=None,
+        metavar="DEPLOYMENT",
+        help=(
+            "Settle refused optional steps by replaying each reading (step "
+            "dropped / step kept when present) in a fresh session on the test "
+            "copy this deployment file declares (test_copy.declared: true), "
+            "scored by its reward contract's read-back. Refuses any target "
+            "not declared a test copy. See docs/PROBE_INDUCTION.md"
+        ),
+    )
+    p.add_argument(
+        "--probe-work-dir",
+        default=None,
+        help=(
+            "Keep probe bundles and run directories here (default: a "
+            "temporary directory, removed afterwards)"
+        ),
+    )
+    p.add_argument(
+        "--report",
+        default=None,
+        help="Write the induction report (JSON, every probe run included) here",
     )
     p.set_defaults(func=_cmd_induce)
 
@@ -7849,6 +8435,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Max 1800."
         ),
     )
+    from openadapt_flow.cli_self_repair import add_self_repair_flags
+
+    add_self_repair_flags(p)
     _add_backend_flags(p)
     _add_surface_flags(p)
     _add_browser_session_flags(p)
@@ -9500,6 +10089,37 @@ def build_parser() -> argparse.ArgumentParser:
     _repair_store_flag(r)
     r.set_defaults(func=_cmd_repair)
 
+    r = rsub.add_parser(
+        "revert",
+        help=(
+            "Undo a repair that applied without a person: the prior bundle is "
+            "active again, and repairs of that step go to a person"
+        ),
+    )
+    r.add_argument("candidate_id", help="The automatic repair's candidate id")
+    r.add_argument("--by", required=True, help="Your name, recorded on the revert")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "standard-changes",
+        help="List the repairs that applied without a person (the daily digest)",
+    )
+    r.add_argument("--day", default=None, help="UTC day, YYYY-MM-DD (default: today)")
+    r.add_argument("--json", action="store_true", help="Print the ledger rows as JSON")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "clear-hold",
+        help="Let repairs of a step apply without a person again after a revert",
+    )
+    r.add_argument("--workflow", required=True)
+    r.add_argument("--step", required=True)
+    r.add_argument("--by", required=True, help="Your name, recorded on the ledger")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
     p = sub.add_parser(
         "connect",
         help=(
@@ -10087,6 +10707,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--repair-store",
+        default=None,
+        help=(
+            "Repair store whose automatic repairs (standard changes) the "
+            "console lists and, when attended, lets a person revert"
+        ),
+    )
+    p.add_argument(
         "--attend",
         action="store_true",
         help=(
@@ -10322,10 +10950,12 @@ def build_parser() -> argparse.ArgumentParser:
     pr.set_defaults(func=_cmd_connector)
 
     from openadapt_flow.cli_admit import register_admit_parser
+    from openadapt_flow.cli_api import register_api_parser
     from openadapt_flow.cli_check import register_check_parser
 
     register_admit_parser(sub)
     register_check_parser(sub)
+    register_api_parser(sub)
 
     from openadapt_flow.cli_undo import register as _register_undo
 
@@ -10374,6 +11004,9 @@ def _attended_service_from_args(args: argparse.Namespace) -> Iterator[Any]:
         backend_cfg = _resolve_backend_config(args, cfg)
     except (FileNotFoundError, ValueError) as exc:
         raise SystemExit(str(exc)) from exc
+    readback_cfg = cfg.model_copy(update={"effects": effects_cfg})
+    if _refuse_shared_readback_session(readback_cfg, backend_cfg, operation="console"):
+        raise SystemExit(2)
     allow_egress = bool(
         cfg.runtime.allow_model_grounding
         or getattr(args, "allow_model_grounding", False)
@@ -10508,6 +11141,7 @@ def _cmd_console(args: argparse.Namespace) -> int:
             attended_service=attended_service,
             decision_supervisor=_decision_supervisor_from_args(args, attended_service),
             port=args.port,
+            repair_store=getattr(args, "repair_store", None),
         )
     return 0
 

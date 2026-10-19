@@ -12,14 +12,16 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+import os
 import threading
 from collections import OrderedDict
-from typing import Any
+from typing import Any, Callable, Iterable
 
 import numpy as np
 from pydantic import BaseModel
 
 from openadapt_flow.ir import Region
+from openadapt_flow.runtime.step_timing import timed_span
 from openadapt_flow.vision import imgops
 from openadapt_flow.vision.match import Match, _clamp_region
 
@@ -61,7 +63,15 @@ def _get_engine() -> Any:
                 else:
                     from rapidocr_onnxruntime import RapidOCR
 
-                    _engine = RapidOCR()
+                    # Parallel worklist workers share this engine; capping its
+                    # threads stops N concurrent calls from each claiming
+                    # every core. Unset keeps onnxruntime's default.
+                    threads = os.environ.get("OPENADAPT_FLOW_OCR_THREADS")
+                    _engine = (
+                        RapidOCR(intra_op_num_threads=int(threads))
+                        if threads
+                        else RapidOCR()
+                    )
     return _engine
 
 
@@ -101,6 +111,68 @@ def clear_ocr_memo() -> None:
         _ocr_memo.clear()
 
 
+# Frames derived from another frame: a display-scaled remote session resampled
+# to the recorded geometry (runtime.render_scale). Resampling merges the gaps
+# between words, so OCR reads the source frame, where the text has more
+# pixels, and maps each line back. Keyed by the derived frame's SHA-256.
+_SOURCE_MAX = 16
+_frame_sources: OrderedDict[
+    str,
+    tuple[
+        bytes, Callable[[Region], Region], Callable[[Region], Region], tuple[int, int]
+    ],
+] = OrderedDict()
+
+
+def register_frame_source(
+    derived_png: bytes,
+    source_png: bytes,
+    *,
+    to_source: Callable[[Region], Region],
+    from_source: Callable[[Region], Region],
+    derived_size: tuple[int, int],
+) -> None:
+    """Have :func:`ocr` of ``derived_png`` read ``source_png`` instead.
+
+    ``to_source`` maps a region of the derived frame into the source frame and
+    ``from_source`` maps a recognized line's region back.
+    """
+    key = hashlib.sha256(derived_png).hexdigest()
+    with _ocr_memo_lock:
+        _frame_sources[key] = (source_png, to_source, from_source, derived_size)
+        _frame_sources.move_to_end(key)
+        while len(_frame_sources) > _SOURCE_MAX:
+            _frame_sources.popitem(last=False)
+
+
+def forget_frame_sources(derived_sha256: Iterable[str] | None = None) -> None:
+    """Drop registered frame sources: the given derived-frame digests, or all."""
+
+    with _ocr_memo_lock:
+        if derived_sha256 is None:
+            _frame_sources.clear()
+            return
+        for key in derived_sha256:
+            _frame_sources.pop(key, None)
+
+
+def _ocr_from_source(
+    source: tuple[
+        bytes, Callable[[Region], Region], Callable[[Region], Region], tuple[int, int]
+    ],
+    region: Region | None,
+) -> list[OcrLine]:
+    source_png, to_source, from_source, (width, height) = source
+    lines = ocr(source_png, region=None if region is None else to_source(region))
+    out: list[OcrLine] = []
+    for line in lines:
+        mapped = _clamp_region(from_source(line.region), width, height)
+        if mapped is not None:
+            out.append(line.model_copy(update={"region": mapped}))
+    return out
+
+
+@timed_span("ocr")
 def ocr(screen_png: bytes, *, region: Region | None = None) -> list[OcrLine]:
     """Run OCR on a screenshot (optionally restricted to a region).
 
@@ -108,7 +180,8 @@ def ocr(screen_png: bytes, *, region: Region | None = None) -> list[OcrLine]:
     engine object: OCR is a pure function of those, and replay asks it about
     the same frame several times per step (identity, landmark, postcondition).
     One changed pixel is a different key, so a memo hit is never stale.
-    Callers always receive fresh copies.
+    Callers always receive fresh copies. A frame registered with
+    :func:`register_frame_source` is read from its source frame.
 
     Args:
         screen_png: Full-frame screenshot as PNG bytes.
@@ -127,7 +200,12 @@ def ocr(screen_png: bytes, *, region: Region | None = None) -> list[OcrLine]:
         if hit is not None and hit[0] is engine:
             _ocr_memo.move_to_end(key)
             return [line.model_copy() for line in hit[1]]
-    lines = _ocr_uncached(engine, screen_png, region=region)
+    with _ocr_memo_lock:
+        source = _frame_sources.get(key[0])
+    if source is not None:
+        lines = _ocr_from_source(source, region)
+    else:
+        lines = _ocr_uncached(engine, screen_png, region=region)
     with _ocr_memo_lock:
         _ocr_memo[key] = (engine, tuple(line.model_copy() for line in lines))
         _ocr_memo.move_to_end(key)

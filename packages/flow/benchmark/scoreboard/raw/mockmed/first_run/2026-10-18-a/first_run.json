@@ -1,0 +1,9 @@
+{
+  "record_status": "needs_human_admit",
+  "detail": null,
+  "steps": 6,
+  "canary_status": "VERIFIED",
+  "canary_detail": null,
+  "canary_halt": null,
+  "admitted": true
+}

@@ -21,21 +21,19 @@ admission-driven Production channel, and the machine-readable selection rule.
 
 ## Release state
 
-There is no trusted signed native build to download. The next native release
-is blocked until macOS has Developer ID plus notarization, Windows has
-Authenticode, and the exact Linux bytes verify under GitHub OIDC attestation.
-The engine is published to PyPI and as a wheel on each `vX.Y.Z` GitHub
-release. The older `desktop-v0.15.0` native packages keep their original ad-hoc
-and unsigned labels; don't install them.
+There is no trusted signed native build to download yet. Releases from the
+OpenAdapt monorepo ship macOS ad-hoc and Windows unsigned until Developer ID or
+SignPath signing is configured, and say so in every file name and the release
+notes. The older `desktop-v0.15.0` native packages in openadapt-desktop keep
+their original ad-hoc and unsigned labels; don't install them.
 
-Native packages ship under a `desktop-vX.Y.Z` prerelease channel, separate from
-the engine's `vX.Y.Z` PyPI and GitHub releases. CI keeps the native version
-synchronized to each engine release, so a native prerelease mirrors the engine
-it was built from. It's packaging evidence, and not a separate supported
-desktop release. Every filename encodes its platform, architecture, and
-signing state. New release filenames require `developer-id-notarized` on
-macOS, `authenticode` on Windows, and `github-attested` for the exact Linux
-bytes.
+Each version ships as one `openadapt-desktop-vX.Y.Z` release: the PyPI wheel and
+sdist and the native packages built from the same commit. The native version is
+synchronized to each engine release, so the native packages are packaging
+evidence for that engine, and not a separate supported desktop release. Every
+filename encodes its platform, architecture, and signing state:
+`adhoc` or `developer-id-notarized` on macOS, `unsigned` or `authenticode` on
+Windows, and `github-attested` for the exact Linux bytes.
 
 Native packages are unadmitted release candidates until the central Production
 lifecycle activates an exact release. A partial set of signing credentials

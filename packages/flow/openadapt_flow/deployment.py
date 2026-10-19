@@ -23,12 +23,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Optional
 
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     field_validator,
     model_serializer,
@@ -45,7 +47,9 @@ from openadapt_flow.remote_frame_contract import RemoteFrameContract
 # declarative config vocabulary, so a deployment YAML binds run parameters
 # with the exact ``{param: ...}`` / ``{literal: ...}`` form bundles use.
 from openadapt_flow.runtime.effects.auth import AuthRef, ResolvedSecrets
+from openadapt_flow.runtime.effects.desktop_readback import DesktopReadbackSpec
 from openadapt_flow.runtime.effects.effect import Region, ValueExpr
+from openadapt_flow.runtime.effects.fresh_session import FreshSessionSpec
 from openadapt_flow.runtime.effects.smart_auth import SmartBackendConfig
 from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
 
@@ -216,6 +220,8 @@ BUILTIN_EFFECT_KINDS = frozenset(
         "email",
         "document",
         "document-hash",
+        "desktop_readback",
+        "desktop-readback",
         "surfaces",
     }
 )
@@ -304,7 +310,9 @@ class EffectsConfig(BaseModel):
     #: ``ui_readback`` reads the saved record back through the application's
     #: own record page in a separate, freshly signed-in, read-only browser
     #: session (tier 2, ``INDEPENDENT_SESSION``): independent of the session
-    #: that typed, but not a system-of-record read.
+    #: that typed, but not a system-of-record read. ``fresh_session`` does the
+    #: same for a desktop app (a relaunched process) or RDP (a second session
+    #: with separate credentials), by replaying the effect's learned reopen.
     kind: str = "none"
 
     #: Reviewed alternatives for the same effect contract.  This is useful
@@ -349,6 +357,20 @@ class EffectsConfig(BaseModel):
     #: ``docs/EFFECT_KIT.md``. Required for ``kind: ui_readback``; ignored
     #: otherwise.
     ui_readback: Optional[UiReadbackSpec] = None
+
+    # -- desktop_readback (separate-session look-up in a desktop, RDP, or
+    #    Citrix application) ------------------------------------------------
+    #: The read-back session (its own ``backend:``-style config), how it
+    #: signs in, how to search for and open the record, and how to read each
+    #: field (UI Automation or OCR). See
+    #: ``runtime/effects/desktop_readback.py`` and ``docs/EFFECT_KIT.md``.
+    #: Required for ``kind: desktop_readback``; ignored otherwise.
+    desktop_readback: Optional[DesktopReadbackSpec] = None
+
+    # -- fresh_session (desktop relaunch or a second RDP session) -------------
+    #: Required for ``kind: fresh_session``; ignored otherwise. See
+    #: ``runtime/effects/fresh_session.py`` and ``docs/READBACK_LADDER.md``.
+    fresh_session: Optional[FreshSessionSpec] = None
 
     # -- rest (JSON REST system of record, e.g. MockMed /api/db) -------------
     base_url: Optional[str] = None
@@ -574,6 +596,15 @@ class EffectsConfig(BaseModel):
                 )
         return self
 
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Keep configs without a desktop read-back byte-identical."""
+
+        data: dict[str, Any] = handler(self)
+        if data.get("desktop_readback", "") is None:
+            data.pop("desktop_readback", None)
+        return data
+
     @model_validator(mode="after")
     def _validate_records_drop_fields(self) -> "EffectsConfig":
         kind = (self.kind or "none").strip().lower()
@@ -723,6 +754,17 @@ class RuntimeSection(BaseModel):
     #: for remote-desktop replays (``rdp``/``citrix``) and off elsewhere;
     #: true or false forces it.
     layout_drift_check: Optional[bool] = None
+    #: How long, in ms, a browser page must stay quiet (no DOM change, input
+    #: event, animation or request) before a step counts as settled. None keeps
+    #: the default 100 ms. Lower is faster but gives the app less time to
+    #: start reacting to an action before the next check (docs/THROUGHPUT.md).
+    #: Applies to the whole process.
+    page_quiet_ms: Optional[int] = Field(default=None, ge=30, le=2000)
+    #: Named speed profile (``runtime/speed.py``): ``standard`` (default) or
+    #: ``fast`` (native fill for ordinary text fields, 50 ms page-quiet
+    #: window, 2 OCR threads). Every check runs in both. ``page_quiet_ms``
+    #: overrides the profile's window. Applies to the whole process.
+    speed: Optional[Literal["standard", "fast"]] = None
     #: Operator-selected ("bring your own") model-grounding endpoint (the VLM
     #: fallback rung). Off by default; configuring it never enables egress on its
     #: own (``allow_model_grounding`` still governs whether anything leaves).
@@ -823,6 +865,94 @@ class IdempotencySection(BaseModel):
     key_env: Optional[str] = None
 
 
+class WorklistAccount(BaseModel):
+    """One signed-in session for a parallel worklist worker.
+
+    Holds env var NAMES only, never a credential value.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Label shown in the run report (for example ``clerk-1``).
+    name: str = Field(min_length=1, max_length=64)
+    #: Sign-in bundle parameter -> NAME of the env var holding its value
+    #: (for example ``{username: EMR_USER_1}``).
+    params_env: dict[str, str] = Field(default_factory=dict)
+    #: Secret sign-in parameter (a step marked ``secret``) -> NAME of the env
+    #: var holding it (for example ``{password: EMR_PASS_1}``).
+    secrets_env: dict[str, str] = Field(default_factory=dict)
+    #: Attach to this account's own signed-in Chromium (CDP) instead of
+    #: launching a browser and replaying the sign-in bundle.
+    browser_cdp_endpoint: Optional[str] = None
+    #: RDP: the user this session connects as, and the NAME of the env var
+    #: holding the password (FreeRDP session pool).
+    rdp_username: Optional[str] = None
+    rdp_password_env: Optional[str] = None
+
+
+class WorklistSection(BaseModel):
+    """Parallel worklist runs (``--workers N``, docs/THROUGHPUT.md).
+
+    The defaults run one item at a time, as before. ``--workers`` above
+    ``max_workers`` is refused, so the deployment states how many sessions
+    the app tolerates at once.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The app's concurrency limit: how many signed-in sessions may enter
+    #: items at once. ``--workers`` above this is refused.
+    max_workers: int = Field(default=1, ge=1, le=64)
+    #: Items touch disjoint records and may run in any order and at the same
+    #: time. Required for ``--workers`` above 1 and a read-back window above 0.
+    items_independent: bool = False
+    #: Pipelined read-back window k (default 0 = verify each save before the
+    #: next item starts). See ``runtime/readback_pipeline.py``.
+    readback_window: int = Field(default=0, ge=0, le=16)
+    #: ``stop`` (default): any halt stops new claims on every worker.
+    #: ``skip_unwritten``: an item that halted before writing anything is
+    #: recorded and the run goes on; anything else still stops it.
+    on_halt: Literal["stop", "skip_unwritten"] = "stop"
+    #: Recorded sign-in bundle each worker replays once with its account.
+    sign_in_bundle: Optional[str] = None
+    #: Page each item starts from (default: ``backend.url``).
+    entry_url: Optional[str] = None
+    #: Recorded navigation replayed after ``entry_url`` before each item, for
+    #: apps that keep state between items (close the open chart, open a blank
+    #: form). It must not save anything; the run refuses one with effects.
+    entry_bundle: Optional[str] = None
+    #: One account per worker. Workers never share a session.
+    accounts: list[WorklistAccount] = Field(default_factory=list)
+
+
+class ProbeCopySection(BaseModel):
+    """Declares that this deployment drives a resettable test copy.
+
+    Only ``induce --probe-on`` reads it. Probing replays guessed
+    interpretations of a recording disagreement, some of which are wrong on
+    purpose, so it runs only where the operator has said in writing that the
+    target is a disposable copy. See docs/PROBE_INDUCTION.md.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The operator's declaration that every system this file names (the GUI,
+    #: the read-back store, the reset hook) is a test copy, not production.
+    #: Probing refuses unless this is exactly ``true``.
+    declared: bool = False
+    #: Restores the copy to its baseline before each probe run: an HTTP POST
+    #: to this URL. One of ``reset_url`` / ``reset_command`` is required.
+    reset_url: Optional[str] = None
+    #: Restores the copy to its baseline before each probe run: a command run
+    #: without a shell, as an argv list.
+    reset_command: list[str] = Field(default_factory=list)
+    #: Reward contract bundle directory, in the ``serve-reward`` format. Its
+    #: required and forbidden effects say what "the recorded effect" is, and
+    #: its oracle recipe is the read-back. A relative path resolves against
+    #: the deployment file's directory.
+    reward_contract: Optional[str] = None
+
+
 #: Sentinel written by ``config init`` for fields the operator must fill.
 UNRESOLVED = "UNRESOLVED"
 
@@ -851,15 +981,161 @@ class DeploymentConfig(BaseModel):
     #: declares. ``--surface NAME=...`` flags apply over these entries. Empty
     #: (and omitted when serialized) otherwise.
     surfaces: dict[str, BackendConfig] = Field(default_factory=dict)
+    #: Parallel worklist runs (``--workers``). Omitted when serialized at its
+    #: defaults (one worker).
+    worklist: WorklistSection = Field(default_factory=WorklistSection)
+    #: Declares the target a resettable test copy (``induce --probe-on``
+    #: only). None (and omitted when serialized) otherwise.
+    test_copy: Optional[ProbeCopySection] = None
+
+    @model_validator(mode="after")
+    def _desktop_readback_is_its_own_session(self) -> "DeploymentConfig":
+        """The read-back session must never be the session that types."""
+
+        candidates = [self.effects, *self.effects.candidates]
+        for effects in candidates:
+            spec = effects.desktop_readback
+            if spec is None:
+                continue
+            problem = desktop_readback_session_overlap(
+                spec, [self.backend, *self.surfaces.values()], strict_user=False
+            )
+            if problem is not None:
+                raise ValueError(f"effects.desktop_readback.session: {problem}")
+        return self
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
-        """Keep configs without surface bindings byte-identical."""
+        """Keep configs without surface bindings or worklist settings
+        byte-identical."""
 
         data: dict[str, Any] = handler(self)
         if not self.surfaces:
             data.pop("surfaces", None)
+        if self.worklist == WorklistSection():
+            data.pop("worklist", None)
+        if self.test_copy is None:
+            data.pop("test_copy", None)
         return data
+
+
+def _endpoint(url: Optional[str]) -> Optional[tuple[str, str, Optional[int], str]]:
+    """``(scheme, host, port, path)`` with loopback names folded together."""
+
+    if not url:
+        return None
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(url.strip())
+    host = (parts.hostname or "").casefold().rstrip(".")
+    if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+        host = "loopback"
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+    return (parts.scheme.casefold(), host, port, parts.path.rstrip("/"))
+
+
+def _host(name: Optional[str]) -> str:
+    host = (name or "").strip().casefold().rstrip(".")
+    return "loopback" if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0") else host
+
+
+def _same_name(left: Optional[str], right: Optional[str]) -> bool:
+    """Two window selectors pick the same window: equal ignoring case, or
+    either one unset (it then matches whatever window is there)."""
+
+    a = (left or "").strip().casefold()
+    b = (right or "").strip().casefold()
+    return not a or not b or a == b
+
+
+def desktop_readback_session_overlap(
+    spec: DesktopReadbackSpec,
+    backends: list[BackendConfig],
+    environ: Optional[Mapping[str, str]] = None,
+    *,
+    strict_user: bool = True,
+) -> Optional[str]:
+    """Why ``spec.session`` is (or may be) a session the run types into.
+
+    The read-back must open its own session. The same agent is the same
+    Windows session; the same RDP host and user would take over the run's
+    RDP session; the same local window is the window that typed. Addresses
+    are compared after folding case and loopback names, kinds after folding
+    their aliases (``citrix`` and ``remote-display`` are window-scoped
+    ``rdp``), and an unset window title counts as matching any title.
+
+    With ``strict_user`` False (loading a config, when the read-back
+    account's variable may not be set yet) an unknown read-back user is not
+    a refusal; the run checks again with the variable set.
+    """
+    from openadapt_flow.backends.factory import _normalize_kind
+
+    try:
+        session = BackendConfig.model_validate(spec.session)
+    except Exception as exc:  # noqa: BLE001 - surfaced as a config error
+        return f"is not a valid backend config ({exc})"
+    kind = _normalize_kind(session.kind)
+    env = os.environ if environ is None else environ
+    for backend in backends:
+        other = _normalize_kind(backend.kind)
+        if kind == "windows" and other == "windows":
+            mine, theirs = _endpoint(session.agent_url), _endpoint(backend.agent_url)
+            if mine is not None and theirs is not None and mine[1:3] == theirs[1:3]:
+                return (
+                    "uses the same agent as the backend that types; run a second "
+                    "agent in a separate Windows session for read-back"
+                )
+        if kind == "rdp" and session.rdp_host and other == "rdp":
+            if _host(session.rdp_host) == _host(backend.rdp_host) and (
+                session.rdp_port == backend.rdp_port
+            ):
+                user = (
+                    env.get(spec.credentials.username_env, "")
+                    if spec.credentials is not None
+                    else session.rdp_username or ""
+                )
+                if not user and not strict_user:
+                    continue
+                if (
+                    not user
+                    or user.casefold() == (backend.rdp_username or "").casefold()
+                ):
+                    return (
+                        "connects to the same RDP host as the user that types; the "
+                        "read-back needs its own user (credentials) so it never "
+                        "takes over the run's session"
+                    )
+        window_kinds = {"rdp", "citrix"}
+        if (
+            (kind in window_kinds and not session.rdp_host)
+            and other in window_kinds
+            and not backend.rdp_host
+            and _same_name(session.rdp_window, backend.rdp_window)
+            and _same_name(session.rdp_window_title, backend.rdp_window_title)
+        ):
+            return (
+                "may name the same window as the backend that types; give both "
+                "the typing window and the read-back window their own titles"
+            )
+        if (
+            kind == "macos"
+            and other == "macos"
+            and _same_name(session.macos_app, backend.macos_app)
+            and _same_name(session.macos_window_title, backend.macos_window_title)
+        ) or (
+            kind == "linux"
+            and other == "linux"
+            and _same_name(session.linux_app, backend.linux_app)
+            and _same_name(session.linux_window_title, backend.linux_window_title)
+        ):
+            return (
+                "may name the same window as the backend that types; give both "
+                "windows their own titles"
+            )
+    return None
 
 
 def incomplete_deployment_reasons(cfg: DeploymentConfig) -> list[str]:
@@ -1254,6 +1530,14 @@ def build_replayer(
             backend
         )
     known_ids = None
+    if runtime_config is not None and runtime_config.speed is not None:
+        from openadapt_flow.runtime.speed import apply_speed_profile
+
+        apply_speed_profile(runtime_config.speed)
+    if runtime_config is not None and runtime_config.page_quiet_ms is not None:
+        from openadapt_flow.vision import settle as _settle
+
+        _settle.PAGE_QUIET_WINDOW_S = runtime_config.page_quiet_ms / 1000.0
     if runtime_config is not None and runtime_config.known_ids_path:
         from openadapt_flow.runtime.known_ids import KnownIdAdmission
 
@@ -1508,13 +1792,23 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
     config = _identity_config_dump(cfg)
     # Fields added after identities were first issued enter the digest only
     # when they are set, so every existing verifier keeps its identity.
-    for added in ("ui_readback", "smart_backend"):
+    for added in ("ui_readback", "smart_backend", "fresh_session", "desktop_readback"):
         if config.get(added) is None:
             config.pop(added, None)
     for candidate in config.get("candidates") or []:
-        for added in ("ui_readback", "smart_backend"):
+        for added in (
+            "ui_readback",
+            "smart_backend",
+            "fresh_session",
+            "desktop_readback",
+        ):
             if isinstance(candidate, dict) and candidate.get(added) is None:
                 candidate.pop(added, None)
+    # The same rule one level down: ``ui_readback.reference`` came later.
+    for holder in [config, *(config.get("candidates") or [])]:
+        section = holder.get("ui_readback") if isinstance(holder, dict) else None
+        if isinstance(section, dict) and section.get("reference") is None:
+            section.pop("reference", None)
     payload = {
         "schema": "openadapt.effect-verifier-identity/v1",
         "implementation": (
@@ -1551,6 +1845,23 @@ def _build_effect_verifier_unredacted(
             min_ratio=cfg.readback_min_ratio,
         )
 
+    if kind in ("desktop_readback", "desktop-readback"):
+        if cfg.desktop_readback is None:
+            raise ValueError(
+                "effects.kind 'desktop_readback' requires an effects.desktop_readback "
+                "section"
+            )
+        from openadapt_flow.runtime.effects.desktop_readback_sessions import (
+            build_desktop_readback_verifier,
+        )
+
+        return build_desktop_readback_verifier(
+            cfg.desktop_readback,
+            params,
+            timeout_s=cfg.timeout_s,
+            poll_interval_s=cfg.poll_interval_s,
+        )
+
     if kind in ("ui_readback", "ui-readback"):
         if cfg.ui_readback is None:
             raise ValueError(
@@ -1566,6 +1877,17 @@ def _build_effect_verifier_unredacted(
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
         )
+
+    if kind in ("fresh_session", "fresh-session"):
+        if cfg.fresh_session is None:
+            raise ValueError(
+                "effects.kind 'fresh_session' requires an effects.fresh_session section"
+            )
+        from openadapt_flow.runtime.effects.fresh_session import (
+            build_fresh_session_verifier,
+        )
+
+        return build_fresh_session_verifier(cfg.fresh_session)
 
     if kind == "surfaces":
         from openadapt_flow.runtime.effects.surfaces import SurfaceRoutedVerifier
@@ -1784,7 +2106,8 @@ def _build_effect_verifier_unredacted(
 
     raise ValueError(
         f"unknown effects.kind {cfg.kind!r} "
-        "(expected: none | onscreen | ui_readback | rest | graphql | fhir | sql | "
+        "(expected: none | onscreen | ui_readback | fresh_session | "
+        "desktop_readback | rest | graphql | fhir | sql | "
         "file | email | document | document-hash, or a registered plugin kind)"
     )
 

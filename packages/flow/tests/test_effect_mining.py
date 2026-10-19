@@ -37,6 +37,7 @@ from openadapt_flow.ir import (
 from openadapt_flow.runtime.effects import (
     EffectKind,
     RestRecordVerifier,
+    ValueExpr,
     Verdict,
 )
 from openadapt_flow.runtime.replayer import Replayer
@@ -458,10 +459,11 @@ def test_different_path_upgrade_from_reopen_sequence():
     assert [n.action for n in rb.renavigation] == ["click", "type", "click"]
 
 
-def test_different_path_not_upgraded_when_renav_is_parameterized():
-    # A parameterized search step cannot be replayed deterministically as a
-    # re-navigation -> stays SAME-SURFACE (safe: an over-eager upgrade could
-    # only false-HALT, but we decline it).
+def test_parameterized_search_upgrades_to_a_learned_check_needing_admission():
+    # A search typed with a run input, then submitted by a click, is a state
+    # reset (a new search). It replays with this run's value, so the check is
+    # learned: different-path, but it confirms nothing until a person admits
+    # it.
     write = _view_step("step_000")
     write.effects = mine_step_effects(
         {"kind": "key"}, write, exclude_texts=(NOTE,)
@@ -471,12 +473,77 @@ def test_different_path_not_upgraded_when_renav_is_parameterized():
         id="step_002",
         intent="type patient id",
         action=ActionKind.TYPE,
-        param="patient_id",  # per-run value, not a literal -> not replayable
+        param="patient_id",
     )
     reopen = _view_step("step_003", action=ActionKind.CLICK, click_point=(70, 65))
     upgraded = derive_different_path_readback([write, close, param_search, reopen])
+    assert upgraded == 1
+    rb = write.effects[0].readback
+    assert rb.different_path is True
+    assert rb.demonstrated is True and rb.admission is None
+    assert rb.reset is not None and rb.reset.kind == "new_search"
+    assert [n.param for n in rb.renavigation] == [None, "patient_id", None]
+
+
+def test_parameterized_search_without_a_reset_stays_same_surface():
+    # The typed search is never submitted, so nothing proves the record was
+    # fetched again: no upgrade.
+    write = _view_step("step_000")
+    write.effects = mine_step_effects(
+        {"kind": "key"}, write, exclude_texts=(NOTE,)
+    ).effects
+    close = _plain_click("step_001", (10, 10))
+    param_search = _view_step("step_002", action=ActionKind.TYPE)
+    param_search.param = "patient_id"
+    upgraded = derive_different_path_readback([write, close, param_search])
     assert upgraded == 0
     assert write.effects[0].readback.different_path is False
+
+
+def test_a_search_by_the_saved_reference_number_replays_the_runs_number():
+    # The person typed the number the save showed. The check types the number
+    # this run's save shows, and only then carries the reference capture.
+    from openadapt_flow.runtime.effects.effect import ReadbackReference
+
+    write = _view_step("step_000")
+    write.effects = mine_step_effects(
+        {"kind": "key"}, write, exclude_texts=(NOTE,)
+    ).effects
+    capture = ReadbackReference(region=(0, 0, 400, 60), pattern=r"(E\d{2,7})")
+    write.effects[0].readback.reference = capture
+    close = _plain_click("step_001", (10, 10))
+    by_number = Step(
+        id="step_002", intent="type number", action=ActionKind.TYPE, text="E1042"
+    )
+    reopen = _view_step("step_003", action=ActionKind.CLICK, click_point=(70, 65))
+    upgraded = derive_different_path_readback(
+        [write, close, by_number, reopen], references={"step_000": "E1042"}
+    )
+    assert upgraded == 1
+    rb = write.effects[0].readback
+    assert [n.reference for n in rb.renavigation] == [False, True, False]
+    assert all(n.text != "E1042" for n in rb.renavigation)
+    assert rb.reference == capture
+    assert rb.guard is not None
+
+
+def test_a_fixed_reopen_drops_a_reference_it_never_types():
+    from openadapt_flow.runtime.effects.effect import ReadbackReference
+
+    write = _view_step("step_000")
+    write.effects = mine_step_effects(
+        {"kind": "key"}, write, exclude_texts=(NOTE,)
+    ).effects
+    write.effects[0].readback.reference = ReadbackReference(
+        region=(0, 0, 400, 60), pattern=r"(E\d{2,7})"
+    )
+    steps = [write]
+    for k in range(1, 4):
+        steps.append(_plain_click(f"step_00{k}", (10 * k, 10)))
+    steps.append(_view_step("step_004", action=ActionKind.CLICK, click_point=(70, 65)))
+    assert derive_different_path_readback(steps) == 1
+    rb = write.effects[0].readback
+    assert rb.different_path is True and rb.reference is None
 
 
 def _plain_click(step_id: str, point) -> Step:
@@ -529,8 +596,52 @@ def test_field_equals_reads_back_the_parameter_when_bound():
     field = next(e for e in bound.effects if e.kind is EffectKind.FIELD_EQUALS)
     assert lit_field.value.literal == NOTE and lit_field.value.param is None
     assert field.value.param == "note" and field.value.literal is None
-    # The identity selector does not change.
-    assert bound.effects[0].match == literal.effects[0].match
+    # The selector keeps the demonstration's constant fields and also matches
+    # the bound field, so it names the record this run writes.
+    assert bound.effects[0].match == {
+        **literal.effects[0].match,
+        "note": ValueExpr(param="note"),
+    }
+
+
+def test_bound_selector_finds_this_runs_record_among_earlier_ones():
+    """On a table that already holds a record with the same constant fields,
+    the confirmed contract reads back the run's record and no other."""
+
+    from openadapt_flow.runtime.effects._common import judge_records
+    from openadapt_flow.runtime.effects.effect import EffectState
+
+    event = {
+        "i": 0,
+        "kind": "key",
+        "key": "Enter",
+        SOR_BEFORE_KEY: [],
+        SOR_AFTER_KEY: [_record()],
+    }
+    literal = mine_step_effects(event, _key_step(), exclude_texts=(NOTE,))
+    bound = mine_step_effects(
+        event, _key_step(), exclude_texts=(NOTE,), param_bindings={NOTE: "note"}
+    )
+    earlier = _record(id=7, note="an earlier visit")
+    before = EffectState(substrate="rest", reachable=True, records=[earlier])
+    current = [earlier, _record(id=8, note="this run's note")]
+    params = {"note": "this run's note"}
+
+    def verdicts(mined):
+        return [
+            judge_records(e.resolve(params), before, current, substrate="rest").verdict
+            for e in mined.effects
+        ]
+
+    assert set(verdicts(bound)) == {Verdict.CONFIRMED}
+    # Without the binding the constant-field selector matches both records.
+    assert Verdict.REFUTED in verdicts(literal)
+    # A run that saved a different value than its parameter is refuted.
+    wrong = [earlier, _record(id=8, note="a different note")]
+    assert {
+        judge_records(e.resolve(params), before, wrong, substrate="rest").verdict
+        for e in bound.effects
+    } == {Verdict.REFUTED}
 
 
 def test_compile_binds_effect_params_only_when_asked(tmp_path):

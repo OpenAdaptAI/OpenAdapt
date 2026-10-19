@@ -1,5 +1,7 @@
 # From trace to program
 
+> The full, current map of every OpenAdapt capability, with status and evidence, is [CAPABILITIES.md](../../../CAPABILITIES.md) at the repository root. This page goes deeper on a few compiler features.
+
 A single demonstration under-specifies intent, so openadapt-flow does not stop
 at replaying one. These capabilities layer onto the same $0, model-free runtime.
 
@@ -21,6 +23,13 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   authoring time rather than emitting a bad bundle. This turns a replay of
   one recorded path into governed execution over a queue:
   `openadapt-flow for-each bundle --records worklist.csv --out queue-bundle`.
+- **Parallel worklists.** `replay` and `run` with `--workers N` enter a
+  for-each bundle's items on N sessions at once, each signed in as its own
+  user from the deployment file, with every check still on per item. Each
+  item is claimed once from a durable queue, a halt on any worker stops new
+  items on all of them, and `--readback-window K` lets a worker start its
+  next item while the last save is still being read back. See
+  [`THROUGHPUT.md`](THROUGHPUT.md).
 - **Compose separately recorded bundles.** `compose` takes named compiled
   child bundles and a handoff contract and writes a parent artifact that
   `certify` and `run` execute. Each child keeps the surface it was recorded
@@ -63,6 +72,10 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   underdetermined. The healthy replay path still makes no model call.
   [`LEARN_FROM_MANY_RUNS.md`](LEARN_FROM_MANY_RUNS.md) covers `induce`,
   `teach-branch` and shadow mining together, with each one's status.
+  With `--probe-on test-copy.yaml`, a refused optional step is instead
+  replayed both ways on a declared test copy and scored by reading the record
+  back; it is certified only when exactly one reading works for every
+  recording ([`PROBE_INDUCTION.md`](PROBE_INDUCTION.md)).
 - **Effect verification against the system of record.** The read-back checks
   our own work: a wrong field, a wrong record, a duplicate submit, or a partial
   save can all look like success on screen. A step
@@ -119,6 +132,16 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   salted-hash, shape-preserving `IdentityTemplate` instead of a plaintext
   name / DOB / MRN band, so a compiled bundle need carry no readable PHI while
   still enforcing identity (`openadapt_flow/runtime/identity_template.py`).
+- **Display scaling on the pixel path.** A remote desktop recorded at 100%
+  and replayed at 125%, 150% or 175%, or with ClearType switched, no longer
+  stops at the first step. The runtime fits one scale from the labels the
+  compiler kept (as salted hashes) and continues on a view of the session in
+  the recorded geometry, with resolution, identity, postconditions and effect
+  checks unchanged (`openadapt_flow/runtime/render_scale.py`). In the
+  [display-scaling sweep](../benchmark/pixel_scale/README.md), healthy runs
+  went from 3 of 24 to 17 of 24, and every wrong-record run still
+  halted with nothing saved. Record IDs with 1/l or 0/O still halt at the
+  identity check off the recorded render.
 
 Compiled workflows can also be emitted as Agent Skills or MCP servers
 (`emit-skill` / `emit-mcp`), so other agents can invoke them.

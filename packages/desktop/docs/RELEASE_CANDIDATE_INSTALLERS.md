@@ -39,45 +39,46 @@ macOS library-validation entitlement required to load that independently
 signed, hash-verified OpenCV extension; the manifest and full-file cache audit
 remain the admission boundary.
 
-Native releases use a distinct `desktop-vX.Y.Z` tag and prerelease channel. The
+Each Desktop version is one immutable `openadapt-desktop-vX.Y.Z` release in the
+OpenAdapt monorepo. It carries the Python wheel and sdist (the same bytes as on
+PyPI), these native installers, and the release's own attested channel. The
 native version comes from `package.json`, `src-tauri/Cargo.toml`, and
-`src-tauri/tauri.conf.json`, with matching entries in both lockfiles. The
-semantic-release commit usually updates all five files. Native Installer
-Freshness checks them. If they don't match, it opens a protected-main pull
-request. The freshness workflow never creates a tag or release. A maintainer
-then dispatches the Native Installer Release workflow from reviewed `main`.
-That transaction verifies the engine receipt, creates the matching
-`desktop-vX.Y.Z` tag, publishes and verifies the installers, mirrors them to the
-engine release, and updates the signed candidate channel. This transaction
-doesn't change the admission-driven Production channel.
-All lower native prereleases receive a prominent "Superseded: do not use"
-notice. Their assets remain for provenance. The full two-lane release policy
-and its planned convergence into a single release are documented in
-[RELEASES.md](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/RELEASES.md).
+`src-tauri/tauri.conf.json`, with matching entries in both lockfiles; a Desktop
+release pull request sets them and the Python version together
+(`scripts/prepare_release.py`). When it merges, the Desktop release workflow
+builds and smoke-tests every package, attests the exact bytes, attaches
+everything to a draft, publishes the wheel and sdist to PyPI, and publishes the
+draft once. If any build fails, nothing is published. OpenAdapt's releases are
+immutable, so a published release is never edited; a newer release supersedes
+an older one by version. This transaction doesn't change the admission-driven
+Production channel. The release policy is in
+[RELEASES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/RELEASES.md).
 
 ## Artifact labels
 
 Every new filename includes `Candidate`, the native version, operating system,
-architecture, and signing state. The initial matrix is:
+architecture, and signing state. The matrix and the signing each platform can
+carry:
 
 | Platform | Architectures | Packages | Signing labels |
 | --- | --- | --- | --- |
-| macOS | Apple Silicon (`arm64`), Intel (`x86_64`) | DMG | `developer-id-notarized` required |
-| Windows | `x86_64` | MSI and NSIS setup executable | `authenticode` required |
-| Linux | `x86_64` | DEB and AppImage | `github-attested` exact bytes required |
+| macOS | Apple Silicon (`arm64`), Intel (`x86_64`) | DMG | `adhoc` today; `developer-id-notarized` once credentials exist |
+| Windows | `x86_64` | MSI and NSIS setup executable | `unsigned`, or `authenticode` once SignPath is configured |
+| Linux | `x86_64` | DEB and AppImage | `github-attested` exact bytes |
 
-The release workflow refuses ad-hoc or unsigned platform metadata. The build
-workflow installs and uninstalls every package on clean hosted runners. It
-verifies the executable architecture and the declared signing policy. macOS
-verification requires the exact configured Developer ID authority and Team ID.
-Windows verification requires a valid signer and a timestamp certificate on
-each installer, the installed executable, and the NSIS uninstaller. The workflow
-launches every installed application and requires the process to survive a
-20-second startup window (catching launch panics before they ship), and
-stages the exact tested bytes. The repository test matrix also checks that only
-the `openadapt` scheme is registered and that its handoff is fixed to
-`connect_uri` without a shell or general navigation escape hatch. These checks
-do not replace qualification of a complete real workflow.
+The "Signing in this release" section above states which labels this release
+uses. With Authenticode, SignPath signs the MSI and every program file in it,
+and the NSIS setup itself; the files the NSIS setup installs are not signed. The build workflow installs
+and uninstalls every package on clean hosted runners and verifies the
+executable architecture and the declared signing policy: the exact Developer ID
+authority and Team ID on macOS when used, and a valid signer and timestamp on
+each Windows installer when signed. The workflow launches every installed
+application and requires the process to survive a 20-second startup window
+(catching launch panics before they ship), and stages the exact tested bytes.
+The repository test matrix also checks that only the `openadapt` scheme is
+registered and that its handoff is fixed to `connect_uri` without a shell or
+general navigation escape hatch. These checks do not replace qualification of
+a complete real workflow.
 
 ## Integrity and provenance
 
@@ -94,8 +95,8 @@ authenticate `SHA256SUMS` before they trust its digests:
 
 ```bash
 gh attestation verify SHA256SUMS \
-  --repo OpenAdaptAI/openadapt-desktop \
-  --cert-identity "https://github.com/OpenAdaptAI/openadapt-desktop/.github/workflows/native-release.yml@refs/heads/main" \
+  --repo OpenAdaptAI/OpenAdapt \
+  --cert-identity "https://github.com/OpenAdaptAI/OpenAdapt/.github/workflows/desktop-release.yml@refs/heads/main" \
   --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
   --deny-self-hosted-runners
 sha256sum -c SHA256SUMS
@@ -103,48 +104,39 @@ python verify-openadapt-native-release.py --directory . --manifest SHA256SUMS
 ```
 
 The final helper refuses missing, extra, linked, non-regular, duplicate, or
-digest-mismatched files. After a native release succeeds, the canonical engine
-release also publishes an attested `openadapt-desktop-verified-release.json`.
-The `desktop-channel` release then carries the attested, strictly monotonic
-`openadapt-desktop-channel.json` candidate index. This closed chain
-identifies the exact native tag, engine release, source commits, workflow run,
-checksum digest, and complete asset set. A download service must verify this
-index attestation. It must not select a release from mutable release-note text.
+digest-mismatched files. Each release also carries its own attested
+`openadapt-desktop-channel.json`. It binds this release's `SHA256SUMS` and
+provenance by hash, states every platform's signing mode, and names the
+previous release's channel by hash. Pass it with `--channel` (and the last
+channel you accepted with `--previous-channel`) to authenticate the whole chain
+before trusting any digest. A download service must select the newest valid
+`openadapt-desktop-v*` release this way, never from mutable release-note text.
+After a native release succeeds, its channel is the authority for that version.
 
 An attestation binds bytes to a build identity; it does not establish that the
 software is secure or functionally complete.
 
-## External signing requirements
+## Signing credentials
 
-The protected `native-release` GitHub environment must provide complete macOS
-and Windows signing credential sets. A missing or partial set fails the build.
+The protected `native-release` environment of OpenAdaptAI/OpenAdapt holds the
+signing credentials. Every set is complete-or-absent: a partial set fails the
+build, and an absent set ships the platform's unsigned label instead.
 
-- macOS Developer ID and notarization: `APPLE_CERTIFICATE`,
-  `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
-  `APPLE_PASSWORD`, and `APPLE_TEAM_ID`.
-- Windows Authenticode, either an importable certificate (`WINDOWS_CERTIFICATE`,
-  `WINDOWS_CERTIFICATE_PASSWORD`, `WINDOWS_CERTIFICATE_THUMBPRINT`; Tauri uses
-  SHA-256 and an RFC 3161 timestamp) **or** Azure Trusted Signing
-  (`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
-  `TRUSTED_SIGNING_ENDPOINT`, `TRUSTED_SIGNING_ACCOUNT`,
-  `TRUSTED_SIGNING_CERTIFICATE_PROFILE`), which is the cheaper, token-free option
-  for a startup. Configure one set, not both. Both produce a publicly trusted,
-  timestamped `authenticode` artifact.
-- Linux uses the required GitHub OIDC exact-byte attestation above. It has no
-  founder-managed secret and is not described as native-signed.
+- Windows Authenticode through SignPath (free for open source projects through
+  the SignPath Foundation): `SIGNPATH_API_TOKEN`, `SIGNPATH_ORGANIZATION_ID`,
+  `SIGNPATH_PROJECT_SLUG` (`openadapt-desktop`), and
+  `SIGNPATH_SIGNING_POLICY_SLUG` (`release-signing`). The pipeline policy is in
+  `.signpath/policies/openadapt-desktop/release-signing.yml` at the monorepo
+  root.
+- macOS Developer ID and notarization, if it is ever configured:
+  `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`,
+  `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID`. Until then macOS builds are
+  ad-hoc signed.
+- Linux uses the GitHub OIDC exact-byte attestation above. It has no secret and
+  is not described as native-signed.
 
-When either native credential set is absent, the release stops. Historical
-prereleases keep their original trust labels. The updater stays disabled until
-its independent public/private signing-key lifecycle and recovery procedure are
-established.
+The updater stays disabled until its independent public/private signing-key
+lifecycle and recovery procedure are established.
 
-Before a release, the repository must also have a no-bypass pull-request
-ruleset for `main` and immutable release-tag rules for both `v*` and
-`desktop-v*`. The engine workflow can create `v*`. The explicitly dispatched
-native release workflow can create `desktop-v*`. Neither release identity can
-update or delete a tag. The historical `desktop-v0.15.0` prerelease doesn't
-satisfy the new trust contract.
-
-The founder activation runbook lists the exact certificates to buy, their costs,
-the secrets to add, and the claims each public surface can make. See
-[CODE_SIGNING.md](CODE_SIGNING.md).
+The signing runbook lists the secrets to add and the claims each public surface
+can make. See [CODE_SIGNING.md](CODE_SIGNING.md).
