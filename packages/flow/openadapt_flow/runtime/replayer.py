@@ -47,6 +47,7 @@ import struct
 import time
 import uuid
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import (
@@ -56,6 +57,7 @@ from typing import (
     Literal,
     Mapping,
     Optional,
+    Sequence,
     TypeVar,
     cast,
 )
@@ -198,6 +200,7 @@ from openadapt_flow.runtime.resolver import (
     visual_resolution_anchor_contract_sha256,
     visual_resolution_evaluator_contract_sha256,
 )
+from openadapt_flow.runtime.step_timing import timed_span
 from openadapt_flow.runtime.surfaces import SurfaceRouter
 from openadapt_flow.verification import (
     EffectContractMutationError,
@@ -222,6 +225,10 @@ if TYPE_CHECKING:
         QualificationCampaignGuard,
     )
     from openadapt_flow.runtime.control_overlay import RuntimeControlOverlayEmitter
+    from openadapt_flow.runtime.readback_pipeline import (
+        PipelinedReadback,
+        ReadbackPipeline,
+    )
     from openadapt_flow.transaction import IdempotencyLedger
 
 # REGION_STABLE template check: how far the expected content may shift from
@@ -400,6 +407,38 @@ class _GraphStepContext:
         self.next_anchored = next_anchored
         self.following = following
         self.has_exception_handler = has_exception_handler
+
+
+def _pipeline_safe_verifier(verifier: Any) -> bool:
+    """Whether a read-back may run on a side thread while the next item runs.
+
+    Only verifiers that read the system of record over the network and never
+    touch the screen: REST, FHIR, GraphQL and SQL. Anything that binds to a
+    backend (on-screen read-backs, and the redacting and candidate wrappers,
+    which forward ``bind_backend``) or any other kind verifies inline.
+    """
+
+    if (
+        verifier is None
+        or hasattr(verifier, "bind_backend")
+        or getattr(verifier, "backend", None) is not None
+        or getattr(verifier, "_backend", None) is not None
+    ):
+        return False
+    safe: list[type] = []
+    for module, name in (
+        ("openadapt_flow.runtime.effects.rest", "RestRecordVerifier"),
+        ("openadapt_flow.runtime.effects.fhir", "FhirEffectVerifier"),
+        ("openadapt_flow.runtime.effects.graphql", "GraphQLRecordVerifier"),
+        ("openadapt_flow.runtime.effects.sql", "SqlRecordVerifier"),
+    ):
+        try:
+            import importlib
+
+            safe.append(getattr(importlib.import_module(module), name))
+        except Exception:  # noqa: BLE001 - an unavailable kind is not safe
+            continue
+    return isinstance(verifier, tuple(safe))
 
 
 class _ProgramHalt(Exception):
@@ -604,6 +643,18 @@ def better_identity_read(first: Any, retry: Any) -> Any:
     return first
 
 
+@dataclass(frozen=True)
+class _WebFormApprovalView:
+    """An API step's prepared request, as a person is asked to approve it."""
+
+    prepared: Any
+    #: :func:`~openadapt_flow.runtime.actuators.web_form.operation_digest`.
+    digest: str
+    rows: list[tuple[str, str]]
+    png: bytes
+    ref: Any
+
+
 class Replayer:
     """Replays a Workflow against a Backend using injected vision.
 
@@ -761,8 +812,17 @@ class Replayer:
         layout_drift: Optional[bool] = None,
         layout_drift_tolerances: Optional[Any] = None,
         layout_drift_advisor: Optional[Callable[[Any], Optional[str]]] = None,
+        secret_env_overrides: Optional[Mapping[str, str]] = None,
+        readback_pipeline: Optional["ReadbackPipeline"] = None,
         render_scale: Optional[bool] = None,
     ) -> None:
+        # Per-run secret sources (worklist workers): secret param name -> the
+        # NAME of the env var holding its value, so each worker signs in with
+        # its own account. Values are never stored here.
+        self.secret_env_overrides: dict[str, str] = dict(secret_env_overrides or {})
+        # Pipelined read-back (runtime/readback_pipeline.py); None = inline.
+        self.readback_pipeline = readback_pipeline
+        self._pipelined_readback: Optional["PipelinedReadback"] = None
         # A JIT draft (openadapt_flow.jit) runs only once admitted, or attended
         # by a named person (the canary). Checked in run().
         self._attended_draft_by = attended_draft_by
@@ -987,6 +1047,12 @@ class Replayer:
         self.web_form_actuator = web_form_actuator
         self._web_form_span_active = False
         self._web_form_fallback_reason: Optional[str] = None
+        # Under an approval mode, the API request a person was asked about
+        # (prepared before the gate), keyed by the save step's result, and
+        # the operation digest the gate's last-point check re-reads.
+        self._web_form_approval: dict[int, Any] = {}
+        self._web_form_form_state: Optional[tuple[str, str]] = None
+        self._web_form_form_state_set = False
         # Durable tiered runtime (RFC §5, Tier 3), OFF by default. When True,
         # run() writes a RunCheckpoint after each VERIFIED step and, on a halt,
         # a PendingEscalation instead of just dying -- so the run can be
@@ -2341,16 +2407,15 @@ class Replayer:
                 reason = "a durable or resumed run uses the GUI steps"
             elif getattr(self, "_surface_router", None) is not None:
                 reason = "a run across several windows or tabs uses the GUI steps"
-            elif (
-                self.approval_gate is not None
-                and str(getattr(getattr(self.approval_gate, "mode", None), "value", ""))
-                != "not_gated"
+            elif self._approval_gated() and not callable(
+                getattr(self._actuator_for(binding), "prepare", None)
             ):
-                # A person approves what the screen shows; an API step would
-                # leave the form empty. Only an ungated run uses API steps.
+                # Under an approval mode the person approves the exact request
+                # the API step sends. An actuator that can't prepare the
+                # request before sending it can't show it.
                 reason = (
-                    "approval mode shows the person the screen before the save, "
-                    "so the GUI steps run"
+                    "approval mode needs the exact request before the save, and "
+                    "this API actuator can't prepare it, so the GUI steps run"
                 )
             elif self.governed_authorization is not None:
                 reason = "a governed run uses its qualified GUI path"
@@ -2413,6 +2478,7 @@ class Replayer:
             )
         finally:
             self._web_form_span_active = False
+            self._web_form_approval.clear()
         if result.api_fallback is not None:
             self._web_form_fallback_reason = result.api_fallback
             return None
@@ -2626,6 +2692,22 @@ class Replayer:
     ) -> RunReport:
         """Persist exact evidence first, then project its terminal outcome."""
 
+        pending = getattr(self, "_pipelined_readback", None)
+        handed_off = False
+        if pending is not None:
+            if persist and report.success and self.readback_pipeline is not None:
+                handed_off = True
+                # Until the read-back settles, the saved report must not say
+                # success: if the process dies first, it stays unsuccessful.
+                report.success = False
+                report.execution_completed = False
+            else:
+                # The run ended some other way: settle the read-back inline
+                # before the report is written.
+                self._apply_pipelined_verdict(
+                    report, self._join_pipelined_readback(keep=True)
+                )
+                self._pipelined_readback = None
         self._end_surfaces()
         if self._surface_environment_observations:
             report.observed_surface_environments = dict(
@@ -2666,6 +2748,165 @@ class Replayer:
             clear_guard(None)
         if project_terminal:
             self._emit_control_overlay_terminal(report.execution_outcome)
+        if handed_off:
+            assert pending is not None and self.readback_pipeline is not None
+            self._pipelined_readback = None
+            entry = pending
+
+            def _settle(error: Optional[str]) -> RunReport:
+                return self._settle_pipelined_readback(
+                    report, workflow, run_dir, entry, error
+                )
+
+            self.readback_pipeline.hand_off(entry, _settle)
+        return report
+
+    # -- pipelined read-back (runtime/readback_pipeline.py) ------------------
+
+    def _may_pipeline_readback(self, verifier: Any) -> bool:
+        """Whether this effect's read-back may run on the side thread."""
+
+        pipeline = getattr(self, "readback_pipeline", None)
+        if pipeline is None:
+            return False
+        reason = None
+        if self.durable or getattr(self, "_program_durable", None) is not None:
+            reason = "durable runs verify inline"
+        elif getattr(self, "idempotency_ledger", None) is not None:
+            reason = "idempotency-ledger runs verify inline"
+        elif getattr(self, "_pipelined_readback", None) is not None:
+            reason = "an earlier read-back in this item is still pending"
+        else:
+            target = verifier if verifier is not None else self.effect_verifier
+            if not _pipeline_safe_verifier(target):
+                reason = (
+                    "only REST, FHIR, GraphQL and SQL read-backs run alongside "
+                    "the next item; this one verifies inline"
+                )
+        pipeline.inline_reason = reason
+        return reason is None
+
+    def _defer_readback(
+        self,
+        step: Step,
+        before: EffectState,
+        result: StepResult,
+        *,
+        effects: Optional[list["Effect"]],
+        verifier: Any,
+    ) -> None:
+        assert self.readback_pipeline is not None
+        scratch = StepResult(step_id=step.id, intent=step.intent, ok=True)
+
+        def verify() -> Optional[str]:
+            return self._verify_effects(
+                step, before, scratch, effects=effects, verifier=verifier
+            )
+
+        entry = self.readback_pipeline.submit(step.id, verify)
+        entry.scratch = scratch  # type: ignore[attr-defined]
+        entry.result = result  # type: ignore[attr-defined]
+        entry.intent = step.intent  # type: ignore[attr-defined]
+        result.effect_verified = None
+        result.effect_results.append("[pipelined] system-of-record read-back pending")
+        self._pipelined_readback = entry
+
+    def _join_pipelined_readback(self, *, keep: bool = False) -> Optional[str]:
+        """Wait for a pending read-back, apply it to its step, return its error."""
+
+        entry = getattr(self, "_pipelined_readback", None)
+        if entry is None:
+            return None
+        try:
+            error = entry.verdict.result()
+        except Exception as exc:  # noqa: BLE001 - a raising verifier fails closed
+            error = f"read-back raised {type(exc).__name__}; reconciliation is required"
+        self._copy_pipelined_evidence(entry, error)
+        if not keep:
+            self._pipelined_readback = None
+        return error
+
+    def _copy_pipelined_evidence(self, entry: Any, error: Optional[str]) -> None:
+        result: StepResult = entry.result
+        scratch: StepResult = entry.scratch
+        result.effect_results = [
+            r for r in result.effect_results if not r.startswith("[pipelined]")
+        ]
+        result.effect_results.extend(scratch.effect_results)
+        result.effect_evidence.extend(scratch.effect_evidence)
+        result.effect_field_checks.extend(scratch.effect_field_checks)
+        result.effect_verified = scratch.effect_verified
+        if scratch.failure_category is not None:
+            result.failure_category = scratch.failure_category
+        if error is not None:
+            result.ok = False
+            result.error = error
+            result.safety_halt = True
+            if result.failure_category is None:
+                result.failure_category = (
+                    "governed_refusal"
+                    if self.governed_authorization is not None
+                    else "safety_halt"
+                )
+        else:
+            result.safety_halt = result.safety_halt or scratch.safety_halt
+
+    def _apply_pipelined_verdict(
+        self,
+        report: RunReport,
+        error: Optional[str],
+        *,
+        entry: Optional["PipelinedReadback"] = None,
+    ) -> None:
+        if error is None:
+            return
+        report.success = False
+        report.execution_completed = False
+        report.terminal_outcome = "halt"
+        report.results.append(
+            StepResult(
+                step_id="<terminal>",
+                intent="program halt",
+                ok=False,
+                error=error,
+                safety_halt=True,
+            )
+        )
+        if entry is None:
+            entry = getattr(self, "_pipelined_readback", None)
+        report.halt = HaltObservation(
+            state_id=getattr(entry, "step_id", "") or "",
+            intent=getattr(entry, "intent", "") or "",
+            reason=error,
+            outcome="halt",
+            # The screen now belongs to the next item; nothing is probed.
+            observed_texts=[],
+            completed_intents=[
+                r.intent for r in report.results if r.ok and not r.skipped
+            ],
+        )
+
+    def _settle_pipelined_readback(
+        self,
+        report: RunReport,
+        workflow: Workflow,
+        run_dir: Path,
+        entry: "PipelinedReadback",
+        error: Optional[str],
+    ) -> RunReport:
+        """Apply a finished deferred read-back to the saved item report."""
+
+        self._copy_pipelined_evidence(entry, error)
+        if error is not None:
+            self._apply_pipelined_verdict(report, error, entry=entry)
+        else:
+            # The execution completed; it was held unsuccessful only until the
+            # read-back confirmed. Re-derive the outcome from that evidence.
+            report.execution_completed = True
+            report.success = True
+        self._stamp_execution_outcome(report, workflow, run_dir)
+        self._stamp_approval(report)
+        report.save(run_dir)
         return report
 
     def _project_idempotency_outcome_after_persist(
@@ -6443,6 +6684,7 @@ class Replayer:
             return f"{exc}; refusing to run"
         return None
 
+    @timed_span("identity")
     def _surface_identity_check(self, backend: Any, step: Step) -> Optional[bool]:
         """Vision-first identity check of one live target for ``step``.
 
@@ -6612,7 +6854,21 @@ class Replayer:
             error=error,
         )
 
-    def _run_step(
+    def _run_step(self, step: Step, **kwargs: Any) -> StepResult:
+        """Execute one step and record where its time went (``timings``)."""
+        from openadapt_flow.runtime import step_timing
+
+        timer, previous = step_timing.start_step()
+        result: Optional[StepResult] = None
+        try:
+            result = self._run_step_timed(step, **kwargs)
+            return result
+        finally:
+            step_timing.end_step(previous)
+            if result is not None:
+                result.timings = timer.result_ms(result.elapsed_ms or None)
+
+    def _run_step_timed(
         self,
         step: Step,
         *,
@@ -6634,6 +6890,19 @@ class Replayer:
         new page halts.
         """
 
+        pending_error = self._join_pipelined_readback()
+        if pending_error is not None:
+            # The previous action's deferred read-back failed: refuse to act
+            # further in this run, exactly as an inline failure would.
+            refused = StepResult(
+                step_id=step.id,
+                intent=step.intent,
+                ok=False,
+                error=pending_error,
+                safety_halt=True,
+                failure_category="safety_halt",
+            )
+            return refused
         router = self._surface_router
         if router is None:
             if step.action is ActionKind.SWITCH_SURFACE:
@@ -6857,8 +7126,23 @@ class Replayer:
             # approved step then takes a fresh frame and resolves its target
             # and right-record check again. The last-point gate still re-reads
             # the form before the input is delivered.
+            api_view = None
+            if (
+                self._web_form_span_active
+                and step.api_binding is not None
+                and self._approval_gated()
+            ):
+                # An API step fills no form: the person approves the exact
+                # request it sends. If it can't be prepared, nothing was sent
+                # and nobody was asked; the GUI steps run instead.
+                api_view = self._web_form_approval_view(step, params)
+                if isinstance(api_view, str):
+                    result.api_fallback = api_view
+                    result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+                    return result
+                self._web_form_approval[id(result)] = api_view
             approval_refusal = self._approval_step_refusal(
-                workflow, step, step_index, result
+                workflow, step, step_index, result, api_view=api_view
             )
             if approval_refusal is not None:
                 result.ok = False
@@ -7897,7 +8181,24 @@ class Replayer:
             # save, a phantom optimistic-UI success, a duplicate write, or a
             # lost update -- the EffectVerifier reads the REAL record and HALTs
             # on any non-CONFIRMED verdict (docs/design/EFFECT_VERIFIER.md).
-            if (error is None or delivery_uncertain) and effect_pre_state is not None:
+            if (
+                error is None
+                and not delivery_uncertain
+                and effect_pre_state is not None
+                and self._may_pipeline_readback(active_verifier)
+            ):
+                # Pipelined read-back (runtime/readback_pipeline.py): the same
+                # check, run on the side thread. Any later step in this run
+                # waits for it first; the item's report is settled with the
+                # verdict when the check finishes.
+                self._defer_readback(
+                    step,
+                    effect_pre_state,
+                    result,
+                    effects=resolved_effects,
+                    verifier=active_verifier,
+                )
+            elif (error is None or delivery_uncertain) and effect_pre_state is not None:
                 effect_error = self._verify_effects(
                     step,
                     effect_pre_state,
@@ -8451,7 +8752,46 @@ class Replayer:
             current_step=overlay_current,
             total_steps=overlay_total,
         )
-        refusal = self._delivery_authorization_refusal(workflow, params, step, result)
+        approved_view = self._web_form_approval.pop(id(result), None)
+        send_prepared: Optional[Any] = None
+        again: Any = None
+        if approved_view is not None:
+            # Under an approval mode: prepare the request again now (fresh
+            # form, fresh pre-checks). The last-point gate compares its
+            # operation digest with the one a person approved; a request that
+            # can't be prepared again reads as an unreadable form.
+            again = self._web_form_approval_view(step, params)
+            self._web_form_form_state = (
+                None if isinstance(again, str) else ("api_request", again.digest)
+            )
+            self._web_form_form_state_set = True
+        try:
+            refusal = self._delivery_authorization_refusal(
+                workflow, params, step, result
+            )
+        finally:
+            self._web_form_form_state = None
+            self._web_form_form_state_set = False
+        if refusal is None and approved_view is not None:
+            if isinstance(again, str) or again.digest != approved_view.digest:
+                # Also refused when the gate let it through (for example a
+                # save that passed problems_only's checks without a person):
+                # only the exact request prepared before the gate is sent.
+                why = (
+                    again
+                    if isinstance(again, str)
+                    else "the request, the record or the record check differs"
+                )
+                result.safety_halt = True
+                result.failure_category = "governed_refusal"
+                refusal = (
+                    f"Step '{step.id}' ({step.intent}): the API request changed "
+                    f"after the approval gate ({why}); the save was not sent "
+                    "and the GUI steps do not run in its place"
+                )
+            else:
+                # Exactly the request whose digest was approved and re-checked.
+                send_prepared = again.prepared
         if refusal is not None:
             result.ok = False
             result.error = refusal
@@ -8466,10 +8806,14 @@ class Replayer:
         result.delivery_attempted = True
         try:
             self._require_qualification_environment_current()
-            outcome = api_actuator.actuate(
-                binding,
-                runtime_params_for_gui(params),
-            )
+            if send_prepared is not None:
+                # Exactly the request whose digest was approved and re-checked.
+                outcome = api_actuator.send(binding, send_prepared)
+            else:
+                outcome = api_actuator.actuate(
+                    binding,
+                    runtime_params_for_gui(params),
+                )
         except Exception as exc:  # noqa: BLE001 - external actuator boundary
             # The actuator contract is no-throw, but a deployment adapter can
             # still violate it. The delivery boundary was crossed immediately
@@ -9080,6 +9424,7 @@ class Replayer:
             self._readback_verifier = verifier
         return verifier
 
+    @timed_span("readback")
     def _verify_effects(
         self,
         step: Step,
@@ -9254,6 +9599,7 @@ class Replayer:
                         observed_effect=final_verdict.observed_effect,
                         endpoint_scope=scope,
                         reconciliation_actions=comp.actions_taken,
+                        deferred_check=verdict.deferred_check,
                     )
                 )
                 result.effect_results.append(
@@ -9282,6 +9628,7 @@ class Replayer:
                     final_verdict=verdict.verdict.value,
                     observed_effect=verdict.observed_effect,
                     endpoint_scope=scope,
+                    deferred_check=verdict.deferred_check,
                 )
             )
             result.effect_results.append(
@@ -10030,6 +10377,7 @@ class Replayer:
             ).guarded_keyboard_frame
         return None
 
+    @timed_span("identity")
     def _revalidate_consequential_actuation(
         self,
         step: Step,
@@ -10387,6 +10735,7 @@ class Replayer:
         self._active_delivery_region = fresh_region
         return fresh_resolution, fresh_region, fresh_png, error
 
+    @timed_span("resolve")
     def _resolve_step(
         self,
         step: Step,
@@ -10476,6 +10825,7 @@ class Replayer:
             )
         return resolution, matched_region, None
 
+    @timed_span("resolve")
     def _resolve_drag_end(
         self,
         step: Step,
@@ -10511,6 +10861,7 @@ class Replayer:
         )
         return resolution, region, error
 
+    @timed_span("settle")
     def _settle_seeded(self) -> bytes:
         """``vision.wait_settled`` that can extend the last settled run.
 
@@ -11254,11 +11605,81 @@ class Replayer:
             "Approval mode: this item stopped before saving."
         )
 
+    def _approval_gated(self) -> bool:
+        """Whether an approval mode other than ``not_gated`` governs this run."""
+
+        gate = self.approval_gate
+        return gate is not None and (
+            str(getattr(getattr(gate, "mode", None), "value", "")) != "not_gated"
+        )
+
+    def _web_form_approval_view(
+        self, step: Step, params: Mapping[str, RuntimeParamScalar]
+    ) -> "Any | str":
+        """Prepare an API step's request for a person to approve.
+
+        Returns the view (the prepared request, its operation digest, the
+        rows and image the person sees), or the reason it can't be prepared.
+        Only reads are sent.
+        """
+
+        from openadapt_flow.approval_mode.item_approval import ApiRequestRef
+        from openadapt_flow.runtime.actuators import ApiActuationResult
+        from openadapt_flow.runtime.actuators.web_form import (
+            operation_digest,
+            operation_rows,
+            render_operation_png,
+        )
+
+        binding = step.api_binding
+        assert binding is not None
+        actuator = self._actuator_for(binding)
+        if actuator is None or not callable(getattr(actuator, "prepare", None)):
+            return "this API actuator can't prepare the request for approval"
+        gui_params = runtime_params_for_gui(params)
+        try:
+            prepared = actuator.prepare(binding, gui_params)
+        except Exception as exc:  # noqa: BLE001 - only reads were sent
+            return f"preparing the request failed ({type(exc).__name__})"
+        if isinstance(prepared, ApiActuationResult):
+            return prepared.reason or "the API step is unavailable"
+        effects = self._resolve_effects(list(binding.effects), params)
+        record = [
+            (key, str(expr))
+            for effect in effects
+            for key, expr in sorted(effect.match.items())
+        ]
+        digest = operation_digest(
+            prepared,
+            record_check=[effect.contract_hash() for effect in effects],
+            record=record,
+        )
+        rows = operation_rows(binding, prepared, gui_params, record=record)
+        return _WebFormApprovalView(
+            prepared=prepared,
+            digest=digest,
+            rows=rows,
+            png=render_operation_png(
+                f"Approve this request: {step.intent or step.id}", rows
+            ),
+            ref=ApiRequestRef(
+                method=prepared.method.upper(),
+                path=prepared.path,
+                payload_sha256=prepared.payload_sha256(),
+            ),
+        )
+
     def _approval_form_state(
         self, frame_png: Optional[bytes]
     ) -> Optional[tuple[str, str]]:
-        """The form's current field state digest, for the approval gate."""
+        """The form's current field state digest, for the approval gate.
 
+        For an API step under an approval mode it is the operation digest of
+        the request about to be sent (set just before the last-point gate).
+        """
+
+        if self._web_form_form_state_set:
+            return self._web_form_form_state
         from openadapt_flow.approval_mode.form_state import capture_form_state
 
         try:
@@ -11289,8 +11710,14 @@ class Replayer:
         step: Step,
         step_index: int,
         result: StepResult,
+        *,
+        api_view: Optional[Any] = None,
     ) -> Optional[str]:
-        """Ask the approval gate before a save step resolves its target."""
+        """Ask the approval gate before a save step resolves its target.
+
+        ``api_view`` is the prepared request of an API step: the person is
+        then shown that request, and its operation digest is the "form".
+        """
 
         gate = self.approval_gate
         assert gate is not None
@@ -11298,10 +11725,34 @@ class Replayer:
         drill_fault_step = self._is_qualification_fault_step(step)
 
         def frame() -> Optional[bytes]:
+            if api_view is not None:
+                return api_view.png
             try:
                 return self.vision.wait_settled(self.backend)
             except Exception:  # noqa: BLE001 - no frame means no approval
                 return None
+
+        def form_state(frame_png: Optional[bytes]) -> Optional[tuple[str, str]]:
+            if api_view is not None:
+                return ("api_request", api_view.digest)
+            return self._approval_form_state(frame_png)
+
+        def save_fields() -> Optional[Sequence[Any]]:
+            if api_view is None:
+                return None
+            from openadapt_flow.approval_mode.item_approval import (
+                MAX_SAVE_FIELDS,
+                SaveField,
+            )
+
+            rows = api_view.rows
+            if len(rows) > MAX_SAVE_FIELDS:
+                # The image lists every row; the phone shows it alone.
+                return None
+            return [
+                SaveField(label=label[:128] or "-", after=value[:512])
+                for label, value in rows
+            ]
 
         try:
             from openadapt_flow.approval_mode.gate import StepContext
@@ -11314,7 +11765,9 @@ class Replayer:
                     step_index=step_index,
                     run_id=self._run_id or "",
                     frame=frame,
-                    form_state=self._approval_form_state,
+                    form_state=form_state,
+                    save_fields=save_fields,
+                    api_request=api_view.ref if api_view is not None else None,
                     drill_fault_step=drill_fault_step,
                     qualification_case_kind=(
                         authorization.qualification_case_kind
@@ -11462,6 +11915,7 @@ class Replayer:
             )
         return None
 
+    @timed_span("actuate")
     def _act(
         self,
         step: Step,
@@ -11554,6 +12008,7 @@ class Replayer:
         else:
             arm(dialog.response, dialog.message)
 
+    @timed_span("postcondition")
     def _wait_for_dialog(self, take: Callable[..., Any], dialog: Any) -> list[Any]:
         """Wait briefly for an armed dialog that opens after the input edge."""
 
@@ -12048,7 +12503,9 @@ class Replayer:
             if step.secret:
                 # Secret value is never in the bundle/params: inject it from
                 # the environment, failing fast with an actionable message.
-                env_var = secret_env_var(step.param or "")
+                env_var = getattr(self, "secret_env_overrides", {}).get(
+                    step.param or ""
+                ) or secret_env_var(step.param or "")
                 text = os.environ.get(env_var, "")
                 if not step.param:
                     return (
@@ -12581,6 +13038,7 @@ class Replayer:
             )
         return None
 
+    @timed_span("settle")
     def _wait_starting_state_settled(
         self, before_png: bytes
     ) -> tuple[bytes, Optional[str], Optional[bool]]:
@@ -12937,6 +13395,7 @@ class Replayer:
             )
         return frame, None
 
+    @timed_span("postcondition")
     def _handle_interstitials(
         self,
         step: Step,
@@ -13877,6 +14336,7 @@ class Replayer:
             parameter_names,
         )
 
+    @timed_span("identity")
     def _verify_identity(
         self,
         step: Step,
@@ -14641,6 +15101,7 @@ class Replayer:
         )
         return landed, changed
 
+    @timed_span("postcondition")
     def _verify_typed_input(
         self,
         step: Step,
@@ -14851,6 +15312,7 @@ class Replayer:
             "a non-input target (focus lost); run aborted"
         )
 
+    @timed_span("postcondition")
     def _verify_selected_option(
         self,
         step: Step,
@@ -15032,6 +15494,7 @@ class Replayer:
 
     # -- closed-loop scroll ------------------------------------------------------
 
+    @timed_span("resolve")
     def _implicit_scroll_target_ready(
         self,
         step: Step,
@@ -15060,13 +15523,24 @@ class Replayer:
         """
         if step.anchor is None:
             return False
-        template_png = self._asset_bytes(
-            bundle_dir, step.anchor.template, workflow=workflow
-        )
         structural = (
             self.backend
             if self.use_structural and hasattr(self.backend, "locate_structural")
             else None
+        )
+        offscreen = getattr(structural, "structural_offscreen", None)
+        if (
+            callable(offscreen)
+            and step.anchor.structural is not None
+            and offscreen(step.anchor.structural) is True
+        ):
+            # The page itself shows the unique recorded target exists below
+            # (or above) the viewport: not ready, keep scrolling. Stricter
+            # than letting a visual rung find a look-alike on screen, and it
+            # skips a full-frame OCR search per probe.
+            return False
+        template_png = self._asset_bytes(
+            bundle_dir, step.anchor.template, workflow=workflow
         )
         try:
             resolved = resolve(
@@ -15296,6 +15770,7 @@ class Replayer:
             f"{target_desc} resolving — target never came into view; run aborted"
         )
 
+    @timed_span("settle")
     def _wait_for_scroll_transition_and_settle(self, baseline_png: bytes) -> bytes:
         """Wait for a delivered scroll to change the frame, then settle it.
 
@@ -15411,6 +15886,7 @@ class Replayer:
             return None
         return current != start
 
+    @timed_span("postcondition")
     def _check_postconditions(
         self,
         step: Step,
@@ -15555,6 +16031,7 @@ class Replayer:
             return f"{kind} (vs. the step's start state)"
         return f"{kind} region={tuple(pc.region) if pc.region else None}"
 
+    @timed_span("postcondition")
     def _poll_postconditions(
         self,
         step: Step,
@@ -16067,6 +16544,7 @@ class Replayer:
         return candidate
 
     @staticmethod
+    @timed_span("artifact_write")
     def _save_step_png(run_dir: Path, step_id: str, suffix: str, png: bytes) -> str:
         """Save a per-step screenshot; return its run-dir-relative path.
 

@@ -1,0 +1,53 @@
+record,attempt,claim_no,insurance_no,ui_changed,outcome,success,model_calls,wall_s,setup_s,program_s,readback_rows,readback_correct,verifier_verdicts,halted_step,halt_reason,video,run_dir,started_at,host_load_1m
+1,1,CN001,999000101,False,COMPLETED_UNVERIFIED,True,0,24.331,6.672,16.604,1,True,4/4 confirmed,,,results/launch-4/video/batch/page@87970f836c05cff57196c434179567ea.webm,out/runs/launch-4/record-001-1,1792351795.839,66.0
+2,1,CN002,999000102,False,COMPLETED_UNVERIFIED,True,0,21.461,6.375,14.382,1,True,4/4 confirmed,,,results/launch-4/video/batch/page@a2fbc568e3e641da69ab92d3e0d7e450.webm,out/runs/launch-4/record-002-1,1792351820.235,59.0
+3,1,CN003,999000103,False,COMPLETED_UNVERIFIED,True,0,19.694,5.989,12.907,1,True,4/4 confirmed,,,results/launch-4/video/batch/page@0113159e8a67e389842e563daa0e28b4.webm,out/runs/launch-4/record-003-1,1792351841.759,61.0
+4,1,CN004,999000104,False,COMPLETED_UNVERIFIED,True,0,21.975,6.178,15.177,1,True,4/4 confirmed,,,,out/runs/launch-4/record-004-1,1792351861.595,104.1
+5,1,CN005,999000105,False,COMPLETED_UNVERIFIED,True,0,21.72,6.535,14.654,1,True,4/4 confirmed,,,,out/runs/launch-4/record-005-1,1792351883.641,113.8
+6,1,CN006,999000106,False,COMPLETED_UNVERIFIED,True,0,25.014,6.162,18.257,1,True,4/4 confirmed,,,,out/runs/launch-4/record-006-1,1792351905.435,166.9
+7,1,CN007,999000107,False,COMPLETED_UNVERIFIED,True,0,19.947,6.741,12.576,1,True,4/4 confirmed,,,,out/runs/launch-4/record-007-1,1792351930.554,204.1
+8,1,CN008,999000108,False,COMPLETED_UNVERIFIED,True,0,18.976,6.002,12.437,1,True,4/4 confirmed,,,,out/runs/launch-4/record-008-1,1792351950.567,178.3
+9,1,CN009,999000109,False,COMPLETED_UNVERIFIED,True,0,20.186,6.21,13.021,1,True,4/4 confirmed,,,,out/runs/launch-4/record-009-1,1792351969.607,139.2
+10,1,CN010,999000110,False,COMPLETED_UNVERIFIED,True,0,23.758,6.523,16.595,1,True,4/4 confirmed,,,,out/runs/launch-4/record-010-1,1792351989.864,161.8
+11,1,CN011,999000101,False,COMPLETED_UNVERIFIED,True,0,19.592,6.491,12.568,1,True,4/4 confirmed,,,,out/runs/launch-4/record-011-1,1792352013.701,168.9
+12,1,CN012,999000102,False,COMPLETED_UNVERIFIED,True,0,36.262,23.077,12.638,1,True,4/4 confirmed,,,,out/runs/launch-4/record-012-1,1792352033.36,143.9
+13,1,CN013,999000103,False,COMPLETED_UNVERIFIED,True,0,21.221,6.174,14.502,1,True,4/4 confirmed,,,,out/runs/launch-4/record-013-1,1792352069.691,167.3
+14,1,CN014,999000104,False,COMPLETED_UNVERIFIED,True,0,18.963,6.055,12.393,1,True,4/4 confirmed,,,,out/runs/launch-4/record-014-1,1792352090.979,167.4
+15,1,CN015,999000105,False,COMPLETED_UNVERIFIED,True,0,19.306,6.182,12.62,1,True,4/4 confirmed,,,,out/runs/launch-4/record-015-1,1792352110.005,178.9
+16,1,CN016,999000106,False,COMPLETED_UNVERIFIED,True,0,19.084,6.145,12.372,1,True,4/4 confirmed,,,,out/runs/launch-4/record-016-1,1792352129.397,165.6
+17,1,CN017,999000107,False,COMPLETED_UNVERIFIED,True,0,19.086,5.996,12.591,1,True,4/4 confirmed,,,,out/runs/launch-4/record-017-1,1792352148.545,150.4
+18,1,CN018,999000108,False,COMPLETED_UNVERIFIED,True,0,19.504,6.387,12.465,1,True,4/4 confirmed,,,,out/runs/launch-4/record-018-1,1792352167.698,144.0
+19,1,CN019,999000109,False,COMPLETED_UNVERIFIED,True,0,19.054,6.142,12.387,1,True,4/4 confirmed,,,,out/runs/launch-4/record-019-1,1792352187.274,160.3
+20,1,CN020,999000110,False,COMPLETED_UNVERIFIED,True,0,19.391,6.018,12.863,1,True,4/4 confirmed,,,,out/runs/launch-4/record-020-1,1792352206.391,137.3
+21,1,CN021,999000101,False,COMPLETED_UNVERIFIED,True,0,17.762,6.37,10.87,1,True,4/4 confirmed,,,,out/runs/launch-4/record-021-1,1792352225.844,126.3
+22,1,CN022,999000102,False,COMPLETED_UNVERIFIED,True,0,19.381,6.143,12.677,1,True,4/4 confirmed,,,,out/runs/launch-4/record-022-1,1792352243.677,135.4
+23,1,CN023,999000103,False,COMPLETED_UNVERIFIED,True,0,39.211,23.298,15.292,1,True,4/4 confirmed,,,,out/runs/launch-4/record-023-1,1792352263.125,134.0
+24,1,CN024,999000104,False,COMPLETED_UNVERIFIED,True,0,23.552,6.279,16.675,1,True,4/4 confirmed,,,,out/runs/launch-4/record-024-1,1792352302.404,139.7
+25,1,CN025,999000105,False,COMPLETED_UNVERIFIED,True,0,33.62,6.853,26.161,1,True,4/4 confirmed,,,,out/runs/launch-4/record-025-1,1792352326.022,256.3
+26,1,CN026,999000106,False,COMPLETED_UNVERIFIED,True,0,30.174,7.279,22.197,1,True,4/4 confirmed,,,,out/runs/launch-4/record-026-1,1792352359.777,321.1
+27,1,CN027,999000107,False,COMPLETED_UNVERIFIED,True,0,39.626,7.706,31.246,1,True,4/4 confirmed,,,,out/runs/launch-4/record-027-1,1792352390.082,459.5
+28,1,CN028,999000108,False,COMPLETED_UNVERIFIED,True,0,26.985,7.588,18.705,1,True,4/4 confirmed,,,,out/runs/launch-4/record-028-1,1792352429.993,508.7
+29,1,CN029,999000109,False,COMPLETED_UNVERIFIED,True,0,20.957,6.985,13.335,1,True,4/4 confirmed,,,,out/runs/launch-4/record-029-1,1792352457.086,530.0
+30,1,CN030,999000110,False,COMPLETED_UNVERIFIED,True,0,43.756,7.703,35.37,1,True,4/4 confirmed,,,,out/runs/launch-4/record-030-1,1792352478.14,591.2
+31,1,CN031,999000101,False,COMPLETED_UNVERIFIED,True,0,21.693,8.234,12.742,1,True,4/4 confirmed,,,,out/runs/launch-4/record-031-1,1792352522.0,596.9
+32,1,CN032,999000102,False,COMPLETED_UNVERIFIED,True,0,19.126,7.838,10.669,1,True,4/4 confirmed,,,,out/runs/launch-4/record-032-1,1792352543.798,619.5
+33,1,CN033,999000103,False,COMPLETED_UNVERIFIED,True,0,19.483,6.088,12.818,1,True,4/4 confirmed,,,,out/runs/launch-4/record-033-1,1792352562.987,552.5
+34,1,CN034,999000104,False,COMPLETED_UNVERIFIED,True,0,27.188,5.911,20.723,1,True,4/4 confirmed,,,,out/runs/launch-4/record-034-1,1792352582.566,456.9
+35,1,CN035,999000105,False,COMPLETED_UNVERIFIED,True,0,25.838,6.613,18.689,1,True,4/4 confirmed,,,,out/runs/launch-4/record-035-1,1792352609.824,458.1
+36,1,CN036,999000106,False,COMPLETED_UNVERIFIED,True,0,21.037,6.926,13.467,1,True,4/4 confirmed,,,,out/runs/launch-4/record-036-1,1792352635.728,465.4
+37,1,CN037,999000107,False,COMPLETED_UNVERIFIED,True,0,21.865,6.325,14.979,1,True,4/4 confirmed,,,,out/runs/launch-4/record-037-1,1792352656.86,435.2
+38,1,CN038,999000108,False,COMPLETED_UNVERIFIED,True,0,19.489,6.008,12.986,1,True,4/4 confirmed,,,,out/runs/launch-4/record-038-1,1792352678.789,392.7
+39,1,CN039,999000109,False,COMPLETED_UNVERIFIED,True,0,17.548,6.351,10.669,1,True,4/4 confirmed,,,,out/runs/launch-4/record-039-1,1792352698.342,293.9
+40,1,CN040,999000110,False,COMPLETED_UNVERIFIED,True,0,19.057,6.015,12.516,1,True,4/4 confirmed,,,,out/runs/launch-4/record-040-1,1792352715.957,217.4
+41,1,CN041,999000101,False,COMPLETED_UNVERIFIED,True,0,25.116,6.04,18.56,1,True,4/4 confirmed,,,,out/runs/launch-4/record-041-1,1792352735.077,202.6
+42,1,CN042,999000102,False,COMPLETED_UNVERIFIED,True,0,31.762,6.604,24.49,1,True,4/4 confirmed,,,,out/runs/launch-4/record-042-1,1792352760.276,305.6
+43,1,CN043,999000103,False,COMPLETED_UNVERIFIED,True,0,27.344,6.757,19.957,1,True,4/4 confirmed,,,,out/runs/launch-4/record-043-1,1792352792.115,280.3
+44,1,CN044,999000104,False,COMPLETED_UNVERIFIED,True,0,42.543,7.677,33.944,1,True,4/4 confirmed,,,,out/runs/launch-4/record-044-1,1792352819.752,396.6
+45,1,CN045,999000105,False,COMPLETED_UNVERIFIED,True,0,32.464,6.853,25.015,1,True,4/4 confirmed,,,,out/runs/launch-4/record-045-1,1792352862.393,417.9
+46,1,CN046,999000106,False,COMPLETED_UNVERIFIED,True,0,21.604,6.982,13.964,1,True,4/4 confirmed,,,,out/runs/launch-4/record-046-1,1792352894.951,407.8
+47,1,CN047,999000107,False,COMPLETED_UNVERIFIED,True,0,21.72,6.653,14.524,1,True,4/4 confirmed,,,,out/runs/launch-4/record-047-1,1792352916.621,367.2
+48,1,CN048,999000108,False,COMPLETED_UNVERIFIED,True,0,22.93,6.43,15.497,1,True,4/4 confirmed,,,,out/runs/launch-4/record-048-1,1792352938.412,281.7
+49,1,CN049,999000109,False,COMPLETED_UNVERIFIED,True,0,27.169,6.816,19.061,1,True,4/4 confirmed,,,results/launch-4/video/batch/page@5d73d6e42ac2354f8f8493d9eb8d5cd3.webm,out/runs/launch-4/record-049-1,1792352961.42,241.9
+50,1,CN050,999000110,True,HALTED,False,0,29.372,6.498,22.013,0,False,not reached,step_014,"Step 'step_014' (scroll by (0, -600)): closed-loop scroll exhausted its budget (1200px of 1500px allowed, 2.5x the recorded distance) without the anchor of step 'step_015' (click recorded visual target) resolving — target never came into view; run aborted",results/launch-4/video/batch/page@869aaf6b2568ad5be6be25ea709a3a3b.webm,out/runs/launch-4/record-050-1,1792352988.881,285.9
+50,2,CN050,999000110,True,HALTED,False,0,29.064,8.021,20.173,0,False,not reached,step_014,"Step 'step_014' (scroll by (0, -600)): closed-loop scroll exhausted its budget (1200px of 1500px allowed, 2.5x the recorded distance) without the anchor of step 'step_015' (click recorded visual target) resolving — target never came into view; run aborted",results/launch-4/video/batch/page@e88776448783c6f7b4da708c42fdda30.webm,out/runs/launch-4/record-050-2,1792353018.334,296.5
+50,3,CN050,999000110,True,HALTED,False,0,27.637,7.117,19.631,0,False,not reached,step_014,"Step 'step_014' (scroll by (0, -600)): closed-loop scroll exhausted its budget (1200px of 1500px allowed, 2.5x the recorded distance) without the anchor of step 'step_015' (click recorded visual target) resolving — target never came into view; run aborted",results/launch-4/video/batch/page@be954a0bc1c326f9de9d3d0869829b94.webm,out/runs/launch-4/record-050-3,1792353047.492,307.8

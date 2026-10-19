@@ -36,9 +36,11 @@ through the GUI. The replayer then confirms the record with the same
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import urllib.parse as up
+from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Any, Optional, Protocol
 
@@ -247,6 +249,129 @@ class PlaywrightSessionTransport:
         )
 
 
+# -- the prepared save ----------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PreparedSave:
+    """The exact save request, built and checked, not yet sent.
+
+    :meth:`payload_sha256` covers every byte the save sends: the method, the
+    path, the content type, the encoded body (session values included) and
+    the referer. A person who approves an API step approves this digest (see
+    :func:`operation_digest`), and the run refuses the send when the request
+    it would send has another digest.
+    """
+
+    method: str
+    path: str
+    body: tuple[tuple[str, str], ...]
+    referer: str
+    #: Fields whose value the server issued to this session (CSRF tokens).
+    #: In the digest; never shown to the person.
+    session_fields: frozenset[str] = frozenset()
+
+    def encoded(self) -> str:
+        return up.urlencode(list(self.body))
+
+    def payload_sha256(self) -> str:
+        payload = {
+            "method": self.method.upper(),
+            "path": self.path,
+            "content_type": "application/x-www-form-urlencoded",
+            "body": self.encoded(),
+            "referer": self.referer,
+        }
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def operation_digest(
+    prepared: PreparedSave,
+    *,
+    record_check: list[str],
+    record: list[tuple[str, str]],
+) -> str:
+    """What a person approves for an API step, as one digest.
+
+    Binds the exact request (:meth:`PreparedSave.payload_sha256`), the record
+    the save is checked against (``record``: the record check's selector
+    fields and their values for this run) and the record check itself
+    (``record_check``: each effect's contract hash).
+    """
+
+    payload = {
+        "schema": "openadapt.api-step-operation/v1",
+        "payload_sha256": prepared.payload_sha256(),
+        "record": [list(row) for row in record],
+        "record_check": list(record_check),
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def operation_rows(
+    binding: Any,
+    prepared: PreparedSave,
+    params: dict[str, str],
+    *,
+    record: list[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    """``(label, value)`` rows a person reads to approve an API step.
+
+    The values this run supplies (parameters and options chosen by label),
+    then the record the check reads back. The form's own defaults and the
+    session values are counted, not listed: they are the recorded form's,
+    and the digest covers them.
+    """
+
+    spec = binding.web_form
+    sent = dict(prepared.body)
+    rows: list[tuple[str, str]] = []
+    defaults = 0
+    for field in spec.fields:
+        if field.source == "param":
+            rows.append((field.name, sent.get(field.name, "")))
+        elif field.source == "select_label":
+            label = str(params.get(field.param or "", ""))
+            rows.append((field.name, label))
+        elif field.source == "form_default":
+            defaults += 1
+    for name, value in record:
+        rows.append((f"Record check: {name}", value))
+    rows.append(
+        (
+            "Request",
+            f"{prepared.method.upper()} {prepared.path}; {defaults} form default(s) "
+            f"and {len(prepared.session_fields)} session value(s) as recorded",
+        )
+    )
+    return rows
+
+
+def render_operation_png(title: str, rows: list[tuple[str, str]]) -> bytes:
+    """A plain image of ``rows``, shown where an approval shows a screenshot.
+
+    Desktop and the phone show the request's image. An API step fills no
+    form, so the image is the request itself, not the screen.
+    """
+
+    import io
+
+    from PIL import Image, ImageDraw
+
+    line_h, pad, width = 18, 16, 900
+    lines = [title, ""] + [f"{label}: {value}" for label, value in rows]
+    height = pad * 2 + line_h * len(lines)
+    image = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(image)
+    for i, line in enumerate(lines):
+        draw.text((pad, pad + i * line_h), line[:140], fill="black")
+    out = io.BytesIO()
+    image.save(out, format="PNG")
+    return out.getvalue()
+
+
 # -- actuator --------------------------------------------------------------------
 
 
@@ -262,6 +387,22 @@ class WebFormActuator:
         self.log: list[dict[str, Any]] = []
 
     def actuate(self, binding: Any, params: dict[str, str]) -> ApiActuationResult:
+        """Prepare the save and send it: :meth:`prepare`, then :meth:`send`."""
+
+        prepared = self.prepare(binding, params)
+        if isinstance(prepared, ApiActuationResult):
+            return prepared
+        return self.send(binding, prepared)
+
+    def prepare(
+        self, binding: Any, params: dict[str, str]
+    ) -> "PreparedSave | ApiActuationResult":
+        """Everything before the save: reads only, nothing that writes.
+
+        Returns the exact request :meth:`send` would send, or an
+        ``UNAVAILABLE`` result saying why the save can't be sent.
+        """
+
         spec = binding.web_form
         summary = f"{binding.method} {binding.url_template}"
 
@@ -323,13 +464,24 @@ class WebFormActuator:
             return unavailable(f"the run has no value for {exc}")
         except Exception as exc:  # noqa: BLE001 - only reads were sent
             return unavailable(f"a read before the save failed ({type(exc).__name__})")
+        return PreparedSave(
+            method=binding.method,
+            path=binding.url_template,
+            body=tuple(body),
+            referer=self.transport.base_url + spec.form_path,
+            session_fields=frozenset(
+                f.name for f in spec.fields if f.source == "session"
+            ),
+        )
 
-        encoded = up.urlencode(body)
+    def send(self, binding: Any, prepared: "PreparedSave") -> ApiActuationResult:
+        """Send exactly ``prepared``, once. Never retried."""
+
+        spec = binding.web_form
+        summary = f"{binding.method} {binding.url_template}"
         try:
             resp = self.transport.post_form(
-                binding.url_template,
-                encoded,
-                referer=self.transport.base_url + spec.form_path,
+                prepared.path, prepared.encoded(), referer=prepared.referer
             )
         except Exception as exc:  # noqa: BLE001 - after dispatch began
             self.log.append({"stage": "save", "error": type(exc).__name__})

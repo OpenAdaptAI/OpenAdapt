@@ -232,8 +232,13 @@ A production run reports success only after it reads back every write it
 declared. Each workflow needs two things:
 
 1. A description of what each write changes. `openadapt-flow
-   scaffold-verifier rec` drafts one from the recording's write steps. The
-   draft checks nothing until a person edits it.
+   scaffold-verifier rec` builds it from the app's own reads: after a save,
+   the app usually reads the record back to show it, and that read, in the
+   captured network traffic or a read-only database, becomes the check. The
+   command tries to break the check before a person reviews it
+   ([docs/EFFECT_KIT.md](docs/EFFECT_KIT.md#a-record-check-built-from-the-apps-own-reads-scaffold-verifier)).
+   When it finds no such read, the draft it writes checks nothing until a
+   person edits it.
 2. A second way to read the record. A database connection isn't required.
    A read-only REST, FHIR, or GraphQL API works, and so does a read-only SQL
    query, a file, report, or email the app exports, or, when you have none
@@ -412,7 +417,9 @@ browser workflows. Desktop and Citrix runs are self-hosted
   stops on drift), not a live Citrix ICA/HDX session. Each deployment has to
   be tested on its own Citrix setup.
 - A stop isn't a rollback. Steps before the stop may already have changed the
-  app.
+  app. The run report lists each change made before the stop, and undo steps
+  declared in the workflow can reverse them once a person approves
+  ([AFTER_A_STOP.md](docs/AFTER_A_STOP.md)).
 - The MockMed comparison numbers above are from July 2026, on Flow 0.1.0,
   with 20 agent runs. The OpenEMR numbers are from October 2026 on one local
   test copy with synthetic data.

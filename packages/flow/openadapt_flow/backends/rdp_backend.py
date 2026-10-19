@@ -70,6 +70,7 @@ from openadapt_flow.backend import (
 from openadapt_flow.ir import ActionDeliveryReceipt, Point
 from openadapt_flow.remote_frame_contract import RemoteFrameContract
 from openadapt_flow.runtime.resolver import visual_resolution_point_fingerprint
+from openadapt_flow.runtime.step_timing import timed_span
 
 # What a transport may hand back as the current frame: a PIL image, or raw
 # pixel bytes (RGB or RGBA, row-major) that the backend wraps with the
@@ -383,6 +384,7 @@ class FreeRDPBackend:
             self._viewport = (int(w), int(h))
         return self._viewport
 
+    @timed_span("screenshot")
     def screenshot(self) -> bytes:
         """Return the current remote frame as PNG bytes.
 
