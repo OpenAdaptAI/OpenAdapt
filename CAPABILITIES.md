@@ -59,7 +59,7 @@ shipping in the next release; a pull request number means it is being merged.
    review, campaign, canary, rollback), agent-demonstrated fixes for a halted
    run, and fleet drift patches shared with no patient data are released.
    Self-repair, where an agent proposes a fix and Flow probes it up to the save
-   without saving, is landing.
+   without saving, is on main; fixes of up to three new steps are in review.
 9. **Is a safety layer underneath any agent.** An agent's MCP calls, a guarded
    save around any agent's write
    ([#1258](https://github.com/OpenAdaptAI/OpenAdapt/pull/1258)), `verify-run`
@@ -78,8 +78,13 @@ shipping in the next release; a pull request number means it is being merged.
 | Learns branching programs from several demonstrations, from repeated halts, and from many background runs. | `induce`, `teach-branch`, [SHADOW_MINING.md](packages/capture/docs/SHADOW_MINING.md), [LEARN_FROM_MANY_RUNS.md](packages/flow/docs/LEARN_FROM_MANY_RUNS.md) |
 | Chains programs across surfaces, and one program can switch surfaces, tabs and popups mid-run. | `compose`, `process`, [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
 | Uses page structure first on web, Windows, macOS and Linux, with pixels as the fallback for remote desktops. Benchmarks labelled "vision-only" ran a deliberately pixel-only arm. | [RESOLUTION_LADDER.md](packages/flow/docs/RESOLUTION_LADDER.md) |
-| Runs steps as direct API calls; compiling them from captured network traffic is being merged. | `runtime/actuators/api.py`, [#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269) |
+| Runs steps as direct API calls, compiled from the network traffic captured while recording. | `api`, [#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269) |
+| Builds the record check itself. After a save, the app usually reads the record back to show it; `scaffold-verifier` finds that read in the captured traffic or a read-only database, builds the check from it and tries to break it before a person reviews it. No API or SQL needs to be written by hand. | [EFFECT_KIT.md](packages/flow/docs/EFFECT_KIT.md#a-record-check-built-from-the-apps-own-reads-scaffold-verifier) |
+| Checks a save on desktop, RDP and Citrix apps with no API at all, by looking the record up in the app's own screens in a separate session. | [EFFECT_KIT.md](packages/flow/docs/EFFECT_KIT.md#separate-session-desktop-read-back-desktop_readback) |
+| Keeps pixel-path runs working across display scaling from 100% to 175% and font smoothing on or off, and stops rather than saves when the record changed. | [benchmark/pixel_scale](packages/flow/benchmark/pixel_scale/README.md) |
+| Lists every change made before a stop, and reverses them with undo steps a person approves. | `undo`, [AFTER_A_STOP.md](packages/flow/docs/AFTER_A_STOP.md) |
 | Repairs itself when the app changes: governed repair, agent-demonstrated fixes, fleet patches, and self-repair probed up to the save. | [REPAIR_LIFECYCLE.md](packages/flow/docs/REPAIR_LIFECYCLE.md) |
+| Repairs a change that needs new steps, such as a new required dialog or a control moved into a menu: up to three new steps, each with its own record check, probed up to the save before one person approves. | [SELF_REPAIR.md](packages/flow/docs/SELF_REPAIR.md), [#1325](https://github.com/OpenAdaptAI/OpenAdapt/pull/1325) |
 | Compiles a computer-use agent's verified run, with no human demonstration needed. | [JIT.md](packages/flow/docs/JIT.md) |
 | The agent that does a task once can act through code, not a screenshot-and-click loop: it reads the page or accessibility tree, acts by role and name, keeps notes with a sandboxed read-only shell, and asks for a screenshot only when it needs one. It is arm 7 of the scoreboard; its figures are quoted from there once its rows are in. | `CODE_AS_ACTION.md` in [#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305) |
 | Binds each approval to the exact screenshot and form state, and re-reads the form before saving. | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md) |
@@ -181,6 +186,7 @@ improvising or retrying when something is off.
 | Run a step as a direct API call (`ApiActuator`, `ApiBinding`) | Released, hand-authored bindings | Synthetic benchmarks | `runtime/actuators/api.py` |
 | Capture a recording's network traffic and compile a clean save into an API step, with the same record check | In review ([#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269)) | Synthetic patients on a local OpenEMR test copy | network capture, `ApiBinding` |
 | Fall back from the API step to page structure when the API is unavailable, before anything is sent | In review ([#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269)) | Synthetic | [#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269) |
+| Approve an API step's exact request under per-item approval: one digest binds the request bytes, the record and the record check, and a changed request is not sent | In review ([#1355](https://github.com/OpenAdaptAI/OpenAdapt/pull/1355)) | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#under-an-approval-mode) |
 | Run a worklist on several workers at once, one signed-in session each, each item claimed once, with a stop on any worker stopping all | In review ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic patients on a local OpenEMR test copy | `--workers`, [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md) |
 | Read a save back while the next item runs (pipelined read-back, REST, FHIR, GraphQL or SQL record checks) | In review ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic | `--readback-window`, [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md) |
 | A faster speed profile that keeps every check (one insert per plain text field, shorter page-quiet wait) | In review ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic | `runtime.speed: fast`, [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md) |
@@ -193,10 +199,10 @@ improvising or retrying when something is off.
 | Governed repair: propose, review, campaigns, approval, staging, canary, rollback | Released | Synthetic | `openadapt-flow repair`, [REPAIR_LIFECYCLE.md](packages/flow/docs/REPAIR_LIFECYCLE.md) |
 | A calling agent demonstrates the fix for a halted run; the result is a repair candidate | Released (2.1.0) | Synthetic | `run --hold-on-halt`, `repair/agent_teach.py` |
 | Font and layout drift halts with a named reason | Released | Synthetic | `runtime/layout_drift.py` |
-| Self-repair: an agent proposes a fix for one halted click, Flow probes it up to the save without saving, a person approves | In review ([#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265)) | Synthetic (MockMed redesign) | `run --self-repair`, [#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265) |
-| Self-repair across several new steps (a new dialog, a control moved into a menu) | In progress | Synthetic (MockMed drift modes) | bridge branch, stacked on #1265 |
+| Self-repair: an agent proposes a fix for one halted click, Flow probes it up to the save without saving, a person approves | On main ([#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265)) | Synthetic (MockMed redesign) | `run --self-repair`, [#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265) |
+| Self-repair across several new steps: a bridge of up to three actions for a new required dialog or a control moved into a menu, each new step armed with a record check and probed up to the save, one person approving | In review ([#1325](https://github.com/OpenAdaptAI/OpenAdapt/pull/1325)) | Synthetic (MockMed menu and provider drifts) | `run --self-repair`, [SELF_REPAIR.md](packages/flow/docs/SELF_REPAIR.md) |
 | Keep pixel-path runs working across display scaling and font smoothing changes | On main ([#1286](https://github.com/OpenAdaptAI/OpenAdapt/pull/1286)) | Synthetic (in-process RDP and canvas renderings: 17 of 24 healthy runs across 100–175%, up from 3; 0 wrong saves) | [benchmark/pixel_scale](packages/flow/benchmark/pixel_scale/README.md) |
-| Pre-approved repairs: a signed policy lists low-risk changes that apply without a person, a test-record run before each queue, and one approval for every item halted the same way | In review ([#1294](https://github.com/OpenAdaptAI/OpenAdapt/pull/1294)) | Synthetic | standard changes |
+| Pre-approved repairs: a signed policy lists low-risk changes that apply without a person, a test-record run before each queue, and one approval for every item halted the same way | On main ([#1294](https://github.com/OpenAdaptAI/OpenAdapt/pull/1294)) | Synthetic | standard changes |
 | Fleet drift patches: a verified fix with no patient data, shared across sites under policy | Released, local reference hub | Simulator | `openadapt-flow fleet`, [FLEET_DRIFT_PATCHES.md](packages/flow/docs/FLEET_DRIFT_PATCHES.md) |
 
 ## Computer-use agents
@@ -234,6 +240,7 @@ A test fails when a command has no file or this list is out of date.
 
 **Record and build a program:**
 
+- `compile-agent`
 - `compile`
 - `compose`
 - `demo-record`
@@ -268,6 +275,7 @@ A test fails when a command has no file or this list is out of date.
 - `approve`
 - `business-decisions`
 - `console`
+- `deferred`
 - `explain`
 - `item-approval`
 - `replay`
@@ -348,7 +356,9 @@ A test fails when a command has no file or this list is out of date.
 ## What is not done yet
 
 - No commercial EMR, claims system or real Citrix session has been tested.
-- In progress: self-repair across several new steps, and the scoreboard.
+- In review: self-repair across several new steps
+  ([#1325](https://github.com/OpenAdaptAI/OpenAdapt/pull/1325)). In
+  progress: the scoreboard.
 - Windows installers are unsigned until free code signing through SignPath
   Foundation is approved; macOS builds are ad-hoc signed.
 - Several capabilities have run only on OpenAdapt's synthetic apps. The

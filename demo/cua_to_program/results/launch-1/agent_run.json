@@ -1,0 +1,68 @@
+{
+  "phase": "agent_run",
+  "agent": "claude",
+  "status": "needs_human_admit",
+  "detail": null,
+  "values": {
+    "insurance_no": "999000110",
+    "claim_no": "CA000",
+    "explanation": "Second visit, symptoms improving (#0)"
+  },
+  "wall_s_including_setup_and_compile": 116.56,
+  "claim_rows_after": [
+    {
+      "claim_no": "CA000",
+      "insurance_no": "999000110",
+      "explanation": "Second visit, symptoms improving (#0)",
+      "claim_status": 2,
+      "hf_code": "VIHOS001",
+      "diagnosis": "A389",
+      "claimed": "400.00"
+    }
+  ],
+  "record_correct": true,
+  "video": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/demo/cua_to_program/results/launch-1/video/agent/page@fc5fe310b0a942a335bc7c1696bcb7cf.webm",
+  "environment": {
+    "machine": "arm64",
+    "system": "Darwin 24.6.0",
+    "python": "3.12.13",
+    "git_head": "480759a358d792f60f5621cd0f00273595f611e3",
+    "app": "openIMIS 25.10 reference stack (synthetic demo data), linux/amd64 images under Rosetta in a colima VM"
+  },
+  "candidate_effects": [
+    {
+      "step_id": "step_015",
+      "kind": "record_written",
+      "needs_operator_confirmation": false
+    }
+  ],
+  "candidate_params": {
+    "lifted": [
+      {
+        "name": "claim_no",
+        "step_id": "step_004",
+        "field_label": null,
+        "masked_example": "C***0"
+      },
+      {
+        "name": "explanation",
+        "step_id": "step_009",
+        "field_label": null,
+        "masked_example": "Se*********************************0)"
+      },
+      {
+        "name": "insurance_no",
+        "step_id": "step_001",
+        "field_label": null,
+        "masked_example": "99*****10"
+      }
+    ],
+    "unlifted": {}
+  },
+  "agent_actions": 30,
+  "model": "claude-opus-5-5",
+  "model_calls": 7,
+  "cost_usd": 0.103243,
+  "agent_wall_s": 42.139,
+  "refused_actions": []
+}
