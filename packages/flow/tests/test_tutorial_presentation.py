@@ -232,3 +232,30 @@ def test_human_recorder_output_can_pass_the_tutorial_effect_contract(
         assert report.outcome_envelope.passed_contracts.effect == 2
     finally:
         stop()
+
+
+def test_a_slow_save_still_records_its_system_of_record_delta(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The screen settles before a slow save reaches the store. The recorder's
+    # after-read must wait for the write, or the compiler sees no delta and
+    # emits the placeholder the tutorial refuses (seen on a loaded CI runner).
+    base_url, db, stop = serve()
+    original_add = db.add
+
+    def slow_add(*args: Any, **kwargs: Any) -> Any:
+        import time
+
+        time.sleep(1.0)
+        return original_add(*args, **kwargs)
+
+    monkeypatch.setattr(db, "add", slow_add)
+    try:
+        recording = tutorial.record_tutorial(base_url, tmp_path / "recording")
+    finally:
+        stop()
+    workflow = compile_recording(
+        recording, tmp_path / "bundle", name="slow-save", mine_effects=True
+    )
+    save = tutorial.consequential_step(workflow)
+    assert not any(effect.needs_operator_confirmation for effect in save.effects)

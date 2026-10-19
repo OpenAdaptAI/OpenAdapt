@@ -1,7 +1,7 @@
 """How a write was checked, in three grades: the read-back assurance.
 
 ``VerificationTier`` (``openadapt_flow.verification``) and the Seal ladder
-(``openadapt_flow.contracts.oracle.OracleTier``) both map onto the check-level
+(``openadapt_types.oracle.OracleTier``) both map onto the check-level
 ladder in :mod:`openadapt_flow.check_level`. These three grades are the coarse
 rollup of that ladder that RFC-0002 publishes. A reviewer usually needs this
 plainer answer: was the save read back independently of the session that
@@ -26,7 +26,7 @@ never ``independent_readback``. ``independent_readback`` still does not by
 itself mean a production Seal.
 
 The three names are the shared verification-grade vocabulary published as
-:class:`openadapt_flow.contracts.approval.ReadBackTier` (RFC-0002
+:class:`openadapt_types.approval.ReadBackTier` (RFC-0002
 ``verification_tier``). :data:`Assurance` is that contract's wire type and the
 constants below are its labels (a test keeps them equal); :func:`assurance_for` stays the only mapping
 from Flow tiers.
@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 #: The RFC-0002 ``verification_tier`` wire type. It spells
-#: ``openadapt_flow.contracts.approval.VerificationTierLabel`` out rather than
+#: ``openadapt_types.approval.VerificationTierLabel`` out rather than
 #: importing it, so importing Flow's runtime does not load the contracts
 #: package; tests/test_demonstrated_readback_verifier.py pins the two equal.
 Assurance = Literal["independent_readback", "screen_readback", "unchecked"]

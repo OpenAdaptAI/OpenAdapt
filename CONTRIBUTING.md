@@ -9,12 +9,10 @@ Participation in this project is governed by the
 
 `OpenAdaptAI/OpenAdapt` is a monorepo. The root holds the `openadapt`
 launcher, and `packages/` holds the engine (`packages/flow`), the MCP server
-(`packages/agent`), the shared contracts (`packages/types`) and the recorder
-(`packages/capture`). New engine, replay, repair, policy, and backend work
-belongs in `packages/flow`.
-
-Privacy scrubbing and OpenAdapt Desktop are moving into `packages/` as well.
-Open new issues and pull requests here.
+(`packages/agent`), the shared contracts (`packages/types`), the recorder
+(`packages/capture`), privacy scrubbing (`packages/privacy`) and OpenAdapt
+Desktop (`packages/desktop`). New engine, replay, repair, policy, and backend
+work belongs in `packages/flow`. Open new issues and pull requests here.
 
 The [signed Production record](https://docs.openadapt.ai/production-lifecycle.json)
 provides the current admission state. Do not infer a lifecycle state from
@@ -25,11 +23,12 @@ package availability, repository text, or a sibling repository.
 - **Root (`openadapt/`, `tests/`)**: launcher packaging, unified CLI
   compatibility, and CI.
 - **`packages/flow`**: compiler, replay, verification, governed repair, and
-  backend implementation. The MCP server's code is in `openadapt_flow.agent`
-  and the contracts are in `openadapt_flow.contracts`.
-- **`packages/agent`** and **`packages/types`**: the `openadapt-agent` and
-  `openadapt-types` packages. They keep the old imports and commands working
-  on top of Flow.
+  backend implementation. The MCP server's code is in `openadapt_flow.agent`.
+- **`packages/types`**: the shared request, result and receipt models
+  (`openadapt-types`). It depends only on Pydantic and must never import Flow;
+  Flow depends on it and re-exports it as `openadapt_flow.contracts`.
+- **`packages/agent`**: the `openadapt-agent` package, which keeps the old
+  imports and commands working on top of `openadapt_flow.agent`.
 - **Other repositories** (capture, privacy, desktop and the rest): open issues
   only when their stated lifecycle and contribution guide match the proposed
   work.
