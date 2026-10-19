@@ -20,29 +20,35 @@ What it checks:
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import TYPE_CHECKING, Any, Iterator, Optional
 
 import pytest
 
-pytest.importorskip("mcp")
 pytest.importorskip("playwright.sync_api")
 
+# mcp is imported in the test, not here: collecting this file must not load it
+# for the other tests in the shard (test_emit checks that emitting an MCP server
+# never imports mcp).
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("mcp") is None, reason="needs the mcp package"
+)
+
 import anyio  # noqa: E402
-import mcp.types as types  # noqa: E402
-from mcp import ClientSession  # noqa: E402
-from mcp.shared.memory import create_client_server_memory_streams  # noqa: E402
 
 from openadapt_flow.agent.bridge import AgentBridge  # noqa: E402
-from openadapt_flow.agent.mcp import build_server  # noqa: E402
 from openadapt_flow.agent.runner import RunnerConfig  # noqa: E402
 from openadapt_flow.agent.teach import TeachBridge, TeachConfig  # noqa: E402
 from openadapt_flow.mockmed.fault_server import serve  # noqa: E402
 from openadapt_flow.tutorial import _http_json, _records  # noqa: E402
 from tests.surface_kiosk import PageWindowClient  # noqa: E402
+
+if TYPE_CHECKING:
+    from mcp import ClientSession
 
 TITLE = "MockMed kiosk"
 SECTIONS = {
@@ -150,6 +156,10 @@ def _admitter(key_dir: Path, origin: str, monkeypatch: pytest.MonkeyPatch) -> An
 
 @asynccontextmanager
 async def connect(server: Any, *, person: Optional[str]):
+    import mcp.types as types
+    from mcp import ClientSession
+    from mcp.shared.memory import create_client_server_memory_streams
+
     async def elicit(context: Any, params: Any) -> types.ElicitResult:
         if person is None:
             return types.ElicitResult(action="decline", content={})
@@ -182,6 +192,7 @@ async def _call(session: ClientSession, name: str, args: Optional[dict] = None) 
 def test_teach_on_a_remote_window(
     mockmed: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
 ) -> None:
+    from openadapt_flow.agent.mcp import build_server
     from openadapt_flow.jit.compile_agent import SurfaceApp
 
     section = SECTIONS[kind]
