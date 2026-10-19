@@ -630,7 +630,8 @@ def build_effect_journal(
 def stamp_transaction_outcome(
     report: RunReport, workflow: Workflow
 ) -> TransactionOutcome:
-    """Write the transaction outcome, billing metadata, and effect journal.
+    """Write the transaction outcome, billing metadata, effect journal, and
+    change ledger (``openadapt_flow.after_stop``).
 
     Called after the coarse ``execution_outcome`` is stamped (see
     ``execution_profiles.stamp_execution_outcome``). Never mutates
@@ -643,6 +644,9 @@ def stamp_transaction_outcome(
     report.transaction_billable = outcome.is_billable
     report.transaction_platform_fault = outcome.is_platform_fault
     report.effect_journal = build_effect_journal(report, workflow)
+    from openadapt_flow.after_stop import build_change_ledger
+
+    report.change_ledger = build_change_ledger(report, workflow)
     return outcome
 
 

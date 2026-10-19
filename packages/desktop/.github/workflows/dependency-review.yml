@@ -1,0 +1,81 @@
+name: Dependency Audit
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "19 11 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python locked dependencies
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+      - name: Export the exact locked dependency set
+        run: >-
+          uv export --quiet --locked --all-extras --no-emit-project
+          --output-file "${{ runner.temp }}/openadapt-desktop-requirements.txt"
+      - name: Audit Python dependencies
+        run: >-
+          uvx --from pip-audit==2.10.1 pip-audit
+          --require-hashes --disable-pip --progress-spinner off
+          --requirement "${{ runner.temp }}/openadapt-desktop-requirements.txt"
+
+  python-macos-intel:
+    name: Python locked dependencies (macOS Intel)
+    runs-on: macos-15-intel
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+      - name: Export the exact Intel macOS dependency set
+        run: >-
+          uv export --quiet --locked --all-extras --no-emit-project
+          --output-file "${{ runner.temp }}/openadapt-desktop-requirements.txt"
+      - name: Audit Intel macOS Python dependencies
+        run: >-
+          uvx --from pip-audit==2.10.1 pip-audit
+          --require-hashes --disable-pip --progress-spinner off
+          --requirement "${{ runner.temp }}/openadapt-desktop-requirements.txt"
+
+  npm:
+    name: npm locked dependencies
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Refuse high-severity npm advisories
+        run: npm audit --audit-level=high --package-lock-only
+
+  rust:
+    name: Rust locked dependencies
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+      - name: Install the RustSec scanner
+        run: cargo install cargo-audit --version 0.22.1 --locked
+      - name: Audit Rust dependencies
+        run: cargo audit --file src-tauri/Cargo.lock

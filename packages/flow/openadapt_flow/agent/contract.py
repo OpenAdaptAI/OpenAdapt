@@ -36,6 +36,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Optional
 
+from openadapt_flow.readback_ladder import CHECKED_HOW_LABELS, below_minimum
+
 __all__ = [
     "APPROVAL_MODES",
     "CONTRACT_VERSION",
@@ -249,6 +251,16 @@ REASONS: dict[str, Reason] = {
         "change may or may not be saved.",
         _CHECK_RECORD,
         label="Finished, not checked",
+    ),
+    "checked_below_minimum": Reason(
+        "not_sure_if_saved",
+        False,
+        "unknown",
+        "check_record",
+        "It finished and checked the save, but not as thoroughly as this "
+        "workflow requires, so the change may or may not be saved correctly.",
+        _CHECK_RECORD,
+        label="Checked, but not enough",
     ),
     "change_reversed": Reason(
         "not_sure_if_saved",
@@ -635,8 +647,10 @@ def reason_for_run(
         ):
             return "not_checked"
         if execution == "COMPLETED_UNVERIFIED":
-            return "not_checked"
+            return "checked_below_minimum" if below_minimum(report) else "not_checked"
         return "result_unreadable"
+    if tx == "COMPLETED_UNVERIFIED" and below_minimum(report):
+        return "checked_below_minimum"
     if tx == "VERIFIED":
         return "saved_and_checked" if exit_code in (0, None) else "result_unreadable"
     if tx in _NO_EFFECT_OUTCOMES:
@@ -658,6 +672,7 @@ _LEDGER_OUTCOMES = {
     "saved_and_checked": "VERIFIED",
     "save_not_confirmed": "RECONCILIATION_REQUIRED",
     "not_checked": "COMPLETED_UNVERIFIED",
+    "checked_below_minimum": "COMPLETED_UNVERIFIED",
     "change_reversed": "ROLLED_BACK",
     "timed_out": "RECONCILIATION_REQUIRED",
     "result_unreadable": "RECONCILIATION_REQUIRED",
@@ -714,11 +729,14 @@ def build_result(
     model_calls: Optional[int] = None,
     sandbox: Optional[Mapping[str, str]] = None,
     approval_mode: Optional[str] = None,
+    checked_how: Optional[str] = None,
 ) -> dict[str, Any]:
     """Render one PHI-safe result object from a closed reason code.
 
     ``approval_mode`` is the per-save approval mode the run used (Flow's
     report) or that the operator chose; it is recorded under ``technical``.
+    ``checked_how`` is the weakest check level the run's saves reached
+    (:mod:`openadapt_flow.readback_ladder`), from ``report.json``.
     """
     spec = REASONS.get(reason)
     if spec is None:
@@ -784,6 +802,12 @@ def build_result(
         and model_calls >= 0
     ):
         result["model_calls"] = model_calls
+    if checked_how in CHECKED_HOW_LABELS and spec.outcome in {
+        "done",
+        "not_sure_if_saved",
+    }:
+        result["checked_how"] = checked_how
+        result["checked_how_label"] = CHECKED_HOW_LABELS[checked_how]
     if sandbox:
         result["sandbox"] = {
             key: str(value)
@@ -861,6 +885,19 @@ RUN_RESULT_SCHEMA: dict[str, Any] = {
         "review_url": {"type": "string"},
         "seconds": {"type": "number"},
         "model_calls": {"type": "integer"},
+        "checked_how": {
+            "type": "string",
+            "enum": list(CHECKED_HOW_LABELS),
+            "description": (
+                "How the saves were checked, the weakest check level any "
+                "save reached: unchecked, same_screen, reopened (found again "
+                "and re-read in the acting session), separate_session (read "
+                "in a separately signed-in session), system_of_record, or "
+                "counterparty_confirmed. Only separate_session and stronger "
+                "make a run done by default."
+            ),
+        },
+        "checked_how_label": {"type": "string"},
         "sandbox": {
             "type": "object",
             "properties": {

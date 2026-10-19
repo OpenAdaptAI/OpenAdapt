@@ -2522,6 +2522,122 @@ def test_identity_mismatch_refuses_to_click(bundle, run_dir):
     assert "refusing to act" in result.error
 
 
+def _frame_with_row_change() -> bytes:
+    """A frame that differs from make_png() inside the target's band."""
+    image = Image.new("RGB", VIEWPORT, (240, 240, 240))
+    image.paste((30, 30, 30), (160, 98, 400, 112))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+class ReRenderingVision(FakeVision):
+    """The screen changes right after the first identity band read: the
+    list under the target re-renders while the read happens."""
+
+    def __init__(self, backend, after_first_read: bytes) -> None:
+        super().__init__()
+        self._backend = backend
+        self._after = after_first_read
+        self.band_reads = 0
+
+    def ocr(self, screen_png, *, region=None):
+        lines = super().ocr(screen_png, region=region)
+        self.band_reads += 1
+        if self.band_reads == 1:
+            self._backend._frame = self._after
+        return lines
+
+
+def _three_resolutions(vision) -> None:
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.99)
+        for _ in range(3)
+    ]
+
+
+def test_identity_mismatch_on_a_stable_screen_is_final(bundle, run_dir):
+    """A stable read of a different record halts with no second look."""
+    vision = resolving_vision()
+    vision.ocr_lines = [OcrLine("Taylor Duplicate Knee pain referral High")]
+    backend = FakeBackend()
+    step = context_click_step("Jane Sample Knee pain referral High")
+    step.timeout_s = 5.0
+    report = Replayer(backend, vision=vision, poll_interval_s=0.01).run(
+        Workflow(name="wf", steps=[step]), bundle_dir=bundle, run_dir=run_dir
+    )
+    assert report.success is False
+    assert backend.actions == []
+    result = report.results[0]
+    assert result.identity_reobserved is False
+    assert result.identity_first_read is None
+    assert result.identity.status == "mismatch"
+
+
+def test_a_re_render_that_settles_on_the_target_verifies_once(bundle, run_dir):
+    """The first read raced a re-render (the band changed right after it).
+    One fresh look verifies the target; both reads are in the result."""
+    backend = FakeBackend()
+    vision = ReRenderingVision(backend, _frame_with_row_change())
+    _three_resolutions(vision)
+    vision.ocr_results = [[OcrLine("Explanation")]]
+    vision.ocr_lines = [OcrLine("Jane Sample Knee pain referral High")]
+    step = context_click_step("Jane Sample Knee pain referral High")
+    step.timeout_s = 5.0
+    report = Replayer(backend, vision=vision, poll_interval_s=0.01).run(
+        Workflow(name="wf", steps=[step]), bundle_dir=bundle, run_dir=run_dir
+    )
+    assert report.success is True
+    assert ("click", 110, 105, False) in backend.actions
+    result = report.results[0]
+    assert result.identity_reobserved is True
+    assert result.identity.status == "verified"
+    assert result.identity_first_read.status == "mismatch"
+    assert "Explanation" in (result.identity_first_read.observed or "")
+    assert (run_dir / result.identity_first_frame_png).is_file()
+    assert result.safety_halt is False
+
+
+def test_a_parameter_mismatch_is_final_even_while_re_rendering(bundle, run_dir):
+    """A band that names neither the recorded nor the run's entity is a
+    wrong record outright: no second look, even while the screen changes."""
+    backend = FakeBackend()
+    vision = ReRenderingVision(backend, _frame_with_row_change())
+    _three_resolutions(vision)
+    vision.ocr_lines = [OcrLine("Getting, Robert Third")]
+    step = context_click_step("Belford, Phil MRN A12")
+    step.timeout_s = 5.0
+    workflow = Workflow(name="wf", params={"patient": "Phil"}, steps=[step])
+    report = Replayer(backend, vision=vision, poll_interval_s=0.01).run(
+        workflow, params={"patient": "Susan"}, bundle_dir=bundle, run_dir=run_dir
+    )
+    assert report.success is False
+    assert backend.actions == []
+    result = report.results[0]
+    assert result.identity.mode == "param"
+    assert result.identity_reobserved is False
+
+
+def test_a_re_render_that_settles_on_a_wrong_record_halts(bundle, run_dir):
+    backend = FakeBackend()
+    vision = ReRenderingVision(backend, _frame_with_row_change())
+    _three_resolutions(vision)
+    vision.ocr_results = [[OcrLine("Explanation")]]
+    vision.ocr_lines = [OcrLine("Taylor Duplicate Knee pain referral High")]
+    step = context_click_step("Jane Sample Knee pain referral High")
+    step.timeout_s = 5.0
+    report = Replayer(backend, vision=vision, poll_interval_s=0.01).run(
+        Workflow(name="wf", steps=[step]), bundle_dir=bundle, run_dir=run_dir
+    )
+    assert report.success is False
+    assert backend.actions == []
+    result = report.results[0]
+    assert result.identity_reobserved is True
+    assert result.identity_first_read.status == "mismatch"
+    assert result.identity.status == "mismatch"
+    assert "Taylor" in (result.identity.observed or "")
+
+
 def test_consequential_remote_reruns_identity_on_fresh_frame(bundle, run_dir):
     frame = make_png()
     backend = RemoteLeaseBackend(initial_frame=frame, fresh_frame=frame)

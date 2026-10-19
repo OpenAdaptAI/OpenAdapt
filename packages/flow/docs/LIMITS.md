@@ -369,23 +369,50 @@ grade is `screen_readback`, never `independent_readback`.
 **Without a read that is independent of the acting session, the run cannot
 be `VERIFIED`.** That read is either a system-of-record read (REST, FHIR, SQL,
 file; tier 1) or the application's own screens read in a separate signed-in
-session: a record page in a separate browser (`ui_readback`; tier 2), or a
-look-up in a separate desktop, RDP or Citrix session (`desktop_readback`;
-tier 2 with its own sign-in). Neither goes around the application, so neither
-is a system-of-record read, and each has its own limits
-([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback),
+session (tier 2): a record page in a separate browser (`ui_readback`), a
+relaunched desktop app or a second RDP session (`fresh_session`, tested on
+mocks only), or a look-up in a separate desktop, RDP or Citrix session
+(`desktop_readback`, tier 2 with its own RDP logon). None of them goes around
+the application, so none is a system-of-record read, and each has its own
+limits ([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback),
 [`desktop_readback`](EFFECT_KIT.md#separate-session-desktop-read-back-desktop_readback)).
 If a person can look the record up, the check can too. A pixel-only Citrix or
-RDP deployment that declares no such look-up is the remaining case.
+RDP deployment that declares no such check is the remaining case. Reopening the
+record in the acting session (tier 3) is reported as its own check level,
+`reopened` ("Reopened in the same session"), and is not `VERIFIED`: a
+confirmed reopen ends `COMPLETED_UNVERIFIED`, and the agent result says
+`not_sure_if_saved` with `checked_below_minimum`
+([`READBACK_LADDER.md`](READBACK_LADDER.md)). A workflow's `minimum_readback`
+can raise the floor to `system_of_record`, never lower it.
 A save that only a later report can confirm (a claim acknowledgment, a
 nightly export) ends `SAVED_AWAITING_CHECK` and becomes `VERIFIED` only when
 that report accepts it ([`deferred_report`](EFFECT_KIT.md#checked-later-deferred_report)). The on-screen
 oracle can still halt when the region is unreadable or wrong. If a
-consequential write may already have been delivered, the production
-`transaction_outcome` is `RECONCILIATION_REQUIRED`, never `VERIFIED`.
-Halt-on-doubt is unchanged. This is not live Citrix Production evidence; a
-live ICA/HDX session is a deployment-specific qualification. Wire the
-independent read before paying a sprint for a `VERIFIED` outcome.
+consequential write may already have been delivered and the check did not
+confirm it, the production `transaction_outcome` is `RECONCILIATION_REQUIRED`,
+never `VERIFIED`. Halt-on-doubt is unchanged. This is not live Citrix
+Production evidence; a live ICA/HDX session is a deployment-specific
+qualification. Wire the independent read before paying a sprint for a
+`VERIFIED` outcome.
+
+The reopen itself has limits. It earns the `reopened` level only when its
+navigation contains a recognized state reset; without one it is
+`same_screen`. A read-only guard refuses any reopen step that presses a
+delete key, or `s`, Enter, Return or Delete with a modifier held (any
+spelling: `control+s`, `Meta+S`, `ctrl+shift+s`, `alt+s`, `shift+delete`).
+It refuses a click on a control labelled with a commit word (Save, Submit,
+Delete, Sign, Send, ...), a click where OCR reads no label (an icon-only
+button may be Save), and a click whose label can't be read at all. It reads
+labels by OCR, so a control drawn with text that doesn't say what it does
+passes, Enter alone is allowed (a search needs it), and typed text is not
+checked. A whole-word match can also refuse a harmless control ("Post-op
+notes"); the check then halts. A reference number is read from one screen
+region and must be the only match there; two different numbers, or none, halt
+the check. A search by a run input (this run's patient) can open an older
+record with the same value, and Flow can't read the record before the save
+without leaving the form, so such a check confirms only when the reopened
+record shows this save's reference number and no other; an application that
+shows no reference number halts there.
 
 ### 4. Model assistance can convert a halt into a false pass
 
@@ -453,8 +480,36 @@ resolution and halt.
 
 A run may halt after earlier steps have already changed the application or
 system of record. OpenAdapt does not provide a general transaction spanning an
-arbitrary GUI workflow. Compensation exists only where a deployment has
-explicitly implemented and verified it.
+arbitrary GUI workflow, and it does not buffer writes until a workflow's checks
+have all passed.
+
+What it does provide ([`AFTER_A_STOP.md`](AFTER_A_STOP.md)):
+
+- Every run report has a change ledger: each step that could have changed the
+  app, in order, with each declared effect marked confirmed, refuted or
+  unknown. The halt message, `explain` and `REPORT.md` say what may need
+  undoing.
+- `lint` warns when a write comes before a right-record check or a halting
+  precondition that the program could have done first. It suggests an order
+  and never reorders the bundle.
+- A bundle can declare an undo step for an effect. After a halt it is offered
+  to a person, runs only after that person approves it, runs at most once,
+  and counts as done only when an independent read of the system of record
+  confirms its own declared effects.
+
+The limits of that:
+
+- A step with no declared effect is `unknown` in the ledger. Flow can't say
+  whether it changed anything.
+- An undo exists only where someone declared it. Flow doesn't infer one.
+- An undo can fail or be refused. Then a person must repair the record by
+  hand.
+- No undo is offered for a workflow with a loop: the undo can't be bound to
+  one iteration's record.
+- The write-ordering check covers straight-line bundles only, and it can't
+  tell whether a later check depends on an earlier write.
+- Duplicate-write compensation (`effects.compensation`) is the only automatic
+  repair, and only where a deployment has implemented and verified it.
 
 Before resuming or teaching a halted consequential workflow, reconcile prior
 effects, confirm the current entity and application state, and ensure the bundle
