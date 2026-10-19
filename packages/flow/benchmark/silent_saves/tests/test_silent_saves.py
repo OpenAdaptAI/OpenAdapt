@@ -105,6 +105,11 @@ def test_baselines_json_is_current() -> None:
     assert baselines.main(["--check"]) == 0
 
 
+def test_readme_table_matches_baselines() -> None:
+    readme = (BENCH / "silent_saves" / "README.md").read_text()
+    assert baselines.table(baselines.build()) in readme
+
+
 def _rows(out: Path) -> dict[str, dict]:
     return {r["fault"]: r for r in csv.DictReader((out / "items.csv").open())}
 

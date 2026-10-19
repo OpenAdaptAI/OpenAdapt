@@ -70,6 +70,12 @@ class Executor(Protocol):
 # -- screen-script: a $0 executor that trusts the screen ------------------------
 
 
+_READ_OUTCOME = """() => {
+  const text = (id) => (document.getElementById(id)?.innerText || '').trim();
+  return {banner: text('saved-banner'), error: text('save-error')};
+}"""
+
+
 class ScreenScript:
     """Clicks through the task with fixed selectors and believes the banner.
 
@@ -96,14 +102,15 @@ class ScreenScript:
             page.locator("#type-triage").click()
             page.locator("#note").fill(task.params["note"])
             page.locator("#save-encounter").click()
-            banner = page.locator("#saved-banner")
-            error = page.locator("#save-error")
+            # One read of the page per poll: MockMed re-renders on save, so
+            # an element found by one call can be gone by the next.
             deadline = time.monotonic() + 5.0
             while time.monotonic() < deadline:
-                if banner.count() and banner.first.is_visible():
-                    return Report(True, final_text=banner.first.inner_text())
-                if error.count() and error.first.inner_text().strip():
-                    return Report(False, final_text=error.first.inner_text())
+                seen = page.evaluate(_READ_OUTCOME)
+                if seen["banner"]:
+                    return Report(True, final_text=seen["banner"])
+                if seen["error"]:
+                    return Report(False, final_text=seen["error"])
                 page.wait_for_timeout(100)
             return Report(False, final_text="no banner and no error within 5 s")
         except Exception as exc:  # noqa: BLE001 - an executor error is a row

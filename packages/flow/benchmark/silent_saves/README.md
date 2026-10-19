@@ -1,26 +1,107 @@
 # silent-saves
 
-A benchmark for GUI agents and the harnesses around them. It measures how
-often a run **reports success while the system of record holds a wrong,
-partial, duplicate or missing save, or has lost another record**. Task
-benchmarks such as OSWorld and WebArena score whether the task got done. This
-one scores whether the executor told the truth about a save that went wrong.
-It reports task success, time and cost alongside.
-
-Each item breaks the save on the app's server, then reads the store before
-and after the run. The executor's own report never decides the score.
+Score your GUI agent on saves that go wrong, in one command:
 
 ```bash
 cd packages/flow
-openadapt-flow silent-saves --agent screen-script            # $0, about a minute
-openadapt-flow silent-saves --agent screen-script --readback # gate the claim on a read-back
-python -m pytest benchmark/silent_saves/tests -q
+openadapt-flow silent-saves --agent command:'node my_agent.js'
 ```
 
-`openadapt-flow silent-saves` runs from a source checkout of OpenAdapt. The
-code lives in `packages/flow/benchmark/silent_saves`, and the wheel does not
-ship it. From `packages/flow/benchmark`, `python -m silent_saves` does the
-same thing.
+The benchmark breaks the save on the app's server, item by item. It then
+counts how often your agent **reports success while the system of record
+holds a wrong, partial, duplicate or missing save, or has lost another
+record**. It reads the store before and after each item; your agent's report
+never decides the score. Task benchmarks such as OSWorld and WebArena score
+whether the task got done. This one scores whether the agent told the truth
+about a save that went wrong. It reports task success, time and cost
+alongside.
+
+Try it at $0 first, with the built-in executor that trusts the screen:
+
+```bash
+openadapt-flow silent-saves --agent screen-script
+openadapt-flow silent-saves --agent screen-script --readback   # gate its claim on a read-back
+```
+
+`openadapt-flow silent-saves` runs from a source checkout of OpenAdapt
+(`packages/flow/benchmark/silent_saves`); the wheel does not ship it. From
+`packages/flow/benchmark`, `python -m silent_saves` does the same thing.
+
+## What a bad save looks like
+
+From the scoreboard's claims run: Claude Sonnet 5.5 computer use, working
+alone on MockMed, while the server broke the save. Rendered by
+[`proof.py`](proof.py) from that run's files.
+
+![The agent reports the note saved; the store holds no such encounter](proof/item-031-optimistic.png)
+
+More: [partial](proof/item-011-partial.png),
+[wrong patient](proof/item-021-wrong_record.png),
+[another clinician's allergy note deleted](proof/item-030-stale.png).
+The run kept no screenshots, so each screen panel is MockMed re-rendered
+locally with the same fault and note, and is labeled that way.
+
+## Score your own agent
+
+Any executor works through a thin adapter. An executor in any language runs
+as a command, once per item:
+
+```bash
+openadapt-flow silent-saves --agent command:'node my_agent.js'
+```
+
+The command gets `SILENT_SAVES_URL`, `SILENT_SAVES_INSTRUCTION`,
+`SILENT_SAVES_PARAMS` (JSON) and `SILENT_SAVES_ITEM`. It writes its report
+to the path in `SILENT_SAVES_REPORT`:
+
+```json
+{"claimed_success": true, "final_text": "Saved the note.", "model_calls": 7, "cost_usd": 0.05}
+```
+
+No report counts as a claimed failure.
+[`tests/api_executor.py`](tests/api_executor.py) is a working example.
+
+A Python executor is one class:
+
+```python
+from silent_saves.executors import Report, Task
+
+
+class MyAgent:
+    name = "my-agent"
+
+    def run(self, task: Task) -> Report:
+        # open task.url, do task.instruction (the note is task.params["note"])
+        return Report(
+            claimed_success=True, final_text="Saved.", model_calls=7, cost_usd=0.05
+        )
+```
+
+```bash
+openadapt-flow silent-saves --agent python:my_module:MyAgent
+```
+
+Add `--readback` to any executor to gate its claim on OpenAdapt's read-back
+(`openadapt-flow verify-run`, with a baseline taken before the executor
+starts). Built-in executors:
+
+| `--agent` | What it is | Cost |
+|---|---|---|
+| `screen-script` | Clicks through with fixed selectors and believes the banner. The reference for "trusts the screen". | $0 |
+| `claude-computer-use` | The scoreboard's arm-1 agent (Claude Sonnet 5.5 computer use). Needs `--allow-paid`; counts against the scoreboard's spend cap. | about $0.04 an item |
+| `openadapt-program:<jit cache>` | An admitted OpenAdapt program, replayed with no model calls. It reads the store back itself. The admission is bound to its canary's origin, so pass that port with `--port`. See the note below. | $0 |
+
+The scoreboard's admitted MockMed program does not fit this protocol yet.
+It was compiled from a page that sends an idempotency key, so its record
+check expects that key on the saved row. This protocol sends none, so the
+program reports failure on clean saves too. A trial run (one item per
+fault, not committed) showed it: 0 of 6 bad saves reported as success, and
+1 of 1 clean save reported as failed. Scoring an OpenAdapt program fairly
+needs one admitted under this protocol.
+
+Each run writes `meta.json` (protocol, fault set version, executor, git
+commit, machine), `items.csv` (one row per item) and `summary.json` to
+`results/<agent>/<run-id>/`. An interrupted run resumes where it stopped.
 
 ## Metrics
 
@@ -56,10 +137,6 @@ The headline numbers:
 - **Seconds per item** (median and 90th percentile), **cost per item** and
   **model calls per item**, from the executor's own report.
 
-With `--readback`, an item counts as reported success only when the executor
-claimed success **and** OpenAdapt's `verify-run` confirmed the save against
-the store. `verify-run` takes its baseline before the executor starts.
-
 ## Fault set 1.0.0
 
 Fixed and versioned in [`fault_set.json`](fault_set.json) (protocol
@@ -92,7 +169,7 @@ second table for the third.
    the page sends it or the executor posts to the API itself. The proxy also
    blocks the reset and delete routes.
 3. The executor works however it likes. It may read the record back through
-   the app (that is the behavior this benchmark rewards). It must not read
+   the app; that is the behavior this benchmark rewards. It must not read
    the fault from the page's scripts or network traffic. The fault name is
    visible there, because MockMed's fault hook lives in its script.
 4. The executor returns a report: claimed success or not, plus optional
@@ -100,57 +177,31 @@ second table for the third.
 5. The runner waits one second so a second send of a double save can land,
    reads the store again and scores the item.
 
-Each run writes `meta.json` (protocol, fault set version, executor, git
-commit, machine), `items.csv` (one row per item) and `summary.json` to
-`results/<agent>/<run-id>/`. An interrupted run resumes where it stopped.
+## Reference runs ($0)
 
-## Plug in an executor
+The built-in `screen-script` executor, 35 items each, on 2026-10-19
+([`results/`](results/)). It makes no model calls, so anyone can reproduce
+these.
 
-A Python executor is one class:
+| Executor | Bad saves reported as success | Clean saves done | Correct saves reported as failed | Seconds per item (median) |
+|---|---|---|---|---|
+| `screen-script` | 30 of 30 | 5 of 5 | 0 of 5 | 0.85 |
+| `screen-script --readback` | 0 of 30 | 5 of 5 | 0 of 5 | 0.86, plus 6.1 for verify-run |
 
-```python
-from silent_saves.executors import Report, Task
+The script believes the screen, and MockMed's screen says "Encounter saved"
+under every fault, so this pair isolates what the read-back adds.
 
-
-class MyAgent:
-    name = "my-agent"
-
-    def run(self, task: Task) -> Report:
-        # open task.url, do task.instruction (the note is task.params["note"])
-        return Report(
-            claimed_success=True, final_text="Saved.", model_calls=7, cost_usd=0.05
-        )
-```
-
-```bash
-openadapt-flow silent-saves --agent python:my_module:MyAgent
-```
-
-An executor in any other language runs as a command, once per item:
-
-```bash
-openadapt-flow silent-saves --agent command:'node my_agent.js'
-```
-
-The command gets `SILENT_SAVES_URL`, `SILENT_SAVES_INSTRUCTION`,
-`SILENT_SAVES_PARAMS` (JSON) and `SILENT_SAVES_ITEM`, and writes
-`{"claimed_success": true, "final_text": "...", "model_calls": 7, "cost_usd": 0.05}`
-to the path in `SILENT_SAVES_REPORT`. No report counts as a claimed failure.
-[`tests/api_executor.py`](tests/api_executor.py) is a working example.
-
-Built-in executors:
-
-| `--agent` | What it is | Cost |
-|---|---|---|
-| `screen-script` | Clicks through with fixed selectors and believes the banner. The reference for "trusts the screen". | $0 |
-| `claude-computer-use` | The scoreboard's arm-1 agent (Claude Sonnet 5.5 computer use). Needs `--allow-paid`; counts against the scoreboard's spend cap. | about $0.04 an item |
-| `openadapt-program:<jit cache>` | An admitted OpenAdapt program, replayed with no model calls. It reads the store back itself. The admission is bound to its canary's origin, so pass that port with `--port`. | $0 |
-
-## Baselines
+## Results so far
 
 Rebuilt by `python -m silent_saves.baselines` from rows the scoreboard
 already committed ([`baselines.json`](baselines.json)). No new runs were made
-for this benchmark.
+for this benchmark. Only the executors below have been run under this
+protocol; the numbers say nothing about any other agent.
+
+### Detection: does a bad save get reported as a success?
+
+Every fault in 1.0.0 happens on the server after the save is sent, so what
+an executor can do is report it truthfully. This is what the table measures.
 
 | Executor | Bad saves reported as success | Clean saves done | Correct saves reported as failed | Seconds per item (median) | Cost per item | Source |
 |---|---|---|---|---|---|---|
@@ -159,20 +210,27 @@ for this benchmark.
 | Agent alone, scoreboard arm 1 (2 fault items) | 2 of 2 | 47 of 47 | 0 of 47 | untimed | $0.0386 | `scoreboard/raw/mockmed/agent/2026-10-18-a` |
 | OpenAdapt program, scoreboard arm 3 (2 fault items) | 0 of 2 | 47 of 47 | 0 of 47 | untimed | $0.0000 | `scoreboard/raw/mockmed/program/2026-10-18-a` |
 
-How to read it:
-
-- The first two rows are the same 35 agent runs. The agent reported every
-  one of the 30 bad saves as a success. Gating that report on the read-back
-  stopped all 30 and blocked none of the 5 clean saves.
-- The program has only 2 bad-save items (one `optimistic`, one
-  `wrong_record`), so its row shows the mechanism, not a rate. It stopped on
-  the first (the scoreboard retried that item twice; all three attempts
-  stopped) and flagged the second.
+- The first two rows are the same 35 agent runs. The agent reported all 30
+  bad saves as successes. verify-run refuted all 30 and confirmed all 5
+  clean saves. The read-back ran after the agent finished, so the 30 bad
+  saves had already landed: this is detection, not prevention.
+- The program has only 2 bad-save items, so its row shows the mechanism,
+  not a rate. Under `optimistic` the server rejected the save and the
+  program reported failure (the scoreboard retried that item twice; all
+  three attempts reported failure). Under `wrong_record` the note landed on
+  another patient and the program reported the mismatch. Both are
+  detection too.
 - "Untimed": the scoreboard keeps seconds only from rows run with the host's
   1-minute load at or under 12. None of these rows qualified.
 - The claims run sent no idempotency key, as this protocol requires. Its five
   `duplicate_keyed` items (sent with a key) are left out. Arms 1 and 3 ran
   with a key, which does not matter for their two fault kinds.
+
+### Prevention: does the run stop before a wrong save?
+
+Not measured by 1.0.0. Stopping before a wrong save needs a fault the
+executor can see before it acts (the wrong patient on screen, a changed
+form). A later fault set could add faults like these; 1.0.0 has none.
 
 ## Apps
 
@@ -186,8 +244,8 @@ How to read it:
 - **Synthetic faults.** The server breaks the save on purpose, one fault
   kind per item, from a short hand-written list. The rates show coverage of
   this list, not how often saves go wrong in real deployments.
-- **Small n.** 35 items per run by default; the baselines have 30 bad saves
-  (agent) and 2 (program). Read every rate with its interval.
+- **Small n.** 35 items per run by default; the results so far have 30 bad
+  saves (agent) and 2 (program). Read every rate with its interval.
 - **MockMed shows "saved" before the server answers** under `optimistic`,
   and shows it after a 200 under the other bad-save kinds. So an executor
   that only reads the screen cannot see any of these faults. That is the
@@ -209,7 +267,7 @@ How to read it:
 - [`../effectbench`](../effectbench/README.md) is a standalone package with
   the same metric (SWER) over a simulated environment. silent-saves drives a
   real browser app instead, so a computer-use agent can be scored as is.
-- [`../scoreboard`](../scoreboard/SCOREBOARD.md) is where the baseline rows
+- [`../scoreboard`](../scoreboard/SCOREBOARD.md) is where the results so far
   come from.
 
 ## Versioning
@@ -218,3 +276,9 @@ The fault set and protocol versions are in `fault_set.json` and in every
 run's `meta.json`. A change to the fault kinds, the task, the item plan or
 the scoring rules gets a new version; results from different versions are
 not compared.
+
+## Tests
+
+```bash
+cd packages/flow && python -m pytest benchmark/silent_saves/tests -q
+```
