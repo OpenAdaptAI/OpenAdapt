@@ -15,6 +15,12 @@ Admission has three modes, and all of them write the same signed
   (:func:`verify_policy`, :func:`scope_problems`). A draft outside the policy
   goes to the ``needs_person`` queue.
 
+The same signed policy can also name **standard repairs**
+(:class:`StandardRepairs`): classes of UI drift that a self-repair may fix
+without a person, the way an ITIL standard change is approved once in
+advance. :mod:`openadapt_flow.repair.standard_change` decides each repair
+against it; anything outside it goes to a person.
+
 The same design as the fleet promotion policy (``openadapt_flow.fleet.policy``
 on the fleet branch): a person-to-key registry, domain-separated Ed25519
 signatures over canonical JSON, and a policy digest bound into what it
@@ -55,12 +61,14 @@ from pydantic import (
 __all__ = [
     "AdmissionPolicy",
     "AuthorityError",
+    "DialogPattern",
     "KEY_PASSPHRASE_ENV",
     "POLICY_SCHEMA",
     "PRINCIPALS_FILE",
     "Principal",
     "PrincipalRegistry",
     "SignedAdmissionPolicy",
+    "StandardRepairs",
     "generate_encrypted_key",
     "load_encrypted_key",
     "principal_from_key",
@@ -300,6 +308,97 @@ def register_principal(
     return updated
 
 
+# -- standard repairs ------------------------------------------------------------
+
+#: How many new menu steps a standard repair may add before a moved control.
+MAX_MENU_STEPS = 3
+
+
+class DialogPattern(BaseModel):
+    """A new dialog a standard repair may dismiss.
+
+    ``text`` is a regular expression searched (case-insensitive) in the text
+    the dialog shows. ``dismiss`` lists the labels of the control that closes
+    it (exact, case-insensitive). A label that reads as a save is refused.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    name: str = Field(pattern=_ID)
+    text: str = Field(min_length=1, max_length=256)
+    dismiss: tuple[str, ...] = Field(min_length=1, max_length=8)
+
+    @field_validator("text")
+    @classmethod
+    def _regex(cls, value: str) -> str:
+        try:
+            re.compile(value)
+        except re.error as exc:
+            raise ValueError(f"dialog text {value!r} is not a regex: {exc}") from exc
+        return value
+
+    @field_validator("dismiss")
+    @classmethod
+    def _labels(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        from openadapt_flow.risk import is_write_shaped
+
+        cleaned = tuple(v.strip() for v in value)
+        for label in cleaned:
+            if not label or len(label) > 64:
+                raise ValueError("a dismiss label is 1 to 64 characters")
+            if is_write_shaped(label):
+                raise ValueError(f"{label!r} reads as a save; it can't dismiss")
+        return cleaned
+
+    def matches(self, texts: "list[str] | tuple[str, ...]") -> bool:
+        pattern = re.compile(self.text, re.IGNORECASE)
+        return any(pattern.search(t or "") for t in texts)
+
+    def dismisses_with(self, label: Optional[str]) -> bool:
+        wanted = (label or "").strip().lower()
+        return bool(wanted) and wanted in {d.lower() for d in self.dismiss}
+
+
+class StandardRepairs(BaseModel):
+    """UI drift a person lets self-repair fix without asking them each time.
+
+    Each class is off unless the person turns it on. A repair applies without
+    a person only when, in addition, the save step, its identity evidence and
+    its record check are byte-identical to the admitted bundle, the probe up to
+    the save passed, and a run on the deployment's test record verified.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    #: A control that is not the save got a new label, place or locator.
+    relabel_or_move: bool = False
+    #: New dialogs that may be dismissed.
+    dialogs: tuple[DialogPattern, ...] = ()
+    #: A control moved into a menu: at most this many new clicks reach it.
+    menu_steps: int = Field(default=0, ge=0, le=MAX_MENU_STEPS)
+    #: Repair agents whose fixes may apply under this policy.
+    repair_agents: tuple[str, ...] = Field(min_length=1)
+    #: Workflow names this covers; empty means every workflow.
+    workflows: tuple[str, ...] = ()
+
+    @field_validator("repair_agents", "workflows")
+    @classmethod
+    def _ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for item in value:
+            if not re.match(_ID, item):
+                raise ValueError(f"invalid id {item!r}")
+        return value
+
+    @model_validator(mode="after")
+    def _some_class(self) -> "StandardRepairs":
+        if not (self.relabel_or_move or self.dialogs or self.menu_steps):
+            raise ValueError("standard repairs name no change class")
+        names = [d.name for d in self.dialogs]
+        if len(names) != len(set(names)):
+            raise ValueError("two dialog patterns share a name")
+        return self
+
+
 # -- admission policy ------------------------------------------------------------
 
 
@@ -336,12 +435,17 @@ class AdmissionPolicy(BaseModel):
     #: left out of the signed payload while off, so policies signed before
     #: this field existed keep their signatures.
     allow_self_admission: bool = False
+    #: UI drift self-repair may fix without a person (standard changes). Left
+    #: out of the signed payload when unset, like ``allow_self_admission``.
+    standard_repairs: Optional[StandardRepairs] = None
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler: Any) -> dict[str, Any]:
         data = handler(self)
         if not self.allow_self_admission:
             data.pop("allow_self_admission", None)
+        if self.standard_repairs is None:
+            data.pop("standard_repairs", None)
         return data
 
     @field_validator("allowed_actions")
@@ -378,6 +482,10 @@ class AdmissionPolicy(BaseModel):
             raise ValueError("the policy expires before it was signed")
         if self.signer.lower() in {a.lower() for a in self.agent_principals}:
             raise ValueError("the policy's signer can't be one of its agents")
+        if self.standard_repairs is not None and self.signer.lower() in {
+            a.lower() for a in self.standard_repairs.repair_agents
+        }:
+            raise ValueError("the policy's signer can't be one of its repair agents")
         return self
 
     def digest(self) -> str:

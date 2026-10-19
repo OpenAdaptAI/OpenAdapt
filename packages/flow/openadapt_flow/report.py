@@ -239,6 +239,16 @@ def _self_repair_lines(evidence: SelfRepairEvidence) -> list[str]:
                 else ""
             )
         )
+    change = evidence.standard_change
+    if change is not None:
+        lines.append(
+            f"- **Applied without a person:** `{change.change_class}` under policy "
+            f"`{_md_escape(change.policy_id)}` signed by "
+            f"{_md_escape(change.policy_signed_by)} (policy "
+            f"`{change.policy_sha256[:16]}`); test record "
+            f"`{_md_escape(change.test_record)}` {change.preflight_outcome}"
+        )
+        lines.append(f"- **Undo:** `{_md_escape(change.revert_command)}`")
     if evidence.steps:
         lines.append("")
         lines.append("| Stage | Attempt | Passed | Model calls | Detail |")

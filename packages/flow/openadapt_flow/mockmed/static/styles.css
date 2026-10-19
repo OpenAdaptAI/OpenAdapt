@@ -135,6 +135,8 @@ body.drift-move .actions.movable {
 
 /* Fixed widths so the "rename" drift keeps buttons in identical positions. */
 #new-encounter { width: 180px; }
+/* "relink" drift: the renamed new-encounter control. */
+#start-visit { width: 150px; border-radius: 18px; }
 #save-encounter { width: 220px; }
 /* "redesign" drift: the replacement save control, right-aligned and styled
    differently from the recorded one. */
