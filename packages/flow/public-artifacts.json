@@ -1169,7 +1169,7 @@
     },
     {
       "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/meta.json",
-      "sha256": "5ab7a76abaca1fb5862ecc5e902f97da5528f95f69aa67f71adddd7cf096c861"
+      "sha256": "abc0be154bd01abaa0cb853e1b65671572c9f3956af1d89b5e2fe3c5e17374aa"
     },
     {
       "path": "benchmark/scoreboard/raw/mockmed/first_run/2026-10-18-a/first_run.json",
@@ -1205,7 +1205,15 @@
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/agent/study-main-0c642bc0/meta.json",
-      "sha256": "6e153be4a10ca66dd96871878f70947f932b64afb742afa0d0865f9e1c68b5b6"
+      "sha256": "e04423d7f504513359e44db655ad7963a61353def733a8920184b05e43a96388"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/claims/2026-10-19-a/meta.json",
+      "sha256": "372187bae1bb18c91c15baa30c9dc8ed8bcd34d80b218d8f7bbfdc0a0cf34b8e"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/claims/smoke-2026-10-19/meta.json",
+      "sha256": "5d14056e44551ca6a23d90c65f450c9be508b6da992b252aaad1a800355102be"
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/first_run/2026-10-18-a/first_run.json",
@@ -1229,7 +1237,7 @@
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/parallel/worklist-8w-2026-10-19/meta.json",
-      "sha256": "1ba55c58d69eeefadf298c540963e0d36cca3ba0324c4ffb87b5612a8807f3b2"
+      "sha256": "ba4cc34e6f6e9f914cb323dd905309bccd7ad1123a90952beea9aa111b6f9ea4"
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/parallel/worklist-8w-window1-2026-10-19/items.csv",
@@ -1237,7 +1245,7 @@
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/parallel/worklist-8w-window1-2026-10-19/meta.json",
-      "sha256": "d914dc40053fc91f9234a493980264b2debc4adbe343f5429b15d4b2a6762a90"
+      "sha256": "eadd96814d61b1846ccbf7454fc41d0ae99ca600b776ba4be1eb94a4c55432a0"
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/program/api-tier-2026-10-19/items.csv",
@@ -1245,7 +1253,7 @@
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/program/api-tier-2026-10-19/meta.json",
-      "sha256": "b406fcdbda768132001aab9ada05e94a9721dfec59cd2b3da7202a720a23be0d"
+      "sha256": "3b2c370bcb943a68a941b008345e750f573e33c75cbcef72c6177c9f49a948ae"
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/program/study-main-0c642bc0/items.csv",
@@ -1253,7 +1261,7 @@
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/program/study-main-0c642bc0/meta.json",
-      "sha256": "53a92767d5bbe4ec9a7486a7f91e769cf886d66fd400ef55c456fb4988bab0fc"
+      "sha256": "6f758deed172cf779ab9ab3fb4d6d6322a7986f624ca958fa49fd247b5c036b5"
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/program/worklist-std-2026-10-19/items.csv",
@@ -1261,7 +1269,7 @@
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/program/worklist-std-2026-10-19/meta.json",
-      "sha256": "12815e3746f21acf7b4db097189f6869c7c1ca77b9c99588e716a505eb75745f"
+      "sha256": "7bad7a3f129ec1b87f29a3298d6f33212226cec21e9bbfab9c5fd86a5baeff0c"
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/program_api/api-tier-2026-10-19/items.csv",
@@ -1269,7 +1277,7 @@
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/program_api/api-tier-2026-10-19/meta.json",
-      "sha256": "5de3dde71d5028ac200a49d6b736ad3bd7e90aed9eca7c1f8821516217e67414"
+      "sha256": "7e1d5eed72769cb9e1451f127dda95cb2b605eb56a7d65015bb227863a75ca57"
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/program_fast/worklist-fast-2026-10-19/items.csv",
@@ -1277,7 +1285,7 @@
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/program_fast/worklist-fast-2026-10-19/meta.json",
-      "sha256": "b09f4a266521998770ad2b0668e0e8e6f649cabeccab3004ccdee8041a6e59b1"
+      "sha256": "45149d188d05a73bb82579fde1b0cd1959eebbe06b68ec6a3694ef62cf994849"
     },
     {
       "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/hand_check.json",
@@ -1537,7 +1545,7 @@
     },
     {
       "path": "benchmark/scoreboard/scoreboard.json",
-      "sha256": "1f37183621b78892b891ef054477bf787b3c5a46334bb0ef5ac5b33f9ff3a0ed"
+      "sha256": "3c3b8c2d6a8c257ff6967d5f014454703e77eca879ec2d53e8c6e74f85a1c03d"
     },
     {
       "path": "benchmark/silent_wrong_action/results.json",
