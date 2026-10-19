@@ -340,6 +340,38 @@ def run_offline(
     }
 
 
+def markdown_table(summary: dict[str, Any]) -> str:
+    """One row per saving step: the fixture, how it was run, the outcome, why,
+    and what would close the gap."""
+    lines = [
+        "| Fixture | Run | Saving step | Verified undo | Why not, and what would close the gap |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for fixture in summary["fixtures"]:
+        mode = "live" if str(fixture.get("mode", "")).startswith("live") else "offline"
+        for step in fixture["steps"]:
+            if step["verified_undo"]:
+                source = next(
+                    c for c in step["candidates"] if c["status"] == "verified"
+                )
+                outcome = f"yes ({source['source']})"
+                why = source["basis"]
+            else:
+                outcome = "no"
+                why = f"{step['reason']}. To close it: {step['to_close_the_gap']}"
+            why = why.replace("|", "\\|")
+            lines.append(
+                f"| {fixture['fixture']} | {mode} | `{step['step_id']}` | {outcome} | {why} |"
+            )
+    totals = summary["totals"]
+    lines.append("")
+    lines.append(
+        f"Total: {totals['saving_steps']} saving steps, {totals['verified_undo']} "
+        f"with a verified undo, {totals['no_verified_undo']} without."
+    )
+    return "\n".join(lines)
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", required=True, type=Path)
@@ -355,7 +387,14 @@ def main(argv: Optional[list[str]] = None) -> int:
             "a test copy (RECORDING may be '-')"
         ),
     )
+    parser.add_argument(
+        "--table", action="store_true", help="Print summary.json as a Markdown table"
+    )
     args = parser.parse_args(argv)
+    if args.table:
+        summary = json.loads((args.out / "summary.json").read_text(encoding="utf-8"))
+        print(markdown_table(summary))
+        return 0
     fixtures = _fixtures()
     names = args.fixture if args.fixture is not None else list(fixtures)
     if args.offline and args.fixture is None:
