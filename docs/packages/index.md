@@ -10,6 +10,7 @@ cockpit, privacy tools, and optional managed control plane.
 | `openadapt-capture` | Native screen, input, timing, window-scope, and media capture | `pip install 'openadapt[capture]'` |
 | `openadapt-privacy` | Local privacy and sanitization support | `pip install 'openadapt[privacy]'` |
 | `openadapt-desktop` | Visual authoring and operator application | [Download an installer](https://openadapt.ai/download) |
+| `openadapt-tray` | Menu-bar and system-tray controls and status for OpenAdapt Desktop | `pip install openadapt-tray` |
 
 Package roles do not assign a lifecycle state. Use the
 [signed Production record](https://docs.openadapt.ai/production-lifecycle.json)

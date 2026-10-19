@@ -84,7 +84,7 @@ shipping in the next release; a pull request number means it is being merged.
 | The agent that does a task once can act through code, not a screenshot-and-click loop: it reads the page or accessibility tree, acts by role and name, keeps notes with a sandboxed read-only shell, and asks for a screenshot only when it needs one. It is arm 7 of the scoreboard; its figures are quoted from there once its rows are in. | `CODE_AS_ACTION.md` in [#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305) |
 | Binds each approval to the exact screenshot and form state, and re-reads the form before saving. | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md) |
 | Fills inputs from a referral PDF, fax image or email, and holds back anything unclear for a person. | `intake`, [INTAKE.md](packages/flow/docs/INTAKE.md) |
-| Ships as one monorepo with separately installable packages (flow, agent, types, capture, privacy and desktop), each released from the monorepo. | [README](README.md) |
+| Ships as one monorepo with separately installable packages (flow, agent, types, capture, privacy, desktop and tray), each released from the monorepo. | [README](README.md) |
 | Makes no model calls on healthy runs. Model training (openadapt-ml) is separate research. | [README](README.md) |
 
 ## The full map
@@ -218,6 +218,7 @@ improvising or retrying when something is off.
 | Record mouse, keyboard, screen video and accessibility trees on one clock (Windows, macOS, Linux X11) | Released (capture 1.3.0) | Real OS | [packages/capture](packages/capture/README.md); Wayland is not supported |
 | Find and redact personal and health data in text, screenshots and structure | Released (privacy 1.1.3) | Unit tests | [packages/privacy](packages/privacy/README.md), [PRIVACY.md](packages/flow/docs/PRIVACY.md) |
 | Scrub by default before anything leaves the machine | On main ([#1262](https://github.com/OpenAdaptAI/OpenAdapt/pull/1262)) | Unit tests | `openadapt-privacy` |
+| Start and stop Desktop recordings from the menu bar or system tray, and see Desktop's state and how many cloud runs need a person | Released (tray 0.3.7) | Unit tests; CI runs the tray client against Desktop's socket server. The two haven't been run together from packaged installs | [packages/tray](packages/tray/README.md) |
 | Each package installs on its own within a size budget, checked in CI (privacy without desktop, capture without plotting) | On main ([#1270](https://github.com/OpenAdaptAI/OpenAdapt/pull/1270), [#1271](https://github.com/OpenAdaptAI/OpenAdapt/pull/1271), [#1279](https://github.com/OpenAdaptAI/OpenAdapt/pull/1279)) | CI | `.github/workflows/packages.yml` |
 | Signed receipts (Seals), countersigned and timestamped, offline by default | Released | Unit tests, real TSA tokens | `openadapt-flow seal`, `countersign`, `local-seal` |
 | Strict no-outbound mode and an unattended on-prem service | Released | Synthetic | `openadapt-flow no-outbound`, `service`; [ON_PREM.md](packages/flow/docs/ON_PREM.md) |

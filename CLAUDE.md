@@ -34,7 +34,7 @@ retrieval, and general computer-use agents are separate research surfaces.
 
 - `openadapt/`: launcher package and unified CLI
 - `packages/`: the product packages, each folded in with its history
-  (`flow`, `agent`, `types`, `capture`, `privacy`, `desktop`); see
+  (`flow`, `agent`, `types`, `capture`, `privacy`, `desktop`, `tray`); see
   `docs/monorepo/`
 - `tests/`: launcher, integration-seam, and release-artifact tests
 - `legacy/`: frozen pre-1.0 monolith
