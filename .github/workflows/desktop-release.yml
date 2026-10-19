@@ -1,25 +1,40 @@
-# Release openadapt-desktop automatically when a reviewed version lands on main.
+# Release OpenAdapt Desktop: one immutable openadapt-desktop-vX.Y.Z release per
+# version, carrying the PyPI wheel and sdist, the native installers, and the
+# release's own attested channel.
 #
 # A Desktop pull request that should ship bumps the version and the changelog
-# itself (packages/desktop/scripts/prepare_release.py), and the desktop
+# itself (packages/desktop/scripts/prepare_release.py); the desktop
 # release-intent check in packages.yml fails a feat or fix that does not. There
-# is no bot version commit: the version is reviewed like any other change.
+# is no bot version commit. When main changes packages/desktop/pyproject.toml:
 #
-# When main changes packages/desktop/pyproject.toml, this workflow:
-#   1. stops quietly if that version is already on PyPI;
-#   2. waits for that commit's Packages run, and refuses unless its desktop
-#      test and desktop build jobs ran and succeeded;
-#   3. refuses if packages/desktop changed on main after that commit, because
-#      the release would then build source that this check did not see;
-#   4. dispatches release-package.yml for desktop on main.
-# release-package.yml then does what it does for every package: refuses a
-# version already on PyPI, publishes through the pypi-desktop environment and
-# Trusted Publishing, and has the openadapt-release App create the immutable
-# openadapt-desktop-vX.Y.Z tag and GitHub Release.
+#   gate         stops quietly if this version is already released; waits for
+#                the commit's Packages run and requires its desktop test and
+#                build jobs to have passed; refuses if packages/desktop changed
+#                on main since.
+#   build-*      the Python distributions and every native installer, smoke-
+#                tested. The macOS and Windows jobs run in the native-release
+#                environment (its reviewer approves the release; it holds the
+#                signing secrets).
+#   attest       checksums, SBOM, provenance, and this release's channel (v3,
+#                naming the previous release's channel by hash), all attested.
+#   stage        the openadapt-release App creates the tag and a draft with
+#                every asset, and verifies the draft's bytes.
+#   publish-pypi the wheel and sdist, through pypi-desktop and Trusted
+#                Publishing, checked against the attested digests.
+#   publish      publishes the draft once and verifies GitHub's own
+#                attestation of the immutable release.
 #
-# Dispatch this workflow by hand to retry a release whose dispatch failed. A
-# dispatch judges the newest main commit that changed packages/desktop, not the
-# tip, whose Packages run may have skipped the desktop jobs.
+# If any build fails, nothing is published. If a later job fails, re-run the
+# failed jobs of the same run: it reuses the attested bytes. A new run refuses a
+# version that is half-published instead of rebuilding it.
+#
+# Signing: macOS DMGs are ad-hoc signed unless Developer ID credentials exist.
+# Windows goes through SignPath when the four SIGNPATH_* secrets are set (one
+# request deep-signs the MSI and its program files and signs the NSIS setup),
+# and ships unsigned otherwise. Linux bytes are covered by the GitHub
+# attestation. File names, the website manifest, the channel, and the release
+# notes state each platform's mode. The result is an unadmitted release
+# candidate; it creates no Production state.
 name: Desktop release
 
 on:
@@ -32,48 +47,94 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    working-directory: packages/desktop
+
 concurrency:
+  # One transaction owns the tag and the release. Never run two at once.
   group: desktop-release
   cancel-in-progress: false
 
 jobs:
-  dispatch:
-    name: Release the reviewed Desktop version
+  gate:
+    name: Decide whether this commit releases a new Desktop version
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 75
     permissions:
-      actions: write
+      actions: read
       contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      release: ${{ steps.state.outputs.release }}
+      version: ${{ steps.state.outputs.version }}
+      tag: ${{ steps.state.outputs.tag }}
+      sbom: ${{ steps.state.outputs.sbom }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Read the version and skip one that is already published
-        id: version
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Read the version and the state of its release
+        id: state
         run: |
           set -euo pipefail
-          version="$(python3 - <<'PY'
-          import tomllib
-          with open("packages/desktop/pyproject.toml", "rb") as fh:
-              print(tomllib.load(fh)["project"]["version"])
-          PY
-          )"
-          echo "version=${version}" >> "${GITHUB_OUTPUT}"
-          status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+          version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          tag="openadapt-desktop-v${version}"
+          {
+            echo "version=${version}"
+            echo "tag=${tag}"
+            echo "sbom=$(python scripts/native_release.py sbom-name --version "${version}")"
+          } >> "${GITHUB_OUTPUT}"
+          pypi="$(curl --silent --output /dev/null --write-out '%{http_code}' \
             "https://pypi.org/pypi/openadapt-desktop/${version}/json")"
-          case "${status}" in
-            200) echo "openadapt-desktop ${version} is already on PyPI; nothing to release."
-                 echo "release=false" >> "${GITHUB_OUTPUT}" ;;
-            404) echo "openadapt-desktop ${version} is not on PyPI yet."
-                 echo "release=true" >> "${GITHUB_OUTPUT}" ;;
-            *)   echo "PyPI returned HTTP ${status}; refusing to guess." >&2; exit 1 ;;
+          release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '.draft' 2>/dev/null || echo none)"
+          echo "PyPI ${version}: HTTP ${pypi}; GitHub release ${tag}: ${release}"
+          if [ "${pypi}" = 200 ] && [ "${release}" = false ]; then
+            echo "${tag} is fully released; nothing to do."
+            echo "release=false" >> "${GITHUB_OUTPUT}"
+          elif [ "${pypi}" = 404 ] && [ "${release}" = none ] && \
+               ! git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
+            echo "release=true" >> "${GITHUB_OUTPUT}"
+          elif [ "${pypi}" = 200 ] || [ "${pypi}" = 404 ]; then
+            echo "${tag} is partly published (PyPI ${pypi}, GitHub ${release})." >&2
+            echo "Re-run the failed jobs of the run that started it; do not rebuild." >&2
+            exit 1
+          else
+            echo "PyPI returned HTTP ${pypi}; refusing to guess." >&2
+            exit 1
+          fi
+
+      - name: Require one version everywhere, its changelog, and a new tag in order
+        if: steps.state.outputs.release == 'true'
+        env:
+          VERSION: ${{ steps.state.outputs.version }}
+          TAG: ${{ steps.state.outputs.tag }}
+        run: |
+          set -euo pipefail
+          python scripts/check_release_consistency.py
+          test "$(python scripts/native_release.py version)" = "${VERSION}"
+          python scripts/native_release.py validate-tag "${TAG}"
+          top="$(grep -m1 -E '^## v[^ ]+ \([0-9]{4}-[0-9]{2}-[0-9]{2}\)$' CHANGELOG.md || true)"
+          case "${top}" in
+            "## v${VERSION} ("*) ;;
+            *) echo "CHANGELOG.md must start with v${VERSION}; found '${top}'" >&2; exit 1 ;;
           esac
+          python scripts/check_source_boundary.py
+          git ls-remote --tags origin > remote-tags.txt
+          python scripts/native_release.py validate-release-order \
+            --candidate-tag "${TAG}" \
+            --tags remote-tags.txt
 
       - name: Choose the commit whose checks decide the release
-        if: steps.version.outputs.release == 'true'
+        if: steps.state.outputs.release == 'true'
         id: subject
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -82,15 +143,16 @@ jobs:
           if [ "${EVENT_NAME}" = push ]; then
             subject="${GITHUB_SHA}"
           else
-            subject="$(git log -1 --format=%H "${GITHUB_SHA}" -- packages/desktop)"
+            # A dispatch builds the tip; its checks are those of the newest
+            # commit that changed Desktop, whose tree the tip must equal.
+            subject="$(git log -1 --format=%H "${GITHUB_SHA}" -- .)"
           fi
           echo "Release checks follow ${subject}."
           echo "sha=${subject}" >> "${GITHUB_OUTPUT}"
 
       - name: Wait for that commit's Packages run and its desktop jobs
-        if: steps.version.outputs.release == 'true'
+        if: steps.state.outputs.release == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
           SUBJECT: ${{ steps.subject.outputs.sha }}
         run: |
           set -euo pipefail
@@ -133,26 +195,1005 @@ jobs:
           exit 1
 
       - name: Require that main has not changed Desktop since that commit
-        if: steps.version.outputs.release == 'true'
+        if: steps.state.outputs.release == 'true'
         env:
           SUBJECT: ${{ steps.subject.outputs.sha }}
         run: |
           set -euo pipefail
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           git merge-base --is-ancestor "${SUBJECT}" refs/remotes/origin/main
-          if ! git diff --quiet "${SUBJECT}" refs/remotes/origin/main -- packages/desktop; then
-            echo "packages/desktop changed on main after ${SUBJECT}." >&2
-            echo "Release the current version by dispatching this workflow once main is green." >&2
+          git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main
+          for later in refs/remotes/origin/main "${GITHUB_SHA}"; do
+            if ! git diff --quiet "${SUBJECT}" "${later}" -- .; then
+              echo "packages/desktop changed on main after ${SUBJECT}." >&2
+              echo "The newer change releases itself; dispatch this workflow once its checks pass." >&2
+              exit 1
+            fi
+          done
+
+  build-python:
+    name: Python distributions
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      - name: Build and check the wheel and sdist
+        run: |
+          set -euo pipefail
+          uv build --wheel --sdist
+          python scripts/check_release_consistency.py --require-dist
+          python scripts/check_source_boundary.py --require-dist
+          uv run --with 'twine==7.0.0' --no-project twine check --strict dist/*
+          mkdir python-dist
+          cp dist/openadapt_desktop-*.whl dist/openadapt_desktop-*.tar.gz python-dist/
+          ls -l python-dist
+
+      - name: Inspect the built Python archives
+        run: uv run python scripts/verify_build_artifact.py python-distribution
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-python-distributions
+          path: packages/desktop/python-dist/*
+          if-no-files-found: error
+
+  build-macos:
+    name: macOS ${{ matrix.architecture }}
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
+    runs-on: ${{ matrix.os }}
+    # The protected environment holds the Developer ID identity and notary
+    # credentials if they are ever configured. Without them the DMG is ad-hoc
+    # signed, and its file name, metadata and the release notes say so.
+    environment: native-release
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            architecture: arm64
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            architecture: x86_64
+            target: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.97.0"
+          targets: ${{ matrix.target }}
+
+      - name: Validate complete-or-absent Apple signing credentials
+        id: signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: >-
+          python scripts/native_signing.py preflight
+          --platform macos
+          --github-output "${GITHUB_OUTPUT}"
+
+      - name: Import Developer ID certificate into an ephemeral keychain
+        if: steps.signing.outputs.mode == 'developer-id-notarized'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          certificate_path="${RUNNER_TEMP}/openadapt-developer-id.p12"
+          keychain_path="${RUNNER_TEMP}/openadapt-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 32)"
+          printf '%s' "${APPLE_CERTIFICATE}" | base64 --decode > "${certificate_path}"
+          security create-keychain -p "${keychain_password}" "${keychain_path}"
+          security set-keychain-settings -lut 21600 "${keychain_path}"
+          security unlock-keychain -p "${keychain_password}" "${keychain_path}"
+          security import "${certificate_path}" -k "${keychain_path}" \
+            -P "${APPLE_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "${keychain_password}" "${keychain_path}"
+          security list-keychain -d user -s "${keychain_path}"
+          echo "OPENADAPT_APPLE_KEYCHAIN=${keychain_path}" >> "${GITHUB_ENV}"
+          echo "OPENADAPT_APPLE_CERTIFICATE=${certificate_path}" >> "${GITHUB_ENV}"
+
+      - name: Install locked Tauri CLI
+        run: npm ci --ignore-scripts
+
+      - name: Build engine sidecar for Tauri externalBin
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ steps.signing.outputs.mode == 'developer-id-notarized' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check uv==0.11.29
+          python scripts/sync_frozen_dependencies.py
+          uv run python scripts/build_frozen_engine.py
+          uv run python scripts/verify_build_artifact.py sidecar
+          uv run python scripts/smoke_test_frozen_flow.py
+          mkdir -p src-tauri/binaries
+          cp dist/openadapt-engine \
+            "src-tauri/binaries/openadapt-engine-${{ matrix.target }}"
+
+      - name: Build Developer ID signed and notarized DMG
+        if: steps.signing.outputs.mode == 'developer-id-notarized'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: >-
+          npm run tauri build --
+          --bundles dmg
+          --target ${{ matrix.target }}
+
+      - name: Build ad-hoc signed DMG
+        if: steps.signing.outputs.mode == 'adhoc'
+        env:
+          APPLE_SIGNING_IDENTITY: "-"
+        run: >-
+          npm run tauri build --
+          --bundles dmg
+          --target ${{ matrix.target }}
+          --config src-tauri/tauri.adhoc.conf.json
+
+      - name: Smoke-test DMG install, signature policy, launch, and uninstall
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifacts=(src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg)
+          test "${#artifacts[@]}" -eq 1
+          python scripts/smoke_test_native_installer.py \
+            --artifact "${artifacts[0]}" \
+            --app-path "${RUNNER_TEMP}/OpenAdapt Desktop.app" \
+            --expected-architecture "${{ matrix.architecture }}" \
+            --signing-mode "${{ steps.signing.outputs.mode }}" \
+            --signing-identity "${APPLE_SIGNING_IDENTITY}" \
+            --signing-team-id "${APPLE_TEAM_ID}" \
+            --launch-seconds 20
+
+      - name: Stage exact native DMG
+        run: >-
+          python scripts/native_release.py stage
+          --bundle-root src-tauri/target/${{ matrix.target }}/release/bundle
+          --output dist/native
+          --platform macos
+          --architecture ${{ matrix.architecture }}
+          --signing ${{ steps.signing.outputs.mode }}
+
+      - name: Upload smoke-tested DMG
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-macos-${{ matrix.architecture }}
+          path: packages/desktop/dist/native/*
+          if-no-files-found: error
+
+      - name: Remove ephemeral Apple signing material
+        if: always() && steps.signing.outputs.mode == 'developer-id-notarized'
+        shell: bash
+        run: |
+          security delete-keychain "${OPENADAPT_APPLE_KEYCHAIN}" || true
+          rm -f "${OPENADAPT_APPLE_CERTIFICATE}"
+
+
+  build-windows:
+    name: Windows x86_64
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
+    runs-on: windows-2022
+    # The protected environment holds the SignPath credentials. With all four,
+    # one SignPath request deep-signs the MSI (the installer and the program
+    # files in it) and signs the NSIS setup; with none, both ship unsigned and
+    # say so; with some, the build fails. The artifact configuration is
+    # .signpath/artifact-configurations/openadapt-desktop-installers.xml.
+    environment: native-release
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.97.0"
+          targets: x86_64-pc-windows-msvc
+
+      - name: Validate complete-or-absent SignPath credentials
+        id: signing
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
+        shell: pwsh
+        run: >-
+          python scripts/native_signing.py preflight
+          --platform windows
+          --github-output "$env:GITHUB_OUTPUT"
+
+      - name: Install locked Tauri CLI
+        run: npm ci --ignore-scripts
+
+      - name: Build engine sidecar for Tauri externalBin
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check uv==0.11.29
+          python scripts/sync_frozen_dependencies.py
+          uv run python scripts/build_frozen_engine.py
+          uv run python scripts/verify_build_artifact.py sidecar
+          uv run python scripts/smoke_test_frozen_flow.py
+          mkdir -p src-tauri/binaries
+          cp dist/openadapt-engine.exe \
+            src-tauri/binaries/openadapt-engine-x86_64-pc-windows-msvc.exe
+
+      - name: Build MSI and NSIS installers
+        run: >-
+          npm run tauri build --
+          --bundles msi,nsis
+          --target x86_64-pc-windows-msvc
+
+      - name: Collect the installers for signing
+        if: steps.signing.outputs.method == 'signpath'
+        shell: pwsh
+        run: |
+          $Bundle = "src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
+          $Msi = @(Get-ChildItem "$Bundle/msi/*.msi")
+          $Nsis = @(Get-ChildItem "$Bundle/nsis/*-setup.exe")
+          if ($Msi.Count -ne 1 -or $Nsis.Count -ne 1) { throw "Expected one MSI and one NSIS installer" }
+          New-Item -ItemType Directory -Path signing-input | Out-Null
+          Copy-Item $Msi[0].FullName signing-input/
+          Copy-Item $Nsis[0].FullName signing-input/
+
+      - name: Upload the unsigned installers for SignPath
+        if: steps.signing.outputs.method == 'signpath'
+        id: unsigned
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-unsigned-installers
+          path: packages/desktop/signing-input/*
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign the installers with SignPath
+        if: steps.signing.outputs.method == 'signpath'
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: packages/desktop/signing-output
+
+      - name: Replace the built installers with the signed ones
+        if: steps.signing.outputs.method == 'signpath'
+        shell: pwsh
+        run: |
+          $Bundle = "src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
+          foreach ($Pattern in @("msi/*.msi", "nsis/*-setup.exe")) {
+            $Built = @(Get-ChildItem "$Bundle/$Pattern")
+            if ($Built.Count -ne 1) { throw "Expected one built $Pattern" }
+            $Signed = Join-Path "signing-output" $Built[0].Name
+            if (-not (Test-Path -LiteralPath $Signed -PathType Leaf)) {
+              throw "SignPath returned no $($Built[0].Name)"
+            }
+            $Signature = Get-AuthenticodeSignature -LiteralPath $Signed
+            if ($Signature.Status -ne "Valid") {
+              throw "SignPath returned $($Built[0].Name) with signature status $($Signature.Status)"
+            }
+            Copy-Item -LiteralPath $Signed -Destination $Built[0].FullName -Force
+          }
+
+      - name: Smoke-test MSI and NSIS install, signature policy, launch, and uninstall
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          $Msi = @(Get-ChildItem "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi")
+          $Nsis = @(Get-ChildItem "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe")
+          if ($Msi.Count -ne 1 -or $Nsis.Count -ne 1) { throw "Expected one MSI and one NSIS installer" }
+          $Signature = @("--signing-mode", "${{ steps.signing.outputs.mode }}")
+          # SignPath deep-signs the MSI, so the program it installs must carry
+          # a valid signature too. It cannot open an NSIS archive, so for the
+          # NSIS setup only the installer itself is signed.
+          $NsisSignature = $Signature
+          if ("${{ steps.signing.outputs.mode }}" -eq "authenticode") {
+            $NsisSignature += @("--installer-only-signature")
+          }
+          python scripts/smoke_test_native_installer.py `
+            --artifact $Msi[0].FullName `
+            --app-path "$env:ProgramFiles/OpenAdapt Desktop/openadapt-desktop.exe" `
+            --expected-architecture x86_64 `
+            --allow-system-install `
+            --launch-seconds 20 @Signature
+          python scripts/smoke_test_native_installer.py `
+            --artifact $Nsis[0].FullName `
+            --app-path "$env:LOCALAPPDATA/OpenAdapt Desktop/openadapt-desktop.exe" `
+            --uninstaller-path "$env:LOCALAPPDATA/OpenAdapt Desktop/uninstall.exe" `
+            --expected-architecture x86_64 `
+            --allow-system-install `
+            --launch-seconds 20 @NsisSignature
+
+      - name: Stage exact native Windows installers
+        run: >-
+          python scripts/native_release.py stage
+          --bundle-root src-tauri/target/x86_64-pc-windows-msvc/release/bundle
+          --output dist/native
+          --platform windows
+          --architecture x86_64
+          --signing ${{ steps.signing.outputs.mode }}
+
+      - name: Upload smoke-tested Windows installers
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-windows-x86_64
+          path: packages/desktop/dist/native/*
+          if-no-files-found: error
+
+  build-linux:
+    name: Linux x86_64 (GitHub-attested bytes)
+    needs: gate
+    if: needs.gate.outputs.release == 'true'
+    runs-on: ubuntu-22.04
+    # DEB and AppImage have no one shared native signing format. The attest job
+    # below uses GitHub OIDC to sign provenance for the exact staged bytes and
+    # verifies those attestations before any release can be created.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Linux bundle dependencies
+        timeout-minutes: 10
+        run: |
+          set -uo pipefail
+          # The hosted runner resolves its Ubuntu mirror through
+          # /etc/apt/apt-mirrors.txt, which points at azure.archive.ubuntu.com.
+          # That mirror fails intermittently, and each failure costs minutes of
+          # apt retries. Prefer the canonical archive. Best-effort: an absent or
+          # already-canonical file changes nothing.
+          sudo sed -i \
+            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          update_ok=""
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              update_ok=1
+              break
+            fi
+            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
+            sleep $((attempt * 10))
+          done
+          if [ -z "$update_ok" ]; then
+            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
+            exit 1
+          fi
+          set -e
+          sudo apt-get install -y --no-install-recommends \
+            dbus \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libwebkit2gtk-4.1-dev \
+            patchelf \
+            xdg-utils \
+            xvfb
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          toolchain: "1.97.0"
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Install locked Tauri CLI
+        run: npm ci --ignore-scripts
+
+      - name: Build engine sidecar for Tauri externalBin
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check uv==0.11.29
+          python scripts/sync_frozen_dependencies.py
+          uv run python scripts/build_frozen_engine.py
+          uv run python scripts/verify_build_artifact.py sidecar
+          uv run python -m playwright install-deps chromium
+          sudo python scripts/alias_lowercase_x11_sonames.py
+          uv run python scripts/smoke_test_frozen_flow.py
+          mkdir -p src-tauri/binaries
+          cp dist/openadapt-engine \
+            src-tauri/binaries/openadapt-engine-x86_64-unknown-linux-gnu
+
+      - name: Build DEB and AppImage
+        run: >-
+          npm run tauri build --
+          --bundles deb,appimage
+          --target x86_64-unknown-linux-gnu
+
+      - name: Smoke-test DEB and AppImage install, launch, and uninstall
+        shell: bash
+        env:
+          # WebKitGTK's DMA-BUF renderer is unreliable under Xvfb on CI.
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+        run: |
+          set -euo pipefail
+          deb=(src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb)
+          appimage=(src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage)
+          test "${#deb[@]}" -eq 1
+          test "${#appimage[@]}" -eq 1
+          dbus-run-session -- xvfb-run --auto-servernum \
+            python scripts/smoke_test_native_installer.py \
+            --artifact "${deb[0]}" \
+            --app-path /usr/bin/openadapt-desktop \
+            --expected-architecture x86_64 \
+            --allow-system-install \
+            --launch-seconds 20
+          dbus-run-session -- xvfb-run --auto-servernum \
+            python scripts/smoke_test_native_installer.py \
+            --artifact "${appimage[0]}" \
+            --app-path "${RUNNER_TEMP}/OpenAdapt-Desktop.AppImage" \
+            --expected-architecture x86_64 \
+            --launch-seconds 20
+
+      - name: Stage exact native Linux packages
+        run: >-
+          python scripts/native_release.py stage
+          --bundle-root src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
+          --output dist/native
+          --platform linux
+          --architecture x86_64
+          --signing github-attested
+
+      - name: Upload smoke-tested Linux packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-linux-x86_64
+          path: packages/desktop/dist/native/*
+          if-no-files-found: error
+
+
+  attest:
+    name: Checksum and attest exact release bytes
+    needs: [gate, build-python, build-macos, build-windows, build-linux]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NATIVE_TAG: ${{ needs.gate.outputs.tag }}
+      SOURCE_COMMIT: ${{ github.sha }}
+      SBOM: ${{ needs.gate.outputs.sbom }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Download the Python distributions and every smoke-tested installer
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: native-*
+          path: packages/desktop/release-assets
+          merge-multiple: true
+
+      - name: Reject missing, duplicate, or unexpected release files
+        run: python scripts/native_release.py validate-set --directory release-assets
+
+      - name: Generate a machine-readable SBOM from the exact installer set
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: packages/desktop/release-assets
+          format: cyclonedx-json
+          output-file: packages/desktop/release-assets/${{ needs.gate.outputs.sbom }}
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Refuse an empty or malformed release SBOM
+        run: >-
+          python scripts/native_release.py validate-sbom
+          --file release-assets/${{ needs.gate.outputs.sbom }}
+
+      - name: Generate the website-readable release manifest
+        run: >-
+          python scripts/native_release.py website-manifest
+          --directory release-assets
+          --tag "${{ needs.gate.outputs.tag }}"
+          --sbom release-assets/${{ needs.gate.outputs.sbom }}
+
+      - name: Bind the exact source and workflow invocation
+        env:
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/native_release.py write-provenance \
+            --output release-assets/openadapt-desktop-native-release-provenance.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${NATIVE_TAG}" \
+            --source-commit "${SOURCE_COMMIT}" \
+            --workflow-ref "${WORKFLOW_REF}" \
+            --workflow-commit "${WORKFLOW_COMMIT}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --runner-environment "${RUNNER_ENVIRONMENT}" \
+            --event "${GITHUB_EVENT_NAME}"
+
+      - name: Add the standalone exact-inventory verifier
+        run: >-
+          cp scripts/verify_native_release_download.py
+          release-assets/verify-openadapt-native-release.py
+
+      - name: Generate and verify final checksums
+        run: |
+          python scripts/native_release.py checksums \
+            --directory release-assets \
+            --output release-assets/SHA256SUMS
+          python scripts/native_release.py verify-checksums \
+            --directory release-assets \
+            --manifest release-assets/SHA256SUMS
+
+      - name: Validate the website manifest against exact checksummed bytes
+        run: >-
+          python scripts/native_release.py validate-website-manifest
+          --file release-assets/openadapt-desktop-release-manifest.json
+          --checksums release-assets/SHA256SUMS
+
+      - name: Attest the exact files named by SHA256SUMS
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-checksums: packages/desktop/release-assets/SHA256SUMS
+
+      - name: Attest SHA256SUMS as the consumer trust root
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: packages/desktop/release-assets/SHA256SUMS
+
+      - name: Verify the signed workflow and exact subject inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          provenance=release-assets/openadapt-desktop-native-release-provenance.json
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/desktop-release.yml@refs/heads/main"
+          gh attestation verify "${provenance}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners \
+            --format json > attestation.json
+          gh attestation verify release-assets/SHA256SUMS \
+            --repo "${GITHUB_REPOSITORY}" \
+            --cert-identity "${identity}" \
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --deny-self-hosted-runners
+          python scripts/native_release.py validate-attestation \
+            --file attestation.json \
+            --directory release-assets \
+            --checksums release-assets/SHA256SUMS \
+            --provenance "${provenance}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${NATIVE_TAG}" \
+            --source-commit "${SOURCE_COMMIT}"
+
+      - name: Fetch and authenticate the previous release's channel
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The newest published openadapt-desktop-v* release below this one
+          # that carries a channel. Drafts and other packages' releases are
+          # ignored.
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[] | select(.draft == false)
+                  | select(.tag_name | test("^openadapt-desktop-v[0-9]+[.][0-9]+[.][0-9]+$"))
+                  | select(any(.assets[]; .name == "openadapt-desktop-channel.json"))
+                  | .tag_name' > channel-releases.txt
+          previous="$(python - "${NATIVE_TAG}" <<'PY'
+          import sys
+          def key(tag):
+              return tuple(int(part) for part in tag.removeprefix("openadapt-desktop-v").split("."))
+          current = key(sys.argv[1])
+          tags = [line.strip() for line in open("channel-releases.txt") if line.strip()]
+          older = sorted((tag for tag in tags if key(tag) < current), key=key)
+          print(older[-1] if older else "")
+          PY
+          )"
+          mkdir previous-channel
+          if [ -n "${previous}" ]; then
+            gh release download "${previous}" --dir previous-channel \
+              --pattern openadapt-desktop-channel.json
+            identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/desktop-release.yml@refs/heads/main"
+            gh attestation verify previous-channel/openadapt-desktop-channel.json \
+              --repo "${GITHUB_REPOSITORY}" \
+              --cert-identity "${identity}" \
+              --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+              --deny-self-hosted-runners
+            python scripts/native_release.py validate-channel \
+              --file previous-channel/openadapt-desktop-channel.json
+            echo "Previous channel: ${previous}"
+          else
+            echo "No earlier openadapt-desktop-v* release carries a channel; this one starts the chain."
+          fi
+
+      - name: Write this release's channel
+        env:
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          previous=()
+          if [ -f previous-channel/openadapt-desktop-channel.json ]; then
+            previous=(--previous previous-channel/openadapt-desktop-channel.json)
+          fi
+          python scripts/native_release.py write-channel \
+            --output release-assets/openadapt-desktop-channel.json \
+            --directory release-assets \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${NATIVE_TAG}" \
+            --source-commit "${SOURCE_COMMIT}" \
+            --workflow-ref "${WORKFLOW_REF}" \
+            --workflow-commit "${WORKFLOW_COMMIT}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            "${previous[@]}"
+          python scripts/native_release.py validate-channel \
+            --file release-assets/openadapt-desktop-channel.json \
+            --directory release-assets \
+            "${previous[@]}"
+
+      - name: Attest this release's channel
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: packages/desktop/release-assets/openadapt-desktop-channel.json
+
+      - name: Upload the exact attested release set
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-release-${{ needs.gate.outputs.tag }}
+          path: packages/desktop/release-assets/*
+          if-no-files-found: error
+
+  stage:
+    name: Tag and stage the exact release as a draft
+    needs: [gate, attest]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    environment: release-identity
+    permissions:
+      attestations: read
+      contents: read
+    env:
+      TAG: ${{ needs.gate.outputs.tag }}
+      VERSION: ${{ needs.gate.outputs.version }}
+      EXPECTED_AUTHOR: openadapt-release[bot]
+    steps:
+      - name: Create a repository-scoped release App token
+        id: release-app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-administration: read
+          permission-contents: write
+          permission-metadata: read
+
+      - name: Require the exact release App identity
+        env:
+          ACTUAL_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+        run: |
+          if [ "${ACTUAL_APP_SLUG}" != openadapt-release ]; then
+            echo "Tagging requires the openadapt-release App, not ${ACTUAL_APP_SLUG}." >&2
             exit 1
           fi
 
-      - name: Dispatch the package release
-        if: steps.version.outputs.release == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          token: ${{ steps.release-app.outputs.token }}
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned GitHub release CLI
+        id: release-cli
         run: |
           set -euo pipefail
-          gh workflow run release-package.yml --repo "${GITHUB_REPOSITORY}" --ref main \
-            -f package=desktop -f version="${VERSION}"
-          echo "Dispatched release-package.yml for openadapt-desktop ${VERSION}."
+          archive="${RUNNER_TEMP}/gh_2.98.0_linux_amd64.tar.gz"
+          curl --fail --location --silent --show-error \
+            https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_linux_amd64.tar.gz \
+            --output "${archive}"
+          echo "3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de  ${archive}" \
+            | sha256sum --check --strict
+          tar --extract --gzip --file "${archive}" --directory "${RUNNER_TEMP}"
+          cli="${RUNNER_TEMP}/gh_2.98.0_linux_amd64/bin/gh"
+          test -x "${cli}"
+          echo "path=${cli}" >> "${GITHUB_OUTPUT}"
+
+      - name: Download the exact attested release set
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: desktop-release-${{ needs.gate.outputs.tag }}
+          path: packages/desktop/release-assets
+
+      - name: Reverify the exact bytes and every attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python scripts/release_publication.py reverify \
+            --directory release-assets \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${TAG}" \
+            --source-commit "${GITHUB_SHA}" \
+            --upload upload
+
+      - name: Require immutable releases and closed rules for the tag
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+        working-directory: .
+        run: python scripts/verify_release_hosting.py --repository "${GITHUB_REPOSITORY}" --tag "${TAG}"
+
+      - name: Create the annotated tag at the released commit
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main
+          git fetch --force --tags origin
+          if git show-ref --verify --quiet "refs/tags/${TAG}"; then
+            test "$(git rev-list -n 1 "refs/tags/${TAG}")" = "${GITHUB_SHA}"
+            exit 0
+          fi
+          git -c user.name="openadapt-release[bot]" \
+            -c user.email="openadapt-release[bot]@users.noreply.github.com" \
+            tag -a "${TAG}" "${GITHUB_SHA}" -m "openadapt-desktop ${VERSION}"
+          git push origin "refs/tags/${TAG}"
+
+      - name: Write release notes that state each platform's signing
+        run: |
+          set -euo pipefail
+          python scripts/release_publication.py notes \
+            --directory release-assets \
+            --version "${VERSION}" \
+            --output "${RUNNER_TEMP}/release-notes.md"
+
+      - name: Create or resume the draft and verify its bytes
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          GH_CLI: ${{ steps.release-cli.outputs.path }}
+        run: |
+          set -euo pipefail
+          state="$(python scripts/release_publication.py state --repository "${GITHUB_REPOSITORY}" --tag "${TAG}" --cli "${GH_CLI}" --metadata "${RUNNER_TEMP}/release.json")"
+          if [ "${state}" = published ]; then
+            echo "${TAG} is already published; the publish job verifies it."
+            exit 0
+          fi
+          if [ "${state}" = none ]; then
+            "${GH_CLI}" release create "${TAG}" upload/* \
+              --repo "${GITHUB_REPOSITORY}" \
+              --draft \
+              --verify-tag \
+              --latest=false \
+              --title "OpenAdapt Desktop ${VERSION}" \
+              --notes-file "${RUNNER_TEMP}/release-notes.md"
+            python scripts/release_publication.py state --repository "${GITHUB_REPOSITORY}" --tag "${TAG}" --cli "${GH_CLI}" --metadata "${RUNNER_TEMP}/release.json"
+          fi
+          verify() {
+            python ../../scripts/verify_github_release.py \
+              --metadata "${RUNNER_TEMP}/release.json" \
+              --tag "${TAG}" \
+              --author "${EXPECTED_AUTHOR}" \
+              --expected-dir upload \
+              "$@"
+          }
+          verify --state draft --allow-missing --missing-output "${RUNNER_TEMP}/missing.txt"
+          while IFS= read -r missing; do
+            "${GH_CLI}" release upload "${TAG}" "upload/${missing}" --repo "${GITHUB_REPOSITORY}"
+          done < "${RUNNER_TEMP}/missing.txt"
+          python scripts/release_publication.py state --repository "${GITHUB_REPOSITORY}" --tag "${TAG}" --cli "${GH_CLI}" --metadata "${RUNNER_TEMP}/release.json"
+          mkdir "${RUNNER_TEMP}/draft"
+          "${GH_CLI}" release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --dir "${RUNNER_TEMP}/draft"
+          verify --state draft --downloaded-dir "${RUNNER_TEMP}/draft"
+
+  publish-pypi:
+    name: Publish openadapt-desktop to PyPI
+    needs: [gate, stage]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    environment:
+      name: pypi-desktop
+      url: https://pypi.org/project/openadapt-desktop/${{ needs.gate.outputs.version }}/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Download the exact attested release set
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: desktop-release-${{ needs.gate.outputs.tag }}
+          path: packages/desktop/release-assets
+
+      - name: Take the wheel and sdist named by the attested SHA256SUMS
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          python scripts/release_publication.py python-dist \
+            --directory release-assets --version "${VERSION}" --output pypi-dist
+
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: packages/desktop/pypi-dist/
+          # A re-run after a later failure finds the files already there; the
+          # next step proves they are these exact bytes.
+          skip-existing: true
+
+      - name: Require PyPI to serve exactly these bytes
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          python scripts/release_publication.py verify-pypi \
+            --directory pypi-dist --version "${VERSION}" --wait-seconds 300
+
+  publish:
+    name: Publish the immutable release
+    needs: [gate, stage, publish-pypi]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    environment: release-identity
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ needs.gate.outputs.tag }}
+      EXPECTED_AUTHOR: openadapt-release[bot]
+    steps:
+      - name: Create a repository-scoped release App token
+        id: release-app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-metadata: read
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the pinned GitHub release CLI
+        id: release-cli
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP}/gh_2.98.0_linux_amd64.tar.gz"
+          curl --fail --location --silent --show-error \
+            https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_linux_amd64.tar.gz \
+            --output "${archive}"
+          echo "3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de  ${archive}" \
+            | sha256sum --check --strict
+          tar --extract --gzip --file "${archive}" --directory "${RUNNER_TEMP}"
+          cli="${RUNNER_TEMP}/gh_2.98.0_linux_amd64/bin/gh"
+          test -x "${cli}"
+          echo "path=${cli}" >> "${GITHUB_OUTPUT}"
+
+      - name: Download the exact attested release set
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: desktop-release-${{ needs.gate.outputs.tag }}
+          path: packages/desktop/upload
+
+      - name: Publish the verified draft once, then verify the immutable release
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          GH_CLI: ${{ steps.release-cli.outputs.path }}
+        run: |
+          set -euo pipefail
+          verify() {
+            python ../../scripts/verify_github_release.py \
+              --metadata "${RUNNER_TEMP}/release.json" \
+              --tag "${TAG}" \
+              --author "${EXPECTED_AUTHOR}" \
+              --expected-dir upload \
+              "$@"
+          }
+          state="$(python scripts/release_publication.py state --repository "${GITHUB_REPOSITORY}" --tag "${TAG}" --cli "${GH_CLI}" --metadata "${RUNNER_TEMP}/release.json")"
+          if [ "${state}" = draft ]; then
+            mkdir "${RUNNER_TEMP}/draft"
+            "${GH_CLI}" release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --dir "${RUNNER_TEMP}/draft"
+            verify --state draft --downloaded-dir "${RUNNER_TEMP}/draft"
+            "${GH_CLI}" release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" --draft=false
+            state="$(python scripts/release_publication.py state --repository "${GITHUB_REPOSITORY}" --tag "${TAG}" --cli "${GH_CLI}" --metadata "${RUNNER_TEMP}/release.json")"
+          fi
+          test "${state}" = published
+          mkdir "${RUNNER_TEMP}/published"
+          "${GH_CLI}" release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --dir "${RUNNER_TEMP}/published"
+          verify --downloaded-dir "${RUNNER_TEMP}/published"
+          for attempt in $(seq 1 12); do
+            if "${GH_CLI}" release verify "${TAG}" --repo "${GITHUB_REPOSITORY}"; then
+              break
+            fi
+            if [ "${attempt}" -eq 12 ]; then
+              echo "GitHub did not produce a valid release attestation in time." >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          for path in upload/*; do
+            "${GH_CLI}" release verify-asset "${TAG}" "${path}" --repo "${GITHUB_REPOSITORY}"
+          done
+          echo "Published https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"

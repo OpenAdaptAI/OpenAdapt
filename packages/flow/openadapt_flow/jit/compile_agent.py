@@ -91,12 +91,44 @@ class WebApp:
         reset: Called before every capture and every run. For demo and test
             apps only.
         headless: Run the browser headless.
+        setup: Called with the Playwright page right after the browser opens
+            at ``url``, before every capture and every run: unmeasured setup
+            such as signing in with a test account and opening a blank form.
+            Nothing it does is recorded or replayed. It must leave the page
+            at ``url``, where the program starts.
+        record_video_dir: OPT-IN. Each capture and run records a WebM of its
+            browser page into this directory (for demo media). ``None``
+            records nothing.
+        capture_settle_timeout_s: How long the capture waits for the page to
+            settle after each agent action before it takes the after-frame
+            the compiler reads. ``None`` keeps the authoring default. Raise
+            it for an app whose lookups take seconds, or the program
+            inherits checks compiled from a still-loading screen.
     """
 
     url: str
     record_reader: Optional[Callable[[], Optional[list[dict[str, Any]]]]] = None
     reset: Optional[Callable[[], None]] = None
     headless: bool = True
+    setup: Optional[Callable[[Any], None]] = None
+    record_video_dir: Optional[str] = None
+    capture_settle_timeout_s: Optional[float] = None
+
+    def open(self) -> tuple[Any, Callable[[], None]]:
+        """Open the browser at ``url`` and run :attr:`setup`; returns ``(backend, close)``."""
+
+        from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+        backend, close = PlaywrightBackend.launch(
+            self.url, headless=self.headless, record_video_dir=self.record_video_dir
+        )
+        if self.setup is not None:
+            try:
+                self.setup(backend.page)
+            except BaseException:
+                close()
+                raise
+        return backend, close
 
     @property
     def origin(self) -> str:
@@ -118,13 +150,6 @@ class WebApp:
     @property
     def deployment_surface(self) -> Optional[str]:
         return None
-
-    def open(self) -> tuple[Any, Callable[[], None]]:
-        """Launch a browser at :attr:`url`. Returns the backend and its close."""
-
-        from openadapt_flow.backends.playwright_backend import PlaywrightBackend
-
-        return PlaywrightBackend.launch(self.url, headless=self.headless)
 
 
 #: Backend kinds :class:`SurfaceApp` drives. ``web`` is :class:`WebApp`.
@@ -401,6 +426,10 @@ class Recording:
         )
         if owner.app.reset is not None:
             owner.app.reset()
+        settle: dict[str, Any] = {}
+        capture_settle = getattr(owner.app, "capture_settle_timeout_s", None)
+        if capture_settle is not None:
+            settle["settle_timeout_s"] = capture_settle
         backend, self._close = owner.app.open()
         try:
             self._session = AuthoringSession(
@@ -410,6 +439,7 @@ class Recording:
                 app_url=owner.app.url,
                 backend_hints=owner.app.backend_hints,
                 system_of_record_reader=owner.app.record_reader,
+                **settle,
             )
             self.computer = CaptureComputer(
                 self._session,
@@ -465,6 +495,19 @@ class Recording:
             )
         except AuthoringError as exc2:
             return owner._capture_refused("capture_failed", str(exc2), computer)
+        compiled_dir = session.compiled_recording_dir or session.recording_dir
+        if compiled_dir is not None:
+            # The agent looked the record up after saving: propose that
+            # look-up as the check, beside the recording that compiles (the
+            # distilled copy, whose event numbers the recompile reads).
+            from openadapt_flow.compiler.lookup_detect import propose_from_recording
+
+            _proposal, _written, lines = propose_from_recording(
+                compiled_dir, session_kind="web", values=self._values
+            )
+            for line in lines:
+                if owner.on_warning is not None:
+                    owner.on_warning(line)
         return owner._write_draft(
             session, compiled, computer, self._values, self._dialect
         )
@@ -697,9 +740,11 @@ class CompiledAgent:
         principal_id: Any,
         accept_params: Sequence[str],
         confirm: object = None,
+        idempotency_key: Optional[str] = None,
     ) -> dict[str, Any]:
         """Confirm the task's parameters before the review. Returns the step
-        ids of the recompiled program. See
+        ids of the recompiled program. ``idempotency_key`` names the parameter
+        that identifies one saved record. See
         :func:`openadapt_flow.jit.lifecycle.confirm_params`."""
 
         return lifecycle.confirm_params(
@@ -708,6 +753,7 @@ class CompiledAgent:
             accept_params=accept_params,
             confirm=confirm,
             key_dir=self.key_dir,
+            idempotency_key=idempotency_key,
         )
 
     def review(

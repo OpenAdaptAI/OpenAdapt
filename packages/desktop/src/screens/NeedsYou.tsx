@@ -9,6 +9,7 @@ import { CMD, engineInvoke, engineTry } from "../lib/engine";
 import { attentionCopy } from "../lib/attention";
 import {
   SWITCH_LABEL,
+  approverSentence,
   confirmedButNeedsLook,
   offAutomatically,
   offReasonSentence,
@@ -235,6 +236,18 @@ function AttentionCard({
                   .filter(Boolean)
                   .join(" · ")}
               </dd>
+              {(item.approval.approvers ?? []).length > 0 && (
+                <>
+                  <dt>Decided by</dt>
+                  <dd>
+                    <ul style={{ margin: 0, paddingLeft: 18 }} data-testid="item-approvers">
+                      {(item.approval.approvers ?? []).map((approver, index) => (
+                        <li key={index}>{approverSentence(approver)}</li>
+                      ))}
+                    </ul>
+                  </dd>
+                </>
+              )}
             </>
           )}
           {item.halt_step && (

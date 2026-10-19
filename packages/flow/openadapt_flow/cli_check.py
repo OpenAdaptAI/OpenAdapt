@@ -31,6 +31,7 @@ from openadapt_flow.compiler.readback_authoring import (
     admit_check,
     demonstrated_checks,
     describe_check,
+    load_check,
     write_check,
 )
 
@@ -115,6 +116,16 @@ def register_check_parser(sub: argparse._SubParsersAction) -> None:
     admit.add_argument("--by", default=None, help="Your name (default: the login name)")
     admit.set_defaults(func=cmd_check_admit)
 
+    accept = verbs.add_parser(
+        "accept",
+        help=(
+            "Use the look-up found after the save (check.proposed.json) as the "
+            "recording's check.json"
+        ),
+    )
+    accept.add_argument("recording", help="Recording directory")
+    accept.set_defaults(func=cmd_check_accept)
+
 
 def _region(text: str) -> tuple[int, int, int, int]:
     parts = [int(p) for p in text.split(",")]
@@ -164,6 +175,23 @@ def parse_reset(text: Optional[str]) -> Optional[DeclaredReset]:
     if not sep:
         raise ValueError(f"expected KIND@EVENT, got {text!r}")
     return DeclaredReset(kind=kind, event=int(event))  # type: ignore[arg-type]
+
+
+def cmd_check_accept(args: argparse.Namespace) -> int:
+    from openadapt_flow.compiler.lookup_detect import accept_check_proposal
+
+    try:
+        path = accept_check_proposal(args.recording)
+    except (FileNotFoundError, FileExistsError, ValueError) as exc:
+        print(f"check accept: {exc}", file=sys.stderr)
+        return 2
+    marks = load_check(args.recording)
+    assert marks is not None  # just written
+    print(f"Wrote {path}: the check starts at event {marks.start_event} and reads")
+    for field in marks.fields:
+        print(f"  {field.param} at {field.region}")
+    print("After compile, a person runs 'check admit'.")
+    return 0
 
 
 def cmd_check_mark(args: argparse.Namespace) -> int:
