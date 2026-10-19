@@ -50,12 +50,21 @@ every field it sent:
 
 | Source | Meaning | At run time |
 | --- | --- | --- |
-| `param` | The value of a recorded parameter | The run's value |
-| `select_label` | A select whose option the person picked by its label | The option with that label in the live form; refuse if it isn't exactly one |
+| `param` | A field a recorded step typed a parameter into | The run's value |
+| `select_label` | A select a recorded step typed an option's label into | The option with that label in the live form; refuse if it isn't exactly one |
 | `session` | A CSRF or session value the server issued | Read from the live form in this session |
 | `form_default` | The form's own default | Must still equal the recorded default |
 
-If a field can't be explained, nothing is proposed. The compiler also
+A field is bound by provenance: which recorded step typed into it (the
+field the click before the typing targeted), never by its value matching a
+parameter's. So a parameter whose demonstration value was blank still binds
+its field, and two parameters with equal values bind their own fields.
+
+If a field can't be explained, nothing is proposed. That includes a field
+that carries a parameter's value although no recorded step typed it there, a
+typed field the save sent with another value, a typed field the save doesn't
+send, a typing step whose field isn't a control of the form, and a field
+typed twice with different values. The compiler also
 doesn't propose an API step in these cases:
 
 - the save sends a secret field;

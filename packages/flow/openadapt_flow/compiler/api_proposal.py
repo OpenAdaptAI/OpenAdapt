@@ -95,6 +95,78 @@ def _templated(value: str, by_value: dict[str, list[str]]) -> Optional[str]:
     return "{" + names[0] + "}" if len(names) == 1 else None
 
 
+_ID_SELECTOR = re.compile(r"^#([A-Za-z_][\w:.-]*)$")
+_NAME_SELECTOR = re.compile(r"""^(?:[a-z]+)?\[name=["']?([^"'\]]+)["']?\]$""")
+
+
+def _control_for(target: Any, controls: dict[str, Any]) -> Optional[str]:
+    """The form control a recorded click target is, by id, name or label."""
+
+    if not isinstance(target, dict):
+        return None
+    selector = str(target.get("selector") or "")
+    by_id = _ID_SELECTOR.match(selector)
+    if by_id:
+        hits = [n for n, c in controls.items() if c.get("id") == by_id.group(1)]
+        hits = hits or ([by_id.group(1)] if by_id.group(1) in controls else [])
+        return hits[0] if len(hits) == 1 else None
+    by_name = _NAME_SELECTOR.match(selector)
+    if by_name:
+        return by_name.group(1) if by_name.group(1) in controls else None
+    name = target.get("name")
+    return name if isinstance(name, str) and name in controls else None
+
+
+def _typed_fields(
+    steps: list[Step], events: list[dict[str, Any]], controls: dict[str, Any]
+) -> tuple[dict[str, Optional[str]], list[str]]:
+    """Which form field each folded step typed into, and with which parameter.
+
+    Provenance, not values: a TYPE step types into the field the click before
+    it targeted (the compiled anchor, else the recorded event's structural
+    target). Returns ``{field: param}`` (``None`` for literal text) and the
+    problems that make the binding ambiguous.
+    """
+
+    typed: dict[str, Optional[str]] = {}
+    problems: list[str] = []
+    current: Optional[str] = None
+    for step in steps:
+        if step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
+            target = None
+            if step.anchor is not None and step.anchor.structural is not None:
+                target = step.anchor.structural.model_dump()
+            else:
+                i = _event_index(step)
+                if i is not None and i < len(events):
+                    target = events[i].get("structural")
+            current = _control_for(target, controls)
+            continue
+        if step.action is not ActionKind.TYPE:
+            continue
+        param = step.param or _placeholder(step.text)
+        if current is None:
+            if param is not None:
+                problems.append(
+                    f"{step.id} types {{{param}}} but the field it types into "
+                    "isn't a control of the form"
+                )
+            continue
+        if current in typed and typed[current] != param:
+            problems.append(
+                f"{current!r} is typed twice with different values "
+                f"({step.id}); the binding is ambiguous"
+            )
+            continue
+        typed[current] = param
+    return typed, problems
+
+
+def _placeholder(text: Optional[str]) -> Optional[str]:
+    match = re.fullmatch(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", text or "")
+    return match.group(1) if match else None
+
+
 def _success_pattern(line: dict[str, Any]) -> Optional[str]:
     """Where the accepted save sent the browser, with record numbers generalized."""
 
@@ -214,41 +286,6 @@ def propose_api_step(
         )
     form_t = float(form_line["t"])
 
-    fields: list[WebFormField] = []
-    for name, value in post["form"]:
-        ctl = controls.get(name)
-        template = _templated(value, by_value) if value else None
-        if template is not None:
-            fields.append(WebFormField(name=name, source="param", param=template[1:-1]))
-            continue
-        if (
-            value.startswith("<session:")
-            and ctl is not None
-            and ctl.get("default") == value
-        ):
-            fields.append(WebFormField(name=name, source="session"))
-            continue
-        if value and ctl is not None and ctl.get("options"):
-            label = next(
-                (o["label"] for o in ctl["options"] if o["value"] == value), None
-            )
-            names = by_value.get(label or "") or []
-            if len(names) == 1:
-                fields.append(
-                    WebFormField(name=name, source="select_label", param=names[0])
-                )
-                continue
-        if ctl is not None and (ctl.get("default") or "") == value:
-            fields.append(WebFormField(name=name, source="form_default", value=value))
-            continue
-        return (
-            workflow,
-            None,
-            [
-                f"field {name!r} of the save is not a recorded value, a form default or a session value"
-            ],
-        )
-
     # Steps the API step stands in for: those recorded on the form page.
     folded: list[Step] = []
     for step in steps:
@@ -261,6 +298,94 @@ def propose_api_step(
             None,
             ["the save is not part of the steps recorded on the form page"],
         )
+
+    # Bind each field from what the steps typed into it, never from a value
+    # that merely matches: a blank or repeated demonstration value would bind
+    # the wrong field, or none (a later run's value silently dropped).
+    typed, problems = _typed_fields(folded, events, controls)
+    if problems:
+        return workflow, None, problems
+    sent = {name for name, _ in post["form"]}
+    for name, param in typed.items():
+        if param is not None and name not in sent:
+            return (
+                workflow,
+                None,
+                [f"{{{param}}} is typed into {name!r} but the save doesn't send it"],
+            )
+
+    fields: list[WebFormField] = []
+    for name, value in post["form"]:
+        ctl = controls.get(name)
+        if name in typed and typed[name] is not None:
+            param = typed[name]
+            demo = params.get(param, "")
+            if value == demo:
+                fields.append(WebFormField(name=name, source="param", param=param))
+                continue
+            label = next(
+                (
+                    o["label"]
+                    for o in ((ctl or {}).get("options") or [])
+                    if o["value"] == value
+                ),
+                None,
+            )
+            if label is not None and label == demo:
+                fields.append(
+                    WebFormField(name=name, source="select_label", param=param)
+                )
+                continue
+            return (
+                workflow,
+                None,
+                [
+                    f"field {name!r} is typed with {{{param}}} but the save sent "
+                    "another value"
+                ],
+            )
+        if value and value in by_value:
+            return (
+                workflow,
+                None,
+                [
+                    f"field {name!r} carries the value of "
+                    f"{', '.join('{' + n + '}' for n in by_value[value])} but no "
+                    "recorded step typed it there"
+                ],
+            )
+        if (
+            value.startswith("<session:")
+            and ctl is not None
+            and ctl.get("default") == value
+        ):
+            fields.append(WebFormField(name=name, source="session"))
+            continue
+        if value and ctl is not None and ctl.get("options"):
+            label = next(
+                (o["label"] for o in ctl["options"] if o["value"] == value), None
+            )
+            if label is not None and label in by_value:
+                return (
+                    workflow,
+                    None,
+                    [
+                        f"field {name!r} shows the value of "
+                        f"{', '.join('{' + n + '}' for n in by_value[label])} but "
+                        "no recorded step chose it there"
+                    ],
+                )
+        if ctl is not None and (ctl.get("default") or "") == value:
+            fields.append(WebFormField(name=name, source="form_default", value=value))
+            continue
+        return (
+            workflow,
+            None,
+            [
+                f"field {name!r} of the save is not a recorded value, a form default or a session value"
+            ],
+        )
+
     for step in folded:
         if step.guard is not None or step.wait_until is not None:
             return (
