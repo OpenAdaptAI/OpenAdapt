@@ -611,9 +611,53 @@ def _walk_public_source_files(root: Path) -> dict[str, Path]:
     return files
 
 
+def _in_git_checkout(root: Path) -> bool:
+    """True when ``root`` is inside a git work tree.
+
+    In the monorepo ``root`` is ``packages/flow``, which has no ``.git`` of its
+    own, so checking for that directory silently skipped the git checks.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],
+        check=False,
+        capture_output=True,
+    )
+    return result.returncode == 0 and result.stdout.strip() == b"true"
+
+
+def _git_ignored_paths(root: Path) -> set[str]:
+    """Paths git ignores, so a working tree's local state never enters review.
+
+    Fixture secrets and downloaded third-party files live under ignored
+    directories; the writer must not register them even when run outside a
+    clean checkout. Returns an empty set when ``root`` is not a git checkout.
+    """
+    if not _in_git_checkout(root):
+        return set()
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(root),
+            "ls-files",
+            "-z",
+            "--others",
+            "--ignored",
+            "--exclude-standard",
+        ],
+        check=False,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        raise ValueError("could not list git-ignored paths for the inventory")
+    return {path.decode("utf-8") for path in result.stdout.split(b"\0") if path}
+
+
 def build_public_artifact_inventory(root: Path = ROOT) -> dict[str, object]:
     """Build the deterministic inventory document for explicit human review."""
     files = _walk_public_source_files(root)
+    for path in _git_ignored_paths(root):
+        files.pop(path, None)
     artifacts = [
         {"path": path, "sha256": _sha256_file(files[path])}
         for path in sorted(files)
@@ -734,8 +778,7 @@ def _validate_public_artifact_inventory(
             "public artifact inventory hash mismatch; explicitly regenerate and "
             f"review it: {changed}"
         )
-    git_marker = root / ".git"
-    if git_marker.exists():
+    if _in_git_checkout(root):
         tracked_result = subprocess.run(
             ["git", "-C", str(root), "ls-files", "-z"],
             check=False,
