@@ -148,6 +148,11 @@ def build() -> dict[str, Any]:
         rows = schema.read_rows(items)
         tasks.setdefault(task, {}).setdefault(arm, {"rows": [], "meta": []})
         tasks[task][arm]["rows"].extend(rows)
+        hc = run / "hand_check.json"
+        if hc.is_file():
+            tasks[task][arm].setdefault("hand_checks", []).extend(
+                {"run": run.name, **i} for i in json.loads(hc.read_text())["items"]
+            )
         meta = run / "meta.json"
         if meta.is_file():
             tasks[task][arm]["meta"].append(
@@ -167,9 +172,28 @@ def build() -> dict[str, Any]:
             arms, key=lambda a: ARM_ORDER.index(a) if a in ARM_ORDER else 99
         ):
             data = arms[arm]
+            # Rows that are not correct and not paused, against the hand check.
+            to_check = {
+                (r["run_id"], int(r["item"]), int(r["attempt"]))
+                for r in data["rows"]
+                if r["outcome"] not in ("correct", "paused")
+            }
+            checks = data.get("hand_checks", [])
+            checked = {(c["run"], c["item"], c["attempt"]) for c in checks}
             out["tasks"][task][arm] = {
                 "label": ARM_LABEL.get(arm, arm),
                 **summarize(data["rows"]),
+                "hand_check": {
+                    "rows_not_correct": len(to_check),
+                    "checked": len(to_check & checked),
+                    "confirmed": sum(
+                        1
+                        for c in checks
+                        if c["confirmed"]
+                        and (c["run"], c["item"], c["attempt"]) in to_check
+                    ),
+                    "items": checks,
+                },
                 "sources": [
                     {
                         k: m.get(k)
@@ -240,6 +264,24 @@ def markdown(sb: dict[str, Any]) -> str:
             if s["fault_items"]:
                 lines.append(
                     f"- {task} / {arm}: fault items {json.dumps(s['fault_items_by_kind'])}"
+                )
+        for arm, s in arms.items():
+            hc = s["hand_check"]
+            if arm == "agent" and hc["rows_not_correct"]:
+                lines.append(
+                    f"- {task} / {arm}: hand check of rows that are not correct: "
+                    f"{hc['checked']} of {hc['rows_not_correct']} checked, "
+                    f"{hc['confirmed']} outcomes confirmed"
+                    + "".join(
+                        f"; item {c['item']} ({c['fault']}): {c['row_outcome']}"
+                        + (
+                            f", {c['evidence'].rstrip('.')}"
+                            if c["row_outcome"] in ("silent_wrong", "flagged_wrong")
+                            else ""
+                        )
+                        for c in hc["items"]
+                    )
+                    + " (evidence for each in hand_check.json)"
                 )
         lines.append("")
     lines.append(
