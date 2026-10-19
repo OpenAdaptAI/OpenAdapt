@@ -58,7 +58,7 @@ shipping in the next release; a pull request number means it is being merged.
    review, campaign, canary, rollback), agent-demonstrated fixes for a halted
    run, and fleet drift patches shared with no patient data are released.
    Self-repair, where an agent proposes a fix and Flow probes it up to the save
-   without saving, is landing.
+   without saving, is on main; fixes of up to three new steps are in review.
 9. **Is a safety layer underneath any agent.** An agent's MCP calls, a guarded
    save around any agent's write
    ([#1258](https://github.com/OpenAdaptAI/OpenAdapt/pull/1258)), `verify-run`
@@ -79,6 +79,7 @@ shipping in the next release; a pull request number means it is being merged.
 | Uses page structure first on web, Windows, macOS and Linux, with pixels as the fallback for remote desktops. Benchmarks labelled "vision-only" ran a deliberately pixel-only arm. | [RESOLUTION_LADDER.md](packages/flow/docs/RESOLUTION_LADDER.md) |
 | Runs steps as direct API calls; compiling them from captured network traffic is being merged. | `runtime/actuators/api.py`, [#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269) |
 | Repairs itself when the app changes: governed repair, agent-demonstrated fixes, fleet patches, and self-repair probed up to the save. | [REPAIR_LIFECYCLE.md](packages/flow/docs/REPAIR_LIFECYCLE.md) |
+| Repairs a change that needs new steps, such as a new required dialog or a control moved into a menu: up to three new steps, each with its own record check, probed up to the save before one person approves. | [SELF_REPAIR.md](packages/flow/docs/SELF_REPAIR.md), [#1325](https://github.com/OpenAdaptAI/OpenAdapt/pull/1325) |
 | Compiles a computer-use agent's verified run, with no human demonstration needed. | [JIT.md](packages/flow/docs/JIT.md) |
 | Binds each approval to the exact screenshot and form state, and re-reads the form before saving. | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md) |
 | Fills inputs from a referral PDF, fax image or email, and holds back anything unclear for a person. | `intake`, [INTAKE.md](packages/flow/docs/INTAKE.md) |
@@ -186,10 +187,10 @@ improvising or retrying when something is off.
 | Governed repair: propose, review, campaigns, approval, staging, canary, rollback | Released | Synthetic | `openadapt-flow repair`, [REPAIR_LIFECYCLE.md](packages/flow/docs/REPAIR_LIFECYCLE.md) |
 | A calling agent demonstrates the fix for a halted run; the result is a repair candidate | Released (2.1.0) | Synthetic | `run --hold-on-halt`, `repair/agent_teach.py` |
 | Font and layout drift halts with a named reason | Released | Synthetic | `runtime/layout_drift.py` |
-| Self-repair: an agent proposes a fix for one halted click, Flow probes it up to the save without saving, a person approves | In review ([#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265)) | Synthetic (MockMed redesign) | `run --self-repair`, [#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265) |
-| Self-repair across several new steps (a new dialog, a control moved into a menu) | In progress | Synthetic (MockMed drift modes) | bridge branch, stacked on #1265 |
+| Self-repair: an agent proposes a fix for one halted click, Flow probes it up to the save without saving, a person approves | On main ([#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265)) | Synthetic (MockMed redesign) | `run --self-repair`, [#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265) |
+| Self-repair across several new steps: a bridge of up to three actions for a new required dialog or a control moved into a menu, each new step armed with a record check and probed up to the save, one person approving | In review ([#1325](https://github.com/OpenAdaptAI/OpenAdapt/pull/1325)) | Synthetic (MockMed menu and provider drifts) | `run --self-repair`, [SELF_REPAIR.md](packages/flow/docs/SELF_REPAIR.md) |
 | Keep pixel-path runs working across display scaling and font smoothing changes | In review ([#1286](https://github.com/OpenAdaptAI/OpenAdapt/pull/1286)) | Synthetic (RDP and Citrix-style renderings) | `vision/match.py` |
-| Pre-approved repairs: a signed policy lists low-risk changes that apply without a person, a test-record run before each queue, and one approval for every item halted the same way | In review ([#1294](https://github.com/OpenAdaptAI/OpenAdapt/pull/1294)) | Synthetic | standard changes |
+| Pre-approved repairs: a signed policy lists low-risk changes that apply without a person, a test-record run before each queue, and one approval for every item halted the same way | On main ([#1294](https://github.com/OpenAdaptAI/OpenAdapt/pull/1294)) | Synthetic | standard changes |
 | Fleet drift patches: a verified fix with no patient data, shared across sites under policy | Released, local reference hub | Simulator | `openadapt-flow fleet`, [FLEET_DRIFT_PATCHES.md](packages/flow/docs/FLEET_DRIFT_PATCHES.md) |
 
 ## Computer-use agents
@@ -247,7 +248,9 @@ fails when a command is added without being listed here.
 ## What is not done yet
 
 - No commercial EMR, claims system or real Citrix session has been tested.
-- In progress: self-repair across several new steps, and the scoreboard.
+- In review: self-repair across several new steps
+  ([#1325](https://github.com/OpenAdaptAI/OpenAdapt/pull/1325)). In
+  progress: the scoreboard.
 - Windows installers are unsigned until free code signing through SignPath
   Foundation is approved; macOS builds are ad-hoc signed.
 - Several capabilities have run only on OpenAdapt's synthetic apps. The
