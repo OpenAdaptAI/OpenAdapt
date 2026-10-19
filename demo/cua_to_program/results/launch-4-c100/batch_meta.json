@@ -1,0 +1,23 @@
+{
+  "n": 100,
+  "change_at": 0,
+  "ui_change": {
+    "control": "claim form Save button (icon only)",
+    "change": "relabelled \"Save claim\" (extended button, new accessible name)"
+  },
+  "tag": "CP",
+  "program_run": "launch-4",
+  "max_attempts": 3,
+  "profile": "demo (plain Replayer, SQL record check attached)",
+  "environment": {
+    "engine": {
+      "path": "/Users/abrichr/oa/worktrees/demo-engine-main-plus-1293/packages/flow/openadapt_flow",
+      "git_head": "a8cca993c564fdc13b4c65c01e3e884dcaa50c44"
+    },
+    "machine": "arm64",
+    "system": "Darwin 24.6.0",
+    "python": "3.12.13",
+    "git_head": "13d3327c58636033adf5b71460774165a026dd4c",
+    "app": "openIMIS 25.10 reference stack (synthetic demo data), linux/amd64 images under Rosetta in a colima VM"
+  }
+}

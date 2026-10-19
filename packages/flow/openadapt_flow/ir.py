@@ -3818,6 +3818,13 @@ class EffectVerificationEvidence(BaseModel):
     #: of the serialized record, so evidence written before this field existed
     #: keeps its exact bytes.
     endpoint_scope: Literal["loopback", "external", "unknown"] = "unknown"
+    #: Set when this effect's check is a declared later report: the pending
+    #: entry the report settles (:mod:`openadapt_flow.runtime.effects.deferred_report`).
+    #: Left out of the serialized record when unset, so existing evidence keeps
+    #: its exact bytes.
+    deferred_check: Optional[str] = Field(
+        default=None, pattern=r"^deferred:[0-9a-f]{32}$"
+    )
 
     @property
     def assurance(self) -> str:
@@ -3844,6 +3851,8 @@ class EffectVerificationEvidence(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.endpoint_scope == "unknown":
             data.pop("endpoint_scope", None)
+        if self.deferred_check is None:
+            data.pop("deferred_check", None)
         return data
 
 
@@ -4900,6 +4909,7 @@ class RunReport(BaseModel):
             "REJECTED_POLICY",
             "COMPLETED_UNVERIFIED",
             "ROLLED_BACK",
+            "SAVED_AWAITING_CHECK",
         ]
     ] = Field(
         default=None,
