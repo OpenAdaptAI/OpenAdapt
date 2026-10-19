@@ -110,9 +110,16 @@ Before it sends the save, the API step:
 1. reads the form page again in this session;
 2. refuses if the form's fields or its client-side validation rules (for
    example, OpenEMR's `constraints` object) differ from the recording;
-3. builds the body, and refuses if a field the form requires would be
-   empty;
-4. runs the pre-checks.
+3. refuses if the form runs script it can't run: an `on*` handler on the
+   form (`onsubmit`) or on a field it sends (`onchange`, `oninput`,
+   `onblur`, script that can validate or rewrite a value), a page script
+   listening for the submit, or a validate.js rule kind other than
+   `presence`, `length`, `format`, `numericality` and `email`;
+4. builds the body and checks it the way the browser would before it
+   submits: native HTML constraints (`required`, `minlength`, `maxlength`,
+   `pattern`, `min`, `max`, and the `email`, `url`, `number` and `date`
+   input types) and the page's validate.js rules;
+5. runs the pre-checks.
 
 Each of these refusals means the save wasn't sent, so the GUI steps run.
 After the save request starts, the API tier's no-double-write rule
@@ -201,9 +208,16 @@ recording.
   over a websocket aren't proposed.
 - The server may enforce less than the page. On OpenEMR, the duplicate
   check and the required fields run only in the browser. The API step
-  carries over the checks it can see (pre-checks and `constraints`
-  presence rules). Logic in the page's script that it can't see is the main
-  risk of this tier, and it's why a person admits each API step.
+  carries over the checks it can evaluate (pre-checks, native HTML
+  constraints and validate.js rules of the kinds above), and leaves a form
+  whose script it can't run to the GUI. A `pattern` is evaluated with
+  Python's regular expressions, which differ from the browser's in rare
+  syntax; one that doesn't compile keeps the save on the GUI. Letting
+  qualification show that the server enforces a script-only rule, so the
+  API step can run anyway, isn't built yet.
+- OpenEMR's new-patient form runs script on submit (`submitme(...)`) and on
+  each name field (`capitalizeMe`, which rewrites the typed value), and its
+  `constraints` use a custom `pastDate` rule. So its save stays on the GUI.
 - Multi-step server state (wizards, uploads, locks held between pages) needs
   the whole request sequence, and isn't proposed.
 

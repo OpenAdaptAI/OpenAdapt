@@ -65,6 +65,8 @@ from openadapt_flow.runtime.actuators.web_form import (
     client_rules,
     folded_checks_digest,
     form_controls,
+    form_scripts,
+    unsupported_client_rules,
 )
 
 
@@ -347,6 +349,30 @@ def propose_api_step(
     form_path, url_problems = _url_template(form_line["url"], by_value)
     if url_problems:
         return workflow, None, url_problems
+    # A browser runs the page's validation and script before it submits; the
+    # API step can only stand in for what it can evaluate itself.
+    unsupported = unsupported_client_rules(client_rules(form_line["response_text"]))
+    if unsupported:
+        return (
+            workflow,
+            None,
+            [
+                "the form validates with rules the API step can't evaluate "
+                f"({', '.join(unsupported)}); it stays on the GUI"
+            ],
+        )
+    scripts = form_scripts(
+        form_line["response_text"], _path(post["url"]), [n for n, _ in post["form"]]
+    )
+    if scripts:
+        return (
+            workflow,
+            None,
+            [
+                "the form runs script the API step can't run "
+                f"({', '.join(scripts[:5])}); it stays on the GUI"
+            ],
+        )
 
     # Steps the API step stands in for: those recorded on the form page.
     folded: list[Step] = []
