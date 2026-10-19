@@ -655,6 +655,64 @@
             "profile": "demo (plain Replayer, SQL record check attached); not admitted"
           }
         ]
+      },
+      "program_repair": {
+        "label": "3r. Compiled program with self-repair (#1265, #1294)",
+        "items": 6,
+        "attempts": 8,
+        "runs": [
+          "2026-10-19-a"
+        ],
+        "normal_items": 5,
+        "correct": 5,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 1,
+        "fault_items_by_kind": {
+          "ui_change": {
+            "correct": 0,
+            "silent_wrong": 0,
+            "safe_stop": 1,
+            "flagged_wrong": 0
+          }
+        },
+        "planned_items": 56,
+        "done_correctly_all_items": 5,
+        "flagged_wrong": 0,
+        "paused": 50,
+        "model_calls_per_item": 0.0,
+        "tokens_per_item": 0,
+        "cost_usd_total": 0.0,
+        "cost_usd_per_item": 0.0,
+        "approvals_asked": 0,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": {
+          "min": 11.22,
+          "max": 26.3
+        },
+        "hand_check": {
+          "rows_not_correct": 3,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
+        "sources": [
+          {
+            "run": "2026-10-19-a",
+            "model": "claude-sonnet-5-5 (repair agent, only if a halt is accepted)",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "42aadc09d9d0f514bfad7efa1923866e70c6782b"
+            },
+            "profile": "demo (plain Replayer, SQL record check attached); not admitted"
+          }
+        ]
       }
     }
   }

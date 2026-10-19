@@ -185,3 +185,20 @@ were made:
 - The note that the openIMIS UI change is global.
 - The Model column, and the "done correctly, all items" column (correct items
   out of every planned item, paused ones included).
+
+## Amendment 2 (2026-10-19)
+
+- **Hand check.** Each agent run directory may hold `hand_check.json`: one
+  entry per row that isn't correct, with the outcome confirmed or not and the
+  evidence. The build reports "N of M checked" per agent arm. Every agent row
+  that isn't correct has been checked: MockMed 2 (both silent wrong confirmed),
+  OpenEMR 10 (all safe stops), openIMIS 1 (a harness timeout, safe stop).
+- **One model per table.** openIMIS arm 2 was re-run with `claude-sonnet-5-5`
+  (`demo/cua_to_program/results/sb-sonnet-1`), the model arm 1 uses. The
+  launch demo's Opus 5.5 run stays under `raw/` with `"in_table": false` in its
+  `meta.json`, and the build skips such runs.
+- **Arm 3r, self-repair.** The openIMIS batch from item 45, with each item
+  run through `SelfRepair` (#1265) under the demo profile, no signed repair
+  policy (#1294) and no fault probe (`repair_arm.py`). A repair approval, if
+  one is asked, is answered by the script standing in for a person, as in arm
+  2. The program is the one arm 3 uses (`launch-4`).

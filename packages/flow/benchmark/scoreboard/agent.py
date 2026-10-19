@@ -400,3 +400,135 @@ class PlainComputer:
         except Exception:  # noqa: BLE001 - a busy page still gets its screenshot
             pass
         return _Observation(png=page.screenshot(), notes=notes)
+
+
+# -- self-repair -----------------------------------------------------------------
+
+REPAIR_SYSTEM = """\
+A recorded program halted because it could not find one control on a changed \
+screen. You are shown the live screen and, when there is one, a crop of the \
+control as it was recorded. Click the control on the live screen that does \
+the same thing as the recorded one, once. If no control on the screen does \
+the same thing, do not click anything and say so. All data is synthetic."""
+
+
+@dataclass
+class ClaudeRepairAgent:
+    """A self-repair agent (``openadapt_flow.repair.self_repair.RepairAgent``).
+
+    One model call per proposal: the live screen, the recorded crop and the
+    step's intent go in, and the first ``left_click`` or ``double_click`` that
+    comes back is the proposal. Every call goes in the ledger, like the
+    agent arms.
+    """
+
+    ledger_path: Path
+    model: str = "claude-sonnet-5-5"
+    effort: str = "medium"
+    dialect: str = "anthropic"
+    requires_model_key: bool = True
+    calls: list[CallRecord] = field(default_factory=list)
+
+    @property
+    def agent_id(self) -> str:
+        return f"agent:anthropic:{self.model}:scoreboard-repair"
+
+    @property
+    def cost_usd(self) -> float:
+        return sum(c.cost_usd for c in self.calls)
+
+    def propose(self, request: Any) -> Any:
+        import base64
+
+        import anthropic
+
+        from openadapt_flow.repair.self_repair import RepairProposal
+
+        key = request.model_key.secret() if request.model_key is not None else None
+        client = anthropic.Anthropic(api_key=key, max_retries=4)
+
+        def image(png: bytes) -> dict[str, Any]:
+            return {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": base64.b64encode(png).decode(),
+                },
+            }
+
+        text = (
+            f"The halted step: {request.intent!r} ({request.action}). "
+            f"Recorded label: {request.recorded_label!r}. "
+            f"Why it halted: {request.halt_reason}"
+        )
+        if request.previous_refusals:
+            text += " Earlier proposals were refused: " + "; ".join(
+                request.previous_refusals
+            )
+        content: list[dict[str, Any]] = [{"type": "text", "text": text}]
+        if request.recorded_crop_png:
+            content += [
+                {"type": "text", "text": "The control as recorded:"},
+                image(request.recorded_crop_png),
+            ]
+        content += [
+            {"type": "text", "text": "The live screen:"},
+            image(request.live_png),
+        ]
+        t0 = time.time()
+        response = client.messages.create(
+            model=self.model,
+            max_tokens=4000,
+            system=REPAIR_SYSTEM,
+            tools=[
+                {
+                    "type": "computer_toolset_20260801",
+                    "configs": {m: {"enabled": False} for m in DISABLED_MEMBERS},
+                }
+            ],
+            output_config={"effort": self.effort},
+            messages=[{"role": "user", "content": content}],
+        )
+        uses = [b for b in response.content if b.type == "tool_use"]
+        cost = call_cost(response.usage, self.model)
+        self.calls.append(
+            CallRecord(
+                turn=request.attempt,
+                started_s=t0,
+                ended_s=time.time(),
+                input_tokens=response.usage.input_tokens,
+                output_tokens=response.usage.output_tokens,
+                cache_read_input_tokens=response.usage.cache_read_input_tokens or 0,
+                cache_creation_input_tokens=(
+                    response.usage.cache_creation_input_tokens or 0
+                ),
+                cost_usd=cost,
+                actions=[{"name": b.name, "input": b.input} for b in uses],
+                request_id=getattr(response, "_request_id", None),
+                stop_reason=response.stop_reason,
+            )
+        )
+        self.ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        self.ledger_path.write_text(
+            json.dumps(
+                {
+                    "model": self.model,
+                    "agent_id": self.agent_id,
+                    "cost_usd": round(self.cost_usd, 6),
+                    "calls": [c.__dict__ for c in self.calls],
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+        click = next(
+            (b for b in uses if b.name in ("left_click", "double_click")), None
+        )
+        if click is None:
+            return None
+        return RepairProposal(
+            action={"action": click.name, **dict(click.input)},
+            model_calls=1,
+            cost_usd=cost,
+        )
