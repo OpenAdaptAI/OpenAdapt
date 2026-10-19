@@ -1,0 +1,115 @@
+{
+  "phase": "compile",
+  "recording": "out/jit-cache/openimis.claim_entry-075241c5f07d/program/recording-distilled",
+  "bundle": "out/program/launch-1/bundle",
+  "params": [
+    "claim_no",
+    "explanation",
+    "insurance_no"
+  ],
+  "steps": [
+    {
+      "id": "step_000",
+      "intent": "click 'Nam'",
+      "risk": "reversible"
+    },
+    {
+      "id": "step_001",
+      "intent": "type <insurance_no>",
+      "risk": "reversible"
+    },
+    {
+      "id": "step_002",
+      "intent": "press Tab",
+      "risk": "reversible"
+    },
+    {
+      "id": "step_003",
+      "intent": "click 'Claim No.'",
+      "risk": "reversible"
+    },
+    {
+      "id": "step_004",
+      "intent": "type <claim_no>",
+      "risk": "reversible"
+    },
+    {
+      "id": "step_005",
+      "intent": "click 'Diagnosis'",
+      "risk": "reversible"
+    },
+    {
+      "id": "step_006",
+      "intent": "type 'Scarlet'",
+      "risk": "reversible"
+    },
+    {
+      "id": "step_007",
+      "intent": "click 'A389 Scarlet fever, uncomplicated'",
+      "risk": "reversible"
+    },
+    {
+      "id": "step_008",
+      "intent": "click recorded visual target",
+      "risk": "reversible"
+    },
+    {
+      "id": "step_009",
+      "intent": "type <explanation>",
+      "risk": "reversible"
+    },
+    {
+      "id": "step_010",
+      "intent": "scroll by (0, 600)",
+      "risk": "reversible"
+    },
+    {
+      "id": "step_011",
+      "intent": "click recorded visual target",
+      "risk": "reversible"
+    },
+    {
+      "id": "step_012",
+      "intent": "type 'General'",
+      "risk": "reversible"
+    },
+    {
+      "id": "step_013",
+      "intent": "click 'A1 General Consultation'",
+      "risk": "reversible"
+    },
+    {
+      "id": "step_014",
+      "intent": "scroll by (0, -600)",
+      "risk": "reversible"
+    },
+    {
+      "id": "step_015",
+      "intent": "click recorded visual target",
+      "risk": "irreversible"
+    }
+  ],
+  "record_check": [
+    {
+      "step": "step_015",
+      "kind": "record_written",
+      "probe": "a record matching claim_status='2', hf_code='VIHOS001', diagnosis='A389', claimed='400.00' exists exactly once (mined from the demonstration's system-of-record delta)"
+    },
+    {
+      "step": "step_015",
+      "kind": "field_equals",
+      "probe": "field 'claim_no' of the written record equals the run's 'claim_no' parameter (mined; the demonstration typed that parameter's value into this field)"
+    },
+    {
+      "step": "step_015",
+      "kind": "field_equals",
+      "probe": "field 'insurance_no' of the written record equals the run's 'insurance_no' parameter (mined; the demonstration typed that parameter's value into this field)"
+    },
+    {
+      "step": "step_015",
+      "kind": "field_equals",
+      "probe": "field 'explanation' of the written record equals the run's 'explanation' parameter (mined; the demonstration typed that parameter's value into this field)"
+    }
+  ],
+  "note": "compiled from the agent's recording outside the JIT admission lifecycle; runs under the demo profile; not admitted for production"
+}

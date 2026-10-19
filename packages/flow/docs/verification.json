@@ -1,5 +1,5 @@
 {
-  "generated_at": "committed registry state (regenerate: scripts/validate_claims.py --report)",
+  "generated_at": "2026-10-19T10:34:36-04:00 (git HEAD commit date)",
   "green_check_run": false,
   "green_check_job": null,
   "green_check_scope": [],
@@ -647,6 +647,90 @@
           "ci_job": null,
           "junit_status": null,
           "proves": "The full measurement next to a same-screen check and an API read, on the GUI replay and API-write fault lists plus display probes."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "desktop-readback-separate-session",
+      "claim": "A save in a desktop, RDP or Citrix application can be checked the way a person checks it: a separate session that is never the one that typed searches for the record, opens the one result that shows its identifier, confirms the record view shows that identifier, and reads the saved fields through UI Automation or OCR, judged by the shared effect judge. The look-up types only into the search box and never clicks a control with a save-like label. With its own sign-in it declares tier 2 (a separate session); without one, tier 3. It is never labeled a system-of-record read.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "The WinForms fixture runs as a UI Automation stand-in that mirrors patient_notes.ps1 and its pn_db.py persistence, and the kiosk as pixels drawn at the Tk layout; neither is the live Windows VM or the Docker RDP fixture in this evidence. On the pixel path OpenAdapt cannot prove where keyboard focus is; it checks the search box shows the query before it submits."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_desktop_readback.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "On the WinForms patient-notes fixture through the real in-guest agent and Windows client (UI Automation): confirms a saved note, refutes a wrong one, opens only the row that shows the full identity past a same-first-name decoy, halts on two matching rows, and refuses a search button with a save-like label. On the RDP kiosk's look-up panel through the RDP backend and real OCR: confirms a booking from its own RDP logon (tier 2), never turns an OCR mismatch into REFUTED, and never takes \"not found\" as proof that nothing was saved. The same look-up confirms through a Citrix Workspace window and a native macOS window (tier 3, a window as the same user). Neither fixture's save control or form is touched. The deployment refuses a read-back session that is the session that types."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "deferred-report-check",
+      "claim": "A save that only a later report can confirm (an X12 999 or 277CA acknowledgment, a CSV export, a saved status page) ends SAVED_AWAITING_CHECK: never VERIFIED or billable until a matching accepting report row settles it, and RECONCILIATION_REQUIRED when the report rejects it or no row arrives by the deadline.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "The report confirms acceptance of the item with that key, not its field values. The hosted runner and the Execute v1 and production-receipt wire formats carry the outcome as RECONCILIATION_REQUIRED."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_deferred_report.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Synthetic 999, 277CA, CSV and text reports parse into accepted, rejected, pending and conflicting rows (a 999 can only reject; a provider-level 277CA trace is ignored); the ledger keeps keys only as private digests; a real replayer run ends SAVED_AWAITING_CHECK and not billable; an unchecked second effect, a failed run or anything else uncertain stays RECONCILIATION_REQUIRED; an accepting row settles VERIFIED, while a rejecting row, a duplicate key, the deadline (checked before any report), a report older than the save, or a report read another way does not; the CLI settles it and never rewrites report.json; verify-run refuses the kind."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "lookup-teaches-the-check",
+      "claim": "When a recording shows the person or the agent look the record up after saving, Flow proposes that look-up as the record check with no marking or configuration: a same-session check and, for desktop, RDP and Citrix recordings, a separate-session desktop_readback. Every proposal waits for a person.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Measured on one synthetic kiosk recording. The detector needs a save button with a save word, a typed and submitted search, and the saved values readable by OCR on the last frame."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_lookup_detect.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "On a synthetic recording of the RDP kiosk: finds the save by its OCR label, the search, and only the values the look-up brought onto the screen (not the saved form still showing the same text); proposes nothing without a look-up; the proposed desktop_readback, with only its address filled in, confirms the booking through real OCR from separate sessions; check accept writes check.json and never overwrites one; record --verify needs no file and ends with the look-up prompt when none is found."
         }
       ],
       "errors": []

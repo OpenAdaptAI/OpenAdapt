@@ -43,6 +43,13 @@ updates:
     groups:
       desktop-python-minor:
         update-types: ["minor", "patch"]
+    ignore:
+      # Each version is a reviewed pin. A PyInstaller bump needs a new
+      # bootloader license review (scripts/frozen_notices.py), and the
+      # Playwright version is part of the bundled Flow runtime that
+      # docs/RELEASE_CANDIDATE_INSTALLERS.md describes. Bump them by hand.
+      - dependency-name: "pyinstaller"
+      - dependency-name: "playwright"
   - package-ecosystem: "npm"
     directory: "/packages/desktop"
     schedule:
@@ -53,6 +60,12 @@ updates:
     groups:
       desktop-npm-minor:
         update-types: ["minor", "patch"]
+    ignore:
+      # Tauri's JavaScript packages pair with the Rust crates in src-tauri, and
+      # tests/test_native_release.py requires the two sides to match. Dependabot
+      # bumps npm and cargo in separate pull requests, so each one fails alone.
+      # Bump the Tauri core and plugins on both sides together, by hand.
+      - dependency-name: "@tauri-apps/*"
   - package-ecosystem: "cargo"
     directory: "/packages/desktop/src-tauri"
     schedule:
@@ -63,6 +76,10 @@ updates:
     groups:
       desktop-cargo-minor:
         update-types: ["minor", "patch"]
+    ignore:
+      # The Rust side of the Tauri pairs above; bumped with them, by hand.
+      - dependency-name: "tauri"
+      - dependency-name: "tauri-*"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

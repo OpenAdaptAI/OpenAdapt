@@ -198,6 +198,7 @@ from openadapt_flow.runtime.resolver import (
     visual_resolution_anchor_contract_sha256,
     visual_resolution_evaluator_contract_sha256,
 )
+from openadapt_flow.runtime.step_timing import timed_span
 from openadapt_flow.runtime.surfaces import SurfaceRouter
 from openadapt_flow.verification import (
     EffectContractMutationError,
@@ -222,6 +223,10 @@ if TYPE_CHECKING:
         QualificationCampaignGuard,
     )
     from openadapt_flow.runtime.control_overlay import RuntimeControlOverlayEmitter
+    from openadapt_flow.runtime.readback_pipeline import (
+        PipelinedReadback,
+        ReadbackPipeline,
+    )
     from openadapt_flow.transaction import IdempotencyLedger
 
 # REGION_STABLE template check: how far the expected content may shift from
@@ -400,6 +405,38 @@ class _GraphStepContext:
         self.next_anchored = next_anchored
         self.following = following
         self.has_exception_handler = has_exception_handler
+
+
+def _pipeline_safe_verifier(verifier: Any) -> bool:
+    """Whether a read-back may run on a side thread while the next item runs.
+
+    Only verifiers that read the system of record over the network and never
+    touch the screen: REST, FHIR, GraphQL and SQL. Anything that binds to a
+    backend (on-screen read-backs, and the redacting and candidate wrappers,
+    which forward ``bind_backend``) or any other kind verifies inline.
+    """
+
+    if (
+        verifier is None
+        or hasattr(verifier, "bind_backend")
+        or getattr(verifier, "backend", None) is not None
+        or getattr(verifier, "_backend", None) is not None
+    ):
+        return False
+    safe: list[type] = []
+    for module, name in (
+        ("openadapt_flow.runtime.effects.rest", "RestRecordVerifier"),
+        ("openadapt_flow.runtime.effects.fhir", "FhirEffectVerifier"),
+        ("openadapt_flow.runtime.effects.graphql", "GraphQLRecordVerifier"),
+        ("openadapt_flow.runtime.effects.sql", "SqlRecordVerifier"),
+    ):
+        try:
+            import importlib
+
+            safe.append(getattr(importlib.import_module(module), name))
+        except Exception:  # noqa: BLE001 - an unavailable kind is not safe
+            continue
+    return isinstance(verifier, tuple(safe))
 
 
 class _ProgramHalt(Exception):
@@ -761,8 +798,17 @@ class Replayer:
         layout_drift: Optional[bool] = None,
         layout_drift_tolerances: Optional[Any] = None,
         layout_drift_advisor: Optional[Callable[[Any], Optional[str]]] = None,
+        secret_env_overrides: Optional[Mapping[str, str]] = None,
+        readback_pipeline: Optional["ReadbackPipeline"] = None,
         render_scale: Optional[bool] = None,
     ) -> None:
+        # Per-run secret sources (worklist workers): secret param name -> the
+        # NAME of the env var holding its value, so each worker signs in with
+        # its own account. Values are never stored here.
+        self.secret_env_overrides: dict[str, str] = dict(secret_env_overrides or {})
+        # Pipelined read-back (runtime/readback_pipeline.py); None = inline.
+        self.readback_pipeline = readback_pipeline
+        self._pipelined_readback: Optional["PipelinedReadback"] = None
         # A JIT draft (openadapt_flow.jit) runs only once admitted, or attended
         # by a named person (the canary). Checked in run().
         self._attended_draft_by = attended_draft_by
@@ -2626,6 +2672,22 @@ class Replayer:
     ) -> RunReport:
         """Persist exact evidence first, then project its terminal outcome."""
 
+        pending = getattr(self, "_pipelined_readback", None)
+        handed_off = False
+        if pending is not None:
+            if persist and report.success and self.readback_pipeline is not None:
+                handed_off = True
+                # Until the read-back settles, the saved report must not say
+                # success: if the process dies first, it stays unsuccessful.
+                report.success = False
+                report.execution_completed = False
+            else:
+                # The run ended some other way: settle the read-back inline
+                # before the report is written.
+                self._apply_pipelined_verdict(
+                    report, self._join_pipelined_readback(keep=True)
+                )
+                self._pipelined_readback = None
         self._end_surfaces()
         if self._surface_environment_observations:
             report.observed_surface_environments = dict(
@@ -2666,6 +2728,165 @@ class Replayer:
             clear_guard(None)
         if project_terminal:
             self._emit_control_overlay_terminal(report.execution_outcome)
+        if handed_off:
+            assert pending is not None and self.readback_pipeline is not None
+            self._pipelined_readback = None
+            entry = pending
+
+            def _settle(error: Optional[str]) -> RunReport:
+                return self._settle_pipelined_readback(
+                    report, workflow, run_dir, entry, error
+                )
+
+            self.readback_pipeline.hand_off(entry, _settle)
+        return report
+
+    # -- pipelined read-back (runtime/readback_pipeline.py) ------------------
+
+    def _may_pipeline_readback(self, verifier: Any) -> bool:
+        """Whether this effect's read-back may run on the side thread."""
+
+        pipeline = getattr(self, "readback_pipeline", None)
+        if pipeline is None:
+            return False
+        reason = None
+        if self.durable or getattr(self, "_program_durable", None) is not None:
+            reason = "durable runs verify inline"
+        elif getattr(self, "idempotency_ledger", None) is not None:
+            reason = "idempotency-ledger runs verify inline"
+        elif getattr(self, "_pipelined_readback", None) is not None:
+            reason = "an earlier read-back in this item is still pending"
+        else:
+            target = verifier if verifier is not None else self.effect_verifier
+            if not _pipeline_safe_verifier(target):
+                reason = (
+                    "only REST, FHIR, GraphQL and SQL read-backs run alongside "
+                    "the next item; this one verifies inline"
+                )
+        pipeline.inline_reason = reason
+        return reason is None
+
+    def _defer_readback(
+        self,
+        step: Step,
+        before: EffectState,
+        result: StepResult,
+        *,
+        effects: Optional[list["Effect"]],
+        verifier: Any,
+    ) -> None:
+        assert self.readback_pipeline is not None
+        scratch = StepResult(step_id=step.id, intent=step.intent, ok=True)
+
+        def verify() -> Optional[str]:
+            return self._verify_effects(
+                step, before, scratch, effects=effects, verifier=verifier
+            )
+
+        entry = self.readback_pipeline.submit(step.id, verify)
+        entry.scratch = scratch  # type: ignore[attr-defined]
+        entry.result = result  # type: ignore[attr-defined]
+        entry.intent = step.intent  # type: ignore[attr-defined]
+        result.effect_verified = None
+        result.effect_results.append("[pipelined] system-of-record read-back pending")
+        self._pipelined_readback = entry
+
+    def _join_pipelined_readback(self, *, keep: bool = False) -> Optional[str]:
+        """Wait for a pending read-back, apply it to its step, return its error."""
+
+        entry = getattr(self, "_pipelined_readback", None)
+        if entry is None:
+            return None
+        try:
+            error = entry.verdict.result()
+        except Exception as exc:  # noqa: BLE001 - a raising verifier fails closed
+            error = f"read-back raised {type(exc).__name__}; reconciliation is required"
+        self._copy_pipelined_evidence(entry, error)
+        if not keep:
+            self._pipelined_readback = None
+        return error
+
+    def _copy_pipelined_evidence(self, entry: Any, error: Optional[str]) -> None:
+        result: StepResult = entry.result
+        scratch: StepResult = entry.scratch
+        result.effect_results = [
+            r for r in result.effect_results if not r.startswith("[pipelined]")
+        ]
+        result.effect_results.extend(scratch.effect_results)
+        result.effect_evidence.extend(scratch.effect_evidence)
+        result.effect_field_checks.extend(scratch.effect_field_checks)
+        result.effect_verified = scratch.effect_verified
+        if scratch.failure_category is not None:
+            result.failure_category = scratch.failure_category
+        if error is not None:
+            result.ok = False
+            result.error = error
+            result.safety_halt = True
+            if result.failure_category is None:
+                result.failure_category = (
+                    "governed_refusal"
+                    if self.governed_authorization is not None
+                    else "safety_halt"
+                )
+        else:
+            result.safety_halt = result.safety_halt or scratch.safety_halt
+
+    def _apply_pipelined_verdict(
+        self,
+        report: RunReport,
+        error: Optional[str],
+        *,
+        entry: Optional["PipelinedReadback"] = None,
+    ) -> None:
+        if error is None:
+            return
+        report.success = False
+        report.execution_completed = False
+        report.terminal_outcome = "halt"
+        report.results.append(
+            StepResult(
+                step_id="<terminal>",
+                intent="program halt",
+                ok=False,
+                error=error,
+                safety_halt=True,
+            )
+        )
+        if entry is None:
+            entry = getattr(self, "_pipelined_readback", None)
+        report.halt = HaltObservation(
+            state_id=getattr(entry, "step_id", "") or "",
+            intent=getattr(entry, "intent", "") or "",
+            reason=error,
+            outcome="halt",
+            # The screen now belongs to the next item; nothing is probed.
+            observed_texts=[],
+            completed_intents=[
+                r.intent for r in report.results if r.ok and not r.skipped
+            ],
+        )
+
+    def _settle_pipelined_readback(
+        self,
+        report: RunReport,
+        workflow: Workflow,
+        run_dir: Path,
+        entry: "PipelinedReadback",
+        error: Optional[str],
+    ) -> RunReport:
+        """Apply a finished deferred read-back to the saved item report."""
+
+        self._copy_pipelined_evidence(entry, error)
+        if error is not None:
+            self._apply_pipelined_verdict(report, error, entry=entry)
+        else:
+            # The execution completed; it was held unsuccessful only until the
+            # read-back confirmed. Re-derive the outcome from that evidence.
+            report.execution_completed = True
+            report.success = True
+        self._stamp_execution_outcome(report, workflow, run_dir)
+        self._stamp_approval(report)
+        report.save(run_dir)
         return report
 
     def _project_idempotency_outcome_after_persist(
@@ -6443,6 +6664,7 @@ class Replayer:
             return f"{exc}; refusing to run"
         return None
 
+    @timed_span("identity")
     def _surface_identity_check(self, backend: Any, step: Step) -> Optional[bool]:
         """Vision-first identity check of one live target for ``step``.
 
@@ -6612,7 +6834,21 @@ class Replayer:
             error=error,
         )
 
-    def _run_step(
+    def _run_step(self, step: Step, **kwargs: Any) -> StepResult:
+        """Execute one step and record where its time went (``timings``)."""
+        from openadapt_flow.runtime import step_timing
+
+        timer, previous = step_timing.start_step()
+        result: Optional[StepResult] = None
+        try:
+            result = self._run_step_timed(step, **kwargs)
+            return result
+        finally:
+            step_timing.end_step(previous)
+            if result is not None:
+                result.timings = timer.result_ms(result.elapsed_ms or None)
+
+    def _run_step_timed(
         self,
         step: Step,
         *,
@@ -6634,6 +6870,19 @@ class Replayer:
         new page halts.
         """
 
+        pending_error = self._join_pipelined_readback()
+        if pending_error is not None:
+            # The previous action's deferred read-back failed: refuse to act
+            # further in this run, exactly as an inline failure would.
+            refused = StepResult(
+                step_id=step.id,
+                intent=step.intent,
+                ok=False,
+                error=pending_error,
+                safety_halt=True,
+                failure_category="safety_halt",
+            )
+            return refused
         router = self._surface_router
         if router is None:
             if step.action is ActionKind.SWITCH_SURFACE:
@@ -7897,7 +8146,24 @@ class Replayer:
             # save, a phantom optimistic-UI success, a duplicate write, or a
             # lost update -- the EffectVerifier reads the REAL record and HALTs
             # on any non-CONFIRMED verdict (docs/design/EFFECT_VERIFIER.md).
-            if (error is None or delivery_uncertain) and effect_pre_state is not None:
+            if (
+                error is None
+                and not delivery_uncertain
+                and effect_pre_state is not None
+                and self._may_pipeline_readback(active_verifier)
+            ):
+                # Pipelined read-back (runtime/readback_pipeline.py): the same
+                # check, run on the side thread. Any later step in this run
+                # waits for it first; the item's report is settled with the
+                # verdict when the check finishes.
+                self._defer_readback(
+                    step,
+                    effect_pre_state,
+                    result,
+                    effects=resolved_effects,
+                    verifier=active_verifier,
+                )
+            elif (error is None or delivery_uncertain) and effect_pre_state is not None:
                 effect_error = self._verify_effects(
                     step,
                     effect_pre_state,
@@ -9080,6 +9346,7 @@ class Replayer:
             self._readback_verifier = verifier
         return verifier
 
+    @timed_span("readback")
     def _verify_effects(
         self,
         step: Step,
@@ -9254,6 +9521,7 @@ class Replayer:
                         observed_effect=final_verdict.observed_effect,
                         endpoint_scope=scope,
                         reconciliation_actions=comp.actions_taken,
+                        deferred_check=verdict.deferred_check,
                     )
                 )
                 result.effect_results.append(
@@ -9282,6 +9550,7 @@ class Replayer:
                     final_verdict=verdict.verdict.value,
                     observed_effect=verdict.observed_effect,
                     endpoint_scope=scope,
+                    deferred_check=verdict.deferred_check,
                 )
             )
             result.effect_results.append(
@@ -10030,6 +10299,7 @@ class Replayer:
             ).guarded_keyboard_frame
         return None
 
+    @timed_span("identity")
     def _revalidate_consequential_actuation(
         self,
         step: Step,
@@ -10387,6 +10657,7 @@ class Replayer:
         self._active_delivery_region = fresh_region
         return fresh_resolution, fresh_region, fresh_png, error
 
+    @timed_span("resolve")
     def _resolve_step(
         self,
         step: Step,
@@ -10476,6 +10747,7 @@ class Replayer:
             )
         return resolution, matched_region, None
 
+    @timed_span("resolve")
     def _resolve_drag_end(
         self,
         step: Step,
@@ -10511,6 +10783,7 @@ class Replayer:
         )
         return resolution, region, error
 
+    @timed_span("settle")
     def _settle_seeded(self) -> bytes:
         """``vision.wait_settled`` that can extend the last settled run.
 
@@ -11462,6 +11735,7 @@ class Replayer:
             )
         return None
 
+    @timed_span("actuate")
     def _act(
         self,
         step: Step,
@@ -11554,6 +11828,7 @@ class Replayer:
         else:
             arm(dialog.response, dialog.message)
 
+    @timed_span("postcondition")
     def _wait_for_dialog(self, take: Callable[..., Any], dialog: Any) -> list[Any]:
         """Wait briefly for an armed dialog that opens after the input edge."""
 
@@ -12048,7 +12323,9 @@ class Replayer:
             if step.secret:
                 # Secret value is never in the bundle/params: inject it from
                 # the environment, failing fast with an actionable message.
-                env_var = secret_env_var(step.param or "")
+                env_var = getattr(self, "secret_env_overrides", {}).get(
+                    step.param or ""
+                ) or secret_env_var(step.param or "")
                 text = os.environ.get(env_var, "")
                 if not step.param:
                     return (
@@ -12581,6 +12858,7 @@ class Replayer:
             )
         return None
 
+    @timed_span("settle")
     def _wait_starting_state_settled(
         self, before_png: bytes
     ) -> tuple[bytes, Optional[str], Optional[bool]]:
@@ -12937,6 +13215,7 @@ class Replayer:
             )
         return frame, None
 
+    @timed_span("postcondition")
     def _handle_interstitials(
         self,
         step: Step,
@@ -13877,6 +14156,7 @@ class Replayer:
             parameter_names,
         )
 
+    @timed_span("identity")
     def _verify_identity(
         self,
         step: Step,
@@ -14641,6 +14921,7 @@ class Replayer:
         )
         return landed, changed
 
+    @timed_span("postcondition")
     def _verify_typed_input(
         self,
         step: Step,
@@ -14851,6 +15132,7 @@ class Replayer:
             "a non-input target (focus lost); run aborted"
         )
 
+    @timed_span("postcondition")
     def _verify_selected_option(
         self,
         step: Step,
@@ -15032,6 +15314,7 @@ class Replayer:
 
     # -- closed-loop scroll ------------------------------------------------------
 
+    @timed_span("resolve")
     def _implicit_scroll_target_ready(
         self,
         step: Step,
@@ -15060,13 +15343,24 @@ class Replayer:
         """
         if step.anchor is None:
             return False
-        template_png = self._asset_bytes(
-            bundle_dir, step.anchor.template, workflow=workflow
-        )
         structural = (
             self.backend
             if self.use_structural and hasattr(self.backend, "locate_structural")
             else None
+        )
+        offscreen = getattr(structural, "structural_offscreen", None)
+        if (
+            callable(offscreen)
+            and step.anchor.structural is not None
+            and offscreen(step.anchor.structural) is True
+        ):
+            # The page itself shows the unique recorded target exists below
+            # (or above) the viewport: not ready, keep scrolling. Stricter
+            # than letting a visual rung find a look-alike on screen, and it
+            # skips a full-frame OCR search per probe.
+            return False
+        template_png = self._asset_bytes(
+            bundle_dir, step.anchor.template, workflow=workflow
         )
         try:
             resolved = resolve(
@@ -15296,6 +15590,7 @@ class Replayer:
             f"{target_desc} resolving — target never came into view; run aborted"
         )
 
+    @timed_span("settle")
     def _wait_for_scroll_transition_and_settle(self, baseline_png: bytes) -> bytes:
         """Wait for a delivered scroll to change the frame, then settle it.
 
@@ -15411,6 +15706,7 @@ class Replayer:
             return None
         return current != start
 
+    @timed_span("postcondition")
     def _check_postconditions(
         self,
         step: Step,
@@ -15555,6 +15851,7 @@ class Replayer:
             return f"{kind} (vs. the step's start state)"
         return f"{kind} region={tuple(pc.region) if pc.region else None}"
 
+    @timed_span("postcondition")
     def _poll_postconditions(
         self,
         step: Step,
@@ -16067,6 +16364,7 @@ class Replayer:
         return candidate
 
     @staticmethod
+    @timed_span("artifact_write")
     def _save_step_png(run_dir: Path, step_id: str, suffix: str, png: bytes) -> str:
         """Save a per-step screenshot; return its run-dir-relative path.
 
