@@ -206,7 +206,7 @@ improvising or retrying when something is off.
 Each `openadapt-flow` command, grouped by the capability it serves. A test
 fails when a command is added without being listed here.
 
-- **Record and build a program:** `record`, `demo-record`, `compile`, `induce`, `disambiguate`, `for-each`, `compose`, `process`, `intake`, `visualize`, `pull`.
+- **Record and build a program:** `record`, `demo-record`, `compile`, `induce`, `disambiguate`, `for-each`, `compose`, `process`, `intake`, `visualize`, `pull`, `variants`, `route`.
 - **Check and admit:** `lint`, `scaffold-verifier`, `check`, `bind-record-checks`, `certify`, `qualify`, `propose-qualification`, `known-ids`, `jit`, `admit`, `approver-grant`.
 - **Run and answer:** `run`, `replay`, `resume`, `approve`, `item-approval`, `triage`, `business-decisions`, `explain`, `console`.
 - **Judge any executor's write:** `verify-run`, `serve-reward` (scores agent training episodes by reading the system of record).

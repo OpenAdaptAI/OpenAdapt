@@ -110,7 +110,7 @@ Only `done` is a success. Results come from openadapt-flow's `transaction_outcom
 `openadapt-agent serve` with no flags is a sandbox: one workflow, `add_triage_note`, on MockMed, a synthetic clinic app. The `sandbox_case` input picks the outcome: `normal` (done), `duplicate_record` (needs_review), `false_saved_banner` and `timeout_after_save` (not_sure_if_saved), `app_offline` (did_not_run). Install the `tutorial` extra to drive the synthetic app with the real engine; otherwise results are simulated and say so.
 
 - From PyPI: `claude mcp add --scope user openadapt -- uvx --python 3.12 openadapt-agent serve`. This only registers the server; Claude Code starts it at the next `claude` session. Then ask it to run `add_triage_note` with a made-up note and a request id.
-- Requires openadapt-flow 2.2.0 or later, which is on PyPI and installs with openadapt-agent.
+- Requires openadapt-flow 2.1.0 or later (2.2.0 is current on PyPI), which installs with openadapt-agent.
 
 ## Modes and older surfaces
 
@@ -150,6 +150,6 @@ Standard and Regulated runs need a workflow admission; Demo and the synthetic sa
 
 ## Other OpenAdapt packages
 
-- [openadapt-flow](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) (`pip install openadapt-flow`): records a task, compiles it into a deterministic workflow, replays it and checks the result. The core package; `openadapt-flow[agent]` adds the MCP server code.
-- [openadapt-types](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/types) (`pip install openadapt-types`): the portable contracts, now `openadapt_flow.contracts`; this name is kept as a compatibility shim.
+- [openadapt-flow](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) (`pip install openadapt-flow`): records a task once, compiles it into a deterministic workflow, replays it and checks the result. The core package; `openadapt-flow[agent]` adds the MCP server code.
+- [openadapt-types](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/types) (`pip install openadapt-types`): the shared request, result and receipt models and their JSON Schemas. Depends only on Pydantic; Flow re-exports it as `openadapt_flow.contracts`.
 - [openadapt](https://github.com/OpenAdaptAI/OpenAdapt) (`pip install openadapt`): the launcher CLI.

@@ -62,6 +62,10 @@ The three inputs come from different people on purpose:
   is refused. One older than `max_execution_window_s` (default 3600) counts
   as no baseline.
 
+To check the open record before the write, hold the write for a person, and
+refuse a retry after an uncertain result, wrap the write in a guarded save
+([`GUARDED_SAVE.md`](GUARDED_SAVE.md)). It reads this same file.
+
 Optional flags:
 
 - `--approver approver.json` names who approved the write, as

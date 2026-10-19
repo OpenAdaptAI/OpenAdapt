@@ -38,6 +38,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import hmac
+import io
 import json
 import math
 import os
@@ -2412,6 +2413,10 @@ class Replayer:
                 self._surface_environment_observations
             )
         report.qualification_fault_mutations = list(self._qualification_fault_mutations)
+        from openadapt_flow.runtime.variant_stamp import current_variant_route
+
+        if (variant_route := current_variant_route()) is not None:
+            report.variant_route = variant_route
         self._stamp_execution_outcome(report, workflow, run_dir)
         self._stamp_approval(report)
         if persist:
@@ -6890,6 +6895,7 @@ class Replayer:
                     run_dir, evidence_step_id, "before", before_png
                 )
                 last_frame = before_png
+                pre_identity_halt = (result.safety_halt, result.failure_category)
                 error = self._identity_gate_error(
                     step,
                     resolution,
@@ -6900,6 +6906,77 @@ class Replayer:
                     result,
                     evidence_run_dir=run_dir,
                 )
+                if (
+                    error is not None
+                    and result.identity is not None
+                    and result.identity.status == "mismatch"
+                    # A signal-quorum conflict or a parameter mismatch names
+                    # another record outright: final, never re-observed.
+                    and result.identity.mode not in ("signal_quorum", "param")
+                    and not result.identity.param
+                    # Qualification drills bind the refusal to the injected
+                    # frame; a second look would read a different one.
+                    and self.qualification_fault_driver is None
+                    and time.monotonic() < deadline
+                    and self._identity_band_still_changing(step, resolution, before_png)
+                ):
+                    # The read raced a re-render: the target's band changed
+                    # right after it (a list or menu re-rendering under slow
+                    # lookups). Keep the first read as evidence, then look
+                    # once more on a fresh settled frame and act only if
+                    # identity verifies there. A second mismatch halts.
+                    result.identity_first_read = result.identity
+                    result.identity_first_frame_png = self._save_step_png(
+                        run_dir, evidence_step_id, "identity_first_read", before_png
+                    )
+                    result.identity_reobserved = True
+                    time.sleep(self.poll_interval_s)
+                    fresh_png = self.vision.wait_settled(self.backend)
+                    fresh_resolution, fresh_region, fresh_error = self._resolve_step(
+                        step, fresh_png, bundle_dir, workflow
+                    )
+                    fresh_drift = (
+                        self._layout_drift_error(step, fresh_png, bundle_dir, workflow)
+                        if fresh_error is None and fresh_resolution is not None
+                        else None
+                    )
+                    if fresh_drift is not None:
+                        # The re-render landed on a different screen: halt on
+                        # the drift, as the step would have before resolving.
+                        error = fresh_drift
+                        result.safety_halt = True
+                        result.failure_category = "safety_halt"
+                    elif fresh_error is None and fresh_resolution is not None:
+                        before_png = fresh_png
+                        result.before_png = self._save_step_png(
+                            run_dir, evidence_step_id, "before", before_png
+                        )
+                        last_frame = before_png
+                        resolution = fresh_resolution
+                        if fresh_region is not None:
+                            assert step.anchor is not None
+                            resolution = self._retain_visual_resolution_evidence(
+                                workflow=workflow,
+                                anchor=step.anchor,
+                                resolution=resolution,
+                                matched_region=fresh_region,
+                                frame_png=before_png,
+                                bundle_dir=bundle_dir,
+                                run_dir=run_dir,
+                            )
+                        result.resolution = resolution
+                        # The first read's halt flags belong to that read.
+                        result.safety_halt, result.failure_category = pre_identity_halt
+                        error = self._identity_gate_error(
+                            step,
+                            resolution,
+                            before_png,
+                            params,
+                            workflow,
+                            bundle_dir,
+                            result,
+                            evidence_run_dir=run_dir,
+                        )
                 if error is not None and result.identity is not None:
                     code: Literal["identity_conflict", "identity_unverifiable"] = (
                         "identity_conflict"
@@ -8934,6 +9011,43 @@ class Replayer:
 
         result.effect_verified = True
         return None
+
+    def _identity_band_still_changing(
+        self, step: Step, resolution: Resolution, read_png: bytes
+    ) -> bool:
+        """Whether the screen was still changing at an identity read.
+
+        Takes a second frame right after the read and compares the target's
+        identity band (the full-width rows around the resolved point, as tall
+        as the anchor's template plus a margin). Where the backend reports
+        page activity (browser DOM and network quiescence), activity counts
+        too. Any doubt reads as stable: a mismatch on a stable screen is
+        final.
+        """
+
+        try:
+            from PIL import Image, ImageChops
+
+            again = self.backend.screenshot()
+            first = Image.open(io.BytesIO(read_png)).convert("RGB")
+            second = Image.open(io.BytesIO(again)).convert("RGB")
+            if first.size != second.size:
+                return True
+            height = step.anchor.region[3] if step.anchor is not None else 64
+            half = max(int(height), 20) // 2 + 16
+            y = int(resolution.point[1])
+            box = (0, max(0, y - half), first.size[0], min(first.size[1], y + half))
+            if ImageChops.difference(first.crop(box), second.crop(box)).getbbox():
+                return True
+        except Exception:
+            return False
+        probe = getattr(self.backend, "page_quiescent", None)
+        if callable(probe):
+            try:
+                return probe(0.2) is False
+            except Exception:
+                return False
+        return False
 
     def _identity_gate_error(
         self,
@@ -13648,10 +13762,12 @@ class Replayer:
         :mod:`openadapt_flow.runtime.identity` for the matching rules and
         the param-mode substitution). Dense small text is undercounted by
         OCR at native resolution, so a non-verified first pass is retried
-        once at 2x resolution before the verdict.
+        once at 2x resolution, and then once more on the point's own text
+        row alone (:func:`openadapt_flow.runtime.identity.row_region`),
+        before the verdict.
 
         Returns:
-            The best :class:`IdentityCheck` across the two attempts.
+            The best :class:`IdentityCheck` across the attempts.
         """
         assert step.anchor is not None and (
             step.anchor.context_text
@@ -13700,6 +13816,7 @@ class Replayer:
             *,
             scoped_identifier: bool = False,
             identifier_filter: Optional[Region] = None,
+            row_lines: Optional[list[Any]] = None,
         ) -> IdentityCheck:
             lines = self.vision.ocr(png, region=ocr_region)
             if scoped_identifier:
@@ -13722,6 +13839,8 @@ class Replayer:
                     )
                 ]
                 lines = identity_mod.lines_near_point(lines, point_y)
+                if row_lines is not None:
+                    row_lines.extend(lines)
                 observed = " ".join(line.text.strip() for line in lines)
             if anchor.identity_template is not None and anchor.identity_template.tokens:
                 # PHI-free path: verify against the salted-hash template (audit
@@ -13746,8 +13865,11 @@ class Replayer:
             )
 
         live_region = identifier_region or band
+        first_row_lines: list[Any] = []
 
-        def native_attempt(png: bytes) -> IdentityCheck:
+        def native_attempt(
+            png: bytes, row_lines: Optional[list[Any]] = None
+        ) -> IdentityCheck:
             return attempt(
                 png,
                 # Match compilation: OCR the full frame, then retain only the
@@ -13759,9 +13881,10 @@ class Replayer:
                 exclude,
                 scoped_identifier=identifier_region is not None,
                 identifier_filter=identifier_region,
+                row_lines=row_lines,
             )
 
-        check = native_attempt(before_png)
+        check = native_attempt(before_png, first_row_lines)
         if check.status == "verified" or identity_read_contradicts(check):
             # A read that names a different record is final: a later read of
             # the same screen must never overrule it into "verified".
@@ -13804,7 +13927,41 @@ class Replayer:
             lifted = self._known_id_lift(check, native_attempt, params, matches)
             if lifted is not None:
                 return lifted
-        return better_identity_read(check, retry)
+        check = better_identity_read(check, retry)
+        if (
+            check.status == "verified"
+            or identity_read_contradicts(check)
+            or identifier_region is not None
+        ):
+            # A read of a different record is final: the row re-read below
+            # must never overrule it into "verified".
+            return check
+        # Last, re-read the point's own text row alone (see
+        # identity.row_region): the same verdict rules, on a crop that holds
+        # no part of the neighbouring rows.
+        row = identity_mod.row_region(first_row_lines, band)
+        row_png = (
+            None
+            if row is None
+            else identity_mod.upscale_crop(
+                before_png, row, identity_mod.ROW_REREAD_FACTOR
+            )
+        )
+        if row is None or row_png is None:
+            return check
+        f = identity_mod.ROW_REREAD_FACTOR
+        row_check = attempt(
+            row_png,
+            None,
+            (resolution.point[1] - row[1]) * f,
+            (
+                (exclude[0] - row[0]) * f,
+                (exclude[1] - row[1]) * f,
+                exclude[2] * f,
+                exclude[3] * f,
+            ),
+        )
+        return better_identity_read(check, row_check)
 
     def _known_id_lift(
         self,

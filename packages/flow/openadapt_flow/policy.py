@@ -1060,6 +1060,9 @@ class Finding(BaseModel):
     code: str
     step_id: Optional[str] = None
     message: str
+    #: Write-ordering findings only: the step order the lint suggests. Advice;
+    #: lint never reorders a bundle.
+    suggested_order: Optional[list[str]] = None
 
 
 class LintReport(BaseModel):
@@ -1221,6 +1224,7 @@ def lint_workflow(
     effect_covered = 0
     identity_armed = 0
     idcrop_armed = 0
+    consequential_ids: set[str] = set()
     # Same canonical traversal the certifier uses: lint a program-mode bundle's
     # graph/subflow action states, not just its (often empty) linear steps.
     steps = list(iter_workflow_steps(workflow))
@@ -1233,6 +1237,8 @@ def lint_workflow(
         )
         effective_risk = projection.effective_risk
         irreversible = projection.consequential
+        if irreversible:
+            consequential_ids.add(step.id)
 
         if step.risk_review_required:
             findings.append(
@@ -1409,6 +1415,31 @@ def lint_workflow(
                     ),
                 )
             )
+
+    from openadapt_flow.after_stop import (
+        undo_declaration_problems,
+        write_ordering_findings,
+    )
+
+    for ordering in write_ordering_findings(workflow, consequential_ids):
+        findings.append(
+            Finding(
+                severity="warn",
+                code=ordering.code,
+                step_id=ordering.step_id,
+                message=ordering.message,
+                suggested_order=ordering.suggested_order,
+            )
+        )
+    for undo_id, code, problem in undo_declaration_problems(workflow):
+        findings.append(
+            Finding(
+                severity="error",
+                code=code,
+                step_id=None,
+                message=f"undo {undo_id!r} {problem}",
+            )
+        )
 
     return LintReport(
         workflow_name=workflow.name,

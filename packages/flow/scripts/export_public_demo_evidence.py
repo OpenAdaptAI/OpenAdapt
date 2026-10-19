@@ -449,7 +449,7 @@ class _PresentationCapture:
     """
 
     def __init__(self, *, mode: str) -> None:
-        from openadapt_flow.contracts import ControlOverlayMode
+        from openadapt_types import ControlOverlayMode
 
         from openadapt_flow.runtime.control_overlay import (
             RuntimeControlOverlayEmitter,
@@ -605,7 +605,7 @@ def _write_presentation_clip(
 ) -> None:
     """Encode one fresh exact-frame derivative and its canonical V2 timeline."""
 
-    from openadapt_flow.contracts import ControlOverlayDataClassification
+    from openadapt_types import ControlOverlayDataClassification
 
     from openadapt_flow.runtime.control_overlay import (
         build_runtime_control_overlay_timeline_v2,

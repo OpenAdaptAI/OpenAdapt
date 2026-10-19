@@ -108,7 +108,7 @@ def retention_days(
 
 def registry_sha256(registry: Sequence[Mapping[str, Any]]) -> str:
     """Digest of the pinned Seal keys, independent of order and extra fields."""
-    from openadapt_flow.contracts.seal import parse_key_registry
+    from openadapt_types.seal import parse_key_registry
 
     try:
         ids = {key.key_id for key in parse_key_registry(list(registry))}
@@ -485,11 +485,11 @@ class ExceptionQueue:
         approver_registry: Sequence[Mapping[str, Any]],
     ) -> dict[str, Any]:
         """Close an open entry with a disposition signed by a pinned person."""
-        from openadapt_flow.contracts.seal import (
+        from openadapt_types.seal import (
             parse_key_registry,
             verify_seal_signature,
         )
-        from openadapt_flow.contracts.seal import receipt_sha256 as types_sha
+        from openadapt_types.seal import receipt_sha256 as types_sha
 
         entry = self._open(receipt_sha256)
         if (
