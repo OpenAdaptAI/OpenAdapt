@@ -1,0 +1,469 @@
+"""Base classes for privacy scrubbing providers.
+
+This module defines the abstract base classes and mixins for implementing
+PII/PHI scrubbing providers.
+"""
+
+from __future__ import annotations
+
+import importlib
+from importlib import metadata
+from typing import Any, List, Optional
+
+from PIL import Image
+from pydantic import BaseModel
+
+from openadapt_privacy.config import effective_config
+
+# Provider modules that must be imported before the subclass registry is read.
+# ``ScrubbingProvider.__subclasses__()`` only sees classes whose module has been
+# imported, so enumerating it without importing these first makes "no provider
+# was ever imported" indistinguishable from "no provider supports this
+# modality" - both were reported as an empty list.
+_BUILTIN_PROVIDER_MODULES = ("openadapt_privacy.providers.presidio",)
+
+
+class ScrubbingProviderUnavailable(RuntimeError):
+    """No scrubbing provider could be loaded, so no scrub was attempted.
+
+    This is deliberately distinct from "no loaded provider supports the
+    requested modality". A caller must never read a provider load failure as an
+    empty capability set and continue with unscrubbed data.
+    """
+
+
+class Modality:
+    """Supported modality types for scrubbing."""
+
+    TEXT = "TEXT"
+    PIL_IMAGE = "PIL_IMAGE"
+    PDF = "PDF"
+    MP4 = "MP4"
+
+
+class ScrubbingProvider(BaseModel):
+    """Abstract base class for scrubbing providers.
+
+    Subclasses must implement the scrub methods for their supported modalities.
+    """
+
+    name: str
+    capabilities: List[str]
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    def validate_ready(self, modalities: list[str]) -> None:
+        """Fail before processing when this provider cannot scrub a modality."""
+        unsupported = sorted(set(modalities) - set(self.capabilities))
+        if unsupported:
+            raise ScrubbingProviderUnavailable(
+                f"Provider {self.name!r} cannot scrub required modalities {unsupported}; "
+                "no scrub was attempted."
+            )
+
+    def evidence(
+        self,
+        modalities: list[str],
+        *,
+        policy_sha256: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Return privacy-safe provenance for a completed scrub operation."""
+        try:
+            package_version = metadata.version("openadapt-privacy")
+        except metadata.PackageNotFoundError:  # pragma: no cover - source checkout only
+            package_version = "unknown"
+        return {
+            "schema_version": 1,
+            "provider": self.name,
+            "provider_class": f"{type(self).__module__}.{type(self).__qualname__}",
+            "package_version": package_version,
+            "policy_sha256": policy_sha256 or effective_config().policy_digest(),
+            "modalities": sorted(set(modalities)),
+            "status": "completed",
+        }
+
+    def scrub_text(self, text: str, is_separated: bool = False) -> str:
+        """Scrub PII/PHI from text.
+
+        Args:
+            text: Text to be scrubbed.
+            is_separated: Whether the text contains separated characters
+                (e.g., key sequences like "a-b-c").
+
+        Returns:
+            Scrubbed text with PII/PHI replaced.
+
+        Raises:
+            NotImplementedError: If the provider doesn't support text scrubbing.
+        """
+        raise NotImplementedError
+
+    def scrub_image(
+        self,
+        image: Image.Image,
+        fill_color: int | None = None,
+    ) -> Image.Image:
+        """Scrub PII/PHI from an image.
+
+        Args:
+            image: PIL Image object to be scrubbed.
+            fill_color: BGR color value for redacted regions.
+                Defaults to config.SCRUB_FILL_COLOR.
+
+        Returns:
+            Scrubbed image with PII/PHI redacted.
+
+        Raises:
+            NotImplementedError: If the provider doesn't support image scrubbing.
+        """
+        raise NotImplementedError
+
+    def scrub_pdf(self, path_to_pdf: str) -> str:
+        """Scrub PII/PHI from a PDF file.
+
+        Args:
+            path_to_pdf: Path to the PDF file to be scrubbed.
+
+        Returns:
+            Path to the scrubbed PDF file.
+
+        Raises:
+            NotImplementedError: If the provider doesn't support PDF scrubbing.
+        """
+        raise NotImplementedError
+
+    def scrub_mp4(
+        self,
+        mp4_file: str,
+        scrub_all_entities: bool = False,
+        playback_speed_multiplier: float = 1.0,
+        crop_start_time: int = 0,
+        crop_end_time: int | None = None,
+    ) -> str:
+        """Scrub PII/PHI from an MP4 video file.
+
+        Args:
+            mp4_file: Path to the MP4 file to be scrubbed.
+            scrub_all_entities: If True, scrub all detected entities.
+            playback_speed_multiplier: Multiplier for playback speed.
+            crop_start_time: Start time in seconds for cropping.
+            crop_end_time: End time in seconds for cropping.
+
+        Returns:
+            Path to the scrubbed MP4 file.
+
+        Raises:
+            NotImplementedError: If the provider doesn't support MP4 scrubbing.
+        """
+        raise NotImplementedError
+
+
+class TextScrubbingMixin:
+    """Mixin class providing text and dict scrubbing utilities.
+
+    This mixin requires the implementing class to have a `scrub_text` method.
+    It provides additional utilities for scrubbing nested dictionaries and lists.
+    """
+
+    def scrub_text(self, text: str, is_separated: bool = False) -> str:
+        """Scrub PII/PHI from text. Must be implemented by subclass."""
+        raise NotImplementedError
+
+    def scrub_text_all(self, text: str) -> str:
+        """Replace all characters in text with the scrub character.
+
+        This is a more aggressive scrubbing that replaces the entire text
+        rather than just detected PII/PHI entities.
+
+        Args:
+            text: Text to be scrubbed.
+
+        Returns:
+            Text with all characters replaced by SCRUB_CHAR.
+        """
+        if text is None:
+            return None
+        return effective_config().SCRUB_CHAR * len(text)
+
+    def scrub_dict(
+        self,
+        input_dict: dict[str, Any],
+        list_keys: list[str] | None = None,
+        scrub_all: bool = False,
+        force_scrub_children: bool = False,
+        separated_keys: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Scrub PII/PHI from a nested dictionary.
+
+        Recursively processes the dictionary, scrubbing text values for
+        specified keys and handling nested structures.
+
+        Args:
+            input_dict: Dictionary to be scrubbed.
+            list_keys: List of keys whose values should be scrubbed.
+                Defaults to config.SCRUB_KEYS_HTML.
+            scrub_all: If True, scrub all string values regardless of key.
+            force_scrub_children: If True, use aggressive scrubbing for
+                child values after PII is detected in parent.
+            separated_keys: Keys that may hold character-separated action text.
+                Defaults to config.SCRUB_KEYS_SEPARATED. Pass an empty list to
+                scrub every value as prose.
+
+        Returns:
+            Scrubbed dictionary with PII/PHI removed.
+        """
+        policy = effective_config()
+        if list_keys is None:
+            list_keys = policy.SCRUB_KEYS_HTML
+        if separated_keys is None:
+            separated_keys = policy.SCRUB_KEYS_SEPARATED
+
+        scrubbed_dict: dict[str, Any] = {}
+        for key, value in input_dict.items():
+            if self._should_scrub_text(key, value, list_keys, scrub_all):
+                scrubbed_text = self._scrub_text_item(
+                    value,
+                    key,
+                    force_scrub_children,
+                    separated_keys=separated_keys,
+                )
+                if key in separated_keys and self._is_scrubbed(value, scrubbed_text):
+                    force_scrub_children = True
+                scrubbed_dict[key] = scrubbed_text
+            elif isinstance(value, list):
+                list_scrub_all = scrub_all or (isinstance(key, str) and key == "state")
+                scrubbed_list = [
+                    (
+                        self._scrub_list_item(
+                            item,
+                            key,
+                            list_keys,
+                            scrub_all=list_scrub_all,
+                            force_scrub_children=force_scrub_children,
+                            separated_keys=separated_keys,
+                        )
+                        if self._should_scrub_list_item(
+                            item,
+                            key,
+                            list_keys,
+                            scrub_all=list_scrub_all,
+                        )
+                        else item
+                    )
+                    for item in value
+                ]
+                scrubbed_dict[key] = scrubbed_list
+                force_scrub_children = False
+            elif isinstance(value, dict):
+                scrubbed_dict[key] = self.scrub_dict(
+                    value,
+                    list_keys,
+                    scrub_all=scrub_all or (isinstance(key, str) and key == "state"),
+                    separated_keys=separated_keys,
+                )
+            else:
+                scrubbed_dict[key] = value
+
+        return scrubbed_dict
+
+    def scrub_list_dicts(
+        self,
+        input_list: list[dict[str, Any]],
+        list_keys: list[str] | None = None,
+        separated_keys: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Scrub PII/PHI from a list of dictionaries.
+
+        Args:
+            input_list: List of dictionaries to be scrubbed.
+            list_keys: List of keys whose values should be scrubbed.
+            separated_keys: Keys that may hold character-separated action text.
+
+        Returns:
+            List of scrubbed dictionaries.
+        """
+        return [
+            self.scrub_dict(input_dict, list_keys, separated_keys=separated_keys)
+            for input_dict in input_list
+        ]
+
+    def _should_scrub_text(
+        self,
+        key: Any,
+        value: Any,
+        list_keys: list[str],
+        scrub_all: bool = False,
+    ) -> bool:
+        """Check if a key-value pair should be scrubbed.
+
+        Args:
+            key: Dictionary key.
+            value: Dictionary value.
+            list_keys: List of keys that should be scrubbed.
+            scrub_all: If True, scrub all string values.
+
+        Returns:
+            True if the value should be scrubbed, False otherwise.
+        """
+        return isinstance(value, str) and isinstance(key, str) and (key in list_keys or scrub_all)
+
+    def _is_scrubbed(self, old_text: str, new_text: str) -> bool:
+        """Check if text was modified by scrubbing.
+
+        Args:
+            old_text: Original text.
+            new_text: Text after scrubbing.
+
+        Returns:
+            True if the text was modified, False otherwise.
+        """
+        return old_text != new_text
+
+    def _scrub_text_item(
+        self,
+        value: str,
+        key: str,
+        force_scrub_children: bool = False,
+        separated_keys: list[str] | None = None,
+    ) -> str:
+        """Scrub a single text value.
+
+        Args:
+            value: Text value to scrub.
+            key: Dictionary key associated with the value.
+            force_scrub_children: If True, use aggressive scrubbing.
+            separated_keys: Keys that may hold character-separated action text.
+
+        Returns:
+            Scrubbed text.
+        """
+        if separated_keys is None:
+            separated_keys = effective_config().SCRUB_KEYS_SEPARATED
+        if key in separated_keys:
+            # A permission, not an instruction: the provider applies separated
+            # handling only to a value that is genuinely a key sequence.
+            return self.scrub_text(value, is_separated=True)
+        if force_scrub_children:
+            return self.scrub_text_all(value)
+        return self.scrub_text(value)
+
+    def _should_scrub_list_item(
+        self,
+        item: Any,
+        key: str,
+        list_keys: list[str],
+        scrub_all: bool = False,
+    ) -> bool:
+        """Check if a list item should be scrubbed.
+
+        Args:
+            item: List item.
+            key: Dictionary key containing the list.
+            list_keys: List of keys that should be scrubbed.
+            scrub_all: If True, scrub every string at every list depth.
+
+        Returns:
+            True if the item should be scrubbed, False otherwise.
+        """
+        if isinstance(item, (dict, list)):
+            return True
+        return isinstance(item, str) and isinstance(key, str) and (key in list_keys or scrub_all)
+
+    def _scrub_list_item(
+        self,
+        item: Any,
+        key: str,
+        list_keys: list[str],
+        force_scrub_children: bool = False,
+        scrub_all: bool = False,
+        separated_keys: list[str] | None = None,
+    ) -> Any:
+        """Scrub a single list item.
+
+        Args:
+            item: List item (string or dict).
+            key: Dictionary key containing the list.
+            list_keys: List of keys that should be scrubbed.
+            force_scrub_children: If True, use aggressive scrubbing.
+            scrub_all: If True, scrub every string at every list depth.
+            separated_keys: Keys that may hold character-separated action text.
+
+        Returns:
+            Scrubbed item.
+        """
+        if isinstance(item, dict):
+            return self.scrub_dict(
+                item,
+                list_keys,
+                scrub_all=scrub_all,
+                force_scrub_children=force_scrub_children,
+                separated_keys=separated_keys,
+            )
+        if isinstance(item, list):
+            return [
+                (
+                    self._scrub_list_item(
+                        nested_item,
+                        key,
+                        list_keys,
+                        scrub_all=scrub_all,
+                        force_scrub_children=force_scrub_children,
+                        separated_keys=separated_keys,
+                    )
+                    if self._should_scrub_list_item(
+                        nested_item,
+                        key,
+                        list_keys,
+                        scrub_all=scrub_all,
+                    )
+                    else nested_item
+                )
+                for nested_item in item
+            ]
+        return self._scrub_text_item(item, key, separated_keys=separated_keys)
+
+
+class ScrubbingProviderFactory:
+    """Factory for creating scrubbing providers based on modality."""
+
+    @staticmethod
+    def get_for_modality(modality: str) -> List[ScrubbingProvider]:
+        """Get all scrubbing providers that support a given modality.
+
+        The built-in provider modules are imported first, so an empty result
+        means "every available provider was inspected and none supports this
+        modality" - never "no provider module happened to be imported yet".
+
+        Args:
+            modality: The modality type (e.g., Modality.TEXT).
+
+        Returns:
+            List of provider instances that support the modality. An empty list
+            means the providers were inspected and none supports `modality`.
+
+        Raises:
+            ScrubbingProviderUnavailable: If a built-in provider module could
+                not be imported and no other provider supports the modality.
+                The caller must halt rather than proceed with unscrubbed data.
+        """
+        load_errors: dict[str, ImportError] = {}
+        for module_path in _BUILTIN_PROVIDER_MODULES:
+            try:
+                importlib.import_module(module_path)
+            except ImportError as exc:
+                load_errors[module_path] = exc
+
+        instances = [provider() for provider in ScrubbingProvider.__subclasses__()]
+        filtered_providers = [
+            instance for instance in instances if modality in instance.capabilities
+        ]
+
+        if not filtered_providers and load_errors:
+            detail = "; ".join(f"{path}: {exc}" for path, exc in load_errors.items())
+            raise ScrubbingProviderUnavailable(
+                f"No scrubbing provider is available for modality {modality!r} because a "
+                f"built-in provider module failed to import ({detail}). No scrub was "
+                "attempted; do not treat this as 'nothing to scrub'."
+            )
+
+        return filtered_providers

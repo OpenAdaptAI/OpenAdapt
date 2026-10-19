@@ -59,8 +59,13 @@ dependencies = [
     # out of the box in a regulated/PHI deployment; the audited AEAD substrate
     # for docs/phi_at_rest.md. Imported lazily, only on the encryption path.
     "cryptography>=42.0",
-    # The portable contracts (formerly openadapt-types) ship inside this
-    # package as openadapt_flow.contracts; openadapt-types is now a shim.
+    # The portable contracts (request, result and receipt models). They live
+    # in openadapt-types, which depends only on pydantic, so a consumer of the
+    # models never installs this package's vision stack; openadapt_flow.contracts
+    # re-exports them. 0.24.0 is the first release that carries the models
+    # again (0.23.0 is a shim over this package). openadapt-types is 0-based
+    # semver with major_on_zero=false, so a breaking change bumps the minor.
+    "openadapt-types>=0.24.0,<0.25.0",
 ]
 
 [project.optional-dependencies]
@@ -137,7 +142,7 @@ console = [
 # Countersigned and Timestamped Seals: `openadapt-flow countersign`. RFC 3161
 # timestamps need an ASN.1 codec for CMS/TSTInfo; asn1crypto is pure Python
 # with no dependencies, and signatures still go through `cryptography`. The
-# Seal verifier is openadapt_flow.contracts.seal, part of the base package.
+# Seal verifier is openadapt_types.seal (openadapt-types, a base dependency).
 countersign = [
     "asn1crypto>=1.5",
 ]
@@ -217,8 +222,8 @@ service-mlx = [
 # so Flow validates against the released producer contract in headless CI.
 capture = ["openadapt-capture>=1.2.0"]
 # Canonical action-vocabulary interop (openadapt_flow.interop.types). The
-# contracts now ship in this package (openadapt_flow.contracts), so the extra
-# is empty and kept only so `openadapt-flow[interop]` still resolves.
+# contracts (openadapt-types) are a base dependency, so the extra is empty and
+# kept only so `openadapt-flow[interop]` still resolves.
 interop = []
 # The MCP server and Agent Skills (formerly openadapt-agent), as
 # openadapt_flow.agent. openadapt-agent is now a shim that depends on this extra.
@@ -497,11 +502,12 @@ check_untyped_defs = false
 # -> tifffile has the same issue, but its only consumer here — the pixel probe —
 # is in the ignore-errors debt list below, so mypy never follows into it.)
 
-# The folded packages (formerly openadapt-types and openadapt-agent) did not run
-# mypy in their own repositories. Keep them out of this gate until a follow-up
-# types them; their own test suites still run in packages/types and packages/agent.
+# The contracts (openadapt-types, imported from packages/types) and the folded
+# agent package did not run mypy in their own repositories. Keep them out of
+# this gate until a follow-up types them; their own test suites still run in
+# packages/types and packages/agent.
 [[tool.mypy.overrides]]
-module = ["openadapt_flow.contracts.*", "openadapt_flow.agent.*"]
+module = ["openadapt_types.*", "openadapt_flow.agent.*"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]

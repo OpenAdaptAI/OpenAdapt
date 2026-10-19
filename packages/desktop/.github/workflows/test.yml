@@ -1,0 +1,103 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-python:
+    name: Python Engine Tests
+    strategy:
+      matrix:
+        # PRs exercise both supported Python versions on the canonical Linux
+        # lane. Exact main repeats the same contract on macOS and Windows, so
+        # releases still require the complete cross-platform matrix.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+        python-version: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --locked --extra dev
+
+      - name: Lint
+        run: uv run ruff check openadapt_desktop/ tests/ scripts/
+
+      - name: Run tests
+        run: uv run pytest tests/ -v
+
+  qualification-contract:
+    name: Qualification contract (bundled Flow)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install Desktop and the exact bundled Flow runtime
+        run: uv sync --locked --extra dev --extra build
+
+      - name: Checkout the exact Tray protocol peer
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OpenAdaptAI/openadapt-tray
+          ref: 3d6ffbeda50af2fc4769ae0f1ce55e3d5d49435c
+          path: .integration/openadapt-tray
+          persist-credentials: false
+
+      - name: Exercise the Desktop and Tray IPC contract
+        env:
+          OPENADAPT_TRAY_SOURCE: .integration/openadapt-tray/src
+        run: uv run pytest tests/test_tray_integration.py -v
+
+      - name: Exercise qualification safety contracts
+        run: >-
+          uv run pytest
+          tests/test_engine/test_qualification.py
+          tests/test_engine/test_qualification_capabilities.py
+          tests/test_engine/test_dispatch.py::TestLibraryCommands::test_first_supervised_replay_refuses_state_change_before_flow
+          tests/test_engine/test_dispatch.py::TestLibraryCommands::test_first_supervised_replay_refuses_a_stale_exact_bundle_binding
+          tests/test_engine/test_dispatch.py::TestLibraryCommands::test_first_supervised_replay_refuses_a_changed_execution_target
+          tests/test_engine/test_dispatch.py::TestLibraryCommands::test_first_supervised_replay_runs_an_exact_reviewed_read_only_bundle
+          tests/test_engine/test_dispatch.py::TestLibraryCommands::test_fresh_first_compile_creates_review_and_reaches_supervised_replay
+          tests/test_engine/test_dispatch.py::TestLibraryCommands::test_uncertain_first_replay_requires_reconciliation_before_retry
+          tests/test_engine/test_dispatch.py::TestLibraryCommands::test_completed_first_workflow_allows_exact_environment_on_draft_descendant
+          -v
+
+      # The capture floor is only checkable where the bundled Flow runtime is
+      # installed: Flow's own metadata declares it, and converting a
+      # demonstrated modifier chord needs both libraries. These assertions skip
+      # in the plain test job, so name the file here explicitly.
+      - name: Exercise the capture/Flow producer contract
+        run: >-
+          uv run pytest
+          tests/test_capture_runtime_contract.py
+          tests/test_build_frozen_engine.py::test_bundled_capture_floor_comes_from_the_frozen_flow_runtime
+          -v
+
+      # Desktop must accept the same openadapt-types range as the bundled
+      # Flow, or installing Desktop next to the launcher downgrades one of
+      # them. Flow's range is only readable where Flow is installed.
+      - name: Check the shared types range against the bundled Flow
+        run: uv run pytest tests/test_dependency_compat.py -v

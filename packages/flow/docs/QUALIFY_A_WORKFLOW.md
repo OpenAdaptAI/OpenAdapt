@@ -133,8 +133,14 @@ What each part does:
   `record_written` plus a `field_equals` per other field. Give `effects` or
   `record`, not both; leave both out when the compiler already bound the
   save's checks from the demonstration.
-- **minimum_effect_strength**: `independent_system_of_record` (default) or
-  `independent_session`. `qualify` refuses a verifier that reads weaker.
+- **minimum_readback**: `system_of_record` or `separate_session`
+  ([`READBACK_LADDER.md`](READBACK_LADDER.md)). `qualify` refuses a verifier
+  that reads weaker, and writes the value onto the workflow so runs enforce
+  it too. A same-session reopen or a same-screen check is never enough.
+  `minimum_effect_strength` is the older setting and still works:
+  `independent_system_of_record` (the default when neither is given) equals
+  `system_of_record`; `independent_session` equals `separate_session`. Give
+  one, not both.
   Certification needs more than the minimum, though: see below.
 - **save_step**: `auto` picks the single irreversible step. If there are none
   or several, `qualify` says so and asks you to name one.
