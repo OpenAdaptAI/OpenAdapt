@@ -803,6 +803,9 @@ def admission_status(
             },
         },
         "needs_person": _evidence_at(program / NEEDS_PERSON_FILE, digest),
+        # A policy such as clinical-write needs one on every write; a person
+        # names it when confirming the parameters.
+        "idempotency_keys": idempotency_keys(workflow),
     }
 
 
@@ -845,8 +848,18 @@ def confirm_params(
     accept_params: Sequence[str],
     confirm: object = None,
     key_dir: Optional[Path] = None,
+    idempotency_key: Optional[str] = None,
 ) -> dict[str, Any]:
     """A named person confirms which typed values become the task's parameters.
+
+    ``idempotency_key`` names the parameter that identifies one saved record,
+    such as a claim number the app keeps unique. The person asserts that; it
+    can't be read from one run. The parameter must be one the mined record
+    check already selects the saved record by. It becomes that check's
+    at-most-once key (:attr:`Effect.idempotency_key`), so a run counts the
+    records bearing the run's value and refuses a duplicate. Without a
+    parameter the record check selects by, it refuses and names the ones it
+    could take.
 
     ``accept_params`` must be exactly the task's parameters. They are applied
     by recompiling the recording
@@ -907,16 +920,106 @@ def confirm_params(
             f"the program's parameters {sorted(workflow.params)} do not match "
             f"the task's {task_params}"
         )
+    if idempotency_key is not None and _set_idempotency_key(
+        bundle, workflow, idempotency_key
+    ):
+        # The key is part of the digest; the recorder is unchanged.
+        workflow = _load_workflow(bundle)
+        candidate = sign_recorder(program, candidate, key_dir=key_dir)
+        _write(program / CANDIDATE_FILE, candidate)
     record = {
         "principal_id": name,
         "confirmed_at": _now(),
         "digest": _digest(workflow),
         "params": sorted(accept_params),
         "steps": [s.id for s in workflow.steps],
+        "idempotency_key": idempotency_keys(workflow),
     }
     _write(program / PARAMS_FILE, record)
     _event(program, "params_confirmed", principal_id=name, digest=record["digest"])
     return record
+
+
+def _record_checks(workflow: Any) -> list[tuple[Any, Any]]:
+    """(step, effect) for every mined record-written check."""
+
+    return [
+        (step, effect)
+        for step in workflow.steps
+        for effect in step.effects
+        if effect.kind.value == "record_written"
+        and not effect.needs_operator_confirmation
+    ]
+
+
+def idempotency_key_candidates(workflow: Any) -> list[str]:
+    """Parameters a record-written check selects its record by."""
+
+    return sorted(
+        {
+            expr.param
+            for _, effect in _record_checks(workflow)
+            for expr in (effect.match or {}).values()
+            if getattr(expr, "param", None)
+        }
+    )
+
+
+def idempotency_keys(workflow: Any) -> list[dict[str, Any]]:
+    """The at-most-once keys the record checks carry, for the record."""
+
+    return [
+        {
+            "step_id": step.id,
+            "field": effect.key_field,
+            "param": getattr(effect.idempotency_key, "param", None),
+        }
+        for step, effect in _record_checks(workflow)
+        if effect.idempotency_key is not None
+    ]
+
+
+def _set_idempotency_key(bundle: Path, workflow: Any, param: str) -> bool:
+    """Key every record check that selects by ``param``. True if it changed."""
+
+    from openadapt_flow.runtime.effects import ValueExpr
+
+    if param not in workflow.params:
+        raise AdmissionError(
+            f"idempotency_key {param!r} is not one of the task's parameters "
+            f"{sorted(workflow.params)}"
+        )
+    bound = []
+    for step, effect in _record_checks(workflow):
+        fields = [
+            field
+            for field, expr in (effect.match or {}).items()
+            if getattr(expr, "param", None) == param
+        ]
+        if len(fields) != 1:
+            continue
+        current = effect.idempotency_key
+        if current is not None and (
+            getattr(current, "param", None) != param or effect.key_field != fields[0]
+        ):
+            raise AdmissionError(
+                f"the record check on {step.id} already has the key "
+                f"{effect.key_field}={current}; reject the draft to change it"
+            )
+        bound.append((effect, fields[0]))
+    if not bound:
+        raise AdmissionError(
+            f"no record check selects its record by {param!r}, so it can't be "
+            "the idempotency key; parameters a record check selects by: "
+            f"{idempotency_key_candidates(workflow) or 'none'}"
+        )
+    if all(effect.idempotency_key is not None for effect, _ in bound):
+        return False
+    for effect, field in bound:
+        effect.idempotency_key = ValueExpr(param=param)
+        effect.key_field = field
+    workflow.save(bundle)
+    return True
 
 
 def record_review(
