@@ -1865,7 +1865,7 @@
     },
     {
       "path": "docs/verification.json",
-      "sha256": "8452ea77dc8cc3144c7b5af41a873238a1f2b7498f98a48c1530c5511f48c5d9"
+      "sha256": "fedb08c368d318855731de28255f71cb441be9d4640bf92db8a0c65fd554dae0"
     },
     {
       "path": "examples/claude-code-demo/demo.gif",
