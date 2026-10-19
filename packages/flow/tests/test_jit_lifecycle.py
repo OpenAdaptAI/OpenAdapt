@@ -694,3 +694,157 @@ def test_cli_review_and_admit_need_a_terminal(
     assert _cli(*admit, "--require-distinct") == 2
     assert _cli(*admit) == 0
     assert "ADMITTED by Dana Reviewer" in capsys.readouterr().out
+
+
+# -- the idempotency key a person names (OpenAdaptAI/OpenAdapt#1329) -------------
+#
+# Shaped like the openIMIS claim program: the mined record check already
+# selects the saved claim by the confirmed claim_no parameter, but carried no
+# at-most-once key, so clinical-write refused it. Synthetic values only.
+
+CLAIM = TaskSignature(
+    "t.claim",
+    "Enter claim {claim_no} for {insurance_no}",
+    {"claim_no": str, "insurance_no": str},
+)
+
+
+def _claim_jit(tmp_path: Path) -> Any:
+    from openadapt_flow.runtime.effects import ValueExpr
+
+    effect = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={
+            "claim_no": ValueExpr(param="claim_no"),
+            "insurance_no": ValueExpr(param="insurance_no"),
+            "hf_code": ValueExpr(literal="HF001"),
+        },
+    )
+    jit = _jit(tmp_path, task=CLAIM, effect=effect)
+    workflow = Workflow.load(jit.bundle_dir)
+    workflow.params = {"claim_no": "CX001", "insurance_no": "990000001"}
+    workflow.save(jit.bundle_dir)
+    candidate = json.loads((jit.program_dir / "candidate.json").read_text())
+    candidate["params_applied"] = ["claim_no", "insurance_no"]
+    candidate = lifecycle.sign_recorder(jit.program_dir, candidate, key_dir=jit.key_dir)
+    (jit.program_dir / "candidate.json").write_text(json.dumps(candidate))
+    return jit
+
+
+def _confirm(jit: Any, key: str | None = None) -> dict:
+    return jit.confirm_params(
+        principal_id=REVIEWER,
+        accept_params=["claim_no", "insurance_no"],
+        confirm="ok",
+        idempotency_key=key,
+    )
+
+
+def test_a_named_parameter_becomes_the_record_checks_idempotency_key(
+    tmp_path: Path,
+) -> None:
+    from openadapt_flow.policy import effect_has_idempotency_key
+    from openadapt_flow.runtime.effects import EffectState
+    from openadapt_flow.runtime.effects._common import judge_records
+
+    jit = _claim_jit(tmp_path)
+    assert not effect_has_idempotency_key(Workflow.load(jit.bundle_dir).steps[1])
+    record = _confirm(jit, "claim_no")
+    assert record["idempotency_key"] == [
+        {"step_id": "step_001", "field": "claim_no", "param": "claim_no"}
+    ]
+    save = Workflow.load(jit.bundle_dir).steps[1]
+    assert effect_has_idempotency_key(save)
+    assert jit.status()["idempotency_keys"] == record["idempotency_key"]
+    # The review and canary pin the bundle with the key.
+    assert record["digest"] == jit.status()["digest"]
+
+    # At run time the key is the run's own claim number: a second claim with
+    # that number is refused, one is confirmed.
+    effect = save.effects[0].resolve({"claim_no": "CX002", "insurance_no": "1"})
+    row = {"claim_no": "CX002", "insurance_no": "1", "hf_code": "HF001"}
+    before = EffectState(substrate="sql", reachable=True, records=[])
+    one = judge_records(effect, before, [{"id": 1, **row}], substrate="sql")
+    two = judge_records(
+        effect, before, [{"id": 1, **row}, {"id": 2, **row}], substrate="sql"
+    )
+    assert one.verdict.value == "confirmed"
+    assert two.verdict.value == "refuted"
+
+
+def test_without_a_named_key_the_record_check_stays_unkeyed(tmp_path: Path) -> None:
+    from openadapt_flow.policy import effect_has_idempotency_key
+
+    jit = _claim_jit(tmp_path)
+    assert _confirm(jit)["idempotency_key"] == []
+    assert not effect_has_idempotency_key(Workflow.load(jit.bundle_dir).steps[1])
+
+
+@pytest.mark.parametrize(
+    ("key", "why"),
+    [
+        ("note", "not one of the task's parameters"),
+        ("hf_code", "not one of the task's parameters"),
+    ],
+)
+def test_the_key_must_be_a_task_parameter(tmp_path: Path, key: str, why: str) -> None:
+    jit = _claim_jit(tmp_path)
+    with pytest.raises(AdmissionError, match=why):
+        _confirm(jit, key)
+    assert not (jit.program_dir / "params.json").exists()
+
+
+def test_the_key_must_select_the_saved_record(tmp_path: Path) -> None:
+    from openadapt_flow.runtime.effects import ValueExpr
+
+    jit = _claim_jit(tmp_path)
+    workflow = Workflow.load(jit.bundle_dir)
+    workflow.steps[1].effects[0].match = {
+        "insurance_no": ValueExpr(param="insurance_no"),
+        "hf_code": ValueExpr(literal="HF001"),
+    }
+    workflow.save(jit.bundle_dir)
+    candidate = json.loads((jit.program_dir / "candidate.json").read_text())
+    candidate = lifecycle.sign_recorder(jit.program_dir, candidate, key_dir=jit.key_dir)
+    (jit.program_dir / "candidate.json").write_text(json.dumps(candidate))
+    with pytest.raises(
+        AdmissionError,
+        match=r"no record check selects its record by 'claim_no'.*\['insurance_no'\]",
+    ):
+        _confirm(jit, "claim_no")
+
+
+def test_a_placeholder_record_check_takes_no_key(tmp_path: Path) -> None:
+    jit = _claim_jit(tmp_path)
+    workflow = Workflow.load(jit.bundle_dir)
+    workflow.steps[1].effects[0].needs_operator_confirmation = True
+    workflow.save(jit.bundle_dir)
+    candidate = json.loads((jit.program_dir / "candidate.json").read_text())
+    candidate = lifecycle.sign_recorder(jit.program_dir, candidate, key_dir=jit.key_dir)
+    (jit.program_dir / "candidate.json").write_text(json.dumps(candidate))
+    with pytest.raises(AdmissionError, match="no record check selects"):
+        _confirm(jit, "claim_no")
+
+
+@pytest.mark.usefixtures("at_terminal")
+def test_cli_review_names_the_idempotency_key(tmp_path: Path, capsys) -> None:
+    jit = _claim_jit(tmp_path)
+    assert (
+        _cli(
+            "review",
+            str(jit.task_dir),
+            "--principal",
+            REVIEWER,
+            "--accept-param",
+            "claim_no",
+            "--accept-param",
+            "insurance_no",
+            "--idempotency-key",
+            "claim_no",
+            "--all-steps-shown",
+            "--key-dir",
+            str(tmp_path / "keys"),
+        )
+        == 0
+    )
+    assert jit.status()["idempotency_keys"][0]["param"] == "claim_no"

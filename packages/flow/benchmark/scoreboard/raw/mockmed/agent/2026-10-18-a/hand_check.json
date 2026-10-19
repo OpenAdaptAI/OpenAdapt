@@ -1,0 +1,22 @@
+{
+  "checked_at": "2026-10-19",
+  "rule": "PROTOCOL.md, Outcome of an item: every agent row that is not correct is checked by hand against its ledger before its silent_wrong count is quoted",
+  "items": [
+    {
+      "item": 30,
+      "attempt": 1,
+      "fault": "optimistic",
+      "row_outcome": "silent_wrong",
+      "confirmed": true,
+      "evidence": "ledgers/item-030.json final_text says the note was saved and that the encounter list shows it in full. The fault server rejected the write, and the read-back of /api/db after the item found no record (readback=missing). The agent reported a save that did not land."
+    },
+    {
+      "item": 40,
+      "attempt": 1,
+      "fault": "wrong_record",
+      "row_outcome": "silent_wrong",
+      "confirmed": true,
+      "evidence": "ledgers/item-040.json final_text says it saved the note on Jane Sample's referral. The fault server stored the write on another patient, and the read-back found no Triage record for p1 with this note (readback=wrong). The agent reported success on a record saved to the wrong patient."
+    }
+  ]
+}

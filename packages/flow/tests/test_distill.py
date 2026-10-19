@@ -295,3 +295,104 @@ def test_dead_end_ignores_repaint_noise_but_not_a_real_change(tmp_path: Path) ->
         ({"kind": "click", "x": 9, "y": 9}, changed, C),
     ]
     assert _dropped(tmp_path, real, "b") == []
+
+
+# -- a save the app refused, then corrected (OpenAdaptAI/OpenAdapt#1328) ------
+#
+# Shaped like the scoreboard's OpenEMR run: the agent typed the sex into
+# Gender Identity, Create was refused ("Birth Sex is not valid"), it typed the
+# same value into Birth Sex and pressed Create again. Synthetic records only.
+
+PRIOR = [{"id": "1", "fname": "Prior", "sex": "Female"}]
+SAVED = PRIOR + [{"id": "2", "fname": "Testa", "sex": "Female"}]
+
+
+def _ev(kind: str, *, after: list | None = None, **fields) -> dict:
+    return {"kind": kind, "sor_before": PRIOR, "sor_after": after or PRIOR, **fields}
+
+
+def _control_click(selector: str, name: str, role: str = "combobox") -> dict:
+    return _ev(
+        "click",
+        x=1,
+        y=1,
+        structural={"selector": selector, "role": role, "name": name},
+    )
+
+
+def _correction(saved: list | None = None) -> list[dict]:
+    return [
+        _control_click("#form_fname", "form_fname", "textbox"),
+        _ev("type", text="Testa", field_label="form_fname"),
+        _control_click("#form_sex_identified", "form_sex_identified"),
+        _ev("type", text="Female", field_label="form_sex_identified"),
+        _ev("key", key="Enter"),
+        _control_click("#create", "Create New Patient", "button"),
+        _control_click("#form_sex", "form_sex"),
+        _ev("type", text="Female", field_label="form_sex"),
+        _ev("key", key="Enter"),
+        _control_click("#create", "Create New Patient", "button"),
+        _ev(
+            "click",
+            x=2,
+            y=2,
+            structural={"selector": "#confirmCreate", "name": "Confirm Create"},
+            after=saved or SAVED,
+        ),
+    ]
+
+
+def _steps(events: list[dict]) -> list[tuple[dict, bytes, bytes]]:
+    return [(event, A, B) for event in events]
+
+
+def test_drops_the_misdirected_entry_and_the_refused_save(tmp_path: Path) -> None:
+    assert _dropped(tmp_path, _steps(_correction()), "a") == [
+        (2, "entry_corrected"),
+        (3, "entry_corrected"),
+        (4, "entry_corrected"),
+        (5, "save_retried"),
+    ]
+
+
+def test_keeps_the_first_entry_when_the_record_has_that_field(tmp_path: Path) -> None:
+    saved = PRIOR + [
+        {"id": "2", "fname": "Testa", "sex": "Female", "sex_identified": ""}
+    ]
+    assert _dropped(tmp_path, _steps(_correction(saved)), "a") == [(5, "save_retried")]
+
+
+def test_keeps_the_first_entry_when_the_record_lacks_the_value(tmp_path: Path) -> None:
+    saved = PRIOR + [{"id": "2", "fname": "Testa", "sex": "Male"}]
+    assert _dropped(tmp_path, _steps(_correction(saved)), "a") == [(5, "save_retried")]
+
+
+def test_drops_nothing_without_a_refused_save(tmp_path: Path) -> None:
+    events = _correction()
+    del events[5]  # no Create between the two entries
+    assert _dropped(tmp_path, _steps(events), "a") == []
+
+
+def test_drops_nothing_when_the_refused_save_wrote(tmp_path: Path) -> None:
+    events = _correction()
+    events[5] = {**events[5], "sor_after": SAVED}
+    assert _dropped(tmp_path, _steps(events), "a") == []
+
+
+def test_drops_nothing_when_nothing_was_typed_between_saves(tmp_path: Path) -> None:
+    events = _correction()
+    del events[6:9]  # the save is pressed again with no correction
+    assert _dropped(tmp_path, _steps(events), "a") == []
+
+
+def test_drops_nothing_without_record_snapshots(tmp_path: Path) -> None:
+    events = [
+        {k: v for k, v in e.items() if not k.startswith("sor_")} for e in _correction()
+    ]
+    assert _dropped(tmp_path, _steps(events), "a") == []
+
+
+def test_keeps_a_parameter_typed_into_the_first_field(tmp_path: Path) -> None:
+    events = _correction()
+    events[3] = {**events[3], "param": "sex"}
+    assert _dropped(tmp_path, _steps(events), "a") == [(5, "save_retried")]

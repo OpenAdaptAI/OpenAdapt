@@ -23,6 +23,13 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   authoring time rather than emitting a bad bundle. This turns a replay of
   one recorded path into governed execution over a queue:
   `openadapt-flow for-each bundle --records worklist.csv --out queue-bundle`.
+- **Parallel worklists.** `replay` and `run` with `--workers N` enter a
+  for-each bundle's items on N sessions at once, each signed in as its own
+  user from the deployment file, with every check still on per item. Each
+  item is claimed once from a durable queue, a halt on any worker stops new
+  items on all of them, and `--readback-window K` lets a worker start its
+  next item while the last save is still being read back. See
+  [`THROUGHPUT.md`](THROUGHPUT.md).
 - **Compose separately recorded bundles.** `compose` takes named compiled
   child bundles and a handoff contract and writes a parent artifact that
   `certify` and `run` execute. Each child keeps the surface it was recorded
@@ -153,6 +160,13 @@ Every later run makes no model calls and gets a `verify-run` receipt. An agent
 that opens the wrong patient is refused at the save, and nothing is compiled.
 See [`COMPILE_AGENT.md`](COMPILE_AGENT.md), which also has the measured token and
 time cost of structure-first observation against a screenshot every turn.
+
+With `--vision code` the agent acts through code: one `run` tool that takes a
+script (query the DOM or accessibility tree, click, fill and select by role
+and name, read back, a read-only sandboxed shell), screenshots only on
+request. Its scoreboard figures are arm 7
+([#1307](https://github.com/OpenAdaptAI/OpenAdapt/pull/1307)). See
+[`CODE_AS_ACTION.md`](CODE_AS_ACTION.md).
 
 ## Answer a halt from a phone
 

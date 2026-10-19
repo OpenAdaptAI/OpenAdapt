@@ -6,14 +6,19 @@ command built, or its refusal.
 
 from __future__ import annotations
 
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-pytest.importorskip("mcp")
+from openadapt_flow.agent.cli import main
 
-from openadapt_flow.agent.cli import main  # noqa: E402
+# Never import the MCP SDK at collection: other tests in the same process
+# check that emitting a server does not import it.
+pytestmark = pytest.mark.skipif(
+    find_spec("mcp") is None, reason="needs the agent extra"
+)
 
 
 @pytest.fixture()

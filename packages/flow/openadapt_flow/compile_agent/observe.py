@@ -143,13 +143,22 @@ _OBSERVE_JS = (
 
 _DESCRIBE_JS = """
 function oaDescribe(c, interactive, scopeSel) {
-  var scope = c.closest(scopeSel) || document.body;
+  var scope = c.closest(scopeSel);
+  // A table row with many controls is page layout, not a record row: the
+  // scope is the form or section around it.
+  while (scope && scope.matches('tr, [role=row]') &&
+         scope.querySelectorAll('input, select, textarea, button').length > 8)
+    scope = scope.parentElement && scope.parentElement.closest(scopeSel);
+  scope = scope || document.body;
   return {tag: c.tagName.toLowerCase(), type: c.type || '', name: oaName(c),
           role: c.getAttribute('role') || '', interactive: interactive,
           editable: c.isContentEditable || c.tagName === 'TEXTAREA' ||
             (c.tagName === 'INPUT' &&
              !/^(button|submit|reset|checkbox|radio|image|file|range|color)$/i
                .test(c.type)),
+          // A drop-down whose change submits the form: Enter on it is a save.
+          submits: /submit/i.test(c.getAttribute('onchange') || '') ||
+            /submit/i.test((c.form && c.form.getAttribute('onchange')) || ''),
           context: oaRow(c), scope: String(scope.innerText || '')};
 }
 """

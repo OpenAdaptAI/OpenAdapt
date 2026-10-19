@@ -134,7 +134,7 @@ export function taskStatus(
       icon: "half",
       next: "check",
       nextLabel: "Continue checking",
-      detail: "Finish checking this task before it runs on real items.",
+      detail: "Finish checking this workflow before it runs on real items.",
     };
   }
   return {

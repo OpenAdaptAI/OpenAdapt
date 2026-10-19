@@ -77,6 +77,8 @@ OUT_DIR = "compiled"
 PROPOSED_FILE = "verify.proposed.yaml"
 CONFIRMED_FILE = "verify.yaml"
 CHECKS_FILE = "record_checks.json"
+TRACE_FILE = "code_action_trace.json"
+AGENT_READS_FILE = "agent_reads.json"
 
 _PLACEHOLDER_RE = re.compile(r"{([A-Za-z_][A-Za-z0-9_]*)}")
 
@@ -541,6 +543,7 @@ class FirstRunCompiler:
         # A new run 1 makes a new draft: checks a person confirmed for an
         # earlier draft must not carry over to it.
         for stale in (
+            AGENT_READS_FILE,
             PROPOSED_FILE,
             CONFIRMED_FILE,
             CHECKS_FILE,
@@ -573,6 +576,14 @@ class FirstRunCompiler:
             "gates": harness.gate_log if harness else [],
             "agent_error": harnessed.error,
         }
+        trace_data: Optional[dict[str, Any]] = None
+        trace = getattr(agent, "last_trace", None)
+        if trace is not None:
+            # Code as action: the structured steps and what the agent read.
+            data: dict[str, Any] = trace.to_dict()
+            trace_data = data
+            _write_json(attempt / TRACE_FILE, data)
+            run1["code_action"] = data["summary"]
         _write_json(attempt / "run1.json", run1)
 
         def done(status: str, detail: Optional[str], **kw: Any) -> CompileResult:
@@ -616,11 +627,48 @@ class FirstRunCompiler:
                 record_check=check.to_dict(),
             )
         proposed = self._propose(self._baseline or [], after or [], values)
+        if trace_data is not None:
+            run1["code_action"]["program"] = self._check_trace(jit, trace_data)
+            _write_json(attempt / "run1.json", run1)
+            _write_json(
+                self.out_dir / AGENT_READS_FILE,
+                {
+                    "identity_read_before_commit": run1["code_action"][
+                        "identity_read_before_commit"
+                    ],
+                    "read_back_after_commit": run1["code_action"][
+                        "read_back_after_commit"
+                    ],
+                    "program": run1["code_action"]["program"],
+                },
+            )
         return done(
             "draft",
             "run 1 passed its record check; a person confirms the proposed checks",
             record_check=check.to_dict(),
             proposed_checks=proposed,
+        )
+
+    @staticmethod
+    def _check_trace(jit: CompiledAgent, trace: Mapping[str, Any]) -> dict[str, Any]:
+        """Whether the draft program carries the locator of every element
+        the agent acted on by structure."""
+
+        from openadapt_flow.compile_agent.code_action import (
+            check_trace_against_ir,
+            distilled_events,
+        )
+        from openadapt_flow.ir import Workflow
+
+        try:
+            workflow = Workflow.load(jit.bundle_dir)
+        except Exception as exc:  # noqa: BLE001 - reported, never admitted on
+            return {"passed": False, "error": f"{type(exc).__name__}: {exc}"}
+        recording = (jit.candidate() or {}).get("compiled_recording")
+        return check_trace_against_ir(
+            trace,
+            workflow,
+            distilled=distilled_events(Path(recording) if recording else None),
         )
 
     def _set_aside(self, jit: CompiledAgent, status: str, reasons: list[str]) -> Path:
@@ -657,7 +705,14 @@ class FirstRunCompiler:
 
         doc = yaml.safe_load((self.out_dir / PROPOSED_FILE).read_text())
         effects = doc.get("effects") or []
+        reads = self.out_dir / AGENT_READS_FILE
+        extra: dict[str, Any] = {}
+        if reads.is_file():
+            # What a code-as-action agent read: the identity before the save,
+            # and its inputs read back after it. Evidence for the person.
+            extra["agent_read"] = json.loads(reads.read_text())
         return {
+            **extra,
             "file": str(self.out_dir / PROPOSED_FILE),
             # Confirming the checks also confirms these as the parameters.
             "params": sorted(self.task.params),

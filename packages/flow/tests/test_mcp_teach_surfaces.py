@@ -23,26 +23,22 @@ from __future__ import annotations
 import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
 import pytest
 
-pytest.importorskip("mcp")
-pytest.importorskip("playwright.sync_api")
+from openadapt_flow.mockmed.fault_server import serve
+from openadapt_flow.tutorial import _http_json, _records
+from tests.surface_kiosk import PageWindowClient
 
-import anyio  # noqa: E402
-import mcp.types as types  # noqa: E402
-from mcp import ClientSession  # noqa: E402
-from mcp.shared.memory import create_client_server_memory_streams  # noqa: E402
-
-from openadapt_flow.agent.bridge import AgentBridge  # noqa: E402
-from openadapt_flow.agent.mcp import build_server  # noqa: E402
-from openadapt_flow.agent.runner import RunnerConfig  # noqa: E402
-from openadapt_flow.agent.teach import TeachBridge, TeachConfig  # noqa: E402
-from openadapt_flow.mockmed.fault_server import serve  # noqa: E402
-from openadapt_flow.tutorial import _http_json, _records  # noqa: E402
-from tests.surface_kiosk import PageWindowClient  # noqa: E402
+# The MCP SDK is imported inside the tests, never at collection: other tests
+# in the same process check that emitting a server does not import it.
+pytestmark = pytest.mark.skipif(
+    find_spec("mcp") is None or find_spec("playwright") is None,
+    reason="needs the agent extra and Playwright",
+)
 
 TITLE = "MockMed kiosk"
 SECTIONS = {
@@ -150,6 +146,11 @@ def _admitter(key_dir: Path, origin: str, monkeypatch: pytest.MonkeyPatch) -> An
 
 @asynccontextmanager
 async def connect(server: Any, *, person: Optional[str]):
+    import anyio
+    import mcp.types as types
+    from mcp import ClientSession
+    from mcp.shared.memory import create_client_server_memory_streams
+
     async def elicit(context: Any, params: Any) -> types.ElicitResult:
         if person is None:
             return types.ElicitResult(action="decline", content={})
@@ -169,7 +170,7 @@ async def connect(server: Any, *, person: Optional[str]):
             tasks.cancel_scope.cancel()
 
 
-async def _call(session: ClientSession, name: str, args: Optional[dict] = None) -> dict:
+async def _call(session: Any, name: str, args: Optional[dict] = None) -> dict:
     result = await session.call_tool(name, args or {})
     payload = json.loads(result.content[0].text)
     if getattr(result, "is_error", None) or getattr(result, "isError", None):
@@ -182,6 +183,12 @@ async def _call(session: ClientSession, name: str, args: Optional[dict] = None) 
 def test_teach_on_a_remote_window(
     mockmed: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
 ) -> None:
+    import anyio
+
+    from openadapt_flow.agent.bridge import AgentBridge
+    from openadapt_flow.agent.mcp import build_server
+    from openadapt_flow.agent.runner import RunnerConfig
+    from openadapt_flow.agent.teach import TeachBridge, TeachConfig
     from openadapt_flow.jit.compile_agent import SurfaceApp
 
     section = SECTIONS[kind]

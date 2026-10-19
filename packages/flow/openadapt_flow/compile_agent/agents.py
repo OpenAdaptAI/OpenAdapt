@@ -11,6 +11,11 @@ key, in one of two observation modes:
 ``every_turn``
     The baseline: Claude's computer toolset (``computer_toolset_20260801``),
     with a screenshot returned after every action.
+``code``
+    Code as action (:mod:`.code_action`): one ``run`` tool that takes a short
+    script. The model queries the structure, acts by role and name, reads
+    back, keeps notes in a sandboxed working directory, and asks for a
+    screenshot only when it wants one. Several actions fit in one call.
 
 Both modes perform every action through the same harness and capture computer,
 so both are recorded and compiled the same way. Each model call's token usage
@@ -63,7 +68,7 @@ PRICES_PER_MTOK: dict[str, dict[str, float]] = {
     },
 }
 
-VISION_MODES = ("selective", "every_turn")
+VISION_MODES = ("selective", "every_turn", "code")
 
 
 class BudgetExceeded(RuntimeError):
@@ -220,6 +225,21 @@ record is refused and ends the run. Do exactly the task, with the values \
 given, and nothing else. When the task is done, or cannot be done, call \
 finish with a one-line summary."""
 
+_CODE_SYSTEM = """\
+You operate an application for the user through a terminal-style tool, run. \
+Each call takes a short script, one command per line, and returns what each \
+line printed. Read the app's structure with tree, find, text and read; act on \
+elements by role and name with click, fill, select and press; check results \
+by reading again. Put several commands in one script when you know what comes \
+next: refs change after every action, so later lines in a script name their \
+targets by role and name (click role=button name="Save"). Filter listings \
+with grep= to keep them short. Call screenshot only \
+when the text is not enough. Before any save, the harness checks that the \
+right record is on screen; a save on the wrong record is refused and ends the \
+run. Do exactly the task, with the values given, and nothing else. After the \
+save, read the screen to confirm it. When the task is done, or cannot be \
+done, call finish with a one-line summary."""
+
 _FINISH_TOOL = {
     "name": "finish",
     "description": "End the task. Call it once, when the task is done or cannot be done.",
@@ -295,6 +315,26 @@ _SELECTIVE_TOOLS = [
     },
     _FINISH_TOOL,
 ]
+
+
+def _run_tool_spec() -> dict[str, Any]:
+    from openadapt_flow.compile_agent.code_action import COMMANDS
+
+    return {
+        "name": "run",
+        "description": "Run a short script against the app.\n" + COMMANDS,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "script": {
+                    "type": "string",
+                    "description": "Commands, one per line.",
+                }
+            },
+            "required": ["script"],
+            "additionalProperties": False,
+        },
+    }
 
 
 def _block_dict(block: Any) -> dict[str, Any]:
@@ -386,7 +426,7 @@ class ClaudeAgent:
 
     @property
     def dialect(self) -> str:
-        return "generic" if self.vision == "selective" else "anthropic"
+        return "anthropic" if self.vision == "every_turn" else "generic"
 
     def _client(self, request: TaskRequest) -> Any:
         if self.client is not None:
@@ -405,10 +445,31 @@ class ClaudeAgent:
         #: Kept so a run that raises still reports what it spent.
         self.last_ledger = ledger
         selective = self.vision == "selective"
-        if selective:
+        self._tool: Any = None
+        tools: list[dict[str, Any]]
+        first: list[dict[str, Any]]
+        if self.vision == "code":
+            from openadapt_flow.compile_agent.code_action import (
+                CodeActionTool,
+                _watch,
+            )
+
+            self._tool = CodeActionTool(harness, watch=_watch(request, harness))
+            self.last_trace = self._tool.trace
+            system = _CODE_SYSTEM
+            tools = [_run_tool_spec(), _FINISH_TOOL]
+            first = [
+                {"type": "text", "text": f"Task: {request.instruction}"},
+                {
+                    "type": "text",
+                    "text": "The harness ran `tree` for you. Its output:\n\n"
+                    + self._tool.run("tree").text,
+                },
+            ]
+        elif selective:
             system = _SELECTIVE_SYSTEM
-            tools: list[dict[str, Any]] = list(_SELECTIVE_TOOLS)
-            first: list[dict[str, Any]] = [
+            tools = list(_SELECTIVE_TOOLS)
+            first = [
                 {"type": "text", "text": f"Task: {request.instruction}"},
                 {"type": "text", "text": "Current page:\n" + harness.observe().text},
             ]
@@ -511,7 +572,11 @@ class ClaudeAgent:
         if toolset:
             result["toolset_name"] = toolset
         try:
-            if selective:
+            if self._tool is not None:
+                if name != "run":
+                    raise LookupError(f"unknown tool {name!r}; use run or finish")
+                result["content"] = self._tool.run(str(args.get("script", ""))).blocks()
+            elif selective:
                 result["content"] = self._selective(name, args, harness)
             else:
                 result["content"] = self._computer(name, args, harness)
