@@ -1,5 +1,7 @@
 # From trace to program
 
+> The full, current map of every OpenAdapt capability, with status and evidence, is [CAPABILITIES.md](../../../CAPABILITIES.md) at the repository root. This page goes deeper on a few compiler features.
+
 A single demonstration under-specifies intent, so openadapt-flow does not stop
 at replaying one. These capabilities layer onto the same $0, model-free runtime.
 
@@ -29,6 +31,20 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   `--allow-halt` class you named). Handoffs copy effect-bound parameter
   values from the predecessor's confirmed effect receipt. Missing evidence
   HALTs. The launcher form is `openadapt flow compose`.
+- **Route between separately admitted variants.** When one workflow is
+  really several programs (one clinic's EMR has different custom fields,
+  Medicare claims take a different path, a dark-theme VDI renders
+  differently), a variant set keeps each variant as its own bundle with its
+  own admission. A deterministic pre-run router picks exactly one variant from
+  the item's inputs and a fingerprint of the first screen (luminance theme
+  class plus whole-word OCR markers such as an app version or tenant banner),
+  with no model call. Conditions must be separated at authoring time. No
+  match, an ambiguous match, a missing frame, or a refused admission halts with
+  a named reason; the router never guesses or falls back. The run report and
+  receipt name the variant that ran, and `variants add --derived-from` promotes
+  an admitted repaired bundle to a new variant
+  (`openadapt-flow variants author`, `route`, `run`). See
+  [`VARIANTS.md`](VARIANTS.md).
 - **See what a demonstration compiled into.** `visualize` renders a
   program-graph view of a bundle before it runs: the ordered steps, the
   resolution ladder each step will try, where an identity gate is armed,
@@ -49,6 +65,10 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   underdetermined. The healthy replay path still makes no model call.
   [`LEARN_FROM_MANY_RUNS.md`](LEARN_FROM_MANY_RUNS.md) covers `induce`,
   `teach-branch` and shadow mining together, with each one's status.
+  With `--probe-on test-copy.yaml`, a refused optional step is instead
+  replayed both ways on a declared test copy and scored by reading the record
+  back; it is certified only when exactly one reading works for every
+  recording ([`PROBE_INDUCTION.md`](PROBE_INDUCTION.md)).
 - **Effect verification against the system of record.** The read-back checks
   our own work: a wrong field, a wrong record, a duplicate submit, or a partial
   save can all look like success on screen. A step
@@ -89,10 +109,32 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   operator can approve and resume from the last verified state (`resume` /
   `approve`), not a restart, and explicitly not "hand the rest to a free-form
   agent."
+- **After a stop: change ledger, write-ordering lint, declared undo.** A stop
+  isn't a rollback, so every run report lists, in order, each step that could
+  have changed the app and whether each declared effect was confirmed, refuted
+  or unknown in the system of record; the halt message and `explain` say what
+  may need undoing. `lint` warns when a write comes before a right-record check
+  or halting precondition it could have run first, and suggests an order
+  without changing the bundle. A bundle can declare an undo step for an
+  effect, written by hand or compiled from a demonstration. After a halt Flow
+  offers it to a person, runs it only after that person approves it at a
+  terminal, and calls it done only when the undo's own effects are confirmed
+  in the system of record (`openadapt-flow undo list | approve | run`). See
+  [`AFTER_A_STOP.md`](AFTER_A_STOP.md).
 - **PHI-free identity.** The wrong-patient identity check can run against a
   salted-hash, shape-preserving `IdentityTemplate` instead of a plaintext
   name / DOB / MRN band, so a compiled bundle need carry no readable PHI while
   still enforcing identity (`openadapt_flow/runtime/identity_template.py`).
+- **Display scaling on the pixel path.** A remote desktop recorded at 100%
+  and replayed at 125%, 150% or 175%, or with ClearType switched, no longer
+  stops at the first step. The runtime fits one scale from the labels the
+  compiler kept (as salted hashes) and continues on a view of the session in
+  the recorded geometry, with resolution, identity, postconditions and effect
+  checks unchanged (`openadapt_flow/runtime/render_scale.py`). In the
+  [display-scaling sweep](../benchmark/pixel_scale/README.md), healthy runs
+  went from 3 of 24 to 17 of 24, and every wrong-record run still
+  halted with nothing saved. Record IDs with 1/l or 0/O still halt at the
+  identity check off the recorded render.
 
 Compiled workflows can also be emitted as Agent Skills or MCP servers
 (`emit-skill` / `emit-mcp`), so other agents can invoke them.

@@ -204,6 +204,24 @@ _SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
         ),
         _SealedCanonicalOmission(
             owner=Step,
+            field_name="read",
+            omitted_values=(None,),
+            reason=(
+                "an absent read spec predates the v2 READ step; a READ step "
+                "carries one, and its spec remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Step,
+            field_name="read_gate",
+            omitted_values=(None,),
+            reason=(
+                "an absent minimum read grade predates the v2 field; a declared "
+                "floor remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Step,
             field_name="surface",
             omitted_values=(None,),
             reason=(
@@ -228,6 +246,16 @@ _SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
             reason=(
                 "absent switch-target origin predates the multi-surface "
                 "fields; a recorded origin remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Step,
+            field_name="closes_surface",
+            omitted_values=(False,),
+            reason=(
+                "a click that leaves its page open is what every earlier "
+                "bundle recorded; a click declared to close its popup is "
+                "sealed content"
             ),
         ),
         _SealedCanonicalOmission(
@@ -323,7 +351,10 @@ def _referenced_asset_paths(workflow: "Workflow") -> set[str]:
     crops, postcondition template crops), across the linear steps AND every
     program / subflow action state."""
     refs: set[str] = set()
-    for step in iter_workflow_steps(workflow):
+    # Declared undo steps are not part of the run, but their crops are bundle
+    # content a person may later approve running, so they are hashed too.
+    undo_steps = [step for undo in workflow.undo_steps for step in undo.steps]
+    for step in [*iter_workflow_steps(workflow), *undo_steps]:
         anchor = step.anchor
         if anchor is not None:
             if anchor.template:

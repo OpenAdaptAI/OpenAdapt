@@ -54,6 +54,7 @@ import random
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Optional
 
 from openadapt_flow.ir import Point, Region
@@ -627,6 +628,10 @@ from openadapt_flow.runtime.identity import (  # noqa: E402
     verify_structured_identity,
     verify_target_identity,
 )
+from openadapt_flow.runtime.replayer import (  # noqa: E402
+    better_identity_read,
+    identity_read_contradicts,
+)
 from openadapt_flow.vision.ocr import ocr  # noqa: E402
 
 _TODAY = date.today()
@@ -739,8 +744,10 @@ def replay_observe(
         context_text,
     )
     used_upscale = False
+    first_near = list(near_lines)
     reads = [check]
-    if check.status != "verified":
+    # Mirrors the replayer: a read that contradicts the record is final.
+    if check.status != "verified" and not identity_read_contradicts(check):
         upscaled = identity_mod.upscale_crop(frame.png, band)
         if upscaled is not None:
             (retry, r_obs, retry_nf, r_obs_nf, r_lines, r_near) = _band_attempt(
@@ -756,11 +763,7 @@ def replay_observe(
                 context_text,
             )
             reads.append(retry)
-            rank = {"unreadable": 0, "abstain": 1, "mismatch": 2, "verified": 3}
-            if (rank[retry.status], retry.coverage) > (
-                rank[check.status],
-                check.coverage,
-            ):
+            if better_identity_read(check, retry) is retry:
                 # The upscaled retry runs in a 2x coordinate space; map its
                 # line regions back to the base frame so geometric row
                 # assignment (bleed) stays in one coordinate system.
@@ -783,6 +786,35 @@ def replay_observe(
                 check, observed, check_nf, obs_nf = (retry, r_obs, retry_nf, r_obs_nf)
                 band_lines = _downscale(r_lines)
                 near_lines = _downscale(r_near)
+                used_upscale = True
+    if check.status != "verified" and not identity_read_contradicts(check):
+        # The replayer's last attempt: the point's own row, re-read alone.
+        row = identity_mod.row_region(
+            [SimpleNamespace(region=region) for _text, region in first_near], band
+        )
+        f = identity_mod.ROW_REREAD_FACTOR
+        row_png = None if row is None else identity_mod.upscale_crop(frame.png, row, f)
+        if row is not None and row_png is not None:
+            (row_check, w_obs, row_nf, w_obs_nf, _w_lines, _w_near) = _band_attempt(
+                row_png,
+                None,
+                (resolved_point[1] - row[1]) * f,
+                (
+                    (exclude[0] - row[0]) * f,
+                    (exclude[1] - row[1]) * f,
+                    exclude[2] * f,
+                    exclude[3] * f,
+                ),
+                context_text,
+            )
+            reads.append(row_check)
+            if better_identity_read(check, row_check) is row_check:
+                check, observed, check_nf, obs_nf = (
+                    row_check,
+                    w_obs,
+                    row_nf,
+                    w_obs_nf,
+                )
                 used_upscale = True
     return ReplayObservation(
         check=check,
