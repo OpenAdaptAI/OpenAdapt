@@ -1392,6 +1392,14 @@
       "sha256": "fd4ea02d518555e7de800971f13e3b0a832eddf53d261082dc49ff72d35ed105"
     },
     {
+      "path": "benchmark/scoreboard/raw/openemr_referral/claims/rejudge-1375-2026-10-19/items.csv",
+      "sha256": "ea2366c60d1e0232602fba9f55fbb6f92561d0da19c917799e86e9c7cba160c5"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/claims/rejudge-1375-2026-10-19/meta.json",
+      "sha256": "5405fe8f3f70ce4cc6838690c5e5b15ffa7d5432d56f39e48c149ab07d68525a"
+    },
+    {
       "path": "benchmark/scoreboard/raw/openemr_referral/claims/smoke-2026-10-19/items.csv",
       "sha256": "ddc0a67039f041a92c62a1e3b768aacd8964d037dcdd080a7c3461e5c4e8358e"
     },
@@ -1761,7 +1769,7 @@
     },
     {
       "path": "benchmark/scoreboard/scoreboard.json",
-      "sha256": "b23e9a74e73493650ab9b59752fd5e92c594d0e35dd562070bd3637620f8dba0"
+      "sha256": "9755a5cb9dcdaa98d2539b0dd5263519f658b84ebd1ad37032048eb46488be81"
     },
     {
       "path": "benchmark/silent_wrong_action/results.json",
