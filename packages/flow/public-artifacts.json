@@ -132,6 +132,10 @@
       "sha256": "04943b58d3a224798940c2c2012dcecd4d0c781ba0111caa3aa46ec53aa444c9"
     },
     {
+      "path": "benchmark/agent_guard/results.json",
+      "sha256": "a03a504d90d732ddbb073958e280da7bb0f6e4ad90b664349698dea0843d0bef"
+    },
+    {
       "path": "benchmark/ap_invoice/results.json",
       "sha256": "684a4c1c79b9b2bf309f601fa58716bab9794ea451da294d78b64bd0a83a1fb9"
     },
