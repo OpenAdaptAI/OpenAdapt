@@ -29,6 +29,7 @@ from openadapt_flow.agent.cards import WorkflowCard, coerce_inputs, input_proble
 from openadapt_flow.agent.contract import REASONS, build_result, reason_for_run
 from openadapt_flow.agent.runner import FlowRunner, is_safe_run_id
 from openadapt_flow.agent.runs import RunStore, pid_alive
+from openadapt_flow.readback_ladder import checked_how_from_report
 
 __all__ = [
     "REQUEST_ID_PATTERN",
@@ -73,6 +74,9 @@ class EngineResult:
     sandbox: Optional[dict[str, str]] = None
     #: The per-save approval mode the run used, or the operator chose.
     approval_mode: Optional[str] = None
+    #: The weakest check level the run's saves reached (``report.json``
+    #: ``readback.checked_how``), a closed code.
+    checked_how: Optional[str] = None
     #: Where the run halted, for a repair token. Never sent to the client
     #: except as the step id inside ``needs_repair``.
     halt_step_id: Optional[str] = None
@@ -163,6 +167,7 @@ class FlowCliEngine:
             model_calls=summary.get("model_calls"),
             seconds=total_ms / 1000.0 if isinstance(total_ms, (int, float)) else None,
             approval_mode=outcome.approval_mode,
+            checked_how=checked_how_from_report(outcome.report),
             halt_step_id=_halt_step(outcome.halt),
             run_dir=str(outcome.run_dir) if outcome.run_dir else None,
             bundle_dir=str(bundle_dir),
@@ -229,6 +234,7 @@ def reason_from_run_dir(attended: Any, run_dir: Path) -> Optional[EngineResult]:
         transaction_outcome=transaction if isinstance(transaction, str) else None,
         needs_attention_id=(attention or {}).get("id"),
         approval_mode=report_approval(report)[0],
+        checked_how=checked_how_from_report(report),
     )
 
 
@@ -420,6 +426,7 @@ class RunService:
                     seconds=outcome.seconds,
                     sandbox=outcome.sandbox,
                     approval_mode=outcome.approval_mode,
+                    checked_how=outcome.checked_how,
                 )
                 self._offer_repair(entry, record, outcome, result)
                 self.store.finish(
@@ -615,6 +622,7 @@ class RunService:
             needs_attention_id=update.needs_attention_id,
             sandbox=result.get("sandbox"),
             approval_mode=update.approval_mode,
+            checked_how=update.checked_how,
         )
         self.store.update_result(record, fresh)
         return fresh

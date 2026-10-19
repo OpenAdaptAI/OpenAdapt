@@ -1,8 +1,13 @@
 # Live interactive qualification of the native recorder.
 #
-# These lanes require physically qualified hosts. The release gate requires
-# the exact-SHA Linux lane. The weekly schedule maintains the macOS and Windows
-# evidence when their qualified runners exist.
+# These lanes require physically qualified hosts. They are NOT part of the
+# release gate. Until 2026-10-17 the release required the exact-SHA Linux lane,
+# but no qualified Linux desktop was ever registered, so no release could pass.
+# The release now requires the hosted Linux Xvfb lane in
+# production-qualification.yml instead, which proves less: one virtual monitor
+# and injected XTEST input, not two physical monitors and real input hardware.
+# The weekly schedule runs these lanes when their qualified runners exist, and
+# fails when none does. A manual dispatch can still qualify a chosen SHA.
 #
 # The lanes prove:
 #
@@ -18,9 +23,9 @@
 #   - live native structural observation through AX, UIA and AT-SPI;
 #   - three counted trials of the above per operating system.
 #
-# Each operating system has a separate runner variable. A release dispatch
-# selects Linux only. This prevents an available Linux runner from queueing
-# work for missing macOS or Windows runners. A scheduled or "all" run warns
+# Each operating system has a separate runner variable. A dispatch for one
+# platform selects that platform only, so an available Linux runner never
+# queues work for missing macOS or Windows runners. A scheduled or "all" run warns
 # for each lane it skips and fails when no lane can run.
 
 name: Live qualification
