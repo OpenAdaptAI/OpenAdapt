@@ -1,0 +1,33 @@
+id: typed-business-decisions-supported
+claim: >-
+  A qualification client can add or update a typed finite business-policy
+  decision without editing an internal manifest. The compiled workflow can
+  then pause at that decision, accept one authorized and attributed choice,
+  retain a signed durable receipt, revalidate the live application, and
+  continue only through the certified successor branch.
+surfaces: [docs]
+tier: supported
+evidence:
+  - path: tests/test_business_decision.py
+    proves: >-
+      Required CI covers typed qualification authoring and replacement,
+      qualification-revision and certification invalidation, ambiguous
+      insertion refusal, the closed runtime decision contract, role and
+      evidence checks, expiry, renewal, idempotency, crash recovery, signed
+      branch authority, scoped outputs, fresh live-state revalidation,
+      normal downstream action gates, and repair-bypass refusal.
+  - path: docs/BUSINESS_DECISIONS.md
+    kind: doc
+    proves: >-
+      The public engine contract separates a declared business choice from
+      an operational halt and defines the Desktop, Cloud, and customer-local
+      integration boundary.
+caveats:
+  - >-
+    The engine validates a principal and its roles; it does not authenticate
+    a self-asserted user. Desktop, Cloud, or a customer-local identity route
+    must supply the authenticated principal.
+  - >-
+    A human choice is control authority only. It cannot satisfy entity
+    identity, a postcondition, or effect verification, and it cannot turn a
+    screen statement or a human assertion into VERIFIED.

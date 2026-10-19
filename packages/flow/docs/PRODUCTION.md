@@ -206,7 +206,7 @@ environment, or verification contract. The current admission state is
 machine-readable at
 [openadapt.ai/production-lifecycle.json](https://openadapt.ai/production-lifecycle.json).
 
-The registry in [`claims.yaml`](../claims.yaml) assigns each registered public
+The registry in [`claims/`](../claims/) assigns each registered public
 capability claim a tier and names the tests or benchmark artifacts behind it.
 The build fails when a registered claim outranks its evidence. See
 [CLAIMS_AND_QUALIFICATION.md](CLAIMS_AND_QUALIFICATION.md) and the generated
