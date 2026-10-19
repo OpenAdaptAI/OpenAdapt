@@ -102,12 +102,22 @@ read-back (`onscreen`) is refused before anything runs.
 
 Only `independent_readback` can yield `verified`.
 
+`checked_how` names the same read's check level
+([`READBACK_LADDER.md`](READBACK_LADDER.md)): `system_of_record` (tier 1),
+`separate_session` (tier 2), `reopened` (tier 3, the acting session),
+`same_screen` (tier 4), or `unchecked`. It must agree with
+`verification_tier`: only `system_of_record` (and `counterparty_confirmed`)
+goes with `independent_readback`. It is inside the signed receipt and in
+`evidence.readback`. A receipt issued before the field existed has neither
+and still checks.
+
 ## The receipt
 
 `share/effect-receipt.json` holds `receipt` and `evidence`. `receipt` has
 every field of the Execute receipt (`openadapt.execute-evidence-receipt/v1`)
 plus `executor_kind`, `executor_ref_sha256`, `effect_verdict`, and
-`verification_tier` (and `remediates` and `correlation_id` when given),
+`verification_tier`, and `checked_how` (and `remediates` and
+`correlation_id` when given),
 under the schema `openadapt.effect-receipt/v1`. `evidence.readback` lists
 each effect's contract hash, verdict, and counts. `receipt.evidence_digest`
 is the SHA-256 of `evidence`. Neither part holds record values, URLs, or the
