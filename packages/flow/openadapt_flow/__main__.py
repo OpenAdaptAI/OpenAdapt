@@ -3884,11 +3884,13 @@ def _cmd_bench(args: argparse.Namespace) -> int:
     except Exception:  # noqa: BLE001 - run_bench reports load errors itself
         surface = None
     if surface not in (None, "web"):
+        from openadapt_flow.cli_hints import command
+
         print(
             "BENCH REFUSED: bench replays a bundle against the bundled MockMed "
             f"web app, and this bundle was recorded on {surface!r}. Measure it "
-            "on its own app with repeated `openadapt-flow run BUNDLE --config "
-            "deploy.yaml`. Nothing was executed."
+            "on its own app with repeated "
+            f"`{command('run BUNDLE --config deploy.yaml')}`. Nothing was executed."
         )
         return 2
     url, stop = serve(port=0)
