@@ -868,6 +868,10 @@
       "sha256": "8e7cd2a4a7dc7e5157c899ba6316d9ed270bfbd94ffc1e609814b095093d1844"
     },
     {
+      "path": "benchmark/undo_proposal/results/mockmed.json",
+      "sha256": "44f22f82c97cf2ff137513820e6de02260ca96445ba465af7681e97054a8a5df"
+    },
+    {
       "path": "benchmark/undo_proposal/results/openemr-new-patient.json",
       "sha256": "1be944a8c13c04bc690a20da6ecf9710abff6363d5c4fecc316830d1d9e455a3"
     },
@@ -877,7 +881,7 @@
     },
     {
       "path": "benchmark/undo_proposal/results/summary.json",
-      "sha256": "5f77d556ed53654c866035c6baf4e49a27ba126404e17924ab2ec9829f4de363"
+      "sha256": "e59fbe763f1aff0be37f64071eaf62a726460dfed732086825481705047e08aa"
     },
     {
       "path": "benchmark/vision_hardening/corpus.json",
