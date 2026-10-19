@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration for the openadapt-desktop project. Paste it
+  into SignPath (project openadapt-desktop > Artifact configurations) and make
+  it the default; the workflow does not pass artifact-configuration-slug.
+
+  desktop-release.yml uploads one GitHub artifact (a ZIP) holding the
+  Tauri MSI and the NSIS setup executable, so one signing request, and one
+  approval, covers a release:
+
+  * the MSI is deep-signed: every PE file inside it (openadapt-desktop.exe and
+    the openadapt-engine sidecar) and then the MSI itself;
+  * the NSIS setup executable is signed. SignPath cannot open an NSIS archive,
+    so the program files it installs and its uninstaller stay unsigned.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <msi-file path="*.msi">
+      <pe-file-set>
+        <include path="*.exe" max-matches="unbounded" />
+        <include path="*.dll" min-matches="0" max-matches="unbounded" />
+        <for-each>
+          <authenticode-sign />
+        </for-each>
+      </pe-file-set>
+      <authenticode-sign />
+    </msi-file>
+    <pe-file path="*-setup.exe">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>
