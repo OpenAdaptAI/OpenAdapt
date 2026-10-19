@@ -612,7 +612,7 @@ def propose_api_step(
         replaces_steps=[s.id for s in folded],
         other_writes_seen=others,
         screen_only_checks=screen_only,
-        folded_checks_digest=folded_checks_digest(folded[:-1]),
+        folded_checks_digest=folded_checks_digest(folded),
     )
     binding = ApiBinding(
         kind="web_form",

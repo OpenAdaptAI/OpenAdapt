@@ -38,9 +38,11 @@ openadapt-flow run bundle/ --approval-mode not_gated ...
    first of those steps carries `api_fallback` with the reason, and the GUI
    steps run as recorded.
 
-If you change a check on one of the covered steps after compiling (for
-example, you add a required on-screen text), the API step stops running
-because it would skip that check. Run `openadapt-flow api propose bundle/
+If you change any of the covered steps after compiling (an action, a typed
+value or parameter, a target or its identity evidence, a guard, an on-screen
+check, or the save's record check), the API step stops running: its
+admission is bound to a digest of the complete definition of every step it
+replaces, the save included. Run `openadapt-flow api propose bundle/
 --recording rec/` to propose it again, then admit it.
 
 ## What the compiler checks
