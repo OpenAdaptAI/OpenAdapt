@@ -55,6 +55,7 @@ from openadapt_flow.ir import (
     ActionKind,
     ApiAdmission,
     ApiBinding,
+    ApiIdentityBinding,
     Step,
     WebFormField,
     WebFormPrecheck,
@@ -434,6 +435,12 @@ def describe_api_step(step: Step) -> str:
     lines.append(
         f"  record check after: {len(b.effects)} effect(s) copied from the save step"
     )
+    for identity in b.identity:
+        lines.append(
+            f"  right record ({identity.key}): the request sends {{{identity.param}}} "
+            f"in {', '.join(p.removeprefix('/body/') for p in identity.request_pointers)} "
+            f"and the record check selects {identity.effect_field} = {{{identity.param}}}"
+        )
     if spec.screen_only_checks:
         lines.append(f"  screen-only checks, not repeated: {spec.screen_only_checks}")
     if spec.other_writes_seen:
@@ -446,18 +453,70 @@ def describe_api_step(step: Step) -> str:
     return "\n".join(lines)
 
 
+def web_form_identity(
+    binding: ApiBinding, effects: list[Any], key: str, param: str
+) -> ApiIdentityBinding:
+    """The right-record contract for one parameter of a ``web_form`` save.
+
+    The person admitting the API step names the parameter that identifies
+    the record (``key=param``). The request must send that parameter's run
+    value as-is in at least one form field, and the record check must select
+    the record by the same parameter. Raises :class:`ApiProposalError` when
+    either side is missing.
+    """
+
+    spec = binding.web_form
+    assert spec is not None
+    pointers = [
+        f"/body/{field.name}"
+        for field in spec.fields
+        if field.source == "param" and field.param == param
+    ]
+    if not pointers:
+        raise ApiProposalError(
+            f"the request sends no form field with the run value {{{param}}}, so it "
+            f"can't identify the record by {param}"
+        )
+    selectors = sorted(
+        {
+            name
+            for effect in effects
+            for row in [effect.match, *effect.new_records]
+            for name, expr in row.items()
+            if getattr(expr, "param", None) == param
+        }
+    )
+    if not selectors:
+        raise ApiProposalError(
+            f"the record check selects no field by {{{param}}}, so it can't confirm "
+            f"the record the request names by {param}"
+        )
+    return ApiIdentityBinding(
+        key=key,  # type: ignore[arg-type]
+        param=param,
+        effect_field=selectors[0],
+        request_pointers=pointers[:8],
+    )
+
+
 def admit_api_step(
     workflow: Workflow,
     *,
     admitted_by: Optional[str] = None,
     step_id: Optional[str] = None,
     now: Optional[datetime] = None,
+    identity: Optional[dict[str, str]] = None,
 ) -> tuple[Workflow, list[str]]:
     """Record a person's admission of the proposed API steps.
 
     Copies the save step's current record check into the binding first (so a
     check added after compile is the one admitted), then binds the admission
     to the exact binding. The caller saves the workflow and asks the person.
+
+    ``identity`` maps a right-record signal (``subject_name``, ``record_id``,
+    ...) to the parameter that carries it (:func:`web_form_identity`).
+    Standard and Regulated runs need one: their run gate refuses a save
+    whose API step names no right-record contract.
     """
 
     from openadapt_flow.runtime.effects.effect import is_agent_identity
@@ -485,8 +544,16 @@ def admit_api_step(
                     f"{step.id} has no record check; an API step must be confirmed by one "
                     "(add it, for example with record --verify or check mark, then admit)"
                 )
+            identities = [
+                web_form_identity(b, list(step.effects), key, param)
+                for key, param in sorted((identity or {}).items())
+            ]
             clean = b.model_copy(
-                update={"effects": list(step.effects), "admission": None}
+                update={
+                    "effects": list(step.effects),
+                    "admission": None,
+                    "identity": identities or list(b.identity),
+                }
             )
             b = clean.model_copy(
                 update={
