@@ -164,7 +164,8 @@ improvising or retrying when something is off.
 | Native Windows (UI Automation) | Released, early | Synthetic (WinForms, 3 of 3 trials) | [SURFACES.md](packages/flow/docs/SURFACES.md) |
 | Native macOS (Accessibility) | Released, early | Synthetic (TextEdit, 3 of 3 trials) | [SURFACES.md](packages/flow/docs/SURFACES.md) |
 | RDP (pixels; Aardwolf or headless FreeRDP with a session pool) | Released, early | Real Windows 11 host, 3 of 3, plus a FreeRDP batch | [SURFACES.md](packages/flow/docs/SURFACES.md), `backends/xfreerdp.py` |
-| Citrix | Exploratory | A no-DOM stand-in only; no real ICA/HDX session yet | [LIMITS.md](packages/flow/docs/LIMITS.md) |
+| Citrix and other virtual desktops, with OpenAdapt installed inside the session (`in_session`): the same structure-first path as a local desktop | Released, early | Same evidence as the Windows path; no live Citrix session yet | [SURFACES.md](packages/flow/docs/SURFACES.md) |
+| Citrix from outside the session, pixels only (`remote_display`), the fallback when nothing can be installed inside | Exploratory | A no-DOM stand-in only; no real ICA/HDX session yet | [LIMITS.md](packages/flow/docs/LIMITS.md) |
 | Chain programs across surfaces, passing confirmed values | Released | Synthetic | `openadapt-flow compose`, `process`; [PROCESS_CONTRACT.md](packages/flow/docs/PROCESS_CONTRACT.md) |
 | One program that switches surfaces, tabs and popups mid-run | On main ([#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197)) | Real Chromium; Windows switch on a mock | [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
 | Halt when a workflow qualified with page structure runs on a pixels-only surface | Released | Synthetic | `openadapt-flow qualify` |
