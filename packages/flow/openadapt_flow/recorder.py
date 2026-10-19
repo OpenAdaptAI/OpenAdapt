@@ -266,6 +266,40 @@ class Recorder:
 
     # -- lifecycle -----------------------------------------------------------
 
+    def mark_read(
+        self,
+        field: Any,
+        region: tuple[int, int, int, int],
+        *,
+        schema_name: str,
+        proof: Any = None,
+        label_region: Optional[tuple[int, int, int, int]] = None,
+        label_text: Optional[str] = None,
+        on_review: str = "halt",
+    ) -> None:
+        """Mark a field's value box on the current screen as an output to read.
+
+        Nothing is actuated. ``field`` is a
+        :class:`~openadapt_flow.records.schema.FieldSpec` and ``proof`` an
+        optional :class:`~openadapt_flow.records.schema.ReadProof`. A marked
+        ``label_region`` (the field's label) becomes the READ step's anchor
+        at compile time. Compiles to a READ step.
+        """
+
+        png = self._backend.screenshot()
+        event: dict[str, Any] = {
+            "kind": "read",
+            "region": [int(v) for v in region],
+            "schema_name": schema_name,
+            "field": field.model_dump(mode="json"),
+            "proof": proof.model_dump(mode="json") if proof is not None else {},
+            "on_review": on_review,
+        }
+        if label_region is not None:
+            event["label_region"] = [int(v) for v in label_region]
+            event["label_text"] = label_text
+        self.record_observed(event, before_png=png, structural_before={}, after_png=png)
+
     def finish(self) -> Path:
         """Write ``meta.json`` and return the recording directory."""
         viewport = self._primary_backend.viewport

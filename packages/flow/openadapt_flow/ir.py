@@ -43,6 +43,12 @@ from pydantic import (
 
 from openadapt_flow.approval_mode.model import ApprovalModeItemEvidence
 from openadapt_flow.qualification_faults import FaultMutationReceipt
+from openadapt_flow.records.schema import (
+    FieldRead,
+    FieldSpec,
+    GradeGate,
+    ReadProof,
+)
 
 if TYPE_CHECKING:
     # Type-only import for the Step.effects forward reference. The RUNTIME
@@ -92,6 +98,11 @@ class ActionKind(str, Enum):
     HOTKEY = "hotkey"
     WAIT = "wait"
     SCROLL = "scroll"
+    #: Read one field off the screen into a typed value (see
+    #: :class:`ReadStepSpec`). Never writes. Additive: bundles without READ
+    #: steps are unchanged, and a runtime that predates READ refuses to load a
+    #: bundle that has one instead of skipping it.
+    READ = "read"
     # Move execution to another declared surface (a browser tab or popup this
     # run opened, or another backend such as a native Windows app or an RDP
     # window). It delivers no input. It is typed so an older runtime, which
@@ -1033,6 +1044,44 @@ class SubmitBinding(BaseModel):
     )
 
 
+class ReadStepSpec(BaseModel):
+    """What a READ step reads and how much proof it collects.
+
+    ``region`` is the field's value box on the recorded frame. When the step
+    has an ``anchor`` (usually the field's label), the runtime re-resolves it
+    on the live frame and moves ``region`` by the same offset, so the read
+    follows the field when the layout shifts. Without an anchor, ``region`` is
+    used as recorded.
+
+    Proof is opt-in (:class:`~openadapt_flow.records.schema.ReadProof`): by
+    default one channel is read (the clipboard when the runtime has one,
+    otherwise OCR), the value is ``unchecked`` and carries no Seal. OCR and
+    the clipboard are deterministic channels; a READ step makes no model
+    calls.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_name: str = Field(description="The RecordSchema this field belongs to.")
+    field: FieldSpec
+    region: Region
+    proof: ReadProof = Field(default_factory=ReadProof)
+    copy_keys: list[str] = Field(
+        default_factory=lambda: ["Meta+a", "Meta+c"],
+        max_length=4,
+        description="Keys pressed to copy the focused field for a clipboard read.",
+    )
+    on_review: Literal["halt", "continue"] = Field(
+        default="halt",
+        description=(
+            "What to do when the read needs review (channels disagree, an"
+            " invalid value, a missing second channel). ``halt`` stops the run"
+            " and asks a person; ``continue`` records the field for the review"
+            " queue and goes on."
+        ),
+    )
+
+
 # -- multi-surface workflows (docs/MULTI_SURFACE.md) ---------------------------
 #
 # A workflow can span browser tabs, popups, and backends. Every surface it uses
@@ -1434,6 +1483,14 @@ class Step(BaseModel):
     # ``guard``: a deterministic precondition evaluated on the entry frame.
     # Unmet => HALT (default) or SKIP the step (see Guard.on_unmet).
     guard: Optional[Guard] = None
+    # Reading records (openadapt_flow.records). Both OPTIONAL and additive.
+    # ``read`` is required on, and valid only on, a READ step.
+    read: Optional[ReadStepSpec] = None
+    # ``read_gate``: the minimum read grade this step accepts for values read
+    # earlier in the run (by field name). Below it, missing, or still under
+    # review => HALT before acting. Meant for steps that write read values
+    # into a system of record.
+    read_gate: Optional[GradeGate] = None
     # Multi-surface workflows (docs/MULTI_SURFACE.md). All three are None/empty
     # on a single-surface bundle, which replays exactly as before.
     surface: Optional[str] = Field(
@@ -1512,6 +1569,10 @@ class Step(BaseModel):
     def _validate_rich_action_contract(self) -> "Step":
         if self.action is not ActionKind.DRAG and self.drag_end_anchor is not None:
             raise ValueError("drag_end_anchor is valid only for DRAG steps")
+        if (self.action is ActionKind.READ) != (self.read is not None):
+            raise ValueError("a READ step needs `read`, and only READ steps may set it")
+        if self.action is ActionKind.READ and self.risk != "reversible":
+            raise ValueError("a READ step never writes, so its risk is reversible")
 
         if self.action is ActionKind.HOTKEY:
             if not self.key or not self.modifiers:
@@ -3700,6 +3761,8 @@ class StepResult(BaseModel):
     # (recorded for audit; empty unless an appliance is configured).
     postcondition_drift_rescues: list[str] = Field(default_factory=list)
     drift_oracle_calls: int = 0  # VLM state-verifier calls this step
+    #: READ steps only: the value read, with its channels, grade and region.
+    field_read: Optional[FieldRead] = None
     # The first identity check on this step mismatched WHILE the screen was
     # still changing (its identity band differed in a frame taken right
     # after the read, or the page reported activity), so one more check ran

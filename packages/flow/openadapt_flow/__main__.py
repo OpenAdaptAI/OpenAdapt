@@ -6369,6 +6369,11 @@ def _emit_local_receipt(args: argparse.Namespace) -> int:
     print("Receipt written (LOCAL ONLY, nothing was uploaded):")
     for path in (paths["png"], paths["json"], paths["markdown"]):
         print(f"  {path}")
+    from openadapt_flow.records.run import write_sealed_reads
+
+    records_path = write_sealed_reads(report, paths["json"])
+    if records_path is not None:
+        print(f"  {records_path} (values read, Seal pointers to this receipt)")
     print(
         "\nEvery byte that would leave this machine is in receipt.json. "
         "Publishing is a separate, explicit step."

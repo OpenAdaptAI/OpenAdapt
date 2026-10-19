@@ -676,6 +676,19 @@ def _actuating_step(kind: ActionKind, label: str | None) -> Step:
             "selection_commit_key": "Enter",
             "selection_region": (0, 0, 10, 10),
         }
+    elif kind is ActionKind.READ:
+        # A read clicks into the field and copies, so it is not drafted
+        # read-only either: an operator classifies it.
+        from openadapt_flow.ir import ReadStepSpec
+        from openadapt_flow.records.schema import FieldSpec
+
+        extra = {
+            "read": ReadStepSpec(
+                schema_name="ledger_entry",
+                field=FieldSpec(name="amount", kind="decimal"),
+                region=(0, 0, 10, 10),
+            )
+        }
     fields: dict[str, object] = {"anchor": anchor, **extra}
     return Step(id="s", intent=f"{kind.value} {label or ''}", action=kind, **fields)
 

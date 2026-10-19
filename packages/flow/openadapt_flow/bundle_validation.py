@@ -204,6 +204,24 @@ _SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
         ),
         _SealedCanonicalOmission(
             owner=Step,
+            field_name="read",
+            omitted_values=(None,),
+            reason=(
+                "an absent read spec predates the v2 READ step; a READ step "
+                "carries one, and its spec remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Step,
+            field_name="read_gate",
+            omitted_values=(None,),
+            reason=(
+                "an absent minimum read grade predates the v2 field; a declared "
+                "floor remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Step,
             field_name="surface",
             omitted_values=(None,),
             reason=(
