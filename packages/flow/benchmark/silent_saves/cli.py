@@ -43,6 +43,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Gate the executor's claim on OpenAdapt's read-back (verify-run)",
     )
     p.add_argument(
+        "--fault-set",
+        default=protocol.DEFAULT,
+        choices=sorted(protocol.SETS),
+        help="Fault set version (default %(default)s; 1.1.0 is repeated runs under UI change)",
+    )
+    p.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="1.1.0 only: run the first N items of the schedule (a smoke test, not a result)",
+    )
+    p.add_argument(
         "--per-fault",
         type=int,
         default=protocol.FAULT_SET["per_fault_default"],
@@ -74,8 +86,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--max-cost",
         type=float,
-        default=0.5,
-        help="Per-item spend cap for claude-computer-use (USD)",
+        default=0.25,
+        help="Per-item spend cap for a paid executor (USD)",
+    )
+    p.add_argument(
+        "--arm",
+        default="",
+        help="Arm name for the cost ledger (results/spend.json)",
+    )
+    p.add_argument(
+        "--arm-cap",
+        type=float,
+        default=0.0,
+        help="Stop before this arm's ledger total passes this many USD",
     )
     p.add_argument("--json", action="store_true", help="Print the summary as JSON")
     return p
@@ -83,7 +106,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.agent.startswith("claude-computer-use") and not args.allow_paid:
+    if (
+        args.agent.startswith(("claude-computer-use", "compile-agent", "self-repair"))
+        and not args.allow_paid
+    ):
         print(
             "claude-computer-use calls a paid model; pass --allow-paid to run it",
             file=sys.stderr,
@@ -95,21 +121,37 @@ def main(argv: list[str] | None = None) -> int:
     out = (
         Path(args.out)
         if args.out
-        else runner.default_out(args.agent, args.readback, args.run_id)
+        else runner.default_out(args.agent, args.readback, args.run_id, args.fault_set)
     )
     summary = runner.run(
         args.agent,
         out=out,
+        fault_set=args.fault_set,
+        limit=args.limit,
         per_fault=args.per_fault,
         faults=faults,
         readback=args.readback,
         port=args.port,
         headed=args.headed,
         max_cost_usd=args.max_cost,
+        arm=args.arm,
+        arm_cap_usd=args.arm_cap,
     )
     if args.json:
         print(json.dumps(summary, indent=2))
     else:
         runner.print_summary(summary)
+        if summary.get("without_readback"):
+            print("\nsame runs, scored on the executor's own claim (no read-back):")
+            runner.print_summary(
+                {
+                    **summary["without_readback"],
+                    "executor": summary["executor"],
+                    "version": summary["version"],
+                    "readback": False,
+                }
+            )
+        if summary.get("stopped"):
+            print(f"\nstopped early: {summary['stopped']}")
         print(f"rows: {out / 'items.csv'}")
     return 0

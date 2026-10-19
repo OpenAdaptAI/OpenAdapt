@@ -40,6 +40,9 @@ class MockMed:
         upstream, _db, self._stop_upstream = serve(port=0)
         self.store_base = upstream.rstrip("/")
         self.fault = "ok"
+        self.drift: tuple[str, ...] = ()
+        self.slow_ms = 0
+        self.idempotency_key = False
         self._proxy = ThreadingHTTPServer(("127.0.0.1", port), _handler(self))
         self._thread = threading.Thread(
             target=self._proxy.serve_forever, name="silent-saves-proxy", daemon=True
@@ -48,15 +51,40 @@ class MockMed:
         self.base = f"http://127.0.0.1:{self._proxy.server_address[1]}"
 
     @property
+    def server_duplicate(self) -> bool:
+        """``duplicate`` with the save key on: the server processes it twice.
+
+        MockMed's own ``duplicate`` makes the page send the save twice, and
+        the fault server drops the second send when the page sends a key.
+        With a key, the proxy instead sends the save on twice without it, so
+        two rows still land.
+        """
+
+        return self.fault == "duplicate" and self.idempotency_key
+
+    @property
+    def page_fault(self) -> str:
+        return "ok" if self.server_duplicate else self.fault
+
+    @property
     def url(self) -> str:
         """The page an executor opens. It carries no fault."""
 
         return f"{self.base}/#tasks"
 
-    def prepare(self, fault: str) -> None:
-        """Reset the store and set the fault the next page load will get."""
+    def prepare(
+        self,
+        fault: str,
+        drift: tuple[str, ...] = (),
+        slow_ms: int = 0,
+        idempotency_key: bool = False,
+    ) -> None:
+        """Reset the store and set what the next page load will get."""
 
         self.fault = fault
+        self.drift = tuple(drift)
+        self.slow_ms = slow_ms
+        self.idempotency_key = idempotency_key
         _json(
             f"{self.store_base}/api/reset",
             method="POST",
@@ -74,14 +102,39 @@ class MockMed:
         self._stop_upstream()
 
 
-def rewrite_app_js(source: str, fault: str) -> str:
-    """Set MockMed's fault in its script. Fails if the hook line moved."""
+#: MockMed's app.js reads these from the page URL; the proxy sets them.
+_DRIFT_READ = "(new URLSearchParams(location.search).get('drift') || '')"
+_SLOW_READ = "new URLSearchParams(location.search).get('slowms')"
+_KEY_READ = "new URLSearchParams(location.search).get('idempotency') === 'demo'"
 
-    if not re.fullmatch(r"[a-z_]+", fault):
-        raise ValueError(f"bad fault name {fault!r}")
+
+def rewrite_app_js(
+    source: str,
+    fault: str,
+    drift: tuple[str, ...] = (),
+    slow_ms: int = 0,
+    idempotency_key: bool = False,
+) -> str:
+    """Set MockMed's fault, UI changes and save key in its script.
+
+    Fails if a hook it rewrites has moved, so a change to MockMed cannot
+    silently turn a fault or a UI change off.
+    """
+
+    for name in (fault, *drift):
+        if not re.fullmatch(r"[a-z_-]+", name):
+            raise ValueError(f"bad fault or change name {name!r}")
     out, n = FAULT_LINE.subn(f"var FAULT = '{fault}';", source, count=1)
     if n != 1:
         raise RuntimeError("MockMed app.js no longer has the FAULT line to set")
+    for hook, value in (
+        (_DRIFT_READ, "'" + ",".join(drift) + "'"),
+        (_SLOW_READ, f"'{int(slow_ms)}'" if slow_ms else "null"),
+        (_KEY_READ, "true" if idempotency_key else "false"),
+    ):
+        if out.count(hook) != 1:
+            raise RuntimeError(f"MockMed app.js no longer reads {hook!r} once")
+        out = out.replace(hook, value)
     return out
 
 
@@ -109,25 +162,31 @@ def _handler(app: MockMed) -> Callable[..., BaseHTTPRequestHandler]:
             length = int(self.headers.get("Content-Length", 0) or 0)
             body = self.rfile.read(length) if length else None
             target = self.path
+            sends = 1
             if method == "POST" and path == "/api/encounter":
                 # The fault applies to every save, however it is sent: through
                 # the page, or straight to the API.
-                target = f"/api/encounter?fault={app.fault}"
-            up = urlparse(app.store_base)
-            conn = http.client.HTTPConnection(up.hostname, up.port, timeout=30)
-            try:
-                headers = {
-                    k: self.headers[k] for k in _FORWARD_REQUEST if self.headers.get(k)
-                }
-                conn.request(method, target, body=body, headers=headers)
-                resp = conn.getresponse()
-                payload = resp.read()
-                out = {k: v for k, v in resp.getheaders() if k in _FORWARD_RESPONSE}
-                status = resp.status
-            finally:
-                conn.close()
+                target = f"/api/encounter?fault={app.page_fault}"
+                if app.server_duplicate:
+                    sends = 2
+                    body = _without_key(body)
+            headers = {
+                k: self.headers[k] for k in _FORWARD_REQUEST if self.headers.get(k)
+            }
+            if body is not None and "Content-Type" not in headers:
+                headers["Content-Type"] = "application/json"
+            for _ in range(sends):
+                status, out, payload = _upstream(
+                    app.store_base, method, target, body, headers
+                )
             if method == "GET" and path == "/app.js" and status == 200:
-                payload = rewrite_app_js(payload.decode("utf-8"), app.fault).encode()
+                payload = rewrite_app_js(
+                    payload.decode("utf-8"),
+                    app.page_fault,
+                    app.drift,
+                    app.slow_ms,
+                    app.idempotency_key,
+                ).encode()
             self._send(status, out, payload)
 
         def _send(self, status: int, headers: dict[str, str], payload: bytes) -> None:
@@ -141,6 +200,31 @@ def _handler(app: MockMed) -> Callable[..., BaseHTTPRequestHandler]:
             self.wfile.write(payload)
 
     return Handler
+
+
+def _upstream(
+    base: str, method: str, target: str, body: Optional[bytes], headers: dict[str, str]
+) -> tuple[int, dict[str, str], bytes]:
+    up = urlparse(base)
+    conn = http.client.HTTPConnection(up.hostname, up.port, timeout=30)
+    try:
+        conn.request(method, target, body=body, headers=headers)
+        resp = conn.getresponse()
+        payload = resp.read()
+        out = {k: v for k, v in resp.getheaders() if k in _FORWARD_RESPONSE}
+        return resp.status, out, payload
+    finally:
+        conn.close()
+
+
+def _without_key(body: Optional[bytes]) -> Optional[bytes]:
+    try:
+        data = json.loads(body or b"{}")
+    except ValueError:
+        return body
+    if isinstance(data, dict):
+        data.pop("key", None)
+    return json.dumps(data).encode()
 
 
 def _json(url: str, *, method: str = "GET", body: Optional[Any] = None) -> Any:

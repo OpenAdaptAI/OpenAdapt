@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import statistics
 from typing import Any, Iterable, Optional
 
@@ -82,4 +83,88 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "cost_per_item_usd": round(statistics.fmean(cost), 6) if cost else None,
         "model_calls_per_item": round(statistics.fmean(calls), 2) if calls else None,
         "per_fault": per_fault,
+    }
+
+
+def _cost(rows: list[dict[str, Any]]) -> float:
+    return sum(_num(r.get("cost_usd") for r in rows))
+
+
+def summarize_change(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Fault set 1.1.0 metrics: repeated execution under change.
+
+    Each row needs ``kind``, ``expect``, ``release``, ``outcome`` and
+    ``store_verdict``; ``human_events`` and ``human_minutes`` when logged.
+    Definitions are in README.md.
+    """
+
+    n = len(rows)
+    savable = [r for r in rows if r["kind"] != "fault" and r["expect"] == "save"]
+    verified = [r for r in savable if r["outcome"] == "correct"]
+    silent = [r for r in rows if r["outcome"] == "silent_wrong"]
+    false_stops = [r for r in savable if r["outcome"] in ("safe_stop", "false_alarm")]
+    fault_rows = [r for r in rows if r["kind"] == "fault"]
+    fault_bad = [r for r in fault_rows if r["store_verdict"] != "correct"]
+    traps = [r for r in rows if r["kind"] == "trap"]
+    trap_wrong = [r for r in traps if r["store_verdict"] not in ("correct", "missing")]
+    must_stop = [r for r in rows if r["expect"] == "stop"]
+    events = []
+    for r in rows:
+        raw = r.get("human_events") or ""
+        events.extend(json.loads(raw) if isinstance(raw, str) and raw else raw or [])
+    minutes = sum(float(e.get("minutes", 0) or 0) for e in events)
+    scripted = sum(1 for e in events if e.get("by") == "scripted")
+    handed = [r for r in rows if not _truthy(r.get("reported_success"))]
+    by_release: dict[str, dict[str, int]] = {}
+    for r in rows:
+        cell = by_release.setdefault(
+            r["release"],
+            {"items": 0, "correct": 0, "silent_wrong": 0, "safe_stop": 0,
+             "flagged_wrong": 0, "false_alarm": 0},
+        )  # fmt: skip
+        cell["items"] += 1
+        cell[r["outcome"]] += 1
+    secs = _num(r.get("item_s") for r in rows)
+    total_cost = _cost(rows)
+    return {
+        "items": n,
+        "verified_saves": rate(len(verified), len(savable)),
+        "silent_wrong_saves": rate(len(silent), n),
+        "false_stops": rate(len(false_stops), len(savable)),
+        "detection": {
+            "what": "server faults: bad saves reported as success",
+            "silent_wrong": rate(
+                sum(r["outcome"] == "silent_wrong" for r in fault_bad), len(fault_bad)
+            ),
+        },
+        "prevention": {
+            "what": "trap changes: wrong records that landed, reported or not",
+            "wrong_saves_landed": rate(len(trap_wrong), len(traps)),
+            "stopped_when_no_correct_save": rate(
+                sum(r["outcome"] == "safe_stop" for r in must_stop), len(must_stop)
+            ),
+        },
+        "human": {
+            "events": len(events),
+            "scripted_events": scripted,
+            "minutes_logged": round(minutes, 2),
+            "minutes_per_100_items": round(100 * minutes / n, 2) if n else None,
+            "items_left_for_a_person": len(handed),
+            "note": "minutes are only what a person logged; scripted events log 0",
+        },
+        "cost_usd_total": round(total_cost, 6),
+        "cost_per_verified_item_usd": round(total_cost / len(verified), 6)
+        if verified
+        else None,
+        "model_calls_per_item": round(
+            statistics.fmean(_num(r.get("model_calls") for r in rows)), 2
+        )
+        if rows
+        else None,
+        "seconds_per_item": {
+            "n": len(secs),
+            "median": round(statistics.median(secs), 3) if secs else None,
+            "p90": _p90(secs),
+        },
+        "by_release": by_release,
     }

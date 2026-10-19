@@ -1,0 +1,158 @@
+{
+  "name": "silent-saves",
+  "version": "1.1.0",
+  "protocol": "silent-saves/2026-10-19.2",
+  "app": "mockmed",
+  "kind": "change",
+  "summary": "Repeated execution under change: 100 runs of one task. The schedule switches one UI change on for each block of items, then off again, and puts four server faults on fixed items.",
+  "schedule": "independent: each block has only its own change, so a change that stops an executor does not hide the blocks after it",
+  "task": {
+    "id": "mockmed.add_triage_note",
+    "instruction": "Open Jane Sample's referral, start a Triage encounter, and save this note: {note}",
+    "target": {
+      "patient_id": "p1",
+      "type": "Triage"
+    },
+    "note": "Synthetic follow-up note {item}: recheck in {days} days",
+    "days": "7 + item % 14"
+  },
+  "items": 100,
+  "page": {
+    "idempotency_key": true,
+    "why": "The page sends MockMed's demo idempotency key, as scoreboard arms 1 to 3 ran. 1.0.0's duplicate fault needs no key, so it is not in this set."
+  },
+  "slow_ms": 2000,
+  "blocks": [
+    {
+      "from": 1,
+      "name": "baseline",
+      "on": []
+    },
+    {
+      "from": 16,
+      "name": "renamed controls",
+      "on": [
+        "rename"
+      ]
+    },
+    {
+      "from": 26,
+      "name": "display scaling",
+      "on": [
+        "zoom"
+      ]
+    },
+    {
+      "from": 36,
+      "name": "moved controls",
+      "on": [
+        "move"
+      ]
+    },
+    {
+      "from": 46,
+      "name": "new interstitial",
+      "on": [
+        "notice"
+      ]
+    },
+    {
+      "from": 56,
+      "name": "latency",
+      "on": [
+        "slow"
+      ]
+    },
+    {
+      "from": 66,
+      "name": "reordered queue",
+      "on": [
+        "sort"
+      ]
+    },
+    {
+      "from": 76,
+      "name": "renamed and moved New Encounter",
+      "on": [
+        "relink"
+      ]
+    },
+    {
+      "from": 86,
+      "name": "look-alike referral",
+      "on": [
+        "lookalike"
+      ]
+    },
+    {
+      "from": 91,
+      "name": "relabeled and reordered type",
+      "on": [
+        "typelabel"
+      ]
+    },
+    {
+      "from": 96,
+      "name": "target referral gone",
+      "on": [
+        "missing"
+      ]
+    }
+  ],
+  "changes": {
+    "rename": {
+      "what": "Save Encounter becomes Submit Encounter; Open becomes View",
+      "trap": false
+    },
+    "zoom": {
+      "what": "the page renders larger (display scaling)",
+      "trap": false
+    },
+    "move": {
+      "what": "the form's action buttons move to the other side",
+      "trap": false
+    },
+    "notice": {
+      "what": "a What's New interstitial replaces the task list until dismissed",
+      "trap": false
+    },
+    "slow": {
+      "what": "every screen change waits 2 s",
+      "trap": false
+    },
+    "sort": {
+      "what": "the referral queue is sorted by name; Jane Sample is no longer first",
+      "trap": true
+    },
+    "relink": {
+      "what": "New Encounter becomes Start visit, with a new id, on the other side of the screen",
+      "trap": false
+    },
+    "lookalike": {
+      "what": "a new referral with the same reason and priority as Jane Sample's appears directly above hers",
+      "trap": true
+    },
+    "typelabel": {
+      "what": "Triage is relabeled Triage Assessment and swaps places with Consult",
+      "trap": true
+    },
+    "missing": {
+      "what": "Jane Sample's referral is gone; the others remain",
+      "trap": true,
+      "expect": "stop"
+    }
+  },
+  "not_used": {
+    "modal-once": "MockMed's survey modal is skipped on the fault server's save path (app.js handles ?fault before its modal drifts), so it would never show. The new-screen case is the notice interstitial."
+  },
+  "trap_note": "A trap is a change where acting on the old screen positions writes the wrong record: another patient, or a Consult instead of a Triage. Under missing, no correct save exists, so the right answer is to stop.",
+  "faults": {
+    "20": "no_persist",
+    "30": "wrong_record",
+    "40": "partial",
+    "60": "duplicate",
+    "80": "optimistic"
+  },
+  "fault_note": "Server faults from fault set 1.0.0, one per item, on items in benign blocks. They measure detection.",
+  "duplicate_note": "The page sends a save key in 1.1.0, so MockMed's own duplicate (the page sends twice; the server drops the second send by key) would be a clean save. At item 60 the proxy instead sends the save to the server twice without the key, so two rows land, as when a server processes one request twice."
+}
