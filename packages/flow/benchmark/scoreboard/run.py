@@ -281,77 +281,93 @@ def arm_agent(args: argparse.Namespace) -> int:
                 )
                 break
             it = sess.item(i)
-            sess.before(it)
-            load0 = schema.load_1m()
-            w0 = time.time()
-            ledger = out / "ledgers" / f"item-{i:03d}.json"
-            # Each item runs in its own process: a browser call that blocks
-            # (it happened, for an hour, at launch and at close) is killed
-            # after ITEM_TIMEOUT_S and becomes an error row.
-            ctx = multiprocessing.get_context("spawn")
-            box = ctx.Queue()
-            proc = ctx.Process(
-                target=_agent_item,
-                args=(
-                    task.NAME,
-                    sess.url(it),
-                    task.instruction(it.values),
-                    str(ledger),
-                    args.max_cost,
-                    box,
-                ),
-            )
-            proc.start()
-            proc.join(ITEM_TIMEOUT_S)
-            result: dict[str, Any] = {}
-            if proc.is_alive():
-                proc.terminate()
-                proc.join(10)
+            # A harness failure before the agent's first model call (a browser
+            # that hangs at launch or sign-in) is not the agent's doing: retry
+            # the item, up to 3 attempts. Every attempt is a row.
+            for attempt in range(1 + args.attempt_offset, 4 + args.attempt_offset):
+                sess.before(it)
+                load0 = schema.load_1m()
+                w0 = time.time()
+                ledger = (
+                    out
+                    / "ledgers"
+                    / (
+                        f"item-{i:03d}.json"
+                        if attempt == 1 and not args.attempt_offset
+                        else f"item-{i:03d}-{attempt}.json"
+                    )
+                )
+                # Each item runs in its own process: a browser call that blocks
+                # (it happened, for an hour, at launch and at close) is killed
+                # after ITEM_TIMEOUT_S and becomes an error row.
+                ctx = multiprocessing.get_context("spawn")
+                box = ctx.Queue()
+                proc = ctx.Process(
+                    target=_agent_item,
+                    args=(
+                        task.NAME,
+                        sess.url(it),
+                        task.instruction(it.values),
+                        str(ledger),
+                        args.max_cost,
+                        box,
+                    ),
+                )
+                proc.start()
+                proc.join(ITEM_TIMEOUT_S)
+                result: dict[str, Any] = {}
                 if proc.is_alive():
-                    proc.kill()
-                result["error"] = f"ItemTimeout: item exceeded {ITEM_TIMEOUT_S} s"
-            else:
-                try:
-                    result = box.get(timeout=5)
-                except Exception:  # noqa: BLE001
-                    result = {"error": f"the item process exited {proc.exitcode}"}
-            agent = _ledger_view(ledger, result)
-            error = result.get("error")
-            wall = time.time() - w0
-            add_spend(agent.cost_usd, f"{task.NAME} agent {args.run_id} item {i}")
-            readback = sess.readback(it)
-            ok = (not error) and reported_success(agent, None)
-            tok = agent.tokens
-            item_s = (agent.finished_at or time.time()) - (agent.started_at or w0)
-            row = schema.Row(
-                task=task.NAME,
-                arm="agent",
-                run_id=args.run_id,
-                item=i,
-                attempt=1,
-                fault=it.fault,
-                reported_success=ok,
-                readback=readback,
-                outcome=schema.classify(ok, readback, it.fault),
-                model_calls=len(agent.calls),
-                input_tokens=tok["input"],
-                output_tokens=tok["output"],
-                cache_read_tokens=tok["cache_read"],
-                cache_write_tokens=tok["cache_write"],
-                cost_usd=round(agent.cost_usd, 6),
-                item_s=round(item_s, 3),
-                wall_s=round(wall, 3),
-                approvals_asked=0,
-                host_load_1m=load0,
-                timed=schema.timed(load0, schema.load_1m()),
-                detail=(sess.observed + (error if error else agent.final_text))[:300],
-            )
-            schema.append(out / "items.csv", row)
-            print(
-                f"{task.NAME} agent {i:3d} {row.fault:12s} {row.outcome:13s} "
-                f"{row.item_s:6.1f}s ${row.cost_usd:.3f} load {load0}",
-                flush=True,
-            )
+                    proc.terminate()
+                    proc.join(10)
+                    if proc.is_alive():
+                        proc.kill()
+                    result["error"] = f"ItemTimeout: item exceeded {ITEM_TIMEOUT_S} s"
+                else:
+                    try:
+                        result = box.get(timeout=5)
+                    except Exception:  # noqa: BLE001
+                        result = {"error": f"the item process exited {proc.exitcode}"}
+                agent = _ledger_view(ledger, result)
+                error = result.get("error")
+                wall = time.time() - w0
+                add_spend(agent.cost_usd, f"{task.NAME} agent {args.run_id} item {i}")
+                readback = sess.readback(it)
+                ok = (not error) and reported_success(agent, None)
+                tok = agent.tokens
+                item_s = (agent.finished_at or time.time()) - (agent.started_at or w0)
+                row = schema.Row(
+                    task=task.NAME,
+                    arm="agent",
+                    run_id=args.run_id,
+                    item=i,
+                    attempt=attempt,
+                    fault=it.fault,
+                    reported_success=ok,
+                    readback=readback,
+                    outcome=schema.classify(ok, readback, it.fault),
+                    model_calls=len(agent.calls),
+                    input_tokens=tok["input"],
+                    output_tokens=tok["output"],
+                    cache_read_tokens=tok["cache_read"],
+                    cache_write_tokens=tok["cache_write"],
+                    cost_usd=round(agent.cost_usd, 6),
+                    item_s=round(item_s, 3),
+                    wall_s=round(wall, 3),
+                    approvals_asked=0,
+                    host_load_1m=load0,
+                    timed=schema.timed(load0, schema.load_1m()),
+                    detail=(sess.observed + (error if error else agent.final_text))[
+                        :300
+                    ],
+                )
+                schema.append(out / "items.csv", row)
+                print(
+                    f"{task.NAME} agent {i:3d} {row.fault:12s} {row.outcome:13s} "
+                    f"{row.item_s:6.1f}s ${row.cost_usd:.3f} load {load0}",
+                    flush=True,
+                )
+                if not (error and not agent.calls):
+                    break
     finally:
         sess.close()
     return 0
@@ -654,6 +670,12 @@ def main() -> int:
     parser.add_argument("--tag", default="SB", help="openIMIS claim-number prefix")
     parser.add_argument("--max-cost", type=float, default=0.75, help="per item, USD")
     parser.add_argument("--max-attempts", type=int, default=3)
+    parser.add_argument(
+        "--attempt-offset",
+        type=int,
+        default=0,
+        help="agent arm: number this run's attempts after ones already recorded",
+    )
     parser.add_argument("--no-faults", dest="faults", action="store_false")
     parser.add_argument("--program-from", default=None, help="first_run id")
     parser.add_argument("--pause-after-change-halt", action="store_true")

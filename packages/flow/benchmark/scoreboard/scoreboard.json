@@ -1,13 +1,13 @@
 {
   "protocol_version": "2026-10-18.1",
   "timed_load_max": 12.0,
-  "spend_usd": 6.730591,
+  "spend_usd": 7.841228,
   "tasks": {
     "mockmed": {
       "agent": {
         "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
-        "items": 82,
-        "attempts": 82,
+        "items": 100,
+        "attempts": 100,
         "runs": [
           "2026-10-18-a"
         ],
@@ -16,7 +16,7 @@
         "correct_rate": 1.0,
         "silent_wrong": 2,
         "safe_stops_normal": 0,
-        "fault_items": 35,
+        "fault_items": 53,
         "fault_items_by_kind": {
           "optimistic": {
             "correct": 0,
@@ -25,7 +25,7 @@
             "flagged_wrong": 0
           },
           "ui_change": {
-            "correct": 33,
+            "correct": 51,
             "silent_wrong": 0,
             "safe_stop": 0,
             "flagged_wrong": 0
@@ -37,23 +37,23 @@
             "flagged_wrong": 0
           }
         },
-        "planned_items": 82,
-        "done_correctly_all_items": 80,
+        "planned_items": 100,
+        "done_correctly_all_items": 98,
         "flagged_wrong": 0,
         "paused": 0,
         "model_calls_per_item": 5.0,
         "tokens_per_item": 40629,
-        "cost_usd_total": 3.1656,
+        "cost_usd_total": 3.8604,
         "cost_usd_per_item": 0.0386,
         "approvals_asked": 0,
-        "timed_correct_items": 0,
-        "item_s_median": null,
-        "item_s_p90": null,
-        "wall_s_median": null,
-        "wall_s_p90": null,
-        "items_per_hour": null,
+        "timed_correct_items": 3,
+        "item_s_median": 16.38,
+        "item_s_p90": 16.67,
+        "wall_s_median": 20.1,
+        "wall_s_p90": 20.22,
+        "items_per_hour": 181.1,
         "host_load_1m": {
-          "min": 19.51,
+          "min": 8.46,
           "max": 523.94
         },
         "sources": [
@@ -328,33 +328,40 @@
     "openimis": {
       "agent": {
         "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
-        "items": 43,
-        "attempts": 43,
+        "items": 50,
+        "attempts": 51,
         "runs": [
           "2026-10-18-a"
         ],
-        "normal_items": 43,
-        "correct": 43,
+        "normal_items": 49,
+        "correct": 49,
         "correct_rate": 1.0,
         "silent_wrong": 0,
         "safe_stops_normal": 0,
-        "fault_items": 0,
-        "fault_items_by_kind": {},
-        "planned_items": 43,
-        "done_correctly_all_items": 43,
+        "fault_items": 1,
+        "fault_items_by_kind": {
+          "ui_change": {
+            "correct": 1,
+            "silent_wrong": 0,
+            "safe_stop": 0,
+            "flagged_wrong": 0
+          }
+        },
+        "planned_items": 50,
+        "done_correctly_all_items": 50,
         "flagged_wrong": 0,
         "paused": 0,
-        "model_calls_per_item": 7.33,
-        "tokens_per_item": 75292,
-        "cost_usd_total": 2.5255,
-        "cost_usd_per_item": 0.0587,
+        "model_calls_per_item": 7.34,
+        "tokens_per_item": 75520,
+        "cost_usd_total": 2.9414,
+        "cost_usd_per_item": 0.0588,
         "approvals_asked": 0,
-        "timed_correct_items": 3,
-        "item_s_median": 36.92,
-        "item_s_p90": 41.28,
-        "wall_s_median": 44.82,
-        "wall_s_p90": 49.05,
-        "items_per_hour": 79.0,
+        "timed_correct_items": 4,
+        "item_s_median": 39.64,
+        "item_s_p90": 52.49,
+        "wall_s_median": 47.46,
+        "wall_s_p90": 74.58,
+        "items_per_hour": 64.9,
         "host_load_1m": {
           "min": 6.94,
           "max": 498.31

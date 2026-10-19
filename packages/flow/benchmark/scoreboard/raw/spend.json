@@ -1,5 +1,5 @@
 {
-  "total_usd": 7.785293,
+  "total_usd": 7.841228,
   "entries": [
     {
       "usd": 0.577,
@@ -769,6 +769,16 @@
       "usd": 0.038558,
       "note": "mockmed agent 2026-10-18-a item 100",
       "at": 1792369637.632965
+    },
+    {
+      "usd": 0.0,
+      "note": "openimis agent 2026-10-18-a item 50",
+      "at": 1792413930.3741271
+    },
+    {
+      "usd": 0.055935,
+      "note": "openimis agent 2026-10-18-a item 50",
+      "at": 1792414086.0837572
     }
   ]
 }
