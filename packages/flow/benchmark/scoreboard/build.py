@@ -145,6 +145,10 @@ def build() -> dict[str, Any]:
     for items in sorted(schema.RAW.glob("*/*/*/items.csv")):
         run = items.parent
         arm, task = run.parent.name, run.parent.parent.name
+        meta = run / "meta.json"
+        if meta.is_file() and json.loads(meta.read_text()).get("in_table") is False:
+            # Kept as raw data, not in the table (its meta.json says why).
+            continue
         rows = schema.read_rows(items)
         tasks.setdefault(task, {}).setdefault(arm, {"rows": [], "meta": []})
         tasks[task][arm]["rows"].extend(rows)
@@ -153,7 +157,6 @@ def build() -> dict[str, Any]:
             tasks[task][arm].setdefault("hand_checks", []).extend(
                 {"run": run.name, **i} for i in json.loads(hc.read_text())["items"]
             )
-        meta = run / "meta.json"
         if meta.is_file():
             tasks[task][arm]["meta"].append(
                 {"run": run.name, **json.loads(meta.read_text())}

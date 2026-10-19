@@ -1,7 +1,7 @@
 {
   "protocol_version": "2026-10-18.1",
   "timed_load_max": 12.0,
-  "spend_usd": 7.841228,
+  "spend_usd": 7.8976,
   "tasks": {
     "mockmed": {
       "agent": {
@@ -544,7 +544,7 @@
         "items": 1,
         "attempts": 1,
         "runs": [
-          "launch-4"
+          "sb-sonnet-1"
         ],
         "normal_items": 1,
         "correct": 1,
@@ -557,10 +557,10 @@
         "done_correctly_all_items": 1,
         "flagged_wrong": 0,
         "paused": 0,
-        "model_calls_per_item": 8.0,
-        "tokens_per_item": 87010,
-        "cost_usd_total": 0.1176,
-        "cost_usd_per_item": 0.1176,
+        "model_calls_per_item": 7.0,
+        "tokens_per_item": 70048,
+        "cost_usd_total": 0.0564,
+        "cost_usd_per_item": 0.0564,
         "approvals_asked": 0,
         "timed_correct_items": 0,
         "item_s_median": null,
@@ -577,12 +577,12 @@
         },
         "sources": [
           {
-            "run": "launch-4",
-            "imported_from": "demo/cua_to_program/results/launch-4",
-            "model": "claude-opus-5-5",
+            "run": "sb-sonnet-1",
+            "imported_from": "demo/cua_to_program/results/sb-sonnet-1",
+            "model": "claude-sonnet-5-5",
             "engine": {
               "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
-              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+              "git_head": "76a99fdc8732566028e757c666c83ecdec955bac"
             },
             "note": "host load not sampled for this run; untimed"
           }

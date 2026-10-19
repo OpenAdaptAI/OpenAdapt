@@ -1,5 +1,5 @@
 {
-  "total_usd": 7.841228,
+  "total_usd": 7.8976,
   "entries": [
     {
       "usd": 0.577,
@@ -779,6 +779,11 @@
       "usd": 0.055935,
       "note": "openimis agent 2026-10-18-a item 50",
       "at": 1792414086.0837572
+    },
+    {
+      "usd": 0.056372,
+      "note": "openimis first_run sb-sonnet-1 (demo pipeline record, claude-sonnet-5-5)",
+      "at": 1792415140.200813
     }
   ]
 }
