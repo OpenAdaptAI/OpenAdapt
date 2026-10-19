@@ -36,7 +36,7 @@ openadapt-agent emit-skill <bundle> --out ~/.claude/skills
 | Type the values and save | Staff, retyping your agent's output | OpenAdapt, in the same screens staff use |
 | Confirm the save | Staff, if they look again | OpenAdapt reads the record back before it reports done |
 | Something doesn't match | Staff notice while typing, or someone finds it later | OpenAdapt stops before saving, and the run waits for a person |
-| What staff handle | Every document | Runs that stopped and records to check. Nobody is notified, so someone checks the list of stopped runs. |
+| What staff handle | Every document | Runs that stopped and records to check. For work in a [task-ledger job](#track-a-long-job), each one is a question on their phone or desktop; otherwise someone checks the list of stopped runs. |
 
 For scale, two hospital time studies put keying one faxed referral into an electronic record at about 10 to 12 minutes ([UCSF, JAMIA Open 2020](https://pmc.ncbi.nlm.nih.gov/articles/PMC7660949/); [Calderdale and Huddersfield NHS Foundation Trust, HFMA 2024](https://www.hfma.org.uk/system/files/2024-04/Using%20digital%20technologies%20to%20process%20admin%20tasks%20Case%20Study%20v7.pdf)). We don't publish a time-saved number until a deployment measures one.
 
@@ -304,7 +304,7 @@ With `--bundles`, the server also registers read-only tools for workflows and ru
 
 ### Decide stopped runs
 
-A run that stops for a person waits in Flow's Needs Attention list on that computer. Nobody is notified. `list_needs_attention` shows the list.
+A run that stops for a person waits in Flow's Needs Attention list on that computer. `list_needs_attention` shows the list. Nobody is notified, unless the run is part of a [task-ledger job](#track-a-long-job): then the ledger asks a person on their phone or desktop.
 
 With `--mode attended`, your agent can send a decision with `continue_attention`, `skip_attention`, `reject_attention`, `teach_attention`, or `escalate_attention`. The person at the computer confirms each decision in a form. Continue and skip also need `--config`. If the client can't show forms, the server refuses the decision, and the person uses Flow's console instead:
 
@@ -384,6 +384,68 @@ ChatGPT and Claude in a web browser can't start a server on your computer. To re
 
 It claims the job, polls openadapt.ai over outgoing HTTPS, and asks you in the terminal before a chat account may drive it. Don't confuse it with the launcher's `openadapt connect`, which pairs a computer with OpenAdapt Cloud. [docs/MAILBOX_CLI.md](docs/MAILBOX_CLI.md) has the details.
 
+## Track a long job
+
+On long work, agents lose track of the rules they were given, miss information that arrives partway through, guess instead of asking, and skip checking their work ([OSWorld 2.0](https://arxiv.org/abs/2606.29537)). The task ledger keeps that state on the server, so your agent reads it instead of rebuilding it from its own history. It's on whenever runs or guarded saves are; `serve --no-ledger` turns it off.
+
+| Tool | What it does |
+| --- | --- |
+| `open_job` | Opens a job with the user's intent, rules, and items. Rules are locked when the job opens. |
+| `get_job` | Returns a short summary: current rules, counts by status, items not verified yet with their `request_id`, waiting questions, answers that came back, and what changed since the last read. |
+| `add_items` | Adds up to 100 items per call, 500 per job. |
+| `record_evidence` | Notes a fact and where it came from: `user` (trusted), or `app` or `document` (never trusted). |
+| `ask_user` | Asks a person a yes-or-no question. Optional `wait_seconds`, 0 to 600. |
+| `get_answer` | Returns `waiting`, `yes`, `no`, `expired`, or `refused`. Optional `wait_seconds`, 0 to 600. |
+| `change_constraint` | Asks a person to change or add a rule. The old rule holds until they approve. |
+| `close_job` | Closes the job. `complete` is true only when every item is verified and no question waits. `verified_items` lists what your agent may report as done. |
+
+Each item has its own `request_id`, `<job_id>.<item_id>`. Pass it to `run_workflow`, and the server updates the item from its own result:
+
+| Item status | Set when |
+| --- | --- |
+| `pending` | The item was added, a run didn't run, or a person asked for another try. |
+| `running` | The run hasn't finished. |
+| `verified` | The run ended `done`, a guarded save ended `VERIFIED`, or a person checked the record and said it saved. |
+| `stopped_before_saving` | The run ended `needs_review`. |
+| `check_the_record` | The run ended `not_sure_if_saved`, or a guarded save wasn't verified. |
+| `saved_awaiting_check` | The save went through and waits for a later check, or a guarded save may write now. |
+| `needs_person` | A question about the item waits, a save waits for approval, or a person said they'll handle it. |
+
+### What the server enforces
+
+- Your agent can't set a status. Only this server's results and a person's answers do.
+- A rule can name a `run_workflow` input and say it `equals` a value, is `one_of` some values, or is `not_one_of` them. The server refuses a run for the job that breaks a rule or leaves that input out, and the error ends "Nothing ran." A rule with only `text` is shown but not checked.
+- Only a person changes a rule after the job opens. That holds when the change comes from the user, too; the person confirms it.
+- The server refuses a run for an item while a question about it waits, and while it's `check_the_record` or `needs_person`. After a person asks for another try, the item gets a new `request_id`, `<job_id>.<item_id>.r2`, and the old one is refused.
+- A run with any other `request_id` doesn't change an item. While a job is open, its summary counts those runs under `unplanned_writes`.
+- Evidence never changes a rule or a status.
+
+### Questions reach a person
+
+A question is a save-approval request, the same files Flow writes before a save. It shows on the paired phone and in Desktop's Run it, and a person answers there. Save means yes, Don't save means no, and the answer saves nothing in any app. The server checks each answer as a run checks a save approval: it must come from a person on Desktop or the phone, for that exact question, before it expired (4 hours). An answer from an agent or a script is refused.
+
+When a run for an item stops before saving, the ledger asks whether to try again. When a save can't be confirmed, it asks the person to check the record. So a stop in a job reaches someone without anyone watching Needs Attention. Questions are written to `task-ledger` inside the runs folder. Point the console or Desktop at that runs folder.
+
+### Measured on a synthetic worklist
+
+A scripted agent worked a 30-item synthetic MockMed worklist. The user changes a rule at item 13, item 20's referral tells the reader to mark everything urgent, two patients share a name, and two saves can't be confirmed (one didn't land). The agent has the same flaws in every arm: it acts on a rule only while the message that stated it is among its last 5 turns, it follows instructions it reads in a referral, it picks the first matching patient, and it reports every run that wrote something as done. A simulated person answers through the same list the phone reads. No model is called.
+
+| | Agent alone | Ledger, enforcement only | Agent follows the ledger |
+| --- | --- | --- | --- |
+| Items saved against a rule | 12 | 0 | 0 |
+| Items guessed instead of asked | 2 | 2 | 0 |
+| Unverified items reported as done | 2 | 1 | 0 |
+| Correct records (of 30) | 16 | 27 | 30 |
+| Runs the ledger refused | 0 | 12 | 0 |
+
+In the middle arm, the agent opens a job and uses each item's `request_id` but keeps its flaws. The ledger stops every rule break, but it can't stop an agent from guessing a value or misreporting its own tally. `close_job` still lists what was verified, so a caller can check the agent's report. The scripted agent stands for a policy, not a model, so these numbers test the mechanism. They aren't a model benchmark. To reproduce them (about 3 seconds):
+
+```bash
+python -m openadapt_flow.agent.ledger_demo
+```
+
+Results: [docs/task-ledger-measurement.json](docs/task-ledger-measurement.json).
+
 ## Security
 
 - The server talks only over stdio and has no sign-in. Anything that can write to its input acts as the OS account that started it, so don't expose it over a network or a tunnel.
@@ -422,7 +484,9 @@ openadapt-agent seal verify https://example.com/receipt.json --json
 ## Limits
 
 - Your agent, or a program acting for it, has to run on your customer's computer.
-- Nobody is notified when a run stops. Someone has to check `list_needs_attention` or Flow's console.
+- Nobody is notified when a run outside a [task-ledger job](#track-a-long-job) stops. Someone has to check `list_needs_attention` or Flow's console.
+- A job belongs to one server process. Two servers that share a runs folder shouldn't work on the same job.
+- Ledger questions are yes or no. The phone still titles them "Approve a save" and labels the answers Save and Don't save; the card shows the question and says the answer saves nothing in any app.
 - The check that stops a second entry covers one runs folder. Pass the same absolute `--runs-dir` every time.
 - If the server exits during a run, the run reads as `not_sure_if_saved`, and Flow may still finish it.
 - This server issues no signed receipts itself. `proof` is `sealed` only when a run is connected to OpenAdapt Cloud Execute, Cloud signed its receipt, and that signature verifies against keys you pinned (see [Seals](#seals)).

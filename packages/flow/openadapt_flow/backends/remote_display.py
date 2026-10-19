@@ -982,6 +982,11 @@ class RemoteDisplayBackend:
             self._wait_for_pointer_settle()
             self._prepared_pointer_point = point
 
+    def hover(self, x: int, y: int) -> None:
+        """Rest the pointer on (x, y) with the same checks as a pre-positioned
+        click (:meth:`prepare_pointer_actuation`); emits no button edge."""
+        self.prepare_pointer_actuation(x, y)
+
     def click(self, x: int, y: int, *, double: bool = False) -> None:
         """Click (or double-click) at captured-pixel coordinates (x, y)."""
         with self._input_lock:
