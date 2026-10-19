@@ -323,14 +323,14 @@ demonstration in a real browser with network capture, then runs
 
 | App | Run | Saving step | Verified undo | Why not, and what would close the gap |
 | --- | --- | --- | --- | --- |
-| MockMed | live | Save Encounter | MOCKMED_RESULT | MOCKMED_WHY |
+| MockMed | live | Save Encounter | Yes: `DELETE /api/encounter/{undo_record_id}` (captured traffic, REST convention) | |
 | MockLoan | live | Authorize Disbursement | Yes: `DELETE /api/disbursement/{undo_record_id}` (captured traffic, REST convention) | |
 | MockLoan, fee-row mode | live | Authorize Disbursement | No | The save also writes a fee row on a second surface, and the `DELETE` leaves it, so the records after the undo don't match. Closes with a recording of the app's own reversal path. |
 | OpenEMR fixture, new patient | offline | `step_039` (a click Flow counts as a possible write) | No | No record check is bound to the step, so there is nothing to invert. Closes with a bound record check. |
 | OpenEMR fixture, new patient | offline | `step_040` (the save) | No | The save is a browser form post, so no API undo is built. The only control after the save is Cancel. No recording deletes a chart. Closes with a recording of the app's own delete path. |
 | openIMIS fixture, claim | offline | `step_015` (the save) | No | The recording has no network capture and no recording deletes a claim. The live fixture wasn't started. Closes with a recording of the app's own delete or cancel path, or a new recording with `--capture-network`. |
 
-TOTALS_LINE
+Total: 6 saving steps, 2 with a verified undo (both synthetic apps' plain saves), 4 without. On the two real-app fixtures, 0 of 3: each needs a recording of the app's own delete or cancel path, or a bound record check.
 
 Live rows record the demonstration in a real browser with network capture
 and run `undo propose` against the app declared a test copy. Offline rows read

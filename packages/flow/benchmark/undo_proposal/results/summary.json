@@ -1,9 +1,9 @@
 {
   "schema": "openadapt.undo-propose-measurement/v1",
-  "engine_commit": "b5189495df43a0884b7ce316b7502e3e89f171bc",
-  "measured_at": "2026-10-19T11:24:47-0400",
+  "engine_commit": "43aa5eaf6f778a27ebb843aeff0722f59d8f2241",
+  "measured_at": "2026-10-19T13:24:59-0400",
   "host": "macOS-15.7.3-arm64-arm-64bit",
-  "load_1m": 251.62,
+  "load_1m": 5.11,
   "fixtures": [
     {
       "fixture": "mockloan",
@@ -66,6 +66,36 @@
       ]
     },
     {
+      "fixture": "mockmed",
+      "what_the_save_does": "Save Encounter writes one encounter record",
+      "mode": "live (real browser, app declared a test copy)",
+      "exit_code": 0,
+      "save_step": "step_010",
+      "compiler_labelled_the_save_a_write": true,
+      "seconds": 20.4,
+      "summary": {
+        "no_verified_undo": 0,
+        "saving_steps": 1,
+        "verified_undo": 1
+      },
+      "steps": [
+        {
+          "step_id": "step_010",
+          "verified_undo": "undo-step_010-network-1",
+          "reason": "",
+          "to_close_the_gap": "",
+          "candidates": [
+            {
+              "source": "network",
+              "status": "verified",
+              "basis": "the save's JSON POST /api/encounter returned a record id; REST convention gives DELETE /api/encounter/{undo_record_id}",
+              "reason": "the undo ran, its record read-back confirmed it, and every record matches the read-back from before the save"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "fixture": "openemr-new-patient",
       "what_the_save_does": "OpenEMR fixture: the new-patient form saves one chart (browser form post)",
       "mode": "offline (no test copy; nothing was run)",
@@ -121,8 +151,8 @@
     }
   ],
   "totals": {
-    "saving_steps": 5,
-    "verified_undo": 1,
+    "saving_steps": 6,
+    "verified_undo": 2,
     "no_verified_undo": 4
   }
 }
