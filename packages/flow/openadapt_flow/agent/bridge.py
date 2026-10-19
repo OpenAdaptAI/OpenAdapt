@@ -237,6 +237,18 @@ class AgentBridge:
             entry.legacy_id: entry for entry in self.catalog.values() if entry.legacy_id
         }
 
+    def add_catalog_entry(self, entry: CatalogEntry) -> None:
+        """Add a workflow while the server runs (a program taught over MCP).
+
+        The run service sees it at once; ``list_workflows`` and the
+        ``run_workflow`` schema list it from the next call.
+        """
+        if entry.name in self.catalog:
+            raise BridgeError("a workflow with that name already exists")
+        self.catalog[entry.name] = entry
+        if self._service is not None:
+            self._service.catalog[entry.name] = entry
+
     @property
     def service(self) -> RunService:
         """The run service, created on first use so read-only servers stay inert."""

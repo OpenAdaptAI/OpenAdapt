@@ -40,11 +40,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
-from openadapt_flow.compile_agent.harness import GateRequest, Harness, SaveGate
+from openadapt_flow.compile_agent.harness import (
+    GateRequest,
+    Harness,
+    SaveGate,
+    SurfaceHarness,
+)
 from openadapt_flow.jit import lifecycle
 from openadapt_flow.jit.compile_agent import (
     CompiledAgent,
     JitResult,
+    SurfaceApp,
     TaskRequest,
     WebApp,
     compile_agent,
@@ -276,7 +282,7 @@ class _HarnessedAgent:
         self.keep = list(keep)
         self.evidence_dir = evidence_dir
         self.principal_id = principal_id
-        self.harness: Optional[Harness] = None
+        self.harness: Optional[Union[Harness, SurfaceHarness]] = None
         self.ledger: Any = None
         self.error: Optional[str] = None
 
@@ -285,7 +291,10 @@ class _HarnessedAgent:
         return bool(getattr(self.inner, "requires_model_key", True))
 
     def run(self, request: TaskRequest, computer: Any) -> None:
-        self.harness = Harness(
+        # A browser page gets the DOM harness; any other surface (a native
+        # window, an RDP or Citrix client window) gets the surface harness.
+        harness_type = Harness if computer.page is not None else SurfaceHarness
+        self.harness = harness_type(
             computer, self.gate, keep=self.keep, evidence_dir=self.evidence_dir
         )
         try:
@@ -312,7 +321,7 @@ class FirstRunCompiler:
         prompt: str,
         *,
         params: Sequence[str],
-        url: str,
+        url: Optional[str] = None,
         verify: Union[str, Path],
         expect: Mapping[str, Any],
         on_screen: Sequence[str],
@@ -325,10 +334,20 @@ class FirstRunCompiler:
         on_warning: Optional[Callable[[str], None]] = None,
         model_key: Optional[CustomerModelKey] = None,
         backend: str = "web",
+        surface: Optional[Mapping[str, Any]] = None,
+        open_backend: Optional[Callable[[Any], Any]] = None,
     ) -> None:
         from openadapt_flow.record_sor import load_observer
 
-        check_target(url, backend)
+        self.surface: Optional[Any] = None
+        if surface is not None:
+            # A deployment ``backend:`` section for a native or remote app.
+            # Only an agent that drives the surface harness can record it
+            # (record() checks); the program runs there like any JIT program.
+            self.surface = SurfaceApp(surface, open_backend=open_backend).backend
+            url = None
+        else:
+            check_target(url or "", backend)
 
         reserved = sorted(set(params) & {"reset", "task_dir"})
         if reserved:
@@ -354,6 +373,7 @@ class FirstRunCompiler:
             task_id or _slug(prompt), prompt, {name: str for name in params}
         )
         self.url = url
+        self.open_backend = open_backend
         self.verify_path = Path(verify).resolve()
         self.expect = {str(k): str(v) for k, v in expect.items()}
         self.on_screen = [str(s) for s in on_screen if str(s).strip()]
@@ -379,16 +399,34 @@ class FirstRunCompiler:
     def out_dir(self) -> Path:
         return self.dir / OUT_DIR
 
+    @property
+    def backend_kind(self) -> str:
+        """``web``, or the surface kind (``windows``, ``macos``, ``linux``,
+        ``rdp``, ``citrix``)."""
+
+        return SurfaceApp(self.surface).kind if self.surface is not None else "web"
+
+    def _app(self) -> Any:
+        if self.surface is not None:
+            return SurfaceApp(
+                self.surface,
+                record_reader=lambda: self.observer.system_of_record,
+                reset=self._on_reset,
+                open_backend=self.open_backend,
+            )
+        assert self.url is not None
+        return WebApp(
+            url=self.url,
+            record_reader=lambda: self.observer.system_of_record,
+            reset=self._on_reset,
+            headless=self.headless,
+        )
+
     def _jit(self, agent: Any = None) -> CompiledAgent:
         return compile_agent(
             agent,
             task=self.task,
-            app=WebApp(
-                url=self.url,
-                record_reader=lambda: self.observer.system_of_record,
-                reset=self._on_reset,
-                headless=self.headless,
-            ),
+            app=self._app(),
             verifier=self.observer.verifier,
             policy=self.policy,
             cache_dir=self.cache_dir,
@@ -425,6 +463,11 @@ class FirstRunCompiler:
                     "key": self.task.key,
                 },
                 "url": self.url,
+                "surface": (
+                    self.surface.model_dump(mode="json", exclude_none=True)
+                    if self.surface is not None
+                    else None
+                ),
                 "verify": str(self.verify_path),
                 "expect": self.expect,
                 "on_screen": self.on_screen,
@@ -437,7 +480,11 @@ class FirstRunCompiler:
 
     @classmethod
     def load(
-        cls, task_dir: Union[str, Path], *, reset: Optional[Callable[[], None]] = None
+        cls,
+        task_dir: Union[str, Path],
+        *,
+        reset: Optional[Callable[[], None]] = None,
+        open_backend: Optional[Callable[[Any], Any]] = None,
     ) -> "FirstRunCompiler":
         spec = json.loads((Path(task_dir) / SPEC_FILE).read_text())
         if spec.get("schema") != SPEC_SCHEMA:
@@ -446,7 +493,9 @@ class FirstRunCompiler:
         return cls(
             task["instruction"],
             params=task["params"],
-            url=spec["url"],
+            url=spec.get("url"),
+            surface=spec.get("surface"),
+            open_backend=open_backend,
             verify=spec["verify"],
             expect=spec["expect"],
             on_screen=spec["on_screen"],
@@ -475,6 +524,12 @@ class FirstRunCompiler:
         agent's own.
         """
 
+        if self.surface is not None and not getattr(agent, "drives_surfaces", False):
+            raise UnsupportedTarget(
+                f"this agent reads a web page's DOM; the {self.backend_kind!r} "
+                "app needs an agent that drives the surface harness (the MCP "
+                "teach tools do). Nothing ran."
+            )
         self.save_spec()
         jit = self._jit()
         values = self.task.validate(params)
