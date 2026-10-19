@@ -29,7 +29,7 @@ selection, to measure the chosen run.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 from harness2.core.spec import BenchPrompts, BenchSpec, ChannelSpec
 from harness2.core.tree import SurfaceSpec, read_tree, write_tree
@@ -225,6 +225,7 @@ class OpenAdaptGuiAdapter:
         targets: Optional[dict[str, AppTarget]] = None,
         penalties: Penalties = Penalties(),
         headless: bool = True,
+        driver_factory: Optional[Callable[[Any], Any]] = None,
     ) -> None:
         if evidence not in EVIDENCE_MODES:
             raise ValueError(
@@ -244,6 +245,9 @@ class OpenAdaptGuiAdapter:
         self.targets = dict(targets or default_targets())
         self.penalties = penalties
         self.headless = headless
+        #: The surface the agent sees: the DOM by default, or pixels only
+        #: (``pixels.web_pixels`` or ``PixelDriver`` over any Flow backend).
+        self.driver_factory = driver_factory
         for task in self._tasks.values():
             if task.app not in self.targets:
                 raise ValueError(
@@ -290,6 +294,7 @@ class OpenAdaptGuiAdapter:
             run_id=run_id,
             penalties=self.penalties,
             headless=self.headless,
+            driver_factory=self.driver_factory,
         )
 
     def delivered(self, run_dir: Path) -> bool:

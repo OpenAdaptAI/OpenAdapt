@@ -143,12 +143,33 @@ them. For a real run, use `ModelGuiAgent` and `ModelProposer` with an
 Harness²'s own `Proposer` (Claude Code or OpenCode on Vertex AI) also works
 with this adapter unchanged.
 
+## Surfaces: DOM, pixels, RDP
+
+The agent reads the page through a driver. Three are supported, and the
+scorer is the same for all of them, because it reads the system of record,
+not the screen.
+
+| Surface | Driver | What the agent sees |
+|---|---|---|
+| `dom` (default) | `agent.PageDriver` | the page text and its controls, from the DOM |
+| `web_pixels` | `pixels.web_pixels` | OCR text segments from Flow's `PlaywrightBackend` screenshots; clicks at their centres |
+| `rdp`, `citrix`, desktop | `pixels.PixelDriver(backend)` | the same, over any Flow backend, for example `RemoteDisplayBackend` on an RDP client window |
+
+Pass the driver as `driver_factory` to `OpenAdaptGuiAdapter` or
+`run_rollout`. `run.json` records the surface.
+
+On pixels the agent has no DOM ids or field tags. OCR drops spaces
+("JaneSample"), so matching compares text without them. A field is focused
+by clicking its label, and typing does not clear the field first, because a
+remote client cannot be trusted to honour a select-all chord.
+
 ## Limits
 
 - One app target today: MockMed. A target is a small class
   (`apps.AppTarget`): start a copy, give the entry URL and the oracle recipe,
   stop it.
-- The GUI agent reads the page as text and numbered controls. It cannot run
+- The GUI agent reads the page as text and numbered controls, from the DOM
+  or from OCR. It cannot run
   scripts, start sub-agents or use hooks, so the harness surface is
   `AGENTS.md` and `skills/<name>/SKILL.md` only.
 - Model requests pass the outbound privacy gate like every other send
