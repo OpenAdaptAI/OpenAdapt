@@ -653,7 +653,7 @@ export function CheckIt({
         setProject(latest);
         setDrillNote(
           batch.length < pending.length
-            ? "That drill ended the way its description says. Open the screen where the task starts, then run the next drill."
+            ? "That drill ended the way its description says. Open the screen where the workflow starts, then run the next drill."
             : "Every drill ended the way its description says.",
         );
       }
@@ -675,7 +675,7 @@ export function CheckIt({
         if (!certified.ok || !(certified as QualificationProject).certification_current) {
           if (certified.ok) setProject(certified as QualificationProject);
           fail(
-            "OpenAdapt can't approve this task yet. Open the exact checks to see what's still open.",
+            "OpenAdapt can't approve this workflow yet. Open the exact checks to see what's still open.",
             String(certified.error || ""),
           );
           return;
@@ -689,7 +689,7 @@ export function CheckIt({
           { workflow_id: workflowId },
         );
         if (!sealed.ok || !sealed.workflow_id) {
-          fail("OpenAdapt approved the task but couldn't lock this version.", String(sealed.error || ""));
+          fail("OpenAdapt approved the workflow but couldn't lock this version.", String(sealed.error || ""));
           return;
         }
         setApprovedId(sealed.workflow_id);
@@ -698,7 +698,7 @@ export function CheckIt({
       }
       setApprovedId(workflowId);
     } catch (error) {
-      fail("OpenAdapt couldn't approve this task.", String(error));
+      fail("OpenAdapt couldn't approve this workflow.", String(error));
     } finally {
       setBusy(null);
     }
@@ -750,7 +750,7 @@ export function CheckIt({
       {attachedBrowser(target) && (
         <p className="simple-sub">
           It starts from the screen your signed-in browser shows. Open the
-          screen where the task starts before you run it.
+          screen where the workflow starts before you run it.
         </p>
       )}
       <details className="technical">
@@ -822,7 +822,7 @@ export function CheckIt({
       />
 
       {loadError && (
-        <Callout tone="warn" title="Desktop couldn't read this task's checks">
+        <Callout tone="warn" title="Desktop couldn't read this workflow's checks">
           {loadError}
           <div className="callout-actions">
             <Button size="sm" onClick={() => void load()}>
@@ -852,13 +852,13 @@ export function CheckIt({
           <CheckSection index={1} title="What it changes" state={foundState(plan.changes)}>
             {plan.writes.length === 0 && plan.unproven.length === 0 ? (
               <p>
-                This task only reads. None of its steps saves anything, so there's
+                This workflow only reads. None of its steps saves anything, so there's
                 no record to check.
               </p>
             ) : plan.writes.length === 0 ? (
               <p>
-                OpenAdapt can't tell yet whether this task saves anything, so it
-                won't treat it as a task that only reads.
+                OpenAdapt can't tell yet whether this workflow saves anything, so it
+                won't treat it as a workflow that only reads.
               </p>
             ) : (
               <>
@@ -886,7 +886,7 @@ export function CheckIt({
                   {plan.writes.length === 0
                     ? `${plan.unproven.length} step${plan.unproven.length === 1 ? "" : "s"} might change something.`
                     : `OpenAdapt can't tell yet whether ${plan.unproven.length} other step${plan.unproven.length === 1 ? "" : "s"} change${plan.unproven.length === 1 ? "s" : ""} anything.`}{" "}
-                  Before you approve the task, say what each one does in Advanced:
+                  Before you approve the workflow, say what each one does in Advanced:
                   exact checks.
                 </p>
                 <details className="technical">
@@ -925,7 +925,7 @@ export function CheckIt({
                 {!step.identityArmed && !step.canArm && (
                   <p className="question">
                     OpenAdapt didn't see the record's name or ID on the screen
-                    where it saves. Show the task again with the record's name
+                    where it saves. Show the workflow again with the record's name
                     or ID visible before you save, or set this up in the exact
                     checks.
                   </p>
@@ -1048,7 +1048,7 @@ export function CheckIt({
             state={plan.writes.length === 0 && !plan.practice ? "todo" : plan.practiceState}
           >
             <p>
-              OpenAdapt does the task once, start to finish, on a test record you
+              OpenAdapt does the workflow once, start to finish, on a test record you
               choose, with every check on. Before it saves, it shows you the
               filled form and waits for you to approve. Then it saves for real
               in the app, so use a test record. Keep the app where you can see
@@ -1069,12 +1069,12 @@ export function CheckIt({
               <p>
                 {plan.drillsState === "not_needed"
                   ? "No drills are needed, because no step saves anything."
-                  : "OpenAdapt sets up five drills from your practice item when you run it. Each one makes the task go wrong on purpose right before the save, and must stop before saving."}
+                  : "OpenAdapt sets up five drills from your practice item when you run it. Each one makes the workflow go wrong on purpose right before the save, and must stop before saving."}
               </p>
             ) : (
               <>
                 <p>
-                  Each drill runs the task with your test values and changes one
+                  Each drill runs the workflow with your test values and changes one
                   thing on purpose right before the save. A drill passes only
                   when OpenAdapt's own check catches the change and stops before
                   saving. Nothing is saved, and no drill asks you to approve.

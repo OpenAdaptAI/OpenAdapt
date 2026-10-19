@@ -46,13 +46,14 @@ table {
   margin: 0;
 }
 
-/* Statements in the serif; everything a person operates in the sans. */
+/* Titles use --font-heading (the sans, one face across Desktop, Cloud and
+   the portal). */
 h1,
 h2 {
   font-family: var(--font-heading);
   letter-spacing: -0.012em;
   color: var(--text-strong);
-  font-weight: 430;
+  font-weight: var(--fw-heading);
   margin: 0;
   line-height: 1.15;
   text-wrap: balance;
@@ -848,7 +849,6 @@ a:hover {
   border: 1px solid var(--border);
   border-radius: var(--radius-2);
   padding: var(--space-5);
-  box-shadow: var(--shadow-sm);
 }
 .card + .card {
   margin-top: var(--space-4);
@@ -1650,7 +1650,7 @@ select.input:focus {
   margin-bottom: var(--space-6);
 }
 .simple-head h1 {
-  font-size: 32px;
+  font-size: 28px;
 }
 .simple-sub {
   margin: var(--space-2) 0 0;
@@ -1918,7 +1918,6 @@ select.input:focus {
   border: 1px solid var(--border);
   border-radius: var(--radius-2);
   background: var(--panel);
-  box-shadow: var(--shadow-sm);
 }
 .task-title-row {
   display: flex;
@@ -2442,13 +2441,13 @@ select.input:focus {
 .stat-warn .stat-label {
   color: var(--pill-warn-fg);
 }
-/* A measurement: the serif, with tabular figures. */
+/* A measurement, with tabular figures. */
 .stat-value {
   color: var(--text-strong);
   font-family: var(--font-heading);
   font-feature-settings: var(--num-tabular);
   font-size: 32px;
-  font-weight: 430;
+  font-weight: var(--fw-heading);
   letter-spacing: -0.015em;
   line-height: 1.05;
 }

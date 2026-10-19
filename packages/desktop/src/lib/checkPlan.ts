@@ -139,7 +139,7 @@ const CASE_COPY: Record<string, { label: string; explanation: string }> = {
       "A second copy of the save button appears on the page. OpenAdapt must stop instead of guessing.",
   },
   stale_identity: {
-    label: "Record changed mid-task",
+    label: "Record changed during the run",
     explanation:
       "The record on screen changes after OpenAdapt checked it. OpenAdapt must stop before saving.",
   },
@@ -189,7 +189,7 @@ function caseView(
  * program, a kind this version doesn't know) may run steps Check it can't see.
  */
 const SHOWN_NODE_KINDS = new Set(["action", "terminal", "branch", "loop", "business_decision"]);
-const HIDDEN_STEPS_CAPTION = "Runs a part of the task that isn't shown step by step here";
+const HIDDEN_STEPS_CAPTION = "Runs a part of the workflow that isn't shown step by step here";
 
 /** The control a step clicks, by its structure, before the OCR-based title. */
 function stepCaption(
@@ -255,7 +255,7 @@ export function checkPlan(response: QualificationProject): CheckPlan {
       canArm: Boolean(control?.identity.can_arm),
       identityText: params.length
         ? `Before saving, it checks that the record on screen matches the ${params.join(" and ")} you give it. If they differ, it stops and asks you.`
-        : "Before saving, it checks the record on screen against the details it saw when you showed the task. If they differ, it stops and asks you.",
+        : "Before saving, it checks the record on screen against the details it saw when you showed the workflow. If they differ, it stops and asks you.",
       checked: effects.length > 0 && tiers.length === effects.length,
       hasRecordChecks: effects.length > 0 || node.effects.length > 0,
       checkText: effects.length
