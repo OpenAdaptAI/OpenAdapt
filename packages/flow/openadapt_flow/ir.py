@@ -2861,6 +2861,13 @@ class Workflow(BaseModel):
         """
         do_encrypt = encrypt or key is not None
         bundle = Path(bundle_dir)
+        from openadapt_flow import sealed_set as _sealed
+
+        if _sealed.active_writer(bundle) is not None or _sealed.is_sealed(bundle):
+            # A sealed bundle stays sealed whatever ``encrypt`` says: many
+            # commands re-save a bundle with a bare ``save(bundle)``, and that
+            # must never turn a sealed bundle back into plaintext.
+            return self._save_sealed_set(bundle, key, seal_manifest=seal_manifest)
         bundle.mkdir(parents=True, exist_ok=True)
         (bundle / "templates").mkdir(exist_ok=True)
         # Restore any in-memory crops (from a prior encrypted load/save) to disk
@@ -2907,6 +2914,48 @@ class Workflow(BaseModel):
             )
         return path
 
+    def _save_sealed_set(
+        self, bundle: Path, key: Optional[str], *, seal_manifest: bool
+    ) -> Path:
+        """Save into a sealed bundle (see :mod:`openadapt_flow.sealed_set`).
+
+        Every asset, ``workflow.json`` and the manifest go through the set's
+        writer, so no plaintext of this workflow touches the disk. Assets come
+        from the in-memory crop map and from crops already sealed in the set.
+        """
+        from openadapt_flow import sealed_set as _sealed
+
+        writer = _sealed.active_writer(bundle)
+        owned = writer is None
+        if writer is None:
+            passphrase = _sealed.passphrase_for("bundle", key)
+            if not passphrase:
+                raise _sealed.SealedSetKeyError(
+                    _sealed.missing_key_message(bundle, "bundle")
+                )
+            writer = _sealed.SealedSetWriter(bundle, "bundle", passphrase, resume=True)
+        assets = {rel: writer.read_bytes(rel) for rel in writer.files("templates/")}
+        for rel, data in self._decrypted_templates.items():
+            if assets.get(rel) != data:
+                writer.write(rel, data)
+            assets[rel] = data
+        if self.schema_version < SCHEMA_VERSION:
+            self.schema_version = SCHEMA_VERSION
+        self.encrypted = True
+        if seal_manifest:
+            from openadapt_flow import bundle_validation as _bv
+
+            self.manifest = _bv.build_manifest(self, bundle, assets=assets)
+        writer.write("workflow.json", self.model_dump_json(indent=2).encode("utf-8"))
+        if self.manifest is not None:
+            writer.write(
+                "manifest.json", self.manifest.model_dump_json(indent=2).encode("utf-8")
+            )
+        self._decrypted_templates = dict(assets)
+        if owned:
+            writer.finalize()
+        return bundle / ("workflow.json" + _sealed.SEALED_SUFFIX)
+
     @classmethod
     def load(
         cls,
@@ -2945,11 +2994,22 @@ class Workflow(BaseModel):
         """
         bundle = Path(bundle_dir)
         from openadapt_flow import bundle_validation as _bv
+        from openadapt_flow import sealed_set as _sealed
 
         encrypted_path = bundle / "workflow.json.enc"
         plaintext_path = bundle / "workflow.json"
+        sealed_assets: Optional[dict[str, bytes]] = None
         bundle_encrypted = encrypted_path.is_file()
-        if bundle_encrypted:
+        if _sealed.active_writer(bundle) is not None or _sealed.is_sealed(bundle):
+            # A sealed set: verify the whole file set, then decrypt the
+            # workflow and every crop in memory.
+            reader: Any = _sealed.active_writer(bundle) or _sealed.open_set(bundle, key)
+            bundle_encrypted = True
+            raw = json.loads(reader.read_bytes("workflow.json"))
+            sealed_assets = {
+                rel: reader.read_bytes(rel) for rel in reader.files("templates/")
+            }
+        elif bundle_encrypted:
             from openadapt_flow import crypto as _crypto
 
             decrypted = _crypto.decrypt_bytes(
@@ -2970,7 +3030,9 @@ class Workflow(BaseModel):
                 wf.manifest = BundleManifest.model_validate_json(sidecar.read_text())
                 persisted = wf.manifest
 
-        if bundle_encrypted:
+        if sealed_assets is not None:
+            wf._decrypted_templates = sealed_assets
+        elif bundle_encrypted:
             # Decrypt the sealed image crops IN MEMORY (fail-loud on wrong key /
             # tamper, exactly as the workflow.json above). The resolver reads
             # them via ``decrypted_template``; nothing cleartext lands on disk.
@@ -5365,6 +5427,12 @@ class RunReport(BaseModel):
             raise ValueError("report filename must be one local file name")
         path = run / filename
         payload = self.model_dump_json(indent=2).encode("utf-8")
+        from openadapt_flow import sealed_set as _sealed
+
+        if _sealed.is_sealed_path(path):
+            # The run of a sealed bundle: the report is encrypted in memory.
+            _sealed.write_bytes(path, payload)
+            return path
         temporary = run / (f".{filename}.{os.getpid()}.{secrets.token_hex(8)}.tmp")
         descriptor = os.open(
             temporary,

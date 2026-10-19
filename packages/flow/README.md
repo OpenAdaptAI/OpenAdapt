@@ -385,9 +385,13 @@ export OPENADAPT_FLOW_SCRUB=on
 The bundle and `report.json` keep literal identifiers, because the identity
 check and the audit trail need them ([docs/PRIVACY.md](docs/PRIVACY.md)). With
 `OPENADAPT_BUNDLE_KEY` set, `openadapt-flow seal ./bundle --out ./bundle-sealed`
-encrypts `workflow.json` and the image crops with AES-256-GCM. Other bundle
-files aren't encrypted, so treat every source bundle as PHI
-([docs/phi_at_rest.md](docs/phi_at_rest.md)).
+encrypts every bundle file that can hold patient data with AES-256-GCM, binds
+the whole file set to one sealed index, and refuses a file it doesn't know.
+Runs of a sealed bundle write an encrypted run directory, and web recordings
+are encrypted from the first frame (`OPENADAPT_RECORDING_KEY`, or the bundle
+key). Data in memory, the app's own storage, file names and sizes, and desktop
+recordings are not encrypted; the source bundle you sealed is still plaintext,
+so treat it as PHI ([docs/phi_at_rest.md](docs/phi_at_rest.md)).
 
 OpenAdapt Cloud at `app.openadapt.ai` is an optional hosted control plane for
 browser workflows. Desktop and Citrix runs are self-hosted

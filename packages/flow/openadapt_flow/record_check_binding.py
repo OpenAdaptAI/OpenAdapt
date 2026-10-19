@@ -78,6 +78,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from openadapt_flow import sealed_set
 from openadapt_flow.ir import Workflow
 from openadapt_flow.runtime.effects.effect import Effect, EffectKind, ValueExpr
 from openadapt_flow.traversal import iter_workflow_steps
@@ -566,7 +567,9 @@ def bind_record_checks(
         os.chmod(staging, 0o700)
         bundle = staging / "bundle"
         shutil.copytree(source, bundle, symlinks=False)
-        (bundle / PROVENANCE_FILENAME).unlink(missing_ok=True)
+        # A sealed source stays sealed: the copy is ciphertext, and the
+        # provenance sidecar is removed and rewritten through its index.
+        sealed_set.unlink(bundle / PROVENANCE_FILENAME, missing_ok=True, key=key)
         working = Workflow.load(bundle, verify_integrity=True, key=key)
         replaced = _apply(working, bound)
         coverage = record_check_coverage(working, binding.not_compared)
@@ -602,8 +605,10 @@ def bind_record_checks(
             "certification_invalidated": invalidated,
             "coverage": coverage.model_dump(mode="json"),
         }
-        (bundle / PROVENANCE_FILENAME).write_text(
-            json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        sealed_set.write_text(
+            bundle / PROVENANCE_FILENAME,
+            json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+            key=key,
         )
         try:
             _publish_no_replace(bundle, destination)

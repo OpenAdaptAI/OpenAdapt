@@ -590,6 +590,7 @@ improvising or retrying when something is off.
 | Find and redact personal and health data in text, screenshots and structure | Released (privacy 1.1.3) | Unit tests | [packages/privacy](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/privacy/README.md), [PRIVACY.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/PRIVACY.md) |
 | Scrub by default before anything leaves the machine | On main ([#1262](https://github.com/OpenAdaptAI/OpenAdapt/pull/1262)) | Unit tests | `openadapt-privacy` |
 | Each package installs on its own within a size budget, checked in CI (privacy without desktop, capture without plotting) | On main ([#1270](https://github.com/OpenAdaptAI/OpenAdapt/pull/1270), [#1271](https://github.com/OpenAdaptAI/OpenAdapt/pull/1271), [#1279](https://github.com/OpenAdaptAI/OpenAdapt/pull/1279)) | CI | `.github/workflows/packages.yml` |
+| Encrypt PHI at rest: every bundle file that can hold patient data under one sealed index (unknown files refused), web recordings from the first frame, and the run directories of sealed bundles; compile, induce, scaffold-verifier, qualify, admit, run, resume and undo read them in memory and refuse without the key | In review | Synthetic (no-plaintext audit-hook test over record, compile and a VERIFIED run; per-frame cost measured) | `openadapt-flow seal`, `record`; [phi_at_rest.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/phi_at_rest.md) |
 | Signed receipts (Seals), countersigned and timestamped, offline by default | Released | Unit tests, real TSA tokens | `openadapt-flow seal`, `countersign`, `local-seal` |
 | Strict no-outbound mode and an unattended on-prem service | Released | Synthetic | `openadapt-flow no-outbound`, `service`; [ON_PREM.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/ON_PREM.md) |
 
@@ -1744,8 +1745,13 @@ host hardening, storage encryption, backups, retention, access control,
 monitoring, effect-verifier integration, update validation, and disaster
 recovery.
 
-The repository supplies integrity manifests, optional bundle encryption,
-destination policy, local egress checks, and audit primitives. A content digest
+The repository supplies integrity manifests, optional encryption at rest for
+bundles, web recordings and the run directories of sealed bundles, destination
+policy, local egress checks, and audit primitives. Encryption at rest does not
+cover data in process memory, the target application's own storage, file names
+and sizes, desktop recordings, or commands outside the list in
+[`phi_at_rest.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/phi_at_rest.md), which refuse sealed input; the key is a
+passphrase in the environment, not a KMS. A content digest
 proves byte identity, not publisher identity. A local hash chain is tamper
 evident against ordinary changes, not tamper proof against an administrator who
 can rewrite it. Local approvals record provenance but are not enterprise-IdP

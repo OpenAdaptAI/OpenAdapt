@@ -474,13 +474,18 @@ def admit_local_dev(
 
 
 def write_proposal(proposal: QualificationProposal, path: Path | str) -> Path:
+    from openadapt_flow import sealed_set
+
     target = Path(path)
-    target.write_text(proposal.model_dump_json(indent=2), encoding="utf-8")
+    # Sealed in memory when the target is inside a sealed bundle.
+    sealed_set.write_text(target, proposal.model_dump_json(indent=2))
     return target
 
 
 def load_proposal(path: Path | str) -> QualificationProposal:
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    from openadapt_flow import sealed_set
+
+    payload = json.loads(sealed_set.read_text(Path(path)))
     return QualificationProposal.model_validate(payload)
 
 
@@ -498,9 +503,11 @@ def save_accepted_bundle(
     if proposal is not None:
         write_proposal(proposal, bundle / "qualification-proposal.json")
     if local_admission is not None:
-        (bundle / "qualification-admission.local-dev.json").write_text(
+        from openadapt_flow import sealed_set
+
+        sealed_set.write_text(
+            bundle / "qualification-admission.local-dev.json",
             local_admission.model_dump_json(indent=2),
-            encoding="utf-8",
         )
     return path
 

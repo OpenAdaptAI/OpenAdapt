@@ -39,6 +39,7 @@ from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.ir import (
     ChangeLedgerEffect,
     ChangeLedgerEntry,
@@ -522,9 +523,9 @@ def _canonical(payload: Any) -> bytes:
 
 def _load_report(run_dir: Path) -> tuple[RunReport, str]:
     path = run_dir / "report.json"
-    if not path.is_file():
+    if not _sealed.is_file(path):
         raise UndoNotOffered(f"{run_dir} holds no report.json")
-    raw = path.read_bytes()
+    raw = _sealed.read_bytes(path)
     return RunReport.model_validate_json(raw), hashlib.sha256(raw).hexdigest()
 
 
@@ -550,10 +551,10 @@ _LINEAGE_SCHEMA = "openadapt.undo-lineage/v1"
 
 def _read_lineage(bundle_dir: Path) -> list[str]:
     path = bundle_dir / LINEAGE_FILENAME
-    if not path.is_file():
+    if not _sealed.is_file(path):
         return []
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = json.loads(_sealed.read_text(path))
     except (OSError, json.JSONDecodeError):
         return []
     if not isinstance(raw, dict) or raw.get("schema") != _LINEAGE_SCHEMA:
@@ -568,11 +569,11 @@ def _record_lineage(bundle_dir: Path, prior_digest: str) -> None:
     digests = _read_lineage(bundle_dir)
     if prior_digest not in digests:
         digests.append(prior_digest)
-    (bundle_dir / LINEAGE_FILENAME).write_text(
+    _sealed.write_text(
+        bundle_dir / LINEAGE_FILENAME,
         json.dumps(
             {"schema": _LINEAGE_SCHEMA, "prior_content_digests": digests}, indent=2
         ),
-        encoding="utf-8",
     )
 
 
@@ -700,6 +701,13 @@ def _find_offer(
 
 
 def _write_once(path: Path, payload: str) -> None:
+    if _sealed.is_sealed_path(path):
+        # The run of a sealed bundle: the record is encrypted in memory. The
+        # existence check and the write are not one atomic step here.
+        if _sealed.exists(path):
+            raise FileExistsError(str(path))
+        _sealed.write_text(path, payload)
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -726,7 +734,7 @@ def approve_undo(
     run_dir = Path(run_dir)
     offer = _find_offer(run_dir, workflow, undo_id, bundle_dir)
     undo_dir = _undo_dir(run_dir, undo_id)
-    if (undo_dir / CLAIM_FILENAME).exists():
+    if _sealed.exists(undo_dir / CLAIM_FILENAME):
         raise UndoAlreadyRun(f"undo {undo_id!r} was already run; it runs once")
     approval = UndoApproval(
         undo_id=undo_id,
@@ -739,11 +747,14 @@ def approve_undo(
     existing = read_undo_approval(run_dir, undo_id)
     if existing is not None and existing.offer_digest == offer.offer_digest:
         raise UndoRefused(f"undo {undo_id!r} is already approved for this offer")
-    if existing is None and not path.exists():
+    if existing is None and not _sealed.exists(path):
         try:
             _write_once(path, approval.model_dump_json(indent=2))
         except FileExistsError as exc:
             raise UndoRefused(f"undo {undo_id!r} already has an approval") from exc
+        return approval
+    if _sealed.is_sealed_path(path):
+        _sealed.write_text(path, approval.model_dump_json(indent=2))
         return approval
     # A stale or unreadable approval that was never used: replace it whole.
     staging = undo_dir / f".{APPROVAL_FILENAME}.{os.getpid()}"
@@ -754,19 +765,19 @@ def approve_undo(
 
 def read_undo_approval(run_dir: Path | str, undo_id: str) -> Optional[UndoApproval]:
     path = _undo_dir(Path(run_dir), undo_id) / APPROVAL_FILENAME
-    if not path.is_file():
+    if not _sealed.is_file(path):
         return None
     try:
-        return UndoApproval.model_validate_json(path.read_text(encoding="utf-8"))
+        return UndoApproval.model_validate_json(_sealed.read_text(path))
     except ValueError:
         return None
 
 
 def read_undo_result(run_dir: Path | str, undo_id: str) -> Optional[UndoResult]:
     path = _undo_dir(Path(run_dir), undo_id) / RESULT_FILENAME
-    if not path.is_file():
+    if not _sealed.is_file(path):
         return None
-    return UndoResult.model_validate_json(path.read_text(encoding="utf-8"))
+    return UndoResult.model_validate_json(_sealed.read_text(path))
 
 
 @dataclass(frozen=True)
@@ -813,15 +824,13 @@ def prepare_undo_run(
     run_dir = Path(run_dir)
     offer = _find_offer(run_dir, workflow, undo_id, bundle_dir)
     approval_path = _undo_dir(run_dir, undo_id) / APPROVAL_FILENAME
-    if not approval_path.is_file():
+    if not _sealed.is_file(approval_path):
         raise UndoNotApproved(
             f"undo {undo_id!r} has no approval. A person must review and "
             "approve it first; Flow never runs an undo on its own"
         )
     try:
-        approval = UndoApproval.model_validate_json(
-            approval_path.read_text(encoding="utf-8")
-        )
+        approval = UndoApproval.model_validate_json(_sealed.read_text(approval_path))
     except ValueError as exc:
         raise UndoNotApproved(f"undo {undo_id!r} approval is unreadable") from exc
     if approval.undo_id != undo_id or approval.offer_digest != offer.offer_digest:
@@ -917,8 +926,9 @@ def finish_undo_run(
             for line in r.effect_results
         ],
     )
-    (_undo_dir(Path(run_dir), prepared.undo.id) / RESULT_FILENAME).write_text(
-        result.model_dump_json(indent=2), encoding="utf-8"
+    _sealed.write_text(
+        _undo_dir(Path(run_dir), prepared.undo.id) / RESULT_FILENAME,
+        result.model_dump_json(indent=2),
     )
     return result
 
@@ -1039,9 +1049,13 @@ def declare_undo(
     if problems:
         raise ValueError(f"undo {undo.id!r} {problems[0]}")
     for rel in assets or {}:
-        if (bundle_dir / rel).exists():
+        if _sealed.exists(bundle_dir / rel):
             raise ValueError(f"the bundle already has {rel}")
     for rel, source in (assets or {}).items():
+        if _sealed.is_sealed(bundle_dir):
+            # The crop joins the in-memory map; save() seals it below.
+            workflow._decrypted_templates[rel] = Path(source).read_bytes()
+            continue
         (bundle_dir / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, bundle_dir / rel)
     if workflow.manifest is not None and workflow.manifest.content_digest:

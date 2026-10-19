@@ -304,7 +304,9 @@ def _replay_params(
     if params_file:
         path = Path(params_file)
         try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
+            from openadapt_flow import sealed_set
+
+            raw = json.loads(sealed_set.read_text(path))
         except (OSError, json.JSONDecodeError) as exc:
             raise SystemExit(f"--params-file could not be read as JSON: {exc}") from exc
         if not isinstance(raw, dict):
@@ -637,6 +639,38 @@ def _enforce_surface_binding(
     return None
 
 
+def _recording_encryption_key(args: argparse.Namespace, backend: str) -> Optional[str]:
+    """The passphrase that encrypts this recording, or ``None`` for plaintext.
+
+    An explicit ``OPENADAPT_RECORDING_KEY`` turns encryption on. Where the
+    recorder can encrypt every file from the first frame (the web recorder),
+    a configured ``OPENADAPT_BUNDLE_KEY`` turns it on by default too, so a
+    deployment that seals its bundles does not leave the recordings they come
+    from in plaintext. ``--no-encrypt`` opts out. The desktop recorders write
+    a raw capture session through openadapt-capture that Flow cannot encrypt
+    yet, so an explicit recording key refuses them rather than write
+    plaintext.
+    """
+    import os
+
+    from openadapt_flow import crypto, sealed_set
+
+    if getattr(args, "no_encrypt", False):
+        return None
+    explicit = os.environ.get(sealed_set.RECORDING_ENV_KEY) or None
+    if backend != "web":
+        if explicit:
+            raise SystemExit(
+                f"record: {sealed_set.RECORDING_ENV_KEY} is set, but the "
+                f"{backend} recorder writes its raw capture session (database, "
+                "video) through openadapt-capture, which Flow cannot encrypt "
+                "yet. Nothing was recorded. Record on an encrypted volume and "
+                "pass --no-encrypt, or use --backend web."
+            )
+        return None
+    return explicit or crypto.resolve_key(None)
+
+
 def _stamp_recording_surface(recording_dir: Path, surface: str) -> None:
     """Stamp the recorded surface into ``meta.json`` (additive, Section 5).
 
@@ -650,15 +684,19 @@ def _stamp_recording_surface(recording_dir: Path, surface: str) -> None:
     """
     import json
 
+    from openadapt_flow import sealed_set
+
     meta_path = Path(recording_dir) / "meta.json"
     try:
-        meta = json.loads(meta_path.read_text())
+        meta = json.loads(sealed_set.read_text(meta_path))
+    except sealed_set.SealedSetError:
+        raise
     except (OSError, ValueError):
         return
     if meta.get("surface") == surface:
         return
     meta["surface"] = surface
-    meta_path.write_text(json.dumps(meta, indent=2))
+    sealed_set.write_text(meta_path, json.dumps(meta, indent=2))
 
 
 def _report_backend_kind(kind: object) -> "ExecutionTargetKind":
@@ -1217,11 +1255,17 @@ def _cmd_record(args: argparse.Namespace) -> int:
     if code == 0 and (Path(args.out) / "events.jsonl").is_file():
         _propose_lookup_check(args, from_lookup=from_lookup)
     if code == 0 and with_check:
+        from openadapt_flow import sealed_set
         from openadapt_flow.cli_check import guided_check
         from openadapt_flow.cli_hints import command
 
         recording = Path(args.out)
-        if not (recording / "events.jsonl").is_file():
+        if sealed_set.is_sealed(recording):
+            print(
+                "record --with-check: marking a check in an encrypted recording "
+                "is not available yet; nothing was marked."
+            )
+        elif not (recording / "events.jsonl").is_file():
             print("record: no events.jsonl to mark a check in; skipped")
         elif not sys.stdin.isatty():
             mark = command(
@@ -1239,7 +1283,11 @@ def _recorded_surface(recording: Path) -> Optional[str]:
     import json
 
     try:
-        surface = json.loads((recording / "meta.json").read_text()).get("surface")
+        from openadapt_flow import sealed_set
+
+        surface = json.loads(sealed_set.read_text(recording / "meta.json")).get(
+            "surface"
+        )
     except (OSError, ValueError, AttributeError):
         return None
     return str(surface) if surface else None
@@ -1333,6 +1381,7 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
         getattr(args, "browser_cdp_endpoint", None)
         or getattr(args, "browser_page_url", None)
     )
+    recording_key = _recording_encryption_key(args, backend)
     if backend in ("windows", "macos", "linux", "rdp", "citrix"):
         if getattr(args, "capture_network", False):
             raise SystemExit(
@@ -1397,11 +1446,17 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
             stop_when=_record_until_stop(args),
             surface="web",
             capture_network=bool(getattr(args, "capture_network", False)),
+            encryption_key=recording_key,
         )
     except BrowserAttachError as exc:
         raise SystemExit(f"record: browser attachment refused: {exc}") from exc
     _stamp_recording_surface(out, "web")
     print(f"Recording written to {out}")
+    if recording_key:
+        print(
+            "Encrypted at rest: frames, events, metadata and network capture "
+            "were sealed with AES-256-GCM before they reached the disk."
+        )
     secrets = sorted(args.secret or ())
     if secrets:
         print(
@@ -1426,8 +1481,10 @@ def _recording_privacy_notices(recording_dir: Path) -> list[str]:
     """
     import json
 
+    from openadapt_flow import sealed_set
+
     try:
-        meta = json.loads((Path(recording_dir) / "meta.json").read_text())
+        meta = json.loads(sealed_set.read_text(Path(recording_dir) / "meta.json"))
     except (OSError, ValueError):
         return []
     notices: list[str] = []
@@ -1967,21 +2024,32 @@ def _cmd_compile(args: argparse.Namespace) -> int:
 
 
 def _cmd_induce(args: argparse.Namespace) -> int:
-    from openadapt_flow.compiler.induction import induce_program, validate_held_out
-    from openadapt_flow.ir import Workflow
-
     # Accept both RECORDING directories (compiled via the single-trace
     # bootstrap by induce_program) and already-compiled BUNDLE directories
     # (a dir containing workflow.json -> loaded as a Workflow). Detecting the
     # bundle case CLI-side keeps induce usable on artifacts the operator
     # already has, without touching the library API.
+    from openadapt_flow import sealed_set
+    from openadapt_flow.compiler.induction import induce_program, validate_held_out
+    from openadapt_flow.ir import Workflow
+
     traces: list = []
+    sealed_inputs = False
     for d in args.recording:
         path = Path(d)
-        if (path / "workflow.json").is_file():
+        sealed_inputs = sealed_inputs or sealed_set.is_sealed(path)
+        if (path / "workflow.json").is_file() or (path / "workflow.json.enc").is_file():
             traces.append(Workflow.load(path))
         else:
             traces.append(path)
+    if sealed_inputs and (args.report or args.probe_on):
+        # Both write the induced program (or probe bundles) outside any
+        # sealed set; refuse rather than write plaintext.
+        print(
+            "induce REFUSED: --report and --probe-on are not available for "
+            "encrypted inputs yet. Nothing was written."
+        )
+        return 2
 
     if args.probe_on:
         probed = _induce_with_probes(args, traces)
@@ -2013,7 +2081,14 @@ def _cmd_induce(args: argparse.Namespace) -> int:
     if args.name:
         workflow = workflow.model_copy(update={"name": args.name})
     out = Path(args.out)
-    workflow.save(out)
+    if sealed_inputs:
+        # Encrypted demonstrations induce an encrypted program.
+        passphrase = sealed_set.passphrase_for("bundle") or sealed_set.recording_key()
+        assert passphrase is not None  # the CLI guard refused a missing key
+        with sealed_set.writing(out, "bundle", passphrase):
+            workflow.save(out)
+    else:
+        workflow.save(out)
     print(
         f"\nCERTIFIED — induced program bundle written to {out} "
         f"(workflow: {workflow.name!r}, "
@@ -4772,6 +4847,7 @@ def _cmd_seal(args: argparse.Namespace) -> int:
         return 2
     print(f"Sealed bundle: {sealed.path}")
     print(f"Content digest: sha256:{sealed.content_digest}")
+    print(f"Sealed file set: sha256:{sealed.set_digest}")
     if sealed.certification_invalidated:
         print(
             "Prior certification invalidated: certify the sealed destination "
@@ -5223,12 +5299,13 @@ def _qualification_drill_driver(args: argparse.Namespace, workflow, params):
 
 def _retain_drill_evidence(run_dir: Path, driver) -> None:
     """Keep the drill's receipt and mutation record next to its report."""
+    from openadapt_flow import sealed_set
     from openadapt_flow.ir import RunReport
     from openadapt_flow.qualification_drills import write_drill_evidence
 
     try:
         report = RunReport.model_validate_json(
-            (run_dir / "report.json").read_text(encoding="utf-8")
+            sealed_set.read_text(run_dir / "report.json")
         )
     except (OSError, ValueError):
         report = None
@@ -5773,6 +5850,18 @@ def _cmd_qualify_proposal(args: argparse.Namespace) -> int:
         workflow = Workflow.load(bundle)
     except (OSError, ValueError) as exc:
         raise SystemExit(f"could not load bundle: {exc}") from exc
+    from openadapt_flow import sealed_set
+
+    out_arg = getattr(args, "out", None)
+    if (
+        out_arg
+        and sealed_set.is_sealed_path(bundle)
+        and not sealed_set.is_sealed_path(Path(out_arg))
+    ):
+        raise SystemExit(
+            f"qualify {verb} REFUSED: the bundle is encrypted, so --out must be "
+            "inside it (or omitted). Nothing was written."
+        )
 
     if verb == "propose":
         try:
@@ -5866,7 +5955,9 @@ def _cmd_qualify_proposal(args: argparse.Namespace) -> int:
             if args.out
             else bundle / "qualification-admission.local-dev.json"
         )
-        out.write_text(local.model_dump_json(indent=2), encoding="utf-8")
+        from openadapt_flow import sealed_set
+
+        sealed_set.write_text(out, local.model_dump_json(indent=2))
         print(local.model_dump_json(indent=2))
         return 0
 
@@ -7793,6 +7884,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--no-encrypt",
+        action="store_true",
+        help=(
+            "Write the recording in plaintext even when OPENADAPT_BUNDLE_KEY "
+            "or OPENADAPT_RECORDING_KEY is set (web recordings are encrypted "
+            "by default when a key is configured)"
+        ),
+    )
+    p.add_argument(
         "--capture-network",
         action="store_true",
         help=(
@@ -9159,9 +9259,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "seal",
         help=(
-            "Copy a bundle to a new path, encrypt its workflow and template "
-            "evidence with OPENADAPT_BUNDLE_KEY, verify integrity, and publish "
-            "it atomically"
+            "Encrypt every file of a bundle that can hold patient data with "
+            "OPENADAPT_BUNDLE_KEY, bind the whole file set to one sealed "
+            "index, verify it, and publish it atomically at a new path"
         ),
     )
     p.add_argument("source", help="Existing workflow bundle directory")
@@ -11415,6 +11515,82 @@ def _qualify_default_form(argv: list[str]) -> list[str]:
 _PREWARM_SKIP_FLAGS = frozenset({"-h", "--help", "--version"})
 
 
+#: Commands that read sealed bundles and encrypted recordings in memory and
+#: keep what they write sealed (docs/phi_at_rest.md). Any other command given
+#: a sealed path refuses before it reads anything, rather than decrypt to disk
+#: or misread the ciphertext. Keyed by ``module:function``.
+_SEALED_READY_COMMANDS: frozenset[str] = frozenset(
+    {
+        "openadapt_flow.__main__:_cmd_seal",
+        "openadapt_flow.__main__:_cmd_certify",
+        "openadapt_flow.__main__:_cmd_record",
+        "openadapt_flow.__main__:_cmd_compile",
+        "openadapt_flow.__main__:_cmd_induce",
+        "openadapt_flow.__main__:_cmd_scaffold_verifier",
+        "openadapt_flow.__main__:_cmd_run",
+        "openadapt_flow.__main__:_cmd_replay",
+        "openadapt_flow.__main__:_cmd_resume",
+        "openadapt_flow.__main__:_cmd_approve",
+        "openadapt_flow.__main__:_cmd_qualify",
+        "openadapt_flow.cli_admit:cmd_admit_run",
+        "openadapt_flow.cli_admit:cmd_admit_decide",
+        "openadapt_flow.cli_admit:cmd_admit_status",
+        "openadapt_flow.cli_undo:_cmd_undo_declare",
+        "openadapt_flow.cli_undo:_cmd_undo_list",
+        "openadapt_flow.cli_undo:_cmd_undo_approve",
+        "openadapt_flow.cli_undo:_cmd_undo_run",
+    }
+)
+
+
+def _sealed_paths_in(args: argparse.Namespace) -> list[Path]:
+    from openadapt_flow import sealed_set
+
+    found: list[Path] = []
+    for name, value in vars(args).items():
+        if name == "func":
+            continue
+        values = value if isinstance(value, (list, tuple)) else [value]
+        for item in values:
+            if not isinstance(item, (str, Path)) or not str(item):
+                continue
+            text = str(item)
+            if "://" in text or "\n" in text or len(text) > 4096:
+                continue
+            path = Path(text)
+            root = path if sealed_set.is_sealed(path) else sealed_set.sealed_root(path)
+            if root is not None and root not in found:
+                found.append(root)
+    return found
+
+
+def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
+    """Refuse a sealed path in a command that cannot keep it sealed, and a
+    sealed path whose key is not configured, before the command runs."""
+    from openadapt_flow import sealed_set
+
+    sealed = _sealed_paths_in(args)
+    if not sealed:
+        return None
+    func = getattr(args, "func", None)
+    command = f"{getattr(func, '__module__', '')}:{getattr(func, '__name__', '')}"
+    if command not in _SEALED_READY_COMMANDS:
+        root = sealed[0]
+        kind = sealed_set.header_kind(root)
+        return (
+            f"{root} is an encrypted {kind}, and this command does not read "
+            "encrypted input yet. Flow will not decrypt it to disk for this "
+            "command. Commands that read sealed input: record, compile, "
+            "induce, scaffold-verifier, seal, certify, qualify, admit, run, "
+            "replay, approve, resume and undo."
+        )
+    for root in sealed:
+        kind = sealed_set.header_kind(root)
+        if not sealed_set.passphrase_for(kind):
+            return sealed_set.missing_key_message(root, kind)
+    return None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code."""
     raw = list(sys.argv[1:] if argv is None else argv)
@@ -11438,6 +11614,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     no_outbound.enforce_from_env()
     args = build_parser().parse_args(argv)
+    from openadapt_flow import sealed_set
+
+    try:
+        refusal = _sealed_input_refusal(args)
+    except sealed_set.SealedSetError as exc:
+        refusal = str(exc)
+    if refusal is not None:
+        print(f"REFUSED: {refusal}", file=sys.stderr)
+        return 2
     try:
         code = args.func(args)
         if getattr(args, "command", None) in ("run", "replay"):
@@ -11450,6 +11635,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             if note:
                 print(note, file=sys.stderr)
         return code
+    except sealed_set.SealedSetError as exc:
+        # A sealed bundle or encrypted recording that is missing its key,
+        # was changed after sealing, or holds an unknown file: fail closed.
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
     except BrowserSupportMissing as exc:
         # Missing optional browser support is a setup decision, not a crash.
         print(f"Browser setup required:\n{exc}", file=sys.stderr)

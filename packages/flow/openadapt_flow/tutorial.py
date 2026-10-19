@@ -304,8 +304,12 @@ def record_tutorial(
     *,
     headed: bool = False,
     presentation_delay_s: float = 0.0,
+    encryption_key: Optional[str] = None,
 ) -> Path:
     """Record the triage demonstration WITH system-of-record observation.
+
+    ``encryption_key`` records an encrypted (sealed) recording; see
+    :mod:`openadapt_flow.sealed_set`.
 
     Every action goes through the ordinary :class:`~openadapt_flow.recorder.Recorder`,
     so frames and events are captured exactly as a human demonstration would be.
@@ -352,6 +356,7 @@ def record_tutorial(
             recording_dir,
             app_url=entry_url,
             system_of_record_reader=read_records,
+            encryption_key=encryption_key,
         )
 
         def save() -> None:

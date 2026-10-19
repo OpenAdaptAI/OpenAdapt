@@ -65,6 +65,7 @@ from typing import (
 )
 from urllib.parse import urlsplit
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.backend import (
     ActionDeliveryUncertain,
     Backend,
@@ -1549,6 +1550,130 @@ class Replayer:
     ) -> RunReport:
         """Execute the workflow and write a run directory.
 
+        See :meth:`_run_unsealed` for the run itself. When ``bundle_dir`` is a
+        sealed bundle (:mod:`openadapt_flow.sealed_set`), the run directory is
+        a sealed set too: the report, step screenshots, identity and
+        resolution crops and every other run artifact are encrypted in memory
+        before they are written, and durable checkpoints use the same key.
+        No plaintext of the bundle or of the live screen reaches the disk.
+        """
+        bundle_path = Path(bundle_dir)
+        if (
+            not (
+                _sealed.is_sealed(bundle_path)
+                or _sealed.active_writer(bundle_path) is not None
+            )
+            or _sealed.active_writer(Path(run_dir)) is not None
+        ):
+            return self._run_unsealed(
+                workflow,
+                params=params,
+                worklists=worklists,
+                bundle_dir=bundle_dir,
+                run_dir=run_dir,
+                save_healed_to=save_healed_to,
+                resume_from=resume_from,
+                resume_program=resume_program,
+                run_id=run_id,
+                idempotency_key=idempotency_key,
+                execution_target_kind=execution_target_kind,
+                surface_override=surface_override,
+                execution_origin=execution_origin,
+                execution_entry_url=execution_entry_url,
+                execution_target_origin=execution_target_origin,
+                prior_screenshots_may_leave_box=prior_screenshots_may_leave_box,
+                prior_model_calls=prior_model_calls,
+                prior_external_network_calls=prior_external_network_calls,
+            )
+        passphrase = _sealed.passphrase_for("bundle")
+        if not passphrase:
+            raise _sealed.SealedSetKeyError(
+                _sealed.missing_key_message(bundle_path, "bundle")
+            )
+        unsupported = self._sealed_run_unsupported(workflow)
+        if unsupported is not None:
+            # Refuse before anything is actuated or written: these stores
+            # keep their own plaintext state files in the run directory.
+            raise _sealed.SealedSetError(
+                f"a sealed bundle cannot run with {unsupported} yet, because "
+                "that state is written to the run directory in plaintext. "
+                "Nothing was executed."
+            )
+        if self.checkpoint_key is None:
+            # A sealed bundle's run keeps its durable state under the same key.
+            self.checkpoint_key = passphrase
+        run_path = Path(run_dir)
+        writer = _sealed.SealedSetWriter(
+            run_path, "run", passphrase, resume=_sealed.is_sealed(run_path)
+        )
+        _sealed.register_writer(writer)
+        try:
+            report = self._run_unsealed(
+                workflow,
+                params=params,
+                worklists=worklists,
+                bundle_dir=bundle_dir,
+                run_dir=run_dir,
+                save_healed_to=save_healed_to,
+                resume_from=resume_from,
+                resume_program=resume_program,
+                run_id=run_id,
+                idempotency_key=idempotency_key,
+                execution_target_kind=execution_target_kind,
+                surface_override=surface_override,
+                execution_origin=execution_origin,
+                execution_entry_url=execution_entry_url,
+                execution_target_origin=execution_target_origin,
+                prior_screenshots_may_leave_box=prior_screenshots_may_leave_box,
+                prior_model_calls=prior_model_calls,
+                prior_external_network_calls=prior_external_network_calls,
+            )
+        finally:
+            _sealed.unregister_writer(writer)
+        writer.finalize(adopt_external=True)
+        return report
+
+    def _sealed_run_unsupported(self, workflow: Workflow) -> Optional[str]:
+        """Name a run feature whose run-directory state is not sealed yet."""
+        if self.approval_gate is not None:
+            return "an approval gate (attended approvals)"
+        if self._attended_draft_by is not None:
+            return "an attended draft"
+        program = workflow.program
+        if program is not None:
+            graphs = [program, *(getattr(workflow, "subflows", None) or {}).values()]
+            for graph in graphs:
+                for state in getattr(graph, "states", {}).values():
+                    if getattr(state, "kind", None) == StateKind.BUSINESS_DECISION:
+                        return "a business-decision state"
+        return None
+
+    def _run_unsealed(
+        self,
+        workflow: Workflow,
+        *,
+        params: Optional[dict[str, RuntimeParamScalar]] = None,
+        worklists: Optional[dict[str, list[dict[str, str]]]] = None,
+        bundle_dir: Path,
+        run_dir: Path,
+        save_healed_to: Optional[Path] = None,
+        resume_from: Optional[int] = None,
+        resume_program: Optional[ProgramCheckpoint] = None,
+        run_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        execution_target_kind: Optional[ExecutionTargetKind] = None,
+        surface_override: bool = False,
+        execution_origin: Optional[str] = None,
+        execution_entry_url: Optional[str] = None,
+        execution_target_origin: Optional[str] = None,
+        prior_screenshots_may_leave_box: bool = False,
+        prior_model_calls: int = 0,
+        prior_external_network_calls: Literal[
+            "none", "observed", "unknown"
+        ] = "unknown",
+    ) -> RunReport:
+        """Execute the workflow and write a run directory.
+
         A workflow with no ``program`` graph runs the LINEAR ``steps`` loop
         exactly as before (byte-for-byte back-compatible). A workflow carrying a
         ``program`` (Workflow-program IR Phase 2) is interpreted as a STATE
@@ -2403,7 +2528,14 @@ class Replayer:
                     candidate
                 )
                 durable_run.complete()
-                os.replace(candidate, run_dir / "report.json")
+                if _sealed.is_sealed_path(candidate):
+                    # Encrypted run directory: the rename is a sealed rewrite.
+                    _sealed.write_bytes(
+                        run_dir / "report.json", _sealed.read_bytes(candidate)
+                    )
+                    _sealed.unlink(candidate)
+                else:
+                    os.replace(candidate, run_dir / "report.json")
                 from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
 
                 CheckpointStore._fsync_directory(run_dir)
@@ -4601,19 +4733,25 @@ class Replayer:
                 frame_path = root / frame_ref
                 if frame_path.is_symlink():
                     raise OSError("transition frame path is a symlink")
-                existing = frame_path.read_bytes() if frame_path.exists() else None
+                existing = (
+                    _sealed.read_bytes(frame_path)
+                    if _sealed.exists(frame_path)
+                    else None
+                )
                 if existing is not None and existing != frame:
                     raise OSError("transition frame digest path has other bytes")
-                frame_path.write_bytes(frame)
+                _sealed.write_bytes(frame_path, frame)
                 context_path = root / context_ref
                 if context_path.is_symlink():
                     raise OSError("transition context path is a symlink")
                 existing_context = (
-                    context_path.read_bytes() if context_path.exists() else None
+                    _sealed.read_bytes(context_path)
+                    if _sealed.exists(context_path)
+                    else None
                 )
                 if existing_context is not None and existing_context != context_payload:
                     raise OSError("transition context digest path has other bytes")
-                context_path.write_bytes(context_payload)
+                _sealed.write_bytes(context_path, context_payload)
             except OSError as exc:
                 raise _ProgramHalt(
                     "halt",
@@ -4664,12 +4802,14 @@ class Replayer:
                         path = root / inventory_ref
                         if path.is_symlink():
                             raise OSError("transition asset path is a symlink")
-                        existing = path.read_bytes() if path.exists() else None
+                        existing = (
+                            _sealed.read_bytes(path) if _sealed.exists(path) else None
+                        )
                         if existing is not None and existing != payload:
                             raise OSError(
                                 "transition asset digest path has other bytes"
                             )
-                        path.write_bytes(payload)
+                        _sealed.write_bytes(path, payload)
                     except OSError as exc:
                         raise _ProgramHalt(
                             "halt",
@@ -10194,10 +10334,10 @@ class Replayer:
                 path = inventory_dir / f"{digest}.png"
                 if path.is_symlink():
                     raise OSError("pixel evidence crop path is a symlink")
-                existing = path.read_bytes() if path.exists() else None
+                existing = _sealed.read_bytes(path) if _sealed.exists(path) else None
                 if existing is not None and existing != payload:
                     raise OSError("pixel evidence digest path has other bytes")
-                path.write_bytes(payload)
+                _sealed.write_bytes(path, payload)
         except OSError:
             raise
 
@@ -10266,10 +10406,10 @@ class Replayer:
             path = inventory_dir / f"{digest}.png"
             if path.is_symlink():
                 raise OSError("visual resolution input path is a symlink")
-            existing = path.read_bytes() if path.exists() else None
+            existing = _sealed.read_bytes(path) if _sealed.exists(path) else None
             if existing is not None and existing != payload:
                 raise OSError("visual resolution digest path has other bytes")
-            path.write_bytes(payload)
+            _sealed.write_bytes(path, payload)
 
         return resolution.model_copy(
             update={
@@ -11917,7 +12057,7 @@ class Replayer:
             if run_dir is None or not result.before_png:
                 return None
             try:
-                return (run_dir / result.before_png).read_bytes()
+                return _sealed.read_bytes(run_dir / result.before_png)
             except OSError:
                 return None
 
@@ -17584,7 +17724,7 @@ class Replayer:
         candidate = safe
         occurrence = 1
         while any(
-            (steps_dir / f"{candidate}_{suffix}.png").exists()
+            _sealed.exists(steps_dir / f"{candidate}_{suffix}.png")
             for suffix in ("before", "after", "attended-before", "attended-after")
         ):
             occurrence += 1
@@ -17603,5 +17743,5 @@ class Replayer:
         (see openadapt_flow.privacy and docs/PRIVACY.md).
         """
         rel = f"steps/{step_id}_{suffix}.png"
-        (Path(run_dir) / rel).write_bytes(_scrub_png(png))
+        _sealed.write_bytes(Path(run_dir) / rel, _scrub_png(png))
         return rel
