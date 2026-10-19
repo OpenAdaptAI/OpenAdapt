@@ -60,6 +60,14 @@ field the click before the typing targeted), never by its value matching a
 parameter's. So a parameter whose demonstration value was blank still binds
 its field, and two parameters with equal values bind their own fields.
 
+The save's URL and the form page's URL keep their query. A path segment or
+query value that equals exactly one input's demonstration value (a record
+identifier such as `record_id=17`) becomes that parameter; the rest is kept
+as recorded. A hidden form field that echoes such an identifier (an update
+form's `pid`) is the same parameter. The form page, the pre-checks and the
+save must share one origin, and the API step only ever sends to the live
+form's own origin.
+
 If a field can't be explained, nothing is proposed. That includes a field
 that carries a parameter's value although no recorded step typed it there, a
 typed field the save sent with another value, a typed field the save doesn't
@@ -71,6 +79,8 @@ doesn't propose an API step in these cases:
 - the form page wasn't captured;
 - the save isn't the program's last step;
 - the program has branches;
+- a URL value equals two inputs' values (ambiguous), or the save or a
+  pre-check is on another origin than the form;
 - a covered step has a guard, a wait rule, or a record-identifying region the
   person marked with `record --identifier`;
 - a covered step made a request whose response must show text the GUI checks

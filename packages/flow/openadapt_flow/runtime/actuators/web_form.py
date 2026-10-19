@@ -425,13 +425,16 @@ class WebFormActuator:
         if spec is None:
             return unavailable("the binding has no recorded form")
         try:
-            page = self.transport.get(spec.form_path)
+            # Record identifiers in the URLs are run parameters (fill_url).
+            form_path = fill_url(spec.form_path, params)
+            save_path = fill_url(binding.url_template, params)
+            page = self.transport.get(form_path)
             self.log.append({"stage": "read_form", "status": page.status})
             if page.status != 200:
                 return unavailable(
                     f"the form page returned HTTP {page.status} (signed out?)"
                 )
-            controls = form_controls(page.text, binding.url_template)
+            controls = form_controls(page.text, up.urlsplit(save_path).path)
             if controls is None:
                 return unavailable("the form page no longer has the recorded form")
             if spec.controls and sorted(controls) != sorted(spec.controls):
@@ -473,9 +476,9 @@ class WebFormActuator:
             return unavailable(f"a read before the save failed ({type(exc).__name__})")
         return PreparedSave(
             method=binding.method,
-            path=binding.url_template,
+            path=save_path,
             body=tuple(body),
-            referer=self.transport.base_url + spec.form_path,
+            referer=self.transport.base_url + form_path,
             session_fields=frozenset(
                 f.name for f in spec.fields if f.source == "session"
             ),
@@ -582,6 +585,34 @@ class WebFormActuator:
 
 class _Missing(KeyError):
     pass
+
+
+def fill_url(template: str, params: dict[str, str]) -> str:
+    """Fill a URL template's ``{param}`` placeholders, URL-encoded.
+
+    A path segment is quoted whole (``/`` included); a query value is
+    form-encoded. Anything not a placeholder is kept as recorded. Raises
+    ``KeyError`` for a parameter the run doesn't have.
+    """
+
+    path, sep, query = template.partition("?")
+    path = re.sub(
+        r"\{([A-Za-z_][A-Za-z0-9_]*)\}",
+        lambda m: up.quote(str(_value(params, m.group(1))), safe=""),
+        path,
+    )
+    if not sep:
+        return path
+    pairs = [
+        (k, _fill(v, params)) for k, v in up.parse_qsl(query, keep_blank_values=True)
+    ]
+    return path + "?" + up.urlencode(pairs)
+
+
+def _value(params: dict[str, str], key: str) -> str:
+    if key not in params:
+        raise _Missing(key)
+    return str(params[key])
 
 
 def _fill(template: str, params: dict[str, str]) -> str:
