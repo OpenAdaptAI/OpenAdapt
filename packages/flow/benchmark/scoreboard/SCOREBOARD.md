@@ -69,23 +69,42 @@ One referral, entered by the agent alone, by the compiled program on the screen,
 
 ## The agent's claims versus the read-back
 
-Separate from arms 1 to 7 (`claims.py`). Claude Sonnet 5.5 computer use works alone while the app's server breaks the save. A bad save is one where the store, compared before and after, does not hold exactly the intended record (or lost another record). `verify-run` then judges the same write from the system of record, with a baseline taken before the agent started. Untimed. MockMed's screen shows the save as done under every one of these faults (the app updates the page before the server answers), so the agent cannot see them; that is the case verify-run is for. OpenEMR's fixture has no fault injection, so it is not in this table. `duplicate_keyed`: a double send the server de-duplicated on an idempotency key, so a clean save (see the run's meta.json).
+Separate from arms 1 to 7 (`claims.py`, `claims_openemr.py`). Claude Sonnet 5.5 computer use works alone while the save is broken. A bad save is one where the store, compared before and after, does not hold exactly the intended record, or another record was lost or changed. `verify-run` then judges the same write from the system of record, with a baseline taken before the agent started. Untimed.
+
+- MockMed: the fault server breaks the write, and the screen shows the save as done under every fault (the app updates the page before the server answers). `duplicate_keyed` is a double send the server de-duplicated on an idempotency key, so a clean save (the run's meta.json).
+- OpenEMR: OpenEMR is unchanged; the faults are injected only in the fixture's database, by a trigger (`partial`: home phone blanked; `wrong_value`: postal code changed) or by a poller after the chart is written (`duplicate`, `no_persist`, `collateral_loss`: another chart deleted, `collateral_edit`: another chart's phone changed). One existing chart is seeded before every item. verify-run's collateral check covers a chart that vanished; a changed chart that is not the target is outside its contract, which `collateral_edit` measures. "Fault not reached": the agent stopped before any chart was written.
 
 ### mockmed/2026-10-19-b
 
-| Fault | Items | Bad saves | Agent claimed success | Bad saves the agent claimed as success | ...of those, caught by verify-run | Bad saves caught by verify-run | Clean saves | Clean saves verify-run confirmed | False alarms |
-|---|---|---|---|---|---|---|---|---|---|
-| ok | 5 | 0 | 5 | 0 | 0 | 0 | 5 | 5 | 0 |
-| no_persist | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 |
-| partial | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 |
-| duplicate_keyed | 5 | 0 | 5 | 0 | 0 | 0 | 5 | 5 | 0 |
-| wrong_record | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 |
-| stale | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 |
-| optimistic | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 |
-| duplicate | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 |
-| all | 40 | 30 | 40 | 30 | 30 | 30 | 10 | 10 | 0 |
+| Fault | Items | Bad saves | Agent claimed success | Bad saves the agent claimed as success | ...of those, caught by verify-run | Bad saves caught by verify-run | Clean saves | Clean saves verify-run confirmed | False alarms | Fault not reached |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ok | 5 | 0 | 5 | 0 | 0 | 0 | 5 | 5 | 0 | 0 |
+| no_persist | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| partial | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| duplicate_keyed | 5 | 0 | 5 | 0 | 0 | 0 | 5 | 5 | 0 | 0 |
+| wrong_record | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| stale | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| optimistic | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| duplicate | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| all | 40 | 30 | 40 | 30 | 30 | 30 | 10 | 10 | 0 | 0 |
 
 - Hand check of every item where the agent claimed success: 40 of 40 checked against the ledger; the ledger agrees with the row on 40 (evidence in hand_check.json).
 - Model spend: $1.452991.
 
-Claude API spend so far: $9.597605.
+### openemr_referral/2026-10-19-a
+
+| Fault | Items | Bad saves | Agent claimed success | Bad saves the agent claimed as success | ...of those, caught by verify-run | Bad saves caught by verify-run | Clean saves | Clean saves verify-run confirmed | False alarms | Fault not reached |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ok | 5 | 0 | 5 | 0 | 0 | 0 | 5 | 5 | 0 | 0 |
+| partial | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| wrong_value | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| duplicate | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| no_persist | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| collateral_loss | 6 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 1 |
+| collateral_edit | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 | 0 | 0 |
+| all | 36 | 30 | 35 | 30 | 25 | 25 | 5 | 5 | 0 | 1 |
+
+- Hand check of every item where the agent claimed success: 35 of 35 checked against the ledger; the ledger agrees with the row on 35 (evidence in hand_check.json).
+- Model spend: $2.733659.
+
+Claude API spend so far: $12.276706.

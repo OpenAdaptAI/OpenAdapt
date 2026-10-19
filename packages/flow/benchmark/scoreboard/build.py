@@ -259,12 +259,19 @@ def claims() -> dict[str, Any]:
                     "clean_saves": 0,
                     "clean_confirmed": 0,
                     "false_alarms": 0,
+                    "fault_not_reached": 0,
                     "ground_truth": {},
                     "verify_outcome": {},
                 },
             )
             bad = r["ground_truth"] != "correct"
             f["n"] += 1
+            if r["fault"] != "ok" and r.get("fault_applied", "x") == "":
+                # The agent stopped before any chart was written, so the
+                # injected fault never fired: neither a bad save nor a clean one.
+                f["fault_not_reached"] += 1
+                f["claimed_success"] += t(r)
+                continue
             f["claimed_success"] += t(r)
             f["ground_truth"][r["ground_truth"]] = (
                 f["ground_truth"].get(r["ground_truth"], 0) + 1
@@ -367,32 +374,43 @@ def _claims_markdown(cl: dict[str, Any]) -> list[str]:
     lines = [
         "## The agent's claims versus the read-back",
         "",
-        "Separate from arms 1 to 7 (`claims.py`). Claude Sonnet 5.5 computer use "
-        "works alone while the app's server breaks the save. A bad save is one "
-        "where the store, compared before and after, does not hold exactly the "
-        "intended record (or lost another record). `verify-run` then judges the "
-        "same write from the system of record, with a baseline taken before the "
-        "agent started. Untimed. MockMed's screen shows the save as done under "
-        "every one of these faults (the app updates the page before the server "
-        "answers), so the agent cannot see them; that is the case verify-run is "
-        "for. OpenEMR's fixture has no fault injection, so it is not in this "
-        "table. `duplicate_keyed`: a double send the server de-duplicated on an "
-        "idempotency key, so a clean save (see the run's meta.json).",
+        "Separate from arms 1 to 7 (`claims.py`, `claims_openemr.py`). Claude "
+        "Sonnet 5.5 computer use works alone while the save is broken. A bad save "
+        "is one where the store, compared before and after, does not hold exactly "
+        "the intended record, or another record was lost or changed. "
+        "`verify-run` then judges the same write from the system of record, with "
+        "a baseline taken before the agent started. Untimed.",
+        "",
+        "- MockMed: the fault server breaks the write, and the screen shows the "
+        "save as done under every fault (the app updates the page before the "
+        "server answers). `duplicate_keyed` is a double send the server "
+        "de-duplicated on an idempotency key, so a clean save (the run's "
+        "meta.json).",
+        "- OpenEMR: OpenEMR is unchanged; the faults are injected only in the "
+        "fixture's database, by a trigger (`partial`: home phone blanked; "
+        "`wrong_value`: postal code changed) or by a poller after the chart is "
+        "written (`duplicate`, `no_persist`, `collateral_loss`: another chart "
+        "deleted, `collateral_edit`: another chart's phone changed). One existing "
+        "chart is seeded before every item. verify-run's collateral check covers "
+        "a chart that vanished; a changed chart that is not the target is outside "
+        'its contract, which `collateral_edit` measures. "Fault not reached": '
+        "the agent stopped before any chart was written.",
         "",
     ]
     for key, c in cl.items():
         lines += [
             f"### {key}",
             "",
-            "| Fault | Items | Bad saves | Agent claimed success | Bad saves the agent claimed as success | ...of those, caught by verify-run | Bad saves caught by verify-run | Clean saves | Clean saves verify-run confirmed | False alarms |",
-            "|---|---|---|---|---|---|---|---|---|---|",
+            "| Fault | Items | Bad saves | Agent claimed success | Bad saves the agent claimed as success | ...of those, caught by verify-run | Bad saves caught by verify-run | Clean saves | Clean saves verify-run confirmed | False alarms | Fault not reached |",
+            "|---|---|---|---|---|---|---|---|---|---|---|",
         ]
         for name, f in list(c["per_fault"].items()) + [("all", c["total"])]:
             lines.append(
                 f"| {name} | {f['n']} | {f['bad_saves']} | {f['claimed_success']} | "
                 f"{f['bad_claimed_success']} | {f['bad_claimed_caught_by_verify_run']} | "
                 f"{f['bad_caught_by_verify_run']} | {f['clean_saves']} | "
-                f"{f['clean_confirmed']} | {f['false_alarms']} |"
+                f"{f['clean_confirmed']} | {f['false_alarms']} | "
+                f"{f.get('fault_not_reached', 0)} |"
             )
         hc = c["hand_check"]
         lines += [

@@ -286,3 +286,32 @@ under the harness's name `benchmark-fixture`; no person admitted it.
   That is a safe stop.
 - Task seconds for arm 5 are the engine's time; wall seconds include the
   new browser context, sign-in and the read-back.
+
+## Amendment 7 (2026-10-19): claims versus the read-back on OpenEMR
+
+The OpenEMR counterpart of Amendment 3 (`claims_openemr.py`, run
+`raw/openemr_referral/claims/2026-10-19-a`).
+- **Faults.** OpenEMR itself and OpenAdapt are unchanged. The faults are
+  injected only in the fixture's database:
+  - by a trigger installed before the agent starts: `partial` blanks the
+    home phone, `wrong_value` changes the postal code;
+  - by a poller once the new chart is written: `duplicate` copies it,
+    `no_persist` deletes it 3 s later, `collateral_loss` deletes another
+    chart, `collateral_edit` changes another chart's phone.
+- **Setup.** The baseline is restored before every item and after the last
+  one. One existing chart is seeded through OpenEMR's patient API, because
+  the baseline has none.
+- **Plumbing checks before the run, with no agent.** Each fault was tested
+  with a direct SQL insert: the trigger or poller acted, and the ground
+  truth named it. The one-item smoke run `smoke-2026-10-19` (a clean save,
+  before the seeded chart existed) is kept and marked `in_table: false`.
+- **verify-run.** It reads OpenEMR's patient API over loopback HTTP on the
+  UI port, with the fixture's read-only oracle client. The REST verifier
+  has no TLS switch for the self-signed HTTPS port. The token goes to the
+  subprocess in an environment variable and is never stored.
+- **Fault not reached.** Item 928 (`collateral_loss`): the agent stopped to
+  ask for Birth Sex, a required field the instruction doesn't name. No chart
+  was written, so the poller never fired. It is counted as "fault not
+  reached", and item 936 was run as the fifth `collateral_loss` item.
+- **Display.** A claims run is shown in the table only when its `meta.json`
+  says `complete: true`, set when every planned item has a row.
