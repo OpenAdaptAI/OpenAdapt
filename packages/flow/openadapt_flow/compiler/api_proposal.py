@@ -96,6 +96,54 @@ def _templated(value: str, by_value: dict[str, list[str]]) -> Optional[str]:
     return "{" + names[0] + "}" if len(names) == 1 else None
 
 
+def _origin(url: str) -> str:
+    parts = up.urlsplit(url)
+    return f"{parts.scheme.lower()}://{parts.netloc.lower()}"
+
+
+def _url_template(url: str, by_value: dict[str, list[str]]) -> tuple[str, list[str]]:
+    """``url``'s path and query, with input values as ``{param}``.
+
+    A path segment or query value that equals exactly one input's
+    demonstration value becomes that parameter (a record identifier such as
+    ``record_id=17``); the rest is kept as recorded. A value equal to two
+    inputs is ambiguous and reported.
+    """
+
+    parts = up.urlsplit(url)
+    problems: list[str] = []
+
+    def bind(value: str, where: str) -> str:
+        names = by_value.get(value) or []
+        if len(names) > 1:
+            problems.append(
+                f"{where} {value!r} equals {', '.join('{' + n + '}' for n in names)}; "
+                "the binding is ambiguous"
+            )
+            return value
+        return "{" + names[0] + "}" if names else value
+
+    segments = [
+        bind(up.unquote(seg), "the URL path segment") if seg else seg
+        for seg in parts.path.split("/")
+    ]
+    path = "/".join(
+        seg if seg.startswith("{") else up.quote(seg, safe=":@!$&'()*+,;=-._~")
+        for seg in segments
+    )
+    query = [
+        (k, bind(v, f"the URL query value {k}=") if v else v)
+        for k, v in up.parse_qsl(parts.query, keep_blank_values=True)
+    ]
+    if query:
+        # Placeholders stay readable; fill_url encodes the run's values.
+        path += "?" + "&".join(
+            up.quote(k) + "=" + (v if v.startswith("{") else up.quote(v))
+            for k, v in query
+        )
+    return path, problems
+
+
 _ID_SELECTOR = re.compile(r"^#([A-Za-z_][\w:.-]*)$")
 _NAME_SELECTOR = re.compile(r"""^(?:[a-z]+)?\[name=["']?([^"'\]]+)["']?\]$""")
 
@@ -260,7 +308,9 @@ def propose_api_step(
     post = max(posts, key=carried)
     if carried(post) < max(1, len(by_value) // 2):
         return workflow, None, ["the save's request does not carry the recorded values"]
-    action = _path(post["url"])
+    action, url_problems = _url_template(post["url"], by_value)
+    if url_problems:
+        return workflow, None, url_problems
     if any(v == nc.SECRET for _, v in post["form"]):
         return workflow, None, ["the save sends a secret field; it stays on the GUI"]
 
@@ -274,7 +324,7 @@ def propose_api_step(
             and ln.get("status") == 200
             and "<form" in (ln.get("response_text") or "")
         ):
-            found = form_controls(ln["response_text"], action)
+            found = form_controls(ln["response_text"], _path(post["url"]))
             if found is not None:
                 form_line, controls = ln, found
     if form_line is None or controls is None:
@@ -286,6 +336,18 @@ def propose_api_step(
             ],
         )
     form_t = float(form_line["t"])
+    if _origin(form_line["url"]) != _origin(post["url"]):
+        return (
+            workflow,
+            None,
+            [
+                "the save posts to another origin than the page that served the "
+                "form; the API step sends only to the form's own origin"
+            ],
+        )
+    form_path, url_problems = _url_template(form_line["url"], by_value)
+    if url_problems:
+        return workflow, None, url_problems
 
     # Steps the API step stands in for: those recorded on the form page.
     folded: list[Step] = []
@@ -345,6 +407,19 @@ def propose_api_step(
                     "another value"
                 ],
             )
+        url_bound = [
+            n for n in by_value.get(value, []) if "{" + n + "}" in action + form_path
+        ]
+        if (
+            value
+            and len(by_value.get(value, [])) == 1
+            and url_bound
+            and (ctl or {}).get("kind") == "hidden"
+        ):
+            # The record's identifier, echoed by the form for the record the
+            # URL names (an update form's hidden pid): the same parameter.
+            fields.append(WebFormField(name=name, source="param", param=url_bound[0]))
+            continue
         if value and value in by_value:
             return (
                 workflow,
@@ -457,6 +532,12 @@ def propose_api_step(
                     f"{step.id} checks {texts!r} on screen and no response it caused carries it"
                 ],
             )
+        if _origin(hit["url"]) != _origin(form_line["url"]):
+            return (
+                workflow,
+                None,
+                [f"the check at {step.id} reads another origin than the form's"],
+            )
         query = []
         for k, v in up.parse_qsl(up.urlsplit(hit["url"]).query, keep_blank_values=True):
             if v.startswith("<session:"):
@@ -485,12 +566,7 @@ def propose_api_step(
         }
     )
     spec = WebFormSpec(
-        form_path=_path(form_line["url"])
-        + (
-            f"?{up.urlsplit(form_line['url']).query}"
-            if up.urlsplit(form_line["url"]).query
-            else ""
-        ),
+        form_path=form_path,
         fields=fields,
         controls=sorted(controls),
         client_rules=client_rules(form_line["response_text"]),
