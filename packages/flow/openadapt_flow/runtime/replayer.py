@@ -9135,7 +9135,7 @@ class Replayer:
         workflow: Workflow,
         step: Step,
         before: Any,
-        effects: list["Effect"],
+        effects: Optional[list["Effect"]],
         params: Mapping[str, Any],
     ) -> None:
         """Keep what a locating or restoring undo of ``step`` needs.
