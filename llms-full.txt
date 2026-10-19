@@ -496,6 +496,7 @@ improvising or retrying when something is off.
 | Checked later: a save confirmed by a later report or acknowledgment, never counted as done until then | In review ([#1297](https://github.com/OpenAdaptAI/OpenAdapt/pull/1297)) | Synthetic | `SAVED_AWAITING_CHECK` |
 | Keep the server's own answer to a save as lower-level evidence on the receipt | In review ([#1298](https://github.com/OpenAdaptAI/OpenAdapt/pull/1298)) | Synthetic | receipts |
 | A ledger of what changed before a stop, a write-ordering lint, and undo steps a person approves | On main ([#1263](https://github.com/OpenAdaptAI/OpenAdapt/pull/1263)) | Synthetic (MockMed) | change ledger |
+| Propose an undo for each saving step (another recording, captured traffic, or the old value), keep it only if a test copy shows every record restored, and offer it after a stop once a person approves it | In review ([#1346](https://github.com/OpenAdaptAI/OpenAdapt/pull/1346)) | Synthetic (MockMed, MockLoan, live browser) | `openadapt-flow undo propose`, `undo accept`; [AFTER_A_STOP.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/AFTER_A_STOP.md) |
 
 ## Approvals
 
@@ -614,6 +615,7 @@ A test fails when a command has no file or this list is out of date.
 - `for-each`
 - `induce`
 - `intake`
+- `narration`
 - `process`
 - `pull`
 - `record`
@@ -660,7 +662,7 @@ A test fails when a command has no file or this list is out of date.
 - `repair`
 - `teach-branch`
 - `teach`
-- `undo`: The undo steps a person approves after a stop.
+- `undo`: The undo steps a person approves after a stop; `undo propose` finds and verifies them on a test copy, `undo accept` is a person's one-time approval of a proposal.
 
 **Give agents the program:**
 
@@ -1649,12 +1651,32 @@ What it does provide ([`AFTER_A_STOP.md`](https://github.com/OpenAdaptAI/OpenAda
   to a person, runs only after that person approves it, runs at most once,
   and counts as done only when an independent read of the system of record
   confirms its own declared effects.
+- `undo propose` finds candidate undo steps for each saving step (another
+  recording, captured traffic, or the field's old value) and tries each one
+  on a declared test copy. It writes a candidate into the bundle, as a
+  proposal, only when every record afterwards matches the read-back from
+  before the save. A person approves a proposal once (`undo accept`), and
+  each run still needs approval after the stop.
 
 The limits of that:
 
 - A step with no declared effect is `unknown` in the ledger. Flow can't say
   whether it changed anything.
-- An undo exists only where someone declared it. Flow doesn't infer one.
+- An undo exists only where someone declared it or approved a verified
+  proposal. Flow never uses an undo no person approved.
+- A proposal is verified once, on a test copy, with the bundle's parameters.
+  It is evidence that the inverse path works on that copy, not a proof for
+  every record in production.
+- A proposal must restore every record exactly. An app that cancels by
+  changing a status, or writes an audit row when a record is deleted, fails
+  verification unless a person names those fields with `--ignore-field`.
+- Flow builds API undo steps only from JSON requests. A browser form post, or
+  a Delete control on the saved record's page, needs a recording of a person
+  doing the undo.
+- A proposal that finds its record (`locate`) or restores old values
+  (`restore`) needs values the replayer keeps just before the save. They exist
+  only for runs whose bundle already held the proposal, and only when the
+  save's record check read the system of record before the save.
 - An undo can fail or be refused. Then a person must repair the record by
   hand.
 - No undo is offered for a workflow with a loop: the undo can't be bound to
