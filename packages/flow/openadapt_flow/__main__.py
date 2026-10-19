@@ -913,6 +913,54 @@ def _replay_outcome_epilogue(
     )
 
 
+def _change_ledger_epilogue(
+    report, run_dir: Path, args: Optional[argparse.Namespace]
+) -> Optional[str]:
+    """What may need undoing after a stop (presentation only).
+
+    Reads the run's change ledger (``openadapt_flow.after_stop``). Offering an
+    undo runs nothing: a person must approve it first.
+    """
+    import shlex
+
+    from openadapt_flow.after_stop import change_ledger_lines
+    from openadapt_flow.cli_hints import command
+
+    bundle = getattr(args, "bundle", None) if args is not None else None
+    hint = command(
+        f"undo list {shlex.quote(str(run_dir))} --bundle "
+        + (shlex.quote(str(bundle)) if bundle else "<bundle-dir>")
+    )
+    lines = change_ledger_lines(report, undo_hint=hint)
+    return "\n".join(lines) if lines else None
+
+
+def _undo_run_target_problem(args: argparse.Namespace, workflow) -> Optional[str]:
+    """Why ``undo run`` has no real application to act on, or None.
+
+    Resolves ``--config`` and the backend flags the way replay does. A web
+    target with no URL and no attached browser would start the bundled
+    MockMed demo, so the undo would act on the demo and use up its approval.
+    """
+    from openadapt_flow.backends.factory import _normalize_kind
+
+    cfg, _effects, _actuation = _deployment_sections(args)
+    backend = _resolve_backend_config(args, cfg, workflow)
+    if _normalize_kind(backend.kind) != "web":
+        return None
+    if (
+        getattr(args, "url", None)
+        or backend.url
+        or backend.browser_cdp_endpoint
+        or backend.browser_page_url
+    ):
+        return None
+    return (
+        "name the application to undo in: --url, a --config whose backend has "
+        "a url, an attached browser, or a non-web --backend"
+    )
+
+
 def _finish_replay(
     run_dir: Path,
     report,
@@ -948,6 +996,9 @@ def _finish_replay(
         epilogue = _replay_outcome_epilogue(report, outcome, run_dir)
         if epilogue:
             print(f"\n{epilogue}")
+        ledger = _change_ledger_epilogue(report, run_dir, args)
+        if ledger:
+            print(f"\n{ledger}")
     _maybe_report_break(run_dir, report)
     _maybe_report_run(run_dir, report, args, backend_kind=backend_kind)
     _maybe_attest_run(run_dir, report, args)
@@ -2133,6 +2184,9 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     refuse_unadmitted_draft(bundle)
     run_dir = Path(args.run_dir) if args.run_dir else _default_run_dir()
     workflow = Workflow.load(bundle)
+    # `undo run` only: the person-approved undo steps of this same bundle
+    # (openadapt_flow.cli_undo), run through the normal replay path.
+    workflow = getattr(args, "_undo_workflow", None) or workflow
     qualification_case = getattr(args, "_qualification_case_execution", None)
     params = (
         qualification_case["params"]
@@ -10317,6 +10371,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     register_admit_parser(sub)
     register_check_parser(sub)
+
+    from openadapt_flow.cli_undo import register as _register_undo
+
+    _register_undo(
+        sub,
+        replay=_cmd_replay,
+        target_problem=_undo_run_target_problem,
+        add_run_flags=(
+            _add_backend_flags,
+            _add_browser_session_flags,
+            _add_deployment_flags,
+        ),
+    )
 
     from openadapt_flow.jit.cli import add_parser as _add_jit_parser
 
