@@ -1472,6 +1472,15 @@ class Replayer:
             raise _sealed.SealedSetKeyError(
                 _sealed.missing_key_message(bundle_path, "bundle")
             )
+        unsupported = self._sealed_run_unsupported(workflow)
+        if unsupported is not None:
+            # Refuse before anything is actuated or written: these stores
+            # keep their own plaintext state files in the run directory.
+            raise _sealed.SealedSetError(
+                f"a sealed bundle cannot run with {unsupported} yet, because "
+                "that state is written to the run directory in plaintext. "
+                "Nothing was executed."
+            )
         if self.checkpoint_key is None:
             # A sealed bundle's run keeps its durable state under the same key.
             self.checkpoint_key = passphrase
@@ -1505,6 +1514,21 @@ class Replayer:
             _sealed.unregister_writer(writer)
         writer.finalize(adopt_external=True)
         return report
+
+    def _sealed_run_unsupported(self, workflow: Workflow) -> Optional[str]:
+        """Name a run feature whose run-directory state is not sealed yet."""
+        if self.approval_gate is not None:
+            return "an approval gate (attended approvals)"
+        if self._attended_draft_by is not None:
+            return "an attended draft"
+        program = workflow.program
+        if program is not None:
+            graphs = [program, *(getattr(workflow, "subflows", None) or {}).values()]
+            for graph in graphs:
+                for state in getattr(graph, "states", {}).values():
+                    if getattr(state, "kind", None) == StateKind.BUSINESS_DECISION:
+                        return "a business-decision state"
+        return None
 
     def _run_unsealed(
         self,

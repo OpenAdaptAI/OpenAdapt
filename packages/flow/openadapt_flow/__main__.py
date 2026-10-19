@@ -11380,6 +11380,81 @@ def _qualify_default_form(argv: list[str]) -> list[str]:
 _PREWARM_SKIP_FLAGS = frozenset({"-h", "--help", "--version"})
 
 
+#: Commands that read sealed bundles and encrypted recordings in memory and
+#: keep what they write sealed (docs/phi_at_rest.md). Any other command given
+#: a sealed path refuses before it reads anything, rather than decrypt to disk
+#: or misread the ciphertext. Keyed by ``module:function``.
+_SEALED_READY_COMMANDS: frozenset[str] = frozenset(
+    {
+        "openadapt_flow.__main__:_cmd_seal",
+        "openadapt_flow.__main__:_cmd_certify",
+        "openadapt_flow.__main__:_cmd_record",
+        "openadapt_flow.__main__:_cmd_compile",
+        "openadapt_flow.__main__:_cmd_induce",
+        "openadapt_flow.__main__:_cmd_scaffold_verifier",
+        "openadapt_flow.__main__:_cmd_run",
+        "openadapt_flow.__main__:_cmd_replay",
+        "openadapt_flow.__main__:_cmd_resume",
+        "openadapt_flow.__main__:_cmd_qualify",
+        "openadapt_flow.cli_admit:cmd_admit_run",
+        "openadapt_flow.cli_admit:cmd_admit_decide",
+        "openadapt_flow.cli_admit:cmd_admit_status",
+        "openadapt_flow.cli_undo:_cmd_undo_declare",
+        "openadapt_flow.cli_undo:_cmd_undo_list",
+        "openadapt_flow.cli_undo:_cmd_undo_approve",
+        "openadapt_flow.cli_undo:_cmd_undo_run",
+    }
+)
+
+
+def _sealed_paths_in(args: argparse.Namespace) -> list[Path]:
+    from openadapt_flow import sealed_set
+
+    found: list[Path] = []
+    for name, value in vars(args).items():
+        if name == "func":
+            continue
+        values = value if isinstance(value, (list, tuple)) else [value]
+        for item in values:
+            if not isinstance(item, (str, Path)) or not str(item):
+                continue
+            text = str(item)
+            if "://" in text or "\n" in text or len(text) > 4096:
+                continue
+            path = Path(text)
+            root = path if sealed_set.is_sealed(path) else sealed_set.sealed_root(path)
+            if root is not None and root not in found:
+                found.append(root)
+    return found
+
+
+def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
+    """Refuse a sealed path in a command that cannot keep it sealed, and a
+    sealed path whose key is not configured, before the command runs."""
+    from openadapt_flow import sealed_set
+
+    sealed = _sealed_paths_in(args)
+    if not sealed:
+        return None
+    func = getattr(args, "func", None)
+    command = f"{getattr(func, '__module__', '')}:{getattr(func, '__name__', '')}"
+    if command not in _SEALED_READY_COMMANDS:
+        root = sealed[0]
+        kind = sealed_set.header_kind(root)
+        return (
+            f"{root} is an encrypted {kind}, and this command does not read "
+            "encrypted input yet. Flow will not decrypt it to disk for this "
+            "command. Commands that read sealed input: record, compile, "
+            "induce, scaffold-verifier, seal, certify, qualify, admit, run, "
+            "replay, resume and undo."
+        )
+    for root in sealed:
+        kind = sealed_set.header_kind(root)
+        if not sealed_set.passphrase_for(kind):
+            return sealed_set.missing_key_message(root, kind)
+    return None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code."""
     raw = list(sys.argv[1:] if argv is None else argv)
@@ -11403,6 +11478,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     no_outbound.enforce_from_env()
     args = build_parser().parse_args(argv)
+    from openadapt_flow import sealed_set
+
+    try:
+        refusal = _sealed_input_refusal(args)
+    except sealed_set.SealedSetError as exc:
+        refusal = str(exc)
+    if refusal is not None:
+        print(f"REFUSED: {refusal}", file=sys.stderr)
+        return 2
     try:
         code = args.func(args)
         if getattr(args, "command", None) in ("run", "replay"):
@@ -11415,6 +11499,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             if note:
                 print(note, file=sys.stderr)
         return code
+    except sealed_set.SealedSetError as exc:
+        # A sealed bundle or encrypted recording that is missing its key,
+        # was changed after sealing, or holds an unknown file: fail closed.
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
     except BrowserSupportMissing as exc:
         # Missing optional browser support is a setup decision, not a crash.
         print(f"Browser setup required:\n{exc}", file=sys.stderr)

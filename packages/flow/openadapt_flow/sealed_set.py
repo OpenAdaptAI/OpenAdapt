@@ -239,6 +239,8 @@ RUN_FILES: Final[tuple[FileKind, ...]] = (
         "structural",
         "a random per-run capability secret (no recorded data)",
     ),
+    FileKind(".attended_action.lease", "structural", "an action lease marker"),
+    FileKind("*.lock", "structural", "a lock file"),
     FileKind("checkpoints/*", "phi", "durable checkpoints (already encrypted)"),
     FileKind(
         "*",
