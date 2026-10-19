@@ -6,7 +6,7 @@ command built, or its refusal.
 
 from __future__ import annotations
 
-import importlib.util
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Any
 
@@ -14,11 +14,10 @@ import pytest
 
 from openadapt_flow.agent.cli import main
 
-# Skipped without mcp, but not imported here: collecting this file must not
-# load mcp for the other tests in the shard (test_emit checks that emitting an
-# MCP server never imports it).
+# Never import the MCP SDK at collection: other tests in the same process
+# check that emitting a server does not import it.
 pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec("mcp") is None, reason="needs the mcp package"
+    find_spec("mcp") is None, reason="needs the agent extra"
 )
 
 

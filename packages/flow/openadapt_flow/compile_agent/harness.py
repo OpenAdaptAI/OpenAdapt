@@ -240,7 +240,9 @@ class Harness:
             text = str(native.get("text") or "")
             if control is not None and _editable(control):
                 return "a typed line break" if any(c in text for c in "\r\n") else None
-        hit = self._commit_target(native)
+        hit = self._commit_target(native) if self.has_page else None
+        if hit is None:
+            hit = self._hinted_commit(native, None)
         return hit[0] if hit is not None else None
 
     # -- every action -------------------------------------------------------------
@@ -254,10 +256,10 @@ class Harness:
     ) -> Observation:
         """Perform one native action in the computer's dialect, behind the gate.
 
-        ``ref`` is the observed control the action names (the MCP teach tools
-        pass it; on a page the gate reads the element under the action
-        itself). ``hint`` names the control a structure-aware tool resolved
-        (see :class:`CommitHint`). It can only add a gate.
+        ``ref`` is accepted for the surface harness's signature; the web
+        harness reads the page at the point itself. ``hint`` names the control
+        a structure-aware tool resolved (see :class:`CommitHint`). It can only
+        add a gate.
 
         Raises:
             GateRefused: the action commits a write and the gate refused it.
