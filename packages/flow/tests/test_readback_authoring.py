@@ -35,7 +35,14 @@ from openadapt_flow.ir import (
     Step,
     Workflow,
 )
-from openadapt_flow.runtime.effects.effect import ReadbackNav, ReadbackSpec
+from openadapt_flow.runtime.effects.effect import (
+    Effect,
+    EffectKind,
+    ReadbackNav,
+    ReadbackReference,
+    ReadbackSpec,
+    ValueExpr,
+)
 from openadapt_flow.runtime.effects.onscreen import OnScreenReadbackVerifier
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.verification import VerificationTier
@@ -45,6 +52,9 @@ NOTE = "chest pain follow up in two weeks"
 VISIT = "Triage"
 NOTE_BOX = (100, 200, 300, 40)
 VISIT_BOX = (100, 260, 200, 30)
+#: Where the save shows its encounter number, and the record page shows it too.
+REF_BOX = (150, 10, 200, 20)
+REF_PATTERN = r"(?<![A-Za-z0-9])(E\d{3,6})(?![A-Za-z0-9])"
 
 
 def _png() -> bytes:
@@ -85,6 +95,21 @@ def _workflow() -> Workflow:
                 action=ActionKind.KEY,
                 key="Enter",
                 risk="irreversible",
+                # What the compiler mined from the save's screen: the new
+                # encounter number. A search by the patient needs it to tell
+                # this save's record from an older one.
+                effects=[
+                    Effect(
+                        kind=EffectKind.FIELD_EQUALS,
+                        value=ValueExpr(param="note"),
+                        readback=ReadbackSpec(
+                            region=NOTE_BOX,
+                            reference=ReadbackReference(
+                                region=REF_BOX, pattern=REF_PATTERN
+                            ),
+                        ),
+                    )
+                ],
                 expect=[
                     Postcondition(
                         kind=PostconditionKind.TEXT_PRESENT, text="Saved", timeout_s=0.2
@@ -216,13 +241,17 @@ class RecordBackend(FakeBackend):
     navigation re-opens the record, so the screen then shows what was saved.
     """
 
-    def __init__(self, *, phantom=False, saved_visit=None):
+    def __init__(self, *, phantom=False, saved_visit=None, older=None):
         super().__init__(viewport=(400, 300))
         self.phantom = phantom
         self.saved_visit = saved_visit
         self.typed: list[str] = []
-        self.record: dict = {}
+        #: An earlier encounter for the same patient, shown when nothing newer
+        #: was saved.
+        self.record: dict = dict(older or {})
         self.view: dict = {"note": "editing", "visit": "editing"}
+        self.banner = ""
+        self.screen = "form"
 
     def type_text(self, text):
         super().type_text(text)
@@ -230,13 +259,38 @@ class RecordBackend(FakeBackend):
 
     def press(self, key):
         super().press(key)
-        if key == "Enter" and not self.phantom:
-            note, visit = self.typed[0], self.typed[1]
-            self.record = {"note": note, "visit": self.saved_visit or visit}
+        if key == "Enter" and self.screen == "form":
+            self.banner = "Saved. Encounter E1001"  # optimistic, even if lost
+            if not self.phantom:
+                note, visit = self.typed[0], self.typed[1]
+                self.record = {
+                    "note": note,
+                    "visit": self.saved_visit or visit,
+                    "encounter": "E1001",
+                }
 
     def click(self, x, y, *, double=False):
         super().click(x, y, double=double)
+        self.screen = "record"
         self.view = dict(self.record)
+
+    def lines(self) -> list:
+        out = [
+            SimpleNamespace(text="Patients", region=(0, 0, 40, 20), confidence=0.95),
+            SimpleNamespace(
+                text="Open encounter", region=(30, 50, 60, 20), confidence=0.95
+            ),
+        ]
+        shown = self.banner if self.screen == "form" else self.view.get("encounter")
+        if shown:
+            out.append(SimpleNamespace(text=shown, region=REF_BOX, confidence=0.95))
+        return out
+
+
+def _overlaps(a, b) -> bool:
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    return ax < bx + bw and bx < ax + aw and ay < by + bh and by < ay + ah
 
 
 def _screen_of(backend: RecordBackend):
@@ -244,8 +298,14 @@ def _screen_of(backend: RecordBackend):
         key = {NOTE_BOX: "note", VISIT_BOX: "visit"}.get(
             tuple(region) if region else None
         )
-        text = backend.view.get(key) if key else None
-        return [SimpleNamespace(text=text, confidence=0.95)] if text else []
+        if key:
+            text = backend.view.get(key)
+            return [SimpleNamespace(text=text, confidence=0.95)] if text else []
+        return [
+            line
+            for line in backend.lines()
+            if region is None or _overlaps(line.region, region)
+        ]
 
     return ocr
 
@@ -288,6 +348,19 @@ def test_a_phantom_save_halts(tmp_path, monkeypatch):
     report = _run(tmp_path, monkeypatch, RecordBackend(phantom=True), RUN)
     assert not report.success
     assert report.results[-1].effect_verified is False
+
+
+def test_an_older_encounter_with_the_same_values_does_not_confirm_a_lost_save(
+    tmp_path, monkeypatch
+):
+    # The patient already has this exact note from an earlier run. This save
+    # is lost; the search opens the older encounter, whose fields match.
+    older = {"note": RUN["note"], "visit": RUN["visit"], "encounter": "E0977"}
+    backend = RecordBackend(phantom=True, older=older)
+    report = _run(tmp_path, monkeypatch, backend, RUN)
+    assert not report.success
+    assert report.results[-1].effect_verified is False
+    assert any("INDETERMINATE" in line for line in report.results[-1].effect_results)
 
 
 def test_one_wrong_field_halts(tmp_path, monkeypatch):
@@ -461,7 +534,16 @@ def _run_structure(tmp_path, monkeypatch, backend):
     import openadapt_flow.vision as vision_mod
 
     updated = _structure_workflow(tmp_path)
-    monkeypatch.setattr(vision_mod, "ocr", lambda png, region=None: [])
+    # No OCR of the fields: only control labels and the encounter number.
+    monkeypatch.setattr(
+        vision_mod,
+        "ocr",
+        lambda png, region=None: [
+            line
+            for line in backend.lines()
+            if region is None or _overlaps(line.region, region)
+        ],
+    )
     vision = FakeVision()
     vision.text_results = {
         "Saved": Match(point=(5, 5), region=(0, 0, 10, 10), confidence=0.9)

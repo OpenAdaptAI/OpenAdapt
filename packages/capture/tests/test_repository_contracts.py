@@ -43,7 +43,7 @@ def test_release_tag_requires_reviewed_exact_main_and_release_app() -> None:
         "- name: Require the reviewed release candidate on current main"
     )
     qualification_index = release.index(
-        "- name: Require exact-main test, hosted, and live Linux evidence"
+        "- name: Require exact-main test and hosted qualification evidence"
     )
     artifact_index = release.index("- name: Build and verify the exact release artifacts")
     tag_index = release.index("- name: Create and push one annotated release tag")
@@ -87,7 +87,9 @@ def test_exact_test_workflow_can_be_started_by_the_release_orchestrator() -> Non
 def test_tag_publication_requires_exact_tag_oidc_and_digest_verification() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     validate = workflow[workflow.index("\n  validate-tag:") : workflow.index("\n  publish-tag:")]
-    publish = workflow[workflow.index("\n  publish-tag:") :]
+    publish = workflow[
+        workflow.index("\n  publish-tag:") : workflow.index("\n  publish-existing-tag-release:")
+    ]
 
     assert "GITHUB_EVENT_NAME" in validate
     assert "GITHUB_REF_TYPE" in validate
@@ -103,10 +105,81 @@ def test_tag_publication_requires_exact_tag_oidc_and_digest_verification() -> No
     assert "python scripts/verify_distribution.py dist/*" in publish
     assert "python scripts/check_source_boundary.py --require-dist" in publish
     assert "pypa/gh-action-pypi-publish@" in publish
-    assert "python-semantic-release/publish-action@" in publish
     assert "scripts/verify_release_publication.py" in publish
     assert "--allow-missing" in publish
     assert "--wait-seconds 180" in publish
+    _assert_release_app_publishes_exact_pypi_assets(publish)
+
+
+def _assert_release_app_publishes_exact_pypi_assets(job: str) -> None:
+    """One GitHub Release creation, by the release App, from exact PyPI bytes."""
+    create = job.index('gh release create "${RELEASE_TAG}" dist/* --verify-tag')
+    exact = job.rindex("python scripts/release_assets.py", 0, create)
+    final = job.index("--wait-seconds 180")
+
+    # The semantic-release action refuses a detached tag checkout.
+    assert "python-semantic-release" not in job
+    assert job.count("gh release create") == 1
+    assert "GH_TOKEN: ${{ steps.release-app.outputs.token }}" in job[:create][-400:]
+    assert '--notes-file "${RUNNER_TEMP}/release-notes.md"' in job
+    assert "python scripts/release_assets.py notes" in job
+    assert ("check-pypi" in job) or ("fetch-pypi" in job)
+    assert exact < create < final
+
+
+def test_existing_tag_release_path_reuses_every_check_and_never_publishes_pypi() -> None:
+    """The recovery path proves the tag, version, evidence, and PyPI digests."""
+    workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    triggers = workflow[workflow.index("\non:\n") : workflow.index("\njobs:\n")]
+    create_tag = workflow[
+        workflow.index("\n  create-release-tag:") : workflow.index("\n  validate-tag:")
+    ]
+    job = workflow[workflow.index("\n  publish-existing-tag-release:") :]
+    steps = [
+        "- name: Verify the existing release App tag and its reviewed version",
+        "- name: Require exact-tag test and hosted qualification evidence",
+        "- name: Rebuild and verify the tagged source",
+        "- name: Download the exact PyPI artifacts and match them to the rebuild",
+        "- name: Check for an exact existing GitHub Release",
+        "- name: Refuse a version that is not on PyPI",
+        "- name: Write the release notes from the tagged CHANGELOG",
+        "- name: Publish the GitHub Release through the release App",
+        "- name: Verify both publication surfaces and artifact digests",
+    ]
+
+    assert "      publish_existing_tag:" in triggers
+    assert "type: boolean" in triggers
+    assert "default: false" in triggers
+    assert "!inputs.publish_existing_tag" in create_tag
+    assert "needs: validate-dispatch" in job
+    assert "inputs.publish_existing_tag &&" in job
+    assert "environment: release-identity" in job
+    assert "persist-credentials: false" in job
+    # Only the release App token may write; the job's own token stays read-only.
+    assert "\n    permissions:\n      actions: read\n      contents: read\n    steps:" in job
+    assert "permission-contents: write" in job
+    assert "id-token: write" not in job
+    assert "environment: pypi" not in job
+    assert "pypa/gh-action-pypi-publish" not in job
+    assert "git tag" not in job
+    assert "git push" not in job
+    assert [job.index(step) for step in steps] == sorted(job.index(step) for step in steps)
+    # Same tag checks as the tag event: current main, annotated, made by the
+    # release App, contained in main, and matching the reviewed version.
+    assert 'if [ "${current_main}" != "${GITHUB_SHA}" ]' in job
+    assert 'git cat-file -t "refs/tags/${release_tag}"' in job
+    assert '"${tagger}" != "openadapt-release[bot]"' in job
+    assert "git merge-base --is-ancestor" in job
+    assert "python scripts/check_changelog.py" in job
+    assert "--dispatch-missing" not in job
+    assert '--sha "${TAGGED_SHA}"' in job
+    assert "python scripts/verify_distribution.py dist/*" in job
+    assert "python scripts/check_source_boundary.py --require-dist" in job
+    assert '--rebuilt "${SOURCE_DIR}/dist"' in job
+    assert "publish_pypi == 'true'" in job
+    # A rerun after success: the verifier writes no outputs, so nothing runs.
+    assert "create_github_release == 'true'" in job
+    _assert_release_app_publishes_exact_pypi_assets(job)
 
 
 def test_native_observers_are_part_of_each_interactive_qualification() -> None:
@@ -171,14 +244,30 @@ def test_the_release_gate_job_set_matches_the_qualification_workflow() -> None:
     assert produced == set(EXPECTED_QUALIFICATION_JOBS)
 
 
-def test_live_release_gate_job_set_matches_the_live_workflow() -> None:
-    """The exact-SHA Linux release check must name every live workflow job."""
-    from scripts.check_release_ci import EXPECTED_LIVE_QUALIFICATION_JOBS
+def test_hosted_linux_release_lane_runs_input_and_structural_trials() -> None:
+    """The hosted Linux lane must keep every test the self-hosted lane ran.
 
-    workflow = (ROOT / ".github/workflows/live-qualification.yml").read_text(encoding="utf-8")
-    produced = set(re.findall(r"^    name: (.+)$", workflow, flags=re.M))
+    It replaced the self-hosted Linux lane in the release gate on 2026-10-17.
+    It runs the same two test files, eight named tests per trial, three
+    trials, under Xvfb with X RECORD, XTEST, AT-SPI, and a focused GTK window.
+    """
+    workflow = (ROOT / ".github/workflows/production-qualification.yml").read_text(encoding="utf-8")
+    linux = workflow[workflow.index("\n  hosted-linux-live:") :]
+    release = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
 
-    assert produced == set(EXPECTED_LIVE_QUALIFICATION_JOBS)
+    assert "runs-on: ubuntu-latest" in linux
+    assert '"${candidate_wheels[0]}[linux]"' in linux
+    assert 'tests/test_structural_observation.py"' in linux
+    assert 'tests/test_performance.py"' in linux
+    assert "-k " not in linux
+    assert "+extension RECORD +extension XTEST" in linux
+    assert "at-spi-bus-launcher" in linux
+    assert "dbus-run-session" in linux
+    assert "entry.grab_focus()" in linux
+    assert "--expected-tests 8" in linux
+    assert "--expected-trials 3" in linux
+    assert 'OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION: "1"' in linux
+    assert "live-qualification.yml" not in release
 
 
 def _step_script(workflow: str, step_name: str) -> str:
@@ -234,9 +323,7 @@ live_lane_selection = pytest.mark.skipif(
 
 
 @live_lane_selection
-@pytest.mark.parametrize(
-    ("event", "platform"), [("schedule", ""), ("workflow_dispatch", "all")]
-)
+@pytest.mark.parametrize(("event", "platform"), [("schedule", ""), ("workflow_dispatch", "all")])
 def test_live_qualification_fails_when_no_lane_can_run(tmp_path, event, platform) -> None:
     """A run that qualifies nothing must not conclude success."""
     completed, outputs = _select_live_lanes(tmp_path, event, platform)

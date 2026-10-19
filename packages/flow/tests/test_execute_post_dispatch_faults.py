@@ -14,9 +14,9 @@ from typing import Any
 
 import pytest
 
-pytest.importorskip("openadapt_flow.contracts")
+pytest.importorskip("openadapt_types")
 
-from openadapt_flow.contracts.execute import ExecuteTerminalOutcomeV1  # noqa: E402
+from openadapt_types.execute import ExecuteTerminalOutcomeV1  # noqa: E402
 
 from openadapt_flow.execute import service as service_module  # noqa: E402
 from openadapt_flow.execute.dispatch import (  # noqa: E402
@@ -148,7 +148,7 @@ def test_admission_lookup_failure_stays_failed_platform(
 
 
 def test_live_replay_missing_bundle_is_pre_effect(tmp_path: Path) -> None:
-    from openadapt_flow.contracts.execute import ExecuteRequestV1
+    from openadapt_types.execute import ExecuteRequestV1
 
     from openadapt_flow.execute.dispatch import live_replay
     from openadapt_flow.execute.models import AdmittedBundle
@@ -184,7 +184,7 @@ def _fail_every_finalize(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_unsealable_fault_never_leaves_execution_running(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from openadapt_flow.contracts.execute import ExecuteLifecycleStateV1
+    from openadapt_types.execute import ExecuteLifecycleStateV1
 
     from openadapt_flow.execute.service import ExecuteServiceError
 
@@ -212,7 +212,7 @@ def test_unsealable_fault_never_leaves_execution_running(
 def test_unsealable_pre_effect_fault_is_not_left_running(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from openadapt_flow.contracts.execute import ExecuteLifecycleStateV1
+    from openadapt_types.execute import ExecuteLifecycleStateV1
 
     def runner(admission: Any, request: Any, run_dir: Path) -> Any:
         raise DispatchError("admitted bundle_dir is missing", pre_effect=True)

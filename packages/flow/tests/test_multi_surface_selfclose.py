@@ -77,12 +77,12 @@ def _drive(page, pump) -> None:
     popup.click("#agree")
     settle()
     try:
-        popup.click("#approve-close")
-    except PlaywrightError as exc:
-        # The button's own onclick closes the popup. Playwright can report
-        # that close as an error after it delivered the click; the loop below
-        # still requires the popup to have closed.
-        if "closed" not in str(exc):
+        popup.click("#approve-close", no_wait_after=True)
+    except PlaywrightError:
+        # The button closes its own window; the click can race the close.
+        # Only that race is expected: the popup must really be closed.
+        page.wait_for_timeout(200)
+        if not popup.is_closed():
             raise
     for _ in range(100):
         if popup.is_closed():

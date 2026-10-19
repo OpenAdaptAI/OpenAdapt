@@ -19,16 +19,16 @@ import requests
 import yaml
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-
-import openadapt_flow.runtime.effects.adapter as adapter_mod
-import openadapt_flow.verify_run as verify_run_mod
-from openadapt_flow.contracts.execute import ExecuteEvidenceReceiptV1
-from openadapt_flow.contracts.seal import (
+from openadapt_types.execute import ExecuteEvidenceReceiptV1
+from openadapt_types.seal import (
     parse_key_registry,
     seal_key_id,
     signing_payload,
     verify_sealed_receipt,
 )
+
+import openadapt_flow.runtime.effects.adapter as adapter_mod
+import openadapt_flow.verify_run as verify_run_mod
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.effects import (
     ConnectionProbe,
@@ -242,6 +242,22 @@ def test_no_record_with_baseline_is_refuted_absent(cfg, sor, tmp_path):
     result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base, fault="no_persist"))
     assert result["receipt"]["effect_verdict"] == "REFUTED"
     assert result["receipt"]["outcome"] == "halted_before_effect"
+
+
+def test_absent_after_a_known_dispatch_needs_reconciliation(cfg, sor, tmp_path):
+    base, _db = sor
+    # The caller knows the save was sent, so an empty store proves nothing:
+    # the write may still land, and a retry could save it twice.
+    result = _run(
+        cfg,
+        tmp_path,
+        pre=lambda: _actor_writes(base, fault="no_persist"),
+        write_attempted=True,
+    )
+    receipt = result["receipt"]
+    assert receipt["effect_verdict"] == "REFUTED"
+    assert receipt["outcome"] == "reconciliation_required"
+    assert receipt["delivery_uncertain"] is True
     assert result["evidence"]["readback"]["effects"][0]["observed_effect"] == "absent"
 
 
@@ -443,6 +459,7 @@ def test_receipt_keeps_every_execute_v1_field(cfg, sor, tmp_path):
         "executor_ref_sha256",
         "effect_verdict",
         "verification_tier",
+        "checked_how",
     }
     assert receipt["schema_version"] == EFFECT_RECEIPT_SCHEMA
     # A strict Execute consumer refuses it rather than mistaking it for a
@@ -919,3 +936,80 @@ def test_unset_environment_reference_is_refused(monkeypatch):
     data = _verify_yaml("${OA_TEST_UNSET_SOR_URL}")
     with pytest.raises(VerifyRunError, match="OA_TEST_UNSET_SOR_URL"):
         parse_verify_config(data)
+
+
+# -- checked_how (RFC-0002 open question 5) ------------------------------------
+
+
+def test_receipt_signs_how_the_save_was_checked(cfg, sor, tmp_path):
+    base, _db = sor
+    result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
+    receipt = result["receipt"]
+    # A REST read of the system of record.
+    assert receipt["checked_how"] == "system_of_record"
+    assert result["evidence"]["readback"]["checked_how"] == "system_of_record"
+    signed = _issuer_sign(receipt)
+    assert (
+        check_effect_receipt({**result, "receipt": signed}, _registry())["verified"]
+        is True
+    )
+    # It is inside receipt_sha256, so editing it breaks the signature.
+    edited = {**signed, "checked_how": "reopened"}
+    assert (
+        check_effect_receipt({**result, "receipt": edited}, _registry())["verified"]
+        is False
+    )
+
+
+def test_a_receipt_from_before_checked_how_still_checks(cfg, sor, tmp_path):
+    base, _db = sor
+    result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
+    evidence = json.loads(json.dumps(result["evidence"]))
+    del evidence["readback"]["checked_how"]
+    receipt = dict(result["receipt"])
+    del receipt["checked_how"]
+    receipt["evidence_digest"] = verify_run_mod.sha256_tagged(evidence)
+    old = {**result, "receipt": _issuer_sign(receipt), "evidence": evidence}
+    assert check_effect_receipt(old, _registry())["verified"] is True
+
+
+def test_checked_how_must_agree_with_verification_tier(cfg, sor, tmp_path):
+    base, _db = sor
+    result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
+    for wrong in ("reopened", "separate_session", "same_screen", "unchecked", "maybe"):
+        receipt = {**result["receipt"], "checked_how": wrong}
+        assert verify_run_mod.receipt_problem(receipt) == "checked_how"
+
+
+def test_checked_how_keeps_a_same_session_reopen_apart_from_a_separate_session():
+    from openadapt_types.approval import (
+        CHECKED_HOW_TIER,
+        checked_how_for_flow_tier,
+    )
+
+    assert checked_how_for_flow_tier(1) == "system_of_record"
+    assert checked_how_for_flow_tier(2) == "separate_session"
+    assert checked_how_for_flow_tier(3) == "reopened"
+    assert checked_how_for_flow_tier(4) == "same_screen"
+    assert checked_how_for_flow_tier(None) == "unchecked"
+    assert checked_how_for_flow_tier(7) == "unchecked"
+    assert CHECKED_HOW_TIER["separate_session"] == "screen_readback"
+    assert CHECKED_HOW_TIER["reopened"] == "screen_readback"
+    assert CHECKED_HOW_TIER["system_of_record"] == "independent_readback"
+
+
+def test_countersign_verify_reads_checked_how(cfg, sor, tmp_path):
+    from openadapt_flow.countersign.document import verify_countersigned
+    from openadapt_flow.countersign.render import render_report
+
+    base, _db = sor
+    result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
+    signed = {**result, "receipt": _issuer_sign(result["receipt"])}
+    report = verify_countersigned(signed, registry=_registry())
+    assert report.checked_how == "system_of_record"
+    assert "checked_how_mismatch" not in report.problems
+    assert "Checked in your system's records" in render_report(report)
+    receipt = {**result["receipt"], "checked_how": "reopened"}
+    wrong = {**result, "receipt": _issuer_sign(receipt)}
+    report = verify_countersigned(wrong, registry=_registry())
+    assert "checked_how_mismatch" in report.problems

@@ -60,6 +60,12 @@ GUIDED_PRESENTATION_DELAY_S = 1.0
 #: A tutorial delay is a presentation aid, not an unbounded runtime wait.
 MAX_PRESENTATION_DELAY_S = 5.0
 
+#: How long the scripted demonstration waits for its save to reach the system
+#: of record before the recorder's after-snapshot, as a person waits for the
+#: saved banner. A save that has not landed by then shows no delta, and the
+#: compiler emits the placeholder the tutorial refuses.
+SAVE_LANDS_TIMEOUT_S = 10.0
+
 #: The note typed during the tutorial.  Synthetic, constant, and free of
 #: anything that could be mistaken for a real clinical note.
 TUTORIAL_NOTE = "Synthetic follow-up in two weeks"
@@ -317,12 +323,40 @@ def record_tutorial(
     backend, close = PlaywrightBackend.launch(entry_url, headless=not headed)
     try:
         page = backend.page
+        # The recorder reads the system of record before each action and again
+        # once the screen settles. The screen can settle while the save request
+        # is still in flight, so for the save the after-read waits (bounded)
+        # for the write to land instead of racing it.
+        save_watch: dict[str, int] = {}
+
+        def read_records() -> list[dict[str, Any]]:
+            records = _records(base_url)
+            calls = save_watch.get("calls")
+            if calls is None:
+                return records
+            save_watch["calls"] = calls + 1
+            if calls == 0:  # the read before the save click
+                save_watch["baseline"] = len(records)
+                return records
+            deadline = time.monotonic() + SAVE_LANDS_TIMEOUT_S
+            while (
+                len(records) <= save_watch["baseline"] and time.monotonic() < deadline
+            ):
+                time.sleep(0.05)
+                records = _records(base_url)
+            save_watch.clear()
+            return records
+
         recorder = Recorder(
             backend,
             recording_dir,
             app_url=entry_url,
-            system_of_record_reader=lambda: _records(base_url),
+            system_of_record_reader=read_records,
         )
+
+        def save() -> None:
+            save_watch["calls"] = 0
+            recorder.click(*_center(page, "#save-encounter"))
 
         def demonstrate(action: Callable[[], None]) -> None:
             _presentation_pause(delay)
@@ -333,7 +367,7 @@ def record_tutorial(
         demonstrate(lambda: recorder.click(*_center(page, "#type-triage")))
         demonstrate(lambda: recorder.click(*_center(page, "#note")))
         demonstrate(lambda: recorder.type_text(TUTORIAL_NOTE, param="note"))
-        demonstrate(lambda: recorder.click(*_center(page, "#save-encounter")))
+        demonstrate(save)
         page.wait_for_selector("#saved-banner", state="visible")
         page.wait_for_timeout(250)
         return recorder.finish()

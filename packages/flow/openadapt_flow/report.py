@@ -465,6 +465,32 @@ def render_run_report(run_dir: Path | str) -> Path:
         )
     lines.append("")
 
+    # -- Change ledger: what may need undoing after a stop -----------------
+    if report.change_ledger and not report.success:
+        lines.append("## Changes before the stop")
+        lines.append("")
+        lines.append(
+            "A stop is not a rollback. These steps could have changed the app "
+            "before the run stopped, in order. Flow never runs an undo on its "
+            "own; see docs/AFTER_A_STOP.md."
+        )
+        lines.append("")
+        lines.append(
+            "| # | Step | Intent | Effects | Status | May need undoing | Undo |"
+        )
+        lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+        for entry in report.change_ledger:
+            effects = "<br>".join(
+                f"{_md_phi(e.description)}: {e.status}" for e in entry.effects
+            )
+            lines.append(
+                f"| {entry.position} | `{_md_escape(entry.step_id)}` "
+                f"| {_md_phi(entry.intent)} | {effects or '&mdash;'} "
+                f"| {entry.status} | {'yes' if entry.may_need_undo else 'no'} "
+                f"| {('`' + _md_escape(entry.undo_id) + '`') if entry.undo_id else '&mdash;'} |"
+            )
+        lines.append("")
+
     # -- Per-step table ---------------------------------------------------
     lines.append("## Steps")
     lines.append("")

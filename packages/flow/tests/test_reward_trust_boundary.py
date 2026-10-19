@@ -16,10 +16,10 @@ from typing import Any
 
 import pytest
 
-pytest.importorskip("openadapt_flow.contracts.reward")
+pytest.importorskip("openadapt_types.reward")
 
-from openadapt_flow.contracts.oracle import OracleChannel  # noqa: E402
-from openadapt_flow.contracts.reward import RewardOutcomeV1  # noqa: E402
+from openadapt_types.oracle import OracleChannel  # noqa: E402
+from openadapt_types.reward import RewardOutcomeV1  # noqa: E402
 
 from openadapt_flow.reward.calibration import (  # noqa: E402
     FAULT_CLASSES,
