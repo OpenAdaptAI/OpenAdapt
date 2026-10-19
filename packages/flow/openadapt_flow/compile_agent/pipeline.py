@@ -138,6 +138,24 @@ def _slug(text: str) -> str:
     return "compile-agent." + ("-".join(words[:6]) or "task")
 
 
+#: The ``probe`` prefix that routes an effect to one named read
+#: (:func:`openadapt_flow.runtime.effects.surfaces.surface_probe`).
+_SURFACE_ROUTE = "surface="
+
+
+def _claims_new_record(
+    effect: Mapping[str, Any], *, count_new_only: bool = True
+) -> bool:
+    """Whether a proposed effect says the save adds a record (``record_written``
+    with ``expected_count`` above 0); ``expected_count: 0`` says it adds none."""
+
+    if effect.get("kind") != "record_written":
+        return False
+    if count_new_only and not effect.get("count_new_only"):
+        return False
+    return int(effect.get("expected_count", 1)) > 0
+
+
 # -- the run-1 record check ------------------------------------------------------
 
 
@@ -705,8 +723,17 @@ class FirstRunCompiler:
 
         doc = yaml.safe_load((self.out_dir / PROPOSED_FILE).read_text())
         effects = doc.get("effects") or []
-        reads = self.out_dir / AGENT_READS_FILE
         extra: dict[str, Any] = {}
+        verifier = doc.get("verifier")
+        if isinstance(verifier, dict) and verifier != self.verifier_section:
+            # Built from other reads than the task's verifier: show them.
+            surfaces = verifier.get("surfaces")
+            extra["reads"] = (
+                sorted(surfaces)
+                if isinstance(surfaces, dict)
+                else [str(verifier.get("kind"))]
+            )
+        reads = self.out_dir / AGENT_READS_FILE
         if reads.is_file():
             # What a code-as-action agent read: the identity before the save,
             # and its inputs read back after it. Evidence for the person.
@@ -727,6 +754,11 @@ class FirstRunCompiler:
                         )
                         for k, v in (e.get("match") or {}).items()
                     },
+                    **(
+                        {"expected_count": e["expected_count"]}
+                        if "expected_count" in e
+                        else {}
+                    ),
                 }
                 for e in effects
             ],
@@ -772,8 +804,16 @@ class FirstRunCompiler:
                 for k, v in (effect.get("match") or {}).items()
                 if k not in drop_fields
             }
-            if effect.get("kind") == "record_written":
-                effect["probe"] = (
+            if _claims_new_record(effect, count_new_only=False):
+                # A check routed to one read (scaffold-verifier's
+                # ``surface=<name>|...``) keeps its route.
+                route = str(effect.get("probe") or "")
+                route = (
+                    route.split("|", 1)[0] + "|"
+                    if route.startswith(_SURFACE_ROUTE)
+                    else ""
+                )
+                effect["probe"] = route + (
                     "exactly one new record with "
                     + ", ".join(
                         f"{k}="
@@ -787,24 +827,40 @@ class FirstRunCompiler:
                     + f" (confirmed by {name})"
                 )
             effects.append(effect)
-        written = [
-            e
-            for e in effects
-            if e.get("kind") == "record_written" and e.get("count_new_only")
-        ]
-        if len(written) != 1:
+        # One effect claims the new record. A check built from several reads
+        # (scaffold-verifier's) claims it once per read, routed to that read;
+        # then every claim must pin the record and read back every input.
+        # Other effects may only say that nothing else was added, changed or
+        # removed (expected_count 0).
+        written = [e for e in effects if _claims_new_record(e)]
+        routes = [str(e.get("probe") or "").split("|", 1)[0] for e in written]
+        if not written or (
+            len(written) > 1
+            and (
+                len(set(routes)) != len(routes)
+                or not all(r.startswith(_SURFACE_ROUTE) for r in routes)
+            )
+        ):
             raise ValueError("the checks must claim exactly one new record")
-        match = written[0]["match"]
-        for key, wanted in self.expect.items():
-            if (match.get(key) or {}).get("literal") != wanted:
-                raise ValueError(f"the check does not pin {key!r} to {wanted!r}")
-        bound = {v.get("param") for v in match.values() if isinstance(v, dict)}
-        unbound = sorted(set(self.task.params) - bound)
-        if unbound:
-            raise ValueError(f"no check reads back input(s) {unbound}")
+        for claim in written:
+            if int(claim.get("expected_count", 1)) != 1:
+                raise ValueError("the checks must claim exactly one new record")
+            match = claim["match"]
+            for key, wanted in self.expect.items():
+                if (match.get(key) or {}).get("literal") != wanted:
+                    raise ValueError(f"the check does not pin {key!r} to {wanted!r}")
+            bound = {v.get("param") for v in match.values() if isinstance(v, dict)}
+            unbound = sorted(set(self.task.params) - bound)
+            if unbound:
+                raise ValueError(f"no check reads back input(s) {unbound}")
+        # A check built from other reads than the task's verifier (for
+        # example scaffold-verifier's) carries them; the person confirms both.
+        verifier = doc.get("verifier")
         config = {
             "schema_version": "openadapt.verify/v1",
-            "verifier": self.verifier_section,
+            "verifier": verifier
+            if isinstance(verifier, dict)
+            else self.verifier_section,
             "effects": effects,
         }
         parse_verify_config(config, source="confirmed checks")

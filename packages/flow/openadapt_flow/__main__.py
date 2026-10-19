@@ -11262,6 +11262,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_compile_agent_parser(sub)
 
+    from openadapt_flow.agent_guard.cli import add_parser as _add_guard_parser
+
+    _add_guard_parser(sub)
+
     from openadapt_flow.cli_fleet import register_fleet_parser
 
     register_fleet_parser(sub)

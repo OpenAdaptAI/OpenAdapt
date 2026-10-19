@@ -386,6 +386,18 @@ ChatGPT and Claude in a web browser can't start a server on your computer. To re
 
 It claims the job, polls openadapt.ai over outgoing HTTPS, and asks you in the terminal before a chat account may drive it. Don't confuse it with the launcher's `openadapt connect`, which pairs a computer with OpenAdapt Cloud. [docs/MAILBOX_CLI.md](docs/MAILBOX_CLI.md) has the details.
 
+### Guard an agent you already run
+
+If your agent already drives a Chromium (a Playwright script, Playwright MCP, browser-use, or a computer-use agent with a browser), you don't have to move it onto these tools. Start its browser with a DevTools port, which is the one line you add, and run the guard next to it for each task:
+
+```bash
+openadapt-flow guard --cdp http://127.0.0.1:9222 --config guard.yaml --task task.json --out runs/task-0001
+```
+
+The guard holds every save the agent's tab sends until the record on the screen is the one `task.json` names. When it isn't, the save is blocked and the agent's page says why. A save that goes through is read back from the system of record (`VERIFIED`, `REFUTED` or `RECONCILIATION_REQUIRED`). `--observe-only` never blocks and shows what the guard would have done.
+
+When a run reads back correctly, it becomes a draft in the teach dir that `guard.yaml` names, with a record check built from the app's own reads. A person confirms the check and admits the draft (`openadapt-flow compile-agent admit`); then `serve --teach verify.yaml --teach-dir <that dir>` serves it as a `taught_<name>` tool that makes no model calls. [GUARD_AN_AGENT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/GUARD_AN_AGENT.md) has the files, what counts as a save, and the measurements.
+
 ### Teach a new workflow from your agent
 
 `serve --teach` lets your agent add a workflow it doesn't have yet, without leaving the conversation. It does the task once through OpenAdapt; OpenAdapt checks the record it saved, compiles the run, and once the run is admitted your agent calls it as a tool. Every later call runs the compiled program with no model calls and reads the save back.
