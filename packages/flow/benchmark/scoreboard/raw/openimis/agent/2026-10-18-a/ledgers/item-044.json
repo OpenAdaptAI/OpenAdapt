@@ -1,0 +1,331 @@
+{
+  "model": "claude-sonnet-5-5",
+  "effort": "medium",
+  "tool": "computer_toolset_20260801",
+  "price_per_mtok_usd": {
+    "input": 2.0,
+    "output": 10.0,
+    "cache_read": 0.2,
+    "cache_write": 2.5
+  },
+  "started_at": 1792369284.319993,
+  "finished_at": 1792369320.347142,
+  "model_calls": 8,
+  "actions": 30,
+  "cost_usd": 0.064375,
+  "final_text": "I entered claim SA044 for insuree 999000104 (Tanaka Mei, active policy) and clicked Save. The form then went read-only and showed the claim with the A389 \"Scarlet fever, uncomplicated\" diagnosis, the A1 General Consultation service ($400), and the explanation \"Child with fever, parent present (#44)\".",
+  "refused_actions": [],
+  "calls": [
+    {
+      "turn": 1,
+      "started_s": 1792369284.319998,
+      "ended_s": 1792369285.9302971,
+      "input_tokens": 4,
+      "output_tokens": 122,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 5229,
+      "cost_usd": 0.0143005,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              368,
+              220
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "999000104"
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Tab"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 3
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAe5hkk6TL4s8reRxQ6c",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 2,
+      "started_s": 1792369290.616042,
+      "ended_s": 1792369292.198881,
+      "input_tokens": 2,
+      "output_tokens": 157,
+      "cache_read_input_tokens": 5229,
+      "cache_creation_input_tokens": 1554,
+      "cost_usd": 0.0065048,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              988,
+              288
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "SA044"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              735,
+              288
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Scarlet"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAe6AJuvi59HtJmpNVkQ",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 3,
+      "started_s": 1792369296.234231,
+      "ended_s": 1792369297.8998091,
+      "input_tokens": 2,
+      "output_tokens": 142,
+      "cache_read_input_tokens": 6783,
+      "cache_creation_input_tokens": 1590,
+      "cost_usd": 0.0067556000000000005,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              746,
+              514
+            ]
+          }
+        },
+        {
+          "name": "scroll",
+          "input": {
+            "coordinate": [
+              746,
+              514
+            ],
+            "scroll_direction": "down",
+            "scroll_amount": 5
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAe6aKo63oJbkWyA1NNE",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 4,
+      "started_s": 1792369300.2787101,
+      "ended_s": 1792369301.8554728,
+      "input_tokens": 2,
+      "output_tokens": 113,
+      "cache_read_input_tokens": 8373,
+      "cache_creation_input_tokens": 1553,
+      "cost_usd": 0.0066911,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              235,
+              536
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "General"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAe6sknfeC7XqbRVHn4n",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 5,
+      "started_s": 1792369305.227616,
+      "ended_s": 1792369306.987515,
+      "input_tokens": 2,
+      "output_tokens": 164,
+      "cache_read_input_tokens": 9926,
+      "cache_creation_input_tokens": 1522,
+      "cost_usd": 0.0074342,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              143,
+              582
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              400,
+              216
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Child with fever, parent present (#44)"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAe7EqoRaJg5vDnpgLyg",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 6,
+      "started_s": 1792369311.4479182,
+      "ended_s": 1792369313.183271,
+      "input_tokens": 2,
+      "output_tokens": 122,
+      "cache_read_input_tokens": 11448,
+      "cache_creation_input_tokens": 1598,
+      "cost_usd": 0.007508600000000001,
+      "actions": [
+        {
+          "name": "scroll",
+          "input": {
+            "coordinate": [
+              400,
+              216
+            ],
+            "scroll_direction": "up",
+            "scroll_amount": 5
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAe7hMk1UmshqZo9TrPK",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 7,
+      "started_s": 1792369313.882742,
+      "ended_s": 1792369315.390655,
+      "input_tokens": 2,
+      "output_tokens": 99,
+      "cache_read_input_tokens": 13046,
+      "cache_creation_input_tokens": 1508,
+      "cost_usd": 0.007373200000000001,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              1243,
+              752
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAe7soJ13B9kzjVChog6",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 8,
+      "started_s": 1792369318.475156,
+      "ended_s": 1792369320.3439481,
+      "input_tokens": 2,
+      "output_tokens": 115,
+      "cache_read_input_tokens": 14554,
+      "cache_creation_input_tokens": 1497,
+      "cost_usd": 0.0078073000000000005,
+      "actions": [],
+      "request_id": "req_011CgAe8DZBhGayg6Uf7W8rY",
+      "stop_reason": "end_turn"
+    }
+  ]
+}

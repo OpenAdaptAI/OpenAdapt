@@ -370,6 +370,9 @@ class KioskLookupTransport:
         self.held: set[str] = set()
         self.save_clicks = 0
         self.booking_typed = ""
+        #: What the booking form shows, per field (the form keeps its text
+        #: after a save, as the Tk kiosk does).
+        self.booking = {"slot": "", "visit": "", "request": ""}
         self.inputs: list[str] = []
         #: Read-back sessions opened on this kiosk's database (tests).
         self.sessions: list["KioskLookupTransport"] = []
@@ -429,8 +432,12 @@ class KioskLookupTransport:
             self._find()
         elif 550 <= x <= 830 and 570 <= y <= 615:
             self.save_clicks += 1
-        elif 550 <= x <= 1000 and 250 <= y <= 530:
-            self.focus = "booking"
+        elif 550 <= x <= 1000 and 250 <= y <= 288:
+            self.focus = "slot"
+        elif 550 <= x <= 1000 and 370 <= y <= 408:
+            self.focus = "visit"
+        elif 550 <= x <= 1000 and 490 <= y <= 528:
+            self.focus = "request"
         else:
             self.focus = None
 
@@ -456,8 +463,9 @@ class KioskLookupTransport:
                 self.lookup = ""
                 self.selected_all = False
             self.lookup += keysym_or_char
-        elif self.focus == "booking":
+        elif self.focus in self.booking:
             self.booking_typed += keysym_or_char
+            self.booking[self.focus] += keysym_or_char
 
     def wheel(self, dx: int, dy: int) -> None:
         return None
@@ -510,15 +518,17 @@ class KioskLookupTransport:
             draw.text((60, top + 14), row, fill=ink, font=_font(22))
         # The booking form (the read-back must never touch it).
         draw.text((550, 130), "Active record: (none)", fill=ink, font=_font(20))
-        for label, top in (
-            ("Appointment slot", 210),
-            ("Visit type", 330),
-            ("Request ID", 450),
+        for label, top, key in (
+            ("Appointment slot", 210, "slot"),
+            ("Visit type", 330, "visit"),
+            ("Request ID", 450, "request"),
         ):
             draw.text((550, top), label, fill=ink, font=_font(20))
             draw.rectangle(
                 (550, top + 40, 1000, top + 78), fill="#ffffff", outline="#888888"
             )
+            if self.booking[key]:
+                draw.text((558, top + 48), self.booking[key], fill=ink, font=_font(22))
         draw.rectangle((550, 570, 830, 615), fill="#2d6fd8")
         draw.text((570, 580), "Save appointment", fill="#ffffff", font=_font(22))
         # The look-up panel.
