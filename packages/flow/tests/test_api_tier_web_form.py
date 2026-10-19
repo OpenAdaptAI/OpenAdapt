@@ -201,8 +201,14 @@ def _recording(
     rec = tmp_path / "rec"
     rec.mkdir()
     (rec / "meta.json").write_text(json.dumps({"params": PARAMS}))
+    targets = {
+        0: {"selector": '[name="form_lname"]', "role": "textbox", "name": "Last"},
+        2: {"selector": '[name="form_state"]', "role": "combobox", "name": "State"},
+        4: {"selector": '[name="form_note"]', "role": "textbox", "name": "Note"},
+    }
     events = [
         {"i": i, "kind": k, "t": float(i + 1)}
+        | ({"structural": targets[i]} if i in targets else {})
         for i, k in enumerate(
             ["click", "type", "click", "type", "click", "type", "click", "click"]
         )
@@ -321,6 +327,7 @@ def test_proposal_explains_every_field_and_carries_the_duplicate_check(tmp_path)
             {
                 "save_form": [
                     ["form_lname", "Marsh"],
+                    ["form_state", "MA"],
                     ["form_note", "Referred"],
                     ["mystery", "x9"],
                 ]
@@ -331,6 +338,7 @@ def test_proposal_explains_every_field_and_carries_the_duplicate_check(tmp_path)
             {
                 "save_form": [
                     ["form_lname", "Marsh"],
+                    ["form_state", "MA"],
                     ["form_note", "Referred"],
                     ["pin", nc.SECRET],
                 ]
@@ -734,4 +742,18 @@ def test_the_fallback_reports_the_rung_that_ran(tmp_path):
     # the rung it resolved on, such as "dom").
     assert "did not pass" in first.api_fallback
     assert first.actuation != "api_folded" and save.actuation != "api"
+    assert ("press", "Enter") in [(a[0], a[1]) for a in backend.actions]
+
+
+def test_an_identity_checked_save_needs_a_right_record_contract(tmp_path):
+    # The save checks the right record on screen. An API step that names no
+    # right-record contract can't make that check, so the GUI steps run (a
+    # durable checkpoint of the save would otherwise lack identity evidence).
+    wf = _span_workflow(admitted=False)
+    save = wf.steps[-1].model_copy(update={"identity_armed": True})
+    wf = wf.model_copy(update={"steps": [*wf.steps[:-1], save]})
+    wf, _ = admit_api_step(wf, admitted_by="reviewer")
+    report, backend, actuator, records = _run(tmp_path, wf, ActuationStatus.ACTUATED)
+    assert actuator.calls == 0
+    assert "names no right-record contract" in report.results[0].api_fallback
     assert ("press", "Enter") in [(a[0], a[1]) for a in backend.actions]

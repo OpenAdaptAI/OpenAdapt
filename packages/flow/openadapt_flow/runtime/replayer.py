@@ -35,6 +35,7 @@ promote a new bundle.
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import hashlib
 import hmac
@@ -59,6 +60,7 @@ from typing import (
     Optional,
     Sequence,
     TypeVar,
+    Union,
     cast,
 )
 from urllib.parse import urlsplit
@@ -94,11 +96,14 @@ from openadapt_flow.ir import (
     Anchor,
     ApiBinding,
     BusinessDecisionEvidence,
+    CheckToClickRecheck,
     EffectVerificationEvidence,
     ExecutionTargetKind,
     FreshActuationEvent,
     HaltObservation,
+    HoverLook,
     IdentityCheck,
+    IdentityLook,
     IdentitySignalEvidence,
     Interstitial,
     InterstitialActionResult,
@@ -151,6 +156,7 @@ from openadapt_flow.run_gate import is_consequential
 from openadapt_flow.runtime import heal as heal_mod
 from openadapt_flow.runtime import healing as healing_mod
 from openadapt_flow.runtime import identity as identity_mod
+from openadapt_flow.runtime import identity_looks as looks_mod
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     RuntimeParamScalar,
@@ -185,6 +191,9 @@ from openadapt_flow.runtime.effects.adapter import (
 from openadapt_flow.runtime.effects.adapter import (
     verifier_identity as effect_verifier_identity,
 )
+from openadapt_flow.runtime.known_ids import (
+    lookalike_class as known_ids_lookalike_class,
+)
 from openadapt_flow.runtime.program_predicates import (
     evaluate_program_predicate,
     exact_png_size,
@@ -211,6 +220,13 @@ from openadapt_flow.vision.ocr import OcrResolutionRefused
 
 _DeliveryResultT = TypeVar("_DeliveryResultT")
 _MAX_FRESH_ACTUATION_REACQUISITIONS = 2
+# Check-to-click guard on the pixel path (``Replayer._pixel_recheck``): how
+# often a changed target or identity region is re-observed before the click
+# is refused, and how much a pixel must change to count (remote encoders
+# shift colours by a few levels; a dialog or a new row changes far more).
+_PIXEL_RECHECK_REOBSERVES = 2
+_PIXEL_RECHECK_LEVEL = 24
+_PIXEL_RECHECK_MIN_PIXELS = 4
 # How long a step that raises a browser dialog waits for it to open.
 _DIALOG_WAIT_S = 5.0
 # Private module capability.  The public ``run`` API cannot mint a durable
@@ -577,6 +593,16 @@ class EgressNotPermitted(RuntimeError):
 #: scroll counts it as ready.
 SCROLL_POSITION_SLACK_FRACTION = 0.25
 
+#: Rungs that show the target itself on screen: what closed-loop scroll
+#: readiness accepts, and all a step accepts after its scroll missed it.
+_DIRECT_TARGET_RUNGS = frozenset({"structural", "template", "template_global", "ocr"})
+
+#: Steps that own the halt when the closed-loop scroll before them never found
+#: their target (see ``Replayer._act_scroll``).
+_SCROLL_HANDOFF_ACTIONS = frozenset(
+    {ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.RIGHT_CLICK}
+)
+
 
 def _scroll_target_positioned(
     recorded: tuple[int, int],
@@ -675,9 +701,19 @@ class Replayer:
             structured-text, pixel-compare, OCR, and halt with no model.
         known_ids: Optional complete ``runtime.known_ids.KnownIdList``. When
             set, an OCR identity check that abstained only because the band
-            rests on a look-alike identifier is lifted to verified if two OCR
-            reads agree and exactly one listed identifier is in that
-            look-alike class. None (default) keeps the abstain.
+            rests on a look-alike identifier is lifted to verified if the
+            reads of three separate screenshots agree and exactly one listed
+            identifier is in that look-alike class. None (default) keeps the
+            abstain.
+        identity_copy: Optional
+            :class:`~openadapt_flow.runtime.identity_looks.IdentityCopyConfig`.
+            With a ``read_clipboard`` channel, a look-alike abstain on a step
+            with a recorded identifier cell takes one more look: select the
+            cell, copy it, read the clipboard. The copy settles the record only
+            when it equals a run parameter embedded in the band; it stops the
+            run when it names another record or the screen changed outside the
+            cell. Never taken in governed or qualification runs. None
+            (default) takes no copy look.
         effect_verifier: Optional system-of-record ``EffectVerifier``
             (``runtime.effects``) bound to the deployment's system of record
             (a REST/FHIR API, a document store). When set, any step that
@@ -764,6 +800,8 @@ class Replayer:
     _render_scale_attempted: bool = False
     _render_scale_inner: Optional[Backend] = None
     _render_scale_evidence: Optional[dict[str, Any]] = None
+    identity_copy: Optional[looks_mod.IdentityCopyConfig] = None
+    _identity_input_looks: bool = False
 
     def __init__(
         self,
@@ -808,6 +846,7 @@ class Replayer:
         attended_draft_by: Optional[Any] = None,
         draft_key_dir: Optional[Path] = None,
         read_clipboard: Optional[Any] = None,
+        identity_copy: Optional[looks_mod.IdentityCopyConfig] = None,
         deployment_surface: Optional[str] = None,
         layout_drift: Optional[bool] = None,
         layout_drift_tolerances: Optional[Any] = None,
@@ -1044,9 +1083,16 @@ class Replayer:
         # ``api_steps=False`` keeps every run on the GUI. ``web_form_actuator``
         # replaces the live-session actuator (tests, other transports).
         self.api_steps = api_steps
+        #: Why ``api_steps`` is off, when a caller says (for the report).
+        self.api_steps_off_reason: Optional[str] = None
         self.web_form_actuator = web_form_actuator
         self._web_form_span_active = False
         self._web_form_fallback_reason: Optional[str] = None
+        # (step id, reason) set when a closed-loop scroll used up its budget
+        # because the next step's target never resolved. That step then
+        # resolves on direct deterministic rungs only, and halts on its own
+        # target, so the halt names the control that changed, not the scroll.
+        self._scroll_missed_target: Optional[tuple[str, str]] = None
         # Under an approval mode, the API request a person was asked about
         # (prepared before the gate), keyed by the save step's result, and
         # the operation digest the gate's last-point check re-reads.
@@ -1073,6 +1119,13 @@ class Replayer:
         # Optional complete known-ID list (runtime.known_ids): lifts a
         # look-alike identifier abstain only when no listed twin exists.
         self.known_ids = known_ids
+        # Optional select-and-copy look for look-alike identifiers
+        # (runtime.identity_looks). It is input, so only the step-entry
+        # identity check takes it; the actuation-time check reuses its read
+        # through a pixel-matched binding.
+        self.identity_copy = identity_copy
+        self._identity_input_looks = False
+        self._identity_look_bindings: dict[str, looks_mod.LookBinding] = {}
         # Optional VLM drift-oracle (state-verifier), OFF by default. When set,
         # it may CONFIRM a render-drift-sensitive postcondition that
         # deterministically false-failed (the same heal-under-drift the
@@ -1597,6 +1650,7 @@ class Replayer:
             else uuid.uuid4().hex
         )
         self._field_reads = {}
+        self._scroll_missed_target = None
         self._idempotency_reservation_owned = False
         self._qualification_fault_mutations = []
         self._qualification_fault_public_key = None
@@ -2155,6 +2209,25 @@ class Replayer:
                     continue
                 if step_index <= span_skip_to:
                     continue
+                if resume_from is not None and step_index == resume_from:
+                    inside = self._resume_inside_web_form_span(
+                        workflow, step_index, report.results
+                    )
+                    if inside is not None:
+                        # The folded steps are checkpointed only after the
+                        # save was sent, so this save may already have
+                        # landed. It is never sent again and never redone
+                        # through the GUI on an empty form.
+                        self._record_linear_result(
+                            report,
+                            workflow,
+                            inside,
+                            step_index=step_index,
+                            step=step,
+                            params=params,
+                            durable_run=durable_run,
+                        )
+                        break
                 # An admitted API step (docs/API_TIER.md) runs in place of the
                 # GUI steps it stands for. When it can't, the reason lands on
                 # the first of those steps and the GUI steps run as recorded.
@@ -2194,15 +2267,25 @@ class Replayer:
                     if why_not is not None:
                         result.api_fallback = why_not
                     batch = [result]
-                for result in batch:
+                # An API span's folded steps are checkpointed only once its
+                # save was sent: a resume then starts at the save, which can
+                # only be reconciled, never redone through the GUI. A save
+                # that wasn't sent leaves the resume point before the span,
+                # so a resume runs the whole span again.
+                save_result = batch[-1]
+                checkpoint_folded = save_result.ok or save_result.delivery_attempted
+                for offset, result in enumerate(batch):
+                    folded = offset < len(batch) - 1
                     stop_run = self._record_linear_result(
                         report,
                         workflow,
                         result,
-                        step_index=step_index,
-                        step=step,
+                        step_index=step_index + offset,
+                        step=workflow.steps[step_index + offset],
                         params=params,
-                        durable_run=durable_run,
+                        durable_run=(
+                            None if folded and not checkpoint_folded else durable_run
+                        ),
                     )
                     if stop_run:
                         break
@@ -2402,9 +2485,7 @@ class Replayer:
                 continue
             ids = [s.id for s in workflow.steps[step_index : end_index + 1]]
             if not self.api_steps:
-                reason = "API steps are off for this run"
-            elif durable:
-                reason = "a durable or resumed run uses the GUI steps"
+                reason = self.api_steps_off_reason or "API steps are off for this run"
             elif getattr(self, "_surface_router", None) is not None:
                 reason = "a run across several windows or tabs uses the GUI steps"
             elif self._approval_gated() and not callable(
@@ -2417,10 +2498,16 @@ class Replayer:
                     "approval mode needs the exact request before the save, and "
                     "this API actuator can't prepare it, so the GUI steps run"
                 )
-            elif self.governed_authorization is not None:
-                reason = "a governed run uses its qualified GUI path"
             elif not binding.admitted():
                 reason = "the API step is not admitted (openadapt-flow api admit)"
+            elif save.identity_armed and not binding.identity:
+                # The GUI save checks the right record on screen. The API step
+                # must check it too, so it needs a right-record contract.
+                reason = (
+                    "the save checks the right record on screen, and the API "
+                    "step names no right-record contract (openadapt-flow api "
+                    "admit --identity)"
+                )
             elif list(binding.effects) != list(save.effects):
                 reason = (
                     "the save step's record check differs from the one admitted "
@@ -2437,11 +2524,90 @@ class Replayer:
                     "step was proposed, and the API step would skip it "
                     "(openadapt-flow api propose)"
                 )
+            elif self.governed_authorization is not None and (
+                governed_reason := self._governed_web_form_refusal(workflow, save)
+            ):
+                reason = governed_reason
             elif self._actuator_for(binding) is None:
                 reason = "there is no live browser session for the API step"
             else:
                 reason = None
             return end_index, save, reason
+        return None
+
+    def _governed_web_form_refusal(
+        self, workflow: Workflow, save: Step
+    ) -> Optional[str]:
+        """Why a governed run can't use this API step, or None when it can.
+
+        The run's authorization must have admitted this exact API step. A
+        qualification case runs the path it names, and a managed (Cloud)
+        dispatch or a production qualification admission doesn't bind API
+        steps yet, so those run the GUI steps.
+        """
+
+        authorization = self.governed_authorization
+        assert authorization is not None
+        if authorization.qualification_case_id is not None:
+            return (
+                "a qualification case runs the GUI path it names; qualifying "
+                "an API step's path is not supported yet"
+            )
+        if self.managed_dispatch_binding is not None:
+            return "a managed dispatch doesn't bind API steps yet"
+        if authorization.production_qualification_admission_id is not None:
+            return (
+                "a production qualification admission doesn't cover API steps "
+                "yet, so the qualified GUI path runs"
+            )
+        return authorization.admitted_api_step(save, workflow)
+
+    def _resume_inside_web_form_span(
+        self, workflow: Workflow, step_index: int, prior: list[StepResult]
+    ) -> Optional[StepResult]:
+        """A halt result when a resume would start inside an API step's span.
+
+        Returns None when ``step_index`` isn't a covered step after the first,
+        or when the steps before it ran on the GUI (``prior`` holds the
+        checkpointed results): then the GUI save resumes as usual.
+        """
+
+        step = workflow.steps[step_index]
+        if not prior or prior[-1].actuation != "api_folded":
+            return None
+        for save in workflow.steps[step_index:]:
+            binding = save.api_binding
+            if (
+                binding is None
+                or binding.kind != "web_form"
+                or binding.web_form is None
+            ):
+                continue
+            covered = list(binding.web_form.replaces_steps)
+            if step.id in covered[1:]:
+                return StepResult(
+                    step_id=step.id,
+                    intent=step.intent,
+                    ok=False,
+                    safety_halt=True,
+                    failure_category=(
+                        "governed_refusal"
+                        if self.governed_authorization is not None
+                        else "safety_halt"
+                    ),
+                    risk=step.risk,
+                    risk_explanation=step.risk_explanation,
+                    risk_review_required=step.risk_review_required,
+                    delivery_attempted=False,
+                    error=(
+                        f"Step '{step.id}' ({step.intent}): resume would start "
+                        f"inside the API step for '{save.id}', whose save was "
+                        "sent and may have landed. Resume never sends it again "
+                        "and never redoes it through the GUI. Reconcile it "
+                        "(the attended reconcile action reads the record back), "
+                        "or start the item again"
+                    ),
+                )
         return None
 
     def _run_web_form_span(
@@ -6903,6 +7069,13 @@ class Replayer:
                 failure_category="safety_halt",
             )
             return refused
+        # A closed-loop scroll that never found this step's target hands the
+        # miss to this step (see ``_act_scroll``); only this step consumes it.
+        target_missed: Optional[str] = None
+        missed = self._scroll_missed_target
+        if missed is not None and missed[0] == step.id:
+            self._scroll_missed_target = None
+            target_missed = missed[1]
         router = self._surface_router
         if router is None:
             if step.action is ActionKind.SWITCH_SURFACE:
@@ -6920,6 +7093,7 @@ class Replayer:
                 run_dir=run_dir,
                 new_crops=new_crops,
                 graph_ctx=graph_ctx,
+                target_missed=target_missed,
             )
         refusal = router.entry_refusal(step)
         if refusal is None and step.action is not ActionKind.SWITCH_SURFACE:
@@ -6952,6 +7126,7 @@ class Replayer:
             run_dir=run_dir,
             new_crops=new_crops,
             graph_ctx=graph_ctx,
+            target_missed=target_missed,
         )
         # Receipt: the surface this step ran on. The entry check above proved
         # it is the step's declared surface; the outcome classifier re-checks
@@ -7066,6 +7241,7 @@ class Replayer:
         run_dir: Path,
         new_crops: dict[str, bytes],
         graph_ctx: Optional["_GraphStepContext"] = None,
+        target_missed: Optional[str] = None,
     ) -> StepResult:
         """Execute a single step; never raises (failures land in the result).
 
@@ -7400,8 +7576,8 @@ class Replayer:
                 )
                 result.elapsed_ms = (time.monotonic() - t0) * 1000.0
                 return result
-            resolution, matched_region, error = self._resolve_step(
-                step, before_png, bundle_dir, workflow
+            resolution, matched_region, error = self._resolve_step_target(
+                step, before_png, bundle_dir, workflow, target_missed
             )
             # Retry ladder failures with fresh settled frames until
             # ``step.timeout_s``: a remote app can present a settled-looking
@@ -7421,8 +7597,8 @@ class Replayer:
                     run_dir, evidence_step_id, "before", before_png
                 )
                 last_frame = before_png
-                resolution, matched_region, error = self._resolve_step(
-                    step, before_png, bundle_dir, workflow
+                resolution, matched_region, error = self._resolve_step_target(
+                    step, before_png, bundle_dir, workflow, target_missed
                 )
             if resolution is not None and matched_region is not None:
                 assert step.anchor is not None
@@ -7448,7 +7624,7 @@ class Replayer:
                 )
                 last_frame = before_png
                 pre_identity_halt = (result.safety_halt, result.failure_category)
-                error = self._identity_gate_error(
+                error = self._entry_identity_gate_error(
                     step,
                     resolution,
                     before_png,
@@ -7519,7 +7695,7 @@ class Replayer:
                         result.resolution = resolution
                         # The first read's halt flags belong to that read.
                         result.safety_halt, result.failure_category = pre_identity_halt
-                        error = self._identity_gate_error(
+                        error = self._entry_identity_gate_error(
                             step,
                             resolution,
                             before_png,
@@ -8394,6 +8570,12 @@ class Replayer:
 
         if pointer.startswith("/url/"):
             return binding.url_template
+        if binding.kind == "web_form":
+            from openadapt_flow.runtime.actuators.web_form import (
+                web_form_pointer_template,
+            )
+
+            return web_form_pointer_template(binding, pointer)
         root_name, *tokens = pointer.lstrip("/").split("/")
         if root_name == "body":
             value: Any = binding.body_template
@@ -8442,6 +8624,14 @@ class Replayer:
             self.governed_authorization is not None
             and self.governed_authorization.requires_verified_identity(step.id)
         )
+        if step.api_binding is not None and step.api_binding.kind == "web_form":
+            # A form save whose GUI step checks the right record, or whose
+            # admission named a right-record parameter, is checked the same
+            # way in every run, governed or not (its durable checkpoint
+            # needs the evidence too).
+            authorization_requires = authorization_requires or bool(
+                step.identity_armed or step.api_binding.identity
+            )
         project = workflow.qualification
         policy = project.identity_policies.get(step.id) if project is not None else None
         if not authorization_requires and policy is None:
@@ -8484,9 +8674,17 @@ class Replayer:
             ]
             exact_token = "{" + identity.param + "}"
             effect_target_path = tuple(identity.effect_field.split("."))
+            # A form field's name is the page's, not the record's (form_lname
+            # versus lname): for a form save the field is bound to the record
+            # check by sending the same parameter the check selects on.
+            names_must_match = binding.kind != "web_form"
             pointers_are_bound = all(
                 template is not None
-                and self._api_request_pointer_field_path(pointer) == effect_target_path
+                and (
+                    not names_must_match
+                    or self._api_request_pointer_field_path(pointer)
+                    == effect_target_path
+                )
                 and (
                     isinstance(template, str)
                     and self._url_path_targets_param(template, identity.param)
@@ -8503,8 +8701,14 @@ class Replayer:
                     f"({step.intent}): identity parameter {identity.param!r} is "
                     "not bound at every declared target-bearing request pointer"
                 )
+            from openadapt_flow.runtime.actuators.web_form import (
+                effect_selector_rows,
+            )
+
             effect_exprs = [
-                effect.match.get(identity.effect_field) for effect in effects
+                row.get(identity.effect_field)
+                for effect in effects
+                for row in effect_selector_rows(effect)
             ]
             if not any(
                 expr is not None and expr.param == identity.param
@@ -8973,6 +9177,16 @@ class Replayer:
             current_step=overlay_current,
             total_steps=overlay_total,
         )
+        if self._may_pipeline_readback(effect_verifier):
+            # Pipelined read-back (runtime/readback_pipeline.py), as for a GUI
+            # save: the same record check on the side thread. The item's
+            # report stays unsuccessful until it settles with the verdict.
+            self._defer_readback(
+                step, before, result, effects=effects, verifier=effect_verifier
+            )
+            result.ok = True
+            result.error = None
+            return True
         try:
             error = self._verify_effects(
                 step,
@@ -9720,6 +9934,27 @@ class Replayer:
                 return False
         return False
 
+    def _entry_identity_gate_error(
+        self,
+        step: Step,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Optional[str]:
+        """The identity gate at step entry, where an extra look may use input.
+
+        Only this check may select and copy the identifier cell
+        (:mod:`openadapt_flow.runtime.identity_looks`). The actuation-time
+        check that follows takes no input and reuses that read only through a
+        pixel-matched binding.
+        """
+        self.__dict__.setdefault("_identity_look_bindings", {}).pop(step.id, None)
+        self.__dict__.setdefault("_hover_frames", {}).pop(step.id, None)
+        self._identity_input_looks = True
+        try:
+            return self._identity_gate_error(step, *args, **kwargs)
+        finally:
+            self._identity_input_looks = False
+
     def _identity_gate_error(
         self,
         step: Step,
@@ -9739,7 +9974,12 @@ class Replayer:
             if qualification is not None
             else None
         )
-        if (
+        hover_check = (
+            self._hover_check(step, resolution, frame_png, workflow, bundle_dir)
+            if qualified_policy is None
+            else None
+        )
+        if hover_check is None and (
             step.action
             not in (
                 ActionKind.CLICK,
@@ -9763,9 +10003,15 @@ class Replayer:
             )
         ):
             return None
+        # A hover check needs an anchor too (see _hover_check).
+        assert step.anchor is not None
 
-        check = self._verify_identity(
-            step, resolution, frame_png, params, workflow, bundle_dir
+        check = (
+            hover_check
+            if hover_check is not None
+            else self._verify_identity(
+                step, resolution, frame_png, params, workflow, bundle_dir
+            )
         )
         if (
             check.status in {"verified", "mismatch"}
@@ -9823,6 +10069,13 @@ class Replayer:
                 f"{check.quorum_required or 0} independent signals verified "
                 "on the fresh frame — refusing to act; run aborted"
             )
+        elif check.look_halt is not None:
+            error = (
+                f"Step '{step.id}' ({step.intent}) took an extra look at a "
+                "look-alike identifier and the screen changed outside the "
+                f"identifier ({check.look_halt}) — refusing to act"
+            )
+            result.safety_halt = True
         elif check.known_id_halt is not None:
             names = {
                 "known_ids_unconfirmed": "has no admission confirmation",
@@ -9836,6 +10089,18 @@ class Replayer:
                 "confirm a current export; refusing to act"
             )
             result.safety_halt = True
+        elif check.mode == "hover" and check.status == "mismatch":
+            reason = check.hover.reason if check.hover is not None else "differs"
+            error = (
+                f"Step '{step.id}' ({step.intent}): with the pointer on the "
+                "target, the screen answered differently from the recording "
+                f"({reason}) — refusing to click; run aborted"
+            )
+        elif check.mode == "hover":
+            # Hover evidence only adds a stop. A step that had no identity
+            # check before keeps going when the response is absent or cannot
+            # be compared; the verdict stays on the step result.
+            error = None
         elif check.status == "mismatch":
             error = (
                 f"Identity check failed for step '{step.id}' "
@@ -10769,6 +11034,39 @@ class Replayer:
         self._active_delivery_resolution = fresh_resolution
         self._active_delivery_region = fresh_region
         return fresh_resolution, fresh_region, fresh_png, error
+
+    def _resolve_step_target(
+        self,
+        step: Step,
+        screen_png: bytes,
+        bundle_dir: Path,
+        workflow: Workflow,
+        target_missed: Optional[str],
+    ) -> tuple[Optional[Resolution], Optional[Region], Optional[str]]:
+        """Resolve the step's target; stricter after a scroll that missed it.
+
+        ``target_missed`` is set when the preceding closed-loop scroll used
+        up its budget without this target resolving. The step then accepts
+        only the rungs scroll readiness accepts (direct deterministic
+        evidence, no model): a weaker rung would act where the scroll could
+        not find the target. Otherwise the step halts on its own target with
+        the ordinary "Could not resolve target" error and sends no input.
+        """
+        if target_missed is None:
+            return self._resolve_step(step, screen_png, bundle_dir, workflow)
+        resolution, region, error = self._resolve_step(
+            step, screen_png, bundle_dir, workflow, allow_grounder=False
+        )
+        if resolution is not None and resolution.rung in _DIRECT_TARGET_RUNGS:
+            return resolution, region, error
+        if resolution is None and step.anchor is None:
+            return resolution, region, error
+        return (
+            None,
+            None,
+            f"Could not resolve target for step '{step.id}' ({step.intent}): "
+            f"{target_missed}",
+        )
 
     @timed_span("resolve")
     def _resolve_step(
@@ -12219,6 +12517,20 @@ class Replayer:
                             "— refusing raw coordinate delivery; run aborted"
                         )
                 else:
+                    rechecked = self._pixel_recheck(
+                        step,
+                        resolution,
+                        before_png,
+                        params,
+                        workflow,
+                        bundle_dir,
+                        result,
+                        run_dir,
+                    )
+                    if isinstance(rechecked, str):
+                        return rechecked
+                    resolution = rechecked
+                    x, y = resolution.point
                     refusal = self._delivery_authorization_refusal(
                         workflow, params, step, result
                     )
@@ -12337,6 +12649,19 @@ class Replayer:
                         "identity verification to delivery; run aborted"
                     )
             elif isinstance(self.backend, RichPointerActionBackend):
+                rechecked = self._pixel_recheck(
+                    step,
+                    resolution,
+                    before_png,
+                    params,
+                    workflow,
+                    bundle_dir,
+                    result,
+                    run_dir,
+                )
+                if isinstance(rechecked, str):
+                    return rechecked
+                x, y = rechecked.point
                 refusal = self._delivery_authorization_refusal(
                     workflow, params, step, result
                 )
@@ -14722,6 +15047,26 @@ class Replayer:
                 rw,
                 rh,
             )
+        if identifier_region is not None and not self._identity_input_looks:
+            # The check just before the click takes no input. When the step-entry
+            # check settled the record with a copy and the identifier shows the
+            # same pixels now, the same record is on screen: reuse that verdict.
+            binding = self.__dict__.get("_identity_look_bindings", {}).get(step.id)
+            if (
+                binding is not None
+                and binding.verdict is not None
+                and binding.same_pixels(
+                    step.id, looks_mod.crop_png(before_png, identifier_region)
+                )
+            ):
+                reused = IdentityLook(
+                    kind="clipboard",
+                    outcome="resolves",
+                    reason="same_pixels_as_step_entry_copy",
+                )
+                return binding.verdict.model_copy(
+                    update={"looks": [*binding.verdict.looks, reused]}
+                )
         band = identity_mod.band_region(
             resolution.point, anchor.region[3], self.backend.viewport
         )
@@ -14821,10 +15166,23 @@ class Replayer:
             )
 
         check = native_attempt(before_png, first_row_lines)
-        if check.status == "verified" or identity_read_contradicts(check):
-            # A read that names a different record is final: a later read of
-            # the same screen must never overrule it into "verified".
+        if check.status == "verified":
             return check
+        if identity_read_contradicts(check):
+            # A read that names a different record is final: a later read of
+            # the same screen must never overrule it into "verified". The one
+            # exception is a run parameter OCR read with look-alike glyphs
+            # (C0X1234 read as COX1234): extra looks may confirm the exact
+            # value; otherwise this mismatch stands.
+            return self._lookalike_param_looks(
+                step,
+                check,
+                native_attempt,
+                params,
+                workflow,
+                identifier_region,
+                before_png,
+            )
         upscaled = identity_mod.upscale_crop(before_png, live_region)
         if upscaled is None:
             return check
@@ -14843,16 +15201,20 @@ class Replayer:
             ),
             scoped_identifier=identifier_region is not None,
         )
+        pending_looks: list[Any] = []
         if (
-            self.known_ids is not None
-            and retry.status not in ("verified", "mismatch")
-            and check.status == "abstain"
-            and check.abstain_reason == "glyph_confusable_identifier"
+            retry.status not in ("verified", "mismatch")
+            and looks_mod.is_glyph_abstain(check)
+            and (
+                self.known_ids is not None
+                or self._copy_look_possible(identifier_region)
+            )
         ):
-            # The band rests on a look-alike identifier. A confirmed,
-            # complete known-ID list with exactly one member in that class
-            # rules out a twin (runtime.known_ids), provided a second read
-            # from a FRESH screenshot agrees with the first.
+            # The band rests on a look-alike identifier. Take extra looks that
+            # change nothing (runtime.identity_looks): fresh frames, the 2x
+            # re-read above, the known-ID list, and, where configured, a
+            # select-and-copy of the identifier cell. Only the list or an
+            # exact copy can settle it; any contradiction is final.
             matches: Optional[Callable[[str], bool]] = None
             if anchor.identity_template is not None and anchor.identity_template.tokens:
                 from openadapt_flow.runtime import identity_template as itmpl
@@ -14860,9 +15222,30 @@ class Replayer:
                 matches = functools.partial(
                     itmpl.recorded_identifier_matches, anchor.identity_template
                 )
-            lifted = self._known_id_lift(check, native_attempt, params, matches)
-            if lifted is not None:
-                return lifted
+            looked = self._look_again(
+                step,
+                check,
+                retry,
+                native_attempt,
+                params,
+                workflow,
+                identifier_region,
+                before_png,
+                matches,
+            )
+            if (
+                looked.status != "abstain"
+                or looked.known_id_halt is not None
+                or looked.look_halt is not None
+            ):
+                return looked
+            pending_looks = list(looked.looks)
+
+        def with_looks(final: IdentityCheck) -> IdentityCheck:
+            if not pending_looks or final.status == "verified" or final.looks:
+                return final
+            return final.model_copy(update={"looks": pending_looks})
+
         check = better_identity_read(check, retry)
         if (
             check.status == "verified"
@@ -14871,7 +15254,7 @@ class Replayer:
         ):
             # A read of a different record is final: the row re-read below
             # must never overrule it into "verified".
-            return check
+            return with_looks(check)
         # Last, re-read the point's own text row alone (see
         # identity.row_region): the same verdict rules, on a crop that holds
         # no part of the neighbouring rows.
@@ -14884,7 +15267,7 @@ class Replayer:
             )
         )
         if row is None or row_png is None:
-            return check
+            return with_looks(check)
         f = identity_mod.ROW_REREAD_FACTOR
         row_check = attempt(
             row_png,
@@ -14897,22 +15280,431 @@ class Replayer:
                 exclude[3] * f,
             ),
         )
-        return better_identity_read(check, row_check)
+        return with_looks(better_identity_read(check, row_check))
 
-    def _known_id_lift(
+    def _hover_check(
         self,
+        step: Step,
+        resolution: Resolution,
+        frame_png: bytes,
+        workflow: Workflow,
+        bundle_dir: Optional[Path],
+    ) -> Optional[IdentityCheck]:
+        """Compare the target's hover response with the recording.
+
+        Only at the step-entry check (moving the pointer is input), only for a
+        click whose recording saw a hover response and that has no other
+        identity evidence,
+        only on the pixel rungs, and only when the backend can hover
+        (:class:`~openadapt_flow.backend.PointerHoverBackend`). None when any
+        of that does not hold: the step then has no identity check, as
+        before. See :mod:`openadapt_flow.runtime.hover_evidence`.
+        """
+        from openadapt_flow.runtime import hover_evidence as hover_mod
+
+        evidence = step.hover
+        anchor = step.anchor
+        if (
+            evidence is None
+            or not evidence.response
+            or anchor is None
+            or not self._identity_input_looks
+            or step.action
+            not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.RIGHT_CLICK)
+            or resolution.rung == "structural"
+            or anchor.context_text
+            or anchor.structured_identity
+            or anchor.identity_template
+            or anchor.identifier_crop
+        ):
+            return None
+        hover = getattr(self.backend, "hover", None)
+        if not callable(hover):
+            return None
+        point = (int(resolution.point[0]), int(resolution.point[1]))
+
+        def check(verdict: str, reason: str, png: Optional[bytes]) -> IdentityCheck:
+            status = {
+                "verified": "verified",
+                "mismatch": "mismatch",
+                "unexpected": "mismatch",
+                "absent": "abstain",
+                "unverifiable": "unreadable",
+            }[verdict]
+            return IdentityCheck(
+                status=status,  # type: ignore[arg-type]
+                mode="hover",
+                expected="recorded hover response",
+                observed=reason,
+                hover=HoverLook(
+                    verdict=verdict,  # type: ignore[arg-type]
+                    reason=reason,
+                    frame_sha256=sha256_bytes(png) if png is not None else None,
+                ),
+            )
+
+        try:
+            hover(*point)
+        except NotImplementedError:
+            return None
+        except Exception as exc:  # noqa: BLE001 - a failed hover confirms nothing
+            return check(
+                "unverifiable", f"hover_failed:{type(exc).__name__}"[:80], None
+            )
+        time.sleep(evidence.dwell_ms / 1000.0)
+        hover_png = self.vision.wait_settled(self.backend)
+        try:
+            live = hover_mod.measure_response(frame_png, hover_png, point)
+        except ValueError:
+            return check("mismatch", "screen_changed_size", hover_png)
+        recorded_crop = (
+            self._asset_bytes(bundle_dir, evidence.crop, workflow=workflow)
+            if evidence.crop and bundle_dir is not None
+            else None
+        )
+        # The click that follows is checked against this frame, not the one
+        # before the pointer moved (see _pixel_recheck).
+        self.__dict__.setdefault("_hover_frames", {})[step.id] = hover_png
+        verdict, reason = hover_mod.compare(
+            recorded_response=evidence.response,
+            recorded_region=evidence.region,
+            recorded_crop=recorded_crop,
+            live=live,
+            point=point,
+            same_render=self._render_scale_inner is None,
+            ocr=self.vision.ocr,
+        )
+        return check(verdict, reason, hover_png)
+
+    def _band_check(
+        self,
+        anchor: Anchor,
+        observed: str,
+        run_values: Mapping[str, str],
+        workflow: Workflow,
+    ) -> IdentityCheck:
+        """The OCR-tier verdict for ``observed`` with the given run values."""
+        tmpl = anchor.identity_template
+        if tmpl is not None and tmpl.tokens:
+            from openadapt_flow.runtime import identity_template as itmpl
+
+            return itmpl.verify_template_identity(
+                tmpl, observed, params=dict(run_values), param_examples=workflow.params
+            )
+        return identity_mod.verify_target_identity(
+            anchor.context_text or "",
+            observed,
+            params=dict(run_values),
+            param_examples=workflow.params,
+        )
+
+    def _lookalike_param_read(
+        self,
+        check: IdentityCheck,
+        anchor: Anchor,
+        params: Mapping[str, RuntimeParamScalar],
+        workflow: Workflow,
+    ) -> Optional[IdentityCheck]:
+        """A run-parameter mismatch that is only a look-alike misread, as the
+        look-alike abstain it would be, or None.
+
+        The parameter's identifier is read with look-alike glyphs (the run
+        value ``C0X1234`` read as ``COX1234``). The band is checked again with
+        the value as OCR read it; when every other identity budget then passes
+        and only the look-alike identifier remains, OCR cannot say which of the
+        two it is. Used only to decide whether extra looks may run; the caller
+        keeps the mismatch unless a look settles the record.
+        """
+        if check.status != "mismatch" or check.mode != "param" or not check.param:
+            return None
+        run_values = runtime_params_for_gui(params)
+        run = run_values.get(check.param)
+        if not isinstance(run, str):
+            return None
+        run_tokens = looks_mod.identifier_tokens(run)
+        if not any(identity_mod._is_glyph_vulnerable_identifier(t) for t in run_tokens):
+            return None
+        seen = looks_mod.identifier_tokens(check.observed)
+        as_read: list[str] = []
+        for token in run_tokens:
+            same = {
+                o
+                for o in seen
+                if known_ids_lookalike_class(o) == known_ids_lookalike_class(token)
+            }
+            if len(same) != 1:
+                return None
+            as_read.append(same.pop())
+        if as_read == run_tokens:
+            return None
+        again = self._band_check(
+            anchor,
+            check.observed,
+            {**run_values, check.param: " ".join(as_read)},
+            workflow,
+        )
+        if not looks_mod.is_glyph_abstain(again):
+            return None
+        return again
+
+    def _lookalike_param_looks(
+        self,
+        step: Step,
+        check: IdentityCheck,
+        native_attempt: Callable[[bytes], IdentityCheck],
+        params: Mapping[str, RuntimeParamScalar],
+        workflow: Workflow,
+        identifier_region: Optional[Region],
+        frame_png: bytes,
+    ) -> IdentityCheck:
+        """Extra looks for a look-alike run-parameter mismatch.
+
+        Returns the looks' ``verified`` verdict, a named halt, or ``check``
+        unchanged (with the looks recorded). Never turns a mismatch into an
+        abstain.
+        """
+        anchor = step.anchor
+        assert anchor is not None
+        first = self._lookalike_param_read(check, anchor, params, workflow)
+        if first is None or not (
+            self.known_ids is not None or self._copy_look_possible(identifier_region)
+        ):
+            return check
+
+        def read(png: bytes) -> IdentityCheck:
+            got = native_attempt(png)
+            return self._lookalike_param_read(got, anchor, params, workflow) or got
+
+        matches: Optional[Callable[[str], bool]] = None
+        if anchor.identity_template is not None and anchor.identity_template.tokens:
+            from openadapt_flow.runtime import identity_template as itmpl
+
+            matches = functools.partial(
+                itmpl.recorded_identifier_matches, anchor.identity_template
+            )
+        looked = self._look_again(
+            step,
+            first,
+            None,
+            read,
+            params,
+            workflow,
+            identifier_region,
+            frame_png,
+            matches,
+        )
+        if (
+            looked.status == "verified"
+            or looked.known_id_halt is not None
+            or looked.look_halt is not None
+        ):
+            return looked
+        return check.model_copy(update={"looks": list(looked.looks)})
+
+    def _check_regions(
+        self, step: Step, resolution: Resolution, matched_region: Optional[Region]
+    ) -> dict[str, Region]:
+        """The regions a pixel step was checked on, at ``resolution``.
+
+        ``target``: where the target matched (or a box of the recorded
+        target's size at the point). ``identity``: the identifier region, or
+        the identity band's row, when the step has identity evidence.
+        ``hover``: the recorded hover response, when there is one.
+        """
+        anchor = step.anchor
+        px, py = int(resolution.point[0]), int(resolution.point[1])
+        regions: dict[str, Region] = {}
+        if matched_region is not None:
+            regions["target"] = matched_region
+        elif anchor is not None:
+            w, h = int(anchor.region[2]), int(anchor.region[3])
+            regions["target"] = (px - w // 2, py - h // 2, w, h)
+        else:
+            regions["target"] = (px - 8, py - 8, 16, 16)
+        if anchor is not None:
+            if anchor.identifier_region is not None:
+                rx, ry, rw, rh = anchor.identifier_region
+                regions["identity"] = (
+                    rx + px - anchor.click_point[0],
+                    ry + py - anchor.click_point[1],
+                    rw,
+                    rh,
+                )
+            elif anchor.context_text or anchor.identity_template:
+                h = int(anchor.region[3])
+                regions["identity"] = (
+                    0,
+                    py - h // 2 - 4,
+                    int(self.backend.viewport[0]),
+                    h + 8,
+                )
+        if step.hover is not None and step.hover.region is not None:
+            dx, dy, w, h = step.hover.region
+            regions["hover"] = (px + dx, py + dy, w, h)
+        return regions
+
+    @staticmethod
+    def _changed_regions(
+        before_png: bytes, fresh_png: bytes, regions: Mapping[str, Region]
+    ) -> list[str]:
+        """Names of ``regions`` whose pixels differ between two frames."""
+        import numpy as np
+        from PIL import Image
+
+        try:
+            with (
+                Image.open(io.BytesIO(before_png)) as a_img,
+                Image.open(io.BytesIO(fresh_png)) as b_img,
+            ):
+                a = np.asarray(a_img.convert("RGB"), dtype=np.int16)
+                b = np.asarray(b_img.convert("RGB"), dtype=np.int16)
+        except Exception:  # noqa: BLE001 - an unreadable frame is a change
+            return ["frame_size"]
+        if a.shape != b.shape:
+            return ["frame_size"]
+        height, width = a.shape[:2]
+        changed: list[str] = []
+        for name, (x, y, w, h) in regions.items():
+            x0, y0 = max(0, int(x)), max(0, int(y))
+            x1, y1 = min(width, int(x + w)), min(height, int(y + h))
+            if x1 <= x0 or y1 <= y0:
+                continue
+            diff = np.abs(a[y0:y1, x0:x1] - b[y0:y1, x0:x1]).max(axis=2)
+            if int((diff > _PIXEL_RECHECK_LEVEL).sum()) >= _PIXEL_RECHECK_MIN_PIXELS:
+                changed.append(name)
+        return changed
+
+    def _pixel_recheck(
+        self,
+        step: Step,
+        resolution: Resolution,
+        checked_png: bytes,
+        params: Mapping[str, RuntimeParamScalar],
+        workflow: Workflow,
+        bundle_dir: Path,
+        result: StepResult,
+        run_dir: Path,
+    ) -> Union[Resolution, str]:
+        """Guard the gap between a pixel step's check and its click.
+
+        Right before the click, take a fresh frame and compare the target,
+        identity and hover regions with the frame the step was checked on (the
+        hover frame when the step took a hover look). When one changed (a
+        dialog opened over the target, the list re-sorted), do not click:
+        re-resolve the target and re-run the identity check on the fresh
+        frame, with no input, and compare again on the next frame. After
+        :data:`_PIXEL_RECHECK_REOBSERVES` re-observations that still see
+        changes, or when the target or its identity cannot be confirmed again,
+        refuse the click. Structured (DOM / accessibility) targets are bound
+        by element tokens instead and are not rechecked here.
+
+        Returns the resolution to click, or the refusal.
+        """
+        if resolution.rung == "structural":
+            return resolution
+        baseline = self.__dict__.get("_hover_frames", {}).get(step.id) or checked_png
+        current = resolution
+        region = self._active_delivery_region
+        for attempt in range(_PIXEL_RECHECK_REOBSERVES + 1):
+            fresh = self.backend.screenshot()
+            changed = self._changed_regions(
+                baseline, fresh, self._check_regions(step, current, region)
+            )
+            if not changed:
+                if current is not resolution:
+                    result.resolution = current
+                return current
+            what = ", ".join(changed)
+            if attempt == _PIXEL_RECHECK_REOBSERVES:
+                result.check_to_click.append(
+                    CheckToClickRecheck(changed=changed, outcome="aborted")  # type: ignore[arg-type]
+                )
+                break
+            fresh_resolution, fresh_region, error = self._resolve_step(
+                step, fresh, bundle_dir, workflow
+            )
+            if error is None and fresh_resolution is not None:
+                error = self._identity_gate_error(
+                    step,
+                    fresh_resolution,
+                    fresh,
+                    params,
+                    workflow,
+                    bundle_dir,
+                    result,
+                    evidence_run_dir=run_dir,
+                )
+            if error is not None or fresh_resolution is None:
+                result.check_to_click.append(
+                    CheckToClickRecheck(changed=changed, outcome="aborted")  # type: ignore[arg-type]
+                )
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                return (
+                    f"Step '{step.id}' ({step.intent}): the screen changed at the "
+                    f"{what} region between the check and the click, and the "
+                    "target could not be confirmed again on a fresh frame "
+                    f"({error or 'target not found'}) — click not delivered"
+                )
+            result.check_to_click.append(
+                CheckToClickRecheck(changed=changed, outcome="reobserved")  # type: ignore[arg-type]
+            )
+            current, region, baseline = fresh_resolution, fresh_region, fresh
+        result.safety_halt = True
+        result.failure_category = "safety_halt"
+        return (
+            f"Step '{step.id}' ({step.intent}): the screen kept changing at the "
+            f"{what} region between the check and the click — click not "
+            "delivered; run aborted"
+        )
+
+    def _copy_look_allowed(self) -> bool:
+        """The copy look is input: never in governed or qualification runs."""
+        return (
+            self.identity_copy is not None
+            and self._read_clipboard is not None
+            and self.governed_authorization is None
+            and self.managed_dispatch_binding is None
+            and self.production_qualification_guard is None
+            and self.qualification_campaign_guard is None
+            and self.qualification_fault_driver is None
+            and getattr(self, "approval_gate", None) is None
+        )
+
+    def _copy_look_possible(self, identifier_region: Optional[Region]) -> bool:
+        return identifier_region is not None and self._copy_look_allowed()
+
+    def _embedded_identity_params(
+        self, anchor: Anchor, workflow: Workflow
+    ) -> list[str]:
+        """Workflow parameters whose demonstrated value is in the identity band."""
+        tmpl = anchor.identity_template
+        if tmpl is not None and tmpl.tokens:
+            return list(tmpl.param_token_indices)
+        if anchor.context_text:
+            return identity_mod.embedded_params(anchor.context_text, workflow.params)
+        return []
+
+    def _look_again(
+        self,
+        step: Step,
         first: IdentityCheck,
+        magnified: Optional[IdentityCheck],
         read: Callable[[bytes], IdentityCheck],
         params: Optional[Mapping[str, RuntimeParamScalar]],
+        workflow: Workflow,
+        identifier_region: Optional[Region],
+        frame_png: bytes,
         recorded_id_matches: Optional[Callable[[str], bool]] = None,
-    ) -> Optional[IdentityCheck]:
-        """Known-ID cross-check for a look-alike abstain.
+    ) -> IdentityCheck:
+        """Extra looks before stopping on a look-alike identifier.
 
-        Returns a ``verified`` check, the abstain marked with a named
-        ``known_id_halt`` when the list may not be used now, the fresh read
-        when it is a ``mismatch`` (final), or None (keep the original
-        verdict). The second read comes from a new screenshot,
-        so a transient render state on one capture cannot satisfy both.
+        Returns the verdict of :func:`identity_looks.decide`: ``verified``
+        when every fresh frame agrees and the known-ID list or an exact copy
+        settles the record, the contradicting read when a look names another
+        record, or ``first`` carrying the looks. A known-ID list that may not
+        be used now, or a copy look that changed the screen, returns ``first``
+        marked with a named halt.
         """
         from openadapt_flow.runtime import known_ids as known_ids_mod
 
@@ -14921,34 +15713,136 @@ class Replayer:
             if isinstance(self.known_ids, known_ids_mod.KnownIdAdmission)
             else None
         )
+        known: Any = self.known_ids
         if admission is not None:
             halt = admission.check()
             if halt is not None:
                 return first.model_copy(update={"known_id_halt": halt.reason})
-            known: Any = admission.known_ids
-        else:
-            known = self.known_ids
-        second = read(self.backend.screenshot())
-        if second.status == "mismatch":
-            # The fresh read names a different record; that is final.
-            return second
-        lifted = known_ids_mod.resolve_lookalike_abstain(
-            [first, second],
-            known,
-            run_values=runtime_params_for_gui(params or {}),
-            recorded_id_matches=recorded_id_matches,
+            known = admission.known_ids
+        run_values = runtime_params_for_gui(params or {})
+
+        frames: list[tuple[IdentityCheck, Optional[str]]] = []
+        for _ in range(looks_mod.FRAME_LOOKS):
+            time.sleep(self.poll_interval_s)
+            png = self.backend.screenshot()
+            frames.append((read(png), sha256_bytes(png)))
+            if frames[-1][0].status == "mismatch":
+                break  # final; no further looks
+
+        frame_reads = [first, *(r for r, _ in frames)]
+        known_lift: Optional[IdentityCheck] = None
+        if known is not None and all(
+            looks_mod.is_glyph_abstain(r) for r in frame_reads
+        ):
+            lifted = known_ids_mod.resolve_lookalike_abstain(
+                frame_reads,
+                known,
+                run_values=run_values,
+                recorded_id_matches=recorded_id_matches,
+            )
+            if lifted is not None and lifted.known_id_evidence is not None:
+                update: dict[str, Any] = {"frames": len(frame_reads)}
+                if admission is not None:
+                    update["confirmed_at"] = admission.confirmation.confirmed_at
+                    update["export_sha256"] = admission.confirmation.sha256
+                known_lift = lifted.model_copy(
+                    update={
+                        "known_id_evidence": lifted.known_id_evidence.model_copy(
+                            update=update
+                        )
+                    }
+                )
+
+        copied: Optional[looks_mod.ClipboardRead] = None
+        classes = looks_mod.lookalike_classes(first.observed)
+        bindings = self.__dict__.setdefault("_identity_look_bindings", {})
+        if (
+            identifier_region is not None
+            and self._copy_look_allowed()
+            and all(r.status != "mismatch" for r, _ in frames)
+        ):
+            assert self.identity_copy is not None
+            if self._identity_input_looks:
+                try:
+                    cell_lines = self.vision.ocr(frame_png, region=identifier_region)
+                except Exception:  # noqa: BLE001 - no box, no copy look
+                    cell_lines = []
+                cell = looks_mod.copy_region(cell_lines, identifier_region)
+                copied = (
+                    looks_mod.copy_identifier(
+                        self.backend,
+                        self._read_clipboard,
+                        cell,
+                        gesture=self.identity_copy.gesture,
+                        copy_keys=self.identity_copy.copy_keys,
+                        crop_region=identifier_region,
+                    )
+                    if cell is not None
+                    else looks_mod.ClipboardRead(
+                        text=None, reason="no_single_identifier_box"
+                    )
+                )
+                if copied.changed_outside:
+                    look = IdentityLook(
+                        kind="clipboard",
+                        outcome="unavailable",
+                        reason="screen_changed_outside_cell",
+                        frame_sha256=copied.frame_sha256,
+                    )
+                    return first.model_copy(
+                        update={
+                            "look_halt": "identity_look_changed_screen",
+                            "looks": [look],
+                        }
+                    )
+                crops = tuple(
+                    c
+                    for c in (
+                        looks_mod.crop_png(frame_png, identifier_region),
+                        copied.pre_crop,
+                        copied.post_crop,
+                    )
+                    if c is not None
+                )
+                bindings[step.id] = looks_mod.LookBinding(
+                    step_id=step.id, classes=classes, read=copied, crops=crops
+                )
+            else:
+                binding = bindings.get(step.id)
+                live_crop = looks_mod.crop_png(frame_png, identifier_region)
+                if binding is not None and binding.matches(step.id, classes, live_crop):
+                    copied = binding.read
+
+        known_list = None
+        if known is not None:
+            known_list = getattr(known, "known_ids", known)
+        decided = looks_mod.decide(
+            first,
+            frames=frames,
+            magnified=magnified,
+            contradicts=identity_read_contradicts,
+            known_ids=known_list,
+            known_ids_lift=known_lift,
+            clipboard=copied,
+            exact_expected=looks_mod.exact_expected_ids(
+                run_values,
+                self._embedded_identity_params(step.anchor, workflow)
+                if step.anchor is not None
+                else [],
+            ),
         )
-        if lifted is None or lifted.known_id_evidence is None:
-            return None
-        update: dict[str, Any] = {"frames": 2}
-        if admission is not None:
-            update["confirmed_at"] = admission.confirmation.confirmed_at
-            update["export_sha256"] = admission.confirmation.sha256
-        return lifted.model_copy(
-            update={
-                "known_id_evidence": lifted.known_id_evidence.model_copy(update=update)
-            }
-        )
+        binding = bindings.get(step.id)
+        if (
+            self._identity_input_looks
+            and binding is not None
+            and decided.status == "verified"
+            and any(
+                look.kind == "clipboard" and look.outcome == "resolves"
+                for look in decided.looks
+            )
+        ):
+            bindings[step.id] = dataclasses.replace(binding, verdict=decided)
+        return decided
 
     # -- typed-input verification -------------------------------------------------
 
@@ -15539,6 +16433,7 @@ class Replayer:
         bundle_dir: Path,
         params: Mapping[str, RuntimeParamScalar],
         scroll_delta: Optional[tuple[int, int]] = None,
+        misses: Optional[list[str]] = None,
     ) -> bool:
         """Resolve an implicit scroll target and honor its armed identity.
 
@@ -15555,9 +16450,20 @@ class Replayer:
         the preceding scroll a false no-op. Structural resolution stays
         available, model grounding stays disabled, and an identity-armed target
         is ready only when the same pre-action identity gate verifies it.
+
+        When not ready, ``misses`` (if given) gets why: ``unresolved`` (no
+        direct deterministic rung found the target), ``offscreen`` (the page
+        reports the recorded element outside the viewport), ``position`` or
+        ``identity``.
         """
-        if step.anchor is None:
+
+        def miss(reason: str) -> bool:
+            if misses is not None:
+                misses.append(reason)
             return False
+
+        if step.anchor is None:
+            return miss("unresolved")
         structural = (
             self.backend
             if self.use_structural and hasattr(self.backend, "locate_structural")
@@ -15572,8 +16478,9 @@ class Replayer:
             # The page itself shows the unique recorded target exists below
             # (or above) the viewport: not ready, keep scrolling. Stricter
             # than letting a visual rung find a look-alike on screen, and it
-            # skips a full-frame OCR search per probe.
-            return False
+            # skips a full-frame OCR search per probe. The control exists, so
+            # this miss never hands the halt to the click (#1331).
+            return miss("offscreen")
         template_png = self._asset_bytes(
             bundle_dir, step.anchor.template, workflow=workflow
         )
@@ -15593,9 +16500,9 @@ class Replayer:
             # candidate means that the target is not ready yet, so the scroll
             # loop must continue. The later target action runs the full
             # resolver again and still halts on the same ambiguity.
-            return False
+            return miss("unresolved")
         if resolved is None:
-            return False
+            return miss("unresolved")
         resolution, _matched_region = resolved
         # Geometry estimates a point from surrounding landmarks; it does not
         # prove that the target itself is visible. In particular, a fixed
@@ -15604,23 +16511,18 @@ class Replayer:
         # readiness therefore requires direct deterministic target evidence.
         # Model grounding is disabled above and future weaker rungs must opt in
         # deliberately rather than silently acquiring readiness authority.
-        if resolution.rung not in {
-            "structural",
-            "template",
-            "template_global",
-            "ocr",
-        }:
-            return False
+        if resolution.rung not in _DIRECT_TARGET_RUNGS:
+            return miss("unresolved")
         if scroll_delta is not None and not _scroll_target_positioned(
             step.anchor.click_point, resolution.point, scroll_delta, frame_png
         ):
-            return False
+            return miss("position")
         if not step.identity_armed:
             return True
         check = self._verify_identity(
             step, resolution, frame_png, params, workflow, bundle_dir
         )
-        return check.status == "verified"
+        return check.status == "verified" or miss("identity")
 
     def _act_scroll(
         self,
@@ -15701,6 +16603,9 @@ class Replayer:
         # Until a wheel edge stops moving the page, readiness also requires
         # the target at (or past) its demonstrated position.
         position_required = [True]
+        # Why each readiness probe of the next target failed; they decide who
+        # owns a budget-exhaustion halt (see below).
+        misses: list[str] = []
 
         def readiness_holds(frame_png: bytes) -> bool:
             if implicit_target_readiness:
@@ -15712,6 +16617,7 @@ class Replayer:
                     bundle_dir=bundle_dir,
                     params=params,
                     scroll_delta=(dx, dy) if position_required[0] else None,
+                    misses=misses,
                 )
             return self._predicate_holds(
                 stop_pred,
@@ -15792,6 +16698,32 @@ class Replayer:
         )
         if following is not None and following.action is ActionKind.SCROLL:
             # The next SCROLL step continues the loop with its own budget.
+            return None
+        if (
+            graph_ctx is None
+            and implicit_target_readiness
+            and next_step is not None
+            and following is next_step
+            and next_step.action in _SCROLL_HANDOFF_ACTIONS
+            and misses
+            and all(miss == "unresolved" for miss in misses)
+            and not step.risk_review_required
+            and not self._step_is_consequential(step, workflow)
+        ):
+            # The scroll did its bounded work; what failed is the next click's
+            # target, which never resolved on any frame (a relabelled or moved
+            # control). Halting here would name the scroll and hide the
+            # control that changed. Hand the miss to that click instead: it
+            # resolves on direct deterministic rungs only and, when they find
+            # nothing, halts on its own target before any input. A target
+            # that resolved but sat out of position or failed its identity
+            # check still halts here, as before.
+            self._scroll_missed_target = (
+                next_step.id,
+                f"the preceding scroll '{step.id}' used {scrolled:.0f}px of its "
+                f"{budget:.0f}px budget and the target never came into view; "
+                "no deterministic rung found it, so no input was sent",
+            )
             return None
         target_desc = (
             f"the anchor of step '{next_step.id}' ({next_step.intent})"

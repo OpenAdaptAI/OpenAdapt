@@ -446,6 +446,11 @@ class XFreeRDPTransport:
             btn,
         )
 
+    def move(self, x: int, y: int) -> None:
+        """Move the pointer with no button edge (a hover)."""
+        self._last_pointer = (int(x), int(y))
+        self._xdotool("mousemove", str(int(x)), str(int(y)))
+
     def key(self, keysym_or_char: str, down: bool) -> None:
         name = _KEYSYMS.get(keysym_or_char.lower()) if len(keysym_or_char) > 1 else None
         if name is not None:
