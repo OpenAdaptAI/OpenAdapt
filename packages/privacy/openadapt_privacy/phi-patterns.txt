@@ -1,0 +1,22 @@
+# git-secrets / gitleaks / detect-secrets pattern file for git-scan PHI shapes.
+# Load with: git-secrets --add-provider -- git-secrets --pattern-file phi-patterns.txt
+# Do not put a matching example on the right-hand side of these lines.
+
+# OHIP-shaped (four digits, three, three; optional two-letter version)
+[0-9]{4}-[0-9]{3}-[0-9]{3}(-[A-Za-z]{1,2})?
+[0-9]{4} [0-9]{3} [0-9]{3}
+[0-9]{4}\.[0-9]{3}\.[0-9]{3}
+(?i)\bohip\b.{0,24}[0-9]{10}
+
+# Chart identifiers (require a value, not the word "chart" alone)
+(?i)\bchart[_ -]?(id|no|num|number)[ \t]*[:=#][ \t]*[A-Za-z0-9]
+(?i)\bchart[ \t]*#[ \t]*[A-Za-z0-9]
+(?i)\bmrn[ \t]*[:=#][ \t]*[A-Za-z0-9]
+
+# Windows UNC path (two backslashes, host, share)
+\\\\[A-Za-z0-9._-]+\\[A-Za-z0-9]
+
+# RDP hostname keys and mstsc
+(?i)(full address|alternate full address|gatewayhostname)[ \t]*:[ \t]*s[ \t]*:
+(?i)\b(RDP_HOST|RDP_HOSTNAME|RDP_SERVER|MSTSC_HOST)[ \t]*=
+(?i)mstsc(\.exe)?[ \t]+/v:

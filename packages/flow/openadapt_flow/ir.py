@@ -1628,6 +1628,50 @@ class Step(BaseModel):
 # Phase-1 ``Step`` (the unchanged, hardened action leaf -- same anchor/identity/
 # effect/risk machinery), a transition's guard IS a Phase-1 ``Predicate``, and a
 # branch reuses the SAME model-free predicate evaluation. BACKWARD-COMPATIBLE:
+UNDO_ID_PATTERN: Final[str] = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+
+
+class UndoStep(BaseModel):
+    """A declared compensating action for one step's effect.
+
+    For example: "delete the draft row that step ``save_draft`` added". Flow
+    never runs it on its own. After a stop, the run's change ledger names the
+    steps that may have changed the app; when one of them has a declared undo,
+    Flow offers it to a person. It runs only after that person approves it
+    (``openadapt_flow.after_stop``), and it counts as done only when the
+    effects declared on its own steps are confirmed in the system of record.
+
+    The undo is part of the sealed bundle content: editing it changes the
+    bundle digest. See ``docs/AFTER_A_STOP.md``.
+    """
+
+    id: str = Field(pattern=UNDO_ID_PATTERN)
+    #: The id of the step whose effect this undoes.
+    undoes: str = Field(min_length=1, max_length=256)
+    #: Plain words a person reads before approving.
+    intent: str = Field(min_length=1, max_length=512)
+    #: ``demonstration``: compiled from a recording of a person doing the
+    #: undo. ``hand_written``: written by an author.
+    source: Literal["demonstration", "hand_written"]
+    #: The compensating actions, run in order by the normal runtime (identity
+    #: checks, risk gate and effect verification all apply).
+    steps: list[Step] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _requires_a_checkable_result(self) -> "UndoStep":
+        if not any(step.effects for step in self.steps):
+            raise ValueError(
+                f"undo {self.id!r} declares no effect on any of its steps; an "
+                "undo must say what the system of record looks like after it "
+                "(for example, a record_written effect with expected_count 0), "
+                "so Flow can check that it landed"
+            )
+        ids = [step.id for step in self.steps]
+        if len(ids) != len(set(ids)):
+            raise ValueError(f"undo {self.id!r} repeats a step id")
+        return self
+
+
 # ``Workflow.program`` is OPTIONAL -- when it is None the runtime executes
 # today's linear ``Workflow.steps`` loop byte-for-byte, and a linear bundle
 # lifts mechanically to the degenerate single-path graph (``lift_to_program``,
@@ -2422,6 +2466,11 @@ class Workflow(BaseModel):
     # review, canary or admission pins. None for every other bundle, and
     # omitted from its serialized bytes.
     origin: Optional[Literal["agent_run"]] = None
+    # Declared compensating actions, offered to a person after a stop and
+    # never run automatically (``openadapt_flow.after_stop``). Part of the
+    # content digest when present; omitted from the serialized bytes when
+    # empty, so a bundle that declares none keeps its digest.
+    undo_steps: list[UndoStep] = Field(default_factory=list)
     # -- schema v2 integrity + provenance manifest --------------------------
     # Sealed on ``save`` (per-asset hashes, a whole-bundle content digest, the
     # compiler version, and -- for a certified bundle -- the certifying policy +
@@ -2441,6 +2490,13 @@ class Workflow(BaseModel):
     # resolver consumes a decrypted crop via :meth:`decrypted_template`.
     _decrypted_templates: dict[str, bytes] = PrivateAttr(default_factory=dict)
 
+    @model_validator(mode="after")
+    def _undo_ids_are_unique(self) -> "Workflow":
+        ids = [undo.id for undo in self.undo_steps]
+        if len(ids) != len(set(ids)):
+            raise ValueError("undo_steps repeats an undo id")
+        return self
+
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Omit empty additive execution hints from legacy bundle bytes."""
@@ -2459,6 +2515,8 @@ class Workflow(BaseModel):
             data.pop("surfaces", None)
         if self.origin is None:
             data.pop("origin", None)
+        if not self.undo_steps:
+            data.pop("undo_steps", None)
         return data
 
     @model_validator(mode="after")
@@ -3642,6 +3700,16 @@ class StepResult(BaseModel):
     # (recorded for audit; empty unless an appliance is configured).
     postcondition_drift_rescues: list[str] = Field(default_factory=list)
     drift_oracle_calls: int = 0  # VLM state-verifier calls this step
+    # The first identity check on this step mismatched WHILE the screen was
+    # still changing (its identity band differed in a frame taken right
+    # after the read, or the page reported activity), so one more check ran
+    # on a fresh settled frame. The step acted only if that second check
+    # verified. ``identity`` is the second read; the first read's verdict and
+    # frame are kept here. A mismatch on a stable screen is final and never
+    # re-observed.
+    identity_reobserved: bool = False
+    identity_first_read: Optional[IdentityCheck] = None
+    identity_first_frame_png: Optional[str] = None
     heal: Optional[HealEvent] = None
     error: Optional[str] = None
     before_png: Optional[str] = None  # run-dir-relative paths
@@ -4090,6 +4158,54 @@ class EffectJournalEntry(BaseModel):
     collateral_reconciliation_actions: int = Field(default=0, ge=0)
 
 
+class ChangeLedgerEffect(BaseModel):
+    """One declared effect of a step in the change ledger (PHI-free).
+
+    Names the effect by its kind and its run-bound contract hash. Never carries
+    the effect's ``probe`` text (a compiler-written probe can quote record
+    values), a selector value or a read-back value.
+    """
+
+    kind: str
+    description: str
+    contract_hash: str = ""
+    #: The verifier's verdict: ``confirmed`` (the change is in the system of
+    #: record), ``refuted`` (the system of record contradicts it) or
+    #: ``unknown`` (not checked, or the system of record could not be read).
+    status: Literal["confirmed", "refuted", "unknown"] = "unknown"
+    #: What the read showed, independent of pass or fail. ``absent`` proves
+    #: nothing landed; ``present`` and ``conflicting`` mean something did.
+    observed_effect: Literal["present", "absent", "conflicting", "unknown"] = "unknown"
+
+
+class ChangeLedgerEntry(BaseModel):
+    """One step that could have changed the app, in run order (PHI-free).
+
+    A step is in the ledger when it is consequential or declares an effect,
+    and the run did not prove it stopped before delivering the action. The
+    ledger answers the question a person has after a stop: what may need
+    undoing? See ``openadapt_flow.after_stop`` and ``docs/AFTER_A_STOP.md``.
+    """
+
+    #: 1-based position of the step among the run's executed results.
+    position: int = Field(ge=1)
+    step_id: str
+    intent: str
+    attempt_state: Literal[
+        "not_actuated", "delivered", "actuated_api", "delivery_uncertain"
+    ] = "delivery_uncertain"
+    #: The step's overall verdict: ``unknown`` if any effect is unknown or none
+    #: was declared, else ``refuted`` if any effect was refuted, else
+    #: ``confirmed``.
+    status: Literal["confirmed", "refuted", "unknown"] = "unknown"
+    effects: list[ChangeLedgerEffect] = Field(default_factory=list)
+    #: True unless the system of record proved that nothing this step
+    #: declared landed (every effect read ``absent``).
+    may_need_undo: bool = True
+    #: The declared undo for this step, when the bundle has one.
+    undo_id: Optional[str] = None
+
+
 MANAGED_RESULT_LOSS_DOMAIN: Final[bytes] = b"OpenAdapt managed result loss v1\0"
 MANAGED_RESULT_LOSS_IDEMPOTENCY_DOMAIN: Final[bytes] = (
     b"OpenAdapt managed result loss idempotency v1\0"
@@ -4406,6 +4522,15 @@ class RunReport(BaseModel):
             "Per consequential-step transaction ledger (intended effect, "
             "attempt state, observed effect, verifier freshness, collateral "
             "delta). PHI-free; the substrate the reconciliation model reads."
+        ),
+    )
+    change_ledger: list[ChangeLedgerEntry] = Field(
+        default_factory=list,
+        description=(
+            "In run order, each step that could have changed the app: its "
+            "declared effects and whether each was confirmed, refuted or "
+            "unknown, and the declared undo when there is one. PHI-free. "
+            "See docs/AFTER_A_STOP.md."
         ),
     )
     managed_result_loss: Optional[ManagedResultLossEvidence] = Field(
@@ -4830,6 +4955,7 @@ from openadapt_flow.runtime.effects.effect import Effect  # noqa: E402,F401
 
 ApiBinding.model_rebuild()
 Step.model_rebuild()
+UndoStep.model_rebuild()
 GovernedAuthorizationTemplate.model_rebuild()
 # Phase-2 state-machine models: State embeds Step (whose Effect forward ref is
 # resolved just above), Transition embeds Predicate, ProgramGraph embeds State,

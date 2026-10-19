@@ -9,6 +9,7 @@
 #   types    openadapt-types  pypi-types
 #   agent    openadapt-agent  pypi-agent
 #   capture  openadapt-capture  pypi-capture
+#   privacy  openadapt-privacy  pypi-privacy
 #
 # Manual dispatch only: there is no tag or push trigger, so nothing here runs
 # unless someone starts it. It refuses any ref other than the current tip of
@@ -34,7 +35,7 @@ on:
         description: "Package directory under packages/"
         required: true
         type: choice
-        options: [flow, types, agent, capture]
+        options: [flow, types, agent, capture, privacy]
       version:
         description: "Version to publish; must equal packages/<package>/pyproject.toml"
         required: true
@@ -93,6 +94,7 @@ jobs:
               "types": "openadapt-types",
               "agent": "openadapt-agent",
               "capture": "openadapt-capture",
+              "privacy": "openadapt-privacy",
           }[pkg]
           if project["name"] != expected:
               sys.exit(f"packages/{pkg} is {project['name']!r}, expected {expected!r}")
