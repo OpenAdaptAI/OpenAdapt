@@ -9790,6 +9790,8 @@ class Replayer:
             )
         ):
             return None
+        # A hover check needs an anchor too (see _hover_check).
+        assert step.anchor is not None
 
         check = (
             hover_check

@@ -246,7 +246,7 @@ When the recorder can move the pointer without clicking
 pointer on each click target first and keeps that frame. For a click with no
 other identity evidence, the compiler stores what changed near the target, such
 as the control's highlight or tooltip, as the step's hover evidence
-([`runtime/hover_evidence.py`](../openadapt_flow/runtime/hover_evidence.py)).
+([`openadapt_flow/runtime/hover_evidence.py`](../openadapt_flow/runtime/hover_evidence.py)).
 At replay, on the pixel rungs, the runtime rests the pointer on the resolved
 target, waits the same 0.8 s, and compares. A different response, or a
 response where the recording saw none, stops the run before the click. A
