@@ -112,7 +112,7 @@ jobs:
           agent="$(hit "^packages/(agent|flow|types)/|$wf")"
           capture="$(hit "^packages/capture/|$wf")"
           privacy="$(hit "^packages/privacy/|$wf")"
-          desktop="$(hit "^packages/desktop/|^\.github/workflows/desktop-(test|build)\.yml$|$wf")"
+          desktop="$(hit "^packages/desktop/|^\.github/workflows/desktop-[a-z-]+\.yml$|$wf")"
           # Any package's metadata, or the launcher's, can change what an
           # install pulls in.
           weight="$(hit "^packages/|^pyproject\.toml$|^openadapt/|^hatch_build\.py$|^scripts/install_weight/|$wf")"
@@ -398,6 +398,7 @@ jobs:
             tests/test_admitted_composition_runtime.py \
             tests/e2e/test_structural_action.py \
             tests/e2e/test_compile_agent_e2e.py \
+            tests/e2e/test_code_action_e2e.py \
             tests/e2e/test_mcp_teach_e2e.py \
             tests/test_agent_guard.py \
             tests/e2e/test_agent_guard_e2e.py \

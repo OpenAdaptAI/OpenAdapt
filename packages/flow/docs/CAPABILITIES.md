@@ -161,6 +161,13 @@ that opens the wrong patient is refused at the save, and nothing is compiled.
 See [`COMPILE_AGENT.md`](COMPILE_AGENT.md), which also has the measured token and
 time cost of structure-first observation against a screenshot every turn.
 
+With `--vision code` the agent acts through code: one `run` tool that takes a
+script (query the DOM or accessibility tree, click, fill and select by role
+and name, read back, a read-only sandboxed shell), screenshots only on
+request. Its scoreboard figures are arm 7
+([#1307](https://github.com/OpenAdaptAI/OpenAdapt/pull/1307)). See
+[`CODE_AS_ACTION.md`](CODE_AS_ACTION.md).
+
 ## Answer a halt from a phone
 
 An attended run can project one signed operational-halt task to an

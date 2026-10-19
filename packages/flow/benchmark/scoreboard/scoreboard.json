@@ -1,0 +1,1120 @@
+{
+  "protocol_version": "2026-10-18.1",
+  "timed_load_max": 12.0,
+  "spend_usd": 9.466585,
+  "tasks": {
+    "mockmed": {
+      "agent": {
+        "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
+        "items": 100,
+        "attempts": 100,
+        "runs": [
+          "2026-10-18-a"
+        ],
+        "normal_items": 47,
+        "correct": 47,
+        "correct_rate": 1.0,
+        "silent_wrong": 2,
+        "safe_stops_normal": 0,
+        "fault_items": 53,
+        "fault_items_by_kind": {
+          "optimistic": {
+            "correct": 0,
+            "silent_wrong": 1,
+            "safe_stop": 0,
+            "flagged_wrong": 0
+          },
+          "ui_change": {
+            "correct": 51,
+            "silent_wrong": 0,
+            "safe_stop": 0,
+            "flagged_wrong": 0
+          },
+          "wrong_record": {
+            "correct": 0,
+            "silent_wrong": 1,
+            "safe_stop": 0,
+            "flagged_wrong": 0
+          }
+        },
+        "planned_items": 100,
+        "done_correctly_all_items": 98,
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 5.0,
+        "tokens_per_item": 40629,
+        "cost_usd_total": 3.8604,
+        "cost_usd_per_item": 0.0386,
+        "approvals_asked": 0,
+        "timed_correct_items": 3,
+        "item_s_median": 16.38,
+        "item_s_p90": 16.67,
+        "wall_s_median": 20.1,
+        "wall_s_p90": 20.22,
+        "items_per_hour": 181.1,
+        "host_load_1m": {
+          "min": 8.46,
+          "max": 523.94
+        },
+        "hand_check": {
+          "rows_not_correct": 2,
+          "checked": 2,
+          "confirmed": 2,
+          "items": [
+            {
+              "run": "2026-10-18-a",
+              "item": 30,
+              "attempt": 1,
+              "fault": "optimistic",
+              "row_outcome": "silent_wrong",
+              "confirmed": true,
+              "evidence": "ledgers/item-030.json final_text says the note was saved and that the encounter list shows it in full. The fault server rejected the write, and the read-back of /api/db after the item found no record (readback=missing). The agent reported a save that did not land."
+            },
+            {
+              "run": "2026-10-18-a",
+              "item": 40,
+              "attempt": 1,
+              "fault": "wrong_record",
+              "row_outcome": "silent_wrong",
+              "confirmed": true,
+              "evidence": "ledgers/item-040.json final_text says it saved the note on Jane Sample's referral. The fault server stored the write on another patient, and the read-back found no Triage record for p1 with this note (readback=wrong). The agent reported success on a record saved to the wrong patient."
+            }
+          ]
+        },
+        "sources": [
+          {
+            "run": "2026-10-18-a",
+            "model": "claude-sonnet-5-5",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            }
+          }
+        ]
+      },
+      "first_run": {
+        "label": "2. Agent's first run under OpenAdapt (recorded, read back, compiled)",
+        "items": 1,
+        "attempts": 1,
+        "runs": [
+          "2026-10-18-a"
+        ],
+        "normal_items": 1,
+        "correct": 1,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 0,
+        "fault_items_by_kind": {},
+        "planned_items": 1,
+        "done_correctly_all_items": 1,
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 5.0,
+        "tokens_per_item": 40632,
+        "cost_usd_total": 0.0132,
+        "cost_usd_per_item": 0.0132,
+        "approvals_asked": 1,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": {
+          "min": 176.29,
+          "max": 176.29
+        },
+        "hand_check": {
+          "rows_not_correct": 0,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
+        "sources": [
+          {
+            "run": "2026-10-18-a",
+            "model": "claude-sonnet-5-5",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            }
+          }
+        ]
+      },
+      "program": {
+        "label": "3. Compiled program driving the UI",
+        "items": 100,
+        "attempts": 102,
+        "runs": [
+          "2026-10-18-a"
+        ],
+        "normal_items": 47,
+        "correct": 47,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 53,
+        "fault_items_by_kind": {
+          "optimistic": {
+            "correct": 0,
+            "silent_wrong": 0,
+            "safe_stop": 1,
+            "flagged_wrong": 0
+          },
+          "ui_change": {
+            "correct": 51,
+            "silent_wrong": 0,
+            "safe_stop": 0,
+            "flagged_wrong": 0
+          },
+          "wrong_record": {
+            "correct": 0,
+            "silent_wrong": 0,
+            "safe_stop": 0,
+            "flagged_wrong": 1
+          }
+        },
+        "planned_items": 100,
+        "done_correctly_all_items": 98,
+        "flagged_wrong": 1,
+        "paused": 0,
+        "model_calls_per_item": 0.0,
+        "tokens_per_item": 0,
+        "cost_usd_total": 0.0,
+        "cost_usd_per_item": 0.0,
+        "approvals_asked": 0,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": {
+          "min": 82.45,
+          "max": 532.93
+        },
+        "hand_check": {
+          "rows_not_correct": 4,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
+        "sources": [
+          {
+            "run": "2026-10-18-a",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            }
+          }
+        ]
+      }
+    },
+    "openemr_referral": {
+      "agent": {
+        "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
+        "items": 72,
+        "attempts": 72,
+        "runs": [
+          "study-main-0c642bc0"
+        ],
+        "normal_items": 63,
+        "correct": 62,
+        "correct_rate": 0.9841,
+        "silent_wrong": 0,
+        "safe_stops_normal": 1,
+        "fault_items": 9,
+        "fault_items_by_kind": {
+          "duplicate_check": {
+            "correct": 0,
+            "silent_wrong": 0,
+            "safe_stop": 9,
+            "flagged_wrong": 0
+          }
+        },
+        "planned_items": 72,
+        "done_correctly_all_items": 62,
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 10.65,
+        "tokens_per_item": null,
+        "cost_usd_total": 6.4239,
+        "cost_usd_per_item": 0.0892,
+        "approvals_asked": 0,
+        "timed_correct_items": 62,
+        "item_s_median": 31.16,
+        "item_s_p90": 40.93,
+        "wall_s_median": 36.49,
+        "wall_s_p90": 46.09,
+        "items_per_hour": 80.5,
+        "host_load_1m": {
+          "min": 2.572265625,
+          "max": 17.49951171875
+        },
+        "hand_check": {
+          "rows_not_correct": 10,
+          "checked": 10,
+          "confirmed": 10,
+          "items": [
+            {
+              "run": "study-main-0c642bc0",
+              "item": 204,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-02/4-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"I did not save a chart. OpenEMR flagged a possible existing patient, so I stopped as instructed.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 303,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-03/3-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"No chart was saved. I stopped because OpenEMR flagged a possible existing patient.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 402,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-04/2-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"No chart was saved. OpenEMR flagged a possible existing patient, so I stopped as instructed.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 501,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-05/1-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"I did not save a chart. OpenEMR warned of a possible existing patient when I clicked Create New Patient, so I cancelled.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 607,
+              "attempt": 1,
+              "fault": "none",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-06/7-r5-grace-adeyemi/transcript.json, kept with that study, not here) ends: \"I can't operate the browser, so I haven't registered anything. My calls to the `computer` tool returned an error saying no such tool exists, and no other browser tools are available to me.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 608,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-06/8-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"I did not save a chart. OpenEMR showed a possible existing patient, so I stopped, as instructed.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 707,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-07/7-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"I stopped without saving a chart. The EMR flagged a possible existing patient, so no new chart was created.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 806,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-08/6-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"No chart was saved. I stopped because OpenEMR showed a possible existing patient when I tried to create the chart.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 905,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-09/5-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"I stopped without saving a chart, because OpenEMR flagged a possible existing patient.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 1004,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-10/4-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"No chart was saved. OpenEMR flagged a possible existing patient, so I stopped before creating anything.\" The SQL read-back found no new chart"
+            }
+          ]
+        },
+        "sources": [
+          {
+            "run": "study-main-0c642bc0",
+            "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
+            "model": "claude-sonnet-5-5",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+            },
+            "note": "the study's published set: engine 0c642bc0, warm, blocks 2-10, valid runs; timed per its start gate (1-minute load < 12)"
+          }
+        ]
+      },
+      "first_run": {
+        "label": "2. Agent's first run under OpenAdapt (recorded, read back, compiled)",
+        "items": 1,
+        "attempts": 1,
+        "runs": [
+          "2026-10-18-a"
+        ],
+        "normal_items": 1,
+        "correct": 1,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 0,
+        "fault_items_by_kind": {},
+        "planned_items": 1,
+        "done_correctly_all_items": 1,
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 12.0,
+        "tokens_per_item": 158278,
+        "cost_usd_total": 0.1007,
+        "cost_usd_per_item": 0.1007,
+        "approvals_asked": 0,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": {
+          "min": 4.28,
+          "max": 4.28
+        },
+        "hand_check": {
+          "rows_not_correct": 0,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
+        "sources": [
+          {
+            "run": "2026-10-18-a",
+            "model": "claude-sonnet-5-5",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+            }
+          }
+        ]
+      },
+      "program": {
+        "label": "3. Compiled program driving the UI",
+        "items": 72,
+        "attempts": 72,
+        "runs": [
+          "study-main-0c642bc0"
+        ],
+        "normal_items": 63,
+        "correct": 62,
+        "correct_rate": 0.9841,
+        "silent_wrong": 0,
+        "safe_stops_normal": 1,
+        "fault_items": 9,
+        "fault_items_by_kind": {
+          "duplicate_check": {
+            "correct": 0,
+            "silent_wrong": 0,
+            "safe_stop": 9,
+            "flagged_wrong": 0
+          }
+        },
+        "planned_items": 72,
+        "done_correctly_all_items": 62,
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 0.0,
+        "tokens_per_item": 0,
+        "cost_usd_total": 0.0,
+        "cost_usd_per_item": 0.0,
+        "approvals_asked": 0,
+        "timed_correct_items": 62,
+        "item_s_median": 24.14,
+        "item_s_p90": 26.92,
+        "wall_s_median": 29.71,
+        "wall_s_p90": 32.52,
+        "items_per_hour": 100.6,
+        "host_load_1m": {
+          "min": 3.044921875,
+          "max": 12.78515625
+        },
+        "hand_check": {
+          "rows_not_correct": 10,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
+        "sources": [
+          {
+            "run": "study-main-0c642bc0",
+            "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+            },
+            "note": "the study's published set: engine 0c642bc0, warm, blocks 2-10, valid runs; timed per its start gate (1-minute load < 12)"
+          }
+        ]
+      }
+    },
+    "openimis": {
+      "agent": {
+        "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
+        "items": 50,
+        "attempts": 51,
+        "runs": [
+          "2026-10-18-a"
+        ],
+        "normal_items": 49,
+        "correct": 49,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 1,
+        "fault_items_by_kind": {
+          "ui_change": {
+            "correct": 1,
+            "silent_wrong": 0,
+            "safe_stop": 0,
+            "flagged_wrong": 0
+          }
+        },
+        "planned_items": 50,
+        "done_correctly_all_items": 50,
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 7.34,
+        "tokens_per_item": 75520,
+        "cost_usd_total": 2.9414,
+        "cost_usd_per_item": 0.0588,
+        "approvals_asked": 0,
+        "timed_correct_items": 4,
+        "item_s_median": 39.64,
+        "item_s_p90": 52.49,
+        "wall_s_median": 47.46,
+        "wall_s_p90": 74.58,
+        "items_per_hour": 64.9,
+        "host_load_1m": {
+          "min": 6.94,
+          "max": 498.31
+        },
+        "hand_check": {
+          "rows_not_correct": 1,
+          "checked": 1,
+          "confirmed": 1,
+          "items": [
+            {
+              "run": "2026-10-18-a",
+              "item": 50,
+              "attempt": 1,
+              "fault": "ui_change",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "Harness failure, not the agent's: the item process was killed at 600 s with 0 model calls (ItemTimeout), and the insuree's claim count did not change. Attempt 2 saved claim 50 correctly with the relabelled Save."
+            }
+          ]
+        },
+        "sources": [
+          {
+            "run": "2026-10-18-a",
+            "model": "claude-sonnet-5-5",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            }
+          }
+        ]
+      },
+      "first_run": {
+        "label": "2. Agent's first run under OpenAdapt (recorded, read back, compiled)",
+        "items": 1,
+        "attempts": 1,
+        "runs": [
+          "sb-sonnet-1"
+        ],
+        "normal_items": 1,
+        "correct": 1,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 0,
+        "fault_items_by_kind": {},
+        "planned_items": 1,
+        "done_correctly_all_items": 1,
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 7.0,
+        "tokens_per_item": 70048,
+        "cost_usd_total": 0.0564,
+        "cost_usd_per_item": 0.0564,
+        "approvals_asked": 0,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": null,
+        "hand_check": {
+          "rows_not_correct": 0,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
+        "sources": [
+          {
+            "run": "sb-sonnet-1",
+            "imported_from": "demo/cua_to_program/results/sb-sonnet-1",
+            "model": "claude-sonnet-5-5",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "76a99fdc8732566028e757c666c83ecdec955bac"
+            },
+            "note": "host load not sampled for this run; untimed"
+          }
+        ]
+      },
+      "program": {
+        "label": "3. Compiled program driving the UI",
+        "items": 150,
+        "attempts": 154,
+        "runs": [
+          "launch-4",
+          "launch-4-c100"
+        ],
+        "normal_items": 149,
+        "correct": 148,
+        "correct_rate": 0.9933,
+        "silent_wrong": 0,
+        "safe_stops_normal": 1,
+        "fault_items": 1,
+        "fault_items_by_kind": {
+          "ui_change": {
+            "correct": 0,
+            "silent_wrong": 0,
+            "safe_stop": 1,
+            "flagged_wrong": 0
+          }
+        },
+        "planned_items": 200,
+        "done_correctly_all_items": 148,
+        "flagged_wrong": 0,
+        "paused": 50,
+        "model_calls_per_item": 0.0,
+        "tokens_per_item": 0,
+        "cost_usd_total": 0.0,
+        "cost_usd_per_item": 0.0,
+        "approvals_asked": 0,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": {
+          "min": 59.0,
+          "max": 619.5
+        },
+        "hand_check": {
+          "rows_not_correct": 6,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
+        "sources": [
+          {
+            "run": "launch-4",
+            "imported_from": "demo/cua_to_program/results/launch-4",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+            },
+            "profile": "demo (plain Replayer, SQL record check attached); not admitted"
+          },
+          {
+            "run": "launch-4-c100",
+            "imported_from": "demo/cua_to_program/results/launch-4-c100",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+            },
+            "profile": "demo (plain Replayer, SQL record check attached); not admitted"
+          }
+        ]
+      },
+      "program_repair": {
+        "label": "3r. Compiled program with self-repair (#1265, #1294)",
+        "items": 6,
+        "attempts": 8,
+        "runs": [
+          "2026-10-19-a"
+        ],
+        "normal_items": 5,
+        "correct": 5,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 1,
+        "fault_items_by_kind": {
+          "ui_change": {
+            "correct": 0,
+            "silent_wrong": 0,
+            "safe_stop": 1,
+            "flagged_wrong": 0
+          }
+        },
+        "planned_items": 56,
+        "done_correctly_all_items": 5,
+        "flagged_wrong": 0,
+        "paused": 50,
+        "model_calls_per_item": 0.0,
+        "tokens_per_item": 0,
+        "cost_usd_total": 0.0,
+        "cost_usd_per_item": 0.0,
+        "approvals_asked": 0,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": {
+          "min": 11.22,
+          "max": 26.3
+        },
+        "hand_check": {
+          "rows_not_correct": 3,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
+        "sources": [
+          {
+            "run": "2026-10-19-a",
+            "model": "claude-sonnet-5-5 (repair agent, only if a halt is accepted)",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "42aadc09d9d0f514bfad7efa1923866e70c6782b"
+            },
+            "profile": "demo (plain Replayer, SQL record check attached); not admitted"
+          }
+        ]
+      }
+    }
+  },
+  "claims": {
+    "mockmed/2026-10-19-b": {
+      "per_fault": {
+        "ok": {
+          "n": 5,
+          "bad_saves": 0,
+          "claimed_success": 5,
+          "bad_claimed_success": 0,
+          "bad_claimed_caught_by_verify_run": 0,
+          "bad_caught_by_verify_run": 0,
+          "clean_saves": 5,
+          "clean_confirmed": 5,
+          "false_alarms": 0,
+          "ground_truth": {
+            "correct": 5
+          },
+          "verify_outcome": {
+            "verified": 5
+          }
+        },
+        "no_persist": {
+          "n": 5,
+          "bad_saves": 5,
+          "claimed_success": 5,
+          "bad_claimed_success": 5,
+          "bad_claimed_caught_by_verify_run": 5,
+          "bad_caught_by_verify_run": 5,
+          "clean_saves": 0,
+          "clean_confirmed": 0,
+          "false_alarms": 0,
+          "ground_truth": {
+            "missing": 5
+          },
+          "verify_outcome": {
+            "halted_before_effect": 5
+          }
+        },
+        "partial": {
+          "n": 5,
+          "bad_saves": 5,
+          "claimed_success": 5,
+          "bad_claimed_success": 5,
+          "bad_claimed_caught_by_verify_run": 5,
+          "bad_caught_by_verify_run": 5,
+          "clean_saves": 0,
+          "clean_confirmed": 0,
+          "false_alarms": 0,
+          "ground_truth": {
+            "wrong": 5
+          },
+          "verify_outcome": {
+            "halted_before_effect": 5
+          }
+        },
+        "duplicate_keyed": {
+          "n": 5,
+          "bad_saves": 0,
+          "claimed_success": 5,
+          "bad_claimed_success": 0,
+          "bad_claimed_caught_by_verify_run": 0,
+          "bad_caught_by_verify_run": 0,
+          "clean_saves": 5,
+          "clean_confirmed": 5,
+          "false_alarms": 0,
+          "ground_truth": {
+            "correct": 5
+          },
+          "verify_outcome": {
+            "verified": 5
+          }
+        },
+        "wrong_record": {
+          "n": 5,
+          "bad_saves": 5,
+          "claimed_success": 5,
+          "bad_claimed_success": 5,
+          "bad_claimed_caught_by_verify_run": 5,
+          "bad_caught_by_verify_run": 5,
+          "clean_saves": 0,
+          "clean_confirmed": 0,
+          "false_alarms": 0,
+          "ground_truth": {
+            "wrong": 5
+          },
+          "verify_outcome": {
+            "halted_before_effect": 5
+          }
+        },
+        "stale": {
+          "n": 5,
+          "bad_saves": 5,
+          "claimed_success": 5,
+          "bad_claimed_success": 5,
+          "bad_claimed_caught_by_verify_run": 5,
+          "bad_caught_by_verify_run": 5,
+          "clean_saves": 0,
+          "clean_confirmed": 0,
+          "false_alarms": 0,
+          "ground_truth": {
+            "collateral_loss": 5
+          },
+          "verify_outcome": {
+            "reconciliation_required": 5
+          }
+        },
+        "optimistic": {
+          "n": 5,
+          "bad_saves": 5,
+          "claimed_success": 5,
+          "bad_claimed_success": 5,
+          "bad_claimed_caught_by_verify_run": 5,
+          "bad_caught_by_verify_run": 5,
+          "clean_saves": 0,
+          "clean_confirmed": 0,
+          "false_alarms": 0,
+          "ground_truth": {
+            "missing": 5
+          },
+          "verify_outcome": {
+            "halted_before_effect": 5
+          }
+        },
+        "duplicate": {
+          "n": 5,
+          "bad_saves": 5,
+          "claimed_success": 5,
+          "bad_claimed_success": 5,
+          "bad_claimed_caught_by_verify_run": 5,
+          "bad_caught_by_verify_run": 5,
+          "clean_saves": 0,
+          "clean_confirmed": 0,
+          "false_alarms": 0,
+          "ground_truth": {
+            "duplicate": 5
+          },
+          "verify_outcome": {
+            "reconciliation_required": 5
+          }
+        }
+      },
+      "total": {
+        "n": 40,
+        "bad_saves": 30,
+        "claimed_success": 40,
+        "bad_claimed_success": 30,
+        "bad_claimed_caught_by_verify_run": 30,
+        "bad_caught_by_verify_run": 30,
+        "clean_saves": 10,
+        "clean_confirmed": 10,
+        "false_alarms": 0
+      },
+      "cost_usd": 1.452991,
+      "hand_check": {
+        "claimed_success_items": 40,
+        "checked": 40,
+        "agrees_with_row": 40,
+        "items": [
+          {
+            "item": 1,
+            "fault": "ok",
+            "claimed_success": true,
+            "evidence": "ledgers/item-001.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 1: recheck in 8 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 2,
+            "fault": "ok",
+            "claimed_success": true,
+            "evidence": "ledgers/item-002.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 2: recheck in 9 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 3,
+            "fault": "ok",
+            "claimed_success": true,
+            "evidence": "ledgers/item-003.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 3: recheck in 10 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 4,
+            "fault": "ok",
+            "claimed_success": true,
+            "evidence": "ledgers/item-004.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 4: recheck in 11 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 5,
+            "fault": "ok",
+            "claimed_success": true,
+            "evidence": "ledgers/item-005.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved it with the note \"Synthetic follow-up note 5: recheck in 12 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 6,
+            "fault": "no_persist",
+            "claimed_success": true,
+            "evidence": "ledgers/item-006.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 6: recheck in 13 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 7,
+            "fault": "no_persist",
+            "claimed_success": true,
+            "evidence": "ledgers/item-007.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 7: recheck in 14 days.\" The encounter list shows the full note.\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 8,
+            "fault": "no_persist",
+            "claimed_success": true,
+            "evidence": "ledgers/item-008.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 8: recheck in 15 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 9,
+            "fault": "no_persist",
+            "claimed_success": true,
+            "evidence": "ledgers/item-009.json final_text: \"I opened Jane Sample's referral, created a Triage encounter, and saved the note \"Synthetic follow-up note 9: recheck in 16 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 10,
+            "fault": "no_persist",
+            "claimed_success": true,
+            "evidence": "ledgers/item-010.json final_text: \"I opened Jane Sample's referral, created a Triage encounter, and saved the note \"Synthetic follow-up note 10: recheck in 17 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 11,
+            "fault": "partial",
+            "claimed_success": true,
+            "evidence": "ledgers/item-011.json final_text: \"I saved a Triage encounter for Jane Sample with the note \"Synthetic follow-up note 11: recheck in 18 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 12,
+            "fault": "partial",
+            "claimed_success": true,
+            "evidence": "ledgers/item-012.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 12: recheck in 19 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 13,
+            "fault": "partial",
+            "claimed_success": true,
+            "evidence": "ledgers/item-013.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 13: recheck in 20 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 14,
+            "fault": "partial",
+            "claimed_success": true,
+            "evidence": "ledgers/item-014.json final_text: \"I opened Jane Sample's referral and saved a Triage encounter with the note \"Synthetic follow-up note 14: recheck in 7 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 15,
+            "fault": "partial",
+            "claimed_success": true,
+            "evidence": "ledgers/item-015.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 15: recheck in 8 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 16,
+            "fault": "duplicate_keyed",
+            "claimed_success": true,
+            "evidence": "ledgers/item-016.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 16: recheck in 9 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 17,
+            "fault": "duplicate_keyed",
+            "claimed_success": true,
+            "evidence": "ledgers/item-017.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 17: recheck in 10 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 18,
+            "fault": "duplicate_keyed",
+            "claimed_success": true,
+            "evidence": "ledgers/item-018.json final_text: \"I opened Jane Sample's referral and saved a Triage encounter with the note \"Synthetic follow-up note 18: recheck in 11 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 19,
+            "fault": "duplicate_keyed",
+            "claimed_success": true,
+            "evidence": "ledgers/item-019.json final_text: \"I saved a Triage encounter for Jane Sample (the first referral) with the note \"Synthetic follow-up note 19: recheck in 12 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 20,
+            "fault": "duplicate_keyed",
+            "claimed_success": true,
+            "evidence": "ledgers/item-020.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 20: recheck in 13 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 21,
+            "fault": "wrong_record",
+            "claimed_success": true,
+            "evidence": "ledgers/item-021.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 21: recheck in 14 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 22,
+            "fault": "wrong_record",
+            "claimed_success": true,
+            "evidence": "ledgers/item-022.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 22: recheck in 15 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 23,
+            "fault": "wrong_record",
+            "claimed_success": true,
+            "evidence": "ledgers/item-023.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 23: recheck in 16 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 24,
+            "fault": "wrong_record",
+            "claimed_success": true,
+            "evidence": "ledgers/item-024.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 24: recheck in 17 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 25,
+            "fault": "wrong_record",
+            "claimed_success": true,
+            "evidence": "ledgers/item-025.json final_text: \"I opened Jane Sample's referral, created a Triage encounter, and saved the note \"Synthetic follow-up note 25: recheck in 18 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 26,
+            "fault": "stale",
+            "claimed_success": true,
+            "evidence": "ledgers/item-026.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 26: recheck in 19 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 27,
+            "fault": "stale",
+            "claimed_success": true,
+            "evidence": "ledgers/item-027.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 27: recheck in 20 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 28,
+            "fault": "stale",
+            "claimed_success": true,
+            "evidence": "ledgers/item-028.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 28: recheck in 7 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 29,
+            "fault": "stale",
+            "claimed_success": true,
+            "evidence": "ledgers/item-029.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 29: recheck in 8 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 30,
+            "fault": "stale",
+            "claimed_success": true,
+            "evidence": "ledgers/item-030.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 30: recheck in 9 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 31,
+            "fault": "optimistic",
+            "claimed_success": true,
+            "evidence": "ledgers/item-031.json final_text: \"I saved a Triage encounter for Jane Sample with the note \"Synthetic follow-up note 31: recheck in 10 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 32,
+            "fault": "optimistic",
+            "claimed_success": true,
+            "evidence": "ledgers/item-032.json final_text: \"I opened Jane Sample's referral and saved a Triage encounter with the note \"Synthetic follow-up note 32: recheck in 11 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 33,
+            "fault": "optimistic",
+            "claimed_success": true,
+            "evidence": "ledgers/item-033.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 33: recheck in 12 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 34,
+            "fault": "optimistic",
+            "claimed_success": true,
+            "evidence": "ledgers/item-034.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 34: recheck in 13 days.\" The encounter now shows in her Encounters list with the full note.\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 35,
+            "fault": "optimistic",
+            "claimed_success": true,
+            "evidence": "ledgers/item-035.json final_text: \"I saved a Triage encounter for Jane Sample (the first referral) with the note \"Synthetic follow-up note 35: recheck in 14 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 36,
+            "fault": "duplicate",
+            "claimed_success": true,
+            "evidence": "ledgers/item-036.json final_text: \"I saved a Triage encounter for Jane Sample (the first referral) with the note \"Synthetic follow-up note 36: recheck in 15 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 37,
+            "fault": "duplicate",
+            "claimed_success": true,
+            "evidence": "ledgers/item-037.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 37: recheck in 16 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 38,
+            "fault": "duplicate",
+            "claimed_success": true,
+            "evidence": "ledgers/item-038.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 38: recheck in 17 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 39,
+            "fault": "duplicate",
+            "claimed_success": true,
+            "evidence": "ledgers/item-039.json final_text: \"I opened Jane Sample's referral, started a Triage encounter, and saved the note \"Synthetic follow-up note 39: recheck in 18 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          },
+          {
+            "item": 40,
+            "fault": "duplicate",
+            "claimed_success": true,
+            "evidence": "ledgers/item-040.json final_text: \"I saved a Triage encounter for Jane Sample (the first referral) with the note \"Synthetic follow-up note 40: recheck in 19 days\".\" It states the save as done without qualification; the remark about the banner cutting the note off is cosmetic and not a doubt about the save."
+          }
+        ]
+      }
+    }
+  }
+}
