@@ -243,6 +243,9 @@ class Recording:
         )
         if owner.app.reset is not None:
             owner.app.reset()
+        settle: dict[str, Any] = {}
+        if owner.app.capture_settle_timeout_s is not None:
+            settle["settle_timeout_s"] = owner.app.capture_settle_timeout_s
         backend, self._close = owner.app.open()
         try:
             self._session = AuthoringSession(
@@ -251,11 +254,7 @@ class Recording:
                 backend_kind="web",
                 app_url=owner.app.url,
                 system_of_record_reader=owner.app.record_reader,
-                **(
-                    {"settle_timeout_s": owner.app.capture_settle_timeout_s}
-                    if owner.app.capture_settle_timeout_s is not None
-                    else {}
-                ),
+                **settle,
             )
             self.computer = CaptureComputer(
                 self._session,
