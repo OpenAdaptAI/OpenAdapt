@@ -283,7 +283,8 @@ class MyAgent:
 - **One action.** A single-action proposal is one click or double click, matching
   the halted step's action. The agent may give a coordinate or, in the
   `playwright_mcp` dialect, a unique CSS selector. Anything else is refused.
-  Return `None` to give up.
+  To give up, return `RepairProposal(model_calls=..., cost_usd=...)` with no
+  action, so the calls it took are counted, or `None`.
 - **The customer's key.** An agent that calls a model must run on the
   customer's own key. Pass `model_key=load_customer_model_key("anthropic")`
   (see [JIT.md](JIT.md)). `SelfRepair` refuses to start without one unless the

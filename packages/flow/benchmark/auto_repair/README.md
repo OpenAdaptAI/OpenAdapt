@@ -38,7 +38,7 @@ before the save.
 | Approved (by the scripted person) | 6 |
 | Resumed and verified by the record check | **6 of 21 (29%)** |
 | Person decisions | 6 (one tap each) |
-| Agent model calls, cost | 18 calls, $0.24 |
+| Agent model calls, cost | 30 calls, $0.43 (from the agent's own log, `calls.json`) |
 
 By drift mode:
 
@@ -52,6 +52,13 @@ By drift mode:
 | provider (a new required "Ordering provider" screen) | Yes, 3 of 3 | Not repaired. The agent declined to choose a provider, a choice the recording doesn't make. |
 | font, zoom | Yes, 3 of 3 each | Not repaired. These are false stops: the click acted, but a pixel `region_stable` postcondition failed after the font changed. No click fixes that, and the agent correctly gave up. |
 | ambiguous, missing, empty | Yes, 3 of 3 each | Never repaired, correctly. A duplicated or missing record goes to a person. |
+
+The stop ledger in these results shows 18 calls and $0.24: when the agent
+gave up, self-repair had no way to count the call that decision took. This PR
+fixes that (an agent gives up with a proposal that has no action but reports
+its calls), so new ledgers count every call; the numbers above come from the
+agent's own log. The same applies to the openIMIS runs below: 7 calls and
+$0.13 in run `b` by the agent's log.
 
 ### MockMed worklist (`results/mockmed-worklist-2026-10-19-a/`)
 
@@ -150,4 +157,4 @@ with `OPENIMIS_STATE_DIR` pointing at the state the stack was created with),
 `pg8000` for the record check, and installed Chrome.
 
 The first two need `ANTHROPIC_API_KEY` (the customer's own key) and a
-Playwright Chromium. They cost about $0.25 and $0.03.
+Playwright Chromium. They cost about $0.45 and $0.03.

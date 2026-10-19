@@ -209,7 +209,8 @@ class RepairProposal:
     ``{"action": "left_click", "coordinate": [846, 457]}`` for ``anthropic``
     or ``{"kind": "click", "x": 846, "y": 457}`` for ``generic``).
     ``actions`` is a bridge of up to ``request.max_actions`` such actions,
-    in order; give one or the other. Clicks may name a point or, where the
+    in order; give one or the other. Give neither to give up while still
+    reporting the model calls and cost it took to decide that. Clicks may name a point or, where the
     dialect allows, a CSS selector. A bridge may type only a parameter's
     value or text the screen shows at that moment. The agent reports the
     model calls it made and their cost; Flow records them and can't measure
@@ -883,6 +884,14 @@ class SelfRepair:
                     detail = "the agent gave up" if proposal is None else ""
                 calls = max(int(getattr(proposal, "model_calls", 0) or 0), 0)
                 cost = max(float(getattr(proposal, "cost_usd", 0.0) or 0.0), 0.0)
+                if (
+                    proposal is not None
+                    and proposal.action is None
+                    and not proposal.actions
+                ):
+                    # A proposal with no action gives up but still reports
+                    # the model calls it took, so the ledger counts them.
+                    proposal, detail = None, "the agent gave up"
                 evidence.model_calls += calls
                 evidence.est_model_cost_usd = round(
                     evidence.est_model_cost_usd + cost, 6

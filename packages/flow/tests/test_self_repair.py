@@ -505,3 +505,26 @@ def test_only_the_ladders_own_refusals_are_repaired(mockmed) -> None:
     delivered = report(error=not_found)
     delivered.results[-1].delivery_attempted = None
     assert "may have reached" in _repairable(delivered, workflow)
+
+
+class GivesUpWithCost(ScriptedAgent):
+    """Gives up on every attempt, reporting the model call each decision took."""
+
+    def propose(self, request: RepairRequest) -> Optional[RepairProposal]:
+        self.requests.append(request)
+        return RepairProposal(model_calls=1, cost_usd=0.02)
+
+
+def test_a_give_up_still_counts_its_model_calls(mockmed, tmp_path) -> None:
+    base_url, bundle = mockmed
+    _reset(base_url)
+    agent = GivesUpWithCost()
+    with _browser():
+        result = _self_repair(base_url, tmp_path, agent).run(bundle, tmp_path / "run")
+    assert result.status == "no_fix"
+    assert result.evidence.reason == "the agent gave up"
+    # The first give-up ends the search, and its call is in the ledger.
+    assert len(agent.requests) == 1
+    assert result.evidence.model_calls == 1
+    assert result.evidence.est_model_cost_usd == 0.02
+    assert _records(base_url) == []

@@ -224,7 +224,8 @@ class BridgeRepairAgent:
             if b.name in ("left_click", "double_click", "type")
         ][: request.max_actions]
         if not actions:
-            return None
+            # Give up, but report the call this decision took.
+            return RepairProposal(model_calls=1, cost_usd=cost)
         if len(actions) == 1:
             return RepairProposal(action=actions[0], model_calls=1, cost_usd=cost)
         return RepairProposal(actions=actions, model_calls=1, cost_usd=cost)
