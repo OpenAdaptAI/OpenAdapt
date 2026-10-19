@@ -1,0 +1,2 @@
+{"app": "mockmed", "host_load_1m": 304.5, "model_calls": 0, "program_from": "code", "receipt_outcome": "VERIFIED", "replay": 1, "seconds": 5.292, "status": "VERIFIED", "verified": true}
+{"app": "mockmed", "host_load_1m": 288.2, "model_calls": 0, "program_from": "code", "receipt_outcome": "VERIFIED", "replay": 2, "seconds": 4.118, "status": "VERIFIED", "verified": true}

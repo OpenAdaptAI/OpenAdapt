@@ -96,9 +96,17 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     p.add_argument(
         "--agent",
         default="claude",
-        help="claude (default), or a JSON file of scripted steps (no model calls)",
+        help=(
+            "claude (default), or a JSON file of scripted steps or code-action "
+            "scripts (no model calls)"
+        ),
     )
-    p.add_argument("--vision", choices=["selective", "every_turn"], default="selective")
+    p.add_argument(
+        "--vision",
+        choices=["selective", "every_turn", "code"],
+        default="selective",
+        help="code: act through one terminal-style tool (docs/CODE_AS_ACTION.md)",
+    )
     p.add_argument("--model", default=None, help="model id (default claude-opus-5-5)")
     p.add_argument("--effort", default="medium")
     p.add_argument("--max-cost", type=float, default=2.0, help="USD cap for run 1")
@@ -160,6 +168,12 @@ def _agent(args: argparse.Namespace) -> Any:
             max_cost_usd=args.max_cost,
         )
     raw = json.loads(Path(args.agent).read_text())
+    if "scripts" in raw:
+        from openadapt_flow.compile_agent.code_action import ScriptedCodeAgent
+
+        return ScriptedCodeAgent(
+            scripts=raw["scripts"], principal_id=raw.get("principal_id")
+        )
     return ScriptedAgent(steps=raw["steps"], principal_id=raw.get("principal_id"))
 
 
