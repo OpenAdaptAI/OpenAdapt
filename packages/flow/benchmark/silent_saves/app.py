@@ -24,8 +24,11 @@ from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-#: The line in MockMed's app.js that reads the fault from the page URL.
-FAULT_LINE = re.compile(r"var FAULT = [^;\n]*;")
+#: The line in MockMed's app.js that reads the fault from the page URL,
+#: matched exactly (no pattern), so a change to it fails closed.
+FAULT_LINE = (
+    "var FAULT = (new URLSearchParams(location.search).get('fault') || '').trim();"
+)
 _BLOCKED = ("/api/reset", "/api/encounter/")
 _FORWARD_REQUEST = ("Content-Type", "Cookie", "Accept")
 _FORWARD_RESPONSE = ("Content-Type", "Set-Cookie", "Location")
@@ -124,9 +127,9 @@ def rewrite_app_js(
     for name in (fault, *drift):
         if not re.fullmatch(r"[a-z_-]+", name):
             raise ValueError(f"bad fault or change name {name!r}")
-    out, n = FAULT_LINE.subn(f"var FAULT = '{fault}';", source, count=1)
-    if n != 1:
+    if source.count(FAULT_LINE) != 1:
         raise RuntimeError("MockMed app.js no longer has the FAULT line to set")
+    out = source.replace(FAULT_LINE, f"var FAULT = '{fault}';")
     for hook, value in (
         (_DRIFT_READ, "'" + ",".join(drift) + "'"),
         (_SLOW_READ, f"'{int(slow_ms)}'" if slow_ms else "null"),
