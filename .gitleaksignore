@@ -48,3 +48,7 @@ eb78575c688f06d7edc04afc69389aad10e1f5fa:packages/flow/tests/fixtures/terminal_v
 # branch commit that added them. The lines carry gitleaks:allow from the next commit on.
 3f0df2191a649540e79a621ac5406ebe2ff228e2:packages/flow/openadapt_flow/jit/authority.py:generic-api-key:101
 3f0df2191a649540e79a621ac5406ebe2ff228e2:packages/flow/openadapt_flow/jit/authority.py:generic-api-key:390
+# MCP teach (PR #1335): the generic-api-key rule matched the variable name `key_dir`
+# in a principal_from_key(...) call in two tests. No credential.
+e8ec96725c4451aa64cb97230c18d04b55d98503:packages/flow/tests/test_mcp_teach_surfaces.py:generic-api-key:147
+e8ec96725c4451aa64cb97230c18d04b55d98503:packages/flow/tests/e2e/test_mcp_teach_e2e.py:generic-api-key:122
