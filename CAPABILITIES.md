@@ -221,7 +221,7 @@ fails when a command is added without being listed here.
 - **Check and admit:** `lint`, `scaffold-verifier`, `check`, `bind-record-checks`, `certify`, `qualify`, `propose-qualification`, `known-ids`, `jit`, `admit`, `approver-grant`.
 - **Run and answer:** `run`, `replay`, `resume`, `approve`, `item-approval`, `triage`, `business-decisions`, `explain`, `console`.
 - **Judge any executor's write:** `verify-run`, `serve-reward` (scores agent training episodes by reading the system of record).
-- **Repair and learn from halts:** `teach`, `teach-branch`, `repair`, `fleet`.
+- **Repair and learn from halts:** `teach`, `teach-branch`, `repair`, `fleet`, `undo` (the undo steps a person approves after a stop).
 - **Give agents the program:** `emit-skill`, `emit-mcp`, `serve-execute`.
 - **Proof:** `seal`, `local-seal`, `countersign`, `attach-seal`.
 - **Run on premises:** `service`, `no-outbound`.
