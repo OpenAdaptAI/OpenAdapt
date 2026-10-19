@@ -446,6 +446,8 @@ class ClaudeAgent:
         self.last_ledger = ledger
         selective = self.vision == "selective"
         self._tool: Any = None
+        tools: list[dict[str, Any]]
+        first: list[dict[str, Any]]
         if self.vision == "code":
             from openadapt_flow.compile_agent.code_action import (
                 CodeActionTool,
@@ -466,8 +468,8 @@ class ClaudeAgent:
             ]
         elif selective:
             system = _SELECTIVE_SYSTEM
-            tools: list[dict[str, Any]] = list(_SELECTIVE_TOOLS)
-            first: list[dict[str, Any]] = [
+            tools = list(_SELECTIVE_TOOLS)
+            first = [
                 {"type": "text", "text": f"Task: {request.instruction}"},
                 {"type": "text", "text": "Current page:\n" + harness.observe().text},
             ]

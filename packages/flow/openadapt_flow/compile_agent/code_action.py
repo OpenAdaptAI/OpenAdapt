@@ -1159,8 +1159,8 @@ class CodeActionTool:
             event = self._event_index()
             self._gates_before = len(self.harness.gate_log)
             self._do({"kind": "press", "key": key}, hint)
-            step = {"action": "press", "key": key}
-            return self._finish_step(step, None, [event], line)
+            pressed: dict[str, Any] = {"action": "press", "key": key}
+            return self._finish_step(pressed, None, [event], line)
 
         element = self._target(positional, named)
         self._gates_before = len(self.harness.gate_log)
@@ -1173,6 +1173,7 @@ class CodeActionTool:
             editable=element.role in _FIELD_ROLES,
         )
         events: list[int] = []
+        step: dict[str, Any]
         if command == "click":
             events.append(self._event_index())
             recorded = self._click(element, hint)
@@ -1223,8 +1224,8 @@ class CodeActionTool:
             commits=element.submits,
         )
         if element.tag == "select":
-            options = {_norm(o): o for o in element.options}
-            option = options.get(_norm(wanted))
+            by_name = {_norm(o): o for o in element.options}
+            option = by_name.get(_norm(wanted))
             if option is None:
                 raise ScriptError(
                     f"{wanted!r} is not an option of @{element.ref}; options: "
@@ -1297,7 +1298,11 @@ class CodeActionTool:
         before = self._scroll_offsets()
         self._do({"kind": "scroll", "dx": 0, "dy": dy}, None)
         moved = before is None or self._scroll_offsets() != before
-        step = {"action": "scroll", "key": f"{where} {px}px", "moved": moved}
+        step: dict[str, Any] = {
+            "action": "scroll",
+            "key": f"{where} {px}px",
+            "moved": moved,
+        }
         out = self._finish_step(step, None, [event], line)
         if not moved:
             raise ScriptError(
