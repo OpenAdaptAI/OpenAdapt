@@ -45,6 +45,12 @@ from typing import Literal, Mapping, Optional, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, model_validator
 
+from openadapt_types.check_level import (
+    CheckLevel,
+    from_verification_tier,
+    to_readback_label,
+)
+
 APPROVER_IDENTITY_SCHEMA: Literal["openadapt.approver-identity/v1"] = (
     "openadapt.approver-identity/v1"
 )
@@ -391,6 +397,52 @@ class ReadBackTier(IntEnum):
 #: RFC-0002 ``verification_tier`` wire values.
 VerificationTierLabel = Literal["independent_readback", "screen_readback", "unchecked"]
 
+#: RFC-0002 ``checked_how`` wire values: the check level
+#: (:mod:`openadapt_flow.check_level`) a check reached. ``unchecked``: nothing
+#: read the save back. ``same_screen``: the screen the save left (Flow tier
+#: 4). ``reopened``: the record opened again in the acting session (tier 3).
+#: ``separate_session``: a separately signed-in session (tier 2).
+#: ``system_of_record``: the system of record (tier 1).
+#: ``counterparty_confirmed``: the other party confirmed it.
+CheckedHowLabel = Literal[
+    "unchecked",
+    "same_screen",
+    "reopened",
+    "separate_session",
+    "system_of_record",
+    "counterparty_confirmed",
+]
+
+CHECKED_HOW_VALUES: tuple[CheckedHowLabel, ...] = (
+    "unchecked",
+    "same_screen",
+    "reopened",
+    "separate_session",
+    "system_of_record",
+    "counterparty_confirmed",
+)
+
+
+def checked_how_for_flow_tier(tier: Optional[int]) -> CheckedHowLabel:
+    """The ``checked_how`` value for a Flow ``VerificationTier`` (1 to 4).
+
+    ``None`` or any other value is ``unchecked``.
+    """
+
+    try:
+        level = from_verification_tier(tier)
+    except ValueError:
+        level = CheckLevel.UNCHECKED
+    return level.label  # type: ignore[return-value]
+
+
+#: The ``verification_tier`` each ``checked_how`` value is consistent with.
+CHECKED_HOW_TIER: Mapping[CheckedHowLabel, VerificationTierLabel] = {
+    level.label: to_readback_label(level)  # type: ignore[misc]
+    for level in CheckLevel
+}
+
+
 _TIER_LABELS: Mapping[ReadBackTier, VerificationTierLabel] = {
     ReadBackTier.INDEPENDENT_READBACK: "independent_readback",
     ReadBackTier.SCREEN_READBACK: "screen_readback",
@@ -661,6 +713,10 @@ __all__ = [
     "ReadBackOutcome",
     "ReadBackTier",
     "VerificationTierLabel",
+    "CHECKED_HOW_TIER",
+    "CHECKED_HOW_VALUES",
+    "CheckedHowLabel",
+    "checked_how_for_flow_tier",
     "ReviewReason",
     "StepClass",
     "approver_from_legacy",

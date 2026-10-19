@@ -17,7 +17,16 @@ import re
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, Literal, Mapping, Optional, Sequence, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Iterable,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    cast,
+)
 
 if TYPE_CHECKING:
     from openadapt_flow.compiler.annotate import StepAnnotator
@@ -2045,6 +2054,10 @@ def compile_recording(
     from openadapt_flow.runtime import layout_drift as _layout
 
     layout_fingerprints: dict[str, "_layout.LayoutFingerprint"] = {}
+    from openadapt_flow.runtime import render_scale as _render_scale
+
+    scale_salt = _render_scale.new_salt_hex()
+    scale_landmarks: dict[str, list[list[Any]]] = {}
 
     def cached_lines(i: int, suffix: str, png: bytes) -> list[OcrLine]:
         key = (i, suffix)
@@ -2118,6 +2131,11 @@ def compile_recording(
             # size and font metrics, no text (runtime.layout_drift).
             layout_fingerprints[step_id] = _layout.fingerprint(
                 frame_lines, (int(frame.shape[1]), int(frame.shape[0]))
+            )
+            # Unique label lines as salted hashes with their centres, for the
+            # display-scale estimate (runtime.render_scale). No text.
+            scale_landmarks[step_id] = _render_scale.scale_landmark_set(
+                frame_lines, salt_hex=scale_salt, exclude_texts=exclude_texts
             )
             crop_region = _clip_away_param_lines(
                 crop_region, click, frame_lines, exclude_texts
@@ -2497,6 +2515,54 @@ def compile_recording(
                     event,
                 )
             )
+        elif kind == "read":
+            # A demonstrated read: the person marked a field's value box as an
+            # output. It compiles to a READ step; nothing is actuated, so it
+            # gets no postconditions (pass 2 skips it). A marked label box
+            # becomes the anchor, so replay moves the value box with the label.
+            from openadapt_flow.ir import ReadStepSpec
+            from openadapt_flow.records.schema import FieldSpec, ReadProof
+
+            value_region = tuple(int(v) for v in event["region"])
+            if len(value_region) != 4:
+                raise ValueError(f"read event {i} needs region [x, y, w, h]")
+            read_anchor: Optional[Anchor] = None
+            label_region = event.get("label_region")
+            if label_region is not None:
+                if before_png is None:
+                    raise ValueError(f"read event {i} has a label box but no frame")
+                lx, ly, lw, lh = (int(v) for v in label_region)
+                label_rel = f"templates/{step_id}.png"
+                (bundle / label_rel).write_bytes(
+                    _crop_png(before_png, (lx, ly, lw, lh))
+                )
+                read_anchor = Anchor(
+                    template=label_rel,
+                    region=(lx, ly, lw, lh),
+                    click_point=(lx + lw // 2, ly + lh // 2),
+                    ocr_text=event.get("label_text"),
+                )
+            field_spec = FieldSpec.model_validate(event["field"])
+            pending.append(
+                (
+                    Step(
+                        id=step_id,
+                        intent=f"read {field_spec.name}",
+                        action=ActionKind.READ,
+                        anchor=read_anchor,
+                        read=ReadStepSpec(
+                            schema_name=str(event["schema_name"]),
+                            field=field_spec,
+                            region=value_region,
+                            proof=ReadProof.model_validate(event.get("proof") or {}),
+                            on_review=event.get("on_review", "halt"),
+                        ),
+                    ),
+                    before_png,
+                    after_png,
+                    event,
+                )
+            )
         elif kind == "switch_surface":
             target = str(event.get("surface") or "")
             from openadapt_flow.runtime.surfaces import url_origin
@@ -2525,6 +2591,8 @@ def compile_recording(
                 stamped.surface = str(event["surface"])
             if event.get("opens"):
                 stamped.opens = [str(sid) for sid in event["opens"]]
+            if event.get("closes_surface") is True:
+                stamped.closes_surface = True
 
     # Collapse a demonstrated native/pixel option selection into one explicit
     # SELECT_OPTION contract. This is deliberately evidence-gated and remote-only:
@@ -2691,8 +2759,8 @@ def compile_recording(
             step.dialog = _dialog_identity(event["dialog"], exclude_texts)
         if event.get("submit_binding") is not None:
             binding_observations[step.id] = event["submit_binding"]
-        if step.action is ActionKind.SCROLL:
-            continue  # see the scroll branch in pass 1
+        if step.action in (ActionKind.SCROLL, ActionKind.READ):
+            continue  # see the scroll and read branches in pass 1
         if step.action is ActionKind.SWITCH_SURFACE:
             # The switch's screen identity: one stable text line from the
             # FIRST frame of the new surface (every line there is "new"), with
@@ -3255,7 +3323,12 @@ def compile_recording(
     if layout_fingerprints:
         fp_path = bundle / _layout.FINGERPRINT_ASSET
         fp_path.parent.mkdir(parents=True, exist_ok=True)
-        fp_path.write_bytes(_layout.dump_bundle_fingerprints(layout_fingerprints))
+        fp_path.write_bytes(
+            _layout.dump_bundle_fingerprints(
+                layout_fingerprints,
+                scale_landmarks={"salt": scale_salt, "steps": scale_landmarks},
+            )
+        )
 
     write_compile_notes(bundle, compile_notes)
     workflow.save(bundle)

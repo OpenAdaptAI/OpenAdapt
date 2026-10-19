@@ -13,6 +13,7 @@ from openadapt_flow.countersign.document import (
     EXECUTE_RECEIPT_SCHEMA,
     CountersignReport,
 )
+from openadapt_flow.readback_ladder import CHECKED_HOW_LABELS
 
 __all__ = ["executor_line", "headline", "render_report", "tier_line"]
 
@@ -73,6 +74,11 @@ def executor_line(report: CountersignReport) -> str:
     return _EXECUTORS.get(str(kind), f"{kind} (unrecognized; treat as unknown)") + (
         " (declared by the run record)"
     )
+
+
+_CHECKED_HOW_TEXT = {
+    code: f"{code} ({label})" for code, label in CHECKED_HOW_LABELS.items()
+}
 
 
 def tier_line(report: CountersignReport) -> str:
@@ -152,6 +158,11 @@ def render_report(report: CountersignReport, *, show_names: bool = True) -> str:
     rows: list[tuple[str, str]] = [
         ("Executor", executor_line(report)),
         ("Verification tier", tier_line(report)),
+        *(
+            [("Checked how", _CHECKED_HOW_TEXT.get(report.checked_how, "unrecognized"))]
+            if report.checked_how is not None
+            else []
+        ),
         ("Effect verdict", str(report.effect_verdict or "not stated (Execute v1)")),
         ("Outcome", str(report.outcome)),
         ("Receipt schema", str(report.receipt_schema)),

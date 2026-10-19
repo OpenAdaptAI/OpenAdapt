@@ -745,6 +745,12 @@ class Replayer:
             None uses ``$OPENADAPT_JIT_KEY_DIR`` or ``~/.openadapt/jit``.
     """
 
+    # Display-scale state (see __init__); class defaults keep partially
+    # constructed replayers, as some tests build them, on recorded geometry.
+    _render_scale_attempted: bool = False
+    _render_scale_inner: Optional[Backend] = None
+    _render_scale_evidence: Optional[dict[str, Any]] = None
+
     def __init__(
         self,
         backend: Backend,
@@ -785,12 +791,14 @@ class Replayer:
         surface_backends: Optional[Mapping[str, Backend]] = None,
         attended_draft_by: Optional[Any] = None,
         draft_key_dir: Optional[Path] = None,
+        read_clipboard: Optional[Any] = None,
         deployment_surface: Optional[str] = None,
         layout_drift: Optional[bool] = None,
         layout_drift_tolerances: Optional[Any] = None,
         layout_drift_advisor: Optional[Callable[[Any], Optional[str]]] = None,
         secret_env_overrides: Optional[Mapping[str, str]] = None,
         readback_pipeline: Optional["ReadbackPipeline"] = None,
+        render_scale: Optional[bool] = None,
     ) -> None:
         # Per-run secret sources (worklist workers): secret param name -> the
         # NAME of the env var holding its value, so each worker signs in with
@@ -803,6 +811,11 @@ class Replayer:
         # by a named person (the canary). Checked in run().
         self._attended_draft_by = attended_draft_by
         self._draft_key_dir = draft_key_dir
+        # READ steps: the clipboard of the driven session (a
+        # records.read.ClipboardReader), or None for OCR-only reads. Values
+        # read this run, by field name, for later steps' read_gate.
+        self._read_clipboard = read_clipboard
+        self._field_reads: dict[str, Any] = {}
         if vision is None:
             import openadapt_flow.vision as vision  # lazy: heavy OCR deps
 
@@ -854,6 +867,16 @@ class Replayer:
         self.layout_drift_advisor = layout_drift_advisor
         self._layout_fingerprints: Optional[dict[str, Any]] = None
         self._layout_target_kind: Optional[str] = None
+        # Display-scale normalization (runtime.render_scale). At the first
+        # step with a recorded fingerprint, a frame that drifted from it gets
+        # one scale estimate from the recorded labels; when the estimate
+        # holds, the run continues on a view of the session resampled to the
+        # recorded geometry. None = on wherever the layout-drift check is on;
+        # True/False forces it.
+        self.render_scale = render_scale
+        self._render_scale_attempted = False
+        self._render_scale_inner: Optional[Backend] = None
+        self._render_scale_evidence: Optional[dict[str, Any]] = None
         # Defaulted to the ``openadapt_flow.vision`` module above when None, so it
         # is always populated by the time replay runs; typed Any (a namespace-like
         # facade exposing find_template/ocr/wait_settled/...).
@@ -1390,6 +1413,7 @@ class Replayer:
         surface_override: bool = False,
         execution_origin: Optional[str] = None,
         execution_entry_url: Optional[str] = None,
+        execution_target_origin: Optional[str] = None,
         prior_screenshots_may_leave_box: bool = False,
         prior_model_calls: int = 0,
         prior_external_network_calls: Literal[
@@ -1462,6 +1486,12 @@ class Replayer:
             execution_entry_url: Browser URL requested before replay. Hosted
                 validation binds this to the runner's entry URL so workflows
                 that start below `/` retain their required path.
+            execution_target_origin: For a non-web run, the app this run
+                drives, as ``<kind>://<target>`` (see
+                :func:`openadapt_flow.surface_selection.surface_target_origin`).
+                Only an admitted JIT program's canary match reads it; it is
+                not written to the report, which keeps ``execution_origin``
+                for browser origins.
             prior_screenshots_may_leave_box: Durable-resume audit carry. True
                 when an earlier leg of the same logical run was configured with
                 an egress-capable screenshot consumer.
@@ -1482,6 +1512,7 @@ class Replayer:
         # fingerprints for this run.
         self._layout_target_kind = execution_target_kind
         self._layout_fingerprints = None
+        self._reset_render_scale()
         production_refusal = self._production_qualification_refusal(workflow)
         if production_refusal is not None:
             raise ValueError(production_refusal)
@@ -1499,7 +1530,7 @@ class Replayer:
                 workflow=workflow,
                 attended_by=self._attended_draft_by,
                 key_dir=self._draft_key_dir,
-                execution_origin=execution_origin,
+                execution_origin=execution_origin or execution_target_origin,
                 effect_verifier=self.effect_verifier,
                 at_run=True,
             )
@@ -1533,6 +1564,7 @@ class Replayer:
             if self.governed_authorization is not None
             else uuid.uuid4().hex
         )
+        self._field_reads = {}
         self._idempotency_reservation_owned = False
         self._qualification_fault_mutations = []
         self._qualification_fault_public_key = None
@@ -2475,6 +2507,7 @@ class Replayer:
                 self._surface_environment_observations
             )
         report.qualification_fault_mutations = list(self._qualification_fault_mutations)
+        report.render_scale = self._render_scale_evidence
         from openadapt_flow.runtime.variant_stamp import current_variant_route
 
         if (variant_route := current_variant_route()) is not None:
@@ -3698,9 +3731,13 @@ class Replayer:
                 report=report,
                 workflow=workflow,
             )
+        # Values read before the loop stay in scope; values a row reads do
+        # not carry over to the next row's read_gate.
+        reads_before_loop = dict(self._field_reads)
         for i, row in enumerate(rows):
             iter_params = {**params, **row}
             _record_loop_iteration(report, state.id, i, row)
+            self._field_reads = dict(reads_before_loop)
             self._walk_graph(
                 body,
                 graph_id=loop.body,
@@ -5948,9 +5985,11 @@ class Replayer:
                 cursor = frames[depth + 1].loop
                 rows = cursor.rows if cursor is not None else []
                 start_i = (cursor.row_index + 1) if cursor is not None else 0
+                reads_before_loop = dict(self._field_reads)
                 for i in range(start_i, len(rows)):
                     iter_params = {**params, **rows[i]}
                     _record_loop_iteration(report, state.id, i, rows[i])
+                    self._field_reads = dict(reads_before_loop)
                     self._walk_graph(
                         body,
                         graph_id=loop.body,
@@ -6936,6 +6975,15 @@ class Replayer:
                 effect_verifier=api_effect_verifier,
                 effects=api_effects,
             )
+        if step.read_gate is not None:
+            # Checked before any actuation path: an API-bound write must not
+            # skip the gate that _act applies to a GUI write.
+            refusal = self._read_gate_refusal(step, result)
+            if refusal is not None:
+                result.ok = False
+                result.error = refusal
+                result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+                return result
         if (
             qualification_path != "gui"
             and self.api_actuator is not None
@@ -7083,6 +7131,9 @@ class Replayer:
                 run_dir, evidence_step_id, "before", before_png
             )
             last_frame = before_png
+            before_png = self._maybe_scale_render(
+                step, before_png, bundle_dir, workflow
+            )
             drift_error = self._layout_drift_error(
                 step, before_png, bundle_dir, workflow
             )
@@ -11340,8 +11391,142 @@ class Replayer:
                 needs_person=True,
             )
 
+    def _read_gate_refusal(self, step: Step, result: StepResult) -> Optional[str]:
+        """Halt before acting when values this step needs are below its gate."""
+
+        from openadapt_flow.records.schema import GradeTooLow, RecordRead
+
+        gate = step.read_gate
+        assert gate is not None
+        reads = tuple(self._field_reads.values())
+        if gate.fields:
+            missing = [name for name in gate.fields if name not in self._field_reads]
+            reads = tuple(r for r in reads if r.field in gate.fields)
+        else:
+            missing = []
+        record = RecordRead.model_construct(
+            schema_name="",
+            schema_version=1,
+            record_key="",
+            run_id=self._run_id,
+            read_at="",
+            fields=reads,
+        )
+        try:
+            gate.check(record)
+            if missing:
+                raise GradeTooLow(
+                    "", {name: "unchecked" for name in missing}, gate.min_grade
+                )
+        except GradeTooLow as exc:
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            listed = ", ".join(f"{k} ({v})" for k, v in exc.below.items())
+            return (
+                f"Step '{step.id}' ({step.intent}) needs read values at "
+                f"{gate.min_grade} or better; below it: {listed}. Halting for "
+                "a person"
+            )
+        return None
+
+    def _act_read(
+        self,
+        step: Step,
+        resolution: Optional[Resolution],
+        *,
+        workflow: Workflow,
+        params: Mapping[str, RuntimeParamScalar],
+        before_png: bytes,
+        result: StepResult,
+    ) -> Optional[str]:
+        """READ: read one field into ``result.field_read``. Zero model calls:
+        OCR and the clipboard are deterministic channels."""
+
+        from openadapt_flow.records.read import read_field
+        from openadapt_flow.records.schema import SealRef
+
+        spec = step.read
+        assert spec is not None
+        region = self._translate_recorded_region(step, resolution, spec.region)
+        clipboard = self._read_clipboard
+        if spec.proof.double_read and clipboard is None:
+            result.failure_category = "runtime_failure"
+            return (
+                f"Step '{step.id}' ({step.intent}) asks for a double read but "
+                "this run has no clipboard channel"
+            )
+        if clipboard is not None:
+            # Focusing and copying a field is input delivery, so it passes the
+            # same authorization gate as any other input.
+            refusal = self._delivery_authorization_refusal(
+                workflow, params, step, result
+            )
+            if refusal is not None:
+                return refusal
+            result.delivery_attempted = True
+        seal = SealRef(run_id=self._run_id) if spec.proof.seal else None
+        try:
+            field_read = read_field(
+                spec.field,
+                self.backend,
+                region,
+                proof=spec.proof,
+                clipboard=clipboard,
+                copy_keys=tuple(spec.copy_keys),
+                ocr=self.vision.ocr,
+                step_id=step.id,
+                seal=seal,
+                frame_png=before_png,
+            )
+        except Exception as exc:  # noqa: BLE001 - a read failure is a halt
+            result.failure_category = "runtime_failure"
+            return f"Step '{step.id}' ({step.intent}) could not read: {exc}"
+        result.field_read = field_read
+        result.actuation = "read"
+        self._field_reads[spec.field.name] = field_read
+        if field_read.needs_review and spec.on_review == "halt":
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            return (
+                f"Step '{step.id}' ({step.intent}) read a value that needs "
+                f"review ({field_read.review_reason}). Halting for a person"
+            )
+        return None
+
     @timed_span("actuate")
     def _act(
+        self,
+        step: Step,
+        resolution: Optional[Resolution],
+        params: Mapping[str, RuntimeParamScalar],
+        **kwargs: Any,
+    ) -> Optional[str]:
+        """Perform the step's action.
+
+        A click recorded as closing its own popup (``Step.closes_surface``)
+        arms the page backend's one-shot expectation first
+        (:class:`~openadapt_flow.backend.PageCloseExpectationBackend`), so a
+        "page closed" report from that click counts as delivery once the page
+        is confirmed closed. Every other step leaves such a report uncertain.
+        """
+
+        expect = (
+            getattr(self.backend, "expect_page_close", None)
+            if step.closes_surface
+            else None
+        )
+        if not callable(expect):
+            return self._act_answering_dialog(step, resolution, params, **kwargs)
+        backend = self.backend
+        expect()
+        try:
+            return self._act_answering_dialog(step, resolution, params, **kwargs)
+        finally:
+            cancel = getattr(backend, "cancel_page_close", None)
+            if callable(cancel):
+                cancel()
+
+    def _act_answering_dialog(
         self,
         step: Step,
         resolution: Optional[Resolution],
@@ -11430,6 +11615,19 @@ class Replayer:
         Returns:
             An error string (no action performed / partial) or None.
         """
+        if step.read_gate is not None:
+            refusal = self._read_gate_refusal(step, result)
+            if refusal is not None:
+                return refusal
+        if step.action is ActionKind.READ:
+            return self._act_read(
+                step,
+                resolution,
+                workflow=workflow,
+                params=params,
+                before_png=before_png,
+                result=result,
+            )
         if step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
             assert resolution is not None  # guaranteed by _resolve_step
             x, y = resolution.point
@@ -13866,6 +14064,11 @@ class Replayer:
         def pixel_tier() -> Optional[IdentityCheck]:
             if pixel_reference_is_run_bound():
                 return None  # defer to the OCR parameter check (see above)
+            if self._render_scale_inner is not None:
+                # The live crop is a resampled render at another display
+                # scale. The tier's thresholds hold only between matching
+                # renders, so it abstains; the OCR tier decides or halts.
+                return None
             recorded_png, live_png = identifier_crops()
             return identity_mod.verify_pixel_identity(
                 recorded_png,
@@ -15558,7 +15761,135 @@ class Replayer:
             kind = self._layout_target_kind or workflow.surface
         if kind in ("rdp", "citrix"):
             return True
-        return type(self.backend).__name__ == "FreeRDPBackend"
+        backend = self._render_scale_inner or self.backend
+        return type(backend).__name__ == "FreeRDPBackend"
+
+    def _live_session_profile(self) -> Optional[str]:
+        """Digest of the pinned remote-session profile, when there is one."""
+        transport = getattr(self.backend, "transport", None)
+        profile = getattr(getattr(transport, "profile", None), "sha256", None)
+        return profile if isinstance(profile, str) else None
+
+    def _session_profile_changed(self, recorded: Any) -> bool:
+        live = self._live_session_profile()
+        return bool(
+            recorded.profile_sha256 and live and recorded.profile_sha256 != live
+        )
+
+    def _reset_render_scale(self) -> None:
+        """Return to the caller's backend and forget the last estimate."""
+        if self._render_scale_inner is not None:
+            release = getattr(self.backend, "release_frame_sources", None)
+            if callable(release):
+                release()
+            self.backend = self._render_scale_inner
+        self._render_scale_inner = None
+        self._render_scale_attempted = False
+        self._render_scale_evidence = None
+
+    def _load_layout_fingerprints(
+        self, bundle_dir: Path, workflow: Workflow
+    ) -> dict[str, Any]:
+        from openadapt_flow.runtime import layout_drift as drift_mod
+
+        if self._layout_fingerprints is None:
+            self._layout_fingerprints = drift_mod.load_bundle_fingerprints(
+                self._asset_bytes(
+                    Path(bundle_dir), drift_mod.FINGERPRINT_ASSET, workflow=workflow
+                )
+            )
+        return self._layout_fingerprints
+
+    def _maybe_scale_render(
+        self,
+        step: Step,
+        frame_png: bytes,
+        bundle_dir: Optional[Path],
+        workflow: Workflow,
+    ) -> bytes:
+        """Estimate the session's display scale once; return the frame to use.
+
+        Runs at the first step that has a recorded fingerprint. A frame that
+        matches the fingerprint, or gives no confident estimate, is returned
+        unchanged and the layout-drift check judges it as before. Otherwise
+        the backend is replaced by a
+        :class:`~openadapt_flow.runtime.render_scale.RenderScaledBackend` and
+        the frame is returned in the recorded geometry, where the same
+        layout-drift check must then pass.
+        """
+        if self._render_scale_attempted or bundle_dir is None:
+            return frame_png
+        enabled = (
+            self.render_scale
+            if self.render_scale is not None
+            else self._layout_drift_on(workflow)
+        )
+        if not enabled or self._surface_router is not None:
+            return frame_png
+        from openadapt_flow.runtime import layout_drift as drift_mod
+        from openadapt_flow.runtime import render_scale as scale_mod
+
+        recorded = self._load_layout_fingerprints(Path(bundle_dir), workflow).get(
+            step.id
+        )
+        if recorded is None:
+            return frame_png
+        self._render_scale_attempted = True
+        try:
+            import io
+
+            from PIL import Image
+
+            with Image.open(io.BytesIO(frame_png)) as img:
+                viewport = (int(img.width), int(img.height))
+        except Exception:  # noqa: BLE001 - undecodable: leave it to the drift check
+            return frame_png
+        if self._session_profile_changed(recorded):
+            # A pinned remote-session profile (scale, DPI, font smoothing) is
+            # a deployment decision; a different profile still halts below.
+            self._render_scale_evidence = {
+                "status": "no_estimate",
+                "reason": "the pinned remote session profile changed",
+            }
+            return frame_png
+        lines = self.vision.ocr(frame_png)
+        live = drift_mod.fingerprint(lines, viewport)
+        verdict = drift_mod.compare(
+            recorded,
+            live,
+            self.layout_drift_tolerances or drift_mod.Tolerances(),
+        )
+        if not verdict.drifted:
+            self._render_scale_evidence = {"status": "recorded_geometry"}
+            return frame_png
+        salt, hashed = drift_mod.load_scale_landmarks(
+            self._asset_bytes(
+                Path(bundle_dir), drift_mod.FINGERPRINT_ASSET, workflow=workflow
+            )
+        )
+        landmarks = scale_mod.hashed_landmarks(
+            hashed.get(step.id, [])
+        ) + scale_mod.anchor_landmarks(workflow.steps)
+        pairs = scale_mod.match_landmarks(landmarks, lines, salt_hex=salt)
+        transform, reason = scale_mod.estimate_render_transform(
+            pairs,
+            recorded_viewport=recorded.viewport,
+            live_viewport=viewport,
+        )
+        if transform is None:
+            self._render_scale_evidence = {
+                "status": "no_estimate",
+                "reason": reason,
+                "drift": list(verdict.reasons),
+            }
+            return frame_png
+        scaled = scale_mod.render_scaled_backend(self.backend, transform)
+        self._render_scale_inner = self.backend
+        self.backend = cast(Backend, scaled)
+        self._render_scale_evidence = {"status": "normalized", **transform.evidence()}
+        # The layout-drift check below now judges the normalized frame, so a
+        # font or layout change that is not a pure rescale still stops here.
+        return scaled.normalize(frame_png)
 
     def _layout_drift_error(
         self,
@@ -15577,18 +15908,12 @@ class Replayer:
             return None
         from openadapt_flow.runtime import layout_drift as drift_mod
 
-        if self._layout_fingerprints is None:
-            self._layout_fingerprints = drift_mod.load_bundle_fingerprints(
-                self._asset_bytes(
-                    Path(bundle_dir), drift_mod.FINGERPRINT_ASSET, workflow=workflow
-                )
-            )
-        recorded = self._layout_fingerprints.get(step.id)
+        recorded = self._load_layout_fingerprints(Path(bundle_dir), workflow).get(
+            step.id
+        )
         if recorded is None:
             return None
-        transport = getattr(self.backend, "transport", None)
-        profile = getattr(transport, "profile", None)
-        live_profile = getattr(profile, "sha256", None)
+        live_profile = self._live_session_profile()
         try:
             import io
 
@@ -15598,8 +15923,42 @@ class Replayer:
                 viewport = (int(img.width), int(img.height))
         except Exception:  # noqa: BLE001 - an undecodable frame is drift
             viewport = (0, 0)
+        lines = self.vision.ocr(frame_png)
+        tolerances = self.layout_drift_tolerances or drift_mod.Tolerances()
+        if self._render_scale_inner is not None and not self._session_profile_changed(
+            recorded
+        ):
+            # A normalized frame is judged label by label: the recorded label
+            # set says where each label sat and how large it was, so OCR box
+            # jitter on other lines cannot pass for a font change.
+            from openadapt_flow.runtime import render_scale as scale_mod
+
+            salt, hashed = drift_mod.load_scale_landmarks(
+                self._asset_bytes(
+                    Path(bundle_dir), drift_mod.FINGERPRINT_ASSET, workflow=workflow
+                )
+            )
+            details = (
+                scale_mod.check_normalized_frame(
+                    hashed.get(step.id, []),
+                    lines,
+                    salt_hex=salt,
+                    text_height_ratio=tolerances.text_height_ratio,
+                    landmark_px=tolerances.landmark_px,
+                )
+                if salt is not None
+                else None
+            )
+            if details:
+                return (
+                    f"Layout drift before step '{step.id}' ({step.intent}) on "
+                    f"the display-scaled session: {'; '.join(details)} — the "
+                    "screen no longer matches the recording; refusing to act."
+                )
+            if details is not None:
+                return None
         live = drift_mod.fingerprint(
-            self.vision.ocr(frame_png),
+            lines,
             viewport,
             landmarks=list(recorded.landmarks),
             profile_sha256=(live_profile if isinstance(live_profile, str) else None),
@@ -15608,7 +15967,7 @@ class Replayer:
             drift_mod.check_layout(
                 recorded,
                 live,
-                tolerances=self.layout_drift_tolerances or drift_mod.Tolerances(),
+                tolerances=tolerances,
                 advisor=self.layout_drift_advisor,
             )
         except drift_mod.LayoutDriftHalt as halt:

@@ -19,7 +19,6 @@ ROOT = Path(__file__).resolve().parents[1]
 # Package name -> first release that fixes the advisories the audit reported.
 PYTHON_FLOORS = {
     "anyio": "4.14.2",  # PYSEC-2026-4024, PYSEC-2026-4025
-    "gitpython": "3.1.60",  # PYSEC-2026-3982, PYSEC-2026-3983, PYSEC-2026-3984
     "urllib3": "2.8.0",  # PYSEC-2026-4175, PYSEC-2026-4176, PYSEC-2026-4177
 }
 NPM_FLOORS = {
