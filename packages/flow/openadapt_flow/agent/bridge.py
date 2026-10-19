@@ -154,6 +154,11 @@ _GET_RUN_USAGE = (
 class AgentBridge:
     """Expose workflows as agent tools: operator bundles or the sandbox."""
 
+    #: The :class:`~openadapt_flow.agent.ledger.TaskLedger` ``serve`` attaches
+    #: when runs are allowed. ``mcp.build_server`` serves its job tools and
+    #: feeds it every run result.
+    ledger: Any = None
+
     def __init__(
         self,
         bundles_dir: Optional[Path],

@@ -86,14 +86,21 @@ def test_correct_row_abstains_without_list():
     assert _check("AC50061", "AC50061", None).status == "abstain"
 
 
-def test_correct_row_verifies_with_complete_list_using_a_fresh_capture():
+def test_correct_row_verifies_with_complete_list_using_fresh_captures():
     out: dict = {}
     check = _check("AC50061", "AC50061", _ids(), out=out)
     assert check.status == "verified"
     assert check.known_id_evidence is not None
-    assert check.known_id_evidence.reads == 2
-    assert check.known_id_evidence.frames == 2
-    assert out["captures"] == 1  # the second read took its own screenshot
+    assert check.known_id_evidence.reads == 3
+    assert check.known_id_evidence.frames == 3
+    assert out["captures"] == 2  # each later read took its own screenshot
+    assert [look.kind for look in check.looks] == [
+        "frame",
+        "frame",
+        "magnified",
+        "known_ids",
+    ]
+    assert check.looks[-1].outcome == "resolves"
 
 
 def test_fresh_capture_showing_another_record_blocks_the_lift():
