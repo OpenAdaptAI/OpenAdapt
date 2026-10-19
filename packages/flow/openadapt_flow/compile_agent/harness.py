@@ -198,15 +198,26 @@ class Harness:
         control = self._control(str(ref))
         return {"kind": "click", "x": control.x, "y": control.y}, control.ref
 
-    def commit_target(self, native: Mapping[str, Any]) -> Optional[str]:
-        """What may commit a write in ``native``, or None. Nothing is performed."""
+    def commit_target(
+        self, native: Mapping[str, Any], ref: Optional[str] = None
+    ) -> Optional[str]:
+        """What may commit a write in ``native``, or None. Nothing is performed.
 
+        ``ref`` is the text field a ``type`` will be typed into (it is clicked
+        first), so the check looks at that field rather than today's focus.
+        """
+
+        if ref is not None and native.get("kind") == "type":
+            control = (self._last.controls if self._last else {}).get(ref)
+            text = str(native.get("text") or "")
+            if control is not None and _editable(control):
+                return "a typed line break" if any(c in text for c in "\r\n") else None
         hit = self._commit_target(native)
         return hit[0] if hit is not None else None
 
     # -- every action -------------------------------------------------------------
 
-    def act(self, native: Mapping[str, Any]) -> Observation:
+    def act(self, native: Mapping[str, Any], ref: Optional[str] = None) -> Observation:
         """Perform one native action in the computer's dialect, behind the gate.
 
         Raises:
@@ -269,6 +280,12 @@ class Harness:
             elif op.kind == "type" and any(ch in (op.text or "") for ch in "\r\n"):
                 focused = _observe.focused_element(self.page) or {}
                 return ("a typed line break", focused.get("scope"))
+            elif op.kind == "type" and " " in (op.text or ""):
+                # A typed space on a focused button presses it.
+                focused = _observe.focused_element(self.page) or {}
+                if not focused.get("editable"):
+                    label = str(focused.get("name") or "the focused element")
+                    return (f"typing a space on {label}", focused.get("scope"))
             elif op.kind == "hotkey":
                 focused = _observe.focused_element(self.page) or {}
                 shortcut = "+".join([*op.modifiers, op.key or ""])
@@ -383,8 +400,59 @@ class SurfaceObservation:
         return hits[0] if len(hits) == 1 else None
 
 
+def _editable(control: Any) -> bool:
+    """A web control that takes typed text."""
+
+    return control.tag in ("input", "textarea") or control.role in (
+        "textbox",
+        "combobox",
+    )
+
+
 #: Roles a click only focuses. Typing into them commits nothing.
 _EDITABLE_ROLES = frozenset({"text_input", "combobox"})
+#: Roles whose click only changes what the form shows or holds.
+_SAFE_CLICK_ROLES = _EDITABLE_ROLES | frozenset({"checkbox", "radio", "tab"})
+#: First words of labels that navigate or open something, and never write.
+_NAVIGATION_WORDS = frozenset(
+    {
+        "open",
+        "new",
+        "next",
+        "back",
+        "previous",
+        "cancel",
+        "close",
+        "search",
+        "find",
+        "view",
+        "show",
+        "edit",
+        "select",
+        "start",
+        "go",
+        "home",
+        "menu",
+        "more",
+        "expand",
+        "collapse",
+    }
+)
+#: Keys that move focus or dismiss, which never write by themselves.
+_FOCUS_KEYS = frozenset(
+    {
+        "Tab",
+        "Escape",
+        "ArrowUp",
+        "ArrowDown",
+        "ArrowLeft",
+        "ArrowRight",
+        "Home",
+        "End",
+        "PageUp",
+        "PageDown",
+    }
+)
 
 
 @dataclass
@@ -397,12 +465,15 @@ class SurfaceHarness:
     :class:`CaptureComputer`, so the recording is the one any other capture
     makes.
 
-    The save gate gates the same actions as on the web: a click on a control
-    whose label names a write, a click on a point no control covers, Enter,
-    Space, a typed line break, and any shortcut. On these surfaces the harness
-    can't read which form or row a control sits in, so it can't do the
-    right-record check itself. A person approves every gated action instead
-    (the hold). Without a hold, a gated action is refused.
+    The save gate is stricter than on the web, because the harness can't read
+    which form or row a control sits in and so can't do the right-record check
+    itself. A click is let through only on a control named by its ref whose
+    role only edits the form (a text field, a check box, a tab) or whose label
+    plainly navigates (Open, New, Cancel); every other click, including any
+    click at x,y, is gated. So are Enter, Space and any typing outside a text
+    field, a typed line break, a single-letter key (a dialog's accelerator),
+    and every shortcut. A person approves every gated action (the hold).
+    Without a hold, a gated action is refused.
     """
 
     computer: CaptureComputer
@@ -498,65 +569,83 @@ class SurfaceHarness:
 
     def click(self, ref: str) -> Observation:
         control = self._control(ref)
-        return self.act({"kind": "click", "x": control.x, "y": control.y})
+        return self.act({"kind": "click", "x": control.x, "y": control.y}, ref=ref)
 
     def type_text(self, text: str, ref: Optional[str] = None) -> Observation:
         if ref is not None:
             self.click(ref)
-        return self.act({"kind": "type", "text": text})
+        return self.act({"kind": "type", "text": text}, ref=ref)
 
     def press(self, key: str) -> Observation:
         return self.act({"kind": "press", "key": key})
 
-    def act(self, native: Mapping[str, Any]) -> Observation:
+    def act(self, native: Mapping[str, Any], ref: Optional[str] = None) -> Observation:
         """Perform one generic action, behind the gate (see the class doc).
+
+        ``ref`` names the control a click is on, or the text field a ``type``
+        goes into. A click with no ref is a click at x,y.
 
         Raises:
             GateRefused: the action may commit a write and no person approved it.
             UnsupportedAction: the recording can't hold the action.
         """
 
-        commit = self.commit_target(native)
+        commit = self.commit_target(native, ref)
         if commit is not None:
             self._check_gate(commit)
         obs = self.computer.execute(native)
         self.stats.actions += 1
-        clicked = self._control_at(native)
-        if clicked is not None or native.get("kind") in ("click", "double_click"):
-            self._focused_role = clicked.role if clicked is not None else None
+        kind = native.get("kind")
+        if kind in ("click", "double_click", "right_click"):
+            control = self._ref_control(ref)
+            self._focused_role = control.role if control is not None else None
+        elif kind == "hotkey" or (
+            kind == "press" and str(native.get("key")) in _FOCUS_KEYS | {"Enter"}
+        ):
+            self._focused_role = None
         return obs
 
-    def _control_at(self, native: Mapping[str, Any]) -> Optional[SurfaceControl]:
-        if native.get("kind") not in ("click", "double_click", "right_click"):
+    def _ref_control(self, ref: Optional[str]) -> Optional[SurfaceControl]:
+        if ref is None or self._last is None:
             return None
-        x, y = native.get("x"), native.get("y")
-        if x is None or y is None or self._last is None:
-            return None
-        for control in self._last.controls.values():
-            if control.x == x and control.y == y:
-                return control
-        return None
+        return self._last.controls.get(ref)
 
-    def commit_target(self, native: Mapping[str, Any]) -> Optional[str]:
+    def commit_target(
+        self, native: Mapping[str, Any], ref: Optional[str] = None
+    ) -> Optional[str]:
         """What may commit a write in ``native``, or None (see the class doc)."""
 
+        control = self._ref_control(ref)
+        focus = control.role if control is not None else self._focused_role
+        editable = focus in _EDITABLE_ROLES
         for op in translate(self.dialect, native):
             if op.kind in ("click", "double_click", "right_click"):
-                control = self._control_at(native)
                 if control is None:
-                    return "a click on a point the harness can't name"
-                if control.role in _EDITABLE_ROLES:
-                    continue
+                    return "a click at a point, not on a named control"
                 if _observe.commit_label(control.name):
                     return control.name
-            elif op.kind == "type" and any(ch in (op.text or "") for ch in "\r\n"):
-                return "a typed line break"
+                words = control.name.lower().split()
+                if control.role in _SAFE_CLICK_ROLES or (
+                    words and words[0] in _NAVIGATION_WORDS
+                ):
+                    continue
+                return control.name or f"a {control.role} with no name"
+            elif op.kind == "type":
+                text = op.text or ""
+                if any(ch in text for ch in "\r\n"):
+                    return "a typed line break"
+                if text and not editable:
+                    return "typing outside a text field"
             elif op.kind == "hotkey":
                 return "the shortcut " + "+".join([*op.modifiers, op.key or ""])
-            elif op.kind == "press" and op.key in ("Enter", "Space"):
-                if op.key == "Space" and self._focused_role in _EDITABLE_ROLES:
-                    continue
-                return f"{op.key} on the focused control"
+            elif op.kind == "press":
+                key = op.key or ""
+                if key in ("Enter", "Return"):
+                    return "Enter on the focused control"
+                if key == "Space" and not editable:
+                    return "Space on the focused control"
+                if len(key) == 1 and not editable:
+                    return f"the key {key!r} outside a text field"
         return None
 
     def _check_gate(self, control: str) -> None:

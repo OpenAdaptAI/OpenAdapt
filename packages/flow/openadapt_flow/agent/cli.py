@@ -1095,7 +1095,10 @@ def _serve_teach(args: argparse.Namespace, serve) -> int:
         + f"; {len(teach.taught)} taught workflow(s); runs folder {runs_dir}",
         file=sys.stderr,
     )
-    serve(bridge, teach=teach)
+    try:
+        serve(bridge, teach=teach)
+    finally:
+        teach.close()
     return 0
 
 

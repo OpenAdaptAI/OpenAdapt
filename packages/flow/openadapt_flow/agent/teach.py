@@ -41,7 +41,7 @@ from __future__ import annotations
 import base64
 import re
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional
 
@@ -128,6 +128,12 @@ class TeachConfig:
     reset: Optional[Callable[[], None]] = None
     #: Tests only: build the live backend for a surface.
     open_backend: Optional[Callable[[Any], Any]] = None
+    #: How long a taught run waits for run 1 or a canary to finish.
+    app_wait_s: float = 600.0
+
+    #: One writer at a time on the app: run 1, the canaries and taught runs
+    #: would otherwise count each other's records in their checks.
+    app_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def __post_init__(self) -> None:
         self.cache_dir = Path(self.cache_dir).resolve()
@@ -185,7 +191,13 @@ class TaughtEngine:
             reset=self.config.reset,
             open_backend=self.config.open_backend,
         )
-        replay = compiler.run(**inputs)
+        if not self.config.app_lock.acquire(timeout=self.config.app_wait_s):
+            # A run 1 or a canary is still writing to the app. Nothing ran.
+            return EngineResult(reason="not_ready_to_run")
+        try:
+            replay = compiler.run(**inputs)
+        finally:
+            self.config.app_lock.release()
         if replay.verified:
             reason = "saved_and_checked"
         elif replay.status == "not_admitted":
@@ -473,27 +485,30 @@ class TeachBridge:
 
     # -- what the MCP layer asks a person ------------------------------------------
 
-    def hold_needed(self, arguments: Mapping[str, Any]) -> Optional[str]:
-        """For ``teach_act``: what this action may commit, when a person must
-        approve it first. None when no approval is needed."""
+    def hold_needed(self, arguments: Mapping[str, Any]) -> Optional[dict[str, Any]]:
+        """For ``teach_act``: when a person must approve this action first,
+        what it may commit, a description, and the binding the approval
+        covers (this run, this action, the app as it is now). Else None."""
 
         run = self._active()
         if not run.person_approves_saves:
             return None
         answer = self._run_call("preview", arguments)
-        if "error" in answer:
-            return None  # teach_act reports the same error, performing nothing
-        return answer.get("commit")
+        if "error" in answer or not answer.get("commit"):
+            return None  # teach_act reports any error, performing nothing
+        return answer
 
-    def hold_message(self, commit: str) -> str:
+    def hold_message(self, hold: Mapping[str, Any]) -> str:
+        commit = str(hold.get("commit"))
         task = self._compiler.task if self._compiler is not None else None
         identity = ", ".join(self._compiler.on_screen) if self._compiler else ""
         return (
             "The agent is teaching OpenAdapt a task"
             + (f" ({task.task_id})" if task is not None else "")
-            + f" and is about to do {commit!r}, which may save a record. Look at "
-            f"the app: is the record {identity} on screen, and should this save "
-            "happen? It is a real entry in this app."
+            + f" and is about to {hold.get('action')} ({commit}), which may "
+            f"save a record. Look at the app: is the record {identity} on "
+            "screen, and should this happen? It is a real entry in this app. "
+            "Your answer covers only this action on the screen as it is now."
         )
 
     def confirm_checks_message(self, arguments: Mapping[str, Any]) -> str:
@@ -620,20 +635,30 @@ class TeachBridge:
             jit = compiler._jit()
             if jit.admitted or jit.candidate() is not None:
                 return {"started": False, **self._status(compiler.task.key)}
+            if not self.config.app_lock.acquire(blocking=False):
+                raise BridgeError(
+                    "a canary or a taught run is writing to the app; try "
+                    "teach_start again when it is done"
+                )
             admitter = self.config.admitter
             run = DrivenRun(
                 compiler,
                 inputs,
                 principal_id=admitter.principal_id if admitter is not None else None,
                 hold=self.config.hold,
+                on_done=self.config.app_lock.release,
             )
+            # Kept even if it fails to start: until its thread ends, no other
+            # run 1 may start on the app.
+            self._run, self._compiler = run, compiler
             try:
                 run.start()
             except Exception as exc:
                 # A run that opens late must not wait for actions forever.
                 run.abort()
-                raise BridgeError(f"run 1 did not start: {exc}") from None
-            self._run, self._compiler = run, compiler
+                raise BridgeError(
+                    f"run 1 did not start: {exc}; it is being stopped"
+                ) from None
         observation = self._run_call("observe")
         return {
             "started": True,
@@ -855,9 +880,16 @@ class TeachBridge:
         ]
 
         def admit_and_emit() -> Any:
-            result = compiler.admit(
-                admitter=self.config.admitter, canary_params=canaries
-            )
+            if not self.config.app_lock.acquire(blocking=False):
+                raise BridgeError(
+                    "run 1 or a taught run is writing to the app; admit when it is done"
+                )
+            try:
+                result = compiler.admit(
+                    admitter=self.config.admitter, canary_params=canaries
+                )
+            finally:
+                self.config.app_lock.release()
             if result.admitted:
                 result.emitted = compiler.emit()
             return result
@@ -892,6 +924,14 @@ class TeachBridge:
                 }
             )
         return out
+
+    def close(self, timeout_s: float = 30.0) -> None:
+        """Stop a run 1 the agent never finished (server exit). No draft."""
+
+        run = self._run
+        if run is not None and not run.done.is_set():
+            run.abort()
+            run.done.wait(timeout_s)
 
     # -- admitted programs as workflows ---------------------------------------------------
 

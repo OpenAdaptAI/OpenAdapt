@@ -380,13 +380,13 @@ def build_server(
                 await _confirm_admit(context, authoring)
                 human_confirmed = True
             elif teaching and name == "teach_act":
-                commit = await anyio.to_thread.run_sync(
+                hold = await anyio.to_thread.run_sync(
                     teach.hold_needed, arguments or {}
                 )
-                if commit:
+                if hold:
                     await _confirm_with_person(
                         context,
-                        teach.hold_message(commit),
+                        teach.hold_message(hold),
                         title="I am a person and I approve this save",
                         unsupported=(
                             "this save needs a person's approval in an MCP client "
@@ -394,7 +394,7 @@ def build_server(
                         ),
                         declined="the person did not approve the save; nothing was done",
                     )
-                    held_by_person = commit
+                    held_by_person = hold["binding"]
             elif teaching and name == "teach_confirm_checks":
                 message = await anyio.to_thread.run_sync(
                     teach.confirm_checks_message, arguments or {}

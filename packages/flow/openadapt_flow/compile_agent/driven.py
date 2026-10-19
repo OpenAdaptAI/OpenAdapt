@@ -17,13 +17,15 @@ person answered the client's own form.
 
 from __future__ import annotations
 
+import json
 import queue
 import threading
 import time
+import uuid
 from concurrent.futures import Future
 from concurrent.futures import TimeoutError as FutureTimeout
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
 
 from openadapt_flow.compile_agent.agents import AgentLedger
 from openadapt_flow.compile_agent.harness import GateRefused, GateRequest, StaleRef
@@ -70,6 +72,10 @@ class DrivenAgent:
         self._inbox: "queue.Queue[Any]" = queue.Queue()
         self._approved: Optional[str] = None
         self.ledger = AgentLedger(agent="driven")
+        #: This run, and how many actions it has performed: a person's
+        #: approval is bound to both (see :meth:`binding`).
+        self.run_id = uuid.uuid4().hex
+        self.performed = 0
 
     # -- called by the gate, on the run thread -----------------------------------
 
@@ -119,29 +125,58 @@ class DrivenAgent:
             # The caller decides how to scrub it before it leaves the computer.
             h.stats.screenshots_requested += 1
             return {"png": h.computer.screenshot()}
-        native, focus = self._native(command.payload)
+        native, ref = self._native(command.payload)
+        field = ref if native["kind"] == "type" else None
+        if field is not None:
+            # type with a ref clicks the field first. That click must commit
+            # nothing, so it never needs its own approval.
+            focus_click, _ = h.native_for({"ref": field})
+            if h.commit_target(focus_click, field) is not None:
+                raise ValueError(
+                    f"{field!r} is not a text field; click it with its own teach_act"
+                )
+        commit = h.commit_target(native, ref)
+        binding = self.binding(native, ref)
         if command.kind == "preview":
-            return {"commit": h.commit_target(native)}
+            return {
+                "commit": commit,
+                "binding": binding if commit else None,
+                "action": describe(native),
+            }
         if command.kind == "act":
-            if focus is not None:
-                # Focus the field first; a click on a text field commits nothing.
-                h.click(focus)
-            # Only the control the person was shown is approved. If something
-            # else would commit now, the gate asks again and the hold says no.
             held = command.payload.get("_held_by_person")
-            self._approved = str(held) if held else None
+            if held and held != binding:
+                raise ValueError(
+                    "the app or the run changed after the person approved this "
+                    "action, so nothing was done; call teach_act again"
+                )
+            if field is not None:
+                h.click(field)
+                self.performed += 1
+            # Only what the person was shown is approved, once.
+            self._approved = commit if held else None
             try:
-                h.act(native)
+                h.act(native, ref)
             finally:
                 self._approved = None
+                self.performed += 1
             return {"observation": h.observe().text}
         raise ValueError(f"unknown command {command.kind!r}")
+
+    def binding(self, native: Mapping[str, Any], ref: Optional[str]) -> str:
+        """What a person's approval covers: this run, this exact action, and
+        the app as it was after the last action performed."""
+
+        return json.dumps(
+            [self.run_id, self.performed, dict(native), ref], sort_keys=True
+        )
 
     def _native(
         self, action: Mapping[str, Any]
     ) -> tuple[dict[str, Any], Optional[str]]:
-        """A caller's action as the harness's generic action, and the ref of
-        a field to click first (``type`` with a ``ref``). Performs nothing."""
+        """A caller's action as the harness's generic action, and its ref: the
+        control a click is on, or the field a ``type`` goes into (clicked
+        first). Performs nothing."""
 
         kind = action.get("action")
         if kind not in ACTIONS:
@@ -202,7 +237,9 @@ class DrivenRun:
         *,
         principal_id: Optional[str] = None,
         hold: bool = False,
+        on_done: Optional[Callable[[], None]] = None,
     ) -> None:
+        self.on_done = on_done
         self.compiler = compiler
         self.params = dict(params)
         self.agent = DrivenAgent(principal_id=principal_id)
@@ -254,6 +291,8 @@ class DrivenRun:
             self.error = exc
         finally:
             self.done.set()
+            if self.on_done is not None:
+                self.on_done()
 
     def call(
         self,
@@ -281,7 +320,13 @@ class DrivenRun:
             if self.done.is_set() and not future.done():
                 raise RunEnded("run 1 is over")
             if time.monotonic() > deadline:
-                raise TimeoutError("the action did not finish in time")
+                # It may still run later; never let it run behind the
+                # caller's back or twice after a retry. End run 1 instead.
+                self.abort()
+                raise RunEnded(
+                    "the action did not finish in time, so run 1 was stopped; "
+                    "check the app, then start again"
+                )
 
     def finish(self, timeout_s: float = 600.0) -> Any:
         """End run 1, then wait for the compile and the record check."""
@@ -298,3 +343,22 @@ class DrivenRun:
         """End run 1 now. Nothing more is performed and no draft is made."""
 
         self.agent.stop()
+
+
+def describe(native: Mapping[str, Any]) -> str:
+    """One line a person reads before approving ``native``. No typed text."""
+
+    kind = native.get("kind")
+    if kind == "click":
+        return f"click at x={native.get('x')}, y={native.get('y')}"
+    if kind == "type":
+        text = str(native.get("text") or "")
+        ending = " ending in a line break" if text.endswith(("\n", "\r")) else ""
+        return f"type {len(text)} characters{ending}"
+    if kind == "press":
+        return f"press {native.get('key')}"
+    if kind == "hotkey":
+        return "press " + "+".join(
+            [*native.get("modifiers", []), str(native.get("key"))]
+        )
+    return str(kind)

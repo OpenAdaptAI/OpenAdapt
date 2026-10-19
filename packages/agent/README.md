@@ -412,7 +412,7 @@ openadapt-flow compile-agent admit <task dir> --admit-as "<your name>" --canary-
 
 Once the program is admitted, it is in `list_workflows` and `run_workflow` at once and has its own `taught_<name>` tool, and the server sends `notifications/tools/list_changed` to clients that support it. A server started later lists every program taught in its `--teach-dir`.
 
-It works on a web app (`--url`) and on the app a deployment file's `backend:` section names (`--config deploy.yaml`): a native Windows, macOS or Linux window, or a local RDP or Citrix client window. Off the web, OpenAdapt can't read which record a form shows, so a person approves every save in your client's form, and a client without forms can't save. RDP and Citrix have no control tree, and the Windows, macOS and Linux backends don't list controls yet, so off the web your agent needs `--teach-screens scrubbed` to see the screen, and clicks x,y pixels. Admission there fails closed for now: a pixel-only click carries no checked record identity, so the canary is refused and says why. Network RDP (`rdp_host`) is refused.
+It works on a web app (`--url`) and on the app a deployment file's `backend:` section names (`--config deploy.yaml`): a native Windows, macOS or Linux window, or a local RDP or Citrix client window. Off the web, OpenAdapt can't read which record a form shows, so a person approves, in your client's form, every action that might save: any click except on a text field, a check box, a tab or a control that plainly navigates (Open, New, Cancel), any click at x,y, Enter, typing outside a text field, and shortcuts. Each answer covers that one action on the screen as it was; if anything changes first, the action isn't done. A client without forms can't save. RDP and Citrix have no control tree, and the Windows, macOS and Linux backends don't list controls yet, so off the web your agent needs `--teach-screens scrubbed` to see the screen, and clicks x,y pixels. Admission there fails closed for now: a pixel-only click carries no checked record identity, so the canary is refused and says why. Network RDP (`rdp_host`) is refused.
 
 | Flag | What it does |
 | --- | --- |
@@ -420,7 +420,7 @@ It works on a web app (`--url`) and on the app a deployment file's `backend:` se
 | `--teach-dir DIR` | Where drafts and taught programs live (default `RUNS_DIR/teach`). |
 | `--teach-key PEM`, `--teach-policy JSON` | The registered agent's encrypted key (passphrase in `OPENADAPT_JIT_KEY_PASSPHRASE`) and the signed admission policy. Only an agent key under a policy; an admitter key admits from CI with `openadapt-flow jit admit`. |
 | `--key-dir DIR` | The JIT key directory (default `OPENADAPT_JIT_KEY_DIR` or `~/.openadapt/jit`). |
-| `--teach-hold` | On the web, a person also approves every save in the first run. |
+| `--teach-hold` | On the web, a person also approves every save in the first run. Without it, your agent names the identity the save gate checks (`on_screen`); a value every form shows proves nothing, and then only the record check after the run and the person confirming it catch a wrong record. |
 | `--teach-screens scrubbed` | Adds `teach_screen`: the app's screen with identifiers scrubbed, and nothing shared if scrubbing fails. `unscrubbed` skips scrubbing. Off by default. |
 | `--mode production --bundles DIR` | Serves your other workflows next to the taught ones. |
 

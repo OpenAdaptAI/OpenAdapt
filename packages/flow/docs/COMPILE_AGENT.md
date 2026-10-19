@@ -221,9 +221,14 @@ gets a `taught_<name>` tool. See the
 The MCP tools also run on Windows, macOS, Linux, RDP and Citrix: pass
 `FirstRunCompiler(surface=<deployment backend section>)`. Off the web the
 harness is `SurfaceHarness`. It reads the authoring session's
-accessibility tree (no values, no window titles) and gates the same actions,
-but it can't read which form or row a control is in, so a person approves
-every gated action (the hold); without a hold, a gated action is refused. On
+accessibility tree (no values, no window titles). It can't read which form or
+row a control is in, so it gates more than the web harness: every click except
+one, named by its ref, on a text field, a check box, a tab or a control whose
+label plainly navigates (Open, New, Cancel), and every click at x,y, Enter,
+typing outside a text field, single-letter keys and shortcuts. A person
+approves each gated action (the hold); without a hold, it is refused. Over MCP
+the approval is bound to the run, the exact action and the number of actions
+performed so far, so it covers only what the person was shown. On
 RDP and Citrix the canary is refused until pixel identity is qualified
 ([BACKEND_PARITY.md](BACKEND_PARITY.md)).
 

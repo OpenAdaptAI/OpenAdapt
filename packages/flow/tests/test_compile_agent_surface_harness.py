@@ -55,6 +55,7 @@ class FakeSession:
                 "name": "Open",
                 "c": (100, 120),
             },
+            {"node_id": "n_00000004", "role": "button", "name": "Yes", "c": (100, 160)},
         ]
         self.performed: list[tuple[Any, ...]] = []
 
@@ -104,6 +105,7 @@ def test_the_observation_lists_controls_by_ref_without_values() -> None:
         '[n_00000001] text_input "Note"',
         '[n_00000002] button "Save"',
         '[n_00000003] button "Open"',
+        '[n_00000004] button "Yes"',
     ]
     assert obs.find("save").ref == "n_00000002"
     assert not obs.screen_only
@@ -132,38 +134,113 @@ def test_a_person_approves_or_refuses_each_save() -> None:
     assert session.performed == []
 
 
+NOTE, SAVE, OPEN, YES = "n_00000001", "n_00000002", "n_00000003", "n_00000004"
+
+
 @pytest.mark.parametrize(
-    ("steps", "gated"),
+    ("setup", "last", "gated"),
     [
-        ([("click", "n_00000003")], None),
-        ([("click", "n_00000001"), ("type", "a note")], None),
-        ([("click", "n_00000001"), ("press", "Space")], None),
-        ([("click", "n_00000001"), ("type", "a note\n")], "a typed line break"),
-        ([("press", "Enter")], "Enter on the focused control"),
-        ([("hotkey", "s")], "the shortcut Control+s"),
-        ([("at", (5, 5))], "a click on a point the harness can't name"),
+        ([], ("click", OPEN), None),
+        ([], ("click", YES), "Yes"),
+        ([], ("click", SAVE), "Save"),
+        ([("click", NOTE)], ("type", "a note"), None),
+        ([], ("type_into", "a note"), None),
+        ([("click", NOTE)], ("press", "Space"), None),
+        (
+            [("click", NOTE), ("press", "Tab")],
+            ("press", "Space"),
+            "Space on the focused control",
+        ),
+        ([("click", OPEN)], ("type", "y"), "typing outside a text field"),
+        ([], ("press", "y"), "the key 'y' outside a text field"),
+        ([("click", NOTE)], ("type", "a note\n"), "a typed line break"),
+        ([("click", NOTE)], ("press", "Enter"), "Enter on the focused control"),
+        ([], ("hotkey", "s"), "the shortcut Control+s"),
+        # Save's own center, but by x,y: nothing names the control.
+        ([], ("at", (100, 80)), "a click at a point, not on a named control"),
     ],
 )
-def test_what_is_gated(steps: list[tuple[str, Any]], gated: Optional[str]) -> None:
+def test_what_is_gated(setup: list, last: tuple, gated: Optional[str]) -> None:
     harness, session = _harness()
-    last = steps[-1]
-    for kind, arg in steps[:-1]:
-        getattr(harness, {"click": "click", "type": "type_text"}[kind])(arg)
-    native = {
-        "click": lambda a: harness.native_for({"ref": a})[0],
-        "type": lambda a: {"kind": "type", "text": a},
-        "press": lambda a: {"kind": "press", "key": a},
-        "hotkey": lambda a: {"kind": "hotkey", "key": a, "modifiers": ["ctrl"]},
-        "at": lambda a: {"kind": "click", "x": a[0], "y": a[1]},
-    }[last[0]](last[1])
-    assert harness.commit_target(native) == gated
-    if gated is None:
-        harness.act(native)
+    for kind, arg in setup:
+        if kind == "click":
+            harness.click(arg)
+        else:
+            harness.press(arg)
+    kind, arg = last
+    ref = None
+    if kind == "click":
+        native, ref = harness.native_for({"ref": arg})
+    elif kind == "type":
+        native = {"kind": "type", "text": arg}
+    elif kind == "type_into":
+        native, ref = {"kind": "type", "text": arg}, NOTE
+    elif kind == "press":
+        native = {"kind": "press", "key": arg}
+    elif kind == "hotkey":
+        native = {"kind": "hotkey", "key": arg, "modifiers": ["ctrl"]}
     else:
-        before = list(session.performed)
+        native = {"kind": "click", "x": arg[0], "y": arg[1]}
+    assert harness.commit_target(native, ref) == gated
+    before = list(session.performed)
+    if gated is None:
+        harness.act(native, ref)
+        assert len(session.performed) == len(before) + 1
+    else:
         with pytest.raises(GateRefused):
-            harness.act(native)
+            harness.act(native, ref)
         assert session.performed == before
+
+
+def test_an_approval_covers_one_action_on_one_run_as_the_app_was() -> None:
+    harness, session = _harness(hold=None)
+    agent = DrivenAgent()
+    harness.gate.hold = agent.hold
+    agent.harness = harness
+    agent.request = SimpleNamespace(inputs={})
+
+    def call(kind: str, payload: dict) -> dict:
+        from concurrent.futures import Future
+
+        from openadapt_flow.compile_agent.driven import _Command
+
+        return agent._handle(_Command(kind, payload, Future()))
+
+    save = {"action": "click", "ref": SAVE}
+    preview = call("preview", save)
+    assert preview["commit"] == "Save" and preview["action"] == "click at x=100, y=80"
+    # Another action happens while the person reads the form: the approval
+    # no longer covers what is on screen.
+    call("act", {"action": "click", "ref": OPEN})
+    with pytest.raises(ValueError, match="changed after the person approved"):
+        call("act", {**save, "_held_by_person": preview["binding"]})
+    assert ("click", 100, 80) not in session.performed
+    # Another run never matches.
+    other = DrivenAgent()
+    assert (
+        other.binding({"kind": "click", "x": 100, "y": 80}, SAVE)
+        != call("preview", save)["binding"]
+    )
+    # The fresh approval goes through, once.
+    fresh = call("preview", save)
+    call("act", {**save, "_held_by_person": fresh["binding"]})
+    assert session.performed[-1] == ("click", 100, 80)
+    assert harness.gate_log[-1]["decision"] == "approved_by_hold"
+
+
+def test_type_into_a_control_that_is_not_a_field_is_refused() -> None:
+    harness, session = _harness()
+    agent = DrivenAgent()
+    agent.harness, agent.request = harness, SimpleNamespace(inputs={})
+    from concurrent.futures import Future
+
+    from openadapt_flow.compile_agent.driven import _Command
+
+    with pytest.raises(ValueError, match="not a text field"):
+        agent._handle(
+            _Command("preview", {"action": "type", "text": "x", "ref": SAVE}, Future())
+        )
+    assert session.performed == []
 
 
 def test_a_control_that_changed_is_a_stale_ref() -> None:
