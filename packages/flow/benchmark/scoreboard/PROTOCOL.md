@@ -230,3 +230,27 @@ their double send was de-duplicated. They are relabelled `duplicate_keyed`
 (clean saves; see `meta.json`), and items 36 to 40 are the duplicate fault
 without a key. OpenEMR's fixture has no fault injection, so the experiment
 is MockMed only.
+
+## Amendment 4 (2026-10-19): OpenEMR worklist runs, and arm 6
+
+- **Worklist runs.** Arms 3, 4 and 6 on OpenEMR were also run through the
+  throughput harness (`benchmark/openemr_throughput`, #1296, engine
+  b82131e5). It runs 26 referrals as one worklist, after one sign-in per
+  worker. Its worklist stops at the first item that needs a person, and the
+  items not started are `paused`. Each run is listed on its own line under
+  the table, with its engine, beside the October study's run (engine
+  0c642bc0). The harness's own figure, correct saves over the run's wall
+  time, is listed as "worklist throughput".
+- **26 items, not 64.** The harness's made-up surnames repeat every 26
+  items. Item 26 matches item 0, OpenEMR correctly shows a possible
+  duplicate, and the run stops. The first two 64-item runs stopped exactly
+  there. They are kept outside `raw/` and not imported.
+- **Arm 6 is self-loaded.** Eight workers load the host themselves (mean
+  load 42 and 171), so no arm 6 row can pass the per-item rule. Arm 6 is
+  gated on the start only: the load is under 12 when the run starts. The
+  mean load during the run is recorded, and its figure is labelled
+  "self-loaded throughput", never timed per item. It is reported beside arm
+  4's single-worker worklist figure.
+- **Engine of an import.** An imported run's `meta.json` names the engine
+  that made the rows (the study's engine tag, or the batch's own record),
+  not the importer's checkout.

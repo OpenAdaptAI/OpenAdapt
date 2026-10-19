@@ -43,5 +43,19 @@
     "idx": 5,
     "at": 1792422313.1993248
   },
-  "load1_mean": 42.49
+  "load1_mean": 42.49,
+  "gate": {
+    "threshold": 12.0,
+    "waited_s": 130.1,
+    "gave_up": false,
+    "load_at_start": [
+      11.01513671875,
+      15.9072265625,
+      23.6650390625
+    ]
+  },
+  "load1_max": 76.26,
+  "saved_correct": 5,
+  "items_run": 8,
+  "note_gate": "gate, load1_max, saved_correct and items_run copied from the harness summary.json named in source_sha256"
 }

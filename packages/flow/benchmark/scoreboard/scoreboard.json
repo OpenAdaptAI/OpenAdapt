@@ -107,6 +107,65 @@
           "min": 8.46,
           "max": 523.94
         },
+        "run_meta": {
+          "2026-10-18-a": {
+            "run": "2026-10-18-a",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-18T15:50:35-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            },
+            "benchmark_git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2",
+            "task": "mockmed",
+            "arm": "agent",
+            "model": "claude-sonnet-5-5",
+            "n": 100,
+            "faults": true,
+            "max_cost_per_item": 0.5,
+            "sessions": [
+              {
+                "protocol_version": "2026-10-18.1",
+                "written_at": "2026-10-18T17:30:48-0400",
+                "machine": "arm64 Darwin 24.6.0",
+                "cpu_count": 12,
+                "python": "3.12.13",
+                "engine": {
+                  "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+                  "git_head": "46eb17d6c7ae53229fe77dd8f8fc578c88cfea9f"
+                },
+                "benchmark_git_head": "46eb17d6c7ae53229fe77dd8f8fc578c88cfea9f",
+                "task": "mockmed",
+                "arm": "agent",
+                "model": "claude-sonnet-5-5",
+                "n": 100,
+                "faults": true,
+                "max_cost_per_item": 0.5
+              },
+              {
+                "protocol_version": "2026-10-18.1",
+                "written_at": "2026-10-18T20:21:13-0400",
+                "machine": "arm64 Darwin 24.6.0",
+                "cpu_count": 12,
+                "python": "3.12.13",
+                "engine": {
+                  "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+                  "git_head": "79d1b1b68a57c4e1f111caacb0789f55fa79ab04"
+                },
+                "benchmark_git_head": "79d1b1b68a57c4e1f111caacb0789f55fa79ab04",
+                "task": "mockmed",
+                "arm": "agent",
+                "model": "claude-sonnet-5-5",
+                "n": 100,
+                "faults": true,
+                "max_cost_per_item": 0.5
+              }
+            ]
+          }
+        },
         "hand_check": {
           "rows_not_correct": 2,
           "checked": 2,
@@ -207,6 +266,24 @@
         "host_load_1m": {
           "min": 176.29,
           "max": 176.29
+        },
+        "run_meta": {
+          "2026-10-18-a": {
+            "run": "2026-10-18-a",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-18T15:45:50-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            },
+            "benchmark_git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2",
+            "task": "mockmed",
+            "arm": "first_run",
+            "model": "claude-sonnet-5-5"
+          }
         },
         "hand_check": {
           "rows_not_correct": 0,
@@ -328,6 +405,25 @@
           "min": 82.45,
           "max": 532.93
         },
+        "run_meta": {
+          "2026-10-18-a": {
+            "run": "2026-10-18-a",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-18T15:46:48-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            },
+            "benchmark_git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2",
+            "task": "mockmed",
+            "arm": "program",
+            "program_from": "2026-10-18-a",
+            "n": 100
+          }
+        },
         "hand_check": {
           "rows_not_correct": 4,
           "checked": 0,
@@ -424,6 +520,27 @@
         "host_load_1m": {
           "min": 2.572265625,
           "max": 17.49951171875
+        },
+        "run_meta": {
+          "study-main-0c642bc0": {
+            "run": "study-main-0c642bc0",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-19T11:28:24-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "git_head": "0c642bc0",
+              "note": "study engine_tag main-0c642bc0"
+            },
+            "benchmark_git_head": "b46f941432f7b8542c723c46c55745a97675b9ff",
+            "task": "openemr_referral",
+            "arm": "agent",
+            "model": "claude-sonnet-5-5",
+            "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
+            "source_sha256": "b4b24eaa8df86c9a54cc3a435cb6baff1940931e893750a4896fca57bf3eaa87",
+            "note": "the study's published set: engine 0c642bc0, warm, blocks 2-10, valid runs; timed per its start gate (1-minute load < 12)"
+          }
         },
         "hand_check": {
           "rows_not_correct": 10,
@@ -528,8 +645,8 @@
             "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
             "model": "claude-sonnet-5-5",
             "engine": {
-              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
-              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+              "git_head": "0c642bc0",
+              "note": "study engine_tag main-0c642bc0"
             },
             "note": "the study's published set: engine 0c642bc0, warm, blocks 2-10, valid runs; timed per its start gate (1-minute load < 12)"
           }
@@ -599,6 +716,24 @@
         "host_load_1m": {
           "min": 4.28,
           "max": 4.28
+        },
+        "run_meta": {
+          "2026-10-18-a": {
+            "run": "2026-10-18-a",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-18T17:15:55-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+            },
+            "benchmark_git_head": "13d3327c58636033adf5b71460774165a026dd4c",
+            "task": "openemr_referral",
+            "arm": "first_run",
+            "model": "claude-sonnet-5-5"
+          }
         },
         "hand_check": {
           "rows_not_correct": 0,
@@ -729,6 +864,82 @@
           "min": 3.044921875,
           "max": 12.78515625
         },
+        "run_meta": {
+          "study-main-0c642bc0": {
+            "run": "study-main-0c642bc0",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-19T11:28:24-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "git_head": "0c642bc0",
+              "note": "study engine_tag main-0c642bc0"
+            },
+            "benchmark_git_head": "b46f941432f7b8542c723c46c55745a97675b9ff",
+            "task": "openemr_referral",
+            "arm": "program",
+            "model": null,
+            "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
+            "source_sha256": "b4b24eaa8df86c9a54cc3a435cb6baff1940931e893750a4896fca57bf3eaa87",
+            "note": "the study's published set: engine 0c642bc0, warm, blocks 2-10, valid runs; timed per its start gate (1-minute load < 12)"
+          },
+          "worklist-std-2026-10-19": {
+            "run": "worklist-std-2026-10-19",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-19T11:23:10-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm46/packages/flow/openadapt_flow",
+              "git_head": "b82131e51f52d6a365e910cc0818ea92e4c10a1a"
+            },
+            "benchmark_git_head": "97effbd5379dd4242128e6d90e4ada2b8d1e9650",
+            "task": "openemr_referral",
+            "arm": "program",
+            "imported_from": "/Users/abrichr/oa/scratch/scoreboard-runs/openemr/std2",
+            "source_sha256": {
+              "summary.json": "b850db58f39eb8a2ae3bd9a721a3ff814e1e09dabb91019aaa5e57ecf8f443c7",
+              "items.json": "90501c6d92ccdccd5dd5ea3a31d4672c7b527ce763f327539941ba7e8be21f47"
+            },
+            "workers": 1,
+            "readback_window": 0,
+            "processes": false,
+            "speed": {
+              "speed_profile": "standard",
+              "native_fill": false,
+              "page_quiet_ms": 100,
+              "ocr_threads": null
+            },
+            "harness_engine_sha": "b82131e51f52d6a365e910cc0818ea92e4c10a1a",
+            "wall_s": 145.313,
+            "sign_in_s": {
+              "oa_clerk1": 2.44
+            },
+            "stop": {
+              "reason": "Identity check failed for step 'step_040' (click 'Confirm Create New Patient'): a target was found positionally (rung 'structural', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Emergency Contact: Confirm Create New Patient Cancel' (coverage 0.81) \u2014 refusing to act; run aborted",
+              "worker": "oa_clerk1",
+              "idx": 8,
+              "at": 1792421866.219306
+            },
+            "load1_mean": 8.64,
+            "gate": {
+              "threshold": 12.0,
+              "waited_s": 425.2,
+              "gave_up": false,
+              "load_at_start": [
+                10.14306640625,
+                28.3095703125,
+                33.68359375
+              ]
+            },
+            "load1_max": 12.2,
+            "saved_correct": 8,
+            "items_run": 9,
+            "note_gate": "gate, load1_max, saved_correct and items_run copied from the harness summary.json named in source_sha256"
+          }
+        },
         "hand_check": {
           "rows_not_correct": 11,
           "checked": 0,
@@ -740,8 +951,8 @@
             "run": "study-main-0c642bc0",
             "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
             "engine": {
-              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
-              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+              "git_head": "0c642bc0",
+              "note": "study engine_tag main-0c642bc0"
             },
             "note": "the study's published set: engine 0c642bc0, warm, blocks 2-10, valid runs; timed per its start gate (1-minute load < 12)"
           },
@@ -819,6 +1030,63 @@
         "host_load_1m": {
           "min": 10.19,
           "max": 15.18
+        },
+        "run_meta": {
+          "worklist-fast-2026-10-19": {
+            "run": "worklist-fast-2026-10-19",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-19T11:23:10-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm46/packages/flow/openadapt_flow",
+              "git_head": "b82131e51f52d6a365e910cc0818ea92e4c10a1a"
+            },
+            "benchmark_git_head": "97effbd5379dd4242128e6d90e4ada2b8d1e9650",
+            "task": "openemr_referral",
+            "arm": "program_fast",
+            "imported_from": "/Users/abrichr/oa/scratch/scoreboard-runs/openemr/fast2",
+            "source_sha256": {
+              "summary.json": "2f9d1827d7bc3a41b224d598b7a5a8b73b2bcbb3ce3bf8592c3a0c16ba6c079b",
+              "items.json": "8dc28ea4c3af8078656b3219a5fbdede2ae247fc5726a938b575f6604fd280a9"
+            },
+            "workers": 1,
+            "readback_window": 0,
+            "processes": false,
+            "speed": {
+              "speed_profile": "fast",
+              "native_fill": true,
+              "page_quiet_ms": 50,
+              "ocr_threads": 2
+            },
+            "harness_engine_sha": "b82131e51f52d6a365e910cc0818ea92e4c10a1a",
+            "wall_s": 276.754,
+            "sign_in_s": {
+              "oa_clerk1": 2.08
+            },
+            "stop": {
+              "reason": "Identity check failed for step 'step_040' (click 'Confirm Create New Patient'): a target was found positionally (rung 'structural', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Emergency Contact: Confirm Create New Patient Cancel' (coverage 0.81) \u2014 refusing to act; run aborted",
+              "worker": "oa_clerk1",
+              "idx": 16,
+              "at": 1792422163.471354
+            },
+            "load1_mean": 12.64,
+            "gate": {
+              "threshold": 12.0,
+              "waited_s": 15.0,
+              "gave_up": false,
+              "load_at_start": [
+                11.23681640625,
+                20.48046875,
+                29.42724609375
+              ]
+            },
+            "load1_max": 24.09,
+            "saved_correct": 16,
+            "items_run": 17,
+            "note_gate": "gate, load1_max, saved_correct and items_run copied from the harness summary.json named in source_sha256"
+          }
         },
         "hand_check": {
           "rows_not_correct": 1,
@@ -935,6 +1203,132 @@
           "min": 13.16,
           "max": 239.69
         },
+        "run_meta": {
+          "worklist-8w-2026-10-19": {
+            "run": "worklist-8w-2026-10-19",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-19T11:23:10-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm46/packages/flow/openadapt_flow",
+              "git_head": "b82131e51f52d6a365e910cc0818ea92e4c10a1a"
+            },
+            "benchmark_git_head": "97effbd5379dd4242128e6d90e4ada2b8d1e9650",
+            "task": "openemr_referral",
+            "arm": "parallel",
+            "imported_from": "/Users/abrichr/oa/scratch/scoreboard-runs/openemr/par8b",
+            "source_sha256": {
+              "summary.json": "0391f010db55f01412a662b7770d73648a332548c5bcc7ef82c9e93994d85b76",
+              "items.json": "c0a725cfbf3d577add97433a1e1e5133af9ec5e33fedf645350575f7a6ab38d3"
+            },
+            "workers": 8,
+            "readback_window": 0,
+            "processes": true,
+            "speed": {
+              "speed_profile": "fast",
+              "native_fill": true,
+              "page_quiet_ms": 50,
+              "ocr_threads": 2
+            },
+            "harness_engine_sha": "b82131e51f52d6a365e910cc0818ea92e4c10a1a",
+            "wall_s": 59.171,
+            "sign_in_s": {
+              "oa_clerk1": 10.52,
+              "oa_clerk2": 11.5,
+              "oa_clerk3": 10.42,
+              "oa_clerk4": 10.51,
+              "oa_clerk5": 11.51,
+              "oa_clerk6": 10.32,
+              "oa_clerk7": 11.49,
+              "oa_clerk8": 10.53
+            },
+            "stop": {
+              "reason": "worker raised RuntimeError: worker oa_clerk4: Error: Frame.evaluate: Execution context was destroyed, most likely because of a navigation",
+              "worker": "oa_clerk4",
+              "idx": 5,
+              "at": 1792422313.1993248
+            },
+            "load1_mean": 42.49,
+            "gate": {
+              "threshold": 12.0,
+              "waited_s": 130.1,
+              "gave_up": false,
+              "load_at_start": [
+                11.01513671875,
+                15.9072265625,
+                23.6650390625
+              ]
+            },
+            "load1_max": 76.26,
+            "saved_correct": 5,
+            "items_run": 8,
+            "note_gate": "gate, load1_max, saved_correct and items_run copied from the harness summary.json named in source_sha256"
+          },
+          "worklist-8w-window1-2026-10-19": {
+            "run": "worklist-8w-window1-2026-10-19",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-19T11:26:07-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm46/packages/flow/openadapt_flow",
+              "git_head": "b82131e51f52d6a365e910cc0818ea92e4c10a1a"
+            },
+            "benchmark_git_head": "97effbd5379dd4242128e6d90e4ada2b8d1e9650",
+            "task": "openemr_referral",
+            "arm": "parallel",
+            "imported_from": "/Users/abrichr/oa/scratch/scoreboard-runs/openemr/par8w1b",
+            "source_sha256": {
+              "summary.json": "06b21d9d35ffd39a1098953584ba0a29dcbb65c5ec97ee58d436f8254cf9117c",
+              "items.json": "f734cf13bf05eb3edfe5a769ab80e07518953277ccaad6dfc9280334598b95be"
+            },
+            "workers": 8,
+            "readback_window": 1,
+            "processes": true,
+            "speed": {
+              "speed_profile": "fast",
+              "native_fill": true,
+              "page_quiet_ms": 50,
+              "ocr_threads": 2
+            },
+            "harness_engine_sha": "b82131e51f52d6a365e910cc0818ea92e4c10a1a",
+            "wall_s": 152.739,
+            "sign_in_s": {
+              "oa_clerk1": 10.0,
+              "oa_clerk2": 11.06,
+              "oa_clerk3": 10.03,
+              "oa_clerk4": 11.05,
+              "oa_clerk5": 11.05,
+              "oa_clerk6": 9.98,
+              "oa_clerk7": 9.96,
+              "oa_clerk8": 9.96
+            },
+            "stop": {
+              "reason": "Postconditions failed for step 'step_040' (click 'Confirm Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(0, 308, 1280, 451); text_present 'TreatmentInterventionPreferences?' \u2014 run aborted",
+              "worker": "oa_clerk2",
+              "idx": 9,
+              "at": 1792423517.869507
+            },
+            "load1_mean": 171.36,
+            "gate": {
+              "threshold": 12.0,
+              "waited_s": 1030.6,
+              "gave_up": false,
+              "load_at_start": [
+                11.13232421875,
+                45.1162109375,
+                45.62890625
+              ]
+            },
+            "load1_max": 251.62,
+            "saved_correct": 21,
+            "items_run": 23,
+            "note_gate": "gate, load1_max, saved_correct and items_run copied from the harness summary.json named in source_sha256"
+          }
+        },
         "hand_check": {
           "rows_not_correct": 5,
           "checked": 0,
@@ -1041,6 +1435,101 @@
           "min": 6.94,
           "max": 498.31
         },
+        "run_meta": {
+          "2026-10-18-a": {
+            "run": "2026-10-18-a",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-18T15:53:00-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            },
+            "benchmark_git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2",
+            "task": "openimis",
+            "arm": "agent",
+            "model": "claude-sonnet-5-5",
+            "n": 49,
+            "faults": true,
+            "max_cost_per_item": 0.75,
+            "sessions": [
+              {
+                "protocol_version": "2026-10-18.1",
+                "written_at": "2026-10-18T17:18:17-0400",
+                "machine": "arm64 Darwin 24.6.0",
+                "cpu_count": 12,
+                "python": "3.12.13",
+                "engine": {
+                  "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+                  "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+                },
+                "benchmark_git_head": "13d3327c58636033adf5b71460774165a026dd4c",
+                "task": "openimis",
+                "arm": "agent",
+                "model": "claude-sonnet-5-5",
+                "n": 49,
+                "faults": true,
+                "max_cost_per_item": 0.75
+              },
+              {
+                "protocol_version": "2026-10-18.1",
+                "written_at": "2026-10-18T20:21:13-0400",
+                "machine": "arm64 Darwin 24.6.0",
+                "cpu_count": 12,
+                "python": "3.12.13",
+                "engine": {
+                  "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+                  "git_head": "79d1b1b68a57c4e1f111caacb0789f55fa79ab04"
+                },
+                "benchmark_git_head": "79d1b1b68a57c4e1f111caacb0789f55fa79ab04",
+                "task": "openimis",
+                "arm": "agent",
+                "model": "claude-sonnet-5-5",
+                "n": 49,
+                "faults": true,
+                "max_cost_per_item": 0.75
+              },
+              {
+                "protocol_version": "2026-10-18.1",
+                "written_at": "2026-10-19T08:35:28-0400",
+                "machine": "arm64 Darwin 24.6.0",
+                "cpu_count": 12,
+                "python": "3.12.13",
+                "engine": {
+                  "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+                  "git_head": "c2fa4df7ac8e3e97ee9988f7038439d75cd6c23c"
+                },
+                "benchmark_git_head": "c2fa4df7ac8e3e97ee9988f7038439d75cd6c23c",
+                "task": "openimis",
+                "arm": "agent",
+                "model": "claude-sonnet-5-5",
+                "n": 50,
+                "faults": true,
+                "max_cost_per_item": 0.75
+              },
+              {
+                "protocol_version": "2026-10-18.1",
+                "written_at": "2026-10-19T08:46:39-0400",
+                "machine": "arm64 Darwin 24.6.0",
+                "cpu_count": 12,
+                "python": "3.12.13",
+                "engine": {
+                  "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+                  "git_head": "c2fa4df7ac8e3e97ee9988f7038439d75cd6c23c"
+                },
+                "benchmark_git_head": "c2fa4df7ac8e3e97ee9988f7038439d75cd6c23c",
+                "task": "openimis",
+                "arm": "agent",
+                "model": "claude-sonnet-5-5",
+                "n": 50,
+                "faults": true,
+                "max_cost_per_item": 0.75
+              }
+            ]
+          }
+        },
         "hand_check": {
           "rows_not_correct": 1,
           "checked": 1,
@@ -1127,6 +1616,32 @@
         "wall_s_p90": null,
         "items_per_hour": null,
         "host_load_1m": null,
+        "run_meta": {
+          "sb-sonnet-1": {
+            "run": "sb-sonnet-1",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-19T09:05:40-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "76a99fdc8732566028e757c666c83ecdec955bac"
+            },
+            "benchmark_git_head": "76a99fdc8732566028e757c666c83ecdec955bac",
+            "task": "openimis",
+            "arm": "first_run",
+            "model": "claude-sonnet-5-5",
+            "in_table": true,
+            "imported_from": "demo/cua_to_program/results/sb-sonnet-1",
+            "source_sha256": {
+              "agent_ledger.json": "288c85f1021c7def7a69c1e4d648bd3ed0ff9731770d77bdfb9bbe06d4f35888",
+              "agent_run.json": "24717f1e5e9da25478c2f07f11231a5f0a3062afd0dcacf81160a6c96959b7d2",
+              "admission.json": "d2e9b9640daa78bfb44bfa73277219fc8d3676e1df37ee15a2cb4cc1310bc2c9"
+            },
+            "note": "host load not sampled for this run; untimed"
+          }
+        },
         "hand_check": {
           "rows_not_correct": 0,
           "checked": 0,
@@ -1258,6 +1773,92 @@
           "min": 59.0,
           "max": 619.5
         },
+        "run_meta": {
+          "launch-4": {
+            "run": "launch-4",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-19T11:28:24-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/demo-engine-main-plus-1293/packages/flow/openadapt_flow",
+              "git_head": "a8cca993c564fdc13b4c65c01e3e884dcaa50c44"
+            },
+            "benchmark_git_head": "b46f941432f7b8542c723c46c55745a97675b9ff",
+            "task": "openimis",
+            "arm": "program",
+            "imported_from": "demo/cua_to_program/results/launch-4",
+            "source_sha256": {
+              "batch.csv": "b5cef4c4a8b1c322c23c9294bcd3d702e38dbb7836366fe42415de6691832419"
+            },
+            "batch_meta": {
+              "n": 100,
+              "change_at": 50,
+              "ui_change": {
+                "control": "claim form Save button (icon only)",
+                "change": "relabelled \"Save claim\" (extended button, new accessible name)"
+              },
+              "tag": "CN",
+              "profile": "demo (plain Replayer, SQL record check attached)",
+              "environment": {
+                "engine": {
+                  "path": "/Users/abrichr/oa/worktrees/demo-engine-main-plus-1293/packages/flow/openadapt_flow",
+                  "git_head": "a8cca993c564fdc13b4c65c01e3e884dcaa50c44"
+                },
+                "machine": "arm64",
+                "system": "Darwin 24.6.0",
+                "python": "3.12.13",
+                "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2",
+                "app": "openIMIS 25.10 reference stack (synthetic demo data), linux/amd64 images under Rosetta in a colima VM"
+              }
+            },
+            "profile": "demo (plain Replayer, SQL record check attached); not admitted"
+          },
+          "launch-4-c100": {
+            "run": "launch-4-c100",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-19T11:28:25-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/demo-engine-main-plus-1293/packages/flow/openadapt_flow",
+              "git_head": "a8cca993c564fdc13b4c65c01e3e884dcaa50c44"
+            },
+            "benchmark_git_head": "b46f941432f7b8542c723c46c55745a97675b9ff",
+            "task": "openimis",
+            "arm": "program",
+            "imported_from": "demo/cua_to_program/results/launch-4-c100",
+            "source_sha256": {
+              "batch.csv": "43520263778646eff03c24b4225f6f18ff54db8a2b4f9877a5c2c24fe1264eeb"
+            },
+            "batch_meta": {
+              "n": 100,
+              "change_at": 0,
+              "ui_change": {
+                "control": "claim form Save button (icon only)",
+                "change": "relabelled \"Save claim\" (extended button, new accessible name)"
+              },
+              "tag": "CP",
+              "program_run": "launch-4",
+              "max_attempts": 3,
+              "profile": "demo (plain Replayer, SQL record check attached)",
+              "environment": {
+                "engine": {
+                  "path": "/Users/abrichr/oa/worktrees/demo-engine-main-plus-1293/packages/flow/openadapt_flow",
+                  "git_head": "a8cca993c564fdc13b4c65c01e3e884dcaa50c44"
+                },
+                "machine": "arm64",
+                "system": "Darwin 24.6.0",
+                "python": "3.12.13",
+                "git_head": "13d3327c58636033adf5b71460774165a026dd4c",
+                "app": "openIMIS 25.10 reference stack (synthetic demo data), linux/amd64 images under Rosetta in a colima VM"
+              }
+            },
+            "profile": "demo (plain Replayer, SQL record check attached); not admitted"
+          }
+        },
         "hand_check": {
           "rows_not_correct": 6,
           "checked": 0,
@@ -1269,8 +1870,8 @@
             "run": "launch-4",
             "imported_from": "demo/cua_to_program/results/launch-4",
             "engine": {
-              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
-              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+              "path": "/Users/abrichr/oa/worktrees/demo-engine-main-plus-1293/packages/flow/openadapt_flow",
+              "git_head": "a8cca993c564fdc13b4c65c01e3e884dcaa50c44"
             },
             "profile": "demo (plain Replayer, SQL record check attached); not admitted"
           },
@@ -1278,8 +1879,8 @@
             "run": "launch-4-c100",
             "imported_from": "demo/cua_to_program/results/launch-4-c100",
             "engine": {
-              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
-              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+              "path": "/Users/abrichr/oa/worktrees/demo-engine-main-plus-1293/packages/flow/openadapt_flow",
+              "git_head": "a8cca993c564fdc13b4c65c01e3e884dcaa50c44"
             },
             "profile": "demo (plain Replayer, SQL record check attached); not admitted"
           }
@@ -1363,6 +1964,28 @@
         "host_load_1m": {
           "min": 11.22,
           "max": 26.3
+        },
+        "run_meta": {
+          "2026-10-19-a": {
+            "run": "2026-10-19-a",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-19T09:09:37-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "42aadc09d9d0f514bfad7efa1923866e70c6782b"
+            },
+            "benchmark_git_head": "42aadc09d9d0f514bfad7efa1923866e70c6782b",
+            "task": "openimis",
+            "arm": "program_repair",
+            "program_run": "launch-4",
+            "profile": "demo (plain Replayer, SQL record check attached); not admitted",
+            "repair": "SelfRepair (#1265); no signed repair policy (#1294); no fault probe",
+            "approver": "scoreboard:scripted-approver (stands in for a person)",
+            "model": "claude-sonnet-5-5 (repair agent, only if a halt is accepted)"
+          }
         },
         "hand_check": {
           "rows_not_correct": 3,

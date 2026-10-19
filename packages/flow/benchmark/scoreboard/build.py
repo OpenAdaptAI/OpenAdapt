@@ -193,6 +193,7 @@ def build() -> dict[str, Any]:
                 "label": ARM_LABEL.get(arm, arm),
                 **summarize(data["rows"]),
                 "runs": {name: summarize(rows) for name, rows in data["runs"].items()},
+                "run_meta": {m["run"]: m for m in data["meta"]},
                 "hand_check": {
                     "rows_not_correct": len(to_check),
                     "checked": len(to_check & checked),
@@ -399,18 +400,43 @@ def markdown(sb: dict[str, Any]) -> str:
                     f"- {task} / {arm}: fault items {json.dumps(s['fault_items_by_kind'])}"
                 )
         for arm, s in arms.items():
-            if len(s["runs"]) < 2:
+            worklist = any(
+                m.get("wall_s") and m.get("saved_correct") is not None
+                for m in s["run_meta"].values()
+            )
+            if len(s["runs"]) < 2 and not worklist:
                 continue
             # Runs of one arm can differ in engine or harness (meta.json);
             # show each so a blended figure is never the only one.
             for name, r in s["runs"].items():
+                meta = s["run_meta"].get(name, {})
+                engine = str((meta.get("engine") or {}).get("git_head", ""))[:8]
                 lines.append(
-                    f"- {task} / {arm} / run `{name}`: {r['items']} rows, "
-                    f"{r['correct']} of {r['normal_items']} correct, "
-                    f"{r['paused']} paused, task s median "
+                    f"- {task} / {arm} / run `{name}` (engine {engine}): "
+                    f"{r['items']} rows, {r['correct']} of {r['normal_items']} "
+                    f"correct, {r['paused']} paused, task s median "
                     f"{_fmt(r['item_s_median'])} (timed rows only), "
                     f"items/hour {_fmt(r['items_per_hour'])}"
                 )
+                if meta.get("wall_s") and meta.get("saved_correct") is not None:
+                    # The harness's own worklist figure: correct saves over the
+                    # run's wall time. For arm 6 the workers load the host
+                    # themselves, so it is gated on the start only (Amendment 4).
+                    start = ((meta.get("gate") or {}).get("load_at_start") or [None])[0]
+                    label = (
+                        "self-loaded throughput"
+                        if arm == "parallel"
+                        else "worklist throughput"
+                    )
+                    lines.append(
+                        f"  - {label}: "
+                        f"{meta['saved_correct'] / meta['wall_s'] * 3600:.0f} correct "
+                        f"items/hour ({meta['saved_correct']} correct of "
+                        f"{meta['items_run']} run in {meta['wall_s']:.0f} s wall, "
+                        f"{meta.get('workers', 1)} worker(s)); load at start "
+                        f"{'-' if start is None else round(start, 1)}, mean during "
+                        f"{round(meta.get('load1_mean') or 0, 1)}"
+                    )
         for arm, s in arms.items():
             hc = s["hand_check"]
             if arm == "agent" and hc["rows_not_correct"]:
