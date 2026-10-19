@@ -125,7 +125,10 @@ def test_prepare_works_on_a_crlf_checkout(repo: Path) -> None:
     for relative in VERSION_FILES:
         path = repo / relative
         path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
-    _commit(repo, "chore: check out with CRLF")
+    # On Windows the checkout (and so the fixture) is already CRLF, so the
+    # rewrite can leave nothing to commit; the test is the prepare() below.
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "chore: check out with CRLF")
     _commit(repo, "fix(portal): keep the card", touch="src/portal.txt")
 
     version = prepare_release.prepare(repo, today=datetime.date(2026, 10, 19))
