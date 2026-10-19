@@ -1500,6 +1500,10 @@
       "sha256": "745ceef1f66c28255cc11cc895ad1e5b1fab6afce66e822ae185e20af54f1532"
     },
     {
+      "path": "benchmark/silent_saves/fault_set_1.1.0.json",
+      "sha256": "e28f5754abc5942a376269a8e201f884fb06d33273283035cf29de0e2cbb0fa3"
+    },
+    {
       "path": "benchmark/silent_saves/proof/evidence.json",
       "sha256": "2c96b081ea656ab9f89f7f9fd9309f3fe42cacf949ea9f3e15c4b2b521fd6117"
     },
@@ -1518,6 +1522,810 @@
     {
       "path": "benchmark/silent_saves/proof/item-031-optimistic.png",
       "sha256": "9e986101e6fff151f494708f6837f3f5419454aeeec17bf061675693e987c5ed"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/hand_check.json",
+      "sha256": "0c35062c119d26ba0d3cecba301c18d6a58394382118dc98a13de14c5679c848"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/items.csv",
+      "sha256": "0a91fa98002d0c1685faac9b56591cc52d08d157e3cc87e6d4c3e958f7611534"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-001-ledger.json",
+      "sha256": "e33b76101506dc55535deb8f46f4b50815caa28639aae98937c9f1b878ac6fc3"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-002-ledger.json",
+      "sha256": "abb14460ec3eecdeeab013ce669681a03df29aa1b16e709c2bec9889e1ec5041"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-003-ledger.json",
+      "sha256": "c4ed7a9dcd6d5221a94a8da389261bbeaba782f7af238dbc02c72dc20b35247a"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-004-ledger.json",
+      "sha256": "2cb4ba2a104083498d7c00d5a03b980fbfeac410989a16dac1c1f5e8240ac13a"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-005-ledger.json",
+      "sha256": "ef76b1b8ab7453e77dc9569e6caa4d67c44bcf7d8769a011624e9df6e35d4c38"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-006-ledger.json",
+      "sha256": "94990d256e5adde357e930db545118ac928b2a2063d233071c6bde784711ab87"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-007-ledger.json",
+      "sha256": "9be7947abe38d905d0593ca80bc4e8b4e15b82fbd6f6e5ed8aee7d1102414c34"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-008-ledger.json",
+      "sha256": "2617a8e44c383016b19b98cce20651a8b61e5a7f20faeae00389e684c315e884"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-009-ledger.json",
+      "sha256": "775e79075cedc15db8b7013614cf29b40adee4f75c4eca8a3199650af60e424c"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-010-ledger.json",
+      "sha256": "c02c2a849e9e3962b3ba9d1a36d75fba774a6521c26b64fbccd9e4230df38808"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-011-ledger.json",
+      "sha256": "df77cb491b8aea9369702f065b4427729951b98e0580c343c3b4e0c3ae1b28c6"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-012-ledger.json",
+      "sha256": "02278d7ed252f2fb7ff99dc963007a4c7b64fd71a836c29899128d9c213648b0"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-013-ledger.json",
+      "sha256": "36425f28ff1a9cd576c2e96a9ff24653238c57537fda4ffeb633c4d5bd54485b"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-014-ledger.json",
+      "sha256": "2c29a58ab427da814e218190e3ae22706c82d32ad27cb7ae43a1a82c916694a8"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-015-ledger.json",
+      "sha256": "028c99264faf0f39ff1f5bf16dabb51bdd3a92f909b64053f4fc16702a4a7df8"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-016-ledger.json",
+      "sha256": "11954b36fef2642c21805af23f5d6124f152b02631f320807f4b9c35ee5aa074"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-017-ledger.json",
+      "sha256": "8f4dc12a2cdbe5b50e11d22ed00d502e15dc3a91a70b61c0128364765c331b9a"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-018-ledger.json",
+      "sha256": "99bc845867068057af021f6a02c2903a03ba43ced4acdc9650ed0ebc3ebf3fd8"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-019-ledger.json",
+      "sha256": "9207e1dd0d6b2202ef995bfe7e728eb66b454721791fa21d113af3dae4539b84"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-020-ledger.json",
+      "sha256": "c68fbfc98252ab638487bc5fbad0cc49f48ecc99b2d5d2b4c765d05073d28815"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-021-ledger.json",
+      "sha256": "3c4a6b35fd014f19ddf62917369804f6e8d83a21eff83e1348cbdf772b1e2b44"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-022-ledger.json",
+      "sha256": "ae4c20e2af59cbd257185266a580fed6d7fa8deb54d295a8f6720a9202cfc89f"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-023-ledger.json",
+      "sha256": "d297412a531a679951e60ee7a11430c0a7ba97733c1b743fb9b255fab753bb87"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-024-ledger.json",
+      "sha256": "e85dd9383424c21550ad958fbf60d6e15ae640cf53d7ed797f91a81a839f43ae"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-025-ledger.json",
+      "sha256": "217a97e01bdd1432adaf3cd78145d4a6d1924ffe2a30a66c493bd0444453a88f"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-026-ledger.json",
+      "sha256": "ae301d542f4fff16b1145b3a5fdbd264dd0e0fc84698ac1868800190a0785115"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-027-ledger.json",
+      "sha256": "621aa1b6aca9f91324c5d870bc8db7cdf3007b6bab6326b25adab15b4324b4f6"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-028-ledger.json",
+      "sha256": "40633c327985116953113b27e293306d73caebbe4aa90f3bdd53fb220452fd9c"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-029-ledger.json",
+      "sha256": "fa3fb4bb69177ce54623b95fe70fdd996b376925c026901e59ee9ee91aeb464b"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-030-ledger.json",
+      "sha256": "fabce2ccd4fac88d5cafcfd634e9c6285bc2f7904cd3d88db1e662553812bfa3"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-031-ledger.json",
+      "sha256": "ff78473de722b42122ca427fa5a3d23f160cceaa39af60d2f7f0fc3a87ee4eda"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-032-ledger.json",
+      "sha256": "0f22b75e8749f24710c2b167ff8be97690e457332f68f06c237c50bfc8391838"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-033-ledger.json",
+      "sha256": "fa865153b7dc4fb25d7b1313a574a495deedba2518d286d0d8a8a6c1bcb0edb8"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-034-ledger.json",
+      "sha256": "43da48151f15f9422996e6940c5de924d993f773bb24e02750b01261fc699f4f"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-035-ledger.json",
+      "sha256": "36b65b518661004862b5d67d3d91382cef2e202d026a3edffd1953020c4a6f47"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-036-ledger.json",
+      "sha256": "528c4fca51765cfcb9addefde635104f6532af6e50b963fd2ce48539b26e505f"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-037-ledger.json",
+      "sha256": "e298d597453dc2de4be9e8e847c4a7ac64d38b886ce924b6db0d1fe8470cbd55"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-038-ledger.json",
+      "sha256": "df8709323a777f0b35873f71e83fcc097424ddedb12296c1eeedc755c785e5ce"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-039-ledger.json",
+      "sha256": "222e35d0b132d490a7aaa90eb8a2d17e7abdbeebcead86424fd129f0491503ea"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-040-ledger.json",
+      "sha256": "fa2d454c79aacebd0a9356eb156410188c3d121401e923b353c0f2847c218892"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-041-ledger.json",
+      "sha256": "c4cd70e9536465d058462a4c5dba1569563c4ae0b3dfe779479883ff100c575d"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-042-ledger.json",
+      "sha256": "c3d8fa46fd04d1d2bf789ba9d76db3d17eea81818ace4282df42a121c7ae990b"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-043-ledger.json",
+      "sha256": "c7f5e0b72192c04ca37173b757c664ff7c494d0a5142b7e2d450afe01d535856"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-044-ledger.json",
+      "sha256": "ecfdea049d80770f5920a0d96a1432340f3127093528d14945aa1a3c05ebe10f"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-045-ledger.json",
+      "sha256": "5833a2dc2e34c9d3fbfb127832f760c9b9d78bd52c8be14b82cc635d94026833"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-046-ledger.json",
+      "sha256": "a1fbe3a964784dcc703679fe029a96c363563fde377490ca35d8331c1caa0560"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-047-ledger.json",
+      "sha256": "0e741c98a08dd08a926833f33ac2a4c5b0d05834d4aa3c9da2cde18e801261b0"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-048-ledger.json",
+      "sha256": "faea007d927ecc170202b7af054b399ed92377e97805da407dcb32957c659d2e"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-049-ledger.json",
+      "sha256": "bcf138311ca9c5c9efec635a5a2b109a7ee84a5cf80ad477898a556e98fc052d"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-050-ledger.json",
+      "sha256": "c1c4102c719579e249e9e3d3e02325ac8bed3c39c8663729559977e1ea9c13a8"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-051-ledger.json",
+      "sha256": "889c3c3991071551184d58c2b54c3809bdbd40fb5cf0117357a3e05643af0d6f"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-052-ledger.json",
+      "sha256": "f7a6b88b7f0bfc5012f914f0fd7ecf9d9e7d906176081c1d03cbf7d11df6bc82"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-053-ledger.json",
+      "sha256": "72f20e8c525f5db91fecad60b81b8e4cf81d6aeec5aa5ad50c36372adf19d984"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-054-ledger.json",
+      "sha256": "2136cd3a86bc3abd8d0f5864f31a22eef93f8bfd924db69ef7612c22d11e2132"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-055-ledger.json",
+      "sha256": "ccc268f7ce91193348bdd3c72cfb2fdf2a26e751350992c17240135f9d90d5e2"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-056-ledger.json",
+      "sha256": "a3a7ff46054d26b0e3552ff1aff21956cd8355cb74d1e5f290c3388e7db8afc9"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-057-ledger.json",
+      "sha256": "218fe9a2b1dde774b47e374f8ab50893c2373e19ba34ad66fb2a32f00c8102c0"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-058-ledger.json",
+      "sha256": "b4e52a66e424b4a2c332b57af360b82f87f1b762fc8b73ccc9a5e2f57df7c80f"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-059-ledger.json",
+      "sha256": "31735de7751193d46e3ff5be0b90cae3db2d6e869a61e849ba4a6f80be480c48"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-060-ledger.json",
+      "sha256": "24ac81e97e97db43a010514028369d1a73557cb67115c67fbd10fede1094e336"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-061-ledger.json",
+      "sha256": "0807b1f20e4e9bf1d2f18ef01b43d3495948ed15bfe07966d3c548eaa58cfae3"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-062-ledger.json",
+      "sha256": "7765bd672e71695e67b59319412a17a84ac31e703a401516075e86ecefb31a75"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-063-ledger.json",
+      "sha256": "ad746b5473b5df134322c59e700fedf52d2207b8ebd27bcf0903177164ebe613"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-064-ledger.json",
+      "sha256": "28d2280d17c0cfb5b8405bbdb83fd5a95a4fc395c65c4d9f9f33f5ae87080a2b"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-065-ledger.json",
+      "sha256": "7ce5669fed0b908e40c757cacece18443660ce00368ec432f4cfdd29acc51e2e"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-066-ledger.json",
+      "sha256": "1a89d9c2209fe1e89cabbb1305614d06e856aeb34770a05597d7759137090357"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-067-ledger.json",
+      "sha256": "3d0e5b5cfe2d2d03276cfda2a31864f12ae542701e0f9779c6f0c8137bf8e98a"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-068-ledger.json",
+      "sha256": "66f5170ce24c7ee2957ae3a40f8fa89132c3d055d6e5410ef78bc460f45fa815"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-069-ledger.json",
+      "sha256": "b1fcfec7a553ff7f4c262975130731780fe2ea1f7f9f048fe44453d7e976d152"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-070-ledger.json",
+      "sha256": "9f42d57b1adee09a5454334e73229b266027ac33aaa7ad92e5337b4a2434cce0"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-071-ledger.json",
+      "sha256": "94f99c7315de405d72dab32dc82fed2c9a625f13a42ad32a6671ca8eb98b9863"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-072-ledger.json",
+      "sha256": "54dae17c2a9e3d89acf1a7b1dd93f38645bac711be2d4246d776f61ec7eb0dc5"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-073-ledger.json",
+      "sha256": "f15a99d65df3272c5ae55adc0f9ab5896c70f89867fa0f3e5afa166509cd1302"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-074-ledger.json",
+      "sha256": "f4abcb5ba5e98a0a185932dfbb7ac7bc26345da73b8c71f0c4a538c287972a01"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-075-ledger.json",
+      "sha256": "b2a2b6811f2b8bbe70ee1f3fd845850b50891ceebb34c0e3e60e08ca0c9b54f5"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-076-ledger.json",
+      "sha256": "4fe77e5a282eca3187009b328eb571a26e7552c9067cf025137768f1e21a2e8a"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-077-ledger.json",
+      "sha256": "ad95fe34c93c5493dea30d63131a0e33aadf8789a899df2a77dd43118f645993"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-078-ledger.json",
+      "sha256": "f7474172d5566e26e143464405a099e5b7267dd1d17b476b6a62be8a62789b08"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-079-ledger.json",
+      "sha256": "601439bd72cf3e5b45bd634cfd11f5cf6042c9257307a0d459eb4ab42bf0e27f"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-080-ledger.json",
+      "sha256": "217da93e5f637b342fc766855d8f62608ecd1ea30803e59045733ec0471fdf9e"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-081-ledger.json",
+      "sha256": "90aebf22ab62188fe77facc4c07563db78998d7f95f292bc0296f9fa386f336e"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-082-ledger.json",
+      "sha256": "b410d5042ec5ec0d344588b4fbd9e9714aa8c5ec03df240ffcf6d906b7d132e0"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-083-ledger.json",
+      "sha256": "84d09a884fcaa4efcd785f3a817c243de94903db27c60ef63f88fd306723fe95"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-084-ledger.json",
+      "sha256": "cf7830f3416f643fb82a4fa7030cf608d67594a39ad3bc13c3eb0d61dc0ffb05"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-085-ledger.json",
+      "sha256": "52c2248e1a8af19d31b5a15435eebe0a38dd1b8b3521f41269f0eb4c81e6bb2f"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-086-ledger.json",
+      "sha256": "9c014a020a716de85b31222c7bc893de1b83c68feecfb3f24b841e34aef1e3d4"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-087-ledger.json",
+      "sha256": "22bc281e8dc6356f3e54e5cfc0dcb228d93d10ceab6997646bdb5631c9f3504a"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-088-ledger.json",
+      "sha256": "1e9e74b4f311580aa0afcca80fbabb22c052025bd92a9be3adc1f00ff1ec1c82"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-089-ledger.json",
+      "sha256": "b76f902b2f1ce29b0192d4794e189f816a35a0d9b10d8981936c09e54e5c4dfc"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-090-ledger.json",
+      "sha256": "bd7fdb2b426f176ebb6136feb08413e94cd5cc681adce20387844da81207d9fc"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-091-ledger.json",
+      "sha256": "93ab40121f3e46d949648ba0df922a67000672e9a680f0d4881fef237d01856e"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-092-ledger.json",
+      "sha256": "68459d9571ba404bca91b26b93850bb05c125410b78ca395a979e45388f0cf71"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-093-ledger.json",
+      "sha256": "1e09da675015e57c4ba12e48b12122ec6a22fb4c45ca6eb59317a6f9becd6a6a"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-094-ledger.json",
+      "sha256": "f24939c2f6b5dc41bbe0454c1f3e81bf40be1de4ab1e562b28c0d3897c690d37"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-095-ledger.json",
+      "sha256": "c99a2bbdeff4effb0c280115e4075ae1e46b0f65f02b8ab335e770f41c64f800"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-096-ledger.json",
+      "sha256": "6cd342d7b63e96ec9d7cc9f7f52682e102686e0d0ee42f9c486f0693f9f7fd73"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-097-ledger.json",
+      "sha256": "77f912b5a01d948c6a3feb703896f8bc8216fef90b516382f0295eb20e3dc408"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-098-ledger.json",
+      "sha256": "e217dda60bb6eec3e27303730518dccf717ea97ecab519d6a94e243cdf3e001f"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-099-ledger.json",
+      "sha256": "6ecfde47e867b31317fa93d295e7afb6ac4299f3d79b97bcbd8e12dd029473cc"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/ledgers/item-100-ledger.json",
+      "sha256": "5fc7bf3143c1fbb9f89b3b4960dfe23e62d43016c9fb8fddb48e19fb126ebc7c"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/meta.json",
+      "sha256": "b149af734d7d3b01a844235d7a147a6a77a8784535b4aa449e567de42a8f382d"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/summary.json",
+      "sha256": "9f23449ecceb97ff7cfde986270ef4e53e7479e4689729818586ffd55b8cd23e"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19/verify.yaml",
+      "sha256": "53cf93922c61a201583742cad0391dc0f9c2f06af98c7825ceae1cfe4340f942"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-002.json",
+      "sha256": "06bd5c57af4a4309a338d6fe369066398471b75d48af0a9606dfb1bdae2e4ba9"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-027.json",
+      "sha256": "36587729fe32f3c877ea9b07a06f0447bda3685a9565f270c251a96d7f548445"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-037.json",
+      "sha256": "36587729fe32f3c877ea9b07a06f0447bda3685a9565f270c251a96d7f548445"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-047.json",
+      "sha256": "429bb35363b4f64fc7874e3c1083a8a40b3f84c1f6de774edc5a876fd5bb6030"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-048.json",
+      "sha256": "429bb35363b4f64fc7874e3c1083a8a40b3f84c1f6de774edc5a876fd5bb6030"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-049.json",
+      "sha256": "429bb35363b4f64fc7874e3c1083a8a40b3f84c1f6de774edc5a876fd5bb6030"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-050.json",
+      "sha256": "429bb35363b4f64fc7874e3c1083a8a40b3f84c1f6de774edc5a876fd5bb6030"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-051.json",
+      "sha256": "429bb35363b4f64fc7874e3c1083a8a40b3f84c1f6de774edc5a876fd5bb6030"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-052.json",
+      "sha256": "429bb35363b4f64fc7874e3c1083a8a40b3f84c1f6de774edc5a876fd5bb6030"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-053.json",
+      "sha256": "429bb35363b4f64fc7874e3c1083a8a40b3f84c1f6de774edc5a876fd5bb6030"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-054.json",
+      "sha256": "429bb35363b4f64fc7874e3c1083a8a40b3f84c1f6de774edc5a876fd5bb6030"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-055.json",
+      "sha256": "429bb35363b4f64fc7874e3c1083a8a40b3f84c1f6de774edc5a876fd5bb6030"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-056.json",
+      "sha256": "429bb35363b4f64fc7874e3c1083a8a40b3f84c1f6de774edc5a876fd5bb6030"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-057.json",
+      "sha256": "5aef0f967633287c393ae5f815ff81517895a1a8044a5fd697520cd3994ddf1c"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-058.json",
+      "sha256": "73a23097e36cec3d02d31370c10221e14f4f209180ea825fde96bb8a477778b2"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-059.json",
+      "sha256": "ce6b293c09e3174cda4961946da362563fc1eac1dc803a4d511e3f87e7ea728e"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-060-invalid.json",
+      "sha256": "23e47cbfcf5d9a3f0b1c759222bdca5834d7e26733cb56581a5ad34aa6582f32"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-061.json",
+      "sha256": "1b97d57a83a217631af199f24f7b499abbe96697b90f09a94e6ad6a5a4c008d8"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-062.json",
+      "sha256": "29b5b8e39d9e91400b2afae54f92002e24d5abddc1a5da3bb84d5c32ee6bd1c2"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-063.json",
+      "sha256": "a1443c942d8bcd1b6d416940e205c6e26f5c5491f7167688e624aa3a7559dee8"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-064.json",
+      "sha256": "7cbf04355477fdc66973032f5c3d3b41aac72f1e95e04ca338f702f8a1bf42fd"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-065.json",
+      "sha256": "ec48c31c84e8013ef053abc56c1af0a0f9d0655e6a58b2be9ac8aa44e4f200aa"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-066.json",
+      "sha256": "00de5195f4bc89469378daa9f9d58728468d2bd2f0e81b44aace930d4b0648bf"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-067.json",
+      "sha256": "36587729fe32f3c877ea9b07a06f0447bda3685a9565f270c251a96d7f548445"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-077.json",
+      "sha256": "36587729fe32f3c877ea9b07a06f0447bda3685a9565f270c251a96d7f548445"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-087.json",
+      "sha256": "4302135a1309da4049299e0f6aee2d3b5ae796fbb98230ee5897c48e1e272bfe"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-097.json",
+      "sha256": "4e77534d537cf157cb24fbb9c5299b8596e67b1b66e0d69f95e83a110b2e73d8"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-098.json",
+      "sha256": "4e77534d537cf157cb24fbb9c5299b8596e67b1b66e0d69f95e83a110b2e73d8"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-099.json",
+      "sha256": "4e77534d537cf157cb24fbb9c5299b8596e67b1b66e0d69f95e83a110b2e73d8"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/admissions/item-100.json",
+      "sha256": "4e77534d537cf157cb24fbb9c5299b8596e67b1b66e0d69f95e83a110b2e73d8"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/hand_check.json",
+      "sha256": "924771b1b9b9a217c79a9fbc2a503cb4149625d036ea631f04743b7b3db7b7ae"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/item-060-invalid.csv",
+      "sha256": "b18c5040eca3e6ef705e771511fbf5e6a339db54349152931b4d99b37515bc55"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/items.csv",
+      "sha256": "f54d0c32a6b3e43114960bcd5dc6935a9e78b8d212924bf895adafb421753197"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-001-ledger.json",
+      "sha256": "06361c0b2dc93e2c1db10d101c7224ce6cd6796bc2950f5cd5689029577ec967"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-026-ledger.json",
+      "sha256": "6842cb6d4b81323be1c79870870bcf300ac8ec67b50a7acd3cc0b64ad1f8fb89"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-036-ledger.json",
+      "sha256": "86a041abd05f607b8d523471fdec8a542bdea529124c4722552b59d89a345abd"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-046-ledger.json",
+      "sha256": "14b89905c184f1850634ceb691961461db180bc0f90af04b245748a1e64965b2"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-047-ledger.json",
+      "sha256": "dbf56f683a698026c40c3c76480d659f9d85fe5147b821e52435557eefe60875"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-048-ledger.json",
+      "sha256": "8a19c193ab2a053a944bd556ef7872443c414518f0e93875e5bbad86eea0d325"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-049-ledger.json",
+      "sha256": "0b9b75748730811a4be3f29b4913d4f3d36927f6733f1a2dcbf90c562e9cb0f5"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-050-ledger.json",
+      "sha256": "6574ad5d7f74ec4e18d9043814a9fc0deff92564333e30f6a8b02fc09b4c88e6"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-051-ledger.json",
+      "sha256": "5588eb354c29d229eb27399726be26c086dd1e8d208f6b8be856320d0a4f3795"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-052-ledger.json",
+      "sha256": "4f60fec00f775ad0ca175263f3ae122161dbab55827d5a4df731971ddff19ca7"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-053-ledger.json",
+      "sha256": "50969c3c2fd8158f3c9308175a341a47eafc92973ba89d7765afc71fb546f696"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-054-ledger.json",
+      "sha256": "e3fef15cff186d199a87378daf5d92cdd07d6a59d60a1d8a281b0e281539dbcc"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-055-ledger.json",
+      "sha256": "c28341162928e4335e0ae707b3a8063c7fd1d88e7934763d066cd1bcb1bd9431"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-056-ledger.json",
+      "sha256": "2d1bb8e5eb08b07db8644e3dee0f4301a74f0da678d88380e6368af7540b7a19"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-057-ledger.json",
+      "sha256": "26c3d651340a0e89c4aa8bc13ba73115aa09f094e126e96ad30fd2798c1ee6ec"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-058-ledger.json",
+      "sha256": "51ac0ec96d170a29c22d9faaff0ad2405bf3752445c68781a7a38112440a0a8a"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-059-ledger.json",
+      "sha256": "c49cca0a80ec2eb47a5c45b9db2fe49b76402783a016c05a692f03701baa1245"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-060-ledger-invalid-run.json",
+      "sha256": "3f55643173b369eece22f1cb7bcff8d961c54ab49dccaed6a121bea54a3e8b62"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-060-ledger.json",
+      "sha256": "6fc89e106895fcab7780210fc289eceb35c1af4b4a12114cab5494abf06c67fe"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-061-ledger.json",
+      "sha256": "377636aefedcd2ce8631266d7a773c2fc57f659ea838088a29892dd342c0cbcd"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-062-ledger.json",
+      "sha256": "536551c28a86e1703436c81cf8ee92d4a9f5ae565481e01af62cb00020171950"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-063-ledger.json",
+      "sha256": "68b23ab229bce3431d652e76bc3950900db8d30c7eb23e47713a94b226a8ea3d"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-064-ledger.json",
+      "sha256": "ec9f05be3163c19d7f589afe36066ffedf56d611d20dfc5306e1b47b36ccdec4"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-065-ledger.json",
+      "sha256": "38564b0524a2aef54a5b258635798b77871e5a8b38f80a93943f51732a699062"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-066-ledger.json",
+      "sha256": "8c49297d3ce6e15082a15c50be338ff55322ad3e5f7d7082804e05082f866655"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-076-ledger.json",
+      "sha256": "8824c14079685dea48f8cd5cd80c69bd61dc6ba27feb26f84b94491795935776"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-086-ledger.json",
+      "sha256": "c5c9f8c4f09d35c0dcb0e68cd09aee983d551597dd8b010ab2170afb0746240f"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-096-ledger.json",
+      "sha256": "14bcce1c1fa81ac8946975c35a413adea01bc8bcc66be236ac0781f5248d40ca"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-097-ledger.json",
+      "sha256": "ce5139a9020c6cf239bf6da1cc45b7eefa12c1fe36dbccdc7122227c023df909"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-098-ledger.json",
+      "sha256": "d099585578f7b87e758f40a2e4d536564cddefe9764f58279389ab91c429f75b"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-099-ledger.json",
+      "sha256": "16ce9f75f36d084c77ebeba6ac02f531f70ef6f50a0db816d26626ac37b7843b"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/ledgers/item-100-ledger.json",
+      "sha256": "2710a6560709ec298b9517c93811f89b6e97ec641709d0fb811b7604adfc9839"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/meta.json",
+      "sha256": "16b989d1f81ef9f0c6ec253615950633fa256374f9512143c368cf080eca1dcd"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/compile-agent/2026-10-19/summary.json",
+      "sha256": "609ec6c89a774f9643fe19b5a0a914e5ab3c39da6870f8e9fe457d729ab7bc05"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/openadapt-program/2026-10-19/items.csv",
+      "sha256": "819aa8d4d115f39080bea7adad5d7fb113d0c3f5c80559d4e2e41b6e0f7d6e3b"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/openadapt-program/2026-10-19/meta.json",
+      "sha256": "789ef2d9cc139ff8b3d501c625eede7511862e0006bfa28bf02d6521c79fb5af"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/openadapt-program/2026-10-19/summary.json",
+      "sha256": "6176775a2060d5a58e3df0fee47d92a26cf2f5b2e4553be3b0d602c4f7e397a6"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/screen-script/2026-10-19/items.csv",
+      "sha256": "5a138719cc03a4b1fd3159db5c27198a1dae33dded4474e8f62cc681549473e2"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/screen-script/2026-10-19/meta.json",
+      "sha256": "ff07b961584e99ce71a1951f551c508670fab082e3a271e8546aabb1462c709e"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/screen-script/2026-10-19/summary.json",
+      "sha256": "ddbe7675df6f400846d26a2aa91c0c37a0855fa168ba5fa6e6a5a9dd09ee2e56"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/items.csv",
+      "sha256": "3992271e7b81585cb2363fb7a5021cddc075feaaed4d3c22e0bb05109c4ebaee"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-046-repair-ledger.json",
+      "sha256": "114b23343f62b71a36c7461749dea5a83830c96a17d20e2535c87e5044090ff2"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-047-repair-ledger.json",
+      "sha256": "b6e610931329209a81d546546354d924afb4639f36eae90f021a393b891db00a"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-048-repair-ledger.json",
+      "sha256": "fc6b0694341a36305d7c3193614352355e3f055de418658be3a8813bdd12b2b9"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-049-repair-ledger.json",
+      "sha256": "750e205b128dfc0cb3a0bcea0a281f0fae8532a95548c62f1f12041d520725fe"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-050-repair-ledger.json",
+      "sha256": "44537ba9eced235ab5c3f91a21b630e44b6bfec91e407e8c68c4ec5c5d6c32dc"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-051-repair-ledger.json",
+      "sha256": "de1085ed490fbed0eef2e7c10976b9613e926db31ef4cf66c69f4445f6e7e0d4"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-052-repair-ledger.json",
+      "sha256": "30cd22e9b0196d84ed7f7e1cf93a40070323d389c019ff54c33fbb5384934a09"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-053-repair-ledger.json",
+      "sha256": "54db1d2f92170cd18a8148c9ee99bf1143150c3c05faab7e18ef072be1fae678"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-054-repair-ledger.json",
+      "sha256": "9454883176f0bfafd197ac266123fb8024dd62f2123d1903fd0b352423c5e31a"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-055-repair-ledger.json",
+      "sha256": "ab581dca9677b0fd2e968c6261150c936bb303c07ed7abb1aa5b286608ff8b5f"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-076-repair-ledger.json",
+      "sha256": "57b6c4b33996a87e802260f3924679d06d0c20b3311f93c8916ddf8d141fe6d6"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-077-repair-ledger.json",
+      "sha256": "61b9dd902c1f6ceb52cde7484e126650bd2a81b42e326471eaa9b67360487345"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-078-repair-ledger.json",
+      "sha256": "43975368f0431fbb8f924ad058eac92e3aff4e543e543094229d6fd9c2bbff6e"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-079-repair-ledger.json",
+      "sha256": "dba56430cbe634e76d4c9b8c1437e78da9fa53e29e1c187160be317632726322"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-080-repair-ledger.json",
+      "sha256": "deb66444b00d07d71c5fa881e23833ac81088a600fed0c005376be1d72ea4576"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-081-repair-ledger.json",
+      "sha256": "64d45fd38302420ab32313892948d7eb99bbd74ff19c6ba80b1acea3a69ff644"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-082-repair-ledger.json",
+      "sha256": "47eb9889f5ea60d51fe6d9d05fec5c98b510742b344809203db34b07ac133084"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-083-repair-ledger.json",
+      "sha256": "d17079766e18788b8fe6052a42909d5a6b1baeedc347aaf11954d1b9081789c6"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-084-repair-ledger.json",
+      "sha256": "0880f87d5c49817483ff7a73167cc02cfb76375d7336801869e01e1b48d66766"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/ledgers/item-085-repair-ledger.json",
+      "sha256": "00d44c4481274eec0dd5214a513e0b84bc29dbbc19e35f9b08ad0eea45df997d"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/meta.json",
+      "sha256": "014096356dc29b4be90773291e15f7cad0379a8834030d1b70cd370f75f9a8af"
+    },
+    {
+      "path": "benchmark/silent_saves/results/1.1.0/self-repair/2026-10-19/summary.json",
+      "sha256": "08ce79ee7438227e7716e087f4af24d91ebdba89c881ff2e58a445123e86316c"
     },
     {
       "path": "benchmark/silent_saves/results/screen-script+readback/2026-10-19/items.csv",
@@ -1546,6 +2354,10 @@
     {
       "path": "benchmark/silent_saves/results/screen-script/2026-10-19/summary.json",
       "sha256": "579a53e9152e99900f98263ac072713372147997d68f8ee5eb360e703fd3cab4"
+    },
+    {
+      "path": "benchmark/silent_saves/results/spend.json",
+      "sha256": "b3279bb3bcaceff6040fe60a575e2311dbc9cabf4fe6cd4f82c7df85f2d3764e"
     },
     {
       "path": "benchmark/silent_wrong_action/results.json",
