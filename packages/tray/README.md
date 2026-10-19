@@ -2,7 +2,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/openadapt-tray.svg)](https://pypi.org/project/openadapt-tray/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/OpenAdaptAI/openadapt-tray/blob/main/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/tray/LICENSE)
 
 openadapt-tray puts OpenAdapt in the macOS menu bar or the Windows and Linux
 system tray. You can start and stop recordings from its menu or with a hotkey,
@@ -11,10 +11,10 @@ workflow, and see how many of your automations in OpenAdapt Cloud stopped and
 need a person.
 
 It's for people who use
-[OpenAdapt Desktop](https://github.com/OpenAdaptAI/openadapt-desktop) and want
+[OpenAdapt Desktop](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/desktop) and want
 those controls without opening the app window. The tray doesn't record or run
 anything itself. OpenAdapt Desktop records, and
-[openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) compiles and
+[openadapt-flow](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) compiles and
 replays workflows. The tray sends them commands and shows what they report.
 
 ## Quick start
@@ -30,7 +30,7 @@ OpenAdapt Desktop app if it isn't running, and asks it to record.
 
 Without the desktop app, the tray runs, but recording can't start. OpenAdapt
 Desktop has no trusted signed build to download yet
-([its README](https://github.com/OpenAdaptAI/openadapt-desktop#try-it) explains),
+([its README](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/desktop#quick-start) explains),
 and the `openadapt-desktop` command that pip installs doesn't open the socket
 the tray connects to.
 
@@ -64,7 +64,7 @@ color:
 
 | Idle | Starting or stopping | Recording, or an error | Compiling |
 | :---: | :---: | :---: | :---: |
-| <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-tray/main/assets/icons/idle@2x.png" width="32" alt="Blue OpenAdapt icon"> | <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-tray/main/assets/icons/recording_starting@2x.png" width="32" alt="Amber OpenAdapt icon"> | <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-tray/main/assets/icons/recording@2x.png" width="32" alt="Red OpenAdapt icon"> | <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-tray/main/assets/icons/compiling@2x.png" width="32" alt="Purple OpenAdapt icon"> |
+| <img src="https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/packages/tray/assets/icons/idle@2x.png" width="32" alt="Blue OpenAdapt icon"> | <img src="https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/packages/tray/assets/icons/recording_starting@2x.png" width="32" alt="Amber OpenAdapt icon"> | <img src="https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/packages/tray/assets/icons/recording@2x.png" width="32" alt="Red OpenAdapt icon"> | <img src="https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/packages/tray/assets/icons/compiling@2x.png" width="32" alt="Purple OpenAdapt icon"> |
 
 A red dot on the icon means automations need attention. Selecting the
 needs-attention item opens the cloud dashboard. If `deployment_lane` is `byoc`,
@@ -72,7 +72,7 @@ the setting for keeping recordings on this machine, the item opens Teach in
 OpenAdapt Desktop instead and never opens the cloud dashboard. Either
 `tray.json` or OpenAdapt Desktop can set it.
 
-[PROTOCOL.md](https://github.com/OpenAdaptAI/openadapt-tray/blob/main/docs/PROTOCOL.md)
+[PROTOCOL.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/tray/docs/PROTOCOL.md)
 describes the local socket, the one cloud request, and how the tray handles the
 token.
 
@@ -120,8 +120,8 @@ has keys the tray doesn't use: `dashboard_port`, `auto_launch_dashboard`,
 ## Development
 
 ```bash
-git clone https://github.com/OpenAdaptAI/openadapt-tray.git
-cd openadapt-tray
+git clone https://github.com/OpenAdaptAI/OpenAdapt.git
+cd OpenAdapt/packages/tray
 uv sync --extra dev
 uv run pytest tests -q
 uv run ruff check .
@@ -170,4 +170,4 @@ To try OpenAdapt itself from the command line, start with the
 
 ## License
 
-[MIT](https://github.com/OpenAdaptAI/openadapt-tray/blob/main/LICENSE)
+[MIT](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/tray/LICENSE)

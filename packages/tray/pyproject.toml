@@ -63,7 +63,8 @@ openadapt-tray-gui = "openadapt_tray.app:main"
 [project.urls]
 Homepage = "https://openadapt.ai"
 Documentation = "https://docs.openadapt.ai"
-Repository = "https://github.com/OpenAdaptAI/openadapt-tray"
+Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/tray"
+Changelog = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/tray/CHANGELOG.md"
 
 
 
@@ -108,29 +109,6 @@ target-version = "py310"
 # the code was fixed instead (see `keychain.clear_ingest_token`,
 # `NotificationManager._show_windows`, `IPCServer._accept_loop`).
 ignore = ["BLE001"]
-
-[tool.semantic_release]
-version_toml = ["pyproject.toml:project.version"]
-version_variables = ["src/openadapt_tray/__init__.py:__version__"]
-commit_message = "chore: release {version}"
-# Keep Experimental releases pre-1.0 until API stability is declared.
-allow_zero_version = true
-major_on_zero = false
-build_command = """
-python scripts/check_release_consistency.py --write-lock &&
-uv lock --locked --offline &&
-git add uv.lock &&
-uv build --no-build-isolation --wheel --sdist &&
-python scripts/check_release_consistency.py --require-dist
-"""
-
-[tool.semantic_release.branches.main]
-match = "main"
-
-[tool.semantic_release.commit_parser_options]
-allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
-minor_tags = ["feat"]
-patch_tags = ["fix", "perf"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

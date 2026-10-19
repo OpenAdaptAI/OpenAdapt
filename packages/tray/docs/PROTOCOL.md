@@ -47,9 +47,9 @@ file to appear:
 
 The tray never runs a Python `openadapt-desktop` console script.
 
-OpenAdapt Desktop's CI runs a pinned commit of this repository's IPC client
-against the desktop's socket server
-([`tests/test_tray_integration.py`](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/tests/test_tray_integration.py)).
+OpenAdapt Desktop's CI runs this package's IPC client, from the same
+monorepo commit, against the desktop's socket server
+([`packages/desktop/tests/test_tray_integration.py`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/tests/test_tray_integration.py)).
 
 ## OpenAdapt Cloud
 
