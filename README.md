@@ -285,6 +285,8 @@ MCP server. The product packages live in this repository:
 | [`openadapt-privacy`](https://pypi.org/project/openadapt-privacy/) | Finds and redacts personal and health data: `openadapt[privacy]` | [`packages/privacy/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/privacy) |
 | [`openadapt-desktop`](https://pypi.org/project/openadapt-desktop/) | OpenAdapt Desktop ([download](https://openadapt.ai/download)) | [`packages/desktop/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/desktop) |
 
+Each package installs only what it imports. For example, `pip install openadapt-privacy` doesn't install the engine or the desktop app. CI checks each package's install size and dependency list ([install weight](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/docs/monorepo/INSTALL_WEIGHT.md)).
+
 Research on GUI agents lives in separate repositories:
 [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) (benchmarks)
 and [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) (model

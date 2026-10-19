@@ -22,7 +22,7 @@ import warnings
 from pathlib import Path
 from urllib.parse import quote
 
-from openadapt_flow.ir import RunReport, StepResult
+from openadapt_flow.ir import RunReport, SelfRepairEvidence, StepResult
 from openadapt_flow.privacy import scrub_mode as _scrub_mode
 from openadapt_flow.privacy import scrub_text as _scrub_phi
 from openadapt_flow.privacy import text_scrubbing_enabled as _text_scrubbing_enabled
@@ -218,6 +218,51 @@ def _step_evidence_line(result: StepResult) -> str:
     return " · ".join([rung_part, gate_part, heal_part, outcome_part])
 
 
+def _self_repair_lines(evidence: SelfRepairEvidence) -> list[str]:
+    """The ``## Self-repair`` section: each stage and the agent's cost."""
+
+    lines = ["## Self-repair", ""]
+    reason = f" ({_md_phi(evidence.reason)})" if evidence.reason else ""
+    lines.append(f"- **Status:** `{evidence.status}`{reason}")
+    lines.append(
+        f"- **Repair agent:** `{_md_escape(evidence.agent_id or 'none')}` "
+        f"({_md_escape(evidence.agent_dialect or 'n/a')}), "
+        f"{evidence.model_calls} model call(s), "
+        f"est. ${evidence.est_model_cost_usd:.4f}"
+    )
+    if evidence.candidate_id:
+        lines.append(
+            f"- **Repair candidate:** `{_md_escape(evidence.candidate_id)}`"
+            + (
+                f", approved by {_md_escape(evidence.approved_by)}"
+                if evidence.approved_by
+                else ""
+            )
+        )
+    change = evidence.standard_change
+    if change is not None:
+        lines.append(
+            f"- **Applied without a person:** `{change.change_class}` under policy "
+            f"`{_md_escape(change.policy_id)}` signed by "
+            f"{_md_escape(change.policy_signed_by)} (policy "
+            f"`{change.policy_sha256[:16]}`); test record "
+            f"`{_md_escape(change.test_record)}` {change.preflight_outcome}"
+        )
+        lines.append(f"- **Undo:** `{_md_escape(change.revert_command)}`")
+    if evidence.steps:
+        lines.append("")
+        lines.append("| Stage | Attempt | Passed | Model calls | Detail |")
+        lines.append("| --- | --- | --- | --- | --- |")
+        for record in evidence.steps:
+            lines.append(
+                f"| {record.stage} | {record.attempt or ''} "
+                f"| {'yes' if record.passed else 'no'} | {record.model_calls} "
+                f"| {_md_phi(record.detail[:200])} |"
+            )
+    lines.append("")
+    return lines
+
+
 def render_run_report(run_dir: Path | str) -> Path:
     """Render ``REPORT.md`` inside ``run_dir`` from its ``report.json``.
 
@@ -363,6 +408,9 @@ def render_run_report(run_dir: Path | str) -> Path:
                 f"{steps}; screen postconditions still applied"
             )
     lines.append("")
+
+    if report.self_repair is not None:
+        lines.extend(_self_repair_lines(report.self_repair))
 
     # -- Parameters -----------------------------------------------------
     # A loop row binds its own value for a parameter in each iteration, so the

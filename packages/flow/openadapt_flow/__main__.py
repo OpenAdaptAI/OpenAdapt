@@ -832,6 +832,7 @@ def _build_and_run_replayer(
     surface_override: bool = False,
     execution_origin: Optional[str] = None,
     execution_entry_url: Optional[str] = None,
+    execution_target_origin: Optional[str] = None,
     run_id: Optional[str] = None,
     approval_gate=None,
     qualification_fault_driver=None,
@@ -870,6 +871,7 @@ def _build_and_run_replayer(
         surface_override=surface_override,
         execution_origin=execution_origin,
         execution_entry_url=execution_entry_url,
+        execution_target_origin=execution_target_origin,
         run_id=(
             remote_delivery_run_id
             if delivery_authority_kind == "cloud_runner"
@@ -1120,6 +1122,7 @@ def _replay_desktop(
             qualification_campaign_guard=qualification_campaign_guard,
             runtime_config=runtime_config,
             execution_target_kind=_report_backend_kind(backend_cfg.kind),
+            execution_target_origin=_surface_target_origin_or_none(backend_cfg),
             surface_override=bool(getattr(args, "_surface_override", False)),
             run_id=run_id,
             approval_gate=approval_gate,
@@ -1135,6 +1138,18 @@ def _replay_desktop(
     return _finish_replay(
         run_dir, report, args, backend_kind=_report_backend_kind(backend_cfg.kind)
     )
+
+
+def _surface_target_origin_or_none(backend_cfg) -> Optional[str]:
+    """The non-web app's ``<kind>://<target>``, for an admitted JIT program's
+    canary match. A section that can't name one gives None, which that match
+    refuses; every other bundle ignores it."""
+    from openadapt_flow.surface_selection import surface_target_origin
+
+    try:
+        return surface_target_origin(backend_cfg)
+    except ValueError:
+        return None
 
 
 def _record_until_stop(args: argparse.Namespace):
@@ -1881,8 +1896,19 @@ def _cmd_induce(args: argparse.Namespace) -> int:
         else:
             traces.append(path)
 
-    result = induce_program(traces)
+    if args.probe_on:
+        probed = _induce_with_probes(args, traces)
+        if isinstance(probed, int):
+            return probed
+        result = probed
+    else:
+        result = induce_program(traces)
     print(result.render())
+    if args.report:
+        report_path = Path(args.report)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(result.model_dump_json(indent=2) + "\n")
+        print(f"Induction report written to {report_path}")
 
     if args.held_out and len(traces) >= 2:
         print(validate_held_out(traces).render())
@@ -1908,6 +1934,64 @@ def _cmd_induce(args: argparse.Namespace) -> int:
         f"{len(result.column_decisions)} column decision(s))."
     )
     return 0
+
+
+def _induce_with_probes(args: argparse.Namespace, traces: list) -> Any:
+    """``induce --probe-on``: refuse a non-test target, else probe and induce.
+
+    Returns the InductionResult, or an exit code when the target is refused.
+    """
+    import tempfile
+
+    from openadapt_flow.compiler import probing
+    from openadapt_flow.deployment import load_deployment
+
+    deployment = Path(args.probe_on)
+    try:
+        cfg = load_deployment(deployment)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"PROBE REFUSED: {exc}")
+        return 3
+    reasons = probing.probe_target_refusals(cfg)
+    if reasons:
+        print("PROBE REFUSED: nothing was reset or replayed.")
+        for reason in reasons:
+            print(f"  - {reason}")
+        return 3
+    contract = Path(str(cfg.test_copy.reward_contract)).expanduser()
+    if not contract.is_absolute():
+        contract = deployment.parent / contract
+
+    def _run(work: Path) -> Any:
+        from openadapt_flow.compiler.compile import compile_recording
+        from openadapt_flow.ir import Workflow
+
+        probe_traces = []
+        seen: set[str] = set()
+        for i, (arg, trace) in enumerate(zip(args.recording, traces)):
+            path = Path(arg)
+            label = path.name if path.name not in seen else f"{path.name}#{i}"
+            seen.add(label)
+            if isinstance(trace, Workflow):
+                bundle = path
+            else:
+                bundle = work / "compiled" / f"{i}-{path.name}"
+                trace = compile_recording(path, bundle, name=path.name)
+            probe_traces.append(
+                probing.ProbeTrace(workflow=trace, bundle_dir=bundle, label=label)
+            )
+        target = probing.DeploymentProbeTarget(cfg)
+        print(f"Probing on declared test copy {cfg.name!r} (read-back: {contract})")
+        return probing.probe_and_induce(
+            probe_traces, target=target, reward_contract=contract, work_dir=work
+        )
+
+    if args.probe_work_dir:
+        work = Path(args.probe_work_dir)
+        work.mkdir(parents=True, exist_ok=True)
+        return _run(work)
+    with tempfile.TemporaryDirectory(prefix="induce-probe-") as tmp:
+        return _run(Path(tmp))
 
 
 def _cmd_for_each(args: argparse.Namespace) -> int:
@@ -3220,6 +3304,48 @@ def _cmd_run(args: argparse.Namespace) -> int:
     # Admitted. A deployment run is not the drift-demo; force it off and delegate
     # to the shared replay executor (which reads all deployment wiring itself).
     args.drift = None
+    if getattr(args, "self_repair", False):
+        from openadapt_flow.cli_self_repair import cmd_run_self_repair
+
+        exit_code = cmd_run_self_repair(
+            args,
+            workflow=workflow,
+            bundle=bundle,
+            cfg=cfg,
+            backend_cfg=backend_cfg,
+            gate_kwargs={
+                "deployment": cfg,
+                "effect_verifier": effect_verifier,
+                "api_actuator": api_actuator,
+                "policy_source": policy_source,
+                "approval_available": bool(
+                    getattr(args, "approve_unverified_writes", False)
+                ),
+                "strict_templates": bool(getattr(args, "strict_templates", False)),
+                "require_encryption": not bool(
+                    getattr(args, "allow_unencrypted", False)
+                ),
+                "pinned_compiler_version": getattr(args, "pin_version", None),
+                "profile_contract": profile,
+                "effective_durable": effective_durable if profile is not None else None,
+                "effective_require_settled": (
+                    effective_require_settled if profile is not None else None
+                ),
+            },
+            params=runtime_params,
+            worklists=runtime_worklists,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+            durable=effective_durable,
+            allow_egress=bool(_egress),
+            run_replayer=_build_and_run_replayer,
+            approval_gate_for_run=_approval_gate_for_run,
+            finish=_finish_replay,
+            default_run_dir=_default_run_dir,
+            attest_pre_state=_maybe_attest_pre_state,
+        )
+        _attach_cloud_seal(args)
+        return exit_code
     exit_code = _cmd_replay(args)
     _attach_cloud_seal(args)
     return exit_code
@@ -6342,6 +6468,11 @@ def _emit_local_receipt(args: argparse.Namespace) -> int:
     print("Receipt written (LOCAL ONLY, nothing was uploaded):")
     for path in (paths["png"], paths["json"], paths["markdown"]):
         print(f"  {path}")
+    from openadapt_flow.records.run import write_sealed_reads
+
+    records_path = write_sealed_reads(report, paths["json"])
+    if records_path is not None:
+        print(f"  {records_path} (values read, Seal pointers to this receipt)")
     print(
         "\nEvery byte that would leave this machine is in receipt.json. "
         "Publishing is a separate, explicit step."
@@ -7472,6 +7603,31 @@ def build_parser() -> argparse.ArgumentParser:
             "reproduction scores (needs >= 2 traces)"
         ),
     )
+    p.add_argument(
+        "--probe-on",
+        default=None,
+        metavar="DEPLOYMENT",
+        help=(
+            "Settle refused optional steps by replaying each reading (step "
+            "dropped / step kept when present) in a fresh session on the test "
+            "copy this deployment file declares (test_copy.declared: true), "
+            "scored by its reward contract's read-back. Refuses any target "
+            "not declared a test copy. See docs/PROBE_INDUCTION.md"
+        ),
+    )
+    p.add_argument(
+        "--probe-work-dir",
+        default=None,
+        help=(
+            "Keep probe bundles and run directories here (default: a "
+            "temporary directory, removed afterwards)"
+        ),
+    )
+    p.add_argument(
+        "--report",
+        default=None,
+        help="Write the induction report (JSON, every probe run included) here",
+    )
     p.set_defaults(func=_cmd_induce)
 
     p = sub.add_parser(
@@ -7891,6 +8047,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Max 1800."
         ),
     )
+    from openadapt_flow.cli_self_repair import add_self_repair_flags
+
+    add_self_repair_flags(p)
     _add_backend_flags(p)
     _add_surface_flags(p)
     _add_browser_session_flags(p)
@@ -9542,6 +9701,37 @@ def build_parser() -> argparse.ArgumentParser:
     _repair_store_flag(r)
     r.set_defaults(func=_cmd_repair)
 
+    r = rsub.add_parser(
+        "revert",
+        help=(
+            "Undo a repair that applied without a person: the prior bundle is "
+            "active again, and repairs of that step go to a person"
+        ),
+    )
+    r.add_argument("candidate_id", help="The automatic repair's candidate id")
+    r.add_argument("--by", required=True, help="Your name, recorded on the revert")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "standard-changes",
+        help="List the repairs that applied without a person (the daily digest)",
+    )
+    r.add_argument("--day", default=None, help="UTC day, YYYY-MM-DD (default: today)")
+    r.add_argument("--json", action="store_true", help="Print the ledger rows as JSON")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "clear-hold",
+        help="Let repairs of a step apply without a person again after a revert",
+    )
+    r.add_argument("--workflow", required=True)
+    r.add_argument("--step", required=True)
+    r.add_argument("--by", required=True, help="Your name, recorded on the ledger")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
     p = sub.add_parser(
         "connect",
         help=(
@@ -10129,6 +10319,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--repair-store",
+        default=None,
+        help=(
+            "Repair store whose automatic repairs (standard changes) the "
+            "console lists and, when attended, lets a person revert"
+        ),
+    )
+    p.add_argument(
         "--attend",
         action="store_true",
         help=(
@@ -10553,6 +10751,7 @@ def _cmd_console(args: argparse.Namespace) -> int:
             attended_service=attended_service,
             decision_supervisor=_decision_supervisor_from_args(args, attended_service),
             port=args.port,
+            repair_store=getattr(args, "repair_store", None),
         )
     return 0
 

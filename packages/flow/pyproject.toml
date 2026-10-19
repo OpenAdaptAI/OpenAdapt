@@ -162,6 +162,12 @@ reward = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
 ]
+# Harness² integration (openadapt_flow.integrations.harness2): GUI tasks on
+# resettable apps, scored by reading the system of record, for
+# google-research/harness2's harness search. Harness² (Apache-2.0, Python
+# 3.12+) is not on PyPI, and a published wheel cannot name a git URL, so it is
+# installed beside this extra; docs/HARNESS2.md gives the pinned command.
+harness2 = ["playwright>=1.44"]
 # Native macOS window capture/input. Imported lazily; other platforms never
 # install or import these framework bindings.
 macos = [
