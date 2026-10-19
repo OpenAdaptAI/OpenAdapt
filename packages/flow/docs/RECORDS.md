@@ -171,3 +171,40 @@ GradeGate(min_grade="reopened", fields=("amount_due",)).check(record)
 
 These grades describe how a read value was checked. Write checks keep their
 own grades in `openadapt_flow.assurance`.
+
+## Review queue
+
+`openadapt_flow.records.review.ReviewQueue` holds only problems: field reads
+that need review and halts while reading a record. Agreeing reads never enter
+it. It is a directory (`items/`, `decisions/`), so it works offline.
+
+```python
+from openadapt_flow.execute.keys import load_or_create_private_key
+from openadapt_flow.records.review import ReviewQueue, apply_decision
+
+queue = ReviewQueue("./review")
+queue.add_record(record, created_by="runner:host-1")
+for item in queue.open_items():
+    print(item.field, item.reason, item.candidates)
+
+decision = queue.decide(
+    item.item_id,
+    action="accept_read",  # or correct, reject, reread
+    channel="clipboard",
+    reviewer="person:clerk-1",
+    signing_key=load_or_create_private_key(data_dir),
+    schema=schema,
+)
+settled = apply_decision(field_read, decision, item)
+```
+
+The queue enforces these rules:
+
+- Only a `person:` principal can decide. Model and agent principals are
+  refused.
+- The principal that created an item cannot decide it.
+- A decision is written once and signed with the local Ed25519 key over the
+  decision and the hash of the item. `queue.check()` verifies both.
+- A corrected value must be valid for the field's kind.
+- A decision settles the value but keeps its grade. A person's choice is not a
+  read, so it never raises the grade.
