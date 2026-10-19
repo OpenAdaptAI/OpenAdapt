@@ -605,8 +605,9 @@ class WebFormSpec(BaseModel):
     success_pattern: Optional[str] = None
     #: GUI steps the API step stands in for, in order. The last one is the save.
     replaces_steps: list[str] = Field(min_length=1)
-    #: Other non-GET requests seen while the recorded steps ran. They are not
-    #: repeated; they are listed so the person admitting the step can judge.
+    #: Other non-GET requests seen while the recorded steps ran. A proposal
+    #: with any is refused, and so are its admission and its run (a binding
+    #: proposed before that rule existed may still list some).
     other_writes_seen: list[str] = Field(default_factory=list)
     #: On-screen checks of folded steps that caused no request (screen-only,
     #: not repeated), listed for the person admitting the step.

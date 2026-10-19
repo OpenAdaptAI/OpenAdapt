@@ -2421,6 +2421,13 @@ class Replayer:
                 reason = "a governed run uses its qualified GUI path"
             elif not binding.admitted():
                 reason = "the API step is not admitted (openadapt-flow api admit)"
+            elif binding.web_form.other_writes_seen:
+                # Proposed before such spans were refused: the steps it would
+                # replace also wrote, and one request can't stand in for them.
+                reason = (
+                    "the steps the API step would replace also sent other writes "
+                    f"({', '.join(binding.web_form.other_writes_seen)})"
+                )
             elif list(binding.effects) != list(save.effects):
                 reason = (
                     "the save step's record check differs from the one admitted "
