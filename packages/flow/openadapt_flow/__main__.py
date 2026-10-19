@@ -11436,6 +11436,7 @@ _SEALED_READY_COMMANDS: frozenset[str] = frozenset(
         "openadapt_flow.__main__:_cmd_run",
         "openadapt_flow.__main__:_cmd_replay",
         "openadapt_flow.__main__:_cmd_resume",
+        "openadapt_flow.__main__:_cmd_approve",
         "openadapt_flow.__main__:_cmd_qualify",
         "openadapt_flow.cli_admit:cmd_admit_run",
         "openadapt_flow.cli_admit:cmd_admit_decide",
@@ -11487,7 +11488,7 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
             "encrypted input yet. Flow will not decrypt it to disk for this "
             "command. Commands that read sealed input: record, compile, "
             "induce, scaffold-verifier, seal, certify, qualify, admit, run, "
-            "replay, resume and undo."
+            "replay, approve, resume and undo."
         )
     for root in sealed:
         kind = sealed_set.header_kind(root)

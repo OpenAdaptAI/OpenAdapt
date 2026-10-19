@@ -168,9 +168,9 @@ takes tens to hundreds of milliseconds, so encryption adds about 1% or less.
 ## Commands on sealed input
 
 `record`, `compile`, `induce`, `scaffold-verifier`, `seal`, `certify`,
-`qualify`, `admit`, `run`, `replay`, `resume` and `undo` read sealed bundles
-and encrypted recordings in memory, given the key, and keep what they write
-sealed:
+`qualify`, `admit`, `run`, `replay`, `approve`, `resume` and `undo` read
+sealed bundles and encrypted recordings in memory, given the key, and keep
+what they write sealed:
 
 - `compile` of an encrypted recording writes a sealed bundle, under
   `OPENADAPT_BUNDLE_KEY` or, when that is unset, the recording's key. It
@@ -183,7 +183,8 @@ sealed:
 - `admit` compiles into sealed bundles and merges crops in memory. The
   pending and decision records at the admission root stay plaintext; they hold
   digests, counts, the workflow name and the decider.
-- `run`, `replay` and `resume` write a sealed run directory. A run with an
+- `run`, `replay` and `resume` write a sealed run directory, and `approve`
+  writes its approval into it encrypted. A run with an
   approval gate, an attended draft or a business-decision state refuses before
   it acts, because those stores still write plaintext state.
 - `undo` keeps its approval, claim, parameters and result in the sealed run
