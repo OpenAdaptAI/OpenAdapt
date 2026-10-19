@@ -608,6 +608,78 @@ UNCONFIRMED_REASONS = frozenset(
 )
 
 
+#: How an answer reached the run: a person in Desktop's Run it or on their
+#: phone (the runner's decision portal), or a delegate by its own route.
+PERSON_ROUTES = frozenset({"desktop_run_it", "decision_portal"})
+DELEGATE_ROUTES = frozenset({"local_cli", "webhook", "mcp"})
+DELEGATE_KINDS = frozenset({"rule", "agent", "system"})
+
+
+def approvers(raw: Any) -> list[dict[str, Any]]:
+    """Who decided each save of an item, from Flow's ``approvals`` rows.
+
+    Closed codes and opaque ids only. A person row names the route and, when
+    signed in, the Cloud user id. A delegate row names the agent, rule or
+    system and the ``sha256:`` of the person-signed grant it acted under; a
+    delegate row without one reads as ``unverified``. A row Desktop can't
+    read is left out, never shown as a person.
+    """
+
+    out: list[dict[str, Any]] = []
+    rows = raw if isinstance(raw, list) else []
+    for row in rows[:64]:
+        if not isinstance(row, dict):
+            continue
+        decision = row.get("decision")
+        if decision not in ("approved", "declined"):
+            continue
+        route = row.get("route", "desktop_run_it")
+        decided_by = row.get("decided_by", "human")
+        entry: dict[str, Any] = {
+            "decision": decision,
+            "route": route if route in PERSON_ROUTES | DELEGATE_ROUTES else "unknown",
+            "kind": "person",
+            "id": None,
+            "policy_ref": None,
+            "signed_in": False,
+            "verified": True,
+        }
+        if decided_by == "automation":
+            approver = row.get("approver")
+            approver = approver if isinstance(approver, dict) else {}
+            kind = approver.get("kind")
+            approver_id = approver.get("id")
+            policy_ref = approver.get("policy_ref")
+            entry.update(
+                kind=kind if kind in DELEGATE_KINDS else "unknown",
+                id=approver_id
+                if isinstance(approver_id, str) and _OPAQUE_ID.fullmatch(approver_id)
+                else None,
+                policy_ref=policy_ref
+                if isinstance(policy_ref, str) and _PREFIXED_SHA256.fullmatch(policy_ref)
+                else None,
+            )
+            entry["verified"] = (
+                entry["kind"] != "unknown"
+                and entry["id"] is not None
+                and entry["policy_ref"] is not None
+                and route in DELEGATE_ROUTES
+            )
+        elif decided_by == "human":
+            approver_id = row.get("approver_id")
+            entry["signed_in"] = row.get("approver_kind") == "cloud_user"
+            entry["id"] = (
+                approver_id
+                if isinstance(approver_id, str) and _OPAQUE_ID.fullmatch(approver_id)
+                else None
+            )
+            entry["verified"] = route in PERSON_ROUTES
+        else:
+            continue
+        out.append(entry)
+    return out
+
+
 def _unconfirmed(approval: Mapping[str, Any], reason: str) -> dict[str, Any]:
     """The same block, now needing a person and never counting as without one."""
 
@@ -720,6 +792,7 @@ def item_approval(raw: Any) -> dict[str, Any] | None:
             if isinstance(block.get("saves_without_person"), int)
             else 0
         ),
+        "approvers": approvers(block.get("approvals")),
     }
 
 
@@ -806,6 +879,7 @@ __all__ = [
     "SwitchApprovalError",
     "SwitchEnvelope",
     "accept_switch",
+    "approvers",
     "blockers",
     "confirm_no_person",
     "flow_switch_api",

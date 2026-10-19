@@ -319,6 +319,13 @@ def render_run_report(run_dir: Path | str) -> Path:
             f"record {where} and reconcile it before you resume."
         )
         lines.append("")
+    if transaction == "SAVED_AWAITING_CHECK":
+        lines.append(
+            "> ⏳ **Saved, waiting for its check.** A later report confirms this "
+            "save. Don't re-run or retry this workflow. It counts as done only "
+            "when `openadapt-flow deferred settle` matches the report."
+        )
+        lines.append("")
     lines.append(f"- **Started:** {report.started_at}")
     if transaction:
         note = {
@@ -330,6 +337,9 @@ def render_run_report(run_dir: Path | str) -> Path:
             ),
             "COMPLETED_UNVERIFIED": (
                 " (the steps ran, but the saved result was not checked)"
+            ),
+            "SAVED_AWAITING_CHECK": (
+                " (saved; waiting for a later report; never retry it)"
             ),
         }.get(transaction, "")
         lines.append(f"- **Transaction outcome:** `{transaction}`{note}")

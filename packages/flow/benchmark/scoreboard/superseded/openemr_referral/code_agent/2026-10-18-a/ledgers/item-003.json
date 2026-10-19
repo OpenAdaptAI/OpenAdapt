@@ -1,0 +1,79 @@
+{
+  "ledger": {
+    "agent": "claude",
+    "model": "claude-sonnet-5-5",
+    "vision": "code",
+    "model_calls": 1,
+    "input_tokens": 4,
+    "output_tokens": 118,
+    "cache_creation_input_tokens": 2856,
+    "cache_read_input_tokens": 0,
+    "prompt_tokens": 2860,
+    "images_in_requests": 0,
+    "cost_usd": 0.008328,
+    "wall_seconds": 1.786,
+    "model_seconds": 1.598,
+    "finished": false,
+    "summary": null,
+    "tool_errors": 0,
+    "calls": [
+      {
+        "turn": 1,
+        "input_tokens": 4,
+        "output_tokens": 118,
+        "cache_creation_input_tokens": 2856,
+        "cache_read_input_tokens": 0,
+        "seconds": 1.598,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      }
+    ]
+  },
+  "harness": {
+    "observations": 0,
+    "screenshots_requested": 0,
+    "screenshots_at_gate": 0,
+    "screenshots_every_turn": 0,
+    "actions": 0,
+    "gate_checks": 1,
+    "gate_evidence_screenshots": 1,
+    "gate_refusals": 1
+  },
+  "trace": {
+    "surface": "dom",
+    "scripts": 2,
+    "lines": 2,
+    "actions": 0,
+    "errors": 0,
+    "screenshots": 0,
+    "shell_commands": 0,
+    "shell_isolation": "sandbox-exec",
+    "by_structure": 0,
+    "with_recorded_locator": 0,
+    "locator_agrees": 0,
+    "locator_unique": 0,
+    "commits": 0,
+    "identity_read_before_commit": [],
+    "read_back_after_commit": []
+  },
+  "scripts": [
+    {
+      "script": "tree",
+      "output": "$ tree\npage: OpenEMR (http://127.0.0.1:9911/interface/main/tabs/main.php?...)\n@1 link \"OpenEMR Website\"\nCalendar\nFinder\nFlow\nRecalls\nMessages\n@2 button \"Patient\"\n@3 button \"Fees\"\n@4 button \"Modules\"\n@5 button \"Procedures\"\n@6 button \"Admin\"\n@7 button \"Reports\"\n@8 button \"Miscellaneous\"\n@9 button \"Popups\"\n@10 textbox \"Search by any demographics\" value=\"\"\n@11 button \"Search for patient by entering whole or part of any demographics field information\"\n@12 button \"Current user\"\nCalendar\nMessage Center\nSearch or Add Patient\n# frame 6: Search or Add Patient\n# Search or Add Patient\n@13 button \"Who\"\nTitle:\n@14 combobox \"form_title\" value=\"Unassigned\" options=[\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]\nName:\n@15 textbox \"First Name\" value=\"\"\n@16 textbox \"Middle Name\" value=\"\"\n@17 textbox \"Last Name\" value=\"\"\n@18 textbox \"Name Suffix\" value=\"\"\nPreferred Name:\n@19 textbox \"Patient preferred name or name patient is commonly known.\" value=\"\"\nBirth Name:\n@20 textbox \"Birth First Name\" value=\"\"\n@21 textbox \"Middle Name\" value=\"\"\n@22 textbox \"Birth Last Name\" value=\"\"\nDOB:\n@23 textbox \"form_DOB\" value=\"\"\nBirth Sex:\n@24 combobox \"form_sex\" value=\"Unassigned\" options=[\"Unassigned\", \"Female\", \"Male\", \"Unknown\"]\nGender Identity:\n@25 combobox \"form_gender_identity\" value=\"Unassigned\" options=[\"Unassigned\", \"Identifies as Male\", \"Identifies as Female\", \"Female-to-Male (FTM)/Transgender Male/Trans Man\", \"Male-to-Female (MTF)/Transgender Female/Trans Woman\", \"Genderqueer, neither exclusively male nor female\", \"Additional gender category or other, please specify\", \"Choose not to disclose\"]\nSex:\n@26 combobox \"form_sex_identified\" value=\"Unassigned\" options=[\"Unassigned\", \"Male\", \"Female\", \"Identifies as nonbinary gender (finding)\", \"Asked But Declined\", \"unknown\"]\nSexual Orientation:\n@27 combobox \"form_sexual_orientation\" value=\"Unassigned\" options=[\"Unassigned\", \"Straight or heterosexual\", \"Lesbian, gay or homosexual\", \"Bisexual\", \"Something else, please describe\", \"Don't know\", \"Choose not to disclose\"]\nPronouns:\n@28 combobox \"form_pronoun\" value=\"Unassigned\" options=[\"Unassigned\", \"he/him/his/his/himself\", \"she/her/her/hers/herself\", \"they/them/their/theirs/themselves\", \"Ask me\", \"Decline to answer\", \"Other\"]\nExternal ID:\n@29 textbox \"form_pubpid\" value=\"\"\nS.S.:\n@30 textbox \"form_ss\" value=\"\"\nLicense/ID:\n@31 textbox \"form_drivers_license\" value=\"\"\nMarital Status:\n@32 combobox \"form_status\" value=\"Unassigned\" options=[\"Unassigned\", \"Married\", \"Single\", \"Divorced\", \"Widowed\", \"Separated\", \"Domestic Partner\"]\nUser Defined:\n@33 textbox \"form_genericname1\" value=\"\"\n@34 textbox \"form_genericval1\" value=\"\"\n@35 textbox \"form_genericname2\" value=\"\"\n@36 textbox \"form_genericval2\" value=\"\"\nBilling Note:\n@37 textbox \"form_billing_note\" value=\"\"\nPrevious Names:\n@38 combobox \"form_name_history[]\" value=\"\"\n@39 button \"Add\"\n@40 button \"Contact\"\n(7 controls below the visible area: \"Choices\", \"Employer\", \"Stats\", \"Misc\", \"Related\", \"Search\", \"Create New Patient\"; scroll down to reach them",
+      "images": 0
+    }
+  ],
+  "result": {
+    "record_status": "capture_failed",
+    "detail": "GateRefused: 'form_title' may commit a write, but the form, row or section it is in does not show ['Create New Patient']; the right-record check refused it (capture kept at packages/flow/benchmark/scoreboard/raw/openemr_referral/code_agent/2026-10-18-a/jit-cache/item-003/openemr.register_referral-dea306642b4f/refused-20261018T213344355169000)",
+    "gates": [
+      {
+        "control": "form_title",
+        "missing": [
+          "Create New Patient"
+        ],
+        "decision": "refused_wrong_record"
+      }
+    ]
+  }
+}
