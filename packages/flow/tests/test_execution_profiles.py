@@ -82,7 +82,11 @@ from openadapt_flow.runtime.effects import (
     ValueExpr,
     Verdict,
 )
-from openadapt_flow.runtime.effects.effect import ReadbackNav, ReadbackSpec
+from openadapt_flow.runtime.effects.effect import (
+    ReadbackNav,
+    ReadbackReset,
+    ReadbackSpec,
+)
 from openadapt_flow.runtime.effects.onscreen import OnScreenReadbackVerifier
 from openadapt_flow.runtime.replayer import Replayer as _RuntimeReplayer
 from openadapt_flow.verification import VerificationTier
@@ -480,7 +484,7 @@ def test_demo_is_the_only_named_unsigned_actuation_profile():
     assert not requires_signed_qualification_admission(None, will_actuate=True)
 
 
-def test_production_gate_rejects_immediate_screen_but_accepts_persisted_readback(
+def test_production_gate_rejects_immediate_screen_but_accepts_a_reset_reopen(
     tmp_path,
 ):
     immediate, immediate_bundle = _sealed(tmp_path, _workflow(), encrypted=False)
@@ -521,6 +525,25 @@ def test_production_gate_rejects_immediate_screen_but_accepts_persisted_readback
 
     persisted.steps[0].effects[0].readback.renavigation.append(
         ReadbackNav(action="click", point=(5, 5))
+    )
+    persisted, persisted_bundle = _sealed(
+        tmp_path / "persisted-no-reset",
+        persisted,
+        encrypted=False,
+    )
+    # Two navigation steps with no state reset earn no reopen credit: the
+    # read could come from a page the save left behind.
+    no_reset_refused = _gate(
+        persisted,
+        persisted_bundle,
+        ExecutionProfile.STANDARD,
+        verifier=onscreen,
+        durable=True,
+    )
+    assert not no_reset_refused.passed
+
+    persisted.steps[0].effects[0].readback.reset = ReadbackReset(
+        kind="reopen_window", at=0
     )
     persisted, persisted_bundle = _sealed(
         tmp_path / "persisted-bounded",

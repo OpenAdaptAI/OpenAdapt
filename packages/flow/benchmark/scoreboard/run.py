@@ -26,9 +26,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import multiprocessing
 import os
 import shutil
-import signal
 import sys
 import time
 from pathlib import Path
@@ -210,8 +210,59 @@ def reported_success(
     return not any(word in text for word in FAILURE_WORDS)
 
 
-def arm_agent(args: argparse.Namespace) -> int:
+class _LedgerView:
+    """The agent's numbers, read back from its ledger file."""
+
+    def __init__(self, data: dict[str, Any], result: dict[str, Any]) -> None:
+        calls = data.get("calls", [])
+        self.calls = calls
+        self.cost_usd = float(data.get("cost_usd", 0.0))
+        self.final_text = result.get("final_text", data.get("final_text", "")) or ""
+        self.started_at = data.get("started_at")
+        self.finished_at = data.get("finished_at")
+        self.tokens = {
+            "input": sum(c["input_tokens"] for c in calls),
+            "output": sum(c["output_tokens"] for c in calls),
+            "cache_read": sum(c["cache_read_input_tokens"] for c in calls),
+            "cache_write": sum(c["cache_creation_input_tokens"] for c in calls),
+        }
+
+
+def _ledger_view(ledger: Path, result: dict[str, Any]) -> _LedgerView:
+    data = json.loads(ledger.read_text()) if ledger.is_file() else {}
+    return _LedgerView(data, result)
+
+
+def _agent_item(
+    task_name: str, url: str, instruction: str, ledger: str, max_cost: float, box: Any
+) -> None:
+    """One agent-alone item, in a child process (see arm_agent)."""
+
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    task = task_module(task_name)
+    agent = ClaudeComputerUseAgent(
+        ledger_path=Path(ledger),
+        model=AGENT_MODEL,
+        system=SYSTEM_TEMPLATE.format(app=task.APP),
+        max_cost_usd=max_cost,
+    )
+    error = None
+    backend, close = PlaywrightBackend.launch(url, headless=True)
+    try:
+        task.setup(backend.page)
+        agent.run(
+            PlainRequest(instruction, model_key=model_key()),
+            PlainComputer(backend.page),
+        )
+    except Exception as exc:  # noqa: BLE001 - recorded in the row
+        error = f"{type(exc).__name__}: {exc}"
+    finally:
+        box.put({"error": error, "final_text": agent.final_text})
+        close()
+
+
+def arm_agent(args: argparse.Namespace) -> int:
 
     task = task_module(args.task)
     out = schema.run_dir(task.NAME, "agent", args.run_id)
@@ -225,7 +276,7 @@ def arm_agent(args: argparse.Namespace) -> int:
         max_cost_per_item=args.max_cost,
     )
     sess = Session(task, args.tag, args.faults, port=0, ui_change_at=args.ui_change_at)
-    key = model_key()
+    model_key()  # fail fast without the customer key; each item reloads it
     try:
         for i in range(args.start, args.n + 1):
             if spent() + args.max_cost > SPEND_CAP_USD:
@@ -237,33 +288,43 @@ def arm_agent(args: argparse.Namespace) -> int:
             sess.before(it)
             load0 = schema.load_1m()
             w0 = time.time()
-            backend, close = PlaywrightBackend.launch(sess.url(it), headless=True)
-            agent = ClaudeComputerUseAgent(
-                ledger_path=out / "ledgers" / f"item-{i:03d}.json",
-                model=AGENT_MODEL,
-                system=SYSTEM_TEMPLATE.format(app=task.APP),
-                max_cost_usd=args.max_cost,
+            ledger = out / "ledgers" / f"item-{i:03d}.json"
+            # Each item runs in its own process: a browser call that blocks
+            # (it happened, for an hour, at launch and at close) is killed
+            # after ITEM_TIMEOUT_S and becomes an error row.
+            ctx = multiprocessing.get_context("spawn")
+            box = ctx.Queue()
+            proc = ctx.Process(
+                target=_agent_item,
+                args=(
+                    task.NAME,
+                    sess.url(it),
+                    task.instruction(it.values),
+                    str(ledger),
+                    args.max_cost,
+                    box,
+                ),
             )
-            error: Optional[BaseException] = None
-            # Watchdog: an item that hangs (once, a browser call blocked for an
-            # hour) becomes an error row instead of stalling the batch.
-            signal.signal(signal.SIGALRM, _item_timeout)
-            signal.alarm(ITEM_TIMEOUT_S)
-            try:
-                task.setup(backend.page)
-                agent.run(
-                    PlainRequest(task.instruction(it.values), model_key=key),
-                    PlainComputer(backend.page),
-                )
-            except Exception as exc:  # noqa: BLE001 - recorded, the batch goes on
-                error = exc
-            finally:
-                signal.alarm(0)
-                close()
+            proc.start()
+            proc.join(ITEM_TIMEOUT_S)
+            result: dict[str, Any] = {}
+            if proc.is_alive():
+                proc.terminate()
+                proc.join(10)
+                if proc.is_alive():
+                    proc.kill()
+                result["error"] = f"ItemTimeout: item exceeded {ITEM_TIMEOUT_S} s"
+            else:
+                try:
+                    result = box.get(timeout=5)
+                except Exception:  # noqa: BLE001
+                    result = {"error": f"the item process exited {proc.exitcode}"}
+            agent = _ledger_view(ledger, result)
+            error = result.get("error")
             wall = time.time() - w0
             add_spend(agent.cost_usd, f"{task.NAME} agent {args.run_id} item {i}")
             readback = sess.readback(it)
-            ok = reported_success(agent, error)
+            ok = (not error) and reported_success(agent, None)
             tok = agent.tokens
             item_s = (agent.finished_at or time.time()) - (agent.started_at or w0)
             row = schema.Row(
@@ -287,14 +348,7 @@ def arm_agent(args: argparse.Namespace) -> int:
                 approvals_asked=0,
                 host_load_1m=load0,
                 timed=schema.timed(load0, schema.load_1m()),
-                detail=(
-                    sess.observed
-                    + (
-                        f"{type(error).__name__}: {error}"
-                        if error
-                        else agent.final_text
-                    )
-                )[:300],
+                detail=(sess.observed + (error if error else agent.final_text))[:300],
             )
             schema.append(out / "items.csv", row)
             print(
@@ -412,7 +466,7 @@ def _admission(
 def arm_first_run(args: argparse.Namespace) -> int:
     task = task_module(args.task)
     out = schema.run_dir(task.NAME, "first_run", args.run_id)
-    cache = out / "jit-cache"
+    cache = schema.cache_dir(task.NAME, "first_run", args.run_id)
     if cache.exists():
         shutil.rmtree(cache)
     schema.write_meta(out, task=task.NAME, arm="first_run", model=AGENT_MODEL)
@@ -509,7 +563,7 @@ def arm_program(args: argparse.Namespace) -> int:
             "the openIMIS program arm is imported from the launch demo (importers.py)"
         )
     out = schema.run_dir(task.NAME, "program", args.run_id)
-    cache = schema.run_dir(task.NAME, "first_run", args.program_from) / "jit-cache"
+    cache = schema.cache_dir(task.NAME, "first_run", args.program_from)
     if not cache.is_dir():
         raise SystemExit(f"no admitted program in {cache}; run first_run first")
     schema.write_meta(

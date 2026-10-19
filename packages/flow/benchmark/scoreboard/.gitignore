@@ -1,5 +1,4 @@
-# The JIT cache holds screenshots, run directories and the scoreboard's
-# throwaway admission key: never committed. Results live in items.csv,
-# meta.json, first_run.json and the ledgers.
+# JIT caches now live outside the package tree (schema.CACHE,
+# SCOREBOARD_CACHE). Kept as a guard in case an old run writes here.
 raw/**/jit-cache/
 __pycache__/

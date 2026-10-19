@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-types"
-version = "0.23.0"
+version = "0.24.0"
 description = "Pydantic models for computer-use agents: screen state (ComputerState, UINode), actions (Action), and results (ActionResult)"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10"
 authors = [
     { name = "OpenAdapt", email = "admin@openadapt.ai" },
 ]
@@ -21,14 +21,15 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries",
     "Typing :: Typed",
 ]
-# Compatibility shim: the contracts live in openadapt-flow as
-# openadapt_flow.contracts, first shipped in openadapt-flow 2.2.0, so that is
-# the floor. Python 3.13+ resolves to 0.21.x, the last standalone release.
+# The leaf of the package graph: shared models only, so installing them never
+# pulls Flow's vision stack. openadapt-flow depends on this package and re-exports
+# it as openadapt_flow.contracts. The install-weight CI job enforces this list.
 dependencies = [
-    "openadapt-flow>=2.2.0,<3",
+    "pydantic>=2.5",
 ]
 
 [project.scripts]

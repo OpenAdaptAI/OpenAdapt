@@ -10,7 +10,7 @@ local signing key. ``score_episode`` is the whole path:
 3. judge every required effect and every forbidden effect with the shared
    three-valued judge (``runtime/effects/_common.py``);
 4. map the verdicts and the runtime's own signal onto ``RewardOutcomeV1``;
-5. call the pure ``openadapt_flow.contracts.reward.score`` helper;
+5. call the pure ``openadapt_types.reward.score`` helper;
 6. write the evidence locally, sign the receipt, store both.
 
 INDETERMINATE never becomes 0. It becomes an unscored outcome with a
@@ -29,11 +29,9 @@ from typing import Any, Literal, Optional, cast
 from uuid import uuid4
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from pydantic import ValidationError
-
-from openadapt_flow.contracts.oracle import OracleAdapter, OracleObservation
-from openadapt_flow.contracts.process_capability import canonical_json_bytes
-from openadapt_flow.contracts.reward import (
+from openadapt_types.oracle import OracleAdapter, OracleObservation
+from openadapt_types.process_capability import canonical_json_bytes
+from openadapt_types.reward import (
     REWARD_SCORING_CLASS,
     RewardCertificateV1,
     RewardContractV1,
@@ -44,6 +42,8 @@ from openadapt_flow.contracts.reward import (
     certificate_state,
     score,
 )
+from pydantic import ValidationError
+
 from openadapt_flow.execute.keys import (
     fingerprint_of,
     load_or_create_private_key,

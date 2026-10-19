@@ -19,7 +19,7 @@ vocabulary pinned to the engine's own literals, a bounded integer, or a
 boolean. A relay that stores this object is structurally incapable of
 representing a patient name, an MRN, an observed value, a path, or a workflow
 label, in precisely the same sense as
-:class:`~openadapt_flow.contracts.HumanDecisionTaskV1`. The claim is checkable by reading
+:class:`~openadapt_types.HumanDecisionTaskV1`. The claim is checkable by reading
 the schema rather than by trusting a detector.
 
 What the operator loses at this tier is one adjective: the phone says "OpenAdapt
