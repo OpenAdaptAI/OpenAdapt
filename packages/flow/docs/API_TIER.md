@@ -1,9 +1,14 @@
 # API steps from a recording's network traffic
 
-A web form save that OpenAdapt can repeat as one HTTP request runs as one
-request instead of as the clicks and keystrokes that filled the form. The
-right-record check before the save and the record check after it stay the
-same. If anything the API step depends on has changed, the recorded GUI
+**Scope: a single HTML form submission.** An API step repeats one
+`application/x-www-form-urlencoded` POST of one HTML form, read again from
+the live page, in place of the clicks and keystrokes that filled it. It is
+not a general API client: JSON or script-built requests, more than one
+write, multi-page server state, and forms whose script validates or rewrites
+values all stay on the GUI.
+
+The right-record check before the save and the record check after it stay
+the same. If anything the API step depends on has changed, the recorded GUI
 steps run instead.
 
 Its speed is measured on the local OpenEMR referral as arm `program_api` of
