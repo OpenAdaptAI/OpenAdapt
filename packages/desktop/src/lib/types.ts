@@ -372,7 +372,53 @@ export interface TaskInputs {
   workflow_id: string;
   inputs?: QualificationParameter[];
   target?: ExecutionTarget | null;
+  /** Values Check it said stay the same; Run it fills them in. */
+  fixed_values?: Record<string, string>;
   error?: string;
+}
+
+/** One answer to a Check it question, and who gave it. */
+export interface CheckSetupAnswer {
+  by: "person" | "agent";
+  at: string;
+  answer?: string;
+  changes?: string[];
+  read?: string;
+  quiet_steps?: number;
+}
+
+/** The record check Check it learned from the reads in the recording. */
+export interface LearnedRecordCheck {
+  found: boolean;
+  reason?: string;
+  read?: string;
+  checked?: string[];
+  values_checked?: string[];
+  fixed_fields?: Record<string, string>;
+  idempotency_field?: string | null;
+  binding?: Record<string, unknown>;
+  effects?: Record<string, unknown>;
+  fault_test?: {
+    bad_saves: number;
+    caught: number;
+    caught_kinds: string[];
+    missed_kinds: string[];
+  };
+}
+
+/** Everything Check it can fill in from the recording (get_check_setup). */
+export interface CheckSetup {
+  ok: boolean;
+  workflow_id: string;
+  error?: string;
+  record_check: LearnedRecordCheck;
+  saving_steps: string[];
+  quiet_steps: { write_requests: number; evidence: string; step_ids: string[] } | null;
+  unproven_steps: string[];
+  values: { name: string; example: unknown; changes: boolean; why: string }[];
+  recordings: number;
+  answers: { record_check?: CheckSetupAnswer; values?: CheckSetupAnswer };
+  fixed_values: Record<string, string>;
 }
 
 export interface RunItemResponse {

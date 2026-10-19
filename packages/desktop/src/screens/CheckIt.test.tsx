@@ -194,7 +194,7 @@ it("never calls a workflow read-only while a step's effect is unknown", async ()
   expect(screen.getAllByText("Needs an answer").length).toBeGreaterThanOrEqual(3);
   expect(screen.queryByText("Not needed")).toBeNull();
   expect(screen.queryByRole("button", { name: "These look right" })).toBeNull();
-  const run = screen.getByRole("button", { name: "Run the practice item" });
+  const run = screen.getByRole("button", { name: "Yes, practice once with these test values" });
   expect((run as HTMLButtonElement).disabled).toBe(true);
 });
 
@@ -283,13 +283,7 @@ it("runs the practice item on test values from the recording", async () => {
   });
   render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
 
-  const run = await screen.findByRole("button", { name: "Run the practice item" });
-  expect((run as HTMLButtonElement).disabled).toBe(true);
-  fireEvent.click(
-    screen.getByRole("checkbox", {
-      name: "These are test values, and I'll keep the app in view while it runs.",
-    }),
-  );
+  const run = await screen.findByRole("button", { name: "Yes, practice once with these test values" });
   fireEvent.click(run);
 
   expect(await screen.findByText(/Done and checked. It saved the entry/)).toBeTruthy();
@@ -400,7 +394,7 @@ it("runs one drill at a time in the signed-in browser", async () => {
   render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
 
   expect(await screen.findByText(/in your signed-in browser/)).toBeTruthy();
-  expect(screen.getByText(/Open the screen where the workflow starts before you run it/)).toBeTruthy();
+  expect(screen.getByText(/Open the\s+screen where the workflow starts first/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Run the next drill" }));
 
   expect(await screen.findByText(/then run the next drill/)).toBeTruthy();
@@ -430,17 +424,12 @@ it("counts nothing when the practice save wasn't approved, and passes IT's setti
   });
   render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
 
-  const run = await screen.findByRole("button", { name: "Run the practice item" });
-  expect(screen.getByText(/Before it saves, it shows you the filled form and waits for you to approve/)).toBeTruthy();
+  const run = await screen.findByRole("button", { name: "Yes, practice once with these test values" });
+  expect(screen.getByText(/shows you the filled form and waits for\s+your OK first/)).toBeTruthy();
   fireEvent.change(screen.getByLabelText("Deployment settings file (for IT)"), {
     target: { value: "/tmp/deployment.claims.yaml" },
   });
   expect(screen.getByText(/with your deployment settings file/)).toBeTruthy();
-  fireEvent.click(
-    screen.getByRole("checkbox", {
-      name: "These are test values, and I'll keep the app in view while it runs.",
-    }),
-  );
   fireEvent.click(run);
 
   expect(await screen.findByText(/Nobody approved the save in time/)).toBeTruthy();
@@ -462,7 +451,7 @@ it("describes each drill as the change Flow makes before the save", async () => 
   engine(ready);
   render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
 
-  expect(await screen.findByText(/no drill asks you to approve/)).toBeTruthy();
+  expect(await screen.findByText(/a drill never saves/)).toBeTruthy();
   for (const label of [
     "Wrong record",
     "Two possible matches",
@@ -483,7 +472,7 @@ it("before the check starts, says drills come with the practice item and the rec
   engine(fresh);
   render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
 
-  expect(await screen.findByText(/sets up five drills from your practice item/)).toBeTruthy();
+  expect(await screen.findByText(/runs 5 safety drills\s+on its own/)).toBeTruthy();
   expect(screen.queryByText("Not needed")).toBeNull();
   expect(screen.getByText(/will read the saved record back to check the\s+entries listed in part 1/)).toBeTruthy();
   expect(screen.queryByText(/didn't see where this save lands/)).toBeNull();
@@ -512,16 +501,153 @@ it("says where and why a practice run that ran didn't pass", async () => {
   });
   render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
 
-  const run = await screen.findByRole("button", { name: "Run the practice item" });
-  fireEvent.click(
-    screen.getByRole("checkbox", {
-      name: "These are test values, and I'll keep the app in view while it runs.",
-    }),
-  );
+  const run = await screen.findByRole("button", { name: "Yes, practice once with these test values" });
   fireEvent.click(run);
 
   expect(await screen.findByText("The practice run didn't pass.")).toBeTruthy();
   expect(
     screen.getByText(/observe exact qualification environment: qualification environment observer does not match the project/),
   ).toBeTruthy();
+});
+
+function learnedSetup(answers: Record<string, unknown> = {}) {
+  return {
+    ok: true,
+    workflow_id: "wf-1",
+    record_check: {
+      found: true,
+      read: "GET /api/db",
+      checked: ["note", "patient_id"],
+      values_checked: ["note"],
+      fixed_fields: { patient_id: "p1" },
+      idempotency_field: "key",
+      fault_test: {
+        bad_saves: 8,
+        caught: 5,
+        caught_kinds: ["nothing saved"],
+        missed_kinds: ["saved on another record"],
+      },
+    },
+    saving_steps: ["save"],
+    quiet_steps: { write_requests: 1, evidence: "In your recording the app sent data to its server only when you saved.", step_ids: ["search"] },
+    unproven_steps: ["search"],
+    values: [
+      { name: "member_id", example: "M-1", changes: true, why: "You typed it while recording." },
+      { name: "note", example: "Reviewed", changes: true, why: "You typed it while recording." },
+    ],
+    recordings: 1,
+    answers,
+    fixed_values: {},
+  };
+}
+
+function guidedEngine(initial: ReturnType<typeof project>, setup: ReturnType<typeof learnedSetup>) {
+  engine(initial);
+  const base = vi.mocked(engineTry).getMockImplementation()!;
+  vi.mocked(engineTry).mockImplementation(async (command, params, fallback) => {
+    if (command === CMD.GET_CHECK_SETUP) return setup;
+    return base(command, params, fallback);
+  });
+}
+
+it("asks three things when OpenAdapt learned the record check, and shows the rest once", async () => {
+  guidedEngine(project({ confirmed: false, armed: false, tier: null }), learnedSetup());
+  render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
+
+  expect(await screen.findByText("Is this the right record check?")).toBeTruthy();
+  expect(screen.getByText("Which values change per item?")).toBeTruthy();
+  expect(screen.getByText("Approve?")).toBeTruthy();
+  expect(screen.getByText("GET /api/db")).toBeTruthy();
+  expect(screen.getByText(/the note you give it and patient ID p1/)).toBeTruthy();
+  // What it can't catch is said, not hidden.
+  expect(screen.getByText(/caught 5 of 8 kinds of bad save\. Not caught: saved on another record\./)).toBeTruthy();
+  expect(screen.getByText(/only when you saved/)).toBeTruthy();
+  // The long parts aren't asked.
+  expect(screen.queryByText("What it changes")).toBeNull();
+  expect(screen.queryByText("How it confirms the save")).toBeNull();
+});
+
+it("a yes sends one answer, from the person, and Change opens the parts", async () => {
+  guidedEngine(project({ confirmed: false, armed: false, tier: null }), learnedSetup());
+  const sent: Record<string, unknown>[] = [];
+  vi.mocked(engineInvoke).mockImplementation(async (command, params) => {
+    if (command === CMD.GET_QUALIFICATION) {
+      return sent.length ? project() : project({ confirmed: false, armed: false, tier: null });
+    }
+    if (command === CMD.ANSWER_CHECK_SETUP) {
+      sent.push(params as Record<string, unknown>);
+      return learnedSetup({ record_check: { by: "person", at: "2026-10-19T00:00:00Z", answer: "yes" } });
+    }
+    throw new Error(`unexpected ${command}`);
+  });
+  render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Yes, use this check" }));
+  expect(await screen.findByText("You answered yes.")).toBeTruthy();
+  expect(sent).toEqual([
+    { workflow_id: "wf-1", question: "record_check", answer: "yes", answered_by: "person" },
+  ]);
+});
+
+it("Change shows the plain parts instead of the learned check", async () => {
+  guidedEngine(project({ confirmed: false, armed: false, tier: null }), learnedSetup());
+  render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Change" }));
+  expect(await screen.findByText("What it changes")).toBeTruthy();
+  expect(screen.getByText("How it confirms the save")).toBeTruthy();
+  expect(screen.queryByText("Is this the right record check?")).toBeNull();
+});
+
+it("answers which values change, then runs the practice item", async () => {
+  guidedEngine(project(), learnedSetup({ record_check: { by: "person", at: "x", answer: "yes" } }));
+  const order: string[] = [];
+  let changes: unknown;
+  vi.mocked(engineInvoke).mockImplementation(async (command, params) => {
+    order.push(command);
+    if (command === CMD.GET_QUALIFICATION) return project();
+    if (command === CMD.ANSWER_CHECK_SETUP) {
+      changes = (params as { changes: unknown }).changes;
+      return learnedSetup();
+    }
+    if (command === CMD.ADD_QUALIFICATION_CASE) {
+      return project({ cases: [{ id: "practice-1", kind: "representative", status: null }] });
+    }
+    if (command === CMD.RUN_QUALIFICATION_CASE) {
+      return {
+        ...project({ cases: [{ id: "practice-1", kind: "representative", status: "passed" }] }),
+        case_run: { outcome: "VERIFIED", transaction_outcome: "VERIFIED" },
+      };
+    }
+    throw new Error(`unexpected ${command}`);
+  });
+  render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
+
+  // The member ID is the same on every item.
+  fireEvent.click(await screen.findByRole("checkbox", { name: /Member ID/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Yes, practice once with these test values" }));
+
+  expect(await screen.findByText(/Done and checked/)).toBeTruthy();
+  expect(changes).toEqual(["note"]);
+  expect(order.filter((command) => command !== CMD.GET_QUALIFICATION).slice(0, 3)).toEqual([
+    CMD.ANSWER_CHECK_SETUP,
+    CMD.ADD_QUALIFICATION_CASE,
+    CMD.RUN_QUALIFICATION_CASE,
+  ]);
+});
+
+it("says when the person's agent answered, and leaves approval to the person", async () => {
+  guidedEngine(
+    project(),
+    learnedSetup({
+      record_check: { by: "agent", at: "x", answer: "yes" },
+      values: { by: "agent", at: "x", changes: ["note"] },
+    }),
+  );
+  render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
+
+  expect(await screen.findByText("Your agent answered for you")).toBeTruthy();
+  expect(screen.getByText("Your agent answered yes.")).toBeTruthy();
+  const approve = screen.getByRole("button", { name: "Approve this workflow" });
+  expect((approve as HTMLButtonElement).disabled).toBe(true);
 });

@@ -2977,6 +2977,40 @@ select.input:focus {
   font-size: var(--fs-caption);
 }
 
+/* Check it's three questions: the learned record check and the values. */
+.learned-check p {
+  margin: 0 0 var(--space-2);
+}
+.learned-check strong {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-medium);
+}
+.value-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+.value-choices label {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.value-choices input {
+  margin-top: 4px;
+  accent-color: var(--action);
+}
+.value-choices .mono {
+  color: var(--text-muted);
+}
+.value-choices small {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--fs-caption);
+}
+
 /* -----------------------------------------------------------------------------
    Approve each save: a run waits before a save for a person (ItemApproval.tsx)
 ----------------------------------------------------------------------------- */
