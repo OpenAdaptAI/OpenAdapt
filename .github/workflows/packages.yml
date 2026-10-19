@@ -7,11 +7,12 @@
 # skipped, and the single `packages-gate` job always reports, so it can be a
 # required check without blocking unrelated PRs.
 #
-# After the fold, openadapt-flow is the core: the contracts (formerly
-# openadapt-types) live in openadapt_flow.contracts and the MCP server (formerly
-# openadapt-agent) in openadapt_flow.agent. openadapt-types and openadapt-agent
-# are compatibility shims, tested here against the in-tree core, so a core
-# change re-runs both shim jobs.
+# Dependencies point one way: openadapt-types (the pydantic-only contracts) is
+# the leaf, openadapt-flow depends on it and re-exports it as
+# openadapt_flow.contracts, and the MCP server lives in openadapt_flow.agent
+# with openadapt-agent as its compatibility shim. Every job that installs the
+# in-tree Flow also installs the in-tree types, so a types change re-runs Flow
+# and the agent shim, and the types job installs nothing else.
 #
 # Flow is split: lint, four unit shards, and a critical job that runs the
 # golden free-path task (VERIFIED read-back against an independent oracle),
@@ -24,6 +25,18 @@
 # the live recorder tests on Windows; lint; and the release contract. Flow's
 # `capture` extra installs the in-tree capture, so a capture change also
 # re-runs Flow.
+#
+# openadapt-privacy (packages/privacy) keeps its own uv.lock and runs
+# `uv sync --locked` against it: its suite without Presidio on
+# Python 3.10, 3.11 and 3.12, the full suite with Presidio and the spaCy model
+# on 3.12, and lint plus the release contract (changelog matches the version,
+# `uv build`, archive boundary).
+#
+# OpenAdapt Desktop (packages/desktop) runs two reusable workflows:
+# desktop-test.yml (the Python engine on Linux for a PR, plus macOS and Windows
+# on main, and the bundled-Flow qualification contract) and desktop-build.yml
+# (frontend, Python distribution, frozen sidecar, and Tauri installers). Their
+# jobs are in packages-gate like every other package's.
 name: Packages
 
 on:
@@ -52,6 +65,8 @@ jobs:
       types: ${{ steps.classify.outputs.types }}
       agent: ${{ steps.classify.outputs.agent }}
       capture: ${{ steps.classify.outputs.capture }}
+      privacy: ${{ steps.classify.outputs.privacy }}
+      desktop: ${{ steps.classify.outputs.desktop }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -65,7 +80,7 @@ jobs:
         run: |
           set -euo pipefail
           all() {
-            for pkg in flow types agent capture; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
+            for pkg in flow types agent capture privacy desktop; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
             exit 0
           }
           case "$EVENT_NAME" in
@@ -85,21 +100,27 @@ jobs:
           # fail on SIGPIPE and silently report "not changed".
           hit() { if grep -Eq "$1" <<<"$changed"; then echo true; else echo false; fi; }
           wf='^\.github/workflows/packages\.yml$'
-          # Flow's `capture` extra is tested against the in-tree capture.
-          flow="$(hit "^packages/(flow|capture)/|$wf")"
-          # Both shims are tested against the in-tree core, so a core change re-runs them.
-          types="$(hit "^packages/(types|flow)/|$wf")"
-          agent="$(hit "^packages/(agent|flow)/|$wf")"
+          # Flow depends on the in-tree types, and its `capture` extra is tested
+          # against the in-tree capture.
+          flow="$(hit "^packages/(flow|capture|types)/|$wf")"
+          # The types package is the leaf: only its own files re-run it.
+          types="$(hit "^packages/types/|$wf")"
+          # The agent shim is tested against the in-tree core.
+          agent="$(hit "^packages/(agent|flow|types)/|$wf")"
           capture="$(hit "^packages/capture/|$wf")"
+          privacy="$(hit "^packages/privacy/|$wf")"
+          desktop="$(hit "^packages/desktop/|^\.github/workflows/desktop-(test|build)\.yml$|$wf")"
           {
             echo "flow=$flow"
             echo "types=$types"
             echo "agent=$agent"
             echo "capture=$capture"
+            echo "privacy=$privacy"
+            echo "desktop=$desktop"
           } | tee -a "$GITHUB_OUTPUT"
 
   types:
-    name: types shim (py${{ matrix.python-version }})
+    name: types (py${{ matrix.python-version }})
     needs: scope
     if: needs.scope.outputs.types == 'true'
     runs-on: ubuntu-latest
@@ -119,17 +140,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install the shim against the in-tree core
-        run: pip install -e ../flow -e ".[dev]" 'ruff==0.17.0' 'build==1.6.1'
-      - name: Confirm the shim resolves to the in-tree core
+      - name: Install the package alone
+        run: pip install -e ".[dev]" 'ruff==0.17.0' 'build==1.6.1'
+      - name: Confirm the leaf package installs without Flow
         run: |
           python - <<'PY'
-          import pathlib, openadapt_types
+          import importlib.util, pathlib, openadapt_types
           here = pathlib.Path(openadapt_types.__file__).resolve().as_posix()
-          print("openadapt_types resolves through", here)
-          import openadapt_flow.contracts as contracts
-          where = pathlib.Path(contracts.__file__).resolve().as_posix()
-          assert "packages/flow/openadapt_flow/contracts" in where, where
+          assert "packages/types/openadapt_types" in here, here
+          for name in ("openadapt_flow", "cv2", "onnxruntime"):
+              assert importlib.util.find_spec(name) is None, f"{name} is installed"
+          print("openadapt_types from", here)
           PY
       - name: Ruff
         run: ruff check openadapt_types tests scripts
@@ -163,7 +184,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - name: Install the shim against the in-tree core
-        run: pip install -e '../flow[agent]' -e ".[dev]"
+        run: pip install -e ../types -e '../flow[agent]' -e ".[dev]"
       - name: Confirm the in-tree Flow is the one installed
         run: |
           python - <<'PY'
@@ -195,7 +216,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install
-        run: pip install -e '.[dev]'
+        run: pip install -e ../types -e '.[dev]'
       - name: Release consistency and public artifact inventory
         # Flow's own gate: version sync across project, module and lock, and
         # every public data/config asset listed in public-artifacts.json.
@@ -266,7 +287,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install
-        run: pip install -e ../capture -e '.[dev,capture,agent]'
+        run: pip install -e ../types -e ../capture -e '.[dev,capture,agent]'
       - name: Verify the in-tree openadapt-capture imports headless
         run: |
           python - <<'PY'
@@ -328,7 +349,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install
-        run: pip install -e '.[dev]'
+        run: pip install -e ../types -e '.[dev]'
       - name: Resolve Playwright version
         id: pw
         run: |
@@ -538,6 +559,94 @@ jobs:
           uv run --no-sync python scripts/verify_distribution.py dist/*
           uv run --no-sync python scripts/check_source_boundary.py --require-dist
 
+  privacy:
+    name: privacy (py${{ matrix.python-version }})
+    needs: scope
+    if: needs.scope.outputs.privacy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    defaults:
+      run:
+        working-directory: packages/privacy
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+      - name: Install
+        run: uv sync --locked --python ${{ matrix.python-version }} --extra dev
+      - name: Test (without Presidio)
+        run: uv run --no-sync pytest tests/ -v --ignore=tests/test_presidio.py
+
+  privacy-presidio:
+    name: privacy (py3.12, Presidio)
+    needs: scope
+    if: needs.scope.outputs.privacy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: packages/privacy
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install with Presidio and the spaCy model
+        run: |
+          uv sync --locked --python 3.12 --extra dev --extra presidio
+          uv pip install "pip>=25.3"
+          uv run --no-sync python -m spacy download en_core_web_sm
+      - name: Test
+        run: uv run --no-sync pytest tests/ -v
+
+  privacy-contract:
+    name: privacy lint and release contract
+    needs: scope
+    if: needs.scope.outputs.privacy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: packages/privacy
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install
+        run: uv sync --locked --python 3.12 --extra dev
+      - name: Ruff
+        run: uv run --no-sync ruff check openadapt_privacy tests scripts
+      - name: Changelog matches the version and the release workflow
+        run: uv run --no-sync pytest tests/test_release_config.py -v
+      - name: Build wheel and source distribution
+        run: uv build
+      - name: Verify release archive boundaries
+        run: uv run --no-sync python scripts/check_source_boundary.py --require-dist
+
+  desktop-test:
+    name: desktop test
+    needs: scope
+    if: needs.scope.outputs.desktop == 'true'
+    uses: ./.github/workflows/desktop-test.yml
+
+  desktop-build:
+    name: desktop build
+    needs: scope
+    if: needs.scope.outputs.desktop == 'true'
+    uses: ./.github/workflows/desktop-build.yml
+
   packages-gate:
     name: packages-gate
     needs:
@@ -551,6 +660,11 @@ jobs:
       - capture-macos
       - capture-windows
       - capture-contract
+      - privacy
+      - privacy-presidio
+      - privacy-contract
+      - desktop-test
+      - desktop-build
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

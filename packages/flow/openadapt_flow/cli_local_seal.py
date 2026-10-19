@@ -17,7 +17,8 @@ def _home(args: argparse.Namespace) -> Path:
 
 
 def _registry(args: argparse.Namespace) -> Any:
-    from openadapt_flow.contracts.seal import parse_key_registry
+    from openadapt_types.seal import parse_key_registry
+
     from openadapt_flow.offline_seal import load_registry, public_key_entry
 
     if args.keys:

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
-from openadapt_flow.contracts import BusinessDecisionAnswerReceiptV1
+from openadapt_types import BusinessDecisionAnswerReceiptV1
 
 from openadapt_flow.console.decision_relay import RelayUncertain
 from openadapt_flow.interop.business_decision_cloud import (
@@ -244,7 +244,7 @@ class _QualifiedRegistrationTransport:
     def post(
         self, path: str, payload: dict[str, Any], *, timeout_s: float
     ) -> tuple[int, dict[str, Any]]:
-        from openadapt_flow.contracts import BusinessDecisionTaskV1
+        from openadapt_types import BusinessDecisionTaskV1
 
         assert timeout_s > 0
         self.calls.append((path, payload))
@@ -512,7 +512,7 @@ class _SharedQueueTransport:
     def post(
         self, path: str, payload: dict[str, Any], *, timeout_s: float
     ) -> tuple[int, dict[str, Any]]:
-        from openadapt_flow.contracts import (
+        from openadapt_types import (
             BusinessDecisionAnswerReceiptV1,
             BusinessDecisionTaskV1,
             sign_business_decision_answer_hmac,

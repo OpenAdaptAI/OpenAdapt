@@ -1,0 +1,48 @@
+[package]
+name = "openadapt-desktop"
+version = "0.20.0"
+description = "Installed companion for OpenAdapt authoring, teaching, and local pairing"
+authors = ["OpenAdapt AI"]
+license = "MIT"
+edition = "2021"
+
+[features]
+default = ["local-storage"]
+local-storage = []
+s3-upload = []
+r2-upload = ["s3-upload"]
+hf-upload = []
+federated = []
+# Build profiles
+enterprise = ["local-storage", "s3-upload"]
+community = ["local-storage", "hf-upload", "r2-upload"]
+full = ["enterprise", "community", "federated"]
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-notification = "2"
+# Drop the default `zip` feature: it only serves Tauri v1 compressed bundles
+# (.msi.zip, .AppImage.tar.gz) and pulls zip 4.x (RUSTSEC-2026-0367/0368/0369).
+tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls", "system-proxy"] }
+tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+reqwest = { version = "0.13.4", default-features = false, features = ["rustls-no-provider", "stream"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+sha2 = "0.10"
+tokio = { version = "1", features = ["fs", "io-util", "process", "sync", "time"] }
+url = "2"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[[bin]]
+name = "openadapt-desktop"
+path = "src/main.rs"

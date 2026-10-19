@@ -16,12 +16,10 @@ from scripts.candidate_lifecycle import (
 from scripts.check_display_topology import DisplayTopologyError, qualify_topology
 from scripts.check_junit_no_skips import JUnitQualificationError, check_reports
 from scripts.check_release_ci import (
-    EXPECTED_LIVE_QUALIFICATION_JOBS,
     EXPECTED_QUALIFICATION_JOBS,
     ReleaseEvidenceError,
     check_once,
     dispatch_missing_qualifications,
-    validate_live_linux_jobs,
     validate_qualification_jobs,
     validate_test_jobs,
 )
@@ -153,22 +151,6 @@ def _successful_jobs() -> list[dict[str, str]]:
     ]
 
 
-def _successful_live_linux_jobs() -> list[dict[str, str]]:
-    required = {
-        "Select live qualification platforms",
-        "Build candidate distributions",
-        "Interactive qualification (Linux X64)",
-    }
-    return [
-        {
-            "name": name,
-            "status": "completed",
-            "conclusion": "success" if name in required else "skipped",
-        }
-        for name in sorted(EXPECTED_LIVE_QUALIFICATION_JOBS)
-    ]
-
-
 def test_release_gate_rejects_missing_qualification_job() -> None:
     jobs = _successful_jobs()[:-1]
 
@@ -198,14 +180,27 @@ def test_release_gate_requires_successful_package_contract() -> None:
     )
 
 
-def test_release_gate_requires_successful_live_linux_qualification() -> None:
-    jobs = _successful_live_linux_jobs()
-    validate_live_linux_jobs(jobs)
+def test_release_gate_requires_the_hosted_linux_xvfb_lane() -> None:
+    """The Linux lane replaced the self-hosted desktop lane in the release gate."""
+    assert "Hosted Linux live qualification (ubuntu-latest, Xvfb)" in EXPECTED_QUALIFICATION_JOBS
 
-    linux = next(job for job in jobs if job["name"] == "Interactive qualification (Linux X64)")
+    jobs = [
+        job
+        for job in _successful_jobs()
+        if job["name"] != "Hosted Linux live qualification (ubuntu-latest, Xvfb)"
+    ]
+    with pytest.raises(ReleaseEvidenceError, match="job set differs"):
+        validate_qualification_jobs(jobs)
+
+    jobs = _successful_jobs()
+    linux = next(
+        job
+        for job in jobs
+        if job["name"] == "Hosted Linux live qualification (ubuntu-latest, Xvfb)"
+    )
     linux["conclusion"] = "skipped"
-    with pytest.raises(ReleaseEvidenceError, match="live Linux qualification"):
-        validate_live_linux_jobs(jobs)
+    with pytest.raises(ReleaseEvidenceError, match="incomplete jobs"):
+        validate_qualification_jobs(jobs)
 
 
 def test_release_gate_binds_both_workflows_and_jobs_to_exact_sha() -> None:
@@ -238,19 +233,6 @@ def test_release_gate_binds_both_workflows_and_jobs_to_exact_sha() -> None:
                     }
                 ]
             }
-        if "/live-qualification.yml/runs?" in url:
-            return {
-                "workflow_runs": [
-                    {
-                        "id": 30,
-                        "head_sha": sha,
-                        "event": "workflow_dispatch",
-                        "created_at": "2026-08-18T00:02:00Z",
-                        "status": "completed",
-                        "conclusion": "success",
-                    }
-                ]
-            }
         if "/actions/runs/20/jobs?" in url:
             return {"jobs": _successful_jobs()}
         if "/actions/runs/10/jobs?" in url:
@@ -263,8 +245,6 @@ def test_release_gate_binds_both_workflows_and_jobs_to_exact_sha() -> None:
                     }
                 ]
             }
-        if "/actions/runs/30/jobs?" in url:
-            return {"jobs": _successful_live_linux_jobs()}
         raise AssertionError(f"unexpected URL {url}")
 
     assert check_once(
@@ -275,7 +255,6 @@ def test_release_gate_binds_both_workflows_and_jobs_to_exact_sha() -> None:
     ) == {
         "test.yml": 10,
         "production-qualification.yml": 20,
-        "live-qualification.yml": 30,
     }
 
 
@@ -289,16 +268,13 @@ def test_release_orchestrator_starts_only_missing_exact_sha_workflows() -> None:
         if "/production-qualification.yml/runs?" in url:
             return {"workflow_runs": []}
         if "/live-qualification.yml/runs?" in url:
-            return {"workflow_runs": []}
+            raise AssertionError("the release must not query the self-hosted live workflow")
         raise AssertionError(f"unexpected URL {url}")
 
     def dispatch(repository, requirement, *, ref, sha, token):  # type: ignore[no-untyped-def]
         calls.append((repository, requirement.file_name, ref, sha))
         assert token == "token"
-        expected_inputs = {"candidate_sha": "{sha}"}
-        if requirement.file_name == "live-qualification.yml":
-            expected_inputs["platform"] = "linux"
-        assert requirement.dispatch_inputs == expected_inputs
+        assert requirement.dispatch_inputs == {"candidate_sha": "{sha}"}
 
     started = dispatch_missing_qualifications(
         repository="OpenAdaptAI/openadapt-capture",
@@ -309,39 +285,16 @@ def test_release_orchestrator_starts_only_missing_exact_sha_workflows() -> None:
         dispatch=dispatch,
     )
 
-    assert started == ("production-qualification.yml", "live-qualification.yml")
+    assert started == ("production-qualification.yml",)
     assert calls == [
         ("OpenAdaptAI/openadapt-capture", "production-qualification.yml", "main", sha),
-        ("OpenAdaptAI/openadapt-capture", "live-qualification.yml", "main", sha),
     ]
 
 
-def test_release_orchestrator_does_not_accept_a_non_linux_live_run() -> None:
-    sha = "a" * 40
-    dispatched: list[str] = []
+def test_release_requirements_never_include_a_self_hosted_workflow() -> None:
+    from scripts.check_release_ci import REQUIREMENTS
 
-    def get_json(url: str, _token: str):
-        if "/test.yml/runs?" in url or "/production-qualification.yml/runs?" in url:
-            return {"workflow_runs": [{"head_sha": sha, "event": "workflow_dispatch", "id": 10}]}
-        if "/live-qualification.yml/runs?" in url:
-            return {"workflow_runs": [{"head_sha": sha, "event": "workflow_dispatch", "id": 30}]}
-        if "/actions/runs/30/jobs?" in url:
-            jobs = _successful_live_linux_jobs()
-            next(job for job in jobs if job["name"] == "Interactive qualification (Linux X64)")[
-                "conclusion"
-            ] = "skipped"
-            return {"jobs": jobs}
-        raise AssertionError(f"unexpected URL {url}")
-
-    dispatch_missing_qualifications(
-        repository="OpenAdaptAI/openadapt-capture",
-        sha=sha,
-        ref="main",
-        token="token",
-        get_json=get_json,
-        dispatch=lambda _repository, requirement, **_kwargs: dispatched.append(
-            requirement.file_name
-        ),
-    )
-
-    assert dispatched == ["live-qualification.yml"]
+    assert [requirement.file_name for requirement in REQUIREMENTS] == [
+        "test.yml",
+        "production-qualification.yml",
+    ]
