@@ -248,7 +248,15 @@ original bundle:
 - a qualification case;
 - `--pin-digest`.
 
-In those cases the approved bundle needs its own admission first. Under the
+In those cases the approved bundle needs its own admission first: a
+repaired bundle has a new digest, and each of these admits only the bundle
+it names.
+
+The first run is the ordinary run, so an admitted API step
+([API_TIER.md](API_TIER.md)) can run there. The probes and the resumed run of
+a repaired bundle run the GUI steps only, and the run report says why: the
+repair, the fault probes and the person's approval are all about the GUI
+step, so an API step in its place would save without exercising the repair. Under the
 CLI, the Standard profile requires a signed qualification admission. So a CLI
 self-repair runs without a named profile or under Demo, and the record check
 still runs. The Python API can run the Standard profile contract directly, as

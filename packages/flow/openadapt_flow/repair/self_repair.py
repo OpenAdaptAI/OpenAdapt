@@ -350,6 +350,8 @@ class ReplayTarget:
             approval_gate=approval_gate,
             **self.replayer_kwargs,
         )
+        if approval_gate is not None:
+            keep_gui_for_repair(replayer)
         return replayer.run(
             workflow.model_copy(deep=True),
             params=self.params,
@@ -360,6 +362,25 @@ class ReplayTarget:
             execution_origin=self.execution_origin,
             execution_entry_url=self.entry_url,
         )
+
+
+#: Why a probe or the resumed run of a repaired bundle doesn't use API steps.
+REPAIR_GUI_ONLY = (
+    "self-repair's probes and resumed run exercise the repaired GUI step, and "
+    "the person approved that step, so its API step doesn't run"
+)
+
+
+def keep_gui_for_repair(replayer: Any) -> None:
+    """Run a repaired bundle's probe or resumed run on the GUI steps only.
+
+    The repair, the fault probes and the person's approval are all about the
+    GUI step. An API step in its place would save without exercising the
+    repair, so the canary would prove nothing about it.
+    """
+
+    replayer.api_steps = False
+    replayer.api_steps_off_reason = REPAIR_GUI_ONLY
 
 
 # -- the probe gate --------------------------------------------------------------

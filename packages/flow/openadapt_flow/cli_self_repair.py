@@ -206,7 +206,10 @@ class CliTarget:
     ) -> Any:
         from urllib.parse import urlsplit
 
-        from openadapt_flow.repair.self_repair import SelfRepairRefused
+        from openadapt_flow.repair.self_repair import (
+            REPAIR_GUI_ONLY,
+            SelfRepairRefused,
+        )
         from openadapt_flow.run_gate import (
             build_runtime_authorization,
             evaluate_run_gate,
@@ -258,6 +261,9 @@ class CliTarget:
             execution_entry_url=page_url,
             approval_gate=gate,
             deployment_surface=self.backend_cfg.deployment_surface,
+            # A probe or the resumed run of a repaired bundle runs the GUI
+            # step the person approved (repair.self_repair.keep_gui_for_repair).
+            api_steps_off_reason=None if original else REPAIR_GUI_ONLY,
         )
 
 
