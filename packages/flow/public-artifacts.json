@@ -1172,6 +1172,34 @@
       "sha256": "abc0be154bd01abaa0cb853e1b65671572c9f3956af1d89b5e2fe3c5e17374aa"
     },
     {
+      "path": "benchmark/scoreboard/raw/mockmed/code_agent/2026-10-19-timed/items.csv",
+      "sha256": "9c48d0b32e4ff5b02f30e20caad774d22b284f0d301586c9d3db041ec9d82f0f"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/code_agent/2026-10-19-timed/ledgers/item-001.json",
+      "sha256": "58fb948c5b36cfe89336033534837956e475deb81d1638967222d7ac3f43aa8d"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/code_agent/2026-10-19-timed/ledgers/item-002.json",
+      "sha256": "6feaf48ee46ca24375f42afabb2d4441ffb17454482ad227e80ab2c65cd68b11"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/code_agent/2026-10-19-timed/ledgers/item-003.json",
+      "sha256": "1636591ecf12cf0473629c3496f5de165da22e0f5ebbd95e194a3347909f9834"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/code_agent/2026-10-19-timed/ledgers/item-004.json",
+      "sha256": "9bf648cdd0d1825c5f95d4c442b8a31fb6ce2bbf63f35db302bc847a3bf399a7"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/code_agent/2026-10-19-timed/ledgers/item-005.json",
+      "sha256": "42189b411154c3b686a5e2f08bf05ce646344ee4654193b5a092beaf095ac6a0"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/code_agent/2026-10-19-timed/meta.json",
+      "sha256": "36edcd6ba88c16fe611f5f425b6face753a2a7dfba88ee3ca02b7cdcd01a3804"
+    },
+    {
       "path": "benchmark/scoreboard/raw/mockmed/first_run/2026-10-18-a/first_run.json",
       "sha256": "5948cd90cd29a502f17c9874cc2000b4192ae006d2f6a9975c98b69bdc0da387"
     },
@@ -1374,6 +1402,34 @@
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/claims/smoke-2026-10-19/meta.json",
       "sha256": "5d14056e44551ca6a23d90c65f450c9be508b6da992b252aaad1a800355102be"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/code_agent/2026-10-19-timed/items.csv",
+      "sha256": "09cf27489eca4ae58f42c748a89ba304a9cc89df224b5c4534a8a03c7d9334bf"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/code_agent/2026-10-19-timed/ledgers/item-721.json",
+      "sha256": "6803379aa825df692d4add958a04ff5f84469ad0f21fa1cadffe912484824172"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/code_agent/2026-10-19-timed/ledgers/item-722.json",
+      "sha256": "bcb573518b57d977ab46531b055486202121e02f590fba2c3fdaf22d7501c02e"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/code_agent/2026-10-19-timed/ledgers/item-723.json",
+      "sha256": "ca83992ea1504beb688c0920ee7888e079a8412aba5d2ad26c822111b6b2d332"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/code_agent/2026-10-19-timed/ledgers/item-724.json",
+      "sha256": "0a52b95e7916464317990556931c4a80e76e4ed2c6f58d4857a91e70b76b2518"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/code_agent/2026-10-19-timed/ledgers/item-725.json",
+      "sha256": "e93e9a76d6f51a2839839ca3a6141f7c4e7055f37aca6c6f1e90d2003e6bb26f"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/code_agent/2026-10-19-timed/meta.json",
+      "sha256": "62a49886aa22c10352ce3556850606c13f7951b0a3c62680f1726ce8dde79426"
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/first_run/2026-10-18-a/first_run.json",
@@ -1701,11 +1757,11 @@
     },
     {
       "path": "benchmark/scoreboard/raw/spend.json",
-      "sha256": "73568f97172d723a822eccf833f26d320ace50258419bd6f467e6e19effdc0ac"
+      "sha256": "a1f2e916515597ebf8414deb68c3d0472ff029929df3261dddd03434176c9c38"
     },
     {
       "path": "benchmark/scoreboard/scoreboard.json",
-      "sha256": "ca49157bda14582c30861e4d0abbf572020b57c53c758364f5f83977d7c7bc95"
+      "sha256": "b23e9a74e73493650ab9b59752fd5e92c594d0e35dd562070bd3637620f8dba0"
     },
     {
       "path": "benchmark/silent_wrong_action/results.json",
