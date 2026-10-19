@@ -13,11 +13,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from openadapt_flow.contracts.execute import (
+from openadapt_types.execute import (
     EffectStrengthV1,
     ExecuteRequestV1,
     ExecuteTerminalOutcomeV1,
 )
+
 from openadapt_flow.execute.models import AdmittedBundle
 
 Runner = Callable[["AdmittedBundle", "ExecuteRequestV1", Path], "DispatchResult"]

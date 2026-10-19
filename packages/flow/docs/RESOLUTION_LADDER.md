@@ -22,6 +22,15 @@ modes, not a blanket promise of adaptation. When the screen stops matching
 expectations entirely, the run halts with a report instead of guessing, and
 steps tagged irreversible will not act on a low-confidence match at all.
 
+A remote desktop redrawn at another display scale is handled before the
+ladder runs. At the first step, the runtime fits one scale from the labels the
+compiler kept and, when the fit holds, runs every rung on a view resampled to
+the recorded geometry. When the OCR rung misses a label that a different
+rasterizer read with confusable glyphs (`A1001` as `Al001`), it compares
+labels under OCR's confusable-glyph classes, only inside the recorded target
+region and only when exactly one line there qualifies. See
+[`../benchmark/pixel_scale/README.md`](../benchmark/pixel_scale/README.md).
+
 ## Vision-first, not vision-limited
 
 The runtime is **vision-first**: it can operate a pure pixel surface

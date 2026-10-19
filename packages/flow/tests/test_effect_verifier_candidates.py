@@ -25,6 +25,7 @@ from openadapt_flow.runtime.effects.effect import (
     EffectState,
     EffectVerdict,
     ReadbackNav,
+    ReadbackReset,
     ReadbackSpec,
     Verdict,
 )
@@ -72,6 +73,7 @@ def _effect(*, different_path=False):
                 if different_path
                 else []
             ),
+            reset=ReadbackReset(kind="new_search", at=2) if different_path else None,
         ),
     )
 

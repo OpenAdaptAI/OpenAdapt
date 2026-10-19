@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B1220">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F5F7FA">
+<title>OpenAdapt decisions</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="app" id="app">
+  <header class="top">
+    <span class="brand"><span class="mark" aria-hidden="true"></span>OpenAdapt</span>
+    <span class="status" id="status" hidden><span class="dot" aria-hidden="true"></span><span id="device" class="device"></span></span>
+  </header>
+  <p class="offline-bar" id="offline-bar" role="status" hidden>Offline. Answers are off until this phone reconnects. Nothing is queued.</p>
+  <div class="queue" id="queue-row" hidden><span class="count" id="count"></span><span class="pips" id="pips" aria-hidden="true"></span></div>
+  <main id="main" class="deck">Loading…</main>
+  <footer id="actions" class="answers" hidden></footer>
+  <p class="hint" id="hint"></p>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden>
+    <p class="toast-msg" id="toast-msg"></p>
+    <button type="button" id="undo" hidden>Undo</button>
+    <span class="toast-bar" id="toast-bar" aria-hidden="true"></span>
+  </div>
+  <div class="scrim" id="scrim" hidden></div>
+  <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden></section>
+  <p class="sr" id="announce" aria-live="assertive"></p>
+</div>
+<script src="/app.js" defer></script>
+</body>
+</html>

@@ -19,7 +19,7 @@ Design (per ``docs/ECOSYSTEM_INTEGRATION.md`` §2):
   ``identity_armed`` are net-new *compiler evidence* the passive canonical
   schema deliberately does not model. They are flow-only and are NOT smuggled
   into ``Action.raw``; the shared vocabulary carries only the shared fields.
-* **Lazy, optional dependency.** ``openadapt_flow.contracts`` is imported *inside* the
+* **Lazy, optional dependency.** ``openadapt_types`` is imported *inside* the
   functions, never at module import time, so importing this module stays
   cheap and the dependency stays optional (extra: ``openadapt-flow[interop]``).
 
@@ -81,7 +81,7 @@ from openadapt_flow import ir
 _PARAM_PLACEHOLDER_RE = re.compile(r"^\{(\w+)\}$")
 
 if TYPE_CHECKING:  # import-light: only for type checkers, never at runtime import
-    from openadapt_flow.contracts import Action, ActionResult, ActionTarget
+    from openadapt_types import Action, ActionResult, ActionTarget
 
     # Without pydantic's mypy plugin, ``Field(None, ...)`` defaults in
     # openadapt-types look required to mypy.  The whole-package development
@@ -111,10 +111,11 @@ _ActionErrorType = Literal[
 # The shared enum map. SELECT_OPTION deliberately stays outside it until the
 # cross-package schema can carry its commit key and field evidence without
 # degrading it to TYPE. SWITCH_SURFACE is a flow-only control step (it moves
-# the replay between bound surfaces) with no canonical ActionType.
-# :func:`step_to_action` refuses both conversions loudly.
+# the replay between bound surfaces) with no canonical ActionType. READ stays
+# outside it too: the shared schema has no typed field read.
+# :func:`step_to_action` refuses these conversions loudly.
 _FLOW_ONLY_ACTION_KINDS = frozenset(
-    {ir.ActionKind.SELECT_OPTION, ir.ActionKind.SWITCH_SURFACE}
+    {ir.ActionKind.SELECT_OPTION, ir.ActionKind.SWITCH_SURFACE, ir.ActionKind.READ}
 )
 ACTION_KIND_TO_ACTION_TYPE: dict[ir.ActionKind, str] = {
     kind: kind.value for kind in ir.ActionKind if kind not in _FLOW_ONLY_ACTION_KINDS
@@ -157,7 +158,7 @@ def _canonical_to_scroll(
 
 
 def step_to_action(step: ir.Step) -> "Action":
-    """Map a flow ``Step`` onto an ``openadapt_flow.contracts.Action`` (shared fields).
+    """Map a flow ``Step`` onto an ``openadapt_types.Action`` (shared fields).
 
     Preserves the shared vocabulary (action type, target coordinates, text,
     key, scroll, intent) and drops compiler-only evidence (anchor templates,
@@ -174,12 +175,17 @@ def step_to_action(step: ir.Step) -> "Action":
         ValueError: If openadapt-types cannot validate the action (should not
             happen for well-formed steps).
     """
-    from openadapt_flow.contracts import Action, ActionTarget, ActionType
+    from openadapt_types import Action, ActionTarget, ActionType
 
     if step.action is ir.ActionKind.SELECT_OPTION:
         raise ValueError(
             "SELECT_OPTION is not representable in openadapt-types without "
             "losing its atomic commit contract"
+        )
+    if step.action is ir.ActionKind.READ:
+        raise ValueError(
+            "READ is not representable in openadapt-types without losing its "
+            "typed field and proof settings"
         )
     if step.action is ir.ActionKind.SWITCH_SURFACE:
         raise ValueError(
@@ -261,7 +267,7 @@ def step_to_action(step: ir.Step) -> "Action":
 
 
 def result_to_action_result(step_result: ir.StepResult) -> "ActionResult":
-    """Map a flow ``StepResult`` onto an ``openadapt_flow.contracts.ActionResult``.
+    """Map a flow ``StepResult`` onto an ``openadapt_types.ActionResult``.
 
     Carries ``ok`` -> ``success``, ``error`` -> ``error``,
     ``elapsed_ms`` -> ``duration_ms``, and the resolved click point
@@ -276,7 +282,7 @@ def result_to_action_result(step_result: ir.StepResult) -> "ActionResult":
     Returns:
         A canonical ``ActionResult``.
     """
-    from openadapt_flow.contracts import ActionResult
+    from openadapt_types import ActionResult
 
     resolved_coordinates: Optional[tuple[int, int]] = None
     if step_result.resolution is not None:

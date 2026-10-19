@@ -3,7 +3,7 @@
 Under an approval mode a run stops before a save and writes an
 :class:`~openadapt_flow.approval_mode.item_approval.ItemApprovalRequest`. This
 module offers that request to the person through the same signed
-:class:`~openadapt_flow.contracts.human_decision.HumanDecisionTaskV1` contract
+:class:`~openadapt_types.human_decision.HumanDecisionTaskV1` contract
 the decision portal already renders for paused runs, so a paired phone can
 approve or decline the save with one tap:
 
@@ -44,6 +44,15 @@ import secrets
 from pathlib import Path
 from typing import Any, Literal, Optional
 
+from openadapt_types.human_decision import (
+    HUMAN_DECISION_TASK_SCHEMA,
+    HumanDecisionAction,
+    HumanDecisionReceiptReason,
+    HumanDecisionReceiptState,
+    HumanDecisionReceiptV1,
+    HumanDecisionTaskV1,
+    sign_human_decision_task_hmac,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 from openadapt_flow.approval_mode.approver import StepClass
@@ -57,15 +66,6 @@ from openadapt_flow.approval_mode.item_approval import (
 )
 from openadapt_flow.approval_mode.model import DECISION_PORTAL_ROUTE, DeclineReason
 from openadapt_flow.console import data
-from openadapt_flow.contracts.human_decision import (
-    HUMAN_DECISION_TASK_SCHEMA,
-    HumanDecisionAction,
-    HumanDecisionReceiptReason,
-    HumanDecisionReceiptState,
-    HumanDecisionReceiptV1,
-    HumanDecisionTaskV1,
-    sign_human_decision_task_hmac,
-)
 
 #: The run-local HMAC key that signs this run's save-approval tasks. Created
 #: once, 0600, inside the run's private ``item-approval`` folder.

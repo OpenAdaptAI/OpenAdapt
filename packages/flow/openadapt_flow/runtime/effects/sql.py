@@ -44,7 +44,7 @@ import re
 import time
 from typing import Any, Callable, Iterable, Mapping, Optional
 
-from openadapt_flow.runtime.effects._common import judge_records
+from openadapt_flow.runtime.effects._common import drop_record_fields, judge_records
 from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
     Effect,
@@ -150,6 +150,8 @@ class SqlRecordVerifier(VerifierAdapterBase):
             bounds the polling loop, mirroring the REST verifier).
         poll_interval_s: Gap between polls while waiting for the write to
             land within ``Effect.timeout_s``.
+        drop_fields: Record fields removed before judging (``["id"]`` judges
+            records by their whole content); see :class:`~openadapt_flow.runtime.effects.RestRecordVerifier`.
     """
 
     substrate = "sql"
@@ -163,7 +165,9 @@ class SqlRecordVerifier(VerifierAdapterBase):
         query_params: Optional[Mapping[str, Any]] = None,
         timeout_s: float = 5.0,
         poll_interval_s: float = 0.2,
+        drop_fields: tuple[str, ...] = (),
     ) -> None:
+        self.drop_fields = tuple(drop_fields)
         self._connect = connect
         self.query = assert_read_only_sql(query)
         self.query_params = dict(query_params or {})
@@ -193,7 +197,9 @@ class SqlRecordVerifier(VerifierAdapterBase):
                 return None  # not a result-set query -> unusable
             columns = [str(col[0]) for col in description]
             rows = cursor.fetchall()
-            return [dict(zip(columns, row)) for row in rows]
+            return drop_record_fields(
+                [dict(zip(columns, row)) for row in rows], self.drop_fields
+            )
         except Exception:  # noqa: BLE001 - any read failure is unreadable
             return None
         finally:

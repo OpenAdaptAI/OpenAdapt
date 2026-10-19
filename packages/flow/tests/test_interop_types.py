@@ -6,7 +6,7 @@ Covers:
 * a representative Step round-trips its shared fields into a valid Action;
 * StepResult -> ActionResult carries ok/error (and resolved coords / duration);
 * the partial reverse hydrate and its refusal of out-of-vocabulary actions;
-* the shim is import-light — importing it does NOT import openadapt_flow.contracts until
+* the shim is import-light — importing it does NOT import openadapt_types until
   a function is actually called (asserted in an isolated subprocess).
 
 Tests that need the optional dependency ``pytest.importorskip`` it, so the file
@@ -27,7 +27,7 @@ from openadapt_flow.interop import types as interop
 # The shim itself is import-light and always importable; the *tests* below
 # exercise the canonical schema, so skip the whole module when the optional
 # dependency is absent. CI installs it via the ``interop`` extra.
-pytest.importorskip("openadapt_flow.contracts")
+pytest.importorskip("openadapt_types")
 
 
 # --- enum map: exhaustive, value-correct, subset ---------------------------
@@ -47,6 +47,7 @@ def test_action_kind_map_covers_losslessly_shared_values() -> None:
     }
     assert set(interop.ACTION_KIND_TO_ACTION_TYPE) == set(ir.ActionKind) - {
         ir.ActionKind.SELECT_OPTION,
+        ir.ActionKind.READ,
         ir.ActionKind.SWITCH_SURFACE,
     }
     assert interop.ACTION_KIND_TO_ACTION_TYPE == expected
@@ -54,7 +55,7 @@ def test_action_kind_map_covers_losslessly_shared_values() -> None:
 
 def test_action_kind_is_byte_identical_subset_of_action_type() -> None:
     """set(ActionKind values) is a subset of set(ActionType values), identical."""
-    from openadapt_flow.contracts import ActionType
+    from openadapt_types import ActionType
 
     kind_values = set(interop.ACTION_KIND_TO_ACTION_TYPE.values())
     type_values = {t.value for t in ActionType}
@@ -75,6 +76,23 @@ def test_select_option_refuses_lossy_shared_type_conversion() -> None:
         anchor=anchor,
         selection_commit_key="Enter",
         selection_region=anchor.region,
+    )
+    with pytest.raises(ValueError, match="not representable"):
+        interop.step_to_action(step)
+
+
+def test_read_refuses_lossy_shared_type_conversion() -> None:
+    from openadapt_flow.records.schema import FieldSpec
+
+    step = ir.Step(
+        id="read",
+        intent="read amount",
+        action=ir.ActionKind.READ,
+        read=ir.ReadStepSpec(
+            schema_name="ledger_entry",
+            field=FieldSpec(name="amount", kind="decimal"),
+            region=(0, 0, 10, 10),
+        ),
     )
     with pytest.raises(ValueError, match="not representable"):
         interop.step_to_action(step)
@@ -111,7 +129,7 @@ def _click_step() -> ir.Step:
 
 
 def test_click_step_round_trips_shared_fields() -> None:
-    from openadapt_flow.contracts import Action, ActionType
+    from openadapt_types import Action, ActionType
 
     action = interop.step_to_action(_click_step())
 
@@ -147,7 +165,7 @@ def test_export_does_not_mark_schema_defaults_as_explicit_fields() -> None:
 
 
 def test_type_step_with_literal_text() -> None:
-    from openadapt_flow.contracts import ActionType
+    from openadapt_types import ActionType
 
     step = ir.Step(id="s2", intent="type note", action=ir.ActionKind.TYPE, text="hello")
     action = interop.step_to_action(step)
@@ -163,7 +181,7 @@ def test_type_step_with_param_yields_valid_placeholder() -> None:
 
 
 def test_key_step() -> None:
-    from openadapt_flow.contracts import ActionType
+    from openadapt_types import ActionType
 
     step = ir.Step(id="s4", intent="press enter", action=ir.ActionKind.KEY, key="Enter")
     action = interop.step_to_action(step)
@@ -194,7 +212,7 @@ def test_scroll_step_direction_and_amount(dx, dy, direction, amount) -> None:
 
 
 def test_wait_step_has_no_target() -> None:
-    from openadapt_flow.contracts import ActionType
+    from openadapt_types import ActionType
 
     step = ir.Step(id="s6", intent="settle", action=ir.ActionKind.WAIT)
     action = interop.step_to_action(step)
@@ -204,7 +222,7 @@ def test_wait_step_has_no_target() -> None:
 
 def test_all_action_kinds_produce_valid_actions() -> None:
     """Exercising every kind through the shim yields validator-passing Actions."""
-    from openadapt_flow.contracts import Action
+    from openadapt_types import Action
 
     kinds_and_kwargs = {
         ir.ActionKind.CLICK: {"anchor": _click_step().anchor},
@@ -223,7 +241,7 @@ def test_all_action_kinds_produce_valid_actions() -> None:
 
 
 def test_result_carries_ok() -> None:
-    from openadapt_flow.contracts import ActionResult
+    from openadapt_types import ActionResult
 
     sr = ir.StepResult(
         step_id="s1",
@@ -275,7 +293,7 @@ def test_result_identity_mismatch_maps_to_state_mismatch() -> None:
 
 
 def test_reverse_round_trips_shared_vocabulary() -> None:
-    from openadapt_flow.contracts import Action, ActionTarget, ActionType
+    from openadapt_types import Action, ActionTarget, ActionType
 
     action = Action(type=ActionType.TYPE, text="hello", reasoning="type greeting")
     step = interop.action_to_step(action, step_id="ing1")
@@ -289,7 +307,7 @@ def test_reverse_round_trips_shared_vocabulary() -> None:
 
 
 def test_reverse_scroll_round_trips() -> None:
-    from openadapt_flow.contracts import Action, ActionType
+    from openadapt_types import Action, ActionType
 
     action = Action(type=ActionType.SCROLL, scroll_direction="down", scroll_amount=80)
     step = interop.action_to_step(action)
@@ -298,7 +316,7 @@ def test_reverse_scroll_round_trips() -> None:
 
 
 def test_reverse_rejects_out_of_vocabulary_action() -> None:
-    from openadapt_flow.contracts import Action, ActionType
+    from openadapt_types import Action, ActionType
 
     action = Action(type=ActionType.GOTO, url="https://example.test")
     with pytest.raises(ValueError, match="no flow ActionKind equivalent"):
@@ -309,16 +327,19 @@ def test_reverse_rejects_out_of_vocabulary_action() -> None:
 
 
 def test_importing_shim_does_not_import_openadapt_types() -> None:
-    """The module must not pull openadapt_flow.contracts until a function is called.
+    """The module must not load the action models until a function is called.
 
-    Verified in a fresh subprocess so pytest.importorskip / other tests in this
-    process can't pollute the result.
+    Flow imports ``openadapt_types.check_level`` at startup, and the
+    ``openadapt_types`` root is lazy, so the root may be loaded; the action
+    models (``openadapt_types.action``) must not be. Verified in a fresh
+    subprocess so pytest.importorskip / other tests in this process can't
+    pollute the result.
     """
     code = (
         "import sys\n"
         "import openadapt_flow.interop.types as t\n"
-        "assert 'openadapt_flow.contracts' not in sys.modules, "
-        "'shim imported openadapt_flow.contracts at module import time'\n"
+        "assert 'openadapt_types.action' not in sys.modules, "
+        "'shim imported the action models at module import time'\n"
         "print('OK')\n"
     )
     proc = subprocess.run(
@@ -342,7 +363,7 @@ def test_param_placeholder_round_trips_back_to_param():
 
 
 def test_literal_braced_text_on_non_type_stays_literal():
-    from openadapt_flow.contracts import Action, ActionType
+    from openadapt_types import Action, ActionType
 
     a = Action(type=ActionType.KEY, key="{enter}")
     assert interop.action_to_step(a).key == "{enter}"  # untouched (not a TYPE param)
