@@ -191,11 +191,16 @@ def executable_actuation_paths(step: Step) -> tuple[EffectPath, ...]:
     policy, and reporting. An absent API binding means GUI-only. The default
     API binding remains dual-path because a proven pre-delivery ``UNAVAILABLE``
     result falls through to GUI. ``on_unavailable='halt'`` removes that GUI
-    fallback and makes the binding API-only.
+    fallback and makes the binding API-only. A ``web_form`` binding that no
+    person admitted is GUI-only: the runtime never runs it.
     """
 
     binding = step.api_binding
     if binding is None:
+        return ("gui",)
+    if binding.kind == "web_form" and not binding.admitted():
+        # A compiled API step that no person admitted never runs: the
+        # replayer runs the recorded GUI steps (docs/API_TIER.md).
         return ("gui",)
     if binding.on_unavailable == "halt":
         return ("api",)

@@ -593,6 +593,16 @@ class EgressNotPermitted(RuntimeError):
 #: scroll counts it as ready.
 SCROLL_POSITION_SLACK_FRACTION = 0.25
 
+#: Rungs that show the target itself on screen: what closed-loop scroll
+#: readiness accepts, and all a step accepts after its scroll missed it.
+_DIRECT_TARGET_RUNGS = frozenset({"structural", "template", "template_global", "ocr"})
+
+#: Steps that own the halt when the closed-loop scroll before them never found
+#: their target (see ``Replayer._act_scroll``).
+_SCROLL_HANDOFF_ACTIONS = frozenset(
+    {ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.RIGHT_CLICK}
+)
+
 
 def _scroll_target_positioned(
     recorded: tuple[int, int],
@@ -1073,9 +1083,16 @@ class Replayer:
         # ``api_steps=False`` keeps every run on the GUI. ``web_form_actuator``
         # replaces the live-session actuator (tests, other transports).
         self.api_steps = api_steps
+        #: Why ``api_steps`` is off, when a caller says (for the report).
+        self.api_steps_off_reason: Optional[str] = None
         self.web_form_actuator = web_form_actuator
         self._web_form_span_active = False
         self._web_form_fallback_reason: Optional[str] = None
+        # (step id, reason) set when a closed-loop scroll used up its budget
+        # because the next step's target never resolved. That step then
+        # resolves on direct deterministic rungs only, and halts on its own
+        # target, so the halt names the control that changed, not the scroll.
+        self._scroll_missed_target: Optional[tuple[str, str]] = None
         # Under an approval mode, the API request a person was asked about
         # (prepared before the gate), keyed by the save step's result, and
         # the operation digest the gate's last-point check re-reads.
@@ -1633,6 +1650,7 @@ class Replayer:
             else uuid.uuid4().hex
         )
         self._field_reads = {}
+        self._scroll_missed_target = None
         self._idempotency_reservation_owned = False
         self._qualification_fault_mutations = []
         self._qualification_fault_public_key = None
@@ -2191,6 +2209,25 @@ class Replayer:
                     continue
                 if step_index <= span_skip_to:
                     continue
+                if resume_from is not None and step_index == resume_from:
+                    inside = self._resume_inside_web_form_span(
+                        workflow, step_index, report.results
+                    )
+                    if inside is not None:
+                        # The folded steps are checkpointed only after the
+                        # save was sent, so this save may already have
+                        # landed. It is never sent again and never redone
+                        # through the GUI on an empty form.
+                        self._record_linear_result(
+                            report,
+                            workflow,
+                            inside,
+                            step_index=step_index,
+                            step=step,
+                            params=params,
+                            durable_run=durable_run,
+                        )
+                        break
                 # An admitted API step (docs/API_TIER.md) runs in place of the
                 # GUI steps it stands for. When it can't, the reason lands on
                 # the first of those steps and the GUI steps run as recorded.
@@ -2230,15 +2267,25 @@ class Replayer:
                     if why_not is not None:
                         result.api_fallback = why_not
                     batch = [result]
-                for result in batch:
+                # An API span's folded steps are checkpointed only once its
+                # save was sent: a resume then starts at the save, which can
+                # only be reconciled, never redone through the GUI. A save
+                # that wasn't sent leaves the resume point before the span,
+                # so a resume runs the whole span again.
+                save_result = batch[-1]
+                checkpoint_folded = save_result.ok or save_result.delivery_attempted
+                for offset, result in enumerate(batch):
+                    folded = offset < len(batch) - 1
                     stop_run = self._record_linear_result(
                         report,
                         workflow,
                         result,
-                        step_index=step_index,
-                        step=step,
+                        step_index=step_index + offset,
+                        step=workflow.steps[step_index + offset],
                         params=params,
-                        durable_run=durable_run,
+                        durable_run=(
+                            None if folded and not checkpoint_folded else durable_run
+                        ),
                     )
                     if stop_run:
                         break
@@ -2438,9 +2485,7 @@ class Replayer:
                 continue
             ids = [s.id for s in workflow.steps[step_index : end_index + 1]]
             if not self.api_steps:
-                reason = "API steps are off for this run"
-            elif durable:
-                reason = "a durable or resumed run uses the GUI steps"
+                reason = self.api_steps_off_reason or "API steps are off for this run"
             elif getattr(self, "_surface_router", None) is not None:
                 reason = "a run across several windows or tabs uses the GUI steps"
             elif self._approval_gated() and not callable(
@@ -2453,10 +2498,16 @@ class Replayer:
                     "approval mode needs the exact request before the save, and "
                     "this API actuator can't prepare it, so the GUI steps run"
                 )
-            elif self.governed_authorization is not None:
-                reason = "a governed run uses its qualified GUI path"
             elif not binding.admitted():
                 reason = "the API step is not admitted (openadapt-flow api admit)"
+            elif save.identity_armed and not binding.identity:
+                # The GUI save checks the right record on screen. The API step
+                # must check it too, so it needs a right-record contract.
+                reason = (
+                    "the save checks the right record on screen, and the API "
+                    "step names no right-record contract (openadapt-flow api "
+                    "admit --identity)"
+                )
             elif list(binding.effects) != list(save.effects):
                 reason = (
                     "the save step's record check differs from the one admitted "
@@ -2473,11 +2524,90 @@ class Replayer:
                     "step was proposed, and the API step would skip it "
                     "(openadapt-flow api propose)"
                 )
+            elif self.governed_authorization is not None and (
+                governed_reason := self._governed_web_form_refusal(workflow, save)
+            ):
+                reason = governed_reason
             elif self._actuator_for(binding) is None:
                 reason = "there is no live browser session for the API step"
             else:
                 reason = None
             return end_index, save, reason
+        return None
+
+    def _governed_web_form_refusal(
+        self, workflow: Workflow, save: Step
+    ) -> Optional[str]:
+        """Why a governed run can't use this API step, or None when it can.
+
+        The run's authorization must have admitted this exact API step. A
+        qualification case runs the path it names, and a managed (Cloud)
+        dispatch or a production qualification admission doesn't bind API
+        steps yet, so those run the GUI steps.
+        """
+
+        authorization = self.governed_authorization
+        assert authorization is not None
+        if authorization.qualification_case_id is not None:
+            return (
+                "a qualification case runs the GUI path it names; qualifying "
+                "an API step's path is not supported yet"
+            )
+        if self.managed_dispatch_binding is not None:
+            return "a managed dispatch doesn't bind API steps yet"
+        if authorization.production_qualification_admission_id is not None:
+            return (
+                "a production qualification admission doesn't cover API steps "
+                "yet, so the qualified GUI path runs"
+            )
+        return authorization.admitted_api_step(save, workflow)
+
+    def _resume_inside_web_form_span(
+        self, workflow: Workflow, step_index: int, prior: list[StepResult]
+    ) -> Optional[StepResult]:
+        """A halt result when a resume would start inside an API step's span.
+
+        Returns None when ``step_index`` isn't a covered step after the first,
+        or when the steps before it ran on the GUI (``prior`` holds the
+        checkpointed results): then the GUI save resumes as usual.
+        """
+
+        step = workflow.steps[step_index]
+        if not prior or prior[-1].actuation != "api_folded":
+            return None
+        for save in workflow.steps[step_index:]:
+            binding = save.api_binding
+            if (
+                binding is None
+                or binding.kind != "web_form"
+                or binding.web_form is None
+            ):
+                continue
+            covered = list(binding.web_form.replaces_steps)
+            if step.id in covered[1:]:
+                return StepResult(
+                    step_id=step.id,
+                    intent=step.intent,
+                    ok=False,
+                    safety_halt=True,
+                    failure_category=(
+                        "governed_refusal"
+                        if self.governed_authorization is not None
+                        else "safety_halt"
+                    ),
+                    risk=step.risk,
+                    risk_explanation=step.risk_explanation,
+                    risk_review_required=step.risk_review_required,
+                    delivery_attempted=False,
+                    error=(
+                        f"Step '{step.id}' ({step.intent}): resume would start "
+                        f"inside the API step for '{save.id}', whose save was "
+                        "sent and may have landed. Resume never sends it again "
+                        "and never redoes it through the GUI. Reconcile it "
+                        "(the attended reconcile action reads the record back), "
+                        "or start the item again"
+                    ),
+                )
         return None
 
     def _run_web_form_span(
@@ -6939,6 +7069,13 @@ class Replayer:
                 failure_category="safety_halt",
             )
             return refused
+        # A closed-loop scroll that never found this step's target hands the
+        # miss to this step (see ``_act_scroll``); only this step consumes it.
+        target_missed: Optional[str] = None
+        missed = self._scroll_missed_target
+        if missed is not None and missed[0] == step.id:
+            self._scroll_missed_target = None
+            target_missed = missed[1]
         router = self._surface_router
         if router is None:
             if step.action is ActionKind.SWITCH_SURFACE:
@@ -6956,6 +7093,7 @@ class Replayer:
                 run_dir=run_dir,
                 new_crops=new_crops,
                 graph_ctx=graph_ctx,
+                target_missed=target_missed,
             )
         refusal = router.entry_refusal(step)
         if refusal is None and step.action is not ActionKind.SWITCH_SURFACE:
@@ -6988,6 +7126,7 @@ class Replayer:
             run_dir=run_dir,
             new_crops=new_crops,
             graph_ctx=graph_ctx,
+            target_missed=target_missed,
         )
         # Receipt: the surface this step ran on. The entry check above proved
         # it is the step's declared surface; the outcome classifier re-checks
@@ -7102,6 +7241,7 @@ class Replayer:
         run_dir: Path,
         new_crops: dict[str, bytes],
         graph_ctx: Optional["_GraphStepContext"] = None,
+        target_missed: Optional[str] = None,
     ) -> StepResult:
         """Execute a single step; never raises (failures land in the result).
 
@@ -7434,8 +7574,8 @@ class Replayer:
                 )
                 result.elapsed_ms = (time.monotonic() - t0) * 1000.0
                 return result
-            resolution, matched_region, error = self._resolve_step(
-                step, before_png, bundle_dir, workflow
+            resolution, matched_region, error = self._resolve_step_target(
+                step, before_png, bundle_dir, workflow, target_missed
             )
             # Retry ladder failures with fresh settled frames until
             # ``step.timeout_s``: a remote app can present a settled-looking
@@ -7455,8 +7595,8 @@ class Replayer:
                     run_dir, evidence_step_id, "before", before_png
                 )
                 last_frame = before_png
-                resolution, matched_region, error = self._resolve_step(
-                    step, before_png, bundle_dir, workflow
+                resolution, matched_region, error = self._resolve_step_target(
+                    step, before_png, bundle_dir, workflow, target_missed
                 )
             if resolution is not None and matched_region is not None:
                 assert step.anchor is not None
@@ -8424,6 +8564,12 @@ class Replayer:
 
         if pointer.startswith("/url/"):
             return binding.url_template
+        if binding.kind == "web_form":
+            from openadapt_flow.runtime.actuators.web_form import (
+                web_form_pointer_template,
+            )
+
+            return web_form_pointer_template(binding, pointer)
         root_name, *tokens = pointer.lstrip("/").split("/")
         if root_name == "body":
             value: Any = binding.body_template
@@ -8472,6 +8618,14 @@ class Replayer:
             self.governed_authorization is not None
             and self.governed_authorization.requires_verified_identity(step.id)
         )
+        if step.api_binding is not None and step.api_binding.kind == "web_form":
+            # A form save whose GUI step checks the right record, or whose
+            # admission named a right-record parameter, is checked the same
+            # way in every run, governed or not (its durable checkpoint
+            # needs the evidence too).
+            authorization_requires = authorization_requires or bool(
+                step.identity_armed or step.api_binding.identity
+            )
         project = workflow.qualification
         policy = project.identity_policies.get(step.id) if project is not None else None
         if not authorization_requires and policy is None:
@@ -8514,9 +8668,17 @@ class Replayer:
             ]
             exact_token = "{" + identity.param + "}"
             effect_target_path = tuple(identity.effect_field.split("."))
+            # A form field's name is the page's, not the record's (form_lname
+            # versus lname): for a form save the field is bound to the record
+            # check by sending the same parameter the check selects on.
+            names_must_match = binding.kind != "web_form"
             pointers_are_bound = all(
                 template is not None
-                and self._api_request_pointer_field_path(pointer) == effect_target_path
+                and (
+                    not names_must_match
+                    or self._api_request_pointer_field_path(pointer)
+                    == effect_target_path
+                )
                 and (
                     isinstance(template, str)
                     and self._url_path_targets_param(template, identity.param)
@@ -8533,8 +8695,14 @@ class Replayer:
                     f"({step.intent}): identity parameter {identity.param!r} is "
                     "not bound at every declared target-bearing request pointer"
                 )
+            from openadapt_flow.runtime.actuators.web_form import (
+                effect_selector_rows,
+            )
+
             effect_exprs = [
-                effect.match.get(identity.effect_field) for effect in effects
+                row.get(identity.effect_field)
+                for effect in effects
+                for row in effect_selector_rows(effect)
             ]
             if not any(
                 expr is not None and expr.param == identity.param
@@ -9002,6 +9170,16 @@ class Replayer:
             current_step=overlay_current,
             total_steps=overlay_total,
         )
+        if self._may_pipeline_readback(effect_verifier):
+            # Pipelined read-back (runtime/readback_pipeline.py), as for a GUI
+            # save: the same record check on the side thread. The item's
+            # report stays unsuccessful until it settles with the verdict.
+            self._defer_readback(
+                step, before, result, effects=effects, verifier=effect_verifier
+            )
+            result.ok = True
+            result.error = None
+            return True
         try:
             error = self._verify_effects(
                 step,
@@ -10821,6 +10999,39 @@ class Replayer:
         self._active_delivery_resolution = fresh_resolution
         self._active_delivery_region = fresh_region
         return fresh_resolution, fresh_region, fresh_png, error
+
+    def _resolve_step_target(
+        self,
+        step: Step,
+        screen_png: bytes,
+        bundle_dir: Path,
+        workflow: Workflow,
+        target_missed: Optional[str],
+    ) -> tuple[Optional[Resolution], Optional[Region], Optional[str]]:
+        """Resolve the step's target; stricter after a scroll that missed it.
+
+        ``target_missed`` is set when the preceding closed-loop scroll used
+        up its budget without this target resolving. The step then accepts
+        only the rungs scroll readiness accepts (direct deterministic
+        evidence, no model): a weaker rung would act where the scroll could
+        not find the target. Otherwise the step halts on its own target with
+        the ordinary "Could not resolve target" error and sends no input.
+        """
+        if target_missed is None:
+            return self._resolve_step(step, screen_png, bundle_dir, workflow)
+        resolution, region, error = self._resolve_step(
+            step, screen_png, bundle_dir, workflow, allow_grounder=False
+        )
+        if resolution is not None and resolution.rung in _DIRECT_TARGET_RUNGS:
+            return resolution, region, error
+        if resolution is None and step.anchor is None:
+            return resolution, region, error
+        return (
+            None,
+            None,
+            f"Could not resolve target for step '{step.id}' ({step.intent}): "
+            f"{target_missed}",
+        )
 
     @timed_span("resolve")
     def _resolve_step(
@@ -16187,6 +16398,7 @@ class Replayer:
         bundle_dir: Path,
         params: Mapping[str, RuntimeParamScalar],
         scroll_delta: Optional[tuple[int, int]] = None,
+        misses: Optional[list[str]] = None,
     ) -> bool:
         """Resolve an implicit scroll target and honor its armed identity.
 
@@ -16203,9 +16415,20 @@ class Replayer:
         the preceding scroll a false no-op. Structural resolution stays
         available, model grounding stays disabled, and an identity-armed target
         is ready only when the same pre-action identity gate verifies it.
+
+        When not ready, ``misses`` (if given) gets why: ``unresolved`` (no
+        direct deterministic rung found the target), ``offscreen`` (the page
+        reports the recorded element outside the viewport), ``position`` or
+        ``identity``.
         """
-        if step.anchor is None:
+
+        def miss(reason: str) -> bool:
+            if misses is not None:
+                misses.append(reason)
             return False
+
+        if step.anchor is None:
+            return miss("unresolved")
         structural = (
             self.backend
             if self.use_structural and hasattr(self.backend, "locate_structural")
@@ -16220,8 +16443,9 @@ class Replayer:
             # The page itself shows the unique recorded target exists below
             # (or above) the viewport: not ready, keep scrolling. Stricter
             # than letting a visual rung find a look-alike on screen, and it
-            # skips a full-frame OCR search per probe.
-            return False
+            # skips a full-frame OCR search per probe. The control exists, so
+            # this miss never hands the halt to the click (#1331).
+            return miss("offscreen")
         template_png = self._asset_bytes(
             bundle_dir, step.anchor.template, workflow=workflow
         )
@@ -16241,9 +16465,9 @@ class Replayer:
             # candidate means that the target is not ready yet, so the scroll
             # loop must continue. The later target action runs the full
             # resolver again and still halts on the same ambiguity.
-            return False
+            return miss("unresolved")
         if resolved is None:
-            return False
+            return miss("unresolved")
         resolution, _matched_region = resolved
         # Geometry estimates a point from surrounding landmarks; it does not
         # prove that the target itself is visible. In particular, a fixed
@@ -16252,23 +16476,18 @@ class Replayer:
         # readiness therefore requires direct deterministic target evidence.
         # Model grounding is disabled above and future weaker rungs must opt in
         # deliberately rather than silently acquiring readiness authority.
-        if resolution.rung not in {
-            "structural",
-            "template",
-            "template_global",
-            "ocr",
-        }:
-            return False
+        if resolution.rung not in _DIRECT_TARGET_RUNGS:
+            return miss("unresolved")
         if scroll_delta is not None and not _scroll_target_positioned(
             step.anchor.click_point, resolution.point, scroll_delta, frame_png
         ):
-            return False
+            return miss("position")
         if not step.identity_armed:
             return True
         check = self._verify_identity(
             step, resolution, frame_png, params, workflow, bundle_dir
         )
-        return check.status == "verified"
+        return check.status == "verified" or miss("identity")
 
     def _act_scroll(
         self,
@@ -16349,6 +16568,9 @@ class Replayer:
         # Until a wheel edge stops moving the page, readiness also requires
         # the target at (or past) its demonstrated position.
         position_required = [True]
+        # Why each readiness probe of the next target failed; they decide who
+        # owns a budget-exhaustion halt (see below).
+        misses: list[str] = []
 
         def readiness_holds(frame_png: bytes) -> bool:
             if implicit_target_readiness:
@@ -16360,6 +16582,7 @@ class Replayer:
                     bundle_dir=bundle_dir,
                     params=params,
                     scroll_delta=(dx, dy) if position_required[0] else None,
+                    misses=misses,
                 )
             return self._predicate_holds(
                 stop_pred,
@@ -16440,6 +16663,32 @@ class Replayer:
         )
         if following is not None and following.action is ActionKind.SCROLL:
             # The next SCROLL step continues the loop with its own budget.
+            return None
+        if (
+            graph_ctx is None
+            and implicit_target_readiness
+            and next_step is not None
+            and following is next_step
+            and next_step.action in _SCROLL_HANDOFF_ACTIONS
+            and misses
+            and all(miss == "unresolved" for miss in misses)
+            and not step.risk_review_required
+            and not self._step_is_consequential(step, workflow)
+        ):
+            # The scroll did its bounded work; what failed is the next click's
+            # target, which never resolved on any frame (a relabelled or moved
+            # control). Halting here would name the scroll and hide the
+            # control that changed. Hand the miss to that click instead: it
+            # resolves on direct deterministic rungs only and, when they find
+            # nothing, halts on its own target before any input. A target
+            # that resolved but sat out of position or failed its identity
+            # check still halts here, as before.
+            self._scroll_missed_target = (
+                next_step.id,
+                f"the preceding scroll '{step.id}' used {scrolled:.0f}px of its "
+                f"{budget:.0f}px budget and the target never came into view; "
+                "no deterministic rung found it, so no input was sent",
+            )
             return None
         target_desc = (
             f"the anchor of step '{next_step.id}' ({next_step.intent})"

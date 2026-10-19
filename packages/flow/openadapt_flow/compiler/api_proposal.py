@@ -55,6 +55,7 @@ from openadapt_flow.ir import (
     ActionKind,
     ApiAdmission,
     ApiBinding,
+    ApiIdentityBinding,
     Step,
     WebFormField,
     WebFormPrecheck,
@@ -93,6 +94,126 @@ def _path(url: str) -> str:
 def _templated(value: str, by_value: dict[str, list[str]]) -> Optional[str]:
     names = by_value.get(value) or []
     return "{" + names[0] + "}" if len(names) == 1 else None
+
+
+def _origin(url: str) -> str:
+    parts = up.urlsplit(url)
+    return f"{parts.scheme.lower()}://{parts.netloc.lower()}"
+
+
+def _url_template(url: str, by_value: dict[str, list[str]]) -> tuple[str, list[str]]:
+    """``url``'s path and query, with input values as ``{param}``.
+
+    A path segment or query value that equals exactly one input's
+    demonstration value becomes that parameter (a record identifier such as
+    ``record_id=17``); the rest is kept as recorded. A value equal to two
+    inputs is ambiguous and reported.
+    """
+
+    parts = up.urlsplit(url)
+    problems: list[str] = []
+
+    def bind(value: str, where: str) -> str:
+        names = by_value.get(value) or []
+        if len(names) > 1:
+            problems.append(
+                f"{where} {value!r} equals {', '.join('{' + n + '}' for n in names)}; "
+                "the binding is ambiguous"
+            )
+            return value
+        return "{" + names[0] + "}" if names else value
+
+    segments = [
+        bind(up.unquote(seg), "the URL path segment") if seg else seg
+        for seg in parts.path.split("/")
+    ]
+    path = "/".join(
+        seg if seg.startswith("{") else up.quote(seg, safe=":@!$&'()*+,;=-._~")
+        for seg in segments
+    )
+    query = [
+        (k, bind(v, f"the URL query value {k}=") if v else v)
+        for k, v in up.parse_qsl(parts.query, keep_blank_values=True)
+    ]
+    if query:
+        # Placeholders stay readable; fill_url encodes the run's values.
+        path += "?" + "&".join(
+            up.quote(k) + "=" + (v if v.startswith("{") else up.quote(v))
+            for k, v in query
+        )
+    return path, problems
+
+
+_ID_SELECTOR = re.compile(r"^#([A-Za-z_][\w:.-]*)$")
+_NAME_SELECTOR = re.compile(r"""^(?:[a-z]+)?\[name=["']?([^"'\]]+)["']?\]$""")
+
+
+def _control_for(target: Any, controls: dict[str, Any]) -> Optional[str]:
+    """The form control a recorded click target is, by id, name or label."""
+
+    if not isinstance(target, dict):
+        return None
+    selector = str(target.get("selector") or "")
+    by_id = _ID_SELECTOR.match(selector)
+    if by_id:
+        hits = [n for n, c in controls.items() if c.get("id") == by_id.group(1)]
+        hits = hits or ([by_id.group(1)] if by_id.group(1) in controls else [])
+        return hits[0] if len(hits) == 1 else None
+    by_name = _NAME_SELECTOR.match(selector)
+    if by_name:
+        return by_name.group(1) if by_name.group(1) in controls else None
+    name = target.get("name")
+    return name if isinstance(name, str) and name in controls else None
+
+
+def _typed_fields(
+    steps: list[Step], events: list[dict[str, Any]], controls: dict[str, Any]
+) -> tuple[dict[str, Optional[str]], list[str]]:
+    """Which form field each folded step typed into, and with which parameter.
+
+    Provenance, not values: a TYPE step types into the field the click before
+    it targeted (the compiled anchor, else the recorded event's structural
+    target). Returns ``{field: param}`` (``None`` for literal text) and the
+    problems that make the binding ambiguous.
+    """
+
+    typed: dict[str, Optional[str]] = {}
+    problems: list[str] = []
+    current: Optional[str] = None
+    for step in steps:
+        if step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
+            target = None
+            if step.anchor is not None and step.anchor.structural is not None:
+                target = step.anchor.structural.model_dump()
+            else:
+                i = _event_index(step)
+                if i is not None and i < len(events):
+                    target = events[i].get("structural")
+            current = _control_for(target, controls)
+            continue
+        if step.action is not ActionKind.TYPE:
+            continue
+        param = step.param or _placeholder(step.text)
+        if current is None:
+            if param is not None:
+                problems.append(
+                    f"{step.id} types {{{param}}} but the field it types into "
+                    "isn't a control of the form"
+                )
+            continue
+        if current in typed and typed[current] != param:
+            problems.append(
+                f"{current!r} is typed twice with different values "
+                f"({step.id}); the binding is ambiguous"
+            )
+            continue
+        typed[current] = param
+    return typed, problems
+
+
+def _placeholder(text: Optional[str]) -> Optional[str]:
+    match = re.fullmatch(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", text or "")
+    return match.group(1) if match else None
 
 
 def _success_pattern(line: dict[str, Any]) -> Optional[str]:
@@ -187,7 +308,9 @@ def propose_api_step(
     post = max(posts, key=carried)
     if carried(post) < max(1, len(by_value) // 2):
         return workflow, None, ["the save's request does not carry the recorded values"]
-    action = _path(post["url"])
+    action, url_problems = _url_template(post["url"], by_value)
+    if url_problems:
+        return workflow, None, url_problems
     if any(v == nc.SECRET for _, v in post["form"]):
         return workflow, None, ["the save sends a secret field; it stays on the GUI"]
 
@@ -201,7 +324,7 @@ def propose_api_step(
             and ln.get("status") == 200
             and "<form" in (ln.get("response_text") or "")
         ):
-            found = form_controls(ln["response_text"], action)
+            found = form_controls(ln["response_text"], _path(post["url"]))
             if found is not None:
                 form_line, controls = ln, found
     if form_line is None or controls is None:
@@ -213,41 +336,18 @@ def propose_api_step(
             ],
         )
     form_t = float(form_line["t"])
-
-    fields: list[WebFormField] = []
-    for name, value in post["form"]:
-        ctl = controls.get(name)
-        template = _templated(value, by_value) if value else None
-        if template is not None:
-            fields.append(WebFormField(name=name, source="param", param=template[1:-1]))
-            continue
-        if (
-            value.startswith("<session:")
-            and ctl is not None
-            and ctl.get("default") == value
-        ):
-            fields.append(WebFormField(name=name, source="session"))
-            continue
-        if value and ctl is not None and ctl.get("options"):
-            label = next(
-                (o["label"] for o in ctl["options"] if o["value"] == value), None
-            )
-            names = by_value.get(label or "") or []
-            if len(names) == 1:
-                fields.append(
-                    WebFormField(name=name, source="select_label", param=names[0])
-                )
-                continue
-        if ctl is not None and (ctl.get("default") or "") == value:
-            fields.append(WebFormField(name=name, source="form_default", value=value))
-            continue
+    if _origin(form_line["url"]) != _origin(post["url"]):
         return (
             workflow,
             None,
             [
-                f"field {name!r} of the save is not a recorded value, a form default or a session value"
+                "the save posts to another origin than the page that served the "
+                "form; the API step sends only to the form's own origin"
             ],
         )
+    form_path, url_problems = _url_template(form_line["url"], by_value)
+    if url_problems:
+        return workflow, None, url_problems
 
     # Steps the API step stands in for: those recorded on the form page.
     folded: list[Step] = []
@@ -261,6 +361,107 @@ def propose_api_step(
             None,
             ["the save is not part of the steps recorded on the form page"],
         )
+
+    # Bind each field from what the steps typed into it, never from a value
+    # that merely matches: a blank or repeated demonstration value would bind
+    # the wrong field, or none (a later run's value silently dropped).
+    typed, problems = _typed_fields(folded, events, controls)
+    if problems:
+        return workflow, None, problems
+    sent = {name for name, _ in post["form"]}
+    for name, param in typed.items():
+        if param is not None and name not in sent:
+            return (
+                workflow,
+                None,
+                [f"{{{param}}} is typed into {name!r} but the save doesn't send it"],
+            )
+
+    fields: list[WebFormField] = []
+    for name, value in post["form"]:
+        ctl = controls.get(name)
+        if name in typed and typed[name] is not None:
+            param = typed[name]
+            demo = params.get(param, "")
+            if value == demo:
+                fields.append(WebFormField(name=name, source="param", param=param))
+                continue
+            label = next(
+                (
+                    o["label"]
+                    for o in ((ctl or {}).get("options") or [])
+                    if o["value"] == value
+                ),
+                None,
+            )
+            if label is not None and label == demo:
+                fields.append(
+                    WebFormField(name=name, source="select_label", param=param)
+                )
+                continue
+            return (
+                workflow,
+                None,
+                [
+                    f"field {name!r} is typed with {{{param}}} but the save sent "
+                    "another value"
+                ],
+            )
+        url_bound = [
+            n for n in by_value.get(value, []) if "{" + n + "}" in action + form_path
+        ]
+        if (
+            value
+            and len(by_value.get(value, [])) == 1
+            and url_bound
+            and (ctl or {}).get("kind") == "hidden"
+        ):
+            # The record's identifier, echoed by the form for the record the
+            # URL names (an update form's hidden pid): the same parameter.
+            fields.append(WebFormField(name=name, source="param", param=url_bound[0]))
+            continue
+        if value and value in by_value:
+            return (
+                workflow,
+                None,
+                [
+                    f"field {name!r} carries the value of "
+                    f"{', '.join('{' + n + '}' for n in by_value[value])} but no "
+                    "recorded step typed it there"
+                ],
+            )
+        if (
+            value.startswith("<session:")
+            and ctl is not None
+            and ctl.get("default") == value
+        ):
+            fields.append(WebFormField(name=name, source="session"))
+            continue
+        if value and ctl is not None and ctl.get("options"):
+            label = next(
+                (o["label"] for o in ctl["options"] if o["value"] == value), None
+            )
+            if label is not None and label in by_value:
+                return (
+                    workflow,
+                    None,
+                    [
+                        f"field {name!r} shows the value of "
+                        f"{', '.join('{' + n + '}' for n in by_value[label])} but "
+                        "no recorded step chose it there"
+                    ],
+                )
+        if ctl is not None and (ctl.get("default") or "") == value:
+            fields.append(WebFormField(name=name, source="form_default", value=value))
+            continue
+        return (
+            workflow,
+            None,
+            [
+                f"field {name!r} of the save is not a recorded value, a form default or a session value"
+            ],
+        )
+
     for step in folded:
         if step.guard is not None or step.wait_until is not None:
             return (
@@ -331,6 +532,12 @@ def propose_api_step(
                     f"{step.id} checks {texts!r} on screen and no response it caused carries it"
                 ],
             )
+        if _origin(hit["url"]) != _origin(form_line["url"]):
+            return (
+                workflow,
+                None,
+                [f"the check at {step.id} reads another origin than the form's"],
+            )
         query = []
         for k, v in up.parse_qsl(up.urlsplit(hit["url"]).query, keep_blank_values=True):
             if v.startswith("<session:"):
@@ -359,12 +566,7 @@ def propose_api_step(
         }
     )
     spec = WebFormSpec(
-        form_path=_path(form_line["url"])
-        + (
-            f"?{up.urlsplit(form_line['url']).query}"
-            if up.urlsplit(form_line["url"]).query
-            else ""
-        ),
+        form_path=form_path,
         fields=fields,
         controls=sorted(controls),
         client_rules=client_rules(form_line["response_text"]),
@@ -434,6 +636,12 @@ def describe_api_step(step: Step) -> str:
     lines.append(
         f"  record check after: {len(b.effects)} effect(s) copied from the save step"
     )
+    for identity in b.identity:
+        lines.append(
+            f"  right record ({identity.key}): the request sends {{{identity.param}}} "
+            f"in {', '.join(p.removeprefix('/body/') for p in identity.request_pointers)} "
+            f"and the record check selects {identity.effect_field} = {{{identity.param}}}"
+        )
     if spec.screen_only_checks:
         lines.append(f"  screen-only checks, not repeated: {spec.screen_only_checks}")
     if spec.other_writes_seen:
@@ -446,18 +654,70 @@ def describe_api_step(step: Step) -> str:
     return "\n".join(lines)
 
 
+def web_form_identity(
+    binding: ApiBinding, effects: list[Any], key: str, param: str
+) -> ApiIdentityBinding:
+    """The right-record contract for one parameter of a ``web_form`` save.
+
+    The person admitting the API step names the parameter that identifies
+    the record (``key=param``). The request must send that parameter's run
+    value as-is in at least one form field, and the record check must select
+    the record by the same parameter. Raises :class:`ApiProposalError` when
+    either side is missing.
+    """
+
+    spec = binding.web_form
+    assert spec is not None
+    pointers = [
+        f"/body/{field.name}"
+        for field in spec.fields
+        if field.source == "param" and field.param == param
+    ]
+    if not pointers:
+        raise ApiProposalError(
+            f"the request sends no form field with the run value {{{param}}}, so it "
+            f"can't identify the record by {param}"
+        )
+    selectors = sorted(
+        {
+            name
+            for effect in effects
+            for row in [effect.match, *effect.new_records]
+            for name, expr in row.items()
+            if getattr(expr, "param", None) == param
+        }
+    )
+    if not selectors:
+        raise ApiProposalError(
+            f"the record check selects no field by {{{param}}}, so it can't confirm "
+            f"the record the request names by {param}"
+        )
+    return ApiIdentityBinding(
+        key=key,  # type: ignore[arg-type]
+        param=param,
+        effect_field=selectors[0],
+        request_pointers=pointers[:8],
+    )
+
+
 def admit_api_step(
     workflow: Workflow,
     *,
     admitted_by: Optional[str] = None,
     step_id: Optional[str] = None,
     now: Optional[datetime] = None,
+    identity: Optional[dict[str, str]] = None,
 ) -> tuple[Workflow, list[str]]:
     """Record a person's admission of the proposed API steps.
 
     Copies the save step's current record check into the binding first (so a
     check added after compile is the one admitted), then binds the admission
     to the exact binding. The caller saves the workflow and asks the person.
+
+    ``identity`` maps a right-record signal (``subject_name``, ``record_id``,
+    ...) to the parameter that carries it (:func:`web_form_identity`).
+    Standard and Regulated runs need one: their run gate refuses a save
+    whose API step names no right-record contract.
     """
 
     from openadapt_flow.runtime.effects.effect import is_agent_identity
@@ -485,8 +745,16 @@ def admit_api_step(
                     f"{step.id} has no record check; an API step must be confirmed by one "
                     "(add it, for example with record --verify or check mark, then admit)"
                 )
+            identities = [
+                web_form_identity(b, list(step.effects), key, param)
+                for key, param in sorted((identity or {}).items())
+            ]
             clean = b.model_copy(
-                update={"effects": list(step.effects), "admission": None}
+                update={
+                    "effects": list(step.effects),
+                    "admission": None,
+                    "identity": identities or list(b.identity),
+                }
             )
             b = clean.model_copy(
                 update={

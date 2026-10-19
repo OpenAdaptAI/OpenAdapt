@@ -282,10 +282,21 @@ PRIVATE_CORPUS_CONTENT_SIGNATURES = SOURCE_POLICY.content_signatures
 # Positive inventory for files that can carry data, evidence, static payloads,
 # models, or deployment-shaped configuration.  Ordinary Python/Markdown/TeX
 # source remains reviewable source code and is not exhaustively enumerated.
-# Every file with one of these suffixes must instead appear, with its exact
-# SHA-256, in PUBLIC_ARTIFACT_INVENTORY_PATH.  Updating that reviewed manifest is
-# an explicit command; validation never rewrites it.
+# Every file with one of these suffixes must instead be listed by path in
+# PUBLIC_ARTIFACT_INVENTORY_PATH.  Updating that reviewed list is an explicit
+# command; validation never rewrites it.
+#
+# The committed list carries paths only (schema 2).  It used to pin each file's
+# SHA-256 as well, so every pull request that touched claims.yaml or a fixture
+# had to rewrite the same hash rows, and parallel pull requests conflicted on
+# them.  The bytes a pull request changes are reviewed in its own diff; the
+# hashes now bind the shipped archives instead: the release workflow runs
+# --stamp-release-inventory on the exact commit it builds, which rewrites the
+# file as schema 1 (path + SHA-256), and --validate-dist-dir then requires every
+# artifact-like wheel and sdist member to be listed with matching bytes.
 PUBLIC_ARTIFACT_INVENTORY_PATH = "public-artifacts.json"
+PUBLIC_ARTIFACT_REVIEWED_SCHEMA = 2
+PUBLIC_ARTIFACT_RELEASE_SCHEMA = 1
 WHEEL_ARTIFACT_INVENTORY_PATH = f"{DIST_NAME}/{PUBLIC_ARTIFACT_INVENTORY_PATH}"
 PUBLIC_ARTIFACT_SUFFIXES = frozenset(
     {
@@ -667,17 +678,14 @@ def _git_ignored_paths(root: Path) -> set[str]:
 
 
 def build_public_artifact_inventory(root: Path = ROOT) -> dict[str, object]:
-    """Build the deterministic inventory document for explicit human review."""
+    """Build the deterministic reviewed path list for explicit human review."""
     files = _walk_public_source_files(root)
-    artifacts = [
-        {"path": path, "sha256": _sha256_file(files[path])}
-        for path in sorted(files)
-        if _artifact_inventory_candidate(path)
-    ]
     return {
-        "schema_version": 1,
+        "schema_version": PUBLIC_ARTIFACT_REVIEWED_SCHEMA,
         "policy": _public_artifact_policy(),
-        "artifacts": artifacts,
+        "artifacts": [
+            path for path in sorted(files) if _artifact_inventory_candidate(path)
+        ],
     }
 
 
@@ -691,18 +699,52 @@ def write_public_artifact_inventory(root: Path = ROOT) -> Path:
     return path
 
 
+def build_release_artifact_inventory(root: Path = ROOT) -> dict[str, object]:
+    """Hash exactly the reviewed paths, after the tree validates against them.
+
+    The stamped document lists the committed paths and nothing else, so a file
+    that appears only at build time is still unregistered in the archive check.
+    """
+    files = _walk_public_source_files(root)
+    inventory = _validate_public_artifact_inventory(files, root=root)
+    return {
+        "schema_version": PUBLIC_ARTIFACT_RELEASE_SCHEMA,
+        "policy": _public_artifact_policy(),
+        "artifacts": [
+            {"path": path, "sha256": _sha256_file(files[path])}
+            for path in sorted(inventory)
+        ],
+    }
+
+
+def stamp_release_artifact_inventory(root: Path = ROOT) -> Path:
+    """Rewrite the reviewed path list as the hashed inventory a release ships.
+
+    Run only by the release workflow, on the commit it is about to build.
+    """
+    document = build_release_artifact_inventory(root)
+    path = root / PUBLIC_ARTIFACT_INVENTORY_PATH
+    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 def _public_artifact_policy() -> dict[str, object]:
     return {
         "artifact_suffixes": sorted(PUBLIC_ARTIFACT_SUFFIXES),
         "forbidden_categories": sorted(PUBLIC_SOURCE_FORBIDDEN_CATEGORIES),
         "note": (
             "Reviewed positive inventory of public data, evidence, static, "
-            "model, and configuration assets. Validation never regenerates it."
+            "model, and configuration assets. Validation never regenerates it. "
+            "The release workflow stamps each file's SHA-256 into the copy it "
+            "ships."
         ),
     }
 
 
-def _parse_public_artifact_inventory(payload: bytes, *, source: str) -> dict[str, str]:
+def _parse_public_artifact_inventory(
+    payload: bytes, *, source: str, require_hashes: bool = False
+) -> dict[str, str | None]:
+    """Parse either form; reviewed (schema 2) paths map to ``None``."""
     try:
         document = json.loads(payload.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -715,8 +757,14 @@ def _parse_public_artifact_inventory(payload: bytes, *, source: str) -> dict[str
         "artifacts",
     }:
         raise ValueError("public artifact inventory has an unexpected top-level schema")
-    if document["schema_version"] != 1:
-        raise ValueError("public artifact inventory schema_version must be 1")
+    schema = document["schema_version"]
+    if schema not in (PUBLIC_ARTIFACT_RELEASE_SCHEMA, PUBLIC_ARTIFACT_REVIEWED_SCHEMA):
+        raise ValueError("public artifact inventory schema_version must be 1 or 2")
+    if require_hashes and schema != PUBLIC_ARTIFACT_RELEASE_SCHEMA:
+        raise ValueError(
+            f"{source} embeds the unstamped path list; release archives must "
+            "embed the inventory written by --stamp-release-inventory"
+        )
     if document["policy"] != _public_artifact_policy():
         raise ValueError(
             "public artifact inventory policy does not match the validator's "
@@ -725,17 +773,25 @@ def _parse_public_artifact_inventory(payload: bytes, *, source: str) -> dict[str
     rows = document["artifacts"]
     if not isinstance(rows, list):
         raise ValueError("public artifact inventory artifacts must be a list")
-    inventory: dict[str, str] = {}
+    inventory: dict[str, str | None] = {}
     previous = ""
     for row in rows:
-        if not isinstance(row, dict) or set(row) != {"path", "sha256"}:
-            raise ValueError("public artifact inventory row has an unexpected schema")
-        if not isinstance(row["path"], str) or not isinstance(row["sha256"], str):
-            raise ValueError(
-                "public artifact inventory path and SHA-256 must be strings"
-            )
-        relative = _canonical_source_path(row["path"], source="inventory")
-        digest = row["sha256"]
+        digest: str | None
+        if schema == PUBLIC_ARTIFACT_REVIEWED_SCHEMA:
+            if not isinstance(row, str):
+                raise ValueError("public artifact inventory paths must be strings")
+            raw_path, digest = row, None
+        else:
+            if not isinstance(row, dict) or set(row) != {"path", "sha256"}:
+                raise ValueError(
+                    "public artifact inventory row has an unexpected schema"
+                )
+            if not isinstance(row["path"], str) or not isinstance(row["sha256"], str):
+                raise ValueError(
+                    "public artifact inventory path and SHA-256 must be strings"
+                )
+            raw_path, digest = row["path"], row["sha256"]
+        relative = _canonical_source_path(raw_path, source="inventory")
         if relative <= previous:
             raise ValueError(
                 "public artifact inventory paths must be unique and sorted"
@@ -744,7 +800,7 @@ def _parse_public_artifact_inventory(payload: bytes, *, source: str) -> dict[str
             raise ValueError(
                 f"public artifact inventory contains a non-artifact path: {relative}"
             )
-        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        if digest is not None and not re.fullmatch(r"[0-9a-f]{64}", digest):
             raise ValueError(
                 f"public artifact inventory has an invalid SHA-256 for {relative}"
             )
@@ -753,7 +809,7 @@ def _parse_public_artifact_inventory(payload: bytes, *, source: str) -> dict[str
     return inventory
 
 
-def _load_public_artifact_inventory(root: Path = ROOT) -> dict[str, str]:
+def _load_public_artifact_inventory(root: Path = ROOT) -> dict[str, str | None]:
     path = root / PUBLIC_ARTIFACT_INVENTORY_PATH
     try:
         payload = path.read_bytes()
@@ -766,7 +822,7 @@ def _load_public_artifact_inventory(root: Path = ROOT) -> dict[str, str]:
 
 def _validate_public_artifact_inventory(
     files: dict[str, Path], *, root: Path = ROOT
-) -> dict[str, str]:
+) -> dict[str, str | None]:
     inventory = _load_public_artifact_inventory(root)
     observed = {path for path in files if _artifact_inventory_candidate(path)}
     expected = set(inventory)
@@ -779,10 +835,11 @@ def _validate_public_artifact_inventory(
             f"unregistered={sorted(unregistered)}, "
             f"missing={sorted(missing)}"
         )
+    # A stamped (schema 1) tree still pins bytes; the reviewed list does not.
     changed = [
         path
         for path in sorted(expected)
-        if _sha256_file(files[path]) != inventory[path]
+        if inventory[path] is not None and _sha256_file(files[path]) != inventory[path]
     ]
     if changed:
         raise ValueError(
@@ -1036,6 +1093,7 @@ def _validate_archive_artifact_inventory(
     inventory = _parse_public_artifact_inventory(
         manifest_payload,
         source=f"{source}:{manifest_member}",
+        require_hashes=True,
     )
     unregistered: list[str] = []
     changed: list[str] = []
@@ -1613,6 +1671,14 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--stamp-release-inventory",
+        action="store_true",
+        help=(
+            "release workflow only: validate the tree against the reviewed path "
+            "list, then rewrite it with each file's SHA-256 for the build"
+        ),
+    )
+    parser.add_argument(
         "--validate-dist-dir",
         type=Path,
         help="validate an external build directory without trusting its source scripts",
@@ -1628,6 +1694,7 @@ def main() -> int:
         if (
             args.sync
             or args.require_dist
+            or args.stamp_release_inventory
             or args.validate_dist_dir
             or args.license_file
         ):
@@ -1637,6 +1704,25 @@ def main() -> int:
             )
         path = write_public_artifact_inventory()
         print(f"Wrote reviewed public artifact inventory candidate: {path}")
+        return 0
+
+    if args.stamp_release_inventory:
+        if (
+            args.sync
+            or args.require_dist
+            or args.validate_dist_dir
+            or args.license_file
+        ):
+            parser.error(
+                "--stamp-release-inventory cannot be combined with other modes"
+            )
+        try:
+            validate_public_source_policy()
+            validate_public_source_tree()
+            path = stamp_release_artifact_inventory()
+        except ValueError as error:
+            parser.error(str(error))
+        print(f"Stamped the release artifact inventory: {path}")
         return 0
 
     if args.validate_dist_dir is not None:
