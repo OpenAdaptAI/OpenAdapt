@@ -265,12 +265,30 @@ def cmd_run(a: argparse.Namespace) -> None:
     env = {"demo": demo, "f": f, "browser": browser, "ocr": ocr}
     csv_path = out / "runs.csv"
     rows: list[dict[str, Any]] = []
+    done = (
+        {
+            d.name
+            for d in (Path(a.skip_done) / "items").iterdir()
+            if (d / "result.json").is_file()
+        }
+        if a.skip_done
+        else set()
+    )
     try:
-        for b in range(a.blocks):
+        for b in range(a.from_block - 1, a.blocks):
             for arm in ["browser", "api"] if b % 2 == 0 else ["api", "browser"]:
+                names = [
+                    f"b{b + 1:02d}-{arm}-{pos + 1}-"
+                    f"{REFERRALS[(b * a.per_block + pos) % len(REFERRALS)].key}"
+                    for pos in range(a.per_block)
+                ]
+                if all(n in done for n in names):
+                    continue
                 reset_and_seed(f)
                 for pos in range(a.per_block):
                     idx = ((b * a.per_block + pos) % len(REFERRALS)) + 1
+                    if names[pos] in done:
+                        continue
                     gate = wait_quiet()
                     load_start = _load1()
                     res = run_one(
@@ -342,14 +360,71 @@ def summarize(rows: list[dict[str, Any]], sha: str) -> dict[str, Any]:
             "median_approval_wait_s": round(
                 statistics.median(r["approval_wait_s"] for r in mine), 3
             ),
-            "max_load_start": max(r["load_start"] for r in mine),
+            "max_load_start": max(
+                (r["load_start"] for r in mine if r["load_start"] is not None),
+                default=None,
+            ),
+            # Stopped before saving, nothing written (a fail-closed halt or a
+            # refused duplicate): not a wrong save.
+            "safe_stops": sum(
+                not r["correct"] and r.get("new_charts") == 0 for r in mine
+            ),
+            "wrong_saves": sum(
+                not r["correct"] and (r.get("new_charts") or 0) > 0 for r in mine
+            ),
         }
     return out
+
+
+def rows_from_items(out: Path, sha: str) -> list[dict[str, Any]]:
+    """Rebuild the rows from each item's result.json (an interrupted run)."""
+
+    rows = []
+    for item in sorted((out / "items").iterdir()):
+        result = item / "result.json"
+        if not result.is_file():
+            continue  # interrupted before the item finished
+        res = json.loads(result.read_text())
+        block, arm, pos = item.name.split("-")[:3]
+        rows.append(
+            {k: res.get(k) for k in COLS}
+            | {
+                "block": int(block[1:]),
+                "pos": int(pos),
+                "load_start": None,
+                "load_end": None,
+                "gate_waited_s": None,
+                "engine_sha": sha,
+            }
+        )
+    return rows
+
+
+def cmd_summarize(a: argparse.Namespace) -> None:
+    """Combine the finished items of one or more --out directories into --to."""
+
+    out = Path(a.to)
+    out.mkdir(parents=True, exist_ok=True)
+    rows = [row for d in a.out for row in rows_from_items(Path(d), a.engine_sha)]
+    with open(out / "runs.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=COLS)
+        w.writeheader()
+        w.writerows(rows)
+    (out / "summary.json").write_text(
+        json.dumps(summarize(rows, a.engine_sha), indent=1) + "\n"
+    )
+    print(json.dumps(summarize(rows, a.engine_sha), indent=1))
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
+    sm = sub.add_parser(
+        "summarize", help="Rebuild runs.csv and summary.json from items/"
+    )
+    sm.add_argument("--out", required=True, action="append")
+    sm.add_argument("--to", required=True)
+    sm.add_argument("--engine-sha", required=True)
     c = sub.add_parser("compile")
     c.add_argument("--recording", required=True)
     c.add_argument("--out", required=True)
@@ -358,8 +433,12 @@ def main() -> None:
     r.add_argument("--out", required=True)
     r.add_argument("--blocks", type=int, default=5)
     r.add_argument("--per-block", type=int, default=4)
+    r.add_argument("--from-block", type=int, default=1)
+    r.add_argument(
+        "--skip-done", default=None, help="An earlier --out; skip its finished items"
+    )
     a = ap.parse_args()
-    {"compile": cmd_compile, "run": cmd_run}[a.cmd](a)
+    {"compile": cmd_compile, "run": cmd_run, "summarize": cmd_summarize}[a.cmd](a)
 
 
 if __name__ == "__main__":
