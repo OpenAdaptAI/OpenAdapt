@@ -3487,6 +3487,7 @@ class PlaywrightBackend:
         headless: bool = True,
         *,
         record_video_dir: Optional[str] = None,
+        before_goto: Optional[Callable[[Any], None]] = None,
     ) -> tuple["PlaywrightBackend", Callable[[], None]]:
         """Start Playwright + chromium, open ``url``, and return a backend.
 
@@ -3500,6 +3501,9 @@ class PlaywrightBackend:
                 the page is created directly on the browser as before. The
                 finished video is only flushed to disk after ``close()`` (which
                 closes the context); read its path from ``backend.page.video``.
+            before_goto: Called with the new page before it opens ``url``, so
+                a request filter (a teach scope's egress guard) sees the first
+                load too.
         Returns:
             ``(backend, close)`` where ``close()`` shuts down the browser and
             the Playwright driver (flushing the video first, when recording).
@@ -3524,8 +3528,6 @@ class PlaywrightBackend:
             page = context.new_page()
         else:
             page = browser.new_page(viewport=viewport, device_scale_factor=1)
-        page.goto(url)
-        backend = cls(page)
 
         def close() -> None:
             if shared is not None:
@@ -3543,7 +3545,14 @@ class PlaywrightBackend:
             finally:
                 pw.stop()
 
-        return backend, close
+        if before_goto is not None:
+            try:
+                before_goto(page)
+            except BaseException:
+                close()
+                raise
+        page.goto(url)
+        return cls(page), close
 
 
 from openadapt_flow.backends._browser_process import (  # noqa: E402

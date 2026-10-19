@@ -504,6 +504,8 @@ class _Patch:
     evidence_dir: Path
     candidate: RepairCandidate
     target_region: tuple[int, int, int, int]
+    #: The agent's own account of its proposal, shown to the approver as such.
+    proposal_note: str = ""
 
 
 # -- the loop ------------------------------------------------------------------
@@ -934,6 +936,14 @@ class SelfRepair:
         width, height = _png_size(live_png)
         if not (0 <= point[0] < width and 0 <= point[1] < height):
             raise SelfRepairRefused(f"the proposed point {point} is off the screen")
+        # Page text can steer the agent toward a control that leaves the app
+        # (a link dressed as a save). A repair never points a step there.
+        offsite = _offsite_target(session.backend, point)
+        if offsite is not None:
+            raise SelfRepairRefused(
+                f"the proposed control leads to {offsite}, outside the app; a "
+                "repair may not point a step at another origin"
+            )
         structural = None
         locate = getattr(session.backend, "structural_locator_at", None)
         if callable(locate):
@@ -1058,6 +1068,7 @@ class SelfRepair:
             evidence_dir=evidence_dir,
             candidate=candidate,
             target_region=region,
+            proposal_note=str(proposal.note or ""),
         )
 
     def _proposed_point(
@@ -1585,6 +1596,14 @@ class SelfRepair:
                 probe.frame_png, probe.resolved_region or patch.target_region
             ),
             form_state=probe.form_state,
+            provenance={
+                "actor": f"agent:{self.agent.agent_id}"[:128],
+                "reason": patch.proposal_note[:512] or None,
+                "task_scope": (
+                    f"step {patch.step.id} only; the record check and identity "
+                    "evidence are the recorded ones"
+                ),
+            },
         )
         if self.on_approval_request is not None:
             try:
@@ -1824,6 +1843,27 @@ def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, int, Any]
     if not report.halt or report.halt.state_id != step.id:
         return "the report's halt does not name the failed step"
     return step, index, halted
+
+
+def _offsite_target(backend: Any, point: tuple[int, int]) -> Optional[str]:
+    """The other origin a link or form at ``point`` leads to, if any."""
+
+    from openadapt_flow.teach_scope import link_target_at, origin_of
+
+    page = getattr(backend, "page", None)
+    if page is None:
+        return None
+    target = link_target_at(page, point[0], point[1])
+    if not target:
+        return None
+    there = origin_of(target.get("url"))
+    if there is None:
+        return None
+    try:
+        here = origin_of(str(page.url))
+    except Exception:  # noqa: BLE001 - a page we can't read is not "here"
+        here = None
+    return None if there == here else there
 
 
 def _typed_values(workflow: Workflow, params: Mapping[str, Any]) -> dict[str, str]:

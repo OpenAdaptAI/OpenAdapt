@@ -105,6 +105,14 @@ class GuardBridge:
                             "type": "string",
                             "maxLength": _MAX_SCREEN_TEXT,
                         },
+                        "reason": {
+                            "type": "string",
+                            "maxLength": 512,
+                            "description": (
+                                "Why you are saving, in one sentence. The "
+                                "person approving sees it as your words."
+                            ),
+                        },
                     },
                     "required": ["guard_id"],
                     "additionalProperties": False,
@@ -166,7 +174,9 @@ class GuardBridge:
                             "screenshot_png_base64 is not base64"
                         ) from None
                 result = guard.commit(
-                    screenshot_png=png, screen_text=args.get("screen_text")
+                    screenshot_png=png,
+                    screen_text=args.get("screen_text"),
+                    reason=str(args["reason"])[:512] if args.get("reason") else None,
                 )
                 return {"ok": True, **result.to_dict()}
             if name == "guard_confirm":

@@ -83,6 +83,7 @@ shipping in the next release; a pull request number means it is being merged.
 | Compiles a computer-use agent's verified run, with no human demonstration needed. | [JIT.md](packages/flow/docs/JIT.md) |
 | The agent that does a task once can act through code, not a screenshot-and-click loop: it reads the page or accessibility tree, acts by role and name, keeps notes with a sandboxed read-only shell, and asks for a screenshot only when it needs one. It is arm 7 of the scoreboard; its figures are quoted from there once its rows are in. | `CODE_AS_ACTION.md` in [#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305) |
 | Binds each approval to the exact screenshot and form state, and re-reads the form before saving. | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md) |
+| Has a written threat model for prompt injection against the agent that teaches or repairs a program, with tests. | [THREAT_MODEL.md](packages/flow/docs/THREAT_MODEL.md) |
 | Fills inputs from a referral PDF, fax image or email, and holds back anything unclear for a person. | `intake`, [INTAKE.md](packages/flow/docs/INTAKE.md) |
 | Ships as one monorepo with separately installable packages (flow, agent, types, capture, privacy and desktop), each released from the monorepo. | [README](README.md) |
 | Makes no model calls on healthy runs. Model training (openadapt-ml) is separate research. | [README](README.md) |
@@ -143,6 +144,7 @@ improvising or retrying when something is off.
 | Person-signed grants let named agents or systems answer saves | Released | Unit tests | `openadapt-flow approver-grant` |
 | Admit once, then stop only on problems | On main ([#1212](https://github.com/OpenAdaptAI/OpenAdapt/pull/1212)), behind a readiness gate | Synthetic | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md) |
 | Show the field values a save writes on the phone | On main ([#1257](https://github.com/OpenAdaptAI/OpenAdapt/pull/1257)) | Unit tests | `console/save_approvals.py` |
+| Show why an agent asked for a save: who asked, its own reason (as a quote), the screen text it saw, and any of that text that reads like an instruction to an agent | In review (PR_THREAT) | Unit tests, synthetic | `ApprovalProvenance` in `approval_mode/item_approval.py`; the phone card in openadapt-desktop `portal/shell` |
 
 ## Branching work, not one linear path
 
@@ -207,6 +209,7 @@ improvising or retrying when something is off.
 | Code as action: the run-1 agent acts through one terminal tool (structure first, actions by role and name, a sandboxed read-only shell, screenshots on request); every action is a structured step checked against the compiled program | In review ([#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)) | Real app (local OpenEMR) and synthetic | `ClaudeAgent(vision="code")`, `CODE_AS_ACTION.md` ([#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)) |
 | Admit a draft by a person, an admitter key, or an agent under a person-signed policy, including self-admission when the policy allows it | Released | Unit tests | [JIT_ADMISSION.md](packages/flow/docs/JIT_ADMISSION.md) |
 | MCP server: your agent decides what to enter, OpenAdapt makes the entry and checks it | Released | Synthetic sandbox | `openadapt-agent`, [packages/agent](packages/agent/README.md) |
+| Limit a teaching agent to the declared task: typed text must be a declared value, links and browser requests to other origins are refused, writes are checked before they are sent, and the record is read back before a draft exists. Injected instructions in record notes, banners, tooltips, alt text and server responses are blocked or caught on MockMed (scripted agent; a live-model mode is off by default). Self-repair refuses a control that leaves the app | In review (PR_THREAT) | Synthetic | `openadapt_flow.teach_scope`, [THREAT_MODEL.md](packages/flow/docs/THREAT_MODEL.md) |
 | Compile an agent's first verified run from a prompt (`compile-agent`), and a code-as-action authoring agent | In review ([#1277](https://github.com/OpenAdaptAI/OpenAdapt/pull/1277), [#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)); the agent harness behind it runs on every backend, on main ([#1283](https://github.com/OpenAdaptAI/OpenAdapt/pull/1283)) | Synthetic | `compile-agent` |
 | Score harness optimizers (Harness², Meta-Harness) on GUI tasks with the record read-back as the reward, with full trace export | On main ([#1299](https://github.com/OpenAdaptAI/OpenAdapt/pull/1299), [#1300](https://github.com/OpenAdaptAI/OpenAdapt/pull/1300), [#1301](https://github.com/OpenAdaptAI/OpenAdapt/pull/1301)) | Synthetic (scripted proposer) | `integrations/harness2/` |
 | One scoreboard comparing the agent alone with OpenAdapt across tasks (correctness by read-back, cost, time, items per hour) | In progress ([#1303](https://github.com/OpenAdaptAI/OpenAdapt/pull/1303)) | Synthetic and local OpenEMR and openIMIS test copies | `benchmark/scoreboard/` |
@@ -258,6 +261,11 @@ fails when a command is added without being listed here.
 
 - No commercial EMR, claims system or real Citrix session has been tested.
 - In progress: self-repair across several new steps, and the scoreboard.
+- Prompt-injection limits (the teach scope) are on `openadapt_flow.jit` only;
+  teach over MCP, `compile-agent` from a prompt and the airbag guard must adopt
+  them when they merge. No live model has been run against the injection
+  fixtures yet. A steered agent can still read other records in the same app.
+  See [THREAT_MODEL.md](packages/flow/docs/THREAT_MODEL.md).
 - Windows installers are unsigned until free code signing through SignPath
   Foundation is approved; macOS builds are ad-hoc signed.
 - Several capabilities have run only on OpenAdapt's synthetic apps. The

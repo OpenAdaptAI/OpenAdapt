@@ -32,7 +32,7 @@ import os
 import stat
 import time
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -158,6 +158,33 @@ class SaveField(BaseModel):
     after: Optional[str] = Field(default=None, max_length=_MAX_FIELD_VALUE)
 
 
+class ApprovalProvenance(BaseModel):
+    """Why an agent asked for this save, as the person approving sees it.
+
+    Set when an agent (a teaching agent, a guarded agent, a repair agent)
+    reached the save, not when a compiled program did. Local only, like the
+    screenshot. ``reason`` is the agent's own account and is shown as that,
+    never as a finding. ``seen_text`` is the (scrubbed) screen text the agent
+    was given. ``instruction_like`` lists lines of it that read like an
+    instruction to an agent; it is a display aid and decides nothing.
+    ``task_scope`` is what the task declared the agent may touch.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    actor: str = Field(min_length=1, max_length=128)
+    reason: Optional[str] = Field(default=None, max_length=512)
+    seen_text: Optional[str] = Field(default=None, max_length=2000)
+    instruction_like: tuple[str, ...] = Field(default=(), max_length=8)
+    task_scope: Optional[str] = Field(default=None, max_length=512)
+
+    @model_validator(mode="after")
+    def _short_lines(self) -> "ApprovalProvenance":
+        if any(len(line) > 300 for line in self.instruction_like):
+            raise ValueError("an instruction_like line is at most 300 characters")
+        return self
+
+
 class ItemApprovalRequest(BaseModel):
     """What the person is asked to approve: one save of one item."""
 
@@ -195,6 +222,10 @@ class ItemApprovalRequest(BaseModel):
     fields: Optional[tuple[SaveField, ...]] = Field(
         default=None, min_length=1, max_length=MAX_SAVE_FIELDS
     )
+    #: Why an agent asked for this save, when an agent did. Part of the
+    #: digest, so the answer binds what the person was shown. Left out of the
+    #: file when absent, so earlier requests keep their digest.
+    provenance: Optional[ApprovalProvenance] = None
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -203,6 +234,8 @@ class ItemApprovalRequest(BaseModel):
             data.pop("step_class", None)
         if self.fields is None:
             data.pop("fields", None)
+        if self.provenance is None:
+            data.pop("provenance", None)
         return data
 
     @model_validator(mode="after")
@@ -691,11 +724,13 @@ class ItemApprovalStore:
         ttl_s: float = REQUEST_TTL_S,
         step_class: StepClass = StepClass.CONSEQUENTIAL,
         fields: Optional[Sequence[SaveField]] = None,
+        provenance: Optional[ApprovalProvenance | Mapping[str, Any]] = None,
     ) -> ItemApprovalRequest:
         """Write the screenshot and the request. Returns the request.
 
         ``fields`` are the values the save writes, shown on the phone. An
-        empty list is stored as none.
+        empty list is stored as none. ``provenance`` says why an agent asked
+        (see :class:`ApprovalProvenance`).
         """
 
         self._checked_dir(create=True)
@@ -721,6 +756,11 @@ class ItemApprovalStore:
             qualification_case_kind=qualification_case_kind,
             step_class=step_class,
             fields=tuple(fields) if fields else None,
+            provenance=(
+                ApprovalProvenance.model_validate(provenance)
+                if provenance is not None
+                else None
+            ),
         )
         _write_exclusive(self.dir / f"{request_id}.png", frame_png)
         _write_exclusive(
@@ -1134,6 +1174,7 @@ def decided_by_summary(
 
 __all__ = [
     "ANSWER_SCHEMA",
+    "ApprovalProvenance",
     "ApproverContext",
     "GRANT_FILENAME",
     "INITIATOR_FILENAME",

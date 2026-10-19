@@ -562,6 +562,10 @@ class CaptureComputer:
             and the text snapshot a Playwright MCP agent reads. Optional for
             the coordinate formats.
         sleep: Injected for tests.
+        guard: A :class:`~openadapt_flow.teach_scope.TeachGuard`. Each action
+            is checked against the task's declared scope before it runs, and
+            the page after it; a violation raises
+            :class:`~openadapt_flow.teach_scope.ScopeViolation`.
 
     Every performed step is also kept in :attr:`log` (native action and the
     steps it became) for the candidate's review.
@@ -574,6 +578,7 @@ class CaptureComputer:
         dialect: str,
         page: Any = None,
         sleep: Callable[[float], None] = time.sleep,
+        guard: Any = None,
     ) -> None:
         if dialect not in _TRANSLATORS:
             raise ValueError(
@@ -583,6 +588,7 @@ class CaptureComputer:
         self.dialect = dialect
         self._page = page
         self._sleep = sleep
+        self._guard = guard
         self._pointer: Optional[tuple[int, int]] = None
         self.log: list[dict[str, Any]] = []
         self.actions = 0
@@ -597,6 +603,8 @@ class CaptureComputer:
 
         ops = [self._resolve(op) for op in translate(self.dialect, native)]
         self._check(ops)
+        if self._guard is not None:
+            self._guard.check_ops(ops, page=self._page, pointer=self._pointer)
         notes: list[str] = []
         for op in ops:
             note = self._perform(op)
@@ -610,6 +618,8 @@ class CaptureComputer:
                 "notes": notes,
             }
         )
+        if self._guard is not None:
+            self._guard.after_action(self._page)
         return Observation(
             png=self._session.screenshot(), text=self._snapshot(), notes=notes
         )
