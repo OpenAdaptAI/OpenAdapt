@@ -315,3 +315,16 @@ The OpenEMR counterpart of Amendment 3 (`claims_openemr.py`, run
   reached", and item 936 was run as the fifth `collateral_loss` item.
 - **Display.** A claims run is shown in the table only when its `meta.json`
   says `complete: true`, set when every planned item has a row.
+
+## Amendment 8 (2026-10-19): arm 7 timed pass
+
+Arm 7 (`code_agent`) ran 5 MockMed items and 5 OpenEMR items (721 to 725)
+from the `claude/scoreboard-arm7` checkout (#1307, engine a5627748),
+during a window the other sessions were asked to keep quiet. All 10 were
+correct by read-back. The load stayed between 11 and 32: another session's
+`silent-saves` benchmark ran throughout. So only 1 MockMed row is timed and
+no OpenEMR row is. On OpenEMR the agent's program compiled, but the standard
+gate refused its canary, so it is not admitted. The two fixes the run needed
+(the `signal` import, and a free port for the MockMed server) and moving its
+JIT cache out of the source tree are on #1307. The time columns now show n,
+the number of timed rows behind each median.

@@ -1,7 +1,7 @@
 {
   "protocol_version": "2026-10-18.1",
   "timed_load_max": 12.0,
-  "spend_usd": 12.276706,
+  "spend_usd": 12.543253,
   "tasks": {
     "mockmed": {
       "agent": {
@@ -436,6 +436,139 @@
             "engine": {
               "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
               "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            }
+          }
+        ]
+      },
+      "code_agent": {
+        "label": "7. Code-as-action authoring agent, first run",
+        "items": 5,
+        "attempts": 5,
+        "runs": {
+          "2026-10-19-timed": {
+            "items": 5,
+            "attempts": 5,
+            "runs": [
+              "2026-10-19-timed"
+            ],
+            "normal_items": 5,
+            "correct": 5,
+            "correct_rate": 1.0,
+            "silent_wrong": 0,
+            "safe_stops_normal": 0,
+            "fault_items": 0,
+            "fault_items_by_kind": {},
+            "planned_items": 5,
+            "done_correctly_all_items": 5,
+            "flagged_wrong": 0,
+            "paused": 0,
+            "model_calls_per_item": 5.0,
+            "tokens_per_item": 9913,
+            "cost_usd_total": 0.0522,
+            "cost_usd_per_item": 0.0104,
+            "approvals_asked": 5,
+            "timed_correct_items": 1,
+            "item_s_median": 8.17,
+            "item_s_p90": 8.17,
+            "wall_s_median": 9.78,
+            "wall_s_p90": 9.78,
+            "items_per_hour": 368.0,
+            "host_load_1m": {
+              "min": 11.78,
+              "max": 14.29
+            }
+          }
+        },
+        "normal_items": 5,
+        "correct": 5,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 0,
+        "fault_items_by_kind": {},
+        "planned_items": 5,
+        "done_correctly_all_items": 5,
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 5.0,
+        "tokens_per_item": 9913,
+        "cost_usd_total": 0.0522,
+        "cost_usd_per_item": 0.0104,
+        "approvals_asked": 5,
+        "timed_correct_items": 1,
+        "item_s_median": 8.17,
+        "item_s_p90": 8.17,
+        "wall_s_median": 9.78,
+        "wall_s_p90": 9.78,
+        "items_per_hour": 368.0,
+        "host_load_1m": {
+          "min": 11.78,
+          "max": 14.29
+        },
+        "run_meta": {
+          "2026-10-19-timed": {
+            "run": "2026-10-19-timed",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-19T14:26:49-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm7/packages/flow/openadapt_flow",
+              "git_head": "a5627748b9c9334fc2401c5636c57e7c858101d5"
+            },
+            "benchmark_git_head": "a5627748b9c9334fc2401c5636c57e7c858101d5",
+            "task": "mockmed",
+            "arm": "code_agent",
+            "model": "claude-sonnet-5-5",
+            "n": 5,
+            "vision": "code",
+            "effort": "medium",
+            "max_cost_per_item": 0.3,
+            "on_screen": [
+              "Jane Sample",
+              "MRN P1"
+            ],
+            "sessions": [
+              {
+                "protocol_version": "2026-10-18.1",
+                "written_at": "2026-10-19T14:27:24-0400",
+                "machine": "arm64 Darwin 24.6.0",
+                "cpu_count": 12,
+                "python": "3.12.13",
+                "engine": {
+                  "path": "/Users/abrichr/oa/worktrees/scoreboard-arm7/packages/flow/openadapt_flow",
+                  "git_head": "a5627748b9c9334fc2401c5636c57e7c858101d5"
+                },
+                "benchmark_git_head": "a5627748b9c9334fc2401c5636c57e7c858101d5",
+                "task": "mockmed",
+                "arm": "code_agent",
+                "model": "claude-sonnet-5-5",
+                "n": 5,
+                "vision": "code",
+                "effort": "medium",
+                "max_cost_per_item": 0.3,
+                "on_screen": [
+                  "Jane Sample",
+                  "MRN P1"
+                ]
+              }
+            ]
+          }
+        },
+        "hand_check": {
+          "rows_not_correct": 0,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
+        "sources": [
+          {
+            "run": "2026-10-19-timed",
+            "model": "claude-sonnet-5-5",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm7/packages/flow/openadapt_flow",
+              "git_head": "a5627748b9c9334fc2401c5636c57e7c858101d5"
             }
           }
         ]
@@ -1553,6 +1686,137 @@
               "git_head": "b82131e51f52d6a365e910cc0818ea92e4c10a1a"
             },
             "profile": "GUI, worklist harness (#1296), speed fast, 8 worker processes, read-back window 1, plain Replayer: no approval gate, not durable, no named execution profile; record check: OpenEMR REST read-back"
+          }
+        ]
+      },
+      "code_agent": {
+        "label": "7. Code-as-action authoring agent, first run",
+        "items": 5,
+        "attempts": 5,
+        "runs": {
+          "2026-10-19-timed": {
+            "items": 5,
+            "attempts": 5,
+            "runs": [
+              "2026-10-19-timed"
+            ],
+            "normal_items": 5,
+            "correct": 5,
+            "correct_rate": 1.0,
+            "silent_wrong": 0,
+            "safe_stops_normal": 0,
+            "fault_items": 0,
+            "fault_items_by_kind": {},
+            "planned_items": 5,
+            "done_correctly_all_items": 5,
+            "flagged_wrong": 0,
+            "paused": 0,
+            "model_calls_per_item": 10.8,
+            "tokens_per_item": 65772,
+            "cost_usd_total": 0.2144,
+            "cost_usd_per_item": 0.0429,
+            "approvals_asked": 0,
+            "timed_correct_items": 0,
+            "item_s_median": null,
+            "item_s_p90": null,
+            "wall_s_median": null,
+            "wall_s_p90": null,
+            "items_per_hour": null,
+            "host_load_1m": {
+              "min": 10.84,
+              "max": 32.3
+            }
+          }
+        },
+        "normal_items": 5,
+        "correct": 5,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 0,
+        "fault_items_by_kind": {},
+        "planned_items": 5,
+        "done_correctly_all_items": 5,
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 10.8,
+        "tokens_per_item": 65772,
+        "cost_usd_total": 0.2144,
+        "cost_usd_per_item": 0.0429,
+        "approvals_asked": 0,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": {
+          "min": 10.84,
+          "max": 32.3
+        },
+        "run_meta": {
+          "2026-10-19-timed": {
+            "run": "2026-10-19-timed",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-19T14:26:50-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm7/packages/flow/openadapt_flow",
+              "git_head": "a5627748b9c9334fc2401c5636c57e7c858101d5"
+            },
+            "benchmark_git_head": "a5627748b9c9334fc2401c5636c57e7c858101d5",
+            "task": "openemr_referral",
+            "arm": "code_agent",
+            "model": "claude-sonnet-5-5",
+            "n": 725,
+            "vision": "code",
+            "effort": "medium",
+            "max_cost_per_item": 0.3,
+            "on_screen": [
+              "Create New Patient"
+            ],
+            "sessions": [
+              {
+                "protocol_version": "2026-10-18.1",
+                "written_at": "2026-10-19T14:28:29-0400",
+                "machine": "arm64 Darwin 24.6.0",
+                "cpu_count": 12,
+                "python": "3.12.13",
+                "engine": {
+                  "path": "/Users/abrichr/oa/worktrees/scoreboard-arm7/packages/flow/openadapt_flow",
+                  "git_head": "a5627748b9c9334fc2401c5636c57e7c858101d5"
+                },
+                "benchmark_git_head": "a5627748b9c9334fc2401c5636c57e7c858101d5",
+                "task": "openemr_referral",
+                "arm": "code_agent",
+                "model": "claude-sonnet-5-5",
+                "n": 725,
+                "vision": "code",
+                "effort": "medium",
+                "max_cost_per_item": 0.3,
+                "on_screen": [
+                  "Create New Patient"
+                ]
+              }
+            ]
+          }
+        },
+        "hand_check": {
+          "rows_not_correct": 0,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
+        "sources": [
+          {
+            "run": "2026-10-19-timed",
+            "model": "claude-sonnet-5-5",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm7/packages/flow/openadapt_flow",
+              "git_head": "a5627748b9c9334fc2401c5636c57e7c858101d5"
+            }
           }
         ]
       }

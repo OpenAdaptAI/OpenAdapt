@@ -1,5 +1,5 @@
 {
-  "total_usd": 12.276706,
+  "total_usd": 12.543253,
   "entries": [
     {
       "usd": 0.577,
@@ -1184,6 +1184,56 @@
       "usd": 0.075245,
       "note": "openemr claims 2026-10-19-a item 936",
       "at": 1792434266.422913
+    },
+    {
+      "usd": 0.010352,
+      "note": "mockmed code_agent 2026-10-19-timed item 1 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.354027
+    },
+    {
+      "usd": 0.010449,
+      "note": "mockmed code_agent 2026-10-19-timed item 2 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.355176
+    },
+    {
+      "usd": 0.010449,
+      "note": "mockmed code_agent 2026-10-19-timed item 3 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.356023
+    },
+    {
+      "usd": 0.010462,
+      "note": "mockmed code_agent 2026-10-19-timed item 4 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.356829
+    },
+    {
+      "usd": 0.010452,
+      "note": "mockmed code_agent 2026-10-19-timed item 5 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.357607
+    },
+    {
+      "usd": 0.04298,
+      "note": "openemr_referral code_agent 2026-10-19-timed item 721 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.3584268
+    },
+    {
+      "usd": 0.038844,
+      "note": "openemr_referral code_agent 2026-10-19-timed item 722 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.359221
+    },
+    {
+      "usd": 0.051667,
+      "note": "openemr_referral code_agent 2026-10-19-timed item 723 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.3600152
+    },
+    {
+      "usd": 0.038837,
+      "note": "openemr_referral code_agent 2026-10-19-timed item 724 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.3608162
+    },
+    {
+      "usd": 0.042055,
+      "note": "openemr_referral code_agent 2026-10-19-timed item 725 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.3616168
     }
   ]
 }
