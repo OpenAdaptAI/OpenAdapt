@@ -49,6 +49,9 @@ GUARD_INSTRUCTIONS = (
 class GuardBridge:
     """Dispatches the guard tools. Guards live in this process's memory."""
 
+    #: The task ledger ``serve`` attaches; it reads each guard result.
+    ledger: Any = None
+
     def __init__(self, guarded: GuardedSave, tasks_dir: Path | str) -> None:
         self.guarded = guarded
         self.tasks_dir = Path(tasks_dir)

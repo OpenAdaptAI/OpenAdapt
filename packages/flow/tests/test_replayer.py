@@ -2309,6 +2309,7 @@ def test_closed_loop_scroll_does_not_accept_geometry_as_target_visibility(
             )
         ],
     )
+    target.timeout_s = 0.2
     workflow = Workflow(name="wf", steps=[scroll_step(), target])
 
     report = Replayer(backend := FakeBackend(), vision=vision).run(
@@ -2316,31 +2317,74 @@ def test_closed_loop_scroll_does_not_accept_geometry_as_target_visibility(
     )
 
     assert report.success is False
-    assert "target never came into view" in report.results[0].error
+    # The click owns the halt and refuses its geometry-only point: no click.
+    assert report.results[0].ok
+    halted = report.results[-1]
+    assert halted.step_id == target.id
+    assert halted.resolution is None
+    assert halted.delivery_attempted is False
+    assert "target never came into view" in halted.error
     assert backend.actions == [("scroll", 0, 400), ("scroll", 0, 400)]
 
 
 def test_closed_loop_scroll_budget_exhaustion_fails_loudly(bundle, run_dir):
     """When the anchor never resolves and no further SCROLL step follows,
-    the loop stops at ~2.5x the recorded distance and fails the run,
-    naming the anchor that never came into view."""
+    the loop stops at ~2.5x the recorded distance and the run halts on the
+    click whose target never came into view (#1331), before any input to it.
+    """
     vision = FakeVision()  # every probe misses
     backend = FakeBackend()
-    workflow = Workflow(
-        name="wf",
-        steps=[scroll_step(dy=-400), click_step(step_id="pencil")],
-    )
+    pencil = click_step(step_id="pencil")
+    pencil.timeout_s = 0.2
+    workflow = Workflow(name="wf", steps=[scroll_step(dy=-400), pencil])
     report = Replayer(backend, vision=vision, poll_interval_s=0.01).run(
         workflow, bundle_dir=bundle, run_dir=run_dir
     )
     assert report.success is False
-    assert len(report.results) == 1  # aborted at the scroll step
-    error = report.results[0].error
-    assert "budget" in error
-    assert "pencil" in error  # names the anchor that never resolved
+    assert len(report.results) == 2
+    assert report.results[0].ok
+    halted = report.results[1]
+    assert halted.step_id == "pencil"
+    assert halted.delivery_attempted is False
+    assert halted.error.startswith("Could not resolve target for step 'pencil'")
+    assert "budget" in halted.error
+    assert report.halt is not None and report.halt.state_id == "pencil"
     # Budget 2.5 x 400px allows exactly two 400px gestures, both upward
     # (direction comes from the recorded delta).
     assert backend.actions == [("scroll", 0, -400), ("scroll", 0, -400)]
+
+
+def test_scroll_keeps_the_halt_when_the_target_resolves_but_fails_identity(
+    bundle, run_dir, monkeypatch
+):
+    """Only a target no direct rung found is handed to the click (#1331).
+
+    A target that resolves on every frame but never verifies its record
+    identity is not a changed control: the scroll keeps the halt and the click
+    never runs.
+    """
+    vision = FakeVision()
+    target = Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.99)
+    vision.template_results = [target] * 6
+    backend = FakeBackend()
+    click = click_step()
+    assert click.anchor is not None
+    click.anchor.context_text = "Synthetic Contact Address"
+    click.identity_armed = True
+    workflow = Workflow(name="wf", steps=[scroll_step(), click])
+    replayer = Replayer(backend, vision=vision, poll_interval_s=0.01)
+    monkeypatch.setattr(
+        replayer,
+        "_verify_identity",
+        lambda *args, **kwargs: IdentityCheck(
+            status="mismatch", expected="target", observed="wrong"
+        ),
+    )
+    report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    assert report.success is False
+    assert len(report.results) == 1
+    assert "target never came into view" in report.results[0].error
+    assert backend.actions == [("scroll", 0, 400), ("scroll", 0, 400)]
 
 
 def test_consequential_remote_scroll_reacquires_each_wheel_edge(bundle, run_dir):

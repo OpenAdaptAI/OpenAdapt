@@ -90,6 +90,7 @@ starts.
   doesn't use the screen (a REST, FHIR or database read). If the item runs
   any further step, the engine waits for the read-back first and halts on a
   failure, as it would inline.
+- An API step's save ([API_TIER.md](API_TIER.md)) is deferred the same way.
 - The item's `report.json` is rewritten with the verdict when the read-back
   finishes, and its outcome is classified again from the completed evidence.
 - If a read-back fails, the run stops on every worker. The report names the
@@ -98,6 +99,11 @@ starts.
 - It needs `items_independent: true`. Durable and idempotency-ledger runs
   verify inline, because their terminal state is written once; the Standard
   and Regulated profiles are durable, so for them the window has no effect.
+  The worker's item detail records why (`readback: inline (durable runs
+  verify inline)`). Deferring a durable save would mean committing its
+  checkpoint and the run's terminal state from the side thread, after the
+  next item has taken the browser, which the durable runtime doesn't
+  support. Workers still run in parallel under those profiles.
 
 ## One entry, faster
 

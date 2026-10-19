@@ -114,6 +114,10 @@ class SaveApprovalSummary(BaseModel):
     expires_at: str
 
 
+#: ``workflow_name`` of a task-ledger question (``openadapt_flow.agent.ledger``).
+LEDGER_QUESTION_WORKFLOW = "openadapt.task-ledger.question"
+
+
 # -- finding requests ----------------------------------------------------------
 
 
@@ -289,6 +293,18 @@ def save_approval_detail(root: Path, request_id: str) -> dict[str, Any]:
         presentation["fields"] = [
             field.model_dump(mode="json") for field in request.fields
         ]
+    if request.workflow_name == LEDGER_QUESTION_WORKFLOW:
+        # An agent's question from its task ledger, not a save. Approve is
+        # yes and decline is no; the answer saves nothing in any app.
+        presentation.update(
+            kind="question",
+            question=request.step_intent,
+            explanation=(
+                "Your agent asks you this. Save means yes, Don't save means "
+                "no. Your answer saves nothing in any app."
+            ),
+            decline_reasons=["wrong_values"],
+        )
     # Why an agent asked for this save: its own words (labelled as such),
     # what it was shown, and any of that text that reads like an
     # instruction to an agent. Inside the request digest, like ``fields``.

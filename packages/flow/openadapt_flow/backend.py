@@ -648,6 +648,19 @@ class PreparedPointerActuationBackend(Protocol):
 
 
 @runtime_checkable
+class PointerHoverBackend(Protocol):
+    """Optional: rest the pointer on a point without pressing a button.
+
+    Used to read a control's hover response (highlight, tooltip, status-bar
+    text) before an icon-only click on a pixel surface
+    (:mod:`openadapt_flow.runtime.hover_evidence`), and by the recorder to
+    capture that response. Emits no button edge.
+    """
+
+    def hover(self, x: int, y: int) -> None: ...
+
+
+@runtime_checkable
 class RichPointerActionBackend(Protocol):
     """Pointer actions beyond the primary/double click contract."""
 
