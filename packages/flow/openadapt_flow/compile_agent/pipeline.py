@@ -30,6 +30,7 @@ confirmed checks.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import re
@@ -272,6 +273,7 @@ class _HarnessedAgent:
         principal_id: Optional[str],
     ) -> None:
         self.inner = inner
+        self.dialect = str(inner.dialect)
         self.gate = gate
         self.keep = list(keep)
         self.evidence_dir = evidence_dir
@@ -279,10 +281,6 @@ class _HarnessedAgent:
         self.harness: Optional[Harness] = None
         self.ledger: Any = None
         self.error: Optional[str] = None
-
-    @property
-    def dialect(self) -> str:
-        return str(self.inner.dialect)
 
     @property
     def requires_model_key(self) -> bool:
@@ -895,7 +893,8 @@ class FirstRunCompiler:
                 result, receipt, path = self._governed(
                     f"canary-{i + 1}",
                     values,
-                    lambda params=params: jit.canary(
+                    functools.partial(
+                        jit.canary,
                         principal_id=admitter if admitter is not None else person,
                         **params,
                     ),
