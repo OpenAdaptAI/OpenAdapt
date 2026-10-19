@@ -128,10 +128,12 @@ withholds:
 - every header, so no cookie or authorization value;
 - the values of password-like fields and of `--secret` fields, everywhere
   they appear (`<secret>`);
-- CSRF and session tokens, found by field name (`csrf`, `xsrf`, `token`,
-  `nonce`, `authenticity`), everywhere they appear (`<session:NAME>`);
-- cookie values the browser sent, where a page echoes them
-  (`<session:cookie>`).
+- CSRF, session and API tokens, found by field name in forms, URL queries
+  and JSON request and response bodies, everywhere they appear
+  (`<session:NAME>`);
+- cookie values the browser sent or a response set, and `Authorization`
+  credentials, wherever a page echoes them (`<session:cookie>`,
+  `<session:authorization>`).
 
 Business values the person typed stay in the file, as they do in
 `events.jsonl`. A recording with capture is as sensitive as any other
