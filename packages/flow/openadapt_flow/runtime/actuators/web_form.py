@@ -88,10 +88,12 @@ class _FormParser(HTMLParser):
             else:
                 value = a.get("value", "on" if kind in ("checkbox", "radio") else "")
             self._form["controls"].setdefault(
-                name, {"kind": kind, "default": value, "options": None}
+                name,
+                {"kind": kind, "default": value, "options": None, "id": a.get("id")},
             )
         elif tag == "select" and name:
             self._select = {
+                "id": a.get("id"),
                 "kind": "select",
                 "default": None,
                 "options": [],
@@ -106,7 +108,12 @@ class _FormParser(HTMLParser):
             }
             self._select["options"].append(self._option)
         elif tag == "textarea" and name:
-            self._textarea = {"kind": "textarea", "default": "", "options": None}
+            self._textarea = {
+                "kind": "textarea",
+                "default": "",
+                "options": None,
+                "id": a.get("id"),
+            }
             self._form["controls"].setdefault(name, self._textarea)
 
     def handle_data(self, data: str) -> None:
