@@ -5,9 +5,8 @@ side effect:
 
 * ``git status`` is dirty after a test run, so a developer can commit a
   regenerated golden by accident;
-* ``scripts/check_release_consistency.py`` pins a reviewed SHA-256 inventory
-  of the public files, so a mutated tracked file silently changes what that
-  release gate measures;
+* the release workflow pins the SHA-256 of every public artifact file, so a
+  mutated tracked file silently changes what that release gate measures;
 * CI artifact and consistency jobs see a diff nobody wrote.
 
 The guard snapshots the tracked-file status before the first test and again
