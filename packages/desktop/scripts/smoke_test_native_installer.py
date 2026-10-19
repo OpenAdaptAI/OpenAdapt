@@ -901,7 +901,10 @@ def _prepare_signature_verifier(
     signing_identity: str | None,
     signing_team_id: str | None,
     timeout: float,
+    installer_only: bool = False,
 ) -> Callable[[Path], None]:
+    if installer_only and (platform != "windows" or signing_mode != "authenticode"):
+        raise SmokeTestError("--installer-only-signature applies only to Windows authenticode")
     if signing_mode not in SIGNING_MODES:
         raise SmokeTestError(
             f"unknown signing mode {signing_mode!r}; expected one of {SIGNING_MODES}"
@@ -965,6 +968,10 @@ def _prepare_signature_verifier(
         )
 
     _verify_authenticode(artifact, fingerprint=signing_fingerprint, timeout=timeout)
+    if installer_only:
+        # The installer was signed after the build (SignPath cannot open an
+        # NSIS archive), so the program files and uninstaller inside it are not.
+        return lambda path: None
     return lambda path: _verify_authenticode(path, fingerprint=signing_fingerprint, timeout=timeout)
 
 
@@ -982,6 +989,7 @@ def smoke_test_installer(
     timeout: float = 300.0,
     platform_value: str | None = None,
     launch_seconds: float = 0.0,
+    installer_only_signature: bool = False,
 ) -> SmokeTestResult:
     """Exercise a native artifact's complete install/uninstall lifecycle."""
 
@@ -1015,6 +1023,7 @@ def smoke_test_installer(
         signing_identity=signing_identity,
         signing_team_id=signing_team_id,
         timeout=timeout,
+        installer_only=installer_only_signature,
     )
 
     def verify_installed(path: Path) -> None:
@@ -1090,6 +1099,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional Authenticode certificate thumbprint or GPG fingerprint",
     )
     parser.add_argument(
+        "--installer-only-signature",
+        action="store_true",
+        help=(
+            "With Windows authenticode, verify the installer's signature only: an NSIS "
+            "setup signed after the build carries unsigned program files"
+        ),
+    )
+    parser.add_argument(
         "--signing-identity",
         help="Exact Apple Developer ID Application identity for macOS verification",
     )
@@ -1133,6 +1150,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             expected_architecture=args.expected_architecture,
             timeout=args.timeout,
             launch_seconds=args.launch_seconds,
+            installer_only_signature=args.installer_only_signature,
         )
     except SmokeTestError as exc:
         parser.exit(1, f"native installer smoke test failed: {exc}\n")

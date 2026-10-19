@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-18T17:51:26-04:00 (git HEAD commit date)",
+  "generated_at": "2026-10-18T17:52:16-04:00 (git HEAD commit date)",
   "green_check_run": false,
   "green_check_job": null,
   "green_check_scope": [],
@@ -675,6 +675,34 @@
           "ci_job": "test",
           "junit_status": null,
           "proves": "On the WinForms patient-notes fixture through the real in-guest agent and Windows client (UI Automation): confirms a saved note, refutes a wrong one, opens only the row that shows the full identity past a same-first-name decoy, halts on two matching rows, and refuses a search button with a save-like label. On the RDP kiosk's look-up panel through the RDP backend and real OCR: confirms a booking from its own RDP logon (tier 2), never turns an OCR mismatch into REFUTED, and never takes \"not found\" as proof that nothing was saved. The same look-up confirms through a Citrix Workspace window and a native macOS window (tier 3, a window as the same user). Neither fixture's save control or form is touched. The deployment refuses a read-back session that is the session that types."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "lookup-teaches-the-check",
+      "claim": "When a recording shows the person or the agent look the record up after saving, Flow proposes that look-up as the record check with no marking or configuration: a same-session check and, for desktop, RDP and Citrix recordings, a separate-session desktop_readback. Every proposal waits for a person.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Measured on one synthetic kiosk recording. The detector needs a save button with a save word, a typed and submitted search, and the saved values readable by OCR on the last frame."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_lookup_detect.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "On a synthetic recording of the RDP kiosk: finds the save by its OCR label, the search, and only the values the look-up brought onto the screen (not the saved form still showing the same text); proposes nothing without a look-up; the proposed desktop_readback, with only its address filled in, confirms the booking through real OCR from separate sessions; check accept writes check.json and never overwrites one; record --verify needs no file and ends with the look-up prompt when none is found."
         }
       ],
       "errors": []
