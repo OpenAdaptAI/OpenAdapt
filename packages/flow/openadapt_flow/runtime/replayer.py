@@ -2377,7 +2377,14 @@ class Replayer:
                     candidate
                 )
                 durable_run.complete()
-                os.replace(candidate, run_dir / "report.json")
+                if _sealed.is_sealed_path(candidate):
+                    # Encrypted run directory: the rename is a sealed rewrite.
+                    _sealed.write_bytes(
+                        run_dir / "report.json", _sealed.read_bytes(candidate)
+                    )
+                    _sealed.unlink(candidate)
+                else:
+                    os.replace(candidate, run_dir / "report.json")
                 from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
 
                 CheckpointStore._fsync_directory(run_dir)

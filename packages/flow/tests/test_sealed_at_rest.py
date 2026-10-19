@@ -124,10 +124,10 @@ def _files(root: Path) -> dict[str, bytes]:
 
 
 def _assert_ciphertext_only(root: Path) -> None:
-    """Each file is the header, a structural file, or a sealed container."""
+    """Each file is a header, a structural file, or a sealed container."""
     kind = sealed_set.header_kind(root)
     for rel, data in _files(root).items():
-        if rel == sealed_set.HEADER:
+        if Path(rel).name == sealed_set.HEADER:
             continue
         entry = sealed_set.classify(kind, rel)
         if entry is not None and entry.classification == "structural":
@@ -487,3 +487,229 @@ def test_encrypted_recording_and_bundle_refuse_without_the_key(
     monkeypatch.setenv(sealed_set.RECORDING_ENV_KEY, "wrong key")
     with pytest.raises(crypto.DecryptionError):
         sealed_set.SealedSet.open(rec_dir)
+
+
+# -- the commands that read sealed input --------------------------------------
+
+
+def _sealed_bundle_of(workflow: Workflow, bundle: Path) -> Path:
+    with sealed_set.writing(bundle, "bundle", KEY):
+        workflow.save(bundle)
+    return bundle
+
+
+def test_halted_sealed_run_is_undone_without_plaintext(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow.after_stop import (
+        approve_undo,
+        offer_undos,
+        read_undo_result,
+        run_undo,
+    )
+    from openadapt_flow.mockmed.fault_server import serve
+    from openadapt_flow.runtime.effects import RestRecordVerifier
+    from openadapt_flow.runtime.replayer import Replayer
+    from tests.test_after_stop_mockmed import (
+        MockMedBackend,
+        _undo_replayer,
+        _vision,
+        _workflow,
+    )
+
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    url, _db, stop = serve()
+    url = url.rstrip("/")
+    try:
+        bundle = _sealed_bundle_of(_workflow(), tmp_path / "bundle")
+        workflow = Workflow.load(bundle)
+        run_dir = tmp_path / "run"
+        with watching_disk() as watch:
+            report = Replayer(
+                MockMedBackend(url),
+                vision=_vision(),
+                effect_verifier=RestRecordVerifier(url),
+                poll_interval_s=0.01,
+            ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+            assert report.execution_outcome == "HALTED"
+            assert [o.undo_id for o in offer_undos(run_dir, workflow)] == [
+                "undo-triage"
+            ]
+            approve_undo(run_dir, workflow, "undo-triage", approver="nurse-a")
+            replayer, backend = _undo_replayer(url)
+            result = run_undo(
+                run_dir, workflow, "undo-triage", replayer=replayer, bundle_dir=bundle
+            )
+        assert result.status == "verified", result.reason
+        assert backend.deletes == 1
+        assert read_undo_result(run_dir, "undo-triage") == result
+    finally:
+        stop()
+    assert watch.leaks([b"nurse-a", b"Triage", b'"results"', PNG_SIGNATURE]) == []
+    _assert_ciphertext_only(run_dir)
+    undo_run = run_dir / "undo" / "undo-triage" / "run"
+    assert sealed_set.is_sealed(undo_run)
+    _assert_ciphertext_only(undo_run)
+    sealed_set.SealedSet.open(run_dir, KEY).verify_all()
+
+
+def _recording(rec_dir: Path, *, key: str | None) -> Path:
+    rec = Recorder(_FakeBackend(), rec_dir, app_url="http://app.test/", encryption_key=key)
+    rec.click(40, 40)
+    rec.type_text("Testpatient Zed", param="patient")
+    rec.click(80, 80)
+    return rec.finish()
+
+
+def test_compile_and_induce_from_encrypted_recordings_stay_sealed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    first = _recording(tmp_path / "rec1", key=KEY)
+    second = _recording(tmp_path / "rec2", key=KEY)
+    with watching_disk() as watch:
+        assert (
+            main(["compile", str(first), "--out", str(tmp_path / "b"), "--name", "x"])
+            == 0
+        )
+        induced = main(
+            ["induce", str(first), str(second), "--out", str(tmp_path / "induced")]
+        )
+    assert watch.leaks([b"Testpatient", PNG_SIGNATURE, b'"anchor"']) == []
+    _assert_ciphertext_only(tmp_path / "b")
+    assert Workflow.load(tmp_path / "b").encrypted
+    assert induced == 0
+    _assert_ciphertext_only(tmp_path / "induced")
+    assert Workflow.load(tmp_path / "induced").encrypted
+
+
+def test_scaffold_verifier_keeps_its_draft_inside_the_sealed_recording(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    rec = tmp_path / "rec"
+    with sealed_set.writing(rec, "recording", KEY) as writer:
+        writer.write("meta.json", json.dumps({"params": {"p": "Testpatient Zed"}}).encode())
+        writer.write(
+            "events.jsonl",
+            json.dumps(
+                {"i": 0, "kind": "click", "x": 5, "y": 5, "field_label": "Save encounter"}
+            ).encode()
+            + b"\n",
+        )
+    with watching_disk() as watch:
+        assert main(["scaffold-verifier", str(rec)]) == 0
+        with pytest.raises(SystemExit, match="Drop --out"):
+            main(["scaffold-verifier", str(rec), "--out", str(tmp_path / "o")])
+    assert watch.leaks([b"Testpatient", PNG_SIGNATURE]) == []
+    assert not (tmp_path / "o").exists()
+    _assert_ciphertext_only(rec)
+    opened = sealed_set.SealedSet.open(rec, KEY)
+    assert "effect_contract.yaml" in opened.files()
+    opened.verify_all()
+
+
+def test_qualify_and_admit_keep_a_sealed_bundle_sealed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    rec = _recording(tmp_path / "rec", key=KEY)
+    target = tmp_path / "admission"
+    with watching_disk() as watch:
+        code = main(
+            [
+                "admit",
+                "run",
+                str(rec),
+                "--out",
+                str(target),
+                "--name",
+                "sealed-admission",
+            ]
+        )
+    assert watch.leaks([b"Testpatient", PNG_SIGNATURE, b'"anchor"']) == [], code
+    # The synthetic demo has no identity or effect evidence, so the admission
+    # stops for a person; what matters here is that it stays sealed.
+    bundle = target / "bundle"
+    assert sealed_set.is_sealed(bundle)
+    _assert_ciphertext_only(bundle)
+    assert "qualification-proposal.draft.json" in sealed_set.open_set(bundle).files()
+    assert not (target / "qualification-proposal.draft.json").exists()
+    for compiled in (target / "compiled").iterdir():
+        _assert_ciphertext_only(compiled)
+    with watching_disk() as watch:
+        main(["qualify", "propose", str(bundle), "--recording", str(rec)])
+    assert watch.leaks([b"Testpatient", PNG_SIGNATURE]) == []
+    _assert_ciphertext_only(bundle)
+
+
+def test_sealed_run_pauses_and_resumes_without_plaintext(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow.runtime.durable import (
+        CheckpointStore,
+        bundle_version,
+        issue_resume_approval,
+        resume,
+    )
+    from openadapt_flow.runtime.replayer import Replayer
+    from tests.test_durable_runtime import (
+        FakeSoRVerifier,
+        _three_step_workflow,
+        _vision_ok,
+    )
+    from tests.test_replayer import FakeBackend
+
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    bundle = _sealed_bundle_of(
+        _three_step_workflow(with_effects=True), tmp_path / "bundle"
+    )
+    run_dir = tmp_path / "run"
+    verifier = FakeSoRVerifier()
+    verifier.refute.add((("step", "s2"),))
+    with watching_disk() as watch:
+        report = Replayer(
+            FakeBackend(),
+            vision=_vision_ok(),
+            effect_verifier=verifier,
+            durable=True,
+            poll_interval_s=0.01,
+        ).run(
+            Workflow.load(bundle),
+            params={"who": "Testpatient Zed"},
+            bundle_dir=bundle,
+            run_dir=run_dir,
+        )
+        assert report.success is False
+        store = CheckpointStore(run_dir, key=KEY)
+        manifest, pending = store.read_manifest(), store.read_pending()
+        assert manifest is not None and pending is not None
+        approval = issue_resume_approval(
+            pending,
+            approver="operator@example.com",
+            resolution="verified the system of record; approve resume",
+            bundle_version=bundle_version(bundle),
+            run_id=manifest.run_id,
+            workflow_name=manifest.workflow_name,
+            run_dir=run_dir,
+        )
+        verifier.refute.clear()
+        resumed_backend = FakeBackend()
+        resumed = resume(
+            run_dir,
+            Replayer(
+                resumed_backend,
+                vision=_vision_ok(),
+                effect_verifier=verifier,
+                poll_interval_s=0.01,
+            ),
+            approval=approval,
+            key=KEY,
+        )
+    assert resumed.success is True
+    assert ("press", "A") not in resumed_backend.actions
+    assert ("press", "C") in resumed_backend.actions
+    assert watch.leaks([b"Testpatient", b"operator@example.com", b'"results"']) == []
+    _assert_ciphertext_only(run_dir)
+    sealed_set.SealedSet.open(run_dir, KEY).verify_all()

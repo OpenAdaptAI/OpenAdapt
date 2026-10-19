@@ -487,8 +487,10 @@ class SealedSet:
         passphrase = _require_passphrase(base, kind, key)
         set_key = _derive(header, passphrase)
         files = _open_index(base, header, set_key)
-        expected = sorted(_physical(rel, e["codec"]) for rel, e in files.items())  # type: ignore[arg-type]
         present = _disk_files(base)
+        if kind == "run":
+            files = _reconcile_run_files(base, files, present)
+        expected = sorted(_physical(rel, e["codec"]) for rel, e in files.items())  # type: ignore[arg-type]
         if present != expected:
             added = sorted(set(present) - set(expected))
             dropped = sorted(set(expected) - set(present))
@@ -537,6 +539,54 @@ class SealedSet:
         """Hash-check and decrypt every file once."""
         for rel in self._files:
             self.read_bytes(rel)
+
+
+def _adoptable(root: Path, kind: str, rel: str) -> Optional[Codec]:
+    """How a file another component wrote directly may join a run set:
+    ``plain`` for a structural file the inventory names, ``external`` for
+    ciphertext of another keyed store, ``None`` for plaintext (refused)."""
+    entry = classify(kind, rel)  # type: ignore[arg-type]
+    if entry is not None and entry.classification == "structural":
+        return "plain"
+    if crypto.is_encrypted((root / rel).read_bytes()):
+        return "external"
+    return None
+
+
+def _reconcile_run_files(
+    root: Path, files: dict[str, dict[str, str]], present: list[str]
+) -> dict[str, dict[str, str]]:
+    """A run directory keeps changing after its index was sealed: the durable
+    store adds, replaces and removes its own encrypted checkpoints, approvals
+    and locks between legs of a run. Accept exactly those changes; any file
+    the run's own writer sealed must still be present, and any other new file
+    must be ciphertext or a structural lock, never plaintext."""
+    out = dict(files)
+    sealed_physical = {
+        _physical(rel, e["codec"]): rel  # type: ignore[arg-type]
+        for rel, e in files.items()
+    }
+    present_set = set(present)
+    for physical, rel in sealed_physical.items():
+        if physical not in present_set and files[rel]["codec"] != "set":
+            del out[rel]
+    for rel in present:
+        if rel in sealed_physical:
+            continue
+        codec = _adoptable(root, "run", rel)
+        if codec is None:
+            raise SealedSetError(
+                f"{root} holds {rel} in plaintext, outside its sealed index"
+            )
+        raw = (root / rel).read_bytes()
+        out[rel] = {"codec": codec, "sha256": _sha256(raw)}
+    for rel, entry in out.items():
+        if entry["codec"] != "set":
+            physical = root / rel
+            if physical.is_file():
+                # Owned and authenticated by its own store; track its bytes.
+                entry["sha256"] = _sha256(physical.read_bytes())
+    return out
 
 
 # -- writing -----------------------------------------------------------------
@@ -685,19 +735,14 @@ class SealedSetWriter:
         for rel in _disk_files(self.root):
             if rel in sealed_physical:
                 continue
-            raw = (self.root / rel).read_bytes()
-            entry = classify(self.kind, rel)
-            if entry is not None and entry.classification == "structural":
-                codec: Codec = "plain"
-            elif crypto.is_encrypted(raw):
-                codec = "external"
-            else:
+            codec = _adoptable(self.root, self.kind, rel)
+            if codec is None:
                 raise SealedSetError(
                     f"refusing to seal {self.root}: {rel} was written in "
                     "plaintext outside the sealed writer"
                 )
             self._codecs[rel] = codec
-            self._hashes[rel] = _sha256(raw)
+            self._hashes[rel] = _sha256((self.root / rel).read_bytes())
 
     def finalize(self, *, adopt_external: bool = False) -> str:
         """Check the directory holds exactly what was written, seal the index,
