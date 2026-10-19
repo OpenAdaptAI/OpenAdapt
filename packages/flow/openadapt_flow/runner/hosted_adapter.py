@@ -19,7 +19,7 @@ from base64 import b64decode, b64encode
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable, Literal, Mapping, Protocol, Union
+from typing import Any, Callable, Literal, Mapping, Protocol, Union, cast
 from urllib.parse import urlsplit
 
 from cryptography.hazmat.primitives import serialization
@@ -123,6 +123,30 @@ _CHILD_START_DOMAIN = b"OpenAdapt managed child start v1\0"
 _RUN_STORE_IDENTITY_DOMAIN = b"OpenAdapt managed run store identity v1\0"
 _RESULT_LOSS_SNAPSHOT_DOMAIN = b"OpenAdapt managed result loss snapshot v1\0"
 _MAX_TERMINAL_STATE_BYTES = 2 * (4 * ((_MAX_ARTIFACT_BYTES + 2) // 3)) + 4096
+#: Outcomes the frozen hosted terminal events (v1, v2) carry.
+HostedWireOutcome = Literal[
+    "VERIFIED",
+    "HALTED_BEFORE_EFFECT",
+    "RECONCILIATION_REQUIRED",
+    "FAILED_PLATFORM",
+    "CANCELED",
+    "REJECTED_POLICY",
+    "COMPLETED_UNVERIFIED",
+    "ROLLED_BACK",
+]
+
+
+def _hosted_wire_outcome(outcome: object) -> HostedWireOutcome:
+    """The frozen wire value for an outcome. A value the hosted events don't
+    have (a save waiting for a later report) fails closed to
+    RECONCILIATION_REQUIRED."""
+
+    value = outcome.value if isinstance(outcome, TransactionOutcome) else outcome
+    if value in HostedWireOutcome.__args__:  # type: ignore[attr-defined]
+        return cast(HostedWireOutcome, value)
+    return "RECONCILIATION_REQUIRED"
+
+
 ManagedResultLossCode = Literal[
     "runner_exception",
     "report_missing",
@@ -3402,11 +3426,7 @@ class HostedRunnerAdapter:
         )
         terminal = terminal_type(
             run_id=binding.run_id,
-            outcome=(
-                result.outcome.value
-                if isinstance(result.outcome, TransactionOutcome)
-                else result.outcome
-            ),
+            outcome=_hosted_wire_outcome(result.outcome),
             report_sha256=result.report_sha256,
             started=result.started,
             uncertain_delivery=result.uncertain_delivery,
