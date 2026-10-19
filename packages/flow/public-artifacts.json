@@ -860,6 +860,26 @@
       "sha256": "7f7a1ef83fef7ecab6f3bb990e6cd257a12e0af0b49be83aca6a16bfd25a2060"
     },
     {
+      "path": "benchmark/undo_proposal/results/mockloan-fee-row.json",
+      "sha256": "a42eb2cd91b714c9eccc55ac8ff7fa737cd3e9ce389dfe26ee59aa35e96288e4"
+    },
+    {
+      "path": "benchmark/undo_proposal/results/mockloan.json",
+      "sha256": "8e7cd2a4a7dc7e5157c899ba6316d9ed270bfbd94ffc1e609814b095093d1844"
+    },
+    {
+      "path": "benchmark/undo_proposal/results/openemr-new-patient.json",
+      "sha256": "1be944a8c13c04bc690a20da6ecf9710abff6363d5c4fecc316830d1d9e455a3"
+    },
+    {
+      "path": "benchmark/undo_proposal/results/openimis-claim.json",
+      "sha256": "8252e5af1a706b25c12859c5f39e71f3870f71f3a2bb81d9705ed6ac4f5d4792"
+    },
+    {
+      "path": "benchmark/undo_proposal/results/summary.json",
+      "sha256": "5f77d556ed53654c866035c6baf4e49a27ba126404e17924ab2ec9829f4de363"
+    },
+    {
       "path": "benchmark/vision_hardening/corpus.json",
       "sha256": "c64e45ce996f6b13b2e1a3f234d2931e10b5090163215a1185c639a019820e35"
     },

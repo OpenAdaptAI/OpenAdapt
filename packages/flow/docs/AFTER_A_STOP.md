@@ -260,10 +260,13 @@ run ended, and the reason) is in the report. A failed candidate is reported
 with its reason and never written. For example:
 
 ```text
-2 saving step(s): 1 with a verified undo, 1 without.
-  save_triage: verified undo undo-save_triage-network-1
-  authorize: no verified undo. network: after the undo the test copy differs from before the save: 1 record(s) added since before the save remain
+1 saving step(s): 0 with a verified undo, 1 without.
+  step_010: no verified undo. network: after the undo the test copy differs from before the save: 1 record(s) added since before the save remain (also: no other recordings were given; the save creates a record; there is no old value to restore)
+    To close the gap: record a person doing the app's own delete or cancel path and pass it with --from-recording; if the only difference is a timestamp or audit field, a person may name it with --ignore-field.
 ```
+
+That is MockLoan in a mode where the save also writes a fee row: the
+`DELETE` removes the disbursement and leaves the fee.
 
 The evidence file holds no record values. The report names fields, never
 values.
@@ -318,7 +321,22 @@ After a stop, the approved proposal is offered, approved and run exactly as in
 demonstration in a real browser with network capture, then runs
 `undo propose` against the app as a test copy.
 
-MEASUREMENT_TABLE
+| App | Run | Saving step | Verified undo | Why not, and what would close the gap |
+| --- | --- | --- | --- | --- |
+| MockMed | live | Save Encounter | MOCKMED_RESULT | MOCKMED_WHY |
+| MockLoan | live | Authorize Disbursement | Yes: `DELETE /api/disbursement/{undo_record_id}` (captured traffic, REST convention) | |
+| MockLoan, fee-row mode | live | Authorize Disbursement | No | The save also writes a fee row on a second surface, and the `DELETE` leaves it, so the records after the undo don't match. Closes with a recording of the app's own reversal path. |
+| OpenEMR fixture, new patient | offline | `step_039` (a click Flow counts as a possible write) | No | No record check is bound to the step, so there is nothing to invert. Closes with a bound record check. |
+| OpenEMR fixture, new patient | offline | `step_040` (the save) | No | The save is a browser form post, so no API undo is built. The only control after the save is Cancel. No recording deletes a chart. Closes with a recording of the app's own delete path. |
+| openIMIS fixture, claim | offline | `step_015` (the save) | No | The recording has no network capture and no recording deletes a claim. The live fixture wasn't started. Closes with a recording of the app's own delete or cancel path, or a new recording with `--capture-network`. |
+
+TOTALS_LINE
+
+Live rows record the demonstration in a real browser with network capture
+and run `undo propose` against the app declared a test copy. Offline rows read
+an existing bundle and recording and run nothing; they answer whether any
+candidate can be built. Every candidate's source, status, basis and reason is
+in [`benchmark/undo_proposal/results/`](../benchmark/undo_proposal/results/).
 
 ## What this doesn't do
 
