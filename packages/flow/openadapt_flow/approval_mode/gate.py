@@ -50,6 +50,7 @@ from openadapt_flow.approval_mode.approver import (
 )
 from openadapt_flow.approval_mode.item_approval import (
     DEFAULT_APPROVAL_WAIT_S,
+    ApiRequestRef,
     ItemApprovalRefused,
     ItemApprovalRequest,
     ItemApprovalStore,
@@ -199,6 +200,10 @@ class StepContext:
     #: The values the save writes, shown on the phone (see
     #: :data:`SaveFieldsReader`). Bound into the request digest.
     save_fields: SaveFieldsReader = _no_save_fields
+    #: The request an API step sends, when the save is one. ``frame`` then
+    #: returns an image of that request and ``form_state`` its operation
+    #: digest, so the person approves the request rather than a screenshot.
+    api_request: Optional[ApiRequestRef] = None
 
 
 @dataclass(frozen=True)
@@ -631,6 +636,7 @@ class ApprovalGate:
                     qualification_case_kind=ctx.qualification_case_kind,
                     step_class=step_class_for(ctx.step, policy_name=self._policy_name),
                     fields=ctx.save_fields(),
+                    api_request=ctx.api_request,
                 )
             except (OSError, ValueError, ItemApprovalRefused):
                 return wait_refusal("approval_request_unwritable")

@@ -190,7 +190,7 @@ before and after numbers are in
 
 Before a step stops on a look-alike identifier, the replayer takes extra looks
 that change nothing
-([`runtime/identity_looks.py`](../openadapt_flow/runtime/identity_looks.py)):
+([`openadapt_flow/runtime/identity_looks.py`](../openadapt_flow/runtime/identity_looks.py)):
 the same read on two fresh screenshots, the 2x re-read, the known-ID list when
 one is configured, and, where the surface allows it, a select-and-copy of the
 identifier's text box (`runtime.identity_copy_look`). OCR looks can't settle
@@ -253,7 +253,7 @@ When the recorder can move the pointer without clicking
 pointer on each click target first and keeps that frame. For a click with no
 other identity evidence, the compiler stores what changed near the target, such
 as the control's highlight or tooltip, as the step's hover evidence
-([`runtime/hover_evidence.py`](../openadapt_flow/runtime/hover_evidence.py)).
+([`openadapt_flow/runtime/hover_evidence.py`](../openadapt_flow/runtime/hover_evidence.py)).
 At replay, on the pixel rungs, the runtime rests the pointer on the resolved
 target, waits the same 0.8 s, and compares. A different response, or a
 response where the recording saw none, stops the run before the click. A
@@ -488,7 +488,10 @@ record in the acting session (tier 3) is reported as its own check level,
 confirmed reopen ends `COMPLETED_UNVERIFIED`, and the agent result says
 `not_sure_if_saved` with `checked_below_minimum`
 ([`READBACK_LADDER.md`](READBACK_LADDER.md)). A workflow's `minimum_readback`
-can raise the floor to `system_of_record`, never lower it. The on-screen
+can raise the floor to `system_of_record`, never lower it.
+A save that only a later report can confirm (a claim acknowledgment, a
+nightly export) ends `SAVED_AWAITING_CHECK` and becomes `VERIFIED` only when
+that report accepts it ([`deferred_report`](EFFECT_KIT.md#checked-later-deferred_report)). The on-screen
 oracle can still halt when the region is unreadable or wrong. If a
 consequential write may already have been delivered and the check did not
 confirm it, the production `transaction_outcome` is `RECONCILIATION_REQUIRED`,

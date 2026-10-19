@@ -148,8 +148,16 @@ def cmd_jit(
                     program,
                     principal_id=args.principal,
                     accept_params=accept,
-                    confirm=confirm(f"Make {accept} the task's parameters?"),
+                    confirm=confirm(
+                        f"Make {accept} the task's parameters"
+                        + (
+                            f", with {args.idempotency_key} identifying one record?"
+                            if args.idempotency_key
+                            else "?"
+                        )
+                    ),
                     key_dir=_key_dir(args),
+                    idempotency_key=args.idempotency_key,
                 )
                 status = lifecycle.admission_status(program, key_dir=_key_dir(args))
             for i, step in enumerate(status["steps"], 1):
@@ -278,6 +286,15 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         help=(
             "A task parameter to confirm (repeat; must be all of them). Applied "
             "before the steps are shown, because it recompiles the program"
+        ),
+    )
+    p.add_argument(
+        "--idempotency-key",
+        metavar="PARAM",
+        help=(
+            "The parameter that identifies one saved record (the app keeps it "
+            "unique, such as a claim number). The record check selects by it "
+            "and refuses a duplicate"
         ),
     )
     group = p.add_mutually_exclusive_group()

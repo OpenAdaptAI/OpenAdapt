@@ -1,0 +1,1004 @@
+{
+  "total_usd": 9.466585,
+  "entries": [
+    {
+      "usd": 0.577,
+      "note": "launch-demo recordings"
+    },
+    {
+      "usd": 0.038538,
+      "note": "mockmed first_run 2026-10-18-a",
+      "at": 1792352630.237271
+    },
+    {
+      "usd": 0.013234,
+      "note": "mockmed first_run 2026-10-18-a",
+      "at": 1792352792.93958
+    },
+    {
+      "usd": 0.038648,
+      "note": "mockmed agent 2026-10-18-a item 1",
+      "at": 1792353082.702174
+    },
+    {
+      "usd": 0.038638,
+      "note": "mockmed agent 2026-10-18-a item 2",
+      "at": 1792353112.0032341
+    },
+    {
+      "usd": 0.038688,
+      "note": "mockmed agent 2026-10-18-a item 3",
+      "at": 1792353139.154944
+    },
+    {
+      "usd": 0.038668,
+      "note": "mockmed agent 2026-10-18-a item 4",
+      "at": 1792353162.880915
+    },
+    {
+      "usd": 0.038628,
+      "note": "mockmed agent 2026-10-18-a item 5",
+      "at": 1792353182.6288881
+    },
+    {
+      "usd": 0.038578,
+      "note": "mockmed agent 2026-10-18-a item 6",
+      "at": 1792353201.0777862
+    },
+    {
+      "usd": 0.038578,
+      "note": "mockmed agent 2026-10-18-a item 7",
+      "at": 1792353221.67111
+    },
+    {
+      "usd": 0.063751,
+      "note": "openimis agent 2026-10-18-a item 1",
+      "at": 1792353228.686962
+    },
+    {
+      "usd": 0.038708,
+      "note": "mockmed agent 2026-10-18-a item 8",
+      "at": 1792353270.462253
+    },
+    {
+      "usd": 0.063542,
+      "note": "openimis agent 2026-10-18-a item 2",
+      "at": 1792353294.2286642
+    },
+    {
+      "usd": 0.038768,
+      "note": "mockmed agent 2026-10-18-a item 9",
+      "at": 1792353294.254014
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 10",
+      "at": 1792353317.65654
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 11",
+      "at": 1792353338.811497
+    },
+    {
+      "usd": 0.06413,
+      "note": "openimis agent 2026-10-18-a item 3",
+      "at": 1792353347.655319
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 12",
+      "at": 1792353366.771648
+    },
+    {
+      "usd": 0.056188,
+      "note": "openimis agent 2026-10-18-a item 4",
+      "at": 1792353410.8631701
+    },
+    {
+      "usd": 0.038598,
+      "note": "mockmed agent 2026-10-18-a item 13",
+      "at": 1792353416.782203
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 14",
+      "at": 1792353466.132204
+    },
+    {
+      "usd": 0.056505,
+      "note": "openimis agent 2026-10-18-a item 5",
+      "at": 1792353487.268248
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 15",
+      "at": 1792353487.992613
+    },
+    {
+      "usd": 0.038668,
+      "note": "mockmed agent 2026-10-18-a item 16",
+      "at": 1792353518.871573
+    },
+    {
+      "usd": 0.056046,
+      "note": "openimis agent 2026-10-18-a item 6",
+      "at": 1792353560.5150049
+    },
+    {
+      "usd": 0.038548,
+      "note": "mockmed agent 2026-10-18-a item 17",
+      "at": 1792353566.9157739
+    },
+    {
+      "usd": 0.038688,
+      "note": "mockmed agent 2026-10-18-a item 18",
+      "at": 1792353616.034401
+    },
+    {
+      "usd": 0.063782,
+      "note": "openimis agent 2026-10-18-a item 7",
+      "at": 1792353638.078144
+    },
+    {
+      "usd": 0.038608,
+      "note": "mockmed agent 2026-10-18-a item 19",
+      "at": 1792353657.192199
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 20",
+      "at": 1792353677.386545
+    },
+    {
+      "usd": 0.063432,
+      "note": "openimis agent 2026-10-18-a item 8",
+      "at": 1792353685.277728
+    },
+    {
+      "usd": 0.038758,
+      "note": "mockmed agent 2026-10-18-a item 21",
+      "at": 1792353729.34743
+    },
+    {
+      "usd": 0.055714,
+      "note": "openimis agent 2026-10-18-a item 9",
+      "at": 1792353758.983634
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 22",
+      "at": 1792353780.373396
+    },
+    {
+      "usd": 0.038588,
+      "note": "mockmed agent 2026-10-18-a item 23",
+      "at": 1792353829.455613
+    },
+    {
+      "usd": 0.056236,
+      "note": "openimis agent 2026-10-18-a item 10",
+      "at": 1792353839.840456
+    },
+    {
+      "usd": 0.038688,
+      "note": "mockmed agent 2026-10-18-a item 24",
+      "at": 1792353855.3972638
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 25",
+      "at": 1792353884.151308
+    },
+    {
+      "usd": 0.056182,
+      "note": "openimis agent 2026-10-18-a item 11",
+      "at": 1792353906.391059
+    },
+    {
+      "usd": 0.038538,
+      "note": "mockmed agent 2026-10-18-a item 26",
+      "at": 1792353916.768128
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed agent 2026-10-18-a item 27",
+      "at": 1792353936.743487
+    },
+    {
+      "usd": 0.064143,
+      "note": "openimis agent 2026-10-18-a item 12",
+      "at": 1792353958.776139
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 28",
+      "at": 1792353961.7313762
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 29",
+      "at": 1792353978.785076
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed agent 2026-10-18-a item 30",
+      "at": 1792353997.7834601
+    },
+    {
+      "usd": 0.063873,
+      "note": "openimis agent 2026-10-18-a item 13",
+      "at": 1792354006.421816
+    },
+    {
+      "usd": 0.038658,
+      "note": "mockmed agent 2026-10-18-a item 31",
+      "at": 1792354016.134633
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 32",
+      "at": 1792354033.984477
+    },
+    {
+      "usd": 0.056521,
+      "note": "openimis agent 2026-10-18-a item 14",
+      "at": 1792354052.359502
+    },
+    {
+      "usd": 0.038618,
+      "note": "mockmed agent 2026-10-18-a item 33",
+      "at": 1792354053.6341178
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed agent 2026-10-18-a item 34",
+      "at": 1792354072.492139
+    },
+    {
+      "usd": 0.038548,
+      "note": "mockmed agent 2026-10-18-a item 35",
+      "at": 1792354099.098669
+    },
+    {
+      "usd": 0.064494,
+      "note": "openimis agent 2026-10-18-a item 15",
+      "at": 1792354101.633112
+    },
+    {
+      "usd": 0.038538,
+      "note": "mockmed agent 2026-10-18-a item 36",
+      "at": 1792354118.723093
+    },
+    {
+      "usd": 0.038528,
+      "note": "mockmed agent 2026-10-18-a item 37",
+      "at": 1792354168.528851
+    },
+    {
+      "usd": 0.056583,
+      "note": "openimis agent 2026-10-18-a item 16",
+      "at": 1792354181.286175
+    },
+    {
+      "usd": 0.038688,
+      "note": "mockmed agent 2026-10-18-a item 38",
+      "at": 1792354198.745715
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed agent 2026-10-18-a item 39",
+      "at": 1792354227.565841
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed agent 2026-10-18-a item 40",
+      "at": 1792354273.6964228
+    },
+    {
+      "usd": 0.038688,
+      "note": "mockmed agent 2026-10-18-a item 41",
+      "at": 1792354307.547764
+    },
+    {
+      "usd": 0.038638,
+      "note": "mockmed agent 2026-10-18-a item 42",
+      "at": 1792354352.952689
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 43",
+      "at": 1792354402.4337258
+    },
+    {
+      "usd": 0.038608,
+      "note": "mockmed agent 2026-10-18-a item 44",
+      "at": 1792354439.651799
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 45",
+      "at": 1792354648.761775
+    },
+    {
+      "usd": 0.038538,
+      "note": "mockmed agent 2026-10-18-a item 46",
+      "at": 1792354696.634707
+    },
+    {
+      "usd": 0.038698,
+      "note": "mockmed agent 2026-10-18-a item 47",
+      "at": 1792354744.58158
+    },
+    {
+      "usd": 0.038538,
+      "note": "mockmed agent 2026-10-18-a item 48",
+      "at": 1792354796.941616
+    },
+    {
+      "usd": 0.038658,
+      "note": "mockmed agent 2026-10-18-a item 49",
+      "at": 1792354846.340391
+    },
+    {
+      "usd": 0.038548,
+      "note": "mockmed agent 2026-10-18-a item 50",
+      "at": 1792354884.0382369
+    },
+    {
+      "usd": 0.038658,
+      "note": "mockmed agent 2026-10-18-a item 51",
+      "at": 1792354913.4168131
+    },
+    {
+      "usd": 0.038688,
+      "note": "mockmed agent 2026-10-18-a item 52",
+      "at": 1792354954.2666008
+    },
+    {
+      "usd": 0.100659,
+      "note": "openemr_referral first_run 2026-10-18-a",
+      "at": 1792358264.2258198
+    },
+    {
+      "usd": 0.056532,
+      "note": "openimis agent 2026-10-18-a item 17",
+      "at": 1792358342.786124
+    },
+    {
+      "usd": 0.056576,
+      "note": "openimis agent 2026-10-18-a item 18",
+      "at": 1792358389.682724
+    },
+    {
+      "usd": 0.05573,
+      "note": "openimis agent 2026-10-18-a item 19",
+      "at": 1792358431.418853
+    },
+    {
+      "usd": 0.064001,
+      "note": "openimis agent 2026-10-18-a item 20",
+      "at": 1792358474.3989902
+    },
+    {
+      "usd": 0.05582,
+      "note": "openimis agent 2026-10-18-a item 21",
+      "at": 1792358516.455704
+    },
+    {
+      "usd": 0.056252,
+      "note": "openimis agent 2026-10-18-a item 22",
+      "at": 1792358559.218119
+    },
+    {
+      "usd": 0.056146,
+      "note": "openimis agent 2026-10-18-a item 23",
+      "at": 1792358604.086559
+    },
+    {
+      "usd": 0.056136,
+      "note": "openimis agent 2026-10-18-a item 24",
+      "at": 1792358649.0329878
+    },
+    {
+      "usd": 0.055807,
+      "note": "openimis agent 2026-10-18-a item 25",
+      "at": 1792358689.651218
+    },
+    {
+      "usd": 0.056713,
+      "note": "openimis agent 2026-10-18-a item 26",
+      "at": 1792358731.932385
+    },
+    {
+      "usd": 0.056635,
+      "note": "openimis agent 2026-10-18-a item 27",
+      "at": 1792358775.761939
+    },
+    {
+      "usd": 0.063532,
+      "note": "openimis agent 2026-10-18-a item 28",
+      "at": 1792358821.261276
+    },
+    {
+      "usd": 0.055926,
+      "note": "openimis agent 2026-10-18-a item 29",
+      "at": 1792358864.321825
+    },
+    {
+      "usd": 0.056565,
+      "note": "openimis agent 2026-10-18-a item 30",
+      "at": 1792358909.398885
+    },
+    {
+      "usd": 0.071849,
+      "note": "openimis agent 2026-10-18-a item 31",
+      "at": 1792358959.762385
+    },
+    {
+      "usd": 0.055909,
+      "note": "openimis agent 2026-10-18-a item 32",
+      "at": 1792359001.746979
+    },
+    {
+      "usd": 0.056322,
+      "note": "openimis agent 2026-10-18-a item 33",
+      "at": 1792359047.270323
+    },
+    {
+      "usd": 0.038548,
+      "note": "mockmed agent 2026-10-18-a item 53",
+      "at": 1792359067.695657
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 54",
+      "at": 1792359085.6498072
+    },
+    {
+      "usd": 0.056156,
+      "note": "openimis agent 2026-10-18-a item 34",
+      "at": 1792359091.673436
+    },
+    {
+      "usd": 0.038578,
+      "note": "mockmed agent 2026-10-18-a item 55",
+      "at": 1792359104.2713401
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 56",
+      "at": 1792359123.563933
+    },
+    {
+      "usd": 0.056565,
+      "note": "openimis agent 2026-10-18-a item 35",
+      "at": 1792359134.3257349
+    },
+    {
+      "usd": 0.038498,
+      "note": "mockmed agent 2026-10-18-a item 57",
+      "at": 1792359143.941035
+    },
+    {
+      "usd": 0.038538,
+      "note": "mockmed agent 2026-10-18-a item 58",
+      "at": 1792359162.2882829
+    },
+    {
+      "usd": 0.056482,
+      "note": "openimis agent 2026-10-18-a item 36",
+      "at": 1792359179.695253
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 59",
+      "at": 1792359182.647926
+    },
+    {
+      "usd": 0.038658,
+      "note": "mockmed agent 2026-10-18-a item 60",
+      "at": 1792359201.805113
+    },
+    {
+      "usd": 0.038658,
+      "note": "mockmed agent 2026-10-18-a item 61",
+      "at": 1792359220.107763
+    },
+    {
+      "usd": 0.056642,
+      "note": "openimis agent 2026-10-18-a item 37",
+      "at": 1792359227.351604
+    },
+    {
+      "usd": 0.038608,
+      "note": "mockmed agent 2026-10-18-a item 62",
+      "at": 1792359235.863434
+    },
+    {
+      "usd": 0.038548,
+      "note": "mockmed agent 2026-10-18-a item 63",
+      "at": 1792359253.104162
+    },
+    {
+      "usd": 0.055784,
+      "note": "openimis agent 2026-10-18-a item 38",
+      "at": 1792359269.698862
+    },
+    {
+      "usd": 0.038688,
+      "note": "mockmed agent 2026-10-18-a item 64",
+      "at": 1792359271.5560079
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed agent 2026-10-18-a item 65",
+      "at": 1792359299.40546
+    },
+    {
+      "usd": 0.05615,
+      "note": "openimis agent 2026-10-18-a item 39",
+      "at": 1792359315.9954538
+    },
+    {
+      "usd": 0.038548,
+      "note": "mockmed agent 2026-10-18-a item 66",
+      "at": 1792359318.44476
+    },
+    {
+      "usd": 0.038698,
+      "note": "mockmed agent 2026-10-18-a item 67",
+      "at": 1792359337.720672
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 68",
+      "at": 1792359357.9752698
+    },
+    {
+      "usd": 0.064251,
+      "note": "openimis agent 2026-10-18-a item 40",
+      "at": 1792359366.792116
+    },
+    {
+      "usd": 0.038678,
+      "note": "mockmed agent 2026-10-18-a item 69",
+      "at": 1792359376.5305731
+    },
+    {
+      "usd": 0.038548,
+      "note": "mockmed agent 2026-10-18-a item 70",
+      "at": 1792359394.1784918
+    },
+    {
+      "usd": 0.055354,
+      "note": "openimis agent 2026-10-18-a item 41",
+      "at": 1792359407.553812
+    },
+    {
+      "usd": 0.038688,
+      "note": "mockmed agent 2026-10-18-a item 71",
+      "at": 1792359412.381387
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed agent 2026-10-18-a item 72",
+      "at": 1792359428.9696798
+    },
+    {
+      "usd": 0.038748,
+      "note": "mockmed agent 2026-10-18-a item 73",
+      "at": 1792359444.9320168
+    },
+    {
+      "usd": 0.056704,
+      "note": "openimis agent 2026-10-18-a item 42",
+      "at": 1792359452.532248
+    },
+    {
+      "usd": 0.038728,
+      "note": "mockmed agent 2026-10-18-a item 74",
+      "at": 1792359464.3914251
+    },
+    {
+      "usd": 0.038728,
+      "note": "mockmed agent 2026-10-18-a item 75",
+      "at": 1792359480.179874
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 76",
+      "at": 1792359495.729913
+    },
+    {
+      "usd": 0.06385,
+      "note": "openimis agent 2026-10-18-a item 43",
+      "at": 1792359502.873638
+    },
+    {
+      "usd": 0.038548,
+      "note": "mockmed agent 2026-10-18-a item 77",
+      "at": 1792359514.09107
+    },
+    {
+      "usd": 0.038498,
+      "note": "mockmed agent 2026-10-18-a item 78",
+      "at": 1792359533.0144992
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 79",
+      "at": 1792359551.1138198
+    },
+    {
+      "usd": 0.038678,
+      "note": "mockmed agent 2026-10-18-a item 80",
+      "at": 1792359569.346108
+    },
+    {
+      "usd": 0.038548,
+      "note": "mockmed agent 2026-10-18-a item 81",
+      "at": 1792359588.616621
+    },
+    {
+      "usd": 0.038688,
+      "note": "mockmed agent 2026-10-18-a item 82",
+      "at": 1792359607.410694
+    },
+    {
+      "usd": 0.31,
+      "note": "code_agent trial runs (code-as-action session), set aside",
+      "at": 1792360360.359995
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 83",
+      "at": 1792369295.695322
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 84",
+      "at": 1792369319.2393842
+    },
+    {
+      "usd": 0.064375,
+      "note": "openimis agent 2026-10-18-a item 44",
+      "at": 1792369321.014272
+    },
+    {
+      "usd": 0.038668,
+      "note": "mockmed agent 2026-10-18-a item 85",
+      "at": 1792369336.283415
+    },
+    {
+      "usd": 0.038718,
+      "note": "mockmed agent 2026-10-18-a item 86",
+      "at": 1792369355.884817
+    },
+    {
+      "usd": 0.038678,
+      "note": "mockmed agent 2026-10-18-a item 87",
+      "at": 1792369377.017047
+    },
+    {
+      "usd": 0.063796,
+      "note": "openimis agent 2026-10-18-a item 45",
+      "at": 1792369377.172329
+    },
+    {
+      "usd": 0.038658,
+      "note": "mockmed agent 2026-10-18-a item 88",
+      "at": 1792369397.342525
+    },
+    {
+      "usd": 0.038588,
+      "note": "mockmed agent 2026-10-18-a item 89",
+      "at": 1792369417.600271
+    },
+    {
+      "usd": 0.063368,
+      "note": "openimis agent 2026-10-18-a item 46",
+      "at": 1792369423.390162
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 90",
+      "at": 1792369437.518798
+    },
+    {
+      "usd": 0.038538,
+      "note": "mockmed agent 2026-10-18-a item 91",
+      "at": 1792369457.5496871
+    },
+    {
+      "usd": 0.055939,
+      "note": "openimis agent 2026-10-18-a item 47",
+      "at": 1792369467.109334
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 92",
+      "at": 1792369476.4018402
+    },
+    {
+      "usd": 0.038658,
+      "note": "mockmed agent 2026-10-18-a item 93",
+      "at": 1792369496.383219
+    },
+    {
+      "usd": 0.056447,
+      "note": "openimis agent 2026-10-18-a item 48",
+      "at": 1792369511.017969
+    },
+    {
+      "usd": 0.038618,
+      "note": "mockmed agent 2026-10-18-a item 94",
+      "at": 1792369517.364584
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 95",
+      "at": 1792369536.628096
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 96",
+      "at": 1792369557.615656
+    },
+    {
+      "usd": 0.056023,
+      "note": "openimis agent 2026-10-18-a item 49",
+      "at": 1792369558.179561
+    },
+    {
+      "usd": 0.038528,
+      "note": "mockmed agent 2026-10-18-a item 97",
+      "at": 1792369577.969534
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 98",
+      "at": 1792369597.277806
+    },
+    {
+      "usd": 0.038638,
+      "note": "mockmed agent 2026-10-18-a item 99",
+      "at": 1792369617.5278
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 100",
+      "at": 1792369637.632965
+    },
+    {
+      "usd": 0.0,
+      "note": "openimis agent 2026-10-18-a item 50",
+      "at": 1792413930.3741271
+    },
+    {
+      "usd": 0.055935,
+      "note": "openimis agent 2026-10-18-a item 50",
+      "at": 1792414086.0837572
+    },
+    {
+      "usd": 0.056372,
+      "note": "openimis first_run sb-sonnet-1 (demo pipeline record, claude-sonnet-5-5)",
+      "at": 1792415140.200813
+    },
+    {
+      "usd": 0.038668,
+      "note": "mockmed claims 2026-10-19-a item 1 (discarded: verify-run refused its run record, a config error; rerun as 2026-10-19-b)",
+      "at": 1792416065.201795
+    },
+    {
+      "usd": 0.038638,
+      "note": "mockmed claims 2026-10-19-a item 2 (discarded: verify-run refused its run record, a config error; rerun as 2026-10-19-b)",
+      "at": 1792416093.373365
+    },
+    {
+      "usd": 0.038688,
+      "note": "mockmed claims 2026-10-19-a item 3 (discarded: verify-run refused its run record, a config error; rerun as 2026-10-19-b)",
+      "at": 1792416115.993137
+    },
+    {
+      "usd": 0.012944,
+      "note": "mockmed claims 2026-10-19-b item 1",
+      "at": 1792416194.432558
+    },
+    {
+      "usd": 0.013264,
+      "note": "mockmed claims 2026-10-19-b item 2",
+      "at": 1792416219.555302
+    },
+    {
+      "usd": 0.023741,
+      "note": "mockmed claims 2026-10-19-b item 3",
+      "at": 1792416241.809909
+    },
+    {
+      "usd": 0.013274,
+      "note": "mockmed claims 2026-10-19-b item 4",
+      "at": 1792416268.0937788
+    },
+    {
+      "usd": 0.038698,
+      "note": "mockmed claims 2026-10-19-b item 5",
+      "at": 1792416293.613942
+    },
+    {
+      "usd": 0.038678,
+      "note": "mockmed claims 2026-10-19-b item 6",
+      "at": 1792416320.8830872
+    },
+    {
+      "usd": 0.038578,
+      "note": "mockmed claims 2026-10-19-b item 7",
+      "at": 1792416353.183489
+    },
+    {
+      "usd": 0.038678,
+      "note": "mockmed claims 2026-10-19-b item 8",
+      "at": 1792416385.0804858
+    },
+    {
+      "usd": 0.038698,
+      "note": "mockmed claims 2026-10-19-b item 9",
+      "at": 1792416414.117135
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 10",
+      "at": 1792416445.431474
+    },
+    {
+      "usd": 0.038488,
+      "note": "mockmed claims 2026-10-19-b item 11",
+      "at": 1792416482.0335438
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed claims 2026-10-19-b item 12",
+      "at": 1792416515.650254
+    },
+    {
+      "usd": 0.038578,
+      "note": "mockmed claims 2026-10-19-b item 13",
+      "at": 1792416559.908292
+    },
+    {
+      "usd": 0.038638,
+      "note": "mockmed claims 2026-10-19-b item 14",
+      "at": 1792416603.4478312
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 15",
+      "at": 1792416636.424244
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 16",
+      "at": 1792416672.684584
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 17",
+      "at": 1792416706.1887622
+    },
+    {
+      "usd": 0.038538,
+      "note": "mockmed claims 2026-10-19-b item 18",
+      "at": 1792416738.4358132
+    },
+    {
+      "usd": 0.038658,
+      "note": "mockmed claims 2026-10-19-b item 19",
+      "at": 1792416774.121108
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 20",
+      "at": 1792416834.140102
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed claims 2026-10-19-b item 21",
+      "at": 1792416875.408413
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 22",
+      "at": 1792416912.702267
+    },
+    {
+      "usd": 0.038678,
+      "note": "mockmed claims 2026-10-19-b item 23",
+      "at": 1792416962.130356
+    },
+    {
+      "usd": 0.038678,
+      "note": "mockmed claims 2026-10-19-b item 24",
+      "at": 1792416997.2318962
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 25",
+      "at": 1792417064.088784
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed claims 2026-10-19-b item 26",
+      "at": 1792417098.7083268
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 27",
+      "at": 1792417142.142247
+    },
+    {
+      "usd": 0.038678,
+      "note": "mockmed claims 2026-10-19-b item 28",
+      "at": 1792417181.5502589
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 29",
+      "at": 1792417223.996345
+    },
+    {
+      "usd": 0.038658,
+      "note": "mockmed claims 2026-10-19-b item 30",
+      "at": 1792417275.846605
+    },
+    {
+      "usd": 0.038488,
+      "note": "mockmed claims 2026-10-19-b item 31",
+      "at": 1792417320.029734
+    },
+    {
+      "usd": 0.038548,
+      "note": "mockmed claims 2026-10-19-b item 32",
+      "at": 1792417359.518861
+    },
+    {
+      "usd": 0.038768,
+      "note": "mockmed claims 2026-10-19-b item 33",
+      "at": 1792417399.166749
+    },
+    {
+      "usd": 0.038758,
+      "note": "mockmed claims 2026-10-19-b item 34",
+      "at": 1792417440.792922
+    },
+    {
+      "usd": 0.038658,
+      "note": "mockmed claims 2026-10-19-b item 35",
+      "at": 1792417489.3180091
+    },
+    {
+      "usd": 0.038598,
+      "note": "mockmed claims 2026-10-19-b item 36",
+      "at": 1792417598.906427
+    },
+    {
+      "usd": 0.038618,
+      "note": "mockmed claims 2026-10-19-b item 37",
+      "at": 1792417644.1306822
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed claims 2026-10-19-b item 38",
+      "at": 1792417698.559569
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 39",
+      "at": 1792417746.527189
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 40",
+      "at": 1792417778.6049159
+    }
+  ]
+}

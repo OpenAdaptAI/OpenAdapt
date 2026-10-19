@@ -1,0 +1,64 @@
+{
+  "protocol_version": "2026-10-18.1",
+  "written_at": "2026-10-19T09:22:44-0400",
+  "machine": "arm64 Darwin 24.6.0",
+  "cpu_count": 12,
+  "python": "3.12.13",
+  "engine": {
+    "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+    "git_head": "99fa0493495a64084c4855d3462fac50b1570b0e"
+  },
+  "benchmark_git_head": "99fa0493495a64084c4855d3462fac50b1570b0e",
+  "task": "mockmed",
+  "arm": "claims",
+  "model": "claude-sonnet-5-5",
+  "verifier": "openadapt-flow verify-run, rest on GET /api/db, with a baseline",
+  "verify_yaml": "schema_version: openadapt.verify/v1\nverifier:\n  kind: rest\n  base_url: <fault server>\n  records_path: /api/db\neffects:\n  - kind: record_written\n    match:\n      patient_id: {param: patient_id}\n      type: {literal: Triage}\n      note: {param: note}\n    expected_count: 1\n    count_new_only: true\n",
+  "faults": [
+    "ok",
+    "no_persist",
+    "partial",
+    "duplicate",
+    "wrong_record",
+    "stale",
+    "optimistic"
+  ],
+  "per_fault": 5,
+  "corrections": [
+    {
+      "at": "2026-10-19",
+      "items": [
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "change": "fault duplicate -> duplicate_keyed",
+      "why": "the page was opened with idempotency=demo, so the app sent a fixed idempotency key and the server de-duplicated the double send; these were clean saves under a key, not duplicate faults. Real duplicate items (no key) are items 36-40."
+    }
+  ],
+  "sessions": [
+    {
+      "protocol_version": "2026-10-18.1",
+      "written_at": "2026-10-19T09:46:05-0400",
+      "machine": "arm64 Darwin 24.6.0",
+      "cpu_count": 12,
+      "python": "3.12.13",
+      "engine": {
+        "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+        "git_head": "99fa0493495a64084c4855d3462fac50b1570b0e"
+      },
+      "benchmark_git_head": "99fa0493495a64084c4855d3462fac50b1570b0e",
+      "task": "mockmed",
+      "arm": "claims",
+      "model": "claude-sonnet-5-5",
+      "verifier": "openadapt-flow verify-run, rest on GET /api/db, with a baseline",
+      "verify_yaml": "schema_version: openadapt.verify/v1\nverifier:\n  kind: rest\n  base_url: <fault server>\n  records_path: /api/db\neffects:\n  - kind: record_written\n    match:\n      patient_id: {param: patient_id}\n      type: {literal: Triage}\n      note: {param: note}\n    expected_count: 1\n    count_new_only: true\n",
+      "faults": [
+        "duplicate"
+      ],
+      "per_fault": 5
+    }
+  ]
+}

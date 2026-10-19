@@ -48,6 +48,7 @@ import struct
 import time
 import uuid
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import (
@@ -57,6 +58,7 @@ from typing import (
     Literal,
     Mapping,
     Optional,
+    Sequence,
     TypeVar,
     Union,
     cast,
@@ -657,6 +659,18 @@ def better_identity_read(first: Any, retry: Any) -> Any:
     return first
 
 
+@dataclass(frozen=True)
+class _WebFormApprovalView:
+    """An API step's prepared request, as a person is asked to approve it."""
+
+    prepared: Any
+    #: :func:`~openadapt_flow.runtime.actuators.web_form.operation_digest`.
+    digest: str
+    rows: list[tuple[str, str]]
+    png: bytes
+    ref: Any
+
+
 class Replayer:
     """Replays a Workflow against a Backend using injected vision.
 
@@ -1062,6 +1076,12 @@ class Replayer:
         self.web_form_actuator = web_form_actuator
         self._web_form_span_active = False
         self._web_form_fallback_reason: Optional[str] = None
+        # Under an approval mode, the API request a person was asked about
+        # (prepared before the gate), keyed by the save step's result, and
+        # the operation digest the gate's last-point check re-reads.
+        self._web_form_approval: dict[int, Any] = {}
+        self._web_form_form_state: Optional[tuple[str, str]] = None
+        self._web_form_form_state_set = False
         # Durable tiered runtime (RFC §5, Tier 3), OFF by default. When True,
         # run() writes a RunCheckpoint after each VERIFIED step and, on a halt,
         # a PendingEscalation instead of just dying -- so the run can be
@@ -2423,16 +2443,15 @@ class Replayer:
                 reason = "a durable or resumed run uses the GUI steps"
             elif getattr(self, "_surface_router", None) is not None:
                 reason = "a run across several windows or tabs uses the GUI steps"
-            elif (
-                self.approval_gate is not None
-                and str(getattr(getattr(self.approval_gate, "mode", None), "value", ""))
-                != "not_gated"
+            elif self._approval_gated() and not callable(
+                getattr(self._actuator_for(binding), "prepare", None)
             ):
-                # A person approves what the screen shows; an API step would
-                # leave the form empty. Only an ungated run uses API steps.
+                # Under an approval mode the person approves the exact request
+                # the API step sends. An actuator that can't prepare the
+                # request before sending it can't show it.
                 reason = (
-                    "approval mode shows the person the screen before the save, "
-                    "so the GUI steps run"
+                    "approval mode needs the exact request before the save, and "
+                    "this API actuator can't prepare it, so the GUI steps run"
                 )
             elif self.governed_authorization is not None:
                 reason = "a governed run uses its qualified GUI path"
@@ -2495,6 +2514,7 @@ class Replayer:
             )
         finally:
             self._web_form_span_active = False
+            self._web_form_approval.clear()
         if result.api_fallback is not None:
             self._web_form_fallback_reason = result.api_fallback
             return None
@@ -7142,8 +7162,23 @@ class Replayer:
             # approved step then takes a fresh frame and resolves its target
             # and right-record check again. The last-point gate still re-reads
             # the form before the input is delivered.
+            api_view = None
+            if (
+                self._web_form_span_active
+                and step.api_binding is not None
+                and self._approval_gated()
+            ):
+                # An API step fills no form: the person approves the exact
+                # request it sends. If it can't be prepared, nothing was sent
+                # and nobody was asked; the GUI steps run instead.
+                api_view = self._web_form_approval_view(step, params)
+                if isinstance(api_view, str):
+                    result.api_fallback = api_view
+                    result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+                    return result
+                self._web_form_approval[id(result)] = api_view
             approval_refusal = self._approval_step_refusal(
-                workflow, step, step_index, result
+                workflow, step, step_index, result, api_view=api_view
             )
             if approval_refusal is not None:
                 result.ok = False
@@ -8753,7 +8788,46 @@ class Replayer:
             current_step=overlay_current,
             total_steps=overlay_total,
         )
-        refusal = self._delivery_authorization_refusal(workflow, params, step, result)
+        approved_view = self._web_form_approval.pop(id(result), None)
+        send_prepared: Optional[Any] = None
+        again: Any = None
+        if approved_view is not None:
+            # Under an approval mode: prepare the request again now (fresh
+            # form, fresh pre-checks). The last-point gate compares its
+            # operation digest with the one a person approved; a request that
+            # can't be prepared again reads as an unreadable form.
+            again = self._web_form_approval_view(step, params)
+            self._web_form_form_state = (
+                None if isinstance(again, str) else ("api_request", again.digest)
+            )
+            self._web_form_form_state_set = True
+        try:
+            refusal = self._delivery_authorization_refusal(
+                workflow, params, step, result
+            )
+        finally:
+            self._web_form_form_state = None
+            self._web_form_form_state_set = False
+        if refusal is None and approved_view is not None:
+            if isinstance(again, str) or again.digest != approved_view.digest:
+                # Also refused when the gate let it through (for example a
+                # save that passed problems_only's checks without a person):
+                # only the exact request prepared before the gate is sent.
+                why = (
+                    again
+                    if isinstance(again, str)
+                    else "the request, the record or the record check differs"
+                )
+                result.safety_halt = True
+                result.failure_category = "governed_refusal"
+                refusal = (
+                    f"Step '{step.id}' ({step.intent}): the API request changed "
+                    f"after the approval gate ({why}); the save was not sent "
+                    "and the GUI steps do not run in its place"
+                )
+            else:
+                # Exactly the request whose digest was approved and re-checked.
+                send_prepared = again.prepared
         if refusal is not None:
             result.ok = False
             result.error = refusal
@@ -8768,10 +8842,14 @@ class Replayer:
         result.delivery_attempted = True
         try:
             self._require_qualification_environment_current()
-            outcome = api_actuator.actuate(
-                binding,
-                runtime_params_for_gui(params),
-            )
+            if send_prepared is not None:
+                # Exactly the request whose digest was approved and re-checked.
+                outcome = api_actuator.send(binding, send_prepared)
+            else:
+                outcome = api_actuator.actuate(
+                    binding,
+                    runtime_params_for_gui(params),
+                )
         except Exception as exc:  # noqa: BLE001 - external actuator boundary
             # The actuator contract is no-throw, but a deployment adapter can
             # still violate it. The delivery boundary was crossed immediately
@@ -9557,6 +9635,7 @@ class Replayer:
                         observed_effect=final_verdict.observed_effect,
                         endpoint_scope=scope,
                         reconciliation_actions=comp.actions_taken,
+                        deferred_check=verdict.deferred_check,
                     )
                 )
                 result.effect_results.append(
@@ -9585,6 +9664,7 @@ class Replayer:
                     final_verdict=verdict.verdict.value,
                     observed_effect=verdict.observed_effect,
                     endpoint_scope=scope,
+                    deferred_check=verdict.deferred_check,
                 )
             )
             result.effect_results.append(
@@ -9710,6 +9790,8 @@ class Replayer:
             )
         ):
             return None
+        # A hover check needs an anchor too (see _hover_check).
+        assert step.anchor is not None
 
         check = (
             hover_check
@@ -11610,11 +11692,81 @@ class Replayer:
             "Approval mode: this item stopped before saving."
         )
 
+    def _approval_gated(self) -> bool:
+        """Whether an approval mode other than ``not_gated`` governs this run."""
+
+        gate = self.approval_gate
+        return gate is not None and (
+            str(getattr(getattr(gate, "mode", None), "value", "")) != "not_gated"
+        )
+
+    def _web_form_approval_view(
+        self, step: Step, params: Mapping[str, RuntimeParamScalar]
+    ) -> "Any | str":
+        """Prepare an API step's request for a person to approve.
+
+        Returns the view (the prepared request, its operation digest, the
+        rows and image the person sees), or the reason it can't be prepared.
+        Only reads are sent.
+        """
+
+        from openadapt_flow.approval_mode.item_approval import ApiRequestRef
+        from openadapt_flow.runtime.actuators import ApiActuationResult
+        from openadapt_flow.runtime.actuators.web_form import (
+            operation_digest,
+            operation_rows,
+            render_operation_png,
+        )
+
+        binding = step.api_binding
+        assert binding is not None
+        actuator = self._actuator_for(binding)
+        if actuator is None or not callable(getattr(actuator, "prepare", None)):
+            return "this API actuator can't prepare the request for approval"
+        gui_params = runtime_params_for_gui(params)
+        try:
+            prepared = actuator.prepare(binding, gui_params)
+        except Exception as exc:  # noqa: BLE001 - only reads were sent
+            return f"preparing the request failed ({type(exc).__name__})"
+        if isinstance(prepared, ApiActuationResult):
+            return prepared.reason or "the API step is unavailable"
+        effects = self._resolve_effects(list(binding.effects), params)
+        record = [
+            (key, str(expr))
+            for effect in effects
+            for key, expr in sorted(effect.match.items())
+        ]
+        digest = operation_digest(
+            prepared,
+            record_check=[effect.contract_hash() for effect in effects],
+            record=record,
+        )
+        rows = operation_rows(binding, prepared, gui_params, record=record)
+        return _WebFormApprovalView(
+            prepared=prepared,
+            digest=digest,
+            rows=rows,
+            png=render_operation_png(
+                f"Approve this request: {step.intent or step.id}", rows
+            ),
+            ref=ApiRequestRef(
+                method=prepared.method.upper(),
+                path=prepared.path,
+                payload_sha256=prepared.payload_sha256(),
+            ),
+        )
+
     def _approval_form_state(
         self, frame_png: Optional[bytes]
     ) -> Optional[tuple[str, str]]:
-        """The form's current field state digest, for the approval gate."""
+        """The form's current field state digest, for the approval gate.
 
+        For an API step under an approval mode it is the operation digest of
+        the request about to be sent (set just before the last-point gate).
+        """
+
+        if self._web_form_form_state_set:
+            return self._web_form_form_state
         from openadapt_flow.approval_mode.form_state import capture_form_state
 
         try:
@@ -11645,8 +11797,14 @@ class Replayer:
         step: Step,
         step_index: int,
         result: StepResult,
+        *,
+        api_view: Optional[Any] = None,
     ) -> Optional[str]:
-        """Ask the approval gate before a save step resolves its target."""
+        """Ask the approval gate before a save step resolves its target.
+
+        ``api_view`` is the prepared request of an API step: the person is
+        then shown that request, and its operation digest is the "form".
+        """
 
         gate = self.approval_gate
         assert gate is not None
@@ -11654,10 +11812,34 @@ class Replayer:
         drill_fault_step = self._is_qualification_fault_step(step)
 
         def frame() -> Optional[bytes]:
+            if api_view is not None:
+                return api_view.png
             try:
                 return self.vision.wait_settled(self.backend)
             except Exception:  # noqa: BLE001 - no frame means no approval
                 return None
+
+        def form_state(frame_png: Optional[bytes]) -> Optional[tuple[str, str]]:
+            if api_view is not None:
+                return ("api_request", api_view.digest)
+            return self._approval_form_state(frame_png)
+
+        def save_fields() -> Optional[Sequence[Any]]:
+            if api_view is None:
+                return None
+            from openadapt_flow.approval_mode.item_approval import (
+                MAX_SAVE_FIELDS,
+                SaveField,
+            )
+
+            rows = api_view.rows
+            if len(rows) > MAX_SAVE_FIELDS:
+                # The image lists every row; the phone shows it alone.
+                return None
+            return [
+                SaveField(label=label[:128] or "-", after=value[:512])
+                for label, value in rows
+            ]
 
         try:
             from openadapt_flow.approval_mode.gate import StepContext
@@ -11670,7 +11852,9 @@ class Replayer:
                     step_index=step_index,
                     run_id=self._run_id or "",
                     frame=frame,
-                    form_state=self._approval_form_state,
+                    form_state=form_state,
+                    save_fields=save_fields,
+                    api_request=api_view.ref if api_view is not None else None,
                     drill_fault_step=drill_fault_step,
                     qualification_case_kind=(
                         authorization.qualification_case_kind
