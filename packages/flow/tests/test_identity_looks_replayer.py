@@ -212,7 +212,7 @@ def test_actuation_check_reuses_the_copy_only_on_matching_pixels():
     again = r._verify_identity(step, res, b.frame, params, wf, bundle_dir=None)
     assert len(b.drags) == 1
     assert again.status == "verified"
-    assert ("clipboard", "resolves") in [(x.kind, x.outcome) for x in again.looks]
+    assert again.looks[-1].reason == "same_pixels_as_step_entry_copy"
     # The twin now sits where the record was: the binding must not carry over.
     twin = _frame("AC5OO61")
     b.frame = twin.png

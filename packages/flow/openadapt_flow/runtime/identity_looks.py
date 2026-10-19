@@ -134,24 +134,25 @@ class IdentityCopyConfig:
 class LookBinding:
     """A clipboard read taken at step entry, reusable at actuation.
 
-    The actuation-time identity check takes no input. It reuses this read only
-    when the identifier cell on its frame shows the same pixels as one of the
-    crops seen at step entry.
+    The actuation-time identity check takes no input. It reuses this read, or
+    the verdict it settled, only when the identifier cell on its frame shows
+    the same pixels as one of the crops seen at step entry.
     """
 
     step_id: str
     classes: frozenset[str]
     read: "ClipboardRead"
     crops: tuple[bytes, ...]
+    #: The step-entry verdict when the copy settled the record.
+    verdict: Optional[IdentityCheck] = None
+
+    def same_pixels(self, step_id: str, crop: Optional[bytes]) -> bool:
+        return step_id == self.step_id and any(crops_match(crop, c) for c in self.crops)
 
     def matches(
         self, step_id: str, classes: frozenset[str], crop: Optional[bytes]
     ) -> bool:
-        return (
-            step_id == self.step_id
-            and classes == self.classes
-            and any(crops_match(crop, c) for c in self.crops)
-        )
+        return classes == self.classes and self.same_pixels(step_id, crop)
 
 
 @dataclass(frozen=True)
@@ -223,34 +224,61 @@ def _magnified_look(
     return _look("magnified", "agrees")
 
 
+def _listed(known_ids: KnownIdList, core: str) -> bool:
+    return core in known_ids.members_of_class(lookalike_class(core))
+
+
 def _clipboard_look(
-    first_classes: frozenset[str],
-    vulnerable: frozenset[str],
+    first_tokens: Sequence[str],
     copied: Optional[ClipboardRead],
     exact: Sequence[str],
     known_ids: Optional[KnownIdList],
 ) -> IdentityLook:
+    """Judge a select-and-copy read against the first OCR read.
+
+    The copy and the read must name the same identifiers up to look-alike
+    glyphs: token by token, or, when one side splits an identifier the other
+    keeps whole (``103 045`` against ``103045``), as the joined string.
+    """
     if copied is None:
         return _look("clipboard", "unavailable", "not_configured")
     sha = copied.frame_sha256
     if copied.text is None:
         return _look("clipboard", "unavailable", copied.reason or "nothing_copied", sha)
     tokens = identifier_tokens(copied.text)
+    if not tokens:
+        return _look("clipboard", "unavailable", "no_identifier_copied", sha)
+    vulnerable_read = any(
+        identity_mod._is_glyph_vulnerable_identifier(t) for t in first_tokens
+    )
     by_class: dict[str, set[str]] = {}
     for tok in tokens:
         by_class.setdefault(lookalike_class(tok), set()).add(tok)
-    if set(by_class) != set(first_classes):
+    read_classes = {lookalike_class(t) for t in first_tokens}
+    exact_set = set(exact)
+    if set(by_class) == read_classes:
+        if any(len(v) != 1 for v in by_class.values()):
+            return _look("clipboard", "unavailable", "copy_ambiguous", sha)
+        copied_ids = {k: next(iter(v)) for k, v in by_class.items()}
+        vulnerable = {
+            lookalike_class(t)
+            for t in first_tokens
+            if identity_mod._is_glyph_vulnerable_identifier(t)
+        }
+    elif lookalike_class("".join(tokens)) == lookalike_class("".join(first_tokens)):
+        joined = "".join(tokens)
+        copied_ids = {lookalike_class(joined): joined}
+        vulnerable = set(copied_ids) if vulnerable_read else set()
+        exact_set |= {"".join(exact)} if exact else set()
+    else:
         # The copy did not cover the identifier OCR read (or covered more).
         return _look("clipboard", "unavailable", "copy_differs_from_read", sha)
-    if any(len(v) != 1 for v in by_class.values()):
-        return _look("clipboard", "unavailable", "copy_ambiguous", sha)
-    copied_ids = {k: next(iter(v)) for k, v in by_class.items()}
     if known_ids is not None and known_ids.complete:
-        listed = {m for k in copied_ids for m in known_ids.members_of_class(k)}
-        if any(core not in listed for core in copied_ids.values()):
+        all_listed = all(_listed(known_ids, c) for c in copied_ids.values())
+        if not all_listed and not _listed(known_ids, "".join(tokens)):
             return _look("clipboard", "contradicts", "copied_id_not_listed", sha)
     exact_by_class: dict[str, set[str]] = {}
-    for e in exact:
+    for e in exact_set:
         exact_by_class.setdefault(lookalike_class(e), set()).add(e)
     for cls, core in copied_ids.items():
         expected = exact_by_class.get(cls)
@@ -298,7 +326,6 @@ def decide(
     if not is_glyph_abstain(first):
         return first
     first_classes = lookalike_classes(first.observed)
-    vulnerable = vulnerable_classes(first.observed)
     looks: list[IdentityLook] = []
     for read, sha in frames:
         look = _frame_look(first_classes, read, sha, contradicts)
@@ -319,7 +346,7 @@ def decide(
         )
     if clipboard is not None:
         clip = _clipboard_look(
-            first_classes, vulnerable, clipboard, exact_expected, known_ids
+            identifier_tokens(first.observed), clipboard, exact_expected, known_ids
         )
         looks.append(clip)
         if clip.outcome == "contradicts":
@@ -364,7 +391,7 @@ def copy_region(lines: Iterable[Any], within: Region) -> Optional[Region]:
     if len(hits) != 1:
         return None
     x, y, w, h = (int(v) for v in hits[0])
-    return (x - 2, y - 2, w + 4, h + 4)
+    return (x - 4, y - 2, w + 8, h + 4)
 
 
 def crop_png(png: bytes, region: Region) -> Optional[bytes]:
@@ -447,9 +474,10 @@ def copy_identifier(
         clipboard.write_text(marker)
         pre = capture()
         mid_y = y + h // 2
-        inset = max(2, min(6, w // 10))
         if gesture == "drag":
-            backend.drag(x + inset, mid_y, x + w - inset, mid_y)
+            # From just before the first glyph to just past the last one: a
+            # drag that ends inside the last glyph leaves it unselected.
+            backend.drag(x + 1, mid_y, x + w - 1, mid_y)
         else:
             backend.click(x + w // 2, mid_y, double=True)
         for key in copy_keys:
