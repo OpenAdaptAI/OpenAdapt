@@ -328,3 +328,25 @@ gate refused its canary, so it is not admitted. The two fixes the run needed
 (the `signal` import, and a free port for the MockMed server) and moving its
 JIT cache out of the source tree are on #1307. The time columns now show n,
 the number of timed rows behind each median.
+
+## Amendment 9 (2026-10-19): collateral change, re-judged
+
+verify-run's collateral check caught a non-target record that vanished, but
+not one that changed: the 5 OpenEMR `collateral_edit` items were `verified`
+(#1373). The fix is #1375 (`Effect.forbid_collateral_change`, applied by
+verify-run). `claims_rejudge.py` re-judged the 5 `collateral_edit` items,
+plus the 5 clean saves as a false-alarm control, with #1375's verify-run
+(9850b627). The original run kept no records, so each item's database
+state was rebuilt without the agent: baseline restored, existing chart
+seeded, the item's chart saved through the API, and the same edit applied.
+Result: 5 of 5 caught, and 5 of 5 clean saves verified. The run is labelled
+a re-judgement on rebuilt state, not an agent run.
+
+The control found a bug in #1375 before it shipped: a baseline stores
+records as canonical JSON, so nested values came back with their keys in
+another order and read as changed. #1375 now compares values in canonical
+form, with a test. It also found a scoreboard bug: a rerun of an item could
+read the receipt an earlier run left behind. Every claims script now uses a
+fresh directory per item and reads a receipt only after verify-run exits 0
+or 1. Every row of the earlier claims runs has exit 0 or 1 and a fresh
+directory, so those runs were not affected.

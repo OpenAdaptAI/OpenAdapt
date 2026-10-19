@@ -1,0 +1,96 @@
+{
+  "protocol_version": "2026-10-18.1",
+  "written_at": "2026-10-19T14:54:36-0400",
+  "machine": "arm64 Darwin 24.6.0",
+  "cpu_count": 12,
+  "python": "3.12.13",
+  "engine": {
+    "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+    "git_head": "16d65f9225a91d7ab7b353f2f9220255c1174b88"
+  },
+  "benchmark_git_head": "16d65f9225a91d7ab7b353f2f9220255c1174b88",
+  "task": "openemr_referral",
+  "arm": "claims",
+  "source_run": "2026-10-19-a",
+  "rebuilt_state": true,
+  "verify_run_flow": "/Users/abrichr/oa/worktrees/verify-run-collateral-change/packages/flow",
+  "verify_run_git_head": "9850b62747975d3b913efe44e77707a2b2b72f39",
+  "note": "re-judgement of recorded items on rebuilt fixture state; no model calls",
+  "faults": [
+    "ok",
+    "collateral_edit"
+  ],
+  "complete": true,
+  "sessions": [
+    {
+      "protocol_version": "2026-10-18.1",
+      "written_at": "2026-10-19T15:01:46-0400",
+      "machine": "arm64 Darwin 24.6.0",
+      "cpu_count": 12,
+      "python": "3.12.13",
+      "engine": {
+        "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+        "git_head": "16d65f9225a91d7ab7b353f2f9220255c1174b88"
+      },
+      "benchmark_git_head": "16d65f9225a91d7ab7b353f2f9220255c1174b88",
+      "task": "openemr_referral",
+      "arm": "claims",
+      "source_run": "2026-10-19-a",
+      "rebuilt_state": true,
+      "verify_run_flow": "/Users/abrichr/oa/worktrees/verify-run-collateral-change/packages/flow",
+      "verify_run_git_head": "9850b62747975d3b913efe44e77707a2b2b72f39",
+      "note": "re-judgement of recorded items on rebuilt fixture state; no model calls",
+      "faults": [
+        "ok",
+        "collateral_edit"
+      ]
+    },
+    {
+      "protocol_version": "2026-10-18.1",
+      "written_at": "2026-10-19T15:08:35-0400",
+      "machine": "arm64 Darwin 24.6.0",
+      "cpu_count": 12,
+      "python": "3.12.13",
+      "engine": {
+        "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+        "git_head": "16d65f9225a91d7ab7b353f2f9220255c1174b88"
+      },
+      "benchmark_git_head": "16d65f9225a91d7ab7b353f2f9220255c1174b88",
+      "task": "openemr_referral",
+      "arm": "claims",
+      "source_run": "2026-10-19-a",
+      "rebuilt_state": true,
+      "verify_run_flow": "/Users/abrichr/oa/worktrees/verify-run-collateral-change/packages/flow",
+      "verify_run_git_head": "9850b62747975d3b913efe44e77707a2b2b72f39",
+      "note": "re-judgement of recorded items on rebuilt fixture state; no model calls",
+      "faults": [
+        "ok",
+        "collateral_edit"
+      ]
+    },
+    {
+      "protocol_version": "2026-10-18.1",
+      "written_at": "2026-10-19T15:10:24-0400",
+      "machine": "arm64 Darwin 24.6.0",
+      "cpu_count": 12,
+      "python": "3.12.13",
+      "engine": {
+        "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+        "git_head": "16d65f9225a91d7ab7b353f2f9220255c1174b88"
+      },
+      "benchmark_git_head": "16d65f9225a91d7ab7b353f2f9220255c1174b88",
+      "task": "openemr_referral",
+      "arm": "claims",
+      "source_run": "2026-10-19-a",
+      "rebuilt_state": true,
+      "verify_run_flow": "/Users/abrichr/oa/worktrees/verify-run-collateral-change/packages/flow",
+      "verify_run_git_head": "9850b62747975d3b913efe44e77707a2b2b72f39",
+      "note": "re-judgement of recorded items on rebuilt fixture state; no model calls",
+      "faults": [
+        "ok",
+        "collateral_edit"
+      ]
+    }
+  ],
+  "earlier_sessions_note": "Every session before the last is discarded. The first judged with a comparison bug in #1375 (nested key order read as a change; fixed in 9850b627). The next two reused item directories, so verify-run refused the already-used baselines and the script read the receipts left behind (fixed in this script: a fresh directory per item, and a receipt is read only after verify-run exits 0 or 1). Only the last session's rows are in items.csv."
+}

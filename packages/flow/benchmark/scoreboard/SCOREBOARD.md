@@ -78,6 +78,7 @@ Separate from arms 1 to 7 (`claims.py`, `claims_openemr.py`). Claude Sonnet 5.5 
 
 ### mockmed/2026-10-19-b
 
+
 | Fault | Items | Bad saves | Agent claimed success | Bad saves the agent claimed as success | ...of those, caught by verify-run | Bad saves caught by verify-run | Clean saves | Clean saves verify-run confirmed | False alarms | Fault not reached |
 |---|---|---|---|---|---|---|---|---|---|---|
 | ok | 5 | 0 | 5 | 0 | 0 | 0 | 5 | 5 | 0 | 0 |
@@ -95,6 +96,7 @@ Separate from arms 1 to 7 (`claims.py`, `claims_openemr.py`). Claude Sonnet 5.5 
 
 ### openemr_referral/2026-10-19-a
 
+
 | Fault | Items | Bad saves | Agent claimed success | Bad saves the agent claimed as success | ...of those, caught by verify-run | Bad saves caught by verify-run | Clean saves | Clean saves verify-run confirmed | False alarms | Fault not reached |
 |---|---|---|---|---|---|---|---|---|---|---|
 | ok | 5 | 0 | 5 | 0 | 0 | 0 | 5 | 5 | 0 | 0 |
@@ -108,5 +110,17 @@ Separate from arms 1 to 7 (`claims.py`, `claims_openemr.py`). Claude Sonnet 5.5 
 
 - Hand check of every item where the agent claimed success: 35 of 35 checked against the ledger; the ledger agrees with the row on 35 (evidence in hand_check.json).
 - Model spend: $2.733659.
+
+### openemr_referral/rejudge-1375-2026-10-19
+
+Re-judgement of run `2026-10-19-a`, not a new agent run: each item's database state was rebuilt without the agent (the item's chart saved through the API, the same fault applied) and judged by verify-run at 9850b627 (#1375, the collateral-change check). The agent's claims are the source run's.
+
+| Fault | Items | Bad saves | Agent claimed success | Bad saves the agent claimed as success | ...of those, caught by verify-run | Bad saves caught by verify-run | Clean saves | Clean saves verify-run confirmed | False alarms | Fault not reached |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ok | 5 | 0 | 5 | 0 | 0 | 0 | 5 | 5 | 0 | 0 |
+| collateral_edit | 5 | 5 | 5 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| all | 10 | 5 | 10 | 5 | 5 | 5 | 5 | 5 | 0 | 0 |
+
+- The agent's claims are the source run's, hand-checked there (`2026-10-19-a`).
 
 Claude API spend so far: $12.543253.

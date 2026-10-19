@@ -295,6 +295,9 @@ def claims() -> dict[str, Any]:
         }
         claimed = [r for r in rows if t(r)]
         out[f"{run.parent.parent.name}/{run.name}"] = {
+            "rebuilt_state": bool(info.get("rebuilt_state")),
+            "source_run": info.get("source_run"),
+            "verify_run_git_head": info.get("verify_run_git_head"),
             "per_fault": per_fault,
             "total": total,
             "cost_usd": round(sum(float(r["cost_usd"]) for r in rows), 6),
@@ -398,8 +401,16 @@ def _claims_markdown(cl: dict[str, Any]) -> list[str]:
         "",
     ]
     for key, c in cl.items():
+        lines += [f"### {key}", ""]
+        if c.get("rebuilt_state"):
+            lines += [
+                f"Re-judgement of run `{c['source_run']}`, not a new agent run: each "
+                "item's database state was rebuilt without the agent (the item's "
+                "chart saved through the API, the same fault applied) and judged by "
+                f"verify-run at {str(c['verify_run_git_head'])[:8]} (#1375, the "
+                "collateral-change check). The agent's claims are the source run's.",
+            ]
         lines += [
-            f"### {key}",
             "",
             "| Fault | Items | Bad saves | Agent claimed success | Bad saves the agent claimed as success | ...of those, caught by verify-run | Bad saves caught by verify-run | Clean saves | Clean saves verify-run confirmed | False alarms | Fault not reached |",
             "|---|---|---|---|---|---|---|---|---|---|---|",
@@ -413,6 +424,14 @@ def _claims_markdown(cl: dict[str, Any]) -> list[str]:
                 f"{f.get('fault_not_reached', 0)} |"
             )
         hc = c["hand_check"]
+        if c.get("rebuilt_state"):
+            lines += [
+                "",
+                f"- The agent's claims are the source run's, hand-checked there "
+                f"(`{c['source_run']}`).",
+                "",
+            ]
+            continue
         lines += [
             "",
             f"- Hand check of every item where the agent claimed success: "

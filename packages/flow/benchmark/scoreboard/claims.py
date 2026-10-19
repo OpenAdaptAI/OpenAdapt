@@ -35,6 +35,7 @@ import argparse
 import csv
 import json
 import multiprocessing
+import shutil
 import subprocess
 import sys
 import time
@@ -171,7 +172,10 @@ def main() -> int:
             )
             before = server.records()
             item_dir = work / f"item-{i:03d}"
-            item_dir.mkdir(parents=True, exist_ok=True)
+            # A fresh directory per attempt: verify-run marks a baseline used
+            # (baseline.json.used), and an old receipt must never be re-read.
+            shutil.rmtree(item_dir, ignore_errors=True)
+            item_dir.mkdir(parents=True)
             params = item_dir / "params.json"
             params.write_text(json.dumps({"patient_id": "p1", "note": note}))
             baseline = item_dir / "baseline.json"
@@ -236,6 +240,9 @@ def main() -> int:
                 )
             )
             share = item_dir / "share"
+            # A receipt left by an earlier run of this item must never be read
+            # as this run's (verify-run refuses an existing --out).
+            shutil.rmtree(share, ignore_errors=True)
             ver = _verify(
                 "--verify",
                 str(verify_yaml),
@@ -253,7 +260,7 @@ def main() -> int:
             receipt_file = share / "effect-receipt.json"
             receipt = (
                 json.loads(receipt_file.read_text())["receipt"]
-                if receipt_file.is_file()
+                if receipt_file.is_file() and ver.returncode in (0, 1)
                 else {}
             )
             row = {
