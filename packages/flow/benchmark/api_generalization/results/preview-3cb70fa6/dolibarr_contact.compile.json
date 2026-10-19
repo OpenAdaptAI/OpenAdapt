@@ -1,0 +1,27 @@
+{
+ "app": "dolibarr_contact",
+ "workflow": "new-contact",
+ "steps": 12,
+ "params": [
+  "email",
+  "firstname",
+  "lastname",
+  "phone_pro",
+  "poste"
+ ],
+ "compile_proposal": {
+  "proposed": false,
+  "step": null,
+  "reasons": [
+   "field 'add' of the save is not a recorded value, a form default or a session value"
+  ]
+ },
+ "proposed": false,
+ "reasons": [
+  "field 'add' of the save is not a recorded value, a form default or a session value"
+ ],
+ "compile_s": 13.2,
+ "frozen": "",
+ "head": "3cb70fa649407782f150ae4b0f65058fcd84ec30",
+ "engine_diff_vs_frozen": ""
+}

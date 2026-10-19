@@ -1,0 +1,26 @@
+{
+ "app": "trac",
+ "workflow": "new-ticket",
+ "steps": 10,
+ "params": [
+  "description",
+  "keywords",
+  "summary",
+  "type"
+ ],
+ "compile_proposal": {
+  "proposed": false,
+  "step": null,
+  "reasons": [
+   "field 'submit' of the save is not a recorded value, a form default or a session value"
+  ]
+ },
+ "proposed": false,
+ "reasons": [
+  "field 'submit' of the save is not a recorded value, a form default or a session value"
+ ],
+ "compile_s": 15.0,
+ "frozen": "",
+ "head": "3cb70fa649407782f150ae4b0f65058fcd84ec30",
+ "engine_diff_vs_frozen": ""
+}

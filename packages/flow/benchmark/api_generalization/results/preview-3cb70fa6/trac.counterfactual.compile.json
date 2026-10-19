@@ -1,0 +1,144 @@
+{
+ "app": "trac",
+ "workflow": "new-ticket",
+ "steps": 10,
+ "params": [
+  "description",
+  "keywords",
+  "summary",
+  "type"
+ ],
+ "compile_proposal": {
+  "proposed": true,
+  "step": "step_009",
+  "reasons": []
+ },
+ "proposed": true,
+ "reasons": [],
+ "compile_s": 15.6,
+ "frozen": "",
+ "head": "3cb70fa649407782f150ae4b0f65058fcd84ec30",
+ "engine_diff_vs_frozen": "",
+ "admitted": [
+  "step_009"
+ ],
+ "describe": "step_009: save with one request, POST /newticket, in place of 10 GUI steps (step_000 to step_009).\n  sign-in: the replaying browser's own session; form read again from /newticket\n  fields: 7 form_default, 4 param, 1 session\n  run values: field_summary={summary}, field_description={description}, field_type={type}, field_keywords={keywords}\n  accepted when: HTTP [303] and the response matches '1'\n  record check after: 4 effect(s) copied from the save step\n  screen-only checks, not repeated: ['step_000: region_stable', 'step_002: region_stable, text_present', 'step_003: text_present', 'step_004: region_stable, text_present', 'step_006: region_stable, text_present', 'step_007: text_present']\n  if the form or a check differs at run time, the GUI steps run instead",
+ "binding": {
+  "form_path": "/newticket",
+  "fields": [
+   {
+    "name": "__FORM_TOKEN",
+    "source": "session",
+    "param": null,
+    "value": null
+   },
+   {
+    "name": "field_summary",
+    "source": "param",
+    "param": "summary",
+    "value": null
+   },
+   {
+    "name": "field_reporter",
+    "source": "form_default",
+    "param": null,
+    "value": "admin"
+   },
+   {
+    "name": "field_description",
+    "source": "param",
+    "param": "description",
+    "value": null
+   },
+   {
+    "name": "field_type",
+    "source": "param",
+    "param": "type",
+    "value": null
+   },
+   {
+    "name": "field_priority",
+    "source": "form_default",
+    "param": null,
+    "value": "major"
+   },
+   {
+    "name": "field_milestone",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "field_component",
+    "source": "form_default",
+    "param": null,
+    "value": "component1"
+   },
+   {
+    "name": "field_version",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "field_keywords",
+    "source": "param",
+    "param": "keywords",
+    "value": null
+   },
+   {
+    "name": "field_cc",
+    "source": "form_default",
+    "param": null,
+    "value": ""
+   },
+   {
+    "name": "action",
+    "source": "form_default",
+    "param": null,
+    "value": "create"
+   }
+  ],
+  "controls": [
+   "__FORM_TOKEN",
+   "action",
+   "action_create_and_assign_reassign_owner",
+   "attachment",
+   "field_cc",
+   "field_component",
+   "field_description",
+   "field_keywords",
+   "field_milestone",
+   "field_priority",
+   "field_reporter",
+   "field_summary",
+   "field_type",
+   "field_version"
+  ],
+  "client_rules": null,
+  "prechecks": [],
+  "success_pattern": "1",
+  "replaces_steps": [
+   "step_000",
+   "step_001",
+   "step_002",
+   "step_003",
+   "step_004",
+   "step_005",
+   "step_006",
+   "step_007",
+   "step_008",
+   "step_009"
+  ],
+  "other_writes_seen": [],
+  "screen_only_checks": [
+   "step_000: region_stable",
+   "step_002: region_stable, text_present",
+   "step_003: text_present",
+   "step_004: region_stable, text_present",
+   "step_006: region_stable, text_present",
+   "step_007: text_present"
+  ],
+  "folded_checks_digest": "sha256:163b2013c760457603d0710dcd57c40212c62244ddf6efccfd62dc3d22d24583"
+ }
+}
