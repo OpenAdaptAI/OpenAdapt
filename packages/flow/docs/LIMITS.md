@@ -240,6 +240,39 @@ irreversible, and qualification requires its record check. An icon-only click
 that only navigates after data entry is therefore over-classified until an
 operator reclassifies it.
 
+On a pixel surface an icon-only click carries no text that names its control.
+When the recorder can move the pointer without clicking
+(`Recorder(capture_hover=True)` on a backend with `hover`), it rests the
+pointer on each click target first and keeps that frame. For a click with no
+other identity evidence, the compiler stores what changed near the target, such
+as the control's highlight or tooltip, as the step's hover evidence
+([`openadapt_flow/runtime/hover_evidence.py`](../openadapt_flow/runtime/hover_evidence.py)).
+At replay, on the pixel rungs, the runtime rests the pointer on the resolved
+target, waits the same 0.8 s, and compares. A different response, or a
+response where the recording saw none, stops the run before the click. A
+missing response, or one that can't be compared (another render with no
+readable text), is recorded on the step and changes nothing. A tooltip that
+opens later than the wait looks like a different response and stops the run.
+Controls that don't answer the pointer, such as most text fields, get no
+evidence this way. The browser, remote-display (Citrix and RDP client window)
+and FreeRDP backends can hover. The Aardwolf RDP transport and the native
+Windows, macOS and Linux backends can't move the pointer without a button
+yet, so they take no hover look.
+
+A pixel step is checked on one frame and clicked a moment later. Consequential
+identity-gated clicks were already bound to the exact checked frame. Every
+other pixel click now gets a check-to-click guard (`Replayer._pixel_recheck`):
+right before the click, the runtime takes a fresh frame and compares the
+target region, the identity region and the hover response with the frame the
+step was checked on. If one changed (a dialog opened, the list re-sorted), it
+doesn't click. It re-resolves the target and re-runs the identity check on
+the fresh frame, with no input, and clicks only when the next frame matches
+that one. After two re-observations that still see a change, or when the
+target or its identity can't be confirmed again, it refuses the click. Each
+change is recorded on the step (`StepResult.check_to_click`). A change smaller
+than 4 pixels, or under 24 levels per channel, doesn't count. Structured
+targets are bound by element tokens instead and aren't rechecked.
+
 A consequential click must be tied to a record before Flow delivers it. Inside
 a table row, the row is that record. An icon-only Save that floats beside a
 form (openIMIS's claim Save has no text, accessible name, or tooltip) has no

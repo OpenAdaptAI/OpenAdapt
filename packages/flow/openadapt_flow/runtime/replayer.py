@@ -60,6 +60,7 @@ from typing import (
     Optional,
     Sequence,
     TypeVar,
+    Union,
     cast,
 )
 from urllib.parse import urlsplit
@@ -95,10 +96,12 @@ from openadapt_flow.ir import (
     Anchor,
     ApiBinding,
     BusinessDecisionEvidence,
+    CheckToClickRecheck,
     EffectVerificationEvidence,
     ExecutionTargetKind,
     FreshActuationEvent,
     HaltObservation,
+    HoverLook,
     IdentityCheck,
     IdentityLook,
     IdentitySignalEvidence,
@@ -217,6 +220,13 @@ from openadapt_flow.vision.ocr import OcrResolutionRefused
 
 _DeliveryResultT = TypeVar("_DeliveryResultT")
 _MAX_FRESH_ACTUATION_REACQUISITIONS = 2
+# Check-to-click guard on the pixel path (``Replayer._pixel_recheck``): how
+# often a changed target or identity region is re-observed before the click
+# is refused, and how much a pixel must change to count (remote encoders
+# shift colours by a few levels; a dialog or a new row changes far more).
+_PIXEL_RECHECK_REOBSERVES = 2
+_PIXEL_RECHECK_LEVEL = 24
+_PIXEL_RECHECK_MIN_PIXELS = 4
 # How long a step that raises a browser dialog waits for it to open.
 _DIALOG_WAIT_S = 5.0
 # Private module capability.  The public ``run`` API cannot mint a durable
@@ -9833,6 +9843,7 @@ class Replayer:
         pixel-matched binding.
         """
         self.__dict__.setdefault("_identity_look_bindings", {}).pop(step.id, None)
+        self.__dict__.setdefault("_hover_frames", {}).pop(step.id, None)
         self._identity_input_looks = True
         try:
             return self._identity_gate_error(step, *args, **kwargs)
@@ -9858,7 +9869,12 @@ class Replayer:
             if qualification is not None
             else None
         )
-        if (
+        hover_check = (
+            self._hover_check(step, resolution, frame_png, workflow, bundle_dir)
+            if qualified_policy is None
+            else None
+        )
+        if hover_check is None and (
             step.action
             not in (
                 ActionKind.CLICK,
@@ -9882,9 +9898,15 @@ class Replayer:
             )
         ):
             return None
+        # A hover check needs an anchor too (see _hover_check).
+        assert step.anchor is not None
 
-        check = self._verify_identity(
-            step, resolution, frame_png, params, workflow, bundle_dir
+        check = (
+            hover_check
+            if hover_check is not None
+            else self._verify_identity(
+                step, resolution, frame_png, params, workflow, bundle_dir
+            )
         )
         if (
             check.status in {"verified", "mismatch"}
@@ -9962,6 +9984,18 @@ class Replayer:
                 "confirm a current export; refusing to act"
             )
             result.safety_halt = True
+        elif check.mode == "hover" and check.status == "mismatch":
+            reason = check.hover.reason if check.hover is not None else "differs"
+            error = (
+                f"Step '{step.id}' ({step.intent}): with the pointer on the "
+                "target, the screen answered differently from the recording "
+                f"({reason}) — refusing to click; run aborted"
+            )
+        elif check.mode == "hover":
+            # Hover evidence only adds a stop. A step that had no identity
+            # check before keeps going when the response is absent or cannot
+            # be compared; the verdict stays on the step result.
+            error = None
         elif check.status == "mismatch":
             error = (
                 f"Identity check failed for step '{step.id}' "
@@ -12378,6 +12412,20 @@ class Replayer:
                             "— refusing raw coordinate delivery; run aborted"
                         )
                 else:
+                    rechecked = self._pixel_recheck(
+                        step,
+                        resolution,
+                        before_png,
+                        params,
+                        workflow,
+                        bundle_dir,
+                        result,
+                        run_dir,
+                    )
+                    if isinstance(rechecked, str):
+                        return rechecked
+                    resolution = rechecked
+                    x, y = resolution.point
                     refusal = self._delivery_authorization_refusal(
                         workflow, params, step, result
                     )
@@ -12496,6 +12544,19 @@ class Replayer:
                         "identity verification to delivery; run aborted"
                     )
             elif isinstance(self.backend, RichPointerActionBackend):
+                rechecked = self._pixel_recheck(
+                    step,
+                    resolution,
+                    before_png,
+                    params,
+                    workflow,
+                    bundle_dir,
+                    result,
+                    run_dir,
+                )
+                if isinstance(rechecked, str):
+                    return rechecked
+                x, y = rechecked.point
                 refusal = self._delivery_authorization_refusal(
                     workflow, params, step, result
                 )
@@ -15116,6 +15177,100 @@ class Replayer:
         )
         return with_looks(better_identity_read(check, row_check))
 
+    def _hover_check(
+        self,
+        step: Step,
+        resolution: Resolution,
+        frame_png: bytes,
+        workflow: Workflow,
+        bundle_dir: Optional[Path],
+    ) -> Optional[IdentityCheck]:
+        """Compare the target's hover response with the recording.
+
+        Only at the step-entry check (moving the pointer is input), only for a
+        click whose recording saw a hover response and that has no other
+        identity evidence,
+        only on the pixel rungs, and only when the backend can hover
+        (:class:`~openadapt_flow.backend.PointerHoverBackend`). None when any
+        of that does not hold: the step then has no identity check, as
+        before. See :mod:`openadapt_flow.runtime.hover_evidence`.
+        """
+        from openadapt_flow.runtime import hover_evidence as hover_mod
+
+        evidence = step.hover
+        anchor = step.anchor
+        if (
+            evidence is None
+            or not evidence.response
+            or anchor is None
+            or not self._identity_input_looks
+            or step.action
+            not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.RIGHT_CLICK)
+            or resolution.rung == "structural"
+            or anchor.context_text
+            or anchor.structured_identity
+            or anchor.identity_template
+            or anchor.identifier_crop
+        ):
+            return None
+        hover = getattr(self.backend, "hover", None)
+        if not callable(hover):
+            return None
+        point = (int(resolution.point[0]), int(resolution.point[1]))
+
+        def check(verdict: str, reason: str, png: Optional[bytes]) -> IdentityCheck:
+            status = {
+                "verified": "verified",
+                "mismatch": "mismatch",
+                "unexpected": "mismatch",
+                "absent": "abstain",
+                "unverifiable": "unreadable",
+            }[verdict]
+            return IdentityCheck(
+                status=status,  # type: ignore[arg-type]
+                mode="hover",
+                expected="recorded hover response",
+                observed=reason,
+                hover=HoverLook(
+                    verdict=verdict,  # type: ignore[arg-type]
+                    reason=reason,
+                    frame_sha256=sha256_bytes(png) if png is not None else None,
+                ),
+            )
+
+        try:
+            hover(*point)
+        except NotImplementedError:
+            return None
+        except Exception as exc:  # noqa: BLE001 - a failed hover confirms nothing
+            return check(
+                "unverifiable", f"hover_failed:{type(exc).__name__}"[:80], None
+            )
+        time.sleep(evidence.dwell_ms / 1000.0)
+        hover_png = self.vision.wait_settled(self.backend)
+        try:
+            live = hover_mod.measure_response(frame_png, hover_png, point)
+        except ValueError:
+            return check("mismatch", "screen_changed_size", hover_png)
+        recorded_crop = (
+            self._asset_bytes(bundle_dir, evidence.crop, workflow=workflow)
+            if evidence.crop and bundle_dir is not None
+            else None
+        )
+        # The click that follows is checked against this frame, not the one
+        # before the pointer moved (see _pixel_recheck).
+        self.__dict__.setdefault("_hover_frames", {})[step.id] = hover_png
+        verdict, reason = hover_mod.compare(
+            recorded_response=evidence.response,
+            recorded_region=evidence.region,
+            recorded_crop=recorded_crop,
+            live=live,
+            point=point,
+            same_render=self._render_scale_inner is None,
+            ocr=self.vision.ocr,
+        )
+        return check(verdict, reason, hover_png)
+
     def _band_check(
         self,
         anchor: Anchor,
@@ -15240,6 +15395,163 @@ class Replayer:
         ):
             return looked
         return check.model_copy(update={"looks": list(looked.looks)})
+
+    def _check_regions(
+        self, step: Step, resolution: Resolution, matched_region: Optional[Region]
+    ) -> dict[str, Region]:
+        """The regions a pixel step was checked on, at ``resolution``.
+
+        ``target``: where the target matched (or a box of the recorded
+        target's size at the point). ``identity``: the identifier region, or
+        the identity band's row, when the step has identity evidence.
+        ``hover``: the recorded hover response, when there is one.
+        """
+        anchor = step.anchor
+        px, py = int(resolution.point[0]), int(resolution.point[1])
+        regions: dict[str, Region] = {}
+        if matched_region is not None:
+            regions["target"] = matched_region
+        elif anchor is not None:
+            w, h = int(anchor.region[2]), int(anchor.region[3])
+            regions["target"] = (px - w // 2, py - h // 2, w, h)
+        else:
+            regions["target"] = (px - 8, py - 8, 16, 16)
+        if anchor is not None:
+            if anchor.identifier_region is not None:
+                rx, ry, rw, rh = anchor.identifier_region
+                regions["identity"] = (
+                    rx + px - anchor.click_point[0],
+                    ry + py - anchor.click_point[1],
+                    rw,
+                    rh,
+                )
+            elif anchor.context_text or anchor.identity_template:
+                h = int(anchor.region[3])
+                regions["identity"] = (
+                    0,
+                    py - h // 2 - 4,
+                    int(self.backend.viewport[0]),
+                    h + 8,
+                )
+        if step.hover is not None and step.hover.region is not None:
+            dx, dy, w, h = step.hover.region
+            regions["hover"] = (px + dx, py + dy, w, h)
+        return regions
+
+    @staticmethod
+    def _changed_regions(
+        before_png: bytes, fresh_png: bytes, regions: Mapping[str, Region]
+    ) -> list[str]:
+        """Names of ``regions`` whose pixels differ between two frames."""
+        import numpy as np
+        from PIL import Image
+
+        try:
+            with (
+                Image.open(io.BytesIO(before_png)) as a_img,
+                Image.open(io.BytesIO(fresh_png)) as b_img,
+            ):
+                a = np.asarray(a_img.convert("RGB"), dtype=np.int16)
+                b = np.asarray(b_img.convert("RGB"), dtype=np.int16)
+        except Exception:  # noqa: BLE001 - an unreadable frame is a change
+            return ["frame_size"]
+        if a.shape != b.shape:
+            return ["frame_size"]
+        height, width = a.shape[:2]
+        changed: list[str] = []
+        for name, (x, y, w, h) in regions.items():
+            x0, y0 = max(0, int(x)), max(0, int(y))
+            x1, y1 = min(width, int(x + w)), min(height, int(y + h))
+            if x1 <= x0 or y1 <= y0:
+                continue
+            diff = np.abs(a[y0:y1, x0:x1] - b[y0:y1, x0:x1]).max(axis=2)
+            if int((diff > _PIXEL_RECHECK_LEVEL).sum()) >= _PIXEL_RECHECK_MIN_PIXELS:
+                changed.append(name)
+        return changed
+
+    def _pixel_recheck(
+        self,
+        step: Step,
+        resolution: Resolution,
+        checked_png: bytes,
+        params: Mapping[str, RuntimeParamScalar],
+        workflow: Workflow,
+        bundle_dir: Path,
+        result: StepResult,
+        run_dir: Path,
+    ) -> Union[Resolution, str]:
+        """Guard the gap between a pixel step's check and its click.
+
+        Right before the click, take a fresh frame and compare the target,
+        identity and hover regions with the frame the step was checked on (the
+        hover frame when the step took a hover look). When one changed (a
+        dialog opened over the target, the list re-sorted), do not click:
+        re-resolve the target and re-run the identity check on the fresh
+        frame, with no input, and compare again on the next frame. After
+        :data:`_PIXEL_RECHECK_REOBSERVES` re-observations that still see
+        changes, or when the target or its identity cannot be confirmed again,
+        refuse the click. Structured (DOM / accessibility) targets are bound
+        by element tokens instead and are not rechecked here.
+
+        Returns the resolution to click, or the refusal.
+        """
+        if resolution.rung == "structural":
+            return resolution
+        baseline = self.__dict__.get("_hover_frames", {}).get(step.id) or checked_png
+        current = resolution
+        region = self._active_delivery_region
+        for attempt in range(_PIXEL_RECHECK_REOBSERVES + 1):
+            fresh = self.backend.screenshot()
+            changed = self._changed_regions(
+                baseline, fresh, self._check_regions(step, current, region)
+            )
+            if not changed:
+                if current is not resolution:
+                    result.resolution = current
+                return current
+            what = ", ".join(changed)
+            if attempt == _PIXEL_RECHECK_REOBSERVES:
+                result.check_to_click.append(
+                    CheckToClickRecheck(changed=changed, outcome="aborted")  # type: ignore[arg-type]
+                )
+                break
+            fresh_resolution, fresh_region, error = self._resolve_step(
+                step, fresh, bundle_dir, workflow
+            )
+            if error is None and fresh_resolution is not None:
+                error = self._identity_gate_error(
+                    step,
+                    fresh_resolution,
+                    fresh,
+                    params,
+                    workflow,
+                    bundle_dir,
+                    result,
+                    evidence_run_dir=run_dir,
+                )
+            if error is not None or fresh_resolution is None:
+                result.check_to_click.append(
+                    CheckToClickRecheck(changed=changed, outcome="aborted")  # type: ignore[arg-type]
+                )
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                return (
+                    f"Step '{step.id}' ({step.intent}): the screen changed at the "
+                    f"{what} region between the check and the click, and the "
+                    "target could not be confirmed again on a fresh frame "
+                    f"({error or 'target not found'}) — click not delivered"
+                )
+            result.check_to_click.append(
+                CheckToClickRecheck(changed=changed, outcome="reobserved")  # type: ignore[arg-type]
+            )
+            current, region, baseline = fresh_resolution, fresh_region, fresh
+        result.safety_halt = True
+        result.failure_category = "safety_halt"
+        return (
+            f"Step '{step.id}' ({step.intent}): the screen kept changing at the "
+            f"{what} region between the check and the click — click not "
+            "delivered; run aborted"
+        )
 
     def _copy_look_allowed(self) -> bool:
         """The copy look is input: never in governed or qualification runs."""
