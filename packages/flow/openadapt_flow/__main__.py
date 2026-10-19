@@ -838,9 +838,11 @@ def _build_and_run_replayer(
     qualification_fault_driver=None,
     surface_backends=None,
     deployment_surface: Optional[str] = None,
+    readback_pipeline=None,
+    secret_env_overrides: Optional[Mapping[str, str]] = None,
 ):
     """Build the shared Replayer configuration and execute one workflow."""
-    return _configured_replayer(
+    replayer = _configured_replayer(
         backend,
         workflow=workflow,
         allow_egress=allow_egress,
@@ -860,7 +862,12 @@ def _build_and_run_replayer(
         qualification_fault_driver=qualification_fault_driver,
         surface_backends=surface_backends,
         deployment_surface=deployment_surface,
-    ).run(
+    )
+    # Worklist workers (cli_worklist_pool): a per-worker read-back pipeline
+    # and per-account secret sources. Both default to the serial behavior.
+    replayer.readback_pipeline = readback_pipeline
+    replayer.secret_env_overrides = dict(secret_env_overrides or {})
+    return replayer.run(
         workflow,
         params=params,
         worklists=worklists,
@@ -2370,6 +2377,25 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         policy_name=getattr(args, "policy", None) or cfg.policy.policy,
     )
     fault_driver = getattr(args, "_qualification_fault_driver", None)
+    from openadapt_flow.cli_worklist_pool import requested_pool
+
+    pool_policy = requested_pool(args, cfg)
+    if pool_policy is not None:
+        return _replay_worklist_pool(
+            args,
+            cfg,
+            backend_cfg,
+            pool_policy,
+            workflow=workflow,
+            params=params,
+            worklists=worklists,
+            bundle=bundle,
+            run_dir=run_dir,
+            allow_egress=allow_egress,
+            durable=durable,
+            fault_driver=fault_driver,
+            surface_cfgs=surface_cfgs,
+        )
     if _normalize_kind(backend_cfg.kind) != "web":
         return _replay_desktop(
             args,
@@ -2550,6 +2576,198 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     return _finish_replay(
         run_dir, report, args, backend_kind=_report_backend_kind(backend_cfg.kind)
     )
+
+
+def _replay_worklist_pool(
+    args: argparse.Namespace,
+    cfg,
+    backend_cfg,
+    policy,
+    *,
+    workflow,
+    params,
+    worklists,
+    bundle: Path,
+    run_dir: Path,
+    allow_egress: bool,
+    durable: bool,
+    fault_driver,
+    surface_cfgs,
+) -> int:
+    """Run a worklist program's items on N workers (docs/THROUGHPUT.md)."""
+    import hashlib
+    import os
+    from functools import partial
+
+    from openadapt_flow import cli_worklist_pool as cwp
+    from openadapt_flow.backends.factory import _normalize_kind, build_backend
+    from openadapt_flow.runtime.worklist_pool import PoolRefusal
+
+    kind = _normalize_kind(backend_cfg.kind)
+    url = args.url or cfg.backend.url
+    try:
+        if (
+            fault_driver is not None
+            or getattr(args, "_qualification_case_execution", None) is not None
+        ):
+            raise PoolRefusal("qualification runs are serial")
+        if surface_cfgs:
+            raise PoolRefusal("multi-surface bundles run on one session")
+        if (
+            getattr(args, "drift", None)
+            or getattr(args, "record_video", None) is not None
+            or float(getattr(args, "hold_on_halt", 0.0) or 0.0) > 0
+            or getattr(args, "save_healed_to", None)
+        ):
+            raise PoolRefusal(
+                "--drift, --record-video, --hold-on-halt and --save-healed-to "
+                "apply to a single session"
+            )
+        if kind not in ("web", "rdp"):
+            raise PoolRefusal(f"--workers supports web and RDP sessions, not {kind}")
+        if kind == "web" and not url:
+            raise PoolRefusal("--workers needs --url or backend.url")
+        if kind == "rdp" and not backend_cfg.rdp_host:
+            raise PoolRefusal("--workers over RDP needs backend.rdp_host")
+        if policy.refusal() is not None:
+            raise PoolRefusal(policy.refusal())
+        relation = cwp.loop_relation(workflow)
+        rows = cwp.pool_rows(workflow, worklists, relation)
+        accounts = cwp.check_accounts(policy, cfg.worklist, kind)
+        entry_workflow = (
+            cwp.load_entry_bundle(Path(cfg.worklist.entry_bundle))
+            if cfg.worklist.entry_bundle and kind == "web"
+            else None
+        )
+    except PoolRefusal as exc:
+        print(f"REFUSED: {exc}. Nothing was executed.")
+        return 2
+
+    item_authorization = getattr(args, "_item_authorization", None)
+    policy_name = getattr(args, "policy", None) or cfg.policy.policy
+    entry_url = cfg.worklist.entry_url or url
+
+    def run_item(wiring, source, idx, row, item_dir, pipeline, *, page_mode: bool):
+        _cfg, effect_verifier, api_actuator, _durable, _egress = wiring
+        backend = build_backend(backend_cfg, page=source) if page_mode else source
+        item_dir.mkdir(parents=True, exist_ok=True)
+        origin = None
+        if page_mode:
+            origin = f"{urlsplit(source.url).scheme}://{urlsplit(source.url).netloc}"
+        return _build_and_run_replayer(
+            backend,
+            workflow=workflow,
+            params=params,
+            worklists={relation: [dict(row)]},
+            bundle=bundle,
+            run_dir=item_dir,
+            save_healed_to=None,
+            allow_egress=allow_egress,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+            durable=durable,
+            use_structural=True,
+            pixel_verify_enabled=cfg.runtime.pixel_verify_enabled,
+            governed_authorization=(
+                item_authorization([dict(row)]) if item_authorization else None
+            ),
+            production_qualification_guard=getattr(
+                args, "_production_qualification_guard", None
+            ),
+            runtime_config=cfg.runtime,
+            execution_target_kind=(
+                "web" if page_mode else _report_backend_kind(backend_cfg.kind)
+            ),
+            surface_override=bool(getattr(args, "_surface_override", False)),
+            execution_origin=origin,
+            execution_entry_url=entry_url if page_mode else None,
+            approval_gate=_approval_gate_for_run(
+                args, item_dir, policy_name=policy_name
+            ),
+            deployment_surface=backend_cfg.deployment_surface,
+            readback_pipeline=pipeline,
+        )
+
+    # One effect verifier / API actuator per worker: they hold HTTP sessions
+    # and are not shared across threads.
+    wirings = [_deployment_runtime(args, params=params) for _ in accounts]
+    salt = getattr(getattr(workflow, "manifest", None), "content_digest", "") or ""
+
+    if kind == "web":
+        workers = []
+        for i, account in enumerate(accounts):
+            name = account.name if account is not None else "worker-1"
+            sign_in = None
+            if account is None:
+                sign_in = partial(lambda page, u: page.goto(u), u=url)
+            elif not account.browser_cdp_endpoint:
+                sign_in = partial(
+                    cwp.sign_in_with_bundle,
+                    bundle=Path(cfg.worklist.sign_in_bundle),
+                    account=account,
+                    backend_factory=lambda page: build_backend(backend_cfg, page=page),
+                    url=url,
+                    run_dir=run_dir / "sign-in" / name,
+                )
+            open_entry = None
+            if entry_workflow is not None:
+                open_entry = partial(
+                    cwp.entry_with_bundle,
+                    url=entry_url,
+                    workflow=entry_workflow,
+                    bundle=Path(cfg.worklist.entry_bundle),
+                    backend_factory=lambda page: build_backend(backend_cfg, page=page),
+                    run_dir=run_dir / "entry" / name,
+                )
+            workers.append(
+                cwp.WebPoolWorker(
+                    name=name,
+                    entry_url=entry_url,
+                    run_item_on_page=partial(run_item, wirings[i], page_mode=True),
+                    sign_in=sign_in,
+                    open_entry=open_entry,
+                    cdp_endpoint=account.browser_cdp_endpoint if account else None,
+                    headed=bool(args.headed or cfg.backend.headed),
+                    readback_window=policy.readback_window,
+                )
+            )
+        return cwp.run_pool(rows, workers, run_dir=run_dir, policy=policy, salt=salt)
+
+    # RDP: one FreeRDP session per account, connected together by the pool.
+    from openadapt_flow.backends.xfreerdp import (
+        RdpTarget,
+        SessionPool,
+        XFreeRDPTransport,
+    )
+
+    transports = [
+        XFreeRDPTransport(
+            RdpTarget(
+                host=backend_cfg.rdp_host,
+                port=backend_cfg.rdp_port,
+                username=account.rdp_username,
+                domain=backend_cfg.rdp_domain,
+            ),
+            password=(lambda env=account.rdp_password_env: os.environ[env]),
+        )
+        for account in accounts
+    ]
+    with SessionPool(transports) as session_pool:
+        workers = [
+            cwp.BackendPoolWorker(
+                name=account.name,
+                backend=build_backend(
+                    backend_cfg, rdp_transport=session, rdp_connect=False
+                ),
+                run_item_on_backend=partial(run_item, wirings[i], page_mode=False),
+                fingerprint=hashlib.sha256(
+                    f"{backend_cfg.rdp_host}|{account.rdp_username}".encode()
+                ).hexdigest(),
+                readback_window=policy.readback_window,
+            )
+            for i, (account, session) in enumerate(zip(accounts, session_pool.sessions))
+        ]
+        return cwp.run_pool(rows, workers, run_dir=run_dir, policy=policy, salt=salt)
 
 
 def _refuse_unverified_managed_qualification_admission(
@@ -3303,6 +3521,45 @@ def _cmd_run(args: argparse.Namespace) -> int:
     refused = _bind_approval_mode(args)
     if refused is not None:
         return refused
+
+    from openadapt_flow.cli_worklist_pool import loop_relation, requested_pool
+    from openadapt_flow.runtime.worklist_pool import PoolRefusal
+
+    if requested_pool(args, cfg) is not None:
+        # Parallel worklist (docs/THROUGHPUT.md): every item gets its own
+        # single-use authorization, bound to that item's one-row worklist and
+        # otherwise identical to the run's (same gate, policy, approvals).
+        if dispatch_file or qualification_case is not None:
+            print(
+                "run REFUSED: --workers and --readback-window apply to local "
+                "runs, not a managed dispatch or a qualification case. Nothing "
+                "was executed."
+            )
+            return 2
+        try:
+            relation = loop_relation(workflow)
+        except PoolRefusal as exc:
+            print(f"run REFUSED: {exc}. Nothing was executed.")
+            return 2
+        base_authorization = args._governed_run_authorization
+
+        def _item_authorization(rows, base=base_authorization):
+            fresh = build_runtime_authorization(
+                workflow,
+                report,
+                params=runtime_params,
+                worklists={relation: rows},
+            )
+            keep = {"authorization_id", "created_at", "runtime_inputs_digest"}
+            return fresh.model_copy(
+                update={
+                    name: getattr(base, name)
+                    for name in type(base).model_fields
+                    if name not in keep
+                }
+            )
+
+        args._item_authorization = _item_authorization
 
     if qualification_case is not None and not _claim_qualification_case_attempt(args):
         return 2
@@ -7037,6 +7294,31 @@ def _add_deployment_flags(
                 "loop over a relation (repeatable). 'RELATION=FILE' binds the "
                 "file to that relation; a bare 'FILE' binds to the program's "
                 "sole loop relation."
+            ),
+        )
+        p.add_argument(
+            "--workers",
+            type=int,
+            default=None,
+            metavar="N",
+            help=(
+                "Run a worklist program's items on N workers at once, each in "
+                "its own signed-in session (docs/THROUGHPUT.md). The deployment "
+                "must declare worklist.max_workers >= N, one account per "
+                "worker, and items_independent: true. Each item is claimed "
+                "once; a halt on any worker stops new items on all of them."
+            ),
+        )
+        p.add_argument(
+            "--readback-window",
+            type=int,
+            default=None,
+            metavar="K",
+            help=(
+                "Let a worker start its next item while up to K earlier saves "
+                "still wait for their system-of-record read-back (default: "
+                "worklist.readback_window, normally 0). A failed read-back "
+                "stops the run and names the items written after it."
             ),
         )
 
