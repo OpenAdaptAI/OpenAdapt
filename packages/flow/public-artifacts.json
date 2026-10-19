@@ -1000,6 +1000,178 @@
       "sha256": "f5d409030401eac4e65585a1ade786b089322d737234d75e5d4a6efd83912ac1"
     },
     {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/hand_check.json",
+      "sha256": "fd9197b6fd39acacc34ccacb3a19f3387cc3f44fcc826fa31a5808e6b0b3da63"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/items.csv",
+      "sha256": "e64463a19c0ab7773c64ff27bdadd47be9feb93db233bd5c092f5ccca54663f1"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-001.json",
+      "sha256": "eb9bd5d134235539d7001daaf3061797bdc1663ab7eee08050ccee64e6e449c7"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-002.json",
+      "sha256": "108cedfe6f25c1cdc35126b17a0e33ab68600cd87209fbb54c5893f99ba622f8"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-003.json",
+      "sha256": "19e3f14044d93e8a6c9c84ef590652b181ac507baa8bd195714dc1cccc384e4b"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-004.json",
+      "sha256": "2e964cb0ec344d94cfa48ec80cf7934191d648d4e8758630e8c5231e691343c4"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-005.json",
+      "sha256": "f061750667e0da16a3daa15413189c4c28513d6402e1e0f1995e260e2ec89c6a"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-006.json",
+      "sha256": "c24e8e4c173ad1ccef376681764f5979d4e5960af27312b2e0269f0d799e1de4"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-007.json",
+      "sha256": "f104bcdd6671921ca85d361fcbc66783d96516312b73c330b088da9ffc24ffb3"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-008.json",
+      "sha256": "cd644a4f4b88840db0f8473b55d6b2299ca8da5c1539b3b9114e247cabba527d"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-009.json",
+      "sha256": "56fd88bf2b82febd29edbf2de65a7c31ed17956f8cc4a22e276fc0b5228f9d3e"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-010.json",
+      "sha256": "4cce92ce10002b531237394b4b949487b55243a929cfe01ba0a8663a8e253a5f"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-011.json",
+      "sha256": "796c984a7bdaa5fbe0b99a9cfc588e8d59ef1bd2ff7c2459b8909229a3a21580"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-012.json",
+      "sha256": "4f734ea671ba30ae8bf2154d6334b7856bf391c5e3c3fa0c31a216d565406bfa"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-013.json",
+      "sha256": "df2153f02a43ae36cdddfc2a48c76f782306ab0bde4cea354a0374a5b3e2d8dc"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-014.json",
+      "sha256": "0adaf7413c9ed7a4fbef46df581fe38893f4cd080cb3d63fb0ce50b558fdeecb"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-015.json",
+      "sha256": "162b636cd492ab42459d6c0134c1743b142a2e5cd09be947c666b92114a153c7"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-016.json",
+      "sha256": "944fd17e9daa9fc59ed3676aaf01643d861239c43575ec3c711edec31ee538ff"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-017.json",
+      "sha256": "79d62546cb2c3280d67f7d6ee825b563b657e37fe8e3c7e0f176ce0be286ea10"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-018.json",
+      "sha256": "3ac3df8379f376a816b0c346f1ec31d2566ba164503eb671fcbb2de9e769a274"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-019.json",
+      "sha256": "fc8aafd8785ba48114561e2396a234ada26524792df7e433c97a4b934bfee47d"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-020.json",
+      "sha256": "82d90ce8595dd03a3b674b0442825ebddbc592658a0f6454297e901090d33276"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-021.json",
+      "sha256": "e92b969848a1c20d8069d9329196fede5a99b8c2dd2d9af348a9be676083ab07"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-022.json",
+      "sha256": "07b2ef94cc0026d0ec9b66717b2da9b0f69509615c7175b90dda92473b36a48f"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-023.json",
+      "sha256": "27551e172aee47fd0e55fecdab697f43bcc1191abedbd6b7d7af75d748dba1d1"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-024.json",
+      "sha256": "7e56ed8909ec27997377b6cf7388d0c5673be58c5e2d6ecb2dd6ba0abb88ede4"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-025.json",
+      "sha256": "9d4277c6e8ae682848307909d24c02294a4ef993126d1ee4e686ef0ade5946e6"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-026.json",
+      "sha256": "4015eba12d46e1bd58104c27c0e09ba759faeaea9e3c518ee10250410cf6416b"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-027.json",
+      "sha256": "756ebb63e763ca501cc64ef1d5727475247d10b018d9583d2a39675871f865b5"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-028.json",
+      "sha256": "331fbe11c7200f1c7c255b4c86ab7b8e1a7fa6c11fec39398d8df5c585c868e7"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-029.json",
+      "sha256": "eed659f6e8b77bb1092efa51cabefbca80fe036492df1f153f46d7de33ee3798"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-030.json",
+      "sha256": "8744d4c26d80d41889baf720517755ff3235ed1ce6b55714086be939e5c9a796"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-031.json",
+      "sha256": "81e782ac0ee9999c1c85ad72e1a0bb8d64e15fc20db88198102753b00fa60edb"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-032.json",
+      "sha256": "7e1e6636a08dbbe8a021a0a60b37717c2425ae70c007833f77661bec5493f5b8"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-033.json",
+      "sha256": "af5f3e3855e847bd92080a4adaacb18ae4d536091201916617c40c0ead0181c0"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-034.json",
+      "sha256": "8655c263c648edd3cf28cbea58b24b1fc80f29ea5fd7c1a75728e812f9766d5a"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-035.json",
+      "sha256": "3e139e74d8ad2c8297dde11ff98d263386d0ff6202da437fedc6c02fc18546a3"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-036.json",
+      "sha256": "9b451bc962bc2e3dd101b1682ba61531ef99958b4ae5ca7f10bfa7f1de43105c"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-037.json",
+      "sha256": "35e7bbf148711146de96398bddd2dd6cb9aeec7de9538e5ad178786236daa7fc"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-038.json",
+      "sha256": "2b463e6c003ebf625ca617b050fe8d349a276ccda3b3a1dd2fd5b16b3494f00f"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-039.json",
+      "sha256": "de71fec74fcfc3bedf7e944e63f69a41ef6195ec9c406588309d7ddfe0ef47dc"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/ledgers/item-040.json",
+      "sha256": "e903b68eea4381c320a3bdcdbf02e4bd66783a1f9fa32d1d9a126bf0e2e8a591"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/claims/2026-10-19-b/meta.json",
+      "sha256": "5ab7a76abaca1fb5862ecc5e902f97da5528f95f69aa67f71adddd7cf096c861"
+    },
+    {
       "path": "benchmark/scoreboard/raw/mockmed/first_run/2026-10-18-a/first_run.json",
       "sha256": "5948cd90cd29a502f17c9874cc2000b4192ae006d2f6a9975c98b69bdc0da387"
     },
@@ -1313,11 +1485,11 @@
     },
     {
       "path": "benchmark/scoreboard/raw/spend.json",
-      "sha256": "0ea09548610ba073a8e4c75421f455b181cad5e8146f6789c465f0758a76dd80"
+      "sha256": "e2db424506475e299c01b947fdd4235b29e035ce7cd07795746e7ab468245abd"
     },
     {
       "path": "benchmark/scoreboard/scoreboard.json",
-      "sha256": "da8c58c28fffc7b7335b960996075971c4fa9b78424c65e88d6e5e704ebd5ad0"
+      "sha256": "292a4aa7245875fa1b707c43a8ddd5b5e8b1bce629adf5cc77461e768bd9b6ea"
     },
     {
       "path": "benchmark/silent_wrong_action/results.json",
