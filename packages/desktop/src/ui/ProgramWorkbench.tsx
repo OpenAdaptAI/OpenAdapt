@@ -52,22 +52,22 @@ function NodeInspector({ node }: { node: QualificationNode }) {
 
       <div className="program-inspector-lanes">
         <EvidenceState
-          label="Resolve"
+          label="Finds the field"
           state={targetRungs.length ? "present" : "none"}
           value={targetRungs.length ? `${targetRungs.length} evidence types` : "Not applicable"}
         />
         <EvidenceState
-          label="Identity"
+          label="Right record"
           state={node.identity?.armed ? "present" : node.identity?.applicable ? "warn" : "none"}
-          value={node.identity?.armed ? "Armed" : node.identity?.applicable ? "Not armed" : "Not applicable"}
+          value={node.identity?.armed ? "Checked" : node.identity?.applicable ? "Not checked" : "Not needed"}
         />
         <EvidenceState
-          label="Screen"
+          label="Screen check"
           state={node.postconditions.length ? "present" : "none"}
           value={node.postconditions.length ? `${node.postconditions.length} checks` : "Not declared"}
         />
         <EvidenceState
-          label="Effect"
+          label="Read-back"
           state={node.effects.length ? "present" : "none"}
           value={node.effects.length ? `${node.effects.length} independent checks` : "Not declared"}
         />
@@ -176,8 +176,8 @@ function ProgramMap({ graph }: { graph: QualificationGraph }) {
                     <strong>{displayTitle(node)}</strong>
                   </span>
                   <span className="program-node-signals" aria-label="Step controls">
-                    {node.identity?.armed && <i title="Identity gate">I</i>}
-                    {node.effects.length > 0 && <i title="Effect check">E</i>}
+                    {node.identity?.armed && <i title="Checks the right record">R</i>}
+                    {node.effects.length > 0 && <i title="Reads the saved record back">C</i>}
                     {node.halts.length > 0 && <i title="Stop rules">H</i>}
                   </span>
                 </button>
@@ -200,11 +200,11 @@ function EvidenceMatrix({ graph }: { graph: QualificationGraph }) {
       <table className="program-matrix">
         <thead>
           <tr>
-            <th>Program step</th>
-            <th>Target evidence</th>
-            <th>Identity gate</th>
+            <th>Step</th>
+            <th>Finds the field</th>
+            <th>Right record</th>
             <th>Screen check</th>
-            <th>Effect check</th>
+            <th>Read-back</th>
           </tr>
         </thead>
         <tbody>
@@ -214,7 +214,7 @@ function EvidenceMatrix({ graph }: { graph: QualificationGraph }) {
               <tr key={`evidence-${node.id}`}>
                 <td><strong>{displayTitle(node)}</strong><small className="mono">{node.id}</small></td>
                 <td data-state={rungs.length ? "present" : "none"}>{rungs.length ? rungs.map((rung) => rung.label).join(", ") : "Not applicable"}</td>
-                <td data-state={node.identity?.armed ? "present" : node.identity?.applicable ? "warn" : "none"}>{node.identity?.armed ? "Armed" : node.identity?.applicable ? "Not armed" : "Not applicable"}</td>
+                <td data-state={node.identity?.armed ? "present" : node.identity?.applicable ? "warn" : "none"}>{node.identity?.armed ? "Checked" : node.identity?.applicable ? "Not checked" : "Not needed"}</td>
                 <td data-state={node.postconditions.length ? "present" : "none"}>{node.postconditions.length ? `${node.postconditions.length} declared` : "Not declared"}</td>
                 <td data-state={node.effects.length ? "present" : "none"}>{node.effects.length ? `${node.effects.length} independent` : "Not declared"}</td>
               </tr>
@@ -252,7 +252,7 @@ export function ProgramWorkbench({ graph }: { graph: QualificationGraph }) {
     <div className="program-workbench surface-phosphor">
       <div className="program-workbench-topbar">
         <div>
-          <span className="program-kicker">Local compiled program</span>
+          <span className="program-kicker">The steps</span>
           <strong>{graph.bundle.name}</strong>
         </div>
         <span className="program-trace-state"><i /> No live trace bound</span>

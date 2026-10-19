@@ -152,7 +152,7 @@ export function ExecutionTargetForm({
 
   return (
     <>
-      <Field label="Application surface" htmlFor={`${idPrefix}-backend`}>
+      <Field label="App type" htmlFor={`${idPrefix}-backend`}>
         <select
           id={`${idPrefix}-backend`}
           className="input"

@@ -46,6 +46,7 @@ from openadapt_flow.ir import (
     StructuralHandle,
     StructuralLocator,
 )
+from openadapt_flow.runtime.step_timing import timed_span
 
 
 class LinuxBackendError(RuntimeError):
@@ -351,6 +352,7 @@ class LinuxBackend:
         assert self._viewport is not None
         return self._viewport
 
+    @timed_span("screenshot")
     def screenshot(self) -> bytes:
         window = self._resolve_window()
         if (

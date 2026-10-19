@@ -35,8 +35,8 @@ export function Advanced({
 
   const tools = [
     {
-      title: "All task versions",
-      body: "Every version of every task with replay, governed run, run detail, and teach controls.",
+      title: "All workflow versions",
+      body: "Every version of every workflow with replay, governed run, run detail, and teach controls.",
       action: onLibrary,
       label: "Open all versions",
     },
@@ -70,20 +70,20 @@ export function Advanced({
     <div className="content simple">
       <PageHead
         title="Advanced"
-        sub="For automation engineers and IT. These tools work on the same tasks as the main screens."
+        sub="For automation engineers and IT. These tools work on the same workflows as the main screens."
       />
       <section className="advanced-tool">
         <div>
           <h2>Exact checks</h2>
           <p>
-            The full readiness test for one task: the program map, each step's
+            The full readiness test for one workflow: the program map, each step's
             risk, right-record and record-check settings, test cases, approval,
             locking, export, and deploy.
           </p>
         </div>
         {tasks.length > 0 ? (
           <div className="advanced-picker">
-            <Field label="Task" htmlFor={`${id}-task`}>
+            <Field label="Workflow" htmlFor={`${id}-task`}>
               <select
                 id={`${id}-task`}
                 className="input"
@@ -102,7 +102,7 @@ export function Advanced({
             </Button>
           </div>
         ) : (
-          <p className="simple-sub">Show OpenAdapt a task first.</p>
+          <p className="simple-sub">Record a workflow first.</p>
         )}
       </section>
       {tools.map((tool) => (

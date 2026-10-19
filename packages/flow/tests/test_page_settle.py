@@ -206,6 +206,9 @@ def test_dom_text_presence_requires_visible_uncovered_text(browser) -> None:
         time.sleep(0.3)
         assert backend.visible_text_present("Visible words here") is True
         assert backend.visible_text_present("visiblewords") is True  # squash
+        # OCR-recorded texts misread punctuation; letters and digits decide.
+        assert backend.visible_text_present("Visible-words, here.") is True
+        assert backend.visible_text_present("Visible words theirs") is None
         assert backend.visible_text_present("Framed words") is True
         for absent in (
             "Hidden words",

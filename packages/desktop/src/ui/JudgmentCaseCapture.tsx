@@ -463,7 +463,7 @@ export function JudgmentCaseCapture({
         <Button variant="primary" disabled={busy} onClick={() => void capture()} data-testid="capture-judgment-case">
           {busy ? "Saving…" : "Save reviewed case locally"}
         </Button>
-        <span className="page-sub">Flow seals the case into the next qualification revision. This does not create a runtime task.</span>
+        <span className="page-sub">Flow seals the case into the next qualification revision. This does not start a run.</span>
       </div>
     </Card>
   );

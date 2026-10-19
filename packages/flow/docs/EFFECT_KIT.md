@@ -141,6 +141,7 @@ environment-assigned surrogate key is the right choice for it.
 |---|---|---|---|
 | `onscreen` | `OnScreenReadbackVerifier` | re-OCR the saved value off the live screen — the **no-API default** for GUI-only recordings; auto-derived from the demonstration. **Different-path** (re-open the record) is default-eligible; **same-surface** (re-read the write's own form) is opt-in only | measured in `benchmark/effect_readback/` — different-path false-CONFIRM 0, same-surface > 0. **A read-back CONFIRMED is a consistency signal, NOT transactional proof** (`docs/LIMITS.md`) |
 | `ui_readback` | `SeparateSessionReadbackVerifier` | the application's own record page, opened by identifier in a separate browser with its own sign-in, read-only, fields read from the page structure. **Tier 2: not a system-of-record read** | CI against MockMed's server-rendered record pages in a real browser; measured in `benchmark/ui_readback/` (see [the section below](#separate-session-ui-read-back-ui_readback)) |
+| `desktop_readback` | `DesktopReadbackVerifier` | the record looked up the way a person does it, in a separate desktop, RDP or Citrix session: search, open the one matching result, read the fields through UI Automation or OCR. Types only into the search box. **Tier 2 with its own sign-in, tier 3 without; not a system-of-record read** | CI against the WinForms patient-notes fixture (UI Automation, through the real agent and client) and the RDP kiosk's look-up panel (real OCR); see [the section below](#separate-session-desktop-read-back-desktop_readback) |
 | `rest` | `RestRecordVerifier` | GET a JSON records document (templatable path, secret-isolated auth headers) | live in CI against the MockMed transactional back end; Frappe-shaped read in the reference matrix (PR #131) |
 | `fhir` | `FhirEffectVerifier` | FHIR R4 search → flattened resources | CI against a byte-faithful fake FHIR server; **opt-in live test** against a real local OpenEMR |
 | `graphql` | `GraphQLRecordVerifier` | ONE read-only GraphQL query (a `mutation`/`subscription` refuses to construct), records extracted at a dotted path; optional freshness window → STALE demotion | **contract-proven in CI against a fake session** -- read-only guard, entity binding, error-body handling, staleness; not live-proven against a production GraphQL endpoint |
@@ -546,6 +547,8 @@ A blank field never counts as proof that nothing was saved.
 | taught by demonstration (reset, then read) | 3, `reacquired-state` | `screen_readback` | a save only the form showed; a wrong value in a marked field | a page served from a cache the write filled; a duplicate submit; a lost update by another writer; fields nobody marked |
 | hand-configured `onscreen`, same screen | 4, `screen-consistency` | `screen_readback` | a value the save's own screen shows wrong | anything the screen paints but the record never got |
 | `ui_readback` (separate signed-in browser session) | 2, `independent-session` | `screen_readback` | the above, without sharing the acting session | it is still the same application, not its record store |
+| `desktop_readback` with its own sign-in (RDP logon or the app's sign-in form) | 2, `independent-session` | `screen_readback` | the same, for desktop, RDP and Citrix applications | the same; and OCR can misread |
+| `desktop_readback` in a separate window as the same user | 3, `reacquired-state` | `screen_readback` | a save the acting window only showed | a view the same user's cache serves |
 | REST, SQL, FHIR and other system-of-record reads | 1, `independent-system` | `independent_readback` | what the record store holds | |
 
 A check taught by demonstration is never a system-of-record read and never
@@ -692,6 +695,154 @@ fixtures, not production rates.
 - A duplicate that lands after the check has read isn't seen. That's true of
   every read after the save.
 
+## Separate-session desktop read-back (`desktop_readback`)
+
+If a person can look the record up, OpenAdapt can check it. Use this when the
+application is a desktop client, or is published over RDP or Citrix, and
+there is no API, database, or export to read. After the save, Flow does what a
+person does to check a save:
+
+1. opens its own session, described in `session` with the same fields as
+   `backend:`. A network RDP session logs on with the read-back account in
+   `credentials`. A Windows session is a second in-guest agent in a separate
+   Windows session. A Citrix, macOS or Linux session is a separate window. Flow
+   refuses a session that is, or may be, the one that types: the same agent
+   (`localhost` and `127.0.0.1` count as the same), the same RDP host and
+   user, or a window that the typing window's selector could also match. It
+   checks when the config loads and again after `--backend`, `--agent-url`,
+   `--rdp-host` and the bundle's recorded target pick the typing backend;
+2. signs in through the application's own form, if `sign_in` is declared;
+3. types the search query into the search box and presses the search button
+   (or Enter);
+4. if a results list appears, opens the one result that shows the record's
+   identifier. Two matching results stop the check. No match counts as "not
+   found" only when the application shows its `not_found` marker;
+5. checks that the record view shows the identifier (`identity`) on its own:
+   `REQ-4815` matches `Request ID: REQ-4815` but not `REQ-4815-01`;
+6. reads each declared field: through UI Automation (the control's value or
+   name) on Windows, or with OCR (the text right of or below a label) on any
+   screen; and
+7. judges the effect contract with the shared judge.
+
+The look-up can't save anything. Every input goes through one guard. It may
+type only into the search box (and the sign-in fields while signing in),
+press Enter only in the search box, select the search box's own text before
+it retypes, and click only the search button, the sign-in button, and one
+result. Before each click, and before typing, it reads the text under the
+point, the control's label, and its UI Automation name and id. Any of them with
+a save-like word (Save, Submit, Sign, Post, Delete, Approve, Send, and others)
+stops the check. Words are matched whole, so a "Submitted" status in a result
+row is data, not a button. On the pixel path Flow can't prove where keyboard
+focus is. It clicks the search box, types, and checks that the box then shows
+exactly the query before it submits. Use a read-only account anyway.
+
+```yaml
+backend:
+  kind: rdp
+  rdp_host: kiosk.example.org
+  rdp_username: clerk          # the account that types
+effects:
+  kind: desktop_readback
+  desktop_readback:
+    session: { kind: rdp, rdp_host: kiosk.example.org }
+    credentials: { username_env: APP_READER_USERNAME, password_env: APP_READER_PASSWORD }
+    search:
+      box: { text: "Find appointment", at: below, region: [40, 320, 470, 360] }
+      query: { param: request_id }
+      submit: { text: "Find", region: [40, 320, 470, 360] }
+    ready: { text: "Request ID", at: right, region: [40, 320, 470, 360] }
+    not_found: { text: "No appointment found", region: [40, 320, 470, 360] }
+    identity:
+      reader: { text: "Request ID", at: right, region: [40, 320, 470, 360] }
+      value: { param: request_id }
+      field: request_id
+    fields:
+      appointment_slot: { control: { text: "Slot", at: right, region: [40, 320, 470, 360] } }
+      visit_type: { control: { text: "Visit type", at: right, region: [40, 320, 470, 360] }, casefold: true }
+```
+
+On Windows, name controls by UI Automation instead:
+`{ automation_id: searchBox }` or `{ role: button, name: Search }`. A list or
+grid of results is `open: { results: { automation_id: patientGrid } }`.
+`shows` makes a marker count only when its text contains a phrase, for
+example `ready: { automation_id: patientHeader, shows: "Patient:" }`. Markers
+(`ready`, `not_found`, `signed_in`) and the identity need text or a control,
+never only a region: an empty area is "there" whether or not anything is in
+it.
+
+Each look-up opens its own connection. A window, a second agent, or an RDP
+logon that reconnects to the reader's disconnected session can still show
+what an earlier look-up left on screen. So a record view (or not-found
+message) that was up before the search counts only after it goes away or
+changes. A view that looks the same before and after the search stops the
+check, because a stale screen and a refreshed one can't be told apart. Set
+the read-back account's RDP sessions to end on disconnect to avoid that stop.
+A look-up that runs past its time limit gets no more input, and no new
+session opens while it is still running.
+
+`sign_in` (the application's own sign-in form) is accepted only with a
+network RDP session. Other sessions persist and stay signed in, so their
+form is not a sign-in per check. When the session is already signed in, the
+check stops: it must sign in with its own account to be a separate session.
+Result rows are record data, so the save-word check reads only the results
+control's declared name and id, not the row text. On the sign-in button,
+"OK" and "Submit" are allowed.
+
+| The look-up shows | Verdict |
+|---|---|
+| the saved values | CONFIRMED |
+| a different value read through UI Automation | REFUTED. The run ends `RECONCILIATION_REQUIRED` |
+| a different value read with OCR | INDETERMINATE (halt). OCR can misread, so a mismatch is never taken as proof the save is wrong |
+| the application's not-found marker | never CONFIRMED. A REFUTED verdict carries no count: a record the search doesn't find is never proof that nothing was saved, so the run ends in reconciliation |
+| a count check (`record_written`, `count_new_only`, an idempotency key) without `open.results` | INDETERMINATE (halt): one record view can't show a duplicate. With `open.results`, the results must show exactly one match. Only rows on screen count: a duplicate on another page or below a virtualized list's fold isn't seen |
+| `exact_new_set`, or `expected_count` above 1 | INDETERMINATE (halt): one record view shows one record |
+| an effect on a field the look-up doesn't declare | INDETERMINATE (halt) |
+| two matching results, another record's identifier, a missing control, a value below the OCR confidence floor, a shortened or unparseable value, a refused input, or a failed sign-in | INDETERMINATE (halt) |
+
+**How strong it is.** With its own sign-in (an RDP logon with the read-back
+account, or the application's sign-in form) the check declares tier 2
+(`INDEPENDENT_SESSION`, check level `separate_session`), the same as
+`ui_readback`, and the same per-entry approval pilot applies. Without its own
+sign-in (a second window as the same user) it declares tier 3
+(`PERSISTED_STATE_REACQUISITION`, `reopened`), which can't end `VERIFIED`. The
+assurance grade is `screen_readback` either way, and the adapter sets
+`independent_system_of_record = False`.
+
+**Tested.** `tests/test_desktop_readback.py` runs the WinForms patient-notes
+fixture as a UI Automation stand-in served by the real in-guest agent and read
+by the real `WindowsBackend` client, with the fixture's own `pn_db.py`
+persistence, and the RDP kiosk's look-up panel drawn at the Tk layout and read
+by the real OCR engine through the RDP backend, a Citrix Workspace window
+(`CitrixWorkspaceBackend`) and a native macOS window (`MacOSBackend`). It has
+not yet been run on the live Windows VM, the Docker RDP fixture, or a live
+Citrix session.
+
+### Limits
+
+- Everything in the `ui_readback` limits applies: it sees only what the record
+  view shows, and it is only as independent as the application's own read
+  path.
+- OCR can misread. A misread makes a correct save stop (never pass as
+  wrong). In principle a misread could also make a near-miss look right. The
+  confidence floor (`min_ocr_confidence`) and exact comparison make that
+  unlikely, not impossible. For a field where one character matters (a dose,
+  an amount), use UI Automation or a system-of-record read.
+- OCR drops and adds spaces, so a field read with OCR is compared with every
+  space removed on both sides: a difference only in spaces is invisible there.
+- On the pixel path Flow can't prove keyboard focus. It checks that the
+  search box shows the query before it submits, and stops otherwise.
+- The search query must be text the run already knows (an identifier or a
+  name). A record whose identifier is assigned at save needs a search by
+  something the run typed.
+- The record view is read as one record. A list of items under a record (all
+  encounters for a patient) is read only by `ui_readback` today.
+- Each look-up repeats the search, so a slow application costs time on every
+  poll within `timeout_s`.
+- macOS and Linux sessions are read with OCR. Their accessibility trees are
+  not read by this check yet.
+- Citrix is a separate Workspace window named in `session`. Opening a new
+  Citrix session for each check is the operator's launcher, not Flow's.
+
 ## Configuration reference (`deployment.yaml` → `effects:`)
 
 Complete commented example: [`docs/deployment.example.yaml`](./deployment.example.yaml).
@@ -727,6 +878,7 @@ Per-kind required fields:
 |---|---|---|
 | `onscreen` | (none — auto-derived from the demo) | `readback_region`, `readback_min_ratio` (hand-config fallback) |
 | `ui_readback` | `ui_readback` section: `record_url`, `sign_in` (env-var names for the read-back account), `ready_selector`, `row_selector`, `fields`, `identity` | `url_params`, `empty_selector`, `not_found_selector`, `read_post_paths`, per-field `attribute` / `date_format` / `casefold`, `truncation_markers`, `navigation_timeout_s` |
+| `desktop_readback` | `desktop_readback` section: `session` (a `backend:`-style config for the read-back session), `search` (`box`, `query`), `ready`, `identity`, `fields` | `credentials` (env-var names), `sign_in`, `search.submit`, `open.results`, `not_found`, per-control `shows` / `region` / `at`, per-field `date_format` / `casefold`, `min_ocr_confidence`, `navigation_timeout_s`, `settle_s` |
 | `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `path_params`, `auth`, `records_drop_fields` |
 | `graphql` | `base_url` + `graphql_query` | `graphql_variables` (`{param: ...}` entity binding), `graphql_records_path`, `graphql_freshness_field` + `graphql_freshness_window_s`, `auth` |
 | `fhir` | `base_url` | `resource_type`, `search_params`, `search_param_exprs`, `field_paths`, `access_token_env` or `smart_backend`, `verify_tls`, `records_drop_fields` |
@@ -790,7 +942,8 @@ effects:
 
 A database connection is not required. Configure the strongest qualified
 read boundary that the workflow has: REST/FHIR/GraphQL, read-only SQL, a file
-or report export, the separate-session UI read-back (`ui_readback`), or a
+or report export, the separate-session UI read-back (`ui_readback`), the
+separate-session desktop read-back (`desktop_readback`), or a
 persisted-state re-acquisition. Do not configure a same-surface
 screen read-back as proof of a consequential write.
 
@@ -889,8 +1042,8 @@ profiles gate on the tier, never on prose:
 | Tier | Label | What it proves | Adapters |
 |---|---|---|---|
 | 1 | `independent-system` | a read through the SoR's own API/DB/store -- independent proof | `rest`, `graphql`, `fhir`, `sql`, `file`, `email`, `document`, `document-hash` |
-| 2 | `independent-session` | same app, read through its record page in a separate, separately signed-in, read-only session. **Not a system-of-record read** | `ui_readback`; a plugin may also declare it |
-| 3 | `reacquired-state` | the app's own UI re-navigated to re-fetch persisted state | `onscreen` with a different-path read-back |
+| 2 | `independent-session` | same app, read through its record page in a separate, separately signed-in, read-only session. **Not a system-of-record read** | `ui_readback`; `desktop_readback` with its own sign-in; a plugin may also declare it |
+| 3 | `reacquired-state` | the app's own UI re-navigated to re-fetch persisted state | `onscreen` with a different-path read-back; `desktop_readback` without its own sign-in |
 | 4 | `screen-consistency` | the same surface the write drove still shows the value | `onscreen` same-surface |
 
 **Same-application screen read-back is a LOWER-CONFIDENCE consistency check,
@@ -912,6 +1065,7 @@ the measured false-CONFIRM evidence behind the demotion.
 | document / report arrival + parse | **supported** | `document` |
 | document store (exact bytes) | **supported** | `document-hash` |
 | separate-session UI read-back | **supported** | `ui_readback`; tier 2, not a system-of-record read |
+| separate-session desktop read-back | **supported** | `desktop_readback`; UI Automation or OCR; tier 2 with its own sign-in, tier 3 without |
 | on-screen read-back | **supported (demoted)** | `onscreen`; tiers 3-4, consistency only |
 | customer plugin | **supported (SDK seam)** | any kind via the entry-point group below |
 

@@ -121,6 +121,13 @@ def _api_template_params(step: "Step") -> Optional[set[str]]:
         for value in binding.headers.values():
             scan(value)
         walk(binding.body_template)
+        if binding.web_form is not None:
+            # A recorded form save names its inputs per field, and its
+            # pre-checks template their queries.
+            names.update(f.param for f in binding.web_form.fields if f.param)
+            for check in binding.web_form.prechecks:
+                for _name, value in check.query:
+                    scan(value)
     except ValueError:
         return None
     return names
