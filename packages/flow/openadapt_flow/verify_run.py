@@ -24,7 +24,10 @@ The output is an ``openadapt.effect-receipt/v1`` document as RFC-0002
   ``verification_tier``. Two optional fields, ``remediates`` and
   ``correlation_id``, link a receipt to the receipt it remediates and to the
   caller's own trace; they are absent unless given, and when present they
-  are inside ``receipt_sha256`` and so inside the signature.
+  are inside ``receipt_sha256`` and so inside the signature. ``checked_how``
+  (``unchecked``, ``same_screen``, ``reopened``, ``separate_session``,
+  ``system_of_record``) names the check level of the weakest read; it is signed the same way,
+  and a receipt without it (issued before it existed) still checks.
 * Every digest whose input can hold customer data is salted with a per-run
   256-bit salt (``openadapt.run-salt/v1``). The salt lives only in a private
   file (mode 0600): the baseline, or a run file when there is no baseline.
@@ -53,6 +56,11 @@ from pathlib import Path
 from typing import Any, Literal, Mapping, Optional, Sequence, cast
 from uuid import uuid4
 
+from openadapt_types.approval import (
+    CHECKED_HOW_TIER,
+    CHECKED_HOW_VALUES,
+    checked_how_for_flow_tier,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
@@ -133,6 +141,7 @@ _NEW_RECEIPT_FIELDS = (
     "verification_tier",
 )
 _OPTIONAL_RECEIPT_FIELDS = ("remediates", "correlation_id")
+#: ``checked_how`` is optional too, but a label, not an opaque id.
 _SIGNATURE_FIELDS = frozenset(
     {
         "schema",
@@ -594,6 +603,7 @@ def verify_run(
     approver: Optional[Mapping[str, Any]] = None,
     remediates: Optional[str] = None,
     correlation_id: Optional[str] = None,
+    write_attempted: bool = False,
 ) -> dict[str, Any]:
     """Read the system of record and return ``{"receipt", "evidence"}``.
 
@@ -607,6 +617,11 @@ def verify_run(
     (its ``execution_id`` and salt) and the baseline is consumed. Without one,
     a new salt is drawn and written to ``private_dir/effect-run.private.json``
     (mode 0600), so ``private_dir`` is required.
+
+    ``write_attempted`` says the caller knows the save was dispatched (the
+    guarded save sets it after its commit step). Then a store that shows
+    nothing is ``reconciliation_required``, not ``halted_before_effect``: the
+    write may still land, so it must not be retried.
     """
 
     from openadapt_types.execute import (
@@ -730,6 +745,13 @@ def verify_run(
     observed_effect = _observed(verdicts)
     verification_tier = readback_class(verdicts, tiers)
     unread = verification_tier == "unchecked"
+    # The check level the weakest read reached (RFC-0002 open question 5):
+    # how it was checked, whatever the verdict.
+    checked_how = (
+        "unchecked"
+        if unread or weakest is None
+        else checked_how_for_flow_tier(int(weakest))
+    )
     strength = (
         _STRENGTH_BY_TIER.get(weakest) if weakest is not None and not unread else None
     )
@@ -761,7 +783,11 @@ def verify_run(
         outcome = ExecuteTerminalOutcomeV1.REJECTED_POLICY
     elif read_proves_write:
         outcome = ExecuteTerminalOutcomeV1.VERIFIED
-    elif effect_verdict == "REFUTED" and observed_effect == "absent":
+    elif (
+        effect_verdict == "REFUTED"
+        and observed_effect == "absent"
+        and not write_attempted
+    ):
         # The store shows nothing landed, whatever the executor said.
         outcome = ExecuteTerminalOutcomeV1.HALTED_BEFORE_EFFECT
     else:
@@ -801,6 +827,7 @@ def verify_run(
         "readback": {
             "verifier_identity": identity,
             "verification_tier": verification_tier,
+            "checked_how": checked_how,
             "baseline_sha256": baseline_sha,
             "baseline_read_at": baseline_read_at,
             "read_at": read_at,
@@ -853,6 +880,7 @@ def verify_run(
     receipt["executor_ref_sha256"] = executor_ref
     receipt["effect_verdict"] = effect_verdict
     receipt["verification_tier"] = verification_tier
+    receipt["checked_how"] = checked_how
     if remediates is not None:
         receipt["remediates"] = remediates
     if correlation_id is not None:
@@ -887,7 +915,12 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
     if receipt.get("schema_version") != EFFECT_RECEIPT_SCHEMA:
         return "schema_version"
     v1_names = set(ExecuteEvidenceReceiptV1.model_fields)
-    allowed = v1_names | set(_NEW_RECEIPT_FIELDS) | set(_OPTIONAL_RECEIPT_FIELDS)
+    allowed = (
+        v1_names
+        | set(_NEW_RECEIPT_FIELDS)
+        | set(_OPTIONAL_RECEIPT_FIELDS)
+        | {"checked_how"}
+    )
     if set(receipt) - allowed:
         return "unknown_field"
     if any(name not in receipt for name in _NEW_RECEIPT_FIELDS):
@@ -915,6 +948,12 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
     for name in _OPTIONAL_RECEIPT_FIELDS:
         if name in receipt and not _OPAQUE.match(str(receipt[name])):
             return name
+    # Optional: receipts issued before RFC-0002 open question 5 lack it.
+    if "checked_how" in receipt and (
+        receipt["checked_how"] not in CHECKED_HOW_VALUES
+        or CHECKED_HOW_TIER[receipt["checked_how"]] != receipt["verification_tier"]
+    ):
+        return "checked_how"
     outcome = receipt.get("outcome")
     if outcome in ("verified", "rolled_back_verified") and (
         receipt["effect_verdict"] != "CONFIRMED"
@@ -945,6 +984,7 @@ def evidence_problem(
         evidence.get("effect_verdict") != receipt.get("effect_verdict")
         or executor.get("kind") != receipt.get("executor_kind")
         or readback.get("verification_tier") != receipt.get("verification_tier")
+        or readback.get("checked_how") != receipt.get("checked_how")
     ):
         return "evidence_mismatch"
     if salting.get("scheme") != SALT_SCHEME or not _DIGEST.match(

@@ -111,6 +111,52 @@ ChannelRead(channel="export", raw="AC-1042", session="independent",
 A workflow can use either kind. A write step that needs `system_of_record` values
 (see below) halts on values backed only by a live-session export.
 
+## The reading step
+
+`openadapt_flow.records.read.read_field()` reads one field on a live backend.
+By default it uses one channel: the clipboard when you pass one, otherwise
+OCR of the field's region. The value comes back `unchecked` with no Seal.
+
+```python
+from openadapt_flow.records.read import SystemClipboard, read_field
+
+field = read_field(spec, backend, (412, 188, 160, 22), clipboard=SystemClipboard())
+```
+
+For the clipboard read, Flow sets the clipboard to a marker value, clicks the
+field, presses the copy keys (default `Meta+a`, `Meta+c`) and reads it back.
+A clipboard still holding the marker means the copy did nothing, so it counts
+as no read rather than as the previous field's value. Every read records the
+screenshot hash, the region and the crop hash in `region`.
+
+With `proof=ReadProof(double_read=True)`, both the clipboard and OCR are read
+and compared. The reported value is the clipboard's, because it is the
+application's own text. Comparison reuses the read-back rules in
+`openadapt_flow.runtime.effects.readback_values`: reads that differ only in
+look-alike characters are `ambiguous` and go to review, never treated as a
+match. With `seal=True`, pass a `SealRef`; it is attached to the value.
+
+Confidence is a fixed rule:
+
+| Reads | Confidence |
+|---|---|
+| Two or more agree | 0.95 + 0.05 × OCR engine confidence |
+| Clipboard only | 0.7 |
+| OCR only | 0.6 × OCR engine confidence |
+| Look-alike characters only | 0.4 |
+| Disagree | 0.1 |
+| Nothing parsed | 0 |
+
+A field goes to review when its reads disagree or are ambiguous, when a value
+is not valid for its kind, when `double_read` is on and only one channel read
+a value, or when it sets `min_confidence` and falls below it.
+
+For `reopened`, close the record, reopen it by its identity
+fields, read the field again with `session="reopened"`, and pass the new read
+to `add_read()`. For `system_of_record`, pass a database or API read, or an export of committed data
+(`channel_read(spec, "export", value, source_kind="committed_store")`). A live-session export gives at most `same_screen`. A later read that disagrees sends
+the field to review.
+
 ## Requiring a grade before a write
 
 A step that writes a read value into a system of record can declare the
@@ -125,3 +171,82 @@ GradeGate(min_grade="reopened", fields=("amount_due",)).check(record)
 
 These grades describe how a read value was checked. Write checks keep their
 own grades in `openadapt_flow.assurance`.
+
+## Review queue
+
+`openadapt_flow.records.review.ReviewQueue` holds only problems: field reads
+that need review and halts while reading a record. Agreeing reads never enter
+it. It is a directory (`items/`, `decisions/`), so it works offline.
+
+```python
+from openadapt_flow.execute.keys import load_or_create_private_key
+from openadapt_flow.records.review import ReviewQueue, apply_decision
+
+queue = ReviewQueue("./review")
+queue.add_record(record, created_by="runner:host-1")
+for item in queue.open_items():
+    print(item.field, item.reason, item.candidates)
+
+decision = queue.decide(
+    item.item_id,
+    action="accept_read",  # or correct, reject, reread
+    channel="clipboard",
+    reviewer="person:clerk-1",
+    signing_key=load_or_create_private_key(data_dir),
+    schema=schema,
+)
+settled = apply_decision(field_read, decision, item)
+```
+
+The queue enforces these rules:
+
+- Only a `person:` principal can decide. Model and agent principals are
+  refused.
+- The principal that created an item cannot decide it.
+- A decision is written once and signed with the local Ed25519 key over the
+  decision and the hash of the item. `queue.check()` verifies both.
+- A corrected value must be valid for the field's kind.
+- A decision settles the value but keeps its grade. A person's choice is not a
+  read, so it never raises the grade.
+
+## Export
+
+`openadapt_flow.records.export.export()` writes settled records to a sink.
+
+```python
+import sqlite3
+from openadapt_flow.records.export import CsvSink, DbApiSink, WebhookSink, export
+
+result = export(records, schema, CsvSink("accounts.csv"))
+export(records, schema, DbApiSink(sqlite3.connect("accounts.db"), "accounts"))
+export(records, schema, WebhookSink("http://127.0.0.1:8080/records"))
+for skipped in result.skipped:
+    print(skipped.record_key, skipped.reason)
+```
+
+Each row has one column per field, typed by kind (`integer` as a number,
+`boolean` as true or false, amounts as exact decimal strings), and these
+provenance columns:
+
+| Column | Meaning |
+|---|---|
+| `_record_key` | Identity field values. The database sink upserts on it. |
+| `_run_id`, `_read_at` | The run that read the record, and when. |
+| `_grade` | The weakest field grade. |
+| `_receipt_sha256` | The Seal that covers the record, once sealed. |
+| `_provenance` | JSON: per field, the grade, channels, confidence, screenshot hash, region, crop hash and review decision. |
+
+A record is exported only when no field still needs review and each field is
+at least `min_grade` (default `unchecked`, so every settled record). A review
+decision settles a value but does not lift it over `min_grade`. Pass `min_grade="system_of_record"` to export only values confirmed
+by an independent channel. Skipped records are returned with the reason.
+
+`DbApiSink` takes any DB-API 2.0 connection. For Postgres, pass a `psycopg`
+connection and `paramstyle="format"`. `WebhookSink` refuses a URL that is not
+on this machine unless you pass `allow_remote=True`, and never sends through a
+proxy. `CsvSink` prefixes text cells that start with `=`, `+`, `-` or `@` with
+an apostrophe so a spreadsheet does not run them as formulas.
+
+A `ColumnMapping` renames fields and adds fixed columns for a layout you
+define. Standard target models are templates outside the core; see
+`examples/records/`.

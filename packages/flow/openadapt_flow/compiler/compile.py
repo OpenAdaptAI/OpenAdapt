@@ -17,7 +17,16 @@ import re
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, Literal, Optional, Sequence, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Iterable,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    cast,
+)
 
 if TYPE_CHECKING:
     from openadapt_flow.compiler.annotate import StepAnnotator
@@ -927,6 +936,14 @@ def _new_text_postcondition(
     else:
         chosen = max(pool, key=lambda c: c[1])[0]
     return Postcondition(kind=PostconditionKind.TEXT_PRESENT, text=chosen.text.strip())
+
+
+def _values_to_params(params: Mapping[str, str]) -> dict[str, list[str]]:
+    by_value: dict[str, list[str]] = {}
+    for name, value in params.items():
+        if value:
+            by_value.setdefault(value, []).append(name)
+    return by_value
 
 
 def _postconditions(
@@ -2855,9 +2872,12 @@ def compile_recording(
     if mine_effects:
         from openadapt_flow.compiler.effect_mining import (
             derive_different_path_readback,
+            mine_reference,
             mine_step_effects,
         )
 
+        references: dict[str, str] = {}
+        view_lines: dict[str, list[OcrLine]] = {}
         bindings: dict[str, str] = {}
         if bind_effect_params:
             by_value: dict[str, list[str]] = {}
@@ -2876,11 +2896,41 @@ def compile_recording(
                 step.effects = mined.effects
             log = logger.info if mined.disposition != "none" else logger.debug
             log("effect-mining %s: %s", step.id, mined.reason)
+            i_event = int(event["i"])
+            if _sa is not None:
+                view_lines[step.id] = cached_lines(i_event, "after", _sa)
+            if mined.disposition == "readback" and _sb is not None and _sa is not None:
+                # A reference number the save's screen newly shows: same-screen
+                # evidence, and a way to find the record again.
+                found = mine_reference(
+                    cached_lines(i_event, "before", _sb),
+                    view_lines[step.id],
+                    exclude_texts,
+                )
+                if found is not None:
+                    capture, demo_value = found
+                    for effect in step.effects:
+                        if effect.readback is not None:
+                            effect.readback.reference = capture
+                    references[step.id] = demo_value
+                    logger.info("effect-mining %s: learned a reference number", step.id)
 
         # Cross-step pass: upgrade a same-surface on-screen read-back to the
         # stronger DIFFERENT-PATH oracle when the demonstration re-opened the
-        # record by an independent path (the default-eligible signal).
-        upgraded = derive_different_path_readback(steps)
+        # record by an independent path, or found it again by a search on this
+        # run's input or on the reference number the save showed.
+        unique_bindings = {
+            value: names[0]
+            for value, names in _values_to_params(params).items()
+            if len(names) == 1
+        }
+        upgraded = derive_different_path_readback(
+            steps,
+            references=references,
+            view_lines=view_lines,
+            param_bindings=unique_bindings,
+            secret_params=frozenset(secret_params),
+        )
         if upgraded:
             logger.info(
                 "effect-mining: upgraded %d on-screen read-back(s) to "
