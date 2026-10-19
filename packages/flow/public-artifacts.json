@@ -1053,7 +1053,7 @@
     },
     {
       "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/items.csv",
-      "sha256": "8d672d6dfa3444fe6493c96b39b20ac050c910d9a0292fab02dd36912c6a9929"
+      "sha256": "d1efa8d67bb331c14e9ece8f9097fe693c9305f0712612904c3a671f90e1f9d3"
     },
     {
       "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-001.json",
@@ -1252,8 +1252,12 @@
       "sha256": "a1be20a3d613a099c84820483a6442cf7f2a1ec41913839a6aae80601db77389"
     },
     {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-050-2.json",
+      "sha256": "aeb081f8d337b1b7e7e50ac06c7855e7fdc2b7242e421b615152fa0c77bc581f"
+    },
+    {
       "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/meta.json",
-      "sha256": "b9949c3b20f19ce6fc6733c070d31f07731bdf97a6a1076f0bc8b749730bfec0"
+      "sha256": "79cede4d506e1f271301c1e9616faa6c4171f4f5b12858bfa1c25a68da99443d"
     },
     {
       "path": "benchmark/scoreboard/raw/openimis/first_run/launch-4/items.csv",
@@ -1281,11 +1285,11 @@
     },
     {
       "path": "benchmark/scoreboard/raw/spend.json",
-      "sha256": "a7c00271e64ef3f18dc3d008690e7609bce91542b0da5eb3bd7df2bec14f40ea"
+      "sha256": "322179303a6b8a908f7f5c079bbcd1a6a62f7eeec636273ab0c412e96d6b8edd"
     },
     {
       "path": "benchmark/scoreboard/scoreboard.json",
-      "sha256": "1c595b5bbb392a09d716d784ed1ac2456e5d96783f796d33921900e8dbecdb99"
+      "sha256": "d1c33028e63cfc4a95020d32869a1ae76ee87079af35619a8c7a814216ed8d87"
     },
     {
       "path": "benchmark/silent_wrong_action/results.json",
