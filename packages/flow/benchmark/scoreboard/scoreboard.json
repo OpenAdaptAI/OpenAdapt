@@ -8,9 +8,60 @@
         "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
         "items": 100,
         "attempts": 100,
-        "runs": [
-          "2026-10-18-a"
-        ],
+        "runs": {
+          "2026-10-18-a": {
+            "items": 100,
+            "attempts": 100,
+            "runs": [
+              "2026-10-18-a"
+            ],
+            "normal_items": 47,
+            "correct": 47,
+            "correct_rate": 1.0,
+            "silent_wrong": 2,
+            "safe_stops_normal": 0,
+            "fault_items": 53,
+            "fault_items_by_kind": {
+              "optimistic": {
+                "correct": 0,
+                "silent_wrong": 1,
+                "safe_stop": 0,
+                "flagged_wrong": 0
+              },
+              "ui_change": {
+                "correct": 51,
+                "silent_wrong": 0,
+                "safe_stop": 0,
+                "flagged_wrong": 0
+              },
+              "wrong_record": {
+                "correct": 0,
+                "silent_wrong": 1,
+                "safe_stop": 0,
+                "flagged_wrong": 0
+              }
+            },
+            "planned_items": 100,
+            "done_correctly_all_items": 98,
+            "flagged_wrong": 0,
+            "paused": 0,
+            "model_calls_per_item": 5.0,
+            "tokens_per_item": 40629,
+            "cost_usd_total": 3.8604,
+            "cost_usd_per_item": 0.0386,
+            "approvals_asked": 0,
+            "timed_correct_items": 3,
+            "item_s_median": 16.38,
+            "item_s_p90": 16.67,
+            "wall_s_median": 20.1,
+            "wall_s_p90": 20.22,
+            "items_per_hour": 181.1,
+            "host_load_1m": {
+              "min": 8.46,
+              "max": 523.94
+            }
+          }
+        },
         "normal_items": 47,
         "correct": 47,
         "correct_rate": 1.0,
@@ -96,9 +147,41 @@
         "label": "2. Agent's first run under OpenAdapt (recorded, read back, compiled)",
         "items": 1,
         "attempts": 1,
-        "runs": [
-          "2026-10-18-a"
-        ],
+        "runs": {
+          "2026-10-18-a": {
+            "items": 1,
+            "attempts": 1,
+            "runs": [
+              "2026-10-18-a"
+            ],
+            "normal_items": 1,
+            "correct": 1,
+            "correct_rate": 1.0,
+            "silent_wrong": 0,
+            "safe_stops_normal": 0,
+            "fault_items": 0,
+            "fault_items_by_kind": {},
+            "planned_items": 1,
+            "done_correctly_all_items": 1,
+            "flagged_wrong": 0,
+            "paused": 0,
+            "model_calls_per_item": 5.0,
+            "tokens_per_item": 40632,
+            "cost_usd_total": 0.0132,
+            "cost_usd_per_item": 0.0132,
+            "approvals_asked": 1,
+            "timed_correct_items": 0,
+            "item_s_median": null,
+            "item_s_p90": null,
+            "wall_s_median": null,
+            "wall_s_p90": null,
+            "items_per_hour": null,
+            "host_load_1m": {
+              "min": 176.29,
+              "max": 176.29
+            }
+          }
+        },
         "normal_items": 1,
         "correct": 1,
         "correct_rate": 1.0,
@@ -146,9 +229,60 @@
         "label": "3. Compiled program driving the UI",
         "items": 100,
         "attempts": 102,
-        "runs": [
-          "2026-10-18-a"
-        ],
+        "runs": {
+          "2026-10-18-a": {
+            "items": 100,
+            "attempts": 102,
+            "runs": [
+              "2026-10-18-a"
+            ],
+            "normal_items": 47,
+            "correct": 47,
+            "correct_rate": 1.0,
+            "silent_wrong": 0,
+            "safe_stops_normal": 0,
+            "fault_items": 53,
+            "fault_items_by_kind": {
+              "optimistic": {
+                "correct": 0,
+                "silent_wrong": 0,
+                "safe_stop": 1,
+                "flagged_wrong": 0
+              },
+              "ui_change": {
+                "correct": 51,
+                "silent_wrong": 0,
+                "safe_stop": 0,
+                "flagged_wrong": 0
+              },
+              "wrong_record": {
+                "correct": 0,
+                "silent_wrong": 0,
+                "safe_stop": 0,
+                "flagged_wrong": 1
+              }
+            },
+            "planned_items": 100,
+            "done_correctly_all_items": 98,
+            "flagged_wrong": 1,
+            "paused": 0,
+            "model_calls_per_item": 0.0,
+            "tokens_per_item": 0,
+            "cost_usd_total": 0.0,
+            "cost_usd_per_item": 0.0,
+            "approvals_asked": 0,
+            "timed_correct_items": 0,
+            "item_s_median": null,
+            "item_s_p90": null,
+            "wall_s_median": null,
+            "wall_s_p90": null,
+            "items_per_hour": null,
+            "host_load_1m": {
+              "min": 82.45,
+              "max": 532.93
+            }
+          }
+        },
         "normal_items": 47,
         "correct": 47,
         "correct_rate": 1.0,
@@ -216,9 +350,48 @@
         "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
         "items": 72,
         "attempts": 72,
-        "runs": [
-          "study-main-0c642bc0"
-        ],
+        "runs": {
+          "study-main-0c642bc0": {
+            "items": 72,
+            "attempts": 72,
+            "runs": [
+              "study-main-0c642bc0"
+            ],
+            "normal_items": 63,
+            "correct": 62,
+            "correct_rate": 0.9841,
+            "silent_wrong": 0,
+            "safe_stops_normal": 1,
+            "fault_items": 9,
+            "fault_items_by_kind": {
+              "duplicate_check": {
+                "correct": 0,
+                "silent_wrong": 0,
+                "safe_stop": 9,
+                "flagged_wrong": 0
+              }
+            },
+            "planned_items": 72,
+            "done_correctly_all_items": 62,
+            "flagged_wrong": 0,
+            "paused": 0,
+            "model_calls_per_item": 10.65,
+            "tokens_per_item": null,
+            "cost_usd_total": 6.4239,
+            "cost_usd_per_item": 0.0892,
+            "approvals_asked": 0,
+            "timed_correct_items": 62,
+            "item_s_median": 31.16,
+            "item_s_p90": 40.93,
+            "wall_s_median": 36.49,
+            "wall_s_p90": 46.09,
+            "items_per_hour": 80.5,
+            "host_load_1m": {
+              "min": 2.572265625,
+              "max": 17.49951171875
+            }
+          }
+        },
         "normal_items": 63,
         "correct": 62,
         "correct_rate": 0.9841,
@@ -366,9 +539,41 @@
         "label": "2. Agent's first run under OpenAdapt (recorded, read back, compiled)",
         "items": 1,
         "attempts": 1,
-        "runs": [
-          "2026-10-18-a"
-        ],
+        "runs": {
+          "2026-10-18-a": {
+            "items": 1,
+            "attempts": 1,
+            "runs": [
+              "2026-10-18-a"
+            ],
+            "normal_items": 1,
+            "correct": 1,
+            "correct_rate": 1.0,
+            "silent_wrong": 0,
+            "safe_stops_normal": 0,
+            "fault_items": 0,
+            "fault_items_by_kind": {},
+            "planned_items": 1,
+            "done_correctly_all_items": 1,
+            "flagged_wrong": 0,
+            "paused": 0,
+            "model_calls_per_item": 12.0,
+            "tokens_per_item": 158278,
+            "cost_usd_total": 0.1007,
+            "cost_usd_per_item": 0.1007,
+            "approvals_asked": 0,
+            "timed_correct_items": 0,
+            "item_s_median": null,
+            "item_s_p90": null,
+            "wall_s_median": null,
+            "wall_s_p90": null,
+            "items_per_hour": null,
+            "host_load_1m": {
+              "min": 4.28,
+              "max": 4.28
+            }
+          }
+        },
         "normal_items": 1,
         "correct": 1,
         "correct_rate": 1.0,
@@ -414,16 +619,88 @@
       },
       "program": {
         "label": "3. Compiled program driving the UI",
-        "items": 72,
-        "attempts": 72,
-        "runs": [
-          "study-main-0c642bc0"
-        ],
-        "normal_items": 63,
-        "correct": 62,
-        "correct_rate": 0.9841,
+        "items": 81,
+        "attempts": 81,
+        "runs": {
+          "study-main-0c642bc0": {
+            "items": 72,
+            "attempts": 72,
+            "runs": [
+              "study-main-0c642bc0"
+            ],
+            "normal_items": 63,
+            "correct": 62,
+            "correct_rate": 0.9841,
+            "silent_wrong": 0,
+            "safe_stops_normal": 1,
+            "fault_items": 9,
+            "fault_items_by_kind": {
+              "duplicate_check": {
+                "correct": 0,
+                "silent_wrong": 0,
+                "safe_stop": 9,
+                "flagged_wrong": 0
+              }
+            },
+            "planned_items": 72,
+            "done_correctly_all_items": 62,
+            "flagged_wrong": 0,
+            "paused": 0,
+            "model_calls_per_item": 0.0,
+            "tokens_per_item": 0,
+            "cost_usd_total": 0.0,
+            "cost_usd_per_item": 0.0,
+            "approvals_asked": 0,
+            "timed_correct_items": 62,
+            "item_s_median": 24.14,
+            "item_s_p90": 26.92,
+            "wall_s_median": 29.71,
+            "wall_s_p90": 32.52,
+            "items_per_hour": 100.6,
+            "host_load_1m": {
+              "min": 3.044921875,
+              "max": 12.78515625
+            }
+          },
+          "worklist-std-2026-10-19": {
+            "items": 9,
+            "attempts": 9,
+            "runs": [
+              "worklist-std-2026-10-19"
+            ],
+            "normal_items": 9,
+            "correct": 8,
+            "correct_rate": 0.8889,
+            "silent_wrong": 0,
+            "safe_stops_normal": 1,
+            "fault_items": 0,
+            "fault_items_by_kind": {},
+            "planned_items": 26,
+            "done_correctly_all_items": 8,
+            "flagged_wrong": 0,
+            "paused": 17,
+            "model_calls_per_item": 0.0,
+            "tokens_per_item": 0,
+            "cost_usd_total": 0.0,
+            "cost_usd_per_item": 0.0,
+            "approvals_asked": 0,
+            "timed_correct_items": 8,
+            "item_s_median": 15.79,
+            "item_s_p90": 16.13,
+            "wall_s_median": 15.96,
+            "wall_s_p90": 16.36,
+            "items_per_hour": 226.0,
+            "host_load_1m": {
+              "min": 7.31,
+              "max": 11.02
+            }
+          }
+        },
+        "normal_items": 72,
+        "correct": 70,
+        "correct_rate": 0.9722,
         "silent_wrong": 0,
-        "safe_stops_normal": 1,
+        "safe_stops_normal": 2,
         "fault_items": 9,
         "fault_items_by_kind": {
           "duplicate_check": {
@@ -433,27 +710,27 @@
             "flagged_wrong": 0
           }
         },
-        "planned_items": 72,
-        "done_correctly_all_items": 62,
+        "planned_items": 98,
+        "done_correctly_all_items": 70,
         "flagged_wrong": 0,
-        "paused": 0,
+        "paused": 17,
         "model_calls_per_item": 0.0,
         "tokens_per_item": 0,
         "cost_usd_total": 0.0,
         "cost_usd_per_item": 0.0,
         "approvals_asked": 0,
-        "timed_correct_items": 62,
-        "item_s_median": 24.14,
-        "item_s_p90": 26.92,
-        "wall_s_median": 29.71,
-        "wall_s_p90": 32.52,
-        "items_per_hour": 100.6,
+        "timed_correct_items": 70,
+        "item_s_median": 23.73,
+        "item_s_p90": 26.88,
+        "wall_s_median": 29.47,
+        "wall_s_p90": 32.42,
+        "items_per_hour": 107.4,
         "host_load_1m": {
           "min": 3.044921875,
           "max": 12.78515625
         },
         "hand_check": {
-          "rows_not_correct": 10,
+          "rows_not_correct": 11,
           "checked": 0,
           "confirmed": 0,
           "items": []
@@ -467,6 +744,219 @@
               "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
             },
             "note": "the study's published set: engine 0c642bc0, warm, blocks 2-10, valid runs; timed per its start gate (1-minute load < 12)"
+          },
+          {
+            "run": "worklist-std-2026-10-19",
+            "imported_from": "/Users/abrichr/oa/scratch/scoreboard-runs/openemr/std2",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm46/packages/flow/openadapt_flow",
+              "git_head": "b82131e51f52d6a365e910cc0818ea92e4c10a1a"
+            }
+          }
+        ]
+      },
+      "program_fast": {
+        "label": "4. Compiled program, throughput fast path",
+        "items": 17,
+        "attempts": 17,
+        "runs": {
+          "worklist-fast-2026-10-19": {
+            "items": 17,
+            "attempts": 17,
+            "runs": [
+              "worklist-fast-2026-10-19"
+            ],
+            "normal_items": 17,
+            "correct": 16,
+            "correct_rate": 0.9412,
+            "silent_wrong": 0,
+            "safe_stops_normal": 1,
+            "fault_items": 0,
+            "fault_items_by_kind": {},
+            "planned_items": 26,
+            "done_correctly_all_items": 16,
+            "flagged_wrong": 0,
+            "paused": 9,
+            "model_calls_per_item": 0.0,
+            "tokens_per_item": 0,
+            "cost_usd_total": 0.0,
+            "cost_usd_per_item": 0.0,
+            "approvals_asked": 0,
+            "timed_correct_items": 4,
+            "item_s_median": 15.67,
+            "item_s_p90": 15.83,
+            "wall_s_median": 15.84,
+            "wall_s_p90": 16.0,
+            "items_per_hour": 229.5,
+            "host_load_1m": {
+              "min": 10.19,
+              "max": 15.18
+            }
+          }
+        },
+        "normal_items": 17,
+        "correct": 16,
+        "correct_rate": 0.9412,
+        "silent_wrong": 0,
+        "safe_stops_normal": 1,
+        "fault_items": 0,
+        "fault_items_by_kind": {},
+        "planned_items": 26,
+        "done_correctly_all_items": 16,
+        "flagged_wrong": 0,
+        "paused": 9,
+        "model_calls_per_item": 0.0,
+        "tokens_per_item": 0,
+        "cost_usd_total": 0.0,
+        "cost_usd_per_item": 0.0,
+        "approvals_asked": 0,
+        "timed_correct_items": 4,
+        "item_s_median": 15.67,
+        "item_s_p90": 15.83,
+        "wall_s_median": 15.84,
+        "wall_s_p90": 16.0,
+        "items_per_hour": 229.5,
+        "host_load_1m": {
+          "min": 10.19,
+          "max": 15.18
+        },
+        "hand_check": {
+          "rows_not_correct": 1,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
+        "sources": [
+          {
+            "run": "worklist-fast-2026-10-19",
+            "imported_from": "/Users/abrichr/oa/scratch/scoreboard-runs/openemr/fast2",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm46/packages/flow/openadapt_flow",
+              "git_head": "b82131e51f52d6a365e910cc0818ea92e4c10a1a"
+            }
+          }
+        ]
+      },
+      "parallel": {
+        "label": "6. Fast path or API step, N parallel workers",
+        "items": 31,
+        "attempts": 31,
+        "runs": {
+          "worklist-8w-2026-10-19": {
+            "items": 8,
+            "attempts": 8,
+            "runs": [
+              "worklist-8w-2026-10-19"
+            ],
+            "normal_items": 8,
+            "correct": 5,
+            "correct_rate": 0.625,
+            "silent_wrong": 0,
+            "safe_stops_normal": 3,
+            "fault_items": 0,
+            "fault_items_by_kind": {},
+            "planned_items": 26,
+            "done_correctly_all_items": 5,
+            "flagged_wrong": 0,
+            "paused": 18,
+            "model_calls_per_item": 0.0,
+            "tokens_per_item": 0,
+            "cost_usd_total": 0.0,
+            "cost_usd_per_item": 0.0,
+            "approvals_asked": 0,
+            "timed_correct_items": 0,
+            "item_s_median": null,
+            "item_s_p90": null,
+            "wall_s_median": null,
+            "wall_s_p90": null,
+            "items_per_hour": null,
+            "host_load_1m": {
+              "min": 13.16,
+              "max": 13.16
+            }
+          },
+          "worklist-8w-window1-2026-10-19": {
+            "items": 23,
+            "attempts": 23,
+            "runs": [
+              "worklist-8w-window1-2026-10-19"
+            ],
+            "normal_items": 23,
+            "correct": 21,
+            "correct_rate": 0.913,
+            "silent_wrong": 0,
+            "safe_stops_normal": 2,
+            "fault_items": 0,
+            "fault_items_by_kind": {},
+            "planned_items": 26,
+            "done_correctly_all_items": 21,
+            "flagged_wrong": 0,
+            "paused": 3,
+            "model_calls_per_item": 0.0,
+            "tokens_per_item": 0,
+            "cost_usd_total": 0.0,
+            "cost_usd_per_item": 0.0,
+            "approvals_asked": 0,
+            "timed_correct_items": 0,
+            "item_s_median": null,
+            "item_s_p90": null,
+            "wall_s_median": null,
+            "wall_s_p90": null,
+            "items_per_hour": null,
+            "host_load_1m": {
+              "min": 13.21,
+              "max": 239.69
+            }
+          }
+        },
+        "normal_items": 31,
+        "correct": 26,
+        "correct_rate": 0.8387,
+        "silent_wrong": 0,
+        "safe_stops_normal": 5,
+        "fault_items": 0,
+        "fault_items_by_kind": {},
+        "planned_items": 52,
+        "done_correctly_all_items": 26,
+        "flagged_wrong": 0,
+        "paused": 21,
+        "model_calls_per_item": 0.0,
+        "tokens_per_item": 0,
+        "cost_usd_total": 0.0,
+        "cost_usd_per_item": 0.0,
+        "approvals_asked": 0,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": {
+          "min": 13.16,
+          "max": 239.69
+        },
+        "hand_check": {
+          "rows_not_correct": 5,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
+        "sources": [
+          {
+            "run": "worklist-8w-2026-10-19",
+            "imported_from": "/Users/abrichr/oa/scratch/scoreboard-runs/openemr/par8b",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm46/packages/flow/openadapt_flow",
+              "git_head": "b82131e51f52d6a365e910cc0818ea92e4c10a1a"
+            }
+          },
+          {
+            "run": "worklist-8w-window1-2026-10-19",
+            "imported_from": "/Users/abrichr/oa/scratch/scoreboard-runs/openemr/par8w1b",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm46/packages/flow/openadapt_flow",
+              "git_head": "b82131e51f52d6a365e910cc0818ea92e4c10a1a"
+            }
           }
         ]
       }
@@ -476,9 +966,48 @@
         "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
         "items": 50,
         "attempts": 51,
-        "runs": [
-          "2026-10-18-a"
-        ],
+        "runs": {
+          "2026-10-18-a": {
+            "items": 50,
+            "attempts": 51,
+            "runs": [
+              "2026-10-18-a"
+            ],
+            "normal_items": 49,
+            "correct": 49,
+            "correct_rate": 1.0,
+            "silent_wrong": 0,
+            "safe_stops_normal": 0,
+            "fault_items": 1,
+            "fault_items_by_kind": {
+              "ui_change": {
+                "correct": 1,
+                "silent_wrong": 0,
+                "safe_stop": 0,
+                "flagged_wrong": 0
+              }
+            },
+            "planned_items": 50,
+            "done_correctly_all_items": 50,
+            "flagged_wrong": 0,
+            "paused": 0,
+            "model_calls_per_item": 7.34,
+            "tokens_per_item": 75520,
+            "cost_usd_total": 2.9414,
+            "cost_usd_per_item": 0.0588,
+            "approvals_asked": 0,
+            "timed_correct_items": 4,
+            "item_s_median": 39.64,
+            "item_s_p90": 52.49,
+            "wall_s_median": 47.46,
+            "wall_s_p90": 74.58,
+            "items_per_hour": 64.9,
+            "host_load_1m": {
+              "min": 6.94,
+              "max": 498.31
+            }
+          }
+        },
         "normal_items": 49,
         "correct": 49,
         "correct_rate": 1.0,
@@ -543,9 +1072,38 @@
         "label": "2. Agent's first run under OpenAdapt (recorded, read back, compiled)",
         "items": 1,
         "attempts": 1,
-        "runs": [
-          "sb-sonnet-1"
-        ],
+        "runs": {
+          "sb-sonnet-1": {
+            "items": 1,
+            "attempts": 1,
+            "runs": [
+              "sb-sonnet-1"
+            ],
+            "normal_items": 1,
+            "correct": 1,
+            "correct_rate": 1.0,
+            "silent_wrong": 0,
+            "safe_stops_normal": 0,
+            "fault_items": 0,
+            "fault_items_by_kind": {},
+            "planned_items": 1,
+            "done_correctly_all_items": 1,
+            "flagged_wrong": 0,
+            "paused": 0,
+            "model_calls_per_item": 7.0,
+            "tokens_per_item": 70048,
+            "cost_usd_total": 0.0564,
+            "cost_usd_per_item": 0.0564,
+            "approvals_asked": 0,
+            "timed_correct_items": 0,
+            "item_s_median": null,
+            "item_s_p90": null,
+            "wall_s_median": null,
+            "wall_s_p90": null,
+            "items_per_hour": null,
+            "host_load_1m": null
+          }
+        },
         "normal_items": 1,
         "correct": 1,
         "correct_rate": 1.0,
@@ -592,10 +1150,81 @@
         "label": "3. Compiled program driving the UI",
         "items": 150,
         "attempts": 154,
-        "runs": [
-          "launch-4",
-          "launch-4-c100"
-        ],
+        "runs": {
+          "launch-4": {
+            "items": 50,
+            "attempts": 52,
+            "runs": [
+              "launch-4"
+            ],
+            "normal_items": 49,
+            "correct": 49,
+            "correct_rate": 1.0,
+            "silent_wrong": 0,
+            "safe_stops_normal": 0,
+            "fault_items": 1,
+            "fault_items_by_kind": {
+              "ui_change": {
+                "correct": 0,
+                "silent_wrong": 0,
+                "safe_stop": 1,
+                "flagged_wrong": 0
+              }
+            },
+            "planned_items": 100,
+            "done_correctly_all_items": 49,
+            "flagged_wrong": 0,
+            "paused": 50,
+            "model_calls_per_item": 0.0,
+            "tokens_per_item": 0,
+            "cost_usd_total": 0.0,
+            "cost_usd_per_item": 0.0,
+            "approvals_asked": 0,
+            "timed_correct_items": 0,
+            "item_s_median": null,
+            "item_s_p90": null,
+            "wall_s_median": null,
+            "wall_s_p90": null,
+            "items_per_hour": null,
+            "host_load_1m": {
+              "min": 59.0,
+              "max": 619.5
+            }
+          },
+          "launch-4-c100": {
+            "items": 100,
+            "attempts": 102,
+            "runs": [
+              "launch-4-c100"
+            ],
+            "normal_items": 100,
+            "correct": 99,
+            "correct_rate": 0.99,
+            "silent_wrong": 0,
+            "safe_stops_normal": 1,
+            "fault_items": 0,
+            "fault_items_by_kind": {},
+            "planned_items": 100,
+            "done_correctly_all_items": 99,
+            "flagged_wrong": 0,
+            "paused": 0,
+            "model_calls_per_item": 0.0,
+            "tokens_per_item": 0,
+            "cost_usd_total": 0.0,
+            "cost_usd_per_item": 0.0,
+            "approvals_asked": 0,
+            "timed_correct_items": 0,
+            "item_s_median": null,
+            "item_s_p90": null,
+            "wall_s_median": null,
+            "wall_s_p90": null,
+            "items_per_hour": null,
+            "host_load_1m": {
+              "min": 86.5,
+              "max": 532.9
+            }
+          }
+        },
         "normal_items": 149,
         "correct": 148,
         "correct_rate": 0.9933,
@@ -660,9 +1289,48 @@
         "label": "3r. Compiled program with self-repair (#1265, #1294)",
         "items": 6,
         "attempts": 8,
-        "runs": [
-          "2026-10-19-a"
-        ],
+        "runs": {
+          "2026-10-19-a": {
+            "items": 6,
+            "attempts": 8,
+            "runs": [
+              "2026-10-19-a"
+            ],
+            "normal_items": 5,
+            "correct": 5,
+            "correct_rate": 1.0,
+            "silent_wrong": 0,
+            "safe_stops_normal": 0,
+            "fault_items": 1,
+            "fault_items_by_kind": {
+              "ui_change": {
+                "correct": 0,
+                "silent_wrong": 0,
+                "safe_stop": 1,
+                "flagged_wrong": 0
+              }
+            },
+            "planned_items": 56,
+            "done_correctly_all_items": 5,
+            "flagged_wrong": 0,
+            "paused": 50,
+            "model_calls_per_item": 0.0,
+            "tokens_per_item": 0,
+            "cost_usd_total": 0.0,
+            "cost_usd_per_item": 0.0,
+            "approvals_asked": 0,
+            "timed_correct_items": 0,
+            "item_s_median": null,
+            "item_s_p90": null,
+            "wall_s_median": null,
+            "wall_s_p90": null,
+            "items_per_hour": null,
+            "host_load_1m": {
+              "min": 11.22,
+              "max": 26.3
+            }
+          }
+        },
         "normal_items": 5,
         "correct": 5,
         "correct_rate": 1.0,

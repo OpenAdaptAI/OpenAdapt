@@ -156,6 +156,7 @@ def build() -> dict[str, Any]:
         rows = schema.read_rows(items)
         tasks.setdefault(task, {}).setdefault(arm, {"rows": [], "meta": []})
         tasks[task][arm]["rows"].extend(rows)
+        tasks[task][arm].setdefault("runs", {})[run.name] = rows
         hc = run / "hand_check.json"
         if hc.is_file():
             tasks[task][arm].setdefault("hand_checks", []).extend(
@@ -191,6 +192,7 @@ def build() -> dict[str, Any]:
             out["tasks"][task][arm] = {
                 "label": ARM_LABEL.get(arm, arm),
                 **summarize(data["rows"]),
+                "runs": {name: summarize(rows) for name, rows in data["runs"].items()},
                 "hand_check": {
                     "rows_not_correct": len(to_check),
                     "checked": len(to_check & checked),
@@ -395,6 +397,19 @@ def markdown(sb: dict[str, Any]) -> str:
             if s["fault_items"]:
                 lines.append(
                     f"- {task} / {arm}: fault items {json.dumps(s['fault_items_by_kind'])}"
+                )
+        for arm, s in arms.items():
+            if len(s["runs"]) < 2:
+                continue
+            # Runs of one arm can differ in engine or harness (meta.json);
+            # show each so a blended figure is never the only one.
+            for name, r in s["runs"].items():
+                lines.append(
+                    f"- {task} / {arm} / run `{name}`: {r['items']} rows, "
+                    f"{r['correct']} of {r['normal_items']} correct, "
+                    f"{r['paused']} paused, task s median "
+                    f"{_fmt(r['item_s_median'])} (timed rows only), "
+                    f"items/hour {_fmt(r['items_per_hour'])}"
                 )
         for arm, s in arms.items():
             hc = s["hand_check"]

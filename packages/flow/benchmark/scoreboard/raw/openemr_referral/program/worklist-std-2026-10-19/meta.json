@@ -1,0 +1,40 @@
+{
+  "protocol_version": "2026-10-18.1",
+  "written_at": "2026-10-19T11:23:10-0400",
+  "machine": "arm64 Darwin 24.6.0",
+  "cpu_count": 12,
+  "python": "3.12.13",
+  "engine": {
+    "path": "/Users/abrichr/oa/worktrees/scoreboard-arm46/packages/flow/openadapt_flow",
+    "git_head": "b82131e51f52d6a365e910cc0818ea92e4c10a1a"
+  },
+  "benchmark_git_head": "97effbd5379dd4242128e6d90e4ada2b8d1e9650",
+  "task": "openemr_referral",
+  "arm": "program",
+  "imported_from": "/Users/abrichr/oa/scratch/scoreboard-runs/openemr/std2",
+  "source_sha256": {
+    "summary.json": "b850db58f39eb8a2ae3bd9a721a3ff814e1e09dabb91019aaa5e57ecf8f443c7",
+    "items.json": "90501c6d92ccdccd5dd5ea3a31d4672c7b527ce763f327539941ba7e8be21f47"
+  },
+  "workers": 1,
+  "readback_window": 0,
+  "processes": false,
+  "speed": {
+    "speed_profile": "standard",
+    "native_fill": false,
+    "page_quiet_ms": 100,
+    "ocr_threads": null
+  },
+  "harness_engine_sha": "b82131e51f52d6a365e910cc0818ea92e4c10a1a",
+  "wall_s": 145.313,
+  "sign_in_s": {
+    "oa_clerk1": 2.44
+  },
+  "stop": {
+    "reason": "Identity check failed for step 'step_040' (click 'Confirm Create New Patient'): a target was found positionally (rung 'structural', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Emergency Contact: Confirm Create New Patient Cancel' (coverage 0.81) \u2014 refusing to act; run aborted",
+    "worker": "oa_clerk1",
+    "idx": 8,
+    "at": 1792421866.219306
+  },
+  "load1_mean": 8.64
+}
