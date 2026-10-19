@@ -68,8 +68,54 @@ A separate browser session (`ui_readback`) can also open the record by the
 number the save assigned: `ui_readback.reference` reads it from the run's
 page URL or screen and fills it into `record_url`.
 
-## Not in this version
+## A fresh session on desktop and RDP/Citrix
 
-Reopening a desktop or RDP/Citrix record in a fresh session (relaunching the
-app, or a second session with its own credentials) is not built. Those
-surfaces reach `reopened` at most, which is not `VERIFIED`.
+`effects.kind: fresh_session` reads the record somewhere that never held
+the typed value, so a form buffer or a client cache can't confirm a save
+that wasn't persisted. That is tier 2, check level `separate_session`, so it
+counts toward `VERIFIED` under Standard and Regulated.
+
+```yaml
+effects:
+  kind: fresh_session
+  fresh_session:
+    surface: rdp                 # or desktop
+    rdp:
+      host: 10.0.0.5
+      username_env: CHECK_RDP_USER       # a separate, read-only account
+      password_env: CHECK_RDP_PASSWORD
+      acting_username_env: RUN_RDP_USER  # refused if it is the same account
+    start:                       # optional: open the app in the new session
+      - {action: key, key: "win+r"}
+      - {action: type, text: "C:\\App\\app.exe"}
+      - {action: key, key: enter}
+    ready_text: Patient search
+```
+
+- **desktop** starts a new process of the app after the save: `command`
+  runs on the machine Flow runs on, or `start` steps open it through the
+  run's own desktop. A launch that exits within `handoff_grace_s` was handed
+  to the running window (a single-instance app) and halts the check. The new
+  process is stopped afterwards.
+- **rdp** opens a second RDP session with the account in `username_env` and
+  `password_env`, and closes it afterwards. It refuses the run's own
+  account when `acting_username_env` names it. Credentials never appear in
+  reasons or reports.
+
+In the new session Flow runs `start`, waits for `ready_text`, then replays
+the effect's learned reopen (the admitted search by a run input or by the
+reference number, which is read in the acting session). The read-only guard
+covers every step.
+
+Limits:
+
+- It is tested only on scripted backends over the MockMed fault server. No
+  live desktop app, RDP host or Citrix session runs in CI.
+- A relaunched desktop process runs as the same OS user and may share local
+  caches or files with the acting process. A single-instance app that keeps
+  its launcher running isn't detected.
+- The learned reopen must work from the new session's start screen (for
+  example a search box that is always shown); otherwise add `start` steps.
+- Citrix: a second published-app session from the same broker may share a
+  server-side cache. Qualify it before relying on it.
+- A second concurrent session may use a license seat.

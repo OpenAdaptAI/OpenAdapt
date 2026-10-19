@@ -253,8 +253,9 @@ def test_identity_of_configs_without_plugin_fields_is_unchanged():
     cfg = EffectsConfig(kind="rest", base_url="http://127.0.0.1:9")
     verifier = build_effect_verifier(cfg)
     legacy_config = cfg.model_dump(mode="json")
-    # Neither the plugin fields, ui_readback, smart_backend, surfaces nor
-    # records_drop_fields existed when identities were first issued.
+    # Neither the plugin fields, ui_readback, smart_backend, surfaces,
+    # records_drop_fields nor fresh_session existed when identities were first
+    # issued.
     for name in (
         "options",
         "option_params",
@@ -263,6 +264,7 @@ def test_identity_of_configs_without_plugin_fields_is_unchanged():
         "smart_backend",
         "surfaces",
         "records_drop_fields",
+        "fresh_session",
     ):
         legacy_config.pop(name, None)
     legacy_config["candidates"] = []

@@ -49,8 +49,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: packages-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # A pull request's newer push supersedes its older run. Runs on main are
+  # never cancelled: desktop-release.yml needs every main commit's own result.
+  group: packages-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -257,6 +259,7 @@ jobs:
             openadapt_flow/runtime/effects/document_hash.py \
             openadapt_flow/runtime/effects/email_delivery.py \
             openadapt_flow/runtime/effects/fhir.py \
+            openadapt_flow/runtime/effects/fresh_session.py \
             openadapt_flow/runtime/effects/file_arrival.py \
             openadapt_flow/runtime/effects/graphql.py \
             openadapt_flow/runtime/effects/onscreen.py \
@@ -701,6 +704,34 @@ jobs:
       - name: Record and read with the core-only install
         run: CONTAINER_ENGINE=docker bash packages/capture/scripts/linux_xvfb_quickstart.sh
 
+  # desktop-release.yml publishes a merged Desktop version that is not on PyPI
+  # yet, so a change that should ship must bump the version in its own pull
+  # request. This fails a feat, fix or perf without a bump (and prints the
+  # prepare_release.py command), and checks a bump's version sources and
+  # changelog section.
+  desktop-release-intent:
+    name: desktop release intent
+    needs: scope
+    if: github.event_name == 'pull_request' && needs.scope.outputs.desktop == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: packages/desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Require a version bump for a change that should ship
+        # The checkout is the pull request's merge commit: HEAD^1 is the base
+        # tip. HEAD (the merge) is the head: its versions and changelog are what
+        # would land, and HEAD^1..HEAD lists exactly the pull request's commits.
+        run: python scripts/check_release_intent.py --base HEAD^1 --head HEAD
+
   packages-gate:
     name: packages-gate
     needs:
@@ -721,6 +752,7 @@ jobs:
       - desktop-build
       - install-weight
       - capture-core-record
+      - desktop-release-intent
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
