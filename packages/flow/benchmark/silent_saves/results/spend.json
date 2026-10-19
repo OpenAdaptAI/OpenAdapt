@@ -1,5 +1,5 @@
 {
-  "total_usd": 3.709005,
+  "total_usd": 5.687285,
   "entries": [
     {
       "usd": 0.038614,
@@ -552,6 +552,366 @@
       "arm": "agent",
       "note": "item 60",
       "at": 1792428911.3485708
+    },
+    {
+      "usd": 0.053068,
+      "arm": "agent",
+      "note": "item 61",
+      "at": 1792428960.2161448
+    },
+    {
+      "usd": 0.045482,
+      "arm": "agent",
+      "note": "item 62",
+      "at": 1792428988.262775
+    },
+    {
+      "usd": 0.045312,
+      "arm": "agent",
+      "note": "item 63",
+      "at": 1792429018.21721
+    },
+    {
+      "usd": 0.053021,
+      "arm": "agent",
+      "note": "item 64",
+      "at": 1792429051.364415
+    },
+    {
+      "usd": 0.053087,
+      "arm": "agent",
+      "note": "item 65",
+      "at": 1792429087.376252
+    },
+    {
+      "usd": 0.038694,
+      "arm": "agent",
+      "note": "item 66",
+      "at": 1792429122.493245
+    },
+    {
+      "usd": 0.038524,
+      "arm": "agent",
+      "note": "item 67",
+      "at": 1792429146.778114
+    },
+    {
+      "usd": 0.038604,
+      "arm": "agent",
+      "note": "item 68",
+      "at": 1792429170.1863282
+    },
+    {
+      "usd": 0.038714,
+      "arm": "agent",
+      "note": "item 69",
+      "at": 1792429196.6328661
+    },
+    {
+      "usd": 0.038504,
+      "arm": "agent",
+      "note": "item 70",
+      "at": 1792429217.222403
+    },
+    {
+      "usd": 0.038574,
+      "arm": "agent",
+      "note": "item 71",
+      "at": 1792429256.80897
+    },
+    {
+      "usd": 0.038674,
+      "arm": "agent",
+      "note": "item 72",
+      "at": 1792429283.751564
+    },
+    {
+      "usd": 0.038574,
+      "arm": "agent",
+      "note": "item 73",
+      "at": 1792429310.863852
+    },
+    {
+      "usd": 0.038544,
+      "arm": "agent",
+      "note": "item 74",
+      "at": 1792429332.273153
+    },
+    {
+      "usd": 0.038574,
+      "arm": "agent",
+      "note": "item 75",
+      "at": 1792429358.5589812
+    },
+    {
+      "usd": 0.038644,
+      "arm": "agent",
+      "note": "item 76",
+      "at": 1792429384.606098
+    },
+    {
+      "usd": 0.038544,
+      "arm": "agent",
+      "note": "item 77",
+      "at": 1792429409.746635
+    },
+    {
+      "usd": 0.038634,
+      "arm": "agent",
+      "note": "item 78",
+      "at": 1792429436.1742132
+    },
+    {
+      "usd": 0.038714,
+      "arm": "agent",
+      "note": "item 79",
+      "at": 1792429462.450604
+    },
+    {
+      "usd": 0.038704,
+      "arm": "agent",
+      "note": "item 80",
+      "at": 1792429486.542188
+    },
+    {
+      "usd": 0.038724,
+      "arm": "agent",
+      "note": "item 81",
+      "at": 1792429513.2518919
+    },
+    {
+      "usd": 0.038574,
+      "arm": "agent",
+      "note": "item 82",
+      "at": 1792429533.8823428
+    },
+    {
+      "usd": 0.038604,
+      "arm": "agent",
+      "note": "item 83",
+      "at": 1792429558.216258
+    },
+    {
+      "usd": 0.038654,
+      "arm": "agent",
+      "note": "item 84",
+      "at": 1792429579.094811
+    },
+    {
+      "usd": 0.038644,
+      "arm": "agent",
+      "note": "item 85",
+      "at": 1792429606.407419
+    },
+    {
+      "usd": 0.038554,
+      "arm": "agent",
+      "note": "item 86",
+      "at": 1792429627.334021
+    },
+    {
+      "usd": 0.038664,
+      "arm": "agent",
+      "note": "item 87",
+      "at": 1792429651.976324
+    },
+    {
+      "usd": 0.038704,
+      "arm": "agent",
+      "note": "item 88",
+      "at": 1792429680.119682
+    },
+    {
+      "usd": 0.038584,
+      "arm": "agent",
+      "note": "item 89",
+      "at": 1792429705.529439
+    },
+    {
+      "usd": 0.038584,
+      "arm": "agent",
+      "note": "item 90",
+      "at": 1792429732.194092
+    },
+    {
+      "usd": 0.038614,
+      "arm": "agent",
+      "note": "item 91",
+      "at": 1792429757.115326
+    },
+    {
+      "usd": 0.038514,
+      "arm": "agent",
+      "note": "item 92",
+      "at": 1792429780.561768
+    },
+    {
+      "usd": 0.038664,
+      "arm": "agent",
+      "note": "item 93",
+      "at": 1792429806.705951
+    },
+    {
+      "usd": 0.038544,
+      "arm": "agent",
+      "note": "item 94",
+      "at": 1792429831.383838
+    },
+    {
+      "usd": 0.038534,
+      "arm": "agent",
+      "note": "item 95",
+      "at": 1792429859.78238
+    },
+    {
+      "usd": 0.019009,
+      "arm": "agent",
+      "note": "item 96",
+      "at": 1792429871.5209548
+    },
+    {
+      "usd": 0.018799,
+      "arm": "agent",
+      "note": "item 97",
+      "at": 1792429887.4652438
+    },
+    {
+      "usd": 0.018914,
+      "arm": "agent",
+      "note": "item 98",
+      "at": 1792429905.3285189
+    },
+    {
+      "usd": 0.018244,
+      "arm": "agent",
+      "note": "item 99",
+      "at": 1792429921.507998
+    },
+    {
+      "usd": 0.018304,
+      "arm": "agent",
+      "note": "item 100",
+      "at": 1792429937.045641
+    },
+    {
+      "usd": 0.011138,
+      "arm": "program_repair",
+      "note": "item 46 repair agent",
+      "at": 1792437548.5632188
+    },
+    {
+      "usd": 0.011768,
+      "arm": "program_repair",
+      "note": "item 47 repair agent",
+      "at": 1792437565.0681422
+    },
+    {
+      "usd": 0.011298,
+      "arm": "program_repair",
+      "note": "item 48 repair agent",
+      "at": 1792437580.756306
+    },
+    {
+      "usd": 0.011848,
+      "arm": "program_repair",
+      "note": "item 49 repair agent",
+      "at": 1792437596.8379688
+    },
+    {
+      "usd": 0.011778,
+      "arm": "program_repair",
+      "note": "item 50 repair agent",
+      "at": 1792437612.859605
+    },
+    {
+      "usd": 0.011038,
+      "arm": "program_repair",
+      "note": "item 51 repair agent",
+      "at": 1792437628.343231
+    },
+    {
+      "usd": 0.011058,
+      "arm": "program_repair",
+      "note": "item 52 repair agent",
+      "at": 1792437644.9591491
+    },
+    {
+      "usd": 0.010788,
+      "arm": "program_repair",
+      "note": "item 53 repair agent",
+      "at": 1792437660.51139
+    },
+    {
+      "usd": 0.011098,
+      "arm": "program_repair",
+      "note": "item 54 repair agent",
+      "at": 1792437677.467482
+    },
+    {
+      "usd": 0.011548,
+      "arm": "program_repair",
+      "note": "item 55 repair agent",
+      "at": 1792437693.079838
+    },
+    {
+      "usd": 0.035508,
+      "arm": "program_repair",
+      "note": "item 76 repair agent",
+      "at": 1792438596.933389
+    },
+    {
+      "usd": 0.036578,
+      "arm": "program_repair",
+      "note": "item 77 repair agent",
+      "at": 1792438608.8157408
+    },
+    {
+      "usd": 0.037258,
+      "arm": "program_repair",
+      "note": "item 78 repair agent",
+      "at": 1792438621.921231
+    },
+    {
+      "usd": 0.036748,
+      "arm": "program_repair",
+      "note": "item 79 repair agent",
+      "at": 1792438634.6056519
+    },
+    {
+      "usd": 0.035938,
+      "arm": "program_repair",
+      "note": "item 80 repair agent",
+      "at": 1792438646.60729
+    },
+    {
+      "usd": 0.036668,
+      "arm": "program_repair",
+      "note": "item 81 repair agent",
+      "at": 1792438660.2621691
+    },
+    {
+      "usd": 0.035918,
+      "arm": "program_repair",
+      "note": "item 82 repair agent",
+      "at": 1792438672.720184
+    },
+    {
+      "usd": 0.035938,
+      "arm": "program_repair",
+      "note": "item 83 repair agent",
+      "at": 1792438684.502201
+    },
+    {
+      "usd": 0.035818,
+      "arm": "program_repair",
+      "note": "item 84 repair agent",
+      "at": 1792438696.4496052
+    },
+    {
+      "usd": 0.036928,
+      "arm": "program_repair",
+      "note": "item 85 repair agent",
+      "at": 1792438710.049856
     }
   ]
 }

@@ -4,7 +4,7 @@
   "protocol": "silent-saves/2026-10-19.2",
   "app": "mockmed",
   "kind": "change",
-  "summary": "Repeated execution under change: 100 runs of one task. The schedule switches one UI change on for each block of items, then off again, and puts four server faults on fixed items.",
+  "summary": "Repeated execution under change: 100 runs of one task. The schedule switches one UI change on for each block of items, then off again, and puts five server faults on fixed items.",
   "schedule": "independent: each block has only its own change, so a change that stops an executor does not hide the blocks after it",
   "task": {
     "id": "mockmed.add_triage_note",

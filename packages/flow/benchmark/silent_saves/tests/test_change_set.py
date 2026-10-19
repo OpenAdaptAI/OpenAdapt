@@ -175,3 +175,9 @@ def test_item_timeout_records_the_item_as_stopped(tmp_path: Path) -> None:
     assert row["claimed_success"] == "False"
     assert "timed out" in row["error"]
     assert summary["false_stops"]["k"] == 1
+
+
+def test_readme_1_1_tables_match_the_runs() -> None:
+    from silent_saves import table_1_1
+
+    assert table_1_1.main(["--check"]) == 0

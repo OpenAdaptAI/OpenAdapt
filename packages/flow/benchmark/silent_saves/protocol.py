@@ -8,7 +8,7 @@ UI change is one of MockMed's existing drift modes.
 
 * 1.0.0: one fault kind per item, round robin, no UI change.
 * 1.1.0: repeated execution under change. 100 items of one task; each block
-  of items has one UI change switched on, and four items get a server fault.
+  of items has one UI change switched on, and five items get a server fault.
 """
 
 from __future__ import annotations
