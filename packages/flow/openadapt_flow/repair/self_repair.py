@@ -85,6 +85,7 @@ from openadapt_flow.ir import (
     Step,
     Workflow,
 )
+from openadapt_flow.jit.lifecycle import STANDARD_CHANGE_APPROVER
 from openadapt_flow.repair.candidate import (
     Actor,
     CampaignCaseResult,
@@ -467,6 +468,9 @@ class _ProbeGate(ApprovalGate):
         super().__init__("not_gated")
         self._checks = checks
         self._resume_form_state = resume_form_state
+        #: In probe mode no save runs: the run gate admits a repaired copy
+        #: whose admission is only a repair probe (``jit.lifecycle``).
+        self.stops_before_first_save = resume_form_state is None
         self.outcome: Optional[ProbeOutcome] = None
         self._approved_result: Optional[int] = None
 
@@ -1305,6 +1309,9 @@ class SelfRepair:
         checked = tuple(s.id for s in new_steps if s.anchor is not None) + (
             (step.id,) if mode == "replace" else ()
         )
+        _carry_admission(
+            bundle_dir, bundle_out, candidate.candidate_id, probe_only=True
+        )
         return _Patch(
             attempt=attempt,
             step=shown_step,
@@ -1640,6 +1647,15 @@ class SelfRepair:
                 evidence=evidence,
             )
             if standard is not None:
+                change = evidence.standard_change
+                _carry_admission(
+                    bundle_dir,
+                    patch.bundle_dir,
+                    standard.candidate_id,
+                    approved_by=STANDARD_CHANGE_APPROVER
+                    + (change.policy_id if change is not None else "unknown"),
+                    route="standard_change",
+                )
                 return self._resume(
                     patch, probe, standard, halted_report, run_dir, work, evidence, None
                 )
@@ -1720,6 +1736,13 @@ class SelfRepair:
             )
         assert candidate.approval is not None
         evidence.approved_by = candidate.approval.approved_by
+        _carry_admission(
+            bundle_dir,
+            patch.bundle_dir,
+            candidate.candidate_id,
+            approved_by=candidate.approval.approved_by,
+            route=route,
+        )
         evidence.steps.append(
             SelfRepairStepRecord(
                 stage="approval",
@@ -2158,6 +2181,45 @@ def _outline(png: bytes, region: tuple[int, int, int, int]) -> bytes:
     out = io.BytesIO()
     canvas.save(out, format="PNG")
     return out.getvalue()
+
+
+def _carry_admission(
+    prior: Path,
+    repaired: Path,
+    candidate_id: str,
+    *,
+    approved_by: Optional[str] = None,
+    route: Optional[str] = None,
+    probe_only: bool = False,
+) -> None:
+    """Carry an agent-compiled program's admission to its repaired copy.
+
+    A program compiled from an agent run (``openadapt_flow.jit``) runs only
+    under its admission, which pins its digest; every patch changes the
+    digest. The repair keeps the record check, so the admission carries over:
+    first for the probe only, then, once a person (or a signed standard
+    change) approved the fix, for the resumed run and later items. Any other
+    program has nothing to carry.
+    """
+
+    from openadapt_flow.jit import lifecycle
+
+    if not lifecycle.is_jit_bundle(prior):
+        return
+    try:
+        lifecycle.admit_repair(
+            prior,
+            repaired,
+            candidate_id=candidate_id,
+            approved_by=approved_by,
+            route=route,
+            probe_only=probe_only,
+        )
+    except lifecycle.AdmissionError as exc:
+        raise SelfRepairRefused(
+            "the program was compiled from an agent run and admitted, and its "
+            f"admission can't carry to this repair: {exc}"
+        ) from None
 
 
 def _patched_structural(step: Step, structural: Any) -> Any:

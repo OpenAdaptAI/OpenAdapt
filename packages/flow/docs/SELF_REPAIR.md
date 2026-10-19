@@ -593,6 +593,7 @@ Data, scripts and the full per-mode table are in
 | OpenEMR referral, #1347's recorded runs | 8 | 0 (all `RECONCILIATION_REQUIRED`) | - | - | - | 0 | - | - |
 | openIMIS relabelled Save (#1331), before #1337 | 3 | 0 (all `RECONCILIATION_REQUIRED`) | - | - | - | 0 | - | - |
 | openIMIS relabelled Save, live, with #1337 and a scripted risk review | 3 | **3** | 2 | 0 | 0 | 0 | 0 | 0 |
+| Silent-saves 1.1.0, the UI-change blocks that stopped arms 3 and 3r (#1380): `zoom`, `notice`, `relink`, 28 items with no server fault | 13 (before: 28) | 11 | 11 | 1 | 1 | **1 repaired, then 8 more items on the repaired program; 9 `zoom` items no longer stop: 18 of 28 correct** | 0 | 1 |
 
 What worked and what didn't:
 
@@ -624,6 +625,15 @@ What worked and what didn't:
   validation, and the probe couldn't open a second browser session from the
   CLI.
 
+- **Silent-saves 1.1.0:** 18 of the 28 items that stopped every time in #1380
+  now end with the correct record. A repaired agent-compiled program now
+  keeps its admission (the `relink` repair could not even be probed before),
+  and a `region_stable` check now holds at the page scale its step's click
+  showed (`zoom` no longer stops). The What's New block still stops: its fix
+  clicks "Continue to tasks", which the write classifier reads as a possible
+  save, until a person classifies it. Details:
+  [benchmark/auto_repair](../benchmark/auto_repair/README.md).
+
 The approver was scripted, so its answer times (milliseconds) are not a
 person's. The measure of a person's time here is the count of decisions: one
 tap per repaired stop, or one per group of worklist items that stopped the
@@ -631,6 +641,9 @@ same way.
 
 ## Limits
 
+- A fix that clicks a control the write classifier reads as a possible save
+  (for example "Continue") is refused, even on a dismiss screen, until a
+  person classifies that control.
 - A patch's new template is cropped from the screen at the halt. When the
   app shows the control in another state during the replay (openIMIS shows
   its Save disabled until the form validates), the probe doesn't find it and

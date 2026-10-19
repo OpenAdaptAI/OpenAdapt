@@ -272,6 +272,26 @@
       "sha256": "8ef178abba217091f9edf5f51fbe7c651bd7cc0451203965f837fcd0c7d5a013"
     },
     {
+      "path": "benchmark/auto_repair/results/silent-saves-1.1.0-2026-10-19-a/calls.json",
+      "sha256": "6cf4d4e9cac7cafb83f9c33fabd5006eea8fb04728f88e7b1efed6d029021970"
+    },
+    {
+      "path": "benchmark/auto_repair/results/silent-saves-1.1.0-2026-10-19-a/items.csv",
+      "sha256": "b0445ab5cbe789c996704641110e17054e589c072a4a230cc22ac9627e3de67a"
+    },
+    {
+      "path": "benchmark/auto_repair/results/silent-saves-1.1.0-2026-10-19-a/ledger.jsonl",
+      "sha256": "7a9de6c5672fc7f6d5cdd5eaec6b93a92065d8e9431a44b8fc5e1726d696b7d9"
+    },
+    {
+      "path": "benchmark/auto_repair/results/silent-saves-1.1.0-2026-10-19-a/meta.json",
+      "sha256": "c70dfd13b65dab4c355313e8485b4fd9876118be814b0693f0938ddec8d14083"
+    },
+    {
+      "path": "benchmark/auto_repair/results/silent-saves-1.1.0-2026-10-19-a/summary.json",
+      "sha256": "51601d8aaa73d3746514c9ade40e37acc4ce3edeb5aad853a1c3f0fa9a7564d4"
+    },
+    {
       "path": "benchmark/canvas_ladder/results.json",
       "sha256": "4502affb014de71e5c584e48cef5bc6a7631983e2517551d5ea9c20c8a0668e2"
     },

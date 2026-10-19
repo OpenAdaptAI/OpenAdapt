@@ -131,6 +131,60 @@ healthy ones included, at `step_000`: the program was recorded in installed
 Chrome, and the bundled Chromium renders the form a few pixels differently.
 It wrote nothing and is not counted.
 
+### Silent-saves 1.1.0, the three UI-change blocks (`results/silent-saves-1.1.0-2026-10-19-a/`)
+
+In silent-saves 1.1.0 ([#1380](https://github.com/OpenAdaptAI/OpenAdapt/pull/1380)),
+the compiled MockMed program (arms 3 and 3r) stopped on all 28 items with no
+server fault in three blocks: display scaling (`zoom`, items 26-35), a What's
+New screen (`notice`, 46-55) and a moved New Encounter control (`relink`,
+76-85). Self-repair fixed none of them. `measure_silent_saves.py` re-ran those
+30 items through the benchmark's own app, schedule and store judge, with the
+default loop, the same admitted program, and the bridge-capable agent.
+
+| Block | Items with no server fault | Ended correct, #1380 (arm 3r) | Ended correct, now | How |
+| --- | --- | --- | --- | --- |
+| zoom | 9 | 0 | **9** | no stop: the postcondition check now finds its content at the page's scale |
+| relink | 9 | 0 | **9** | 1 repair, approved once; the other 8 ran the repaired program |
+| notice | 10 | 0 | 0 | not repaired: needs a person's classification of "Continue to tasks" |
+| Total | 28 | 0 | **18** | 0 wrong saves |
+
+The two server-fault items in these blocks ended as before, without a silent
+save: item 30 (`wrong_record`, flagged) and item 80 (`optimistic`, stopped).
+The agent made 21 calls ($0.31): 10 of them on the `notice` items, one per
+item, because a single run repairs only its own stop (a `WorklistQueue` asks
+once per group).
+
+Why each block failed in #1380, and what changed:
+
+- **`relink`: a repaired agent-compiled program could never run.** The
+  program was compiled from an agent run (JIT), and its admission pins its
+  digest. Every patch changes the digest, so the run gate refused the
+  probe (`DraftNotAdmitted`), even though the agent proposed the right
+  control ("Start visit"). A repair keeps the record check, so the
+  admission now carries over (`jit.lifecycle.admit_repair`): a
+  `repair_probe` admission lets the copy run only behind a gate that stops
+  before the save, and a `repair` admission follows the person's approval.
+  A copy that changes the record check or the parameters is refused.
+- **`zoom`: a false stop on a correct screen.** At 125% every element is 25%
+  larger and 25% further from the top-left corner, so a `region_stable`
+  postcondition's recorded content fell outside its search window and scale
+  band. In #1380's engine self-repair also declined the halt; with the
+  bridge (#1325) it took it, but no click can fix a correct screen. The
+  check now also looks at the scale this step's own click showed, only
+  when both axes agree (`_uniform_page_scale`), within one percent of it,
+  with the unchanged thresholds. A covered or missing region still fails
+  (`tests/test_page_scale_postcondition.py`). No model is asked.
+- **`notice`: not fixed.** The fix is two clicks, "Continue to tasks" and
+  then "Open". The fail-closed write classifier reads "Continue" as a
+  possible save (a wizard's Continue often submits), so self-repair refuses
+  a patch that clicks it, and the probe could not pass it either. Clicking
+  it on a real record to find out is what the probe exists to avoid. The
+  same classification causes #1377: in arm 2, compiling a recording that
+  dismisses the screen gives that click a placeholder `record_written`
+  effect, so the canary refuses the program. Both need a person to classify
+  that control once as saving nothing (a reviewed risk classification, as
+  `qualify set-risk` does for openIMIS); neither is changed here.
+
 ## What this does not show
 
 - The approver is scripted, so the time to answer (milliseconds) is not a

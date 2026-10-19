@@ -141,7 +141,12 @@ required choice, or a pixel postcondition that failed after a font change
 (0 of 15). On openIMIS's relabelled Save, once a person reviewed the two
 steps whose risk was unclassified, the stop reached repair 3 of 3, but no fix
 passed the probe: the replay sees the Save disabled where the fix was cropped
-from the enabled one. A compiled program is also reused only for the record check and
+from the enabled one. On silent-saves 1.1.0's UI-change blocks (#1380), 18
+of the 28 items that stopped every time now end correctly: a page zoom no
+longer fails a correct screen's check, and a repaired agent-compiled program
+keeps its admission. A What's New screen dismissed by "Continue to tasks" still
+stops every item: "Continue" can submit, so a person must classify that
+control first. A compiled program is also reused only for the record check and
 app environment it was admitted under ([JIT.md](JIT.md)).
 
 ## The main incorrect-success risks

@@ -126,6 +126,13 @@ Reuse is also bound to what the program checks and where it runs:
   that reads it before each run. A program admitted under `7.0.2` is refused
   under `7.0.3` at the same origin, and the inbox entry says why; run a
   canary on the new version. A function that fails is a refusal too.
+- **Repairs keep the admission.** A self-repair (`openadapt_flow.repair`)
+  changes the bundle, and so its digest, but never its record check. The
+  repaired copy gets an admission that embeds the prior one
+  (`lifecycle.admit_repair`): first a `repair_probe` admission, which lets it
+  run only as a probe that stops before the save, then, once a person (or a
+  signed standard change) approved the fix, a `repair` admission for every
+  run. A copy whose record check or parameters changed gets neither.
 - **Pins in the key.** `TaskSignature(..., record_check=<digest>,
   environment=<app.environment>)` puts both in the cache key and refuses a
   program that doesn't match them. Without pins the key is the same as before,
