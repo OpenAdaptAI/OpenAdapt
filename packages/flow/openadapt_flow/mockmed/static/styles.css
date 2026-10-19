@@ -270,3 +270,8 @@ body.drift-theme #survey-modal {
   color: #e6e9ef;
   border-color: #5b8def;
 }
+
+/* "menu" drift: the save control lives in a small in-place menu. */
+.menu { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.menu-list { display: flex; flex-direction: column; gap: 6px; padding-left: 16px; }
+.menu-list[hidden] { display: none; }

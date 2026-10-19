@@ -37,7 +37,6 @@ from scripts.check_release_consistency import (
     REPOSITORY_ONLY_EVALUATION_PATH_TOKENS,
     REQUIRED_SDIST_PATHS,
     WHEEL_ARTIFACT_INVENTORY_PATH,
-    build_release_artifact_inventory,
     release_versions,
     stamp_release_artifact_inventory,
     sync_lock_version,
@@ -55,10 +54,25 @@ MIT_LICENSE = (ROOT / "LICENSE").read_bytes()
 
 @cache
 def _stamped_manifest_bytes() -> bytes:
-    """The inventory a release of this tree would embed (schema 1, hashed)."""
-    return (
-        json.dumps(build_release_artifact_inventory(ROOT), indent=2) + "\n"
-    ).encode()
+    """The inventory a release of this tree would embed (schema 1, hashed).
+
+    Hashes the committed path list directly instead of walking the tree, so
+    scratch output other tests leave under the package (for example symlinks
+    in runs/) cannot fail these archive tests.
+    """
+    reviewed = json.loads((ROOT / PUBLIC_ARTIFACT_INVENTORY_PATH).read_text())
+    stamped = {
+        "schema_version": 1,
+        "policy": reviewed["policy"],
+        "artifacts": [
+            {
+                "path": path,
+                "sha256": hashlib.sha256((ROOT / path).read_bytes()).hexdigest(),
+            }
+            for path in reviewed["artifacts"]
+        ],
+    }
+    return (json.dumps(stamped, indent=2) + "\n").encode()
 
 
 SOURCE_BOUNDARY_EXCLUDES = {
