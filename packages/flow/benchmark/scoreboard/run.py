@@ -404,7 +404,7 @@ def _admission(
 def arm_first_run(args: argparse.Namespace) -> int:
     task = task_module(args.task)
     out = schema.run_dir(task.NAME, "first_run", args.run_id)
-    cache = out / "jit-cache"
+    cache = schema.cache_dir(task.NAME, "first_run", args.run_id)
     if cache.exists():
         shutil.rmtree(cache)
     schema.write_meta(out, task=task.NAME, arm="first_run", model=AGENT_MODEL)
@@ -501,7 +501,7 @@ def arm_program(args: argparse.Namespace) -> int:
             "the openIMIS program arm is imported from the launch demo (importers.py)"
         )
     out = schema.run_dir(task.NAME, "program", args.run_id)
-    cache = schema.run_dir(task.NAME, "first_run", args.program_from) / "jit-cache"
+    cache = schema.cache_dir(task.NAME, "first_run", args.program_from)
     if not cache.is_dir():
         raise SystemExit(f"no admitted program in {cache}; run first_run first")
     schema.write_meta(

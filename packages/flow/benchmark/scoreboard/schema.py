@@ -34,6 +34,12 @@ from typing import Any, Optional
 
 HERE = Path(__file__).resolve().parent
 RAW = HERE / "raw"
+# JIT caches (recordings, screenshots, bundles, a throwaway admission key) live
+# outside the package tree: the release check walks the source tree whatever
+# .gitignore says, and none of this is published.
+CACHE = Path(
+    os.environ.get("SCOREBOARD_CACHE", Path.home() / ".cache" / "openadapt-scoreboard")
+)
 PROTOCOL_VERSION = "2026-10-18.1"
 TIMED_LOAD_MAX = 12.0
 
@@ -84,6 +90,10 @@ def load_1m() -> float:
 
 def run_dir(task: str, arm: str, run_id: str) -> Path:
     return RAW / task / arm / run_id
+
+
+def cache_dir(task: str, arm: str, run_id: str) -> Path:
+    return CACHE / task / arm / run_id / "jit-cache"
 
 
 def append(path: Path, row: Row) -> None:
