@@ -1205,7 +1205,7 @@
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/agent/study-main-0c642bc0/meta.json",
-      "sha256": "6e61bf57e944f849279519cb3c1c558205faf1e7d93eac05e29b731c94b1084d"
+      "sha256": "6e153be4a10ca66dd96871878f70947f932b64afb742afa0d0865f9e1c68b5b6"
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/first_run/2026-10-18-a/first_run.json",
@@ -1224,12 +1224,44 @@
       "sha256": "f41aa38d13410dfecb3724b1ac15f55b4d9ab09d16423e1400fd1d6d506d28dc"
     },
     {
+      "path": "benchmark/scoreboard/raw/openemr_referral/parallel/worklist-8w-2026-10-19/items.csv",
+      "sha256": "d48d034ae245c594a2ee86075183dfef2df00c5f0da12bae778fbcaa5a884bee"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/parallel/worklist-8w-2026-10-19/meta.json",
+      "sha256": "1ba55c58d69eeefadf298c540963e0d36cca3ba0324c4ffb87b5612a8807f3b2"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/parallel/worklist-8w-window1-2026-10-19/items.csv",
+      "sha256": "70a7d44893862a31e015c6b2b99d9b9c4d63de55e62aba9fd7927d2d4c5ab3ad"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/parallel/worklist-8w-window1-2026-10-19/meta.json",
+      "sha256": "d914dc40053fc91f9234a493980264b2debc4adbe343f5429b15d4b2a6762a90"
+    },
+    {
       "path": "benchmark/scoreboard/raw/openemr_referral/program/study-main-0c642bc0/items.csv",
       "sha256": "fa0a1f7e34ee333e8cc8e9db0b435621c9938f24dbd72a52f4da9722ddc18d0a"
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/program/study-main-0c642bc0/meta.json",
-      "sha256": "5a1f6e18b6d1736702dbfea5c3ae9d4562ac23090170d55a8f1eea3681f7352b"
+      "sha256": "53a92767d5bbe4ec9a7486a7f91e769cf886d66fd400ef55c456fb4988bab0fc"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/program/worklist-std-2026-10-19/items.csv",
+      "sha256": "3b19bd4c8a0596ed47b6094c708169dc1c4e4acb3aaccf108277d26793d7e54d"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/program/worklist-std-2026-10-19/meta.json",
+      "sha256": "12815e3746f21acf7b4db097189f6869c7c1ca77b9c99588e716a505eb75745f"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/program_fast/worklist-fast-2026-10-19/items.csv",
+      "sha256": "43330c5df59e846bcf3fd8cc5c5543827b18ccb24b218cb8953eb95ba89e8a19"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/program_fast/worklist-fast-2026-10-19/meta.json",
+      "sha256": "b09f4a266521998770ad2b0668e0e8e6f649cabeccab3004ccdee8041a6e59b1"
     },
     {
       "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/hand_check.json",
@@ -1465,7 +1497,7 @@
     },
     {
       "path": "benchmark/scoreboard/raw/openimis/program/launch-4-c100/meta.json",
-      "sha256": "d07dafee4b516174a76fa196daf4974c213bf0040fd833c44ce93671c49b0cbb"
+      "sha256": "e078808c9e21e5531ce9d354afdfe5129cb7930ee34f9db71210d2d2960fd403"
     },
     {
       "path": "benchmark/scoreboard/raw/openimis/program/launch-4/items.csv",
@@ -1473,7 +1505,7 @@
     },
     {
       "path": "benchmark/scoreboard/raw/openimis/program/launch-4/meta.json",
-      "sha256": "09a60306c3355fb57d58c108c3c5762dd30f3a25dd18885aefc080995c4b1b36"
+      "sha256": "b9d53c9c635d420a436667ed5d2338b60f42f3cfd7e8e499b40c05de5a382ecc"
     },
     {
       "path": "benchmark/scoreboard/raw/openimis/program_repair/2026-10-19-a/items.csv",
@@ -1489,7 +1521,7 @@
     },
     {
       "path": "benchmark/scoreboard/scoreboard.json",
-      "sha256": "292a4aa7245875fa1b707c43a8ddd5b5e8b1bce629adf5cc77461e768bd9b6ea"
+      "sha256": "8fde84e877dc5f7ab91d319de934bb67e1a750ff2636f0c45a633169e6737a9a"
     },
     {
       "path": "benchmark/silent_wrong_action/results.json",
