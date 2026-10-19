@@ -17,8 +17,8 @@ with the same record check. The harness and the earlier spike are in
 openadapt-flow record --backend web --url https://app.example/ --capture-network --out rec/
 openadapt-flow compile rec/ --out bundle/ --name referral
 openadapt-flow api show bundle/
-openadapt-flow api admit bundle/        # a person, at a terminal
-openadapt-flow run bundle/ --approval-mode not_gated ...
+openadapt-flow api admit bundle/ --identity subject_name=lname   # a person, at a terminal
+openadapt-flow run bundle/ ...
 ```
 
 1. **Record with `--capture-network`.** Flow keeps the page's requests next
@@ -31,7 +31,9 @@ openadapt-flow run bundle/ --approval-mode not_gated ...
    `api admit` asks a person to type `admit`. Until then, the API step never
    runs. An agent, model, or service name can't admit it, and the admission
    is bound to the exact proposal. If the binding changes, it needs a new
-   admission.
+   admission. `--identity KEY=PARAM` names the parameter that identifies the
+   record (for example `subject_name=lname` or `record_id=mrn`); Standard
+   and Regulated runs need one (see [Under governance](#under-governance)).
 4. **Run.** An admitted API step runs in place of the GUI steps it covers.
    The run report marks those steps `actuation: "api_folded"`, and the save
    step is marked `actuation: "api"`. When the API step doesn't run, the
@@ -174,6 +176,48 @@ collateral-loss guard) can't be proven that way after the fact, so the pause
 stays for a person to check the record. The same limit applies to a GUI
 save.
 
+## Under governance
+
+Every `openadapt-flow run` carries a run authorization, and Standard and
+Regulated runs add the run gate's profile checks. An API step runs there
+under these rules:
+
+- **The authorization names it.** When the run gate admits the run, the
+  authorization lists each admitted API step (`api_steps`) with the digest
+  of the binding the person admitted, the folded-checks digest and the
+  record check's contract hashes. The runtime runs an API step only when
+  all three still match. A step the authorization doesn't list, such as one
+  admitted after the run was authorized, runs on the GUI. An API step that
+  no person admitted is GUI-only for the run gate too, so a proposal alone
+  never blocks a run.
+- **Right record.** A Standard or Regulated save needs an identity contract
+  on every path it can run. For an API step it's the parameter named at
+  admission (`api admit --identity`): the request must send that
+  parameter's run value as-is in a form field, and the record check must
+  select the record by the same parameter (in `match`, or in `new_records`
+  for a create). The runtime checks both sides before the request is sent,
+  and the outcome check checks them again. A form field's name is the
+  page's, not the record's (`form_lname` versus `lname`), so the field and
+  the record check are tied by the parameter, not by name. An API step
+  admitted without one is refused by the run gate's identity check, which
+  names the step and the `--identity` flag.
+- **Outcome.** The covered steps are skips, and the outcome check accepts
+  them only when the API step's own save in the same report ran on the API
+  path and succeeded, and every step it covers was folded. The save is then
+  checked like any other API action: delivered, confirmed by the record
+  check at the profile's evidence tier, with exact identity evidence. A run
+  like that reads `VERIFIED`.
+
+Not yet covered, so the GUI steps run with that reason:
+
+- **Qualification cases.** Qualification needs representative and fault
+  cases on the API path for an admitted API step, and a case run doesn't
+  run API steps yet. So a bundle with an admitted API step can't complete
+  qualification today, and a run under a production qualification admission
+  uses the GUI steps.
+- **Managed (Cloud) dispatch.** Cloud's run authorization doesn't list API
+  steps yet.
+
 ## When it doesn't run
 
 The API step runs only in a plain linear run. It doesn't run, and the GUI
@@ -181,7 +225,9 @@ steps run instead, when:
 
 - an approval mode is on and the API actuator can't prepare the request
   before sending it (a deployment's own actuator without `prepare`);
-- the run is governed by qualification;
+- the run's authorization didn't admit that API step, or it is a
+  qualification case, a managed (Cloud) dispatch, or a run under a
+  production qualification admission (see [Under governance](#under-governance));
 - the step isn't admitted, or the program's steps, on-screen checks or the
   save's record check changed since it was proposed or admitted;
 - the save checks the right record on screen and the API step names no

@@ -2496,8 +2496,6 @@ class Replayer:
                     "approval mode needs the exact request before the save, and "
                     "this API actuator can't prepare it, so the GUI steps run"
                 )
-            elif self.governed_authorization is not None:
-                reason = "a governed run uses its qualified GUI path"
             elif not binding.admitted():
                 reason = "the API step is not admitted (openadapt-flow api admit)"
             elif save.identity_armed and not binding.identity:
@@ -2505,7 +2503,8 @@ class Replayer:
                 # must check it too, so it needs a right-record contract.
                 reason = (
                     "the save checks the right record on screen, and the API "
-                    "step names no right-record contract"
+                    "step names no right-record contract (openadapt-flow api "
+                    "admit --identity)"
                 )
             elif list(binding.effects) != list(save.effects):
                 reason = (
@@ -2523,12 +2522,43 @@ class Replayer:
                     "step was proposed, and the API step would skip it "
                     "(openadapt-flow api propose)"
                 )
+            elif self.governed_authorization is not None and (
+                governed_reason := self._governed_web_form_refusal(workflow, save)
+            ):
+                reason = governed_reason
             elif self._actuator_for(binding) is None:
                 reason = "there is no live browser session for the API step"
             else:
                 reason = None
             return end_index, save, reason
         return None
+
+    def _governed_web_form_refusal(
+        self, workflow: Workflow, save: Step
+    ) -> Optional[str]:
+        """Why a governed run can't use this API step, or None when it can.
+
+        The run's authorization must have admitted this exact API step. A
+        qualification case runs the path it names, and a managed (Cloud)
+        dispatch or a production qualification admission doesn't bind API
+        steps yet, so those run the GUI steps.
+        """
+
+        authorization = self.governed_authorization
+        assert authorization is not None
+        if authorization.qualification_case_id is not None:
+            return (
+                "a qualification case runs the GUI path it names; qualifying "
+                "an API step's path is not supported yet"
+            )
+        if self.managed_dispatch_binding is not None:
+            return "a managed dispatch doesn't bind API steps yet"
+        if authorization.production_qualification_admission_id is not None:
+            return (
+                "a production qualification admission doesn't cover API steps "
+                "yet, so the qualified GUI path runs"
+            )
+        return authorization.admitted_api_step(save, workflow)
 
     def _resume_inside_web_form_span(
         self, workflow: Workflow, step_index: int, prior: list[StepResult]
@@ -8532,6 +8562,12 @@ class Replayer:
 
         if pointer.startswith("/url/"):
             return binding.url_template
+        if binding.kind == "web_form":
+            from openadapt_flow.runtime.actuators.web_form import (
+                web_form_pointer_template,
+            )
+
+            return web_form_pointer_template(binding, pointer)
         root_name, *tokens = pointer.lstrip("/").split("/")
         if root_name == "body":
             value: Any = binding.body_template
@@ -8580,6 +8616,14 @@ class Replayer:
             self.governed_authorization is not None
             and self.governed_authorization.requires_verified_identity(step.id)
         )
+        if step.api_binding is not None and step.api_binding.kind == "web_form":
+            # A form save whose GUI step checks the right record, or whose
+            # admission named a right-record parameter, is checked the same
+            # way in every run, governed or not (its durable checkpoint
+            # needs the evidence too).
+            authorization_requires = authorization_requires or bool(
+                step.identity_armed or step.api_binding.identity
+            )
         project = workflow.qualification
         policy = project.identity_policies.get(step.id) if project is not None else None
         if not authorization_requires and policy is None:
@@ -8622,9 +8666,17 @@ class Replayer:
             ]
             exact_token = "{" + identity.param + "}"
             effect_target_path = tuple(identity.effect_field.split("."))
+            # A form field's name is the page's, not the record's (form_lname
+            # versus lname): for a form save the field is bound to the record
+            # check by sending the same parameter the check selects on.
+            names_must_match = binding.kind != "web_form"
             pointers_are_bound = all(
                 template is not None
-                and self._api_request_pointer_field_path(pointer) == effect_target_path
+                and (
+                    not names_must_match
+                    or self._api_request_pointer_field_path(pointer)
+                    == effect_target_path
+                )
                 and (
                     isinstance(template, str)
                     and self._url_path_targets_param(template, identity.param)
@@ -8641,8 +8693,14 @@ class Replayer:
                     f"({step.intent}): identity parameter {identity.param!r} is "
                     "not bound at every declared target-bearing request pointer"
                 )
+            from openadapt_flow.runtime.actuators.web_form import (
+                effect_selector_rows,
+            )
+
             effect_exprs = [
-                effect.match.get(identity.effect_field) for effect in effects
+                row.get(identity.effect_field)
+                for effect in effects
+                for row in effect_selector_rows(effect)
             ]
             if not any(
                 expr is not None and expr.param == identity.param
