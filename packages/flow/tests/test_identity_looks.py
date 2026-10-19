@@ -279,9 +279,85 @@ def test_copy_region_is_the_single_line_holding_a_lookalike_id():
     mrn = NS(text="AC50061", region=(10, 5, 90, 20))
     name = NS(text="Smith, John", region=(200, 5, 120, 20))
     dob = NS(text="01/15/1980", region=(400, 5, 110, 20))
-    assert L.copy_region([mrn, name, dob], within) == (8, 3, 94, 24)
+    assert L.copy_region([mrn, name, dob], within) == (6, 3, 98, 24)
     other = NS(text="ZZ10O1", region=(520, 5, 60, 20))
     assert L.copy_region([mrn, other], within) is None  # two candidates
     assert L.copy_region([name, dob], within) is None  # none
     outside = NS(text="AC50061", region=(10, 100, 90, 20))
     assert L.copy_region([outside], within) is None
+
+
+def test_a_split_identifier_is_matched_as_one_string():
+    first = _abstain("103 O45 Smith, John 01/15/1980")
+    kw = dict(
+        frames=_frames(first, first),
+        magnified=first,
+        contradicts=identity_read_contradicts,
+        exact_expected=("103", "045"),
+    )
+    assert L.decide(first, clipboard=_copy("103045"), **kw).status == "verified"
+    assert L.decide(first, clipboard=_copy("1O3045"), **kw).status == "mismatch"
+    ids = KnownIdList(ids=("103 045", "ZZ1000"), source="t", complete=True)
+    listed = L.decide(first, clipboard=_copy("103 045"), known_ids=ids, **kw)
+    assert listed.status == "verified"
+
+
+def test_lookalike_param_mismatch_takes_looks_but_never_softens(monkeypatch):
+    from openadapt_flow.ir import Anchor, Step, Workflow
+    from openadapt_flow.runtime import identity as I
+    from openadapt_flow.runtime.replayer import Replayer
+
+    band = "AC50061 Smith, John 01/15/1980"
+    anchor = Anchor(
+        template="t.png",
+        region=(0, 0, 10, 10),
+        click_point=(5, 5),
+        context_text=band,
+        identifier_region=(0, 0, 400, 20),
+    )
+    step = Step(id="s", intent="open", action="click", anchor=anchor)
+    wf = Workflow(name="p", params={"mrn": "AC50061"}, steps=[step])
+    params = {"mrn": "AC50061"}
+
+    def read(observed):
+        return I.verify_target_identity(
+            band, observed, params=params, param_examples=wf.params
+        )
+
+    misread = read("AC5OO61 Smith, John 01/15/1980")
+    assert misread.status == "mismatch" and misread.mode == "param"
+
+    class _Clip:
+        def read_text(self):
+            return None
+
+        def write_text(self, text):
+            pass
+
+    r = Replayer(
+        object(),  # type: ignore[arg-type]
+        vision=object(),
+        read_clipboard=_Clip(),
+        identity_copy=L.IdentityCopyConfig(),
+    )
+    normal = r._lookalike_param_read(misread, anchor, params, wf)
+    assert L.is_glyph_abstain(normal)
+    other = read("AC5OO61 Jones, Mary 02/02/1990")
+    assert r._lookalike_param_read(other, anchor, params, wf) is None
+
+    def looked(status):
+        return lambda *a, **k: misread.model_copy(
+            update={"status": status, "abstain_reason": None}
+        )
+
+    native = lambda png: misread  # noqa: E731
+    monkeypatch.setattr(r, "_look_again", looked("verified"))
+    got = r._lookalike_param_looks(
+        step, misread, native, params, wf, (0, 0, 400, 20), b""
+    )
+    assert got.status == "verified"
+    monkeypatch.setattr(r, "_look_again", looked("abstain"))
+    got = r._lookalike_param_looks(
+        step, misread, native, params, wf, (0, 0, 400, 20), b""
+    )
+    assert got.status == "mismatch"  # the original mismatch stands
