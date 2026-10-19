@@ -559,7 +559,7 @@ improvising or retrying when something is off.
 | Self-repair across several new steps: a bridge of up to three actions for a new required dialog or a control moved into a menu, each new step armed with a record check and probed up to the save, one person approving | On main ([#1325](https://github.com/OpenAdaptAI/OpenAdapt/pull/1325)) | Synthetic (MockMed menu and provider drifts, scripted agent; a real one-shot agent repaired neither, see [benchmark/auto_repair](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/auto_repair/README.md)) | `run --self-repair`, [SELF_REPAIR.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SELF_REPAIR.md) |
 | Keep pixel-path runs working across display scaling and font smoothing changes | On main ([#1286](https://github.com/OpenAdaptAI/OpenAdapt/pull/1286)) | Synthetic (in-process RDP and canvas renderings: 17 of 24 healthy runs across 100–175%, up from 3; 0 wrong saves) | [benchmark/pixel_scale](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/pixel_scale/README.md) |
 | Pre-approved repairs: a signed policy lists low-risk changes that apply without a person, a test-record run before each queue, and one approval for every item halted the same way | On main ([#1294](https://github.com/OpenAdaptAI/OpenAdapt/pull/1294)) | Synthetic | standard changes |
-| Repair by default: once a repair agent is configured, every stop that wrote nothing goes to it without anyone starting it; a stop after a possible write goes to reconciliation; every stop is a row in a ledger with the funnel from stop to resumed item | In review ([#1360](https://github.com/OpenAdaptAI/OpenAdapt/pull/1360)) | Synthetic (MockMed, 22 drift modes, real Claude agent: 6 of 21 repairable stops resumed and verified, 0 wrong saves in 66 runs); routing over recorded OpenEMR and openIMIS stops | `run` (on by default, `--no-auto-repair`), `repair:` in `deploy.yaml`, [benchmark/auto_repair](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/auto_repair/README.md) |
+| Repair by default: once a repair agent is configured, every stop that wrote nothing goes to it without anyone starting it; a stop after a possible write goes to reconciliation; every stop is a row in a ledger with the funnel from stop to resumed item | In review ([#1360](https://github.com/OpenAdaptAI/OpenAdapt/pull/1360)) | Synthetic (MockMed, 22 drift modes, real Claude agent: 6 of 21 repairable stops resumed and verified, 0 wrong saves in 66 runs); routing over recorded OpenEMR stops; live openIMIS relabel: 3 of 3 reached repair, 0 resumed | `run` (on by default, `--no-auto-repair`), `repair:` in `deploy.yaml`, [benchmark/auto_repair](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/auto_repair/README.md) |
 | Fleet drift patches: a verified fix with no patient data, shared across sites under policy | Released, local reference hub | Simulator | `openadapt-flow fleet`, [FLEET_DRIFT_PATCHES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/FLEET_DRIFT_PATCHES.md) |
 
 ## Computer-use agents
@@ -621,10 +621,11 @@ fails when a command is added without being listed here.
 ## What is not done yet
 
 - No commercial EMR, claims system or real Citrix session has been tested.
-- Repair by default is measured only on MockMed. On the recorded OpenEMR
-  and openIMIS stops, none reached repair: each came after a step that may
-  have written (OpenEMR's "Create New Patient" click, openIMIS steps whose
-  risk nobody had reviewed). In progress: the scoreboard.
+- Repair by default has resumed items only on MockMed. On the recorded
+  OpenEMR stops none reached repair (each came after "Create New Patient",
+  which counts as a save). On openIMIS, with #1337 and a risk review, the
+  relabelled Save reached repair 3 of 3, but no fix passed the probe yet.
+  In progress: the scoreboard.
 - Windows installers are unsigned until free code signing through SignPath
   Foundation is approved; macOS builds are ad-hoc signed.
 - Several capabilities have run only on OpenAdapt's synthetic apps. The
@@ -1076,7 +1077,10 @@ click before the duplicate-check dialog counts as a save. Measured on MockMed,
 the default loop repaired a renamed or moved control (6 of 6 stops) and did
 not repair a control moved into a closed menu, a new interstitial, a new
 required choice, or a pixel postcondition that failed after a font change
-(0 of 15). A compiled program is also reused only for the record check and
+(0 of 15). On openIMIS's relabelled Save, once a person reviewed the two
+steps whose risk was unclassified, the stop reached repair 3 of 3, but no fix
+passed the probe: the replay sees the Save disabled where the fix was cropped
+from the enabled one. A compiled program is also reused only for the record check and
 app environment it was admitted under ([JIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT.md)).
 
 ## The main incorrect-success risks

@@ -187,3 +187,46 @@ def test_a_run_that_cannot_be_repaired_runs_plainly(
     assert code == 0, out
     assert (run_dir / "report.json").is_file()
     assert len(_records(base_url)) == 1
+
+
+def test_the_cli_repairs_without_a_shared_browser_from_its_caller(
+    mockmed,  # noqa: F811 - the shared fixture
+    tmp_path,
+    capsys,
+) -> None:
+    """The halted session stays open while the probe opens another. Outside
+    this module's fixture nothing shares one browser, and a second Playwright
+    driver on the same thread fails, so ``run`` must share one itself. Runs
+    on a fresh thread with the fixture's browser set aside, as a real
+    ``openadapt-flow run`` process would."""
+
+    from openadapt_flow.backends import _browser_process
+
+    base_url, bundle = mockmed
+    _reset(base_url)
+    with _browser():
+        cli.TARGET = _center_of(base_url, "#submit-encounter")
+    run_dir = tmp_path / "run"
+    stop = threading.Event()
+    answered: list[str] = []
+    phone = threading.Thread(
+        target=cli._answer_on_phone, args=(run_dir, stop, answered), daemon=True
+    )
+    phone.start()
+    saved = dict(_browser_process._SHARED_BROWSER)
+    _browser_process._SHARED_BROWSER.clear()
+    try:
+        _run(
+            bundle,
+            _config(tmp_path, base_url),
+            f"{base_url}/{QUERY}&drift=redesign#tasks",
+            run_dir,
+        )
+    finally:
+        _browser_process._SHARED_BROWSER.update(saved)
+        stop.set()
+        phone.join(timeout=5)
+        cli.TARGET = None
+    out = capsys.readouterr().out
+    assert "Self-repair: resumed" in out, out
+    assert len(_records(base_url)) == 1

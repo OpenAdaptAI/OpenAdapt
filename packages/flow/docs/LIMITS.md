@@ -138,7 +138,10 @@ click before the duplicate-check dialog counts as a save. Measured on MockMed,
 the default loop repaired a renamed or moved control (6 of 6 stops) and did
 not repair a control moved into a closed menu, a new interstitial, a new
 required choice, or a pixel postcondition that failed after a font change
-(0 of 15). A compiled program is also reused only for the record check and
+(0 of 15). On openIMIS's relabelled Save, once a person reviewed the two
+steps whose risk was unclassified, the stop reached repair 3 of 3, but no fix
+passed the probe: the replay sees the Save disabled where the fix was cropped
+from the enabled one. A compiled program is also reused only for the record check and
 app environment it was admitted under ([JIT.md](JIT.md)).
 
 ## The main incorrect-success risks

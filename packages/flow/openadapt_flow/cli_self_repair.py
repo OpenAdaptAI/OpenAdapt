@@ -445,9 +445,16 @@ def cmd_run_self_repair(
     if attest_pre_state is not None:
         # Same point as a plain run: admitted, nothing actuated yet.
         attest_pre_state(run_dir, args)
+    from openadapt_flow.backends._browser_process import shared_browser
+
     auto = AutoRepair(repair)
     try:
-        result = auto.run(bundle, run_dir)
+        # The halted session stays open while each probe opens its own. Two
+        # Playwright drivers can't run on one thread, so every session of
+        # this run shares one browser process (each still gets a fresh
+        # context: no cookies or storage carry over).
+        with shared_browser(headless=not repair.target.headed):
+            result = auto.run(bundle, run_dir)
     except SelfRepairRefused as exc:
         print(f"Self-repair stopped: {exc}. Nothing was saved by self-repair.")
         return 1

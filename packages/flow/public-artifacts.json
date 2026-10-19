@@ -212,6 +212,66 @@
       "sha256": "09c6cb8b9488563f7aed2f339241af549b2f3c6a0973e53fad6a86e7cd4ac6af"
     },
     {
+      "path": "benchmark/auto_repair/results/openimis-reviewed-2026-10-19-a/calls.json",
+      "sha256": "e507e127310e692286cffa4646854983024e669b32eea0c0d1b896928c999d0e"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-reviewed-2026-10-19-a/items.csv",
+      "sha256": "f57460b8bdd7bf422d0e547d690562357422311efa0480604980f73b3c575acd"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-reviewed-2026-10-19-a/ledger.jsonl",
+      "sha256": "f817ef9fc416df05e401d6d50a36f69241757975e5d69fdd0e38815cf39af421"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-reviewed-2026-10-19-a/meta.json",
+      "sha256": "894bfb2418a587c59c8110da8592d54d7c0582e6496273b5d57bb96009fc65a4"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-reviewed-2026-10-19-a/summary.json",
+      "sha256": "0b06e1e738eecf8027825a5b45ea0bd51c08b0cffb2083d170a35f43477c84ce"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-reviewed-2026-10-19-b/calls.json",
+      "sha256": "bcf7138d3479ff9dd16277ca49ec52896a48cfcf9e9b45599e69cecad8ab2f82"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-reviewed-2026-10-19-b/items.csv",
+      "sha256": "19c1f39de75edaeb649c541325d8bb0b009afd628380ee3248e3518cd6bc72ea"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-reviewed-2026-10-19-b/ledger.jsonl",
+      "sha256": "00d321e0df2cfe4f4f54f8d04655edd00cde8a060bf342a1f70cd2c5fbd11514"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-reviewed-2026-10-19-b/meta.json",
+      "sha256": "193b4c3e4e8eb122a7072dcc4701404d28c0b3bb2a2b0914fc9a5388dcc22ebd"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-reviewed-2026-10-19-b/summary.json",
+      "sha256": "c9f8ea5769e098d1e0c89642a5860fe09e696ed92eb93fd7881f50f6fb6ea96f"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-unreviewed-2026-10-19-b/calls.json",
+      "sha256": "7a88263a06fdaaa4b1a7eadc6ff4db102ddb12bc964e8d837ce67ac3c5e64e2c"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-unreviewed-2026-10-19-b/items.csv",
+      "sha256": "7ab7fa50cfeec823b570c768919e3408cb34a810d7a0262d7e4777bffb93fac0"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-unreviewed-2026-10-19-b/ledger.jsonl",
+      "sha256": "a2083aa13f54e729a437b52f8d3ef78a6d0f30bf896d8ceca304565536e25bd6"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-unreviewed-2026-10-19-b/meta.json",
+      "sha256": "1b77f548693f33ac3c095c77421effb238ee2ba0ebe28920a7934d7b7cb97ad2"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-unreviewed-2026-10-19-b/summary.json",
+      "sha256": "8ef178abba217091f9edf5f51fbe7c651bd7cc0451203965f837fcd0c7d5a013"
+    },
+    {
       "path": "benchmark/canvas_ladder/results.json",
       "sha256": "4502affb014de71e5c584e48cef5bc6a7631983e2517551d5ea9c20c8a0668e2"
     },

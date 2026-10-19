@@ -591,6 +591,7 @@ Data, scripts and the full per-mode table are in
 | MockMed worklist, `relink` and `redesign`, 5 items each (the change ships after the pre-flight) | 10 | 10 | 2 (one repair per group, on the test record) | 2 | 2 | **10 of 10** | 0 | 2 |
 | OpenEMR referral, #1347's recorded runs | 8 | 0 (all `RECONCILIATION_REQUIRED`) | - | - | - | 0 | - | - |
 | openIMIS relabelled Save (#1331), before #1337 | 3 | 0 (all `RECONCILIATION_REQUIRED`) | - | - | - | 0 | - | - |
+| openIMIS relabelled Save, live, with #1337 and a scripted risk review | 3 | **3** | 2 | 0 | 0 | 0 | 0 | 0 |
 
 What worked and what didn't:
 
@@ -612,8 +613,15 @@ What worked and what didn't:
   run gate counts as a save, so all 8 went to reconciliation. Repair can't
   help these; the fix for #1347 is the identity check's cause.
 - **openIMIS:** before #1337 the relabelled Save stopped on the scroll before
-  it with `RECONCILIATION_REQUIRED`, 3 of 3. The live re-run with #1337 and
-  the risk review is not done yet.
+  it with `RECONCILIATION_REQUIRED`, 3 of 3. With #1337 and a risk review of
+  the two steps nobody had classified, it halts on the Save before any effect
+  and reaches repair, 3 of 3. The agent found "SAVE CLAIM" in 2 of 3, but no
+  fix passed the probe: in the replay the Save is still disabled (grey) while
+  the scroll looks for it, and the new template was cropped from the enabled
+  button. Nothing was written. The first live run also found two bugs, now
+  fixed: a re-targeted save that carries a `submit_binding` failed
+  validation, and the probe couldn't open a second browser session from the
+  CLI.
 
 The approver was scripted, so its answer times (milliseconds) are not a
 person's. The measure of a person's time here is the count of decisions: one
@@ -622,6 +630,10 @@ same way.
 
 ## Limits
 
+- A patch's new template is cropped from the screen at the halt. When the
+  app shows the control in another state during the replay (openIMIS shows
+  its Save disabled until the form validates), the probe doesn't find it and
+  refuses the fix.
 - Only a stop that wrote nothing is repaired. A stop after a step the run gate
   counts as a save has acted is `RECONCILIATION_REQUIRED` and goes to
   reconciliation, even when the app saved nothing; see [Measured](#measured)

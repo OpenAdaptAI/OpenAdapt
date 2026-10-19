@@ -1356,7 +1356,7 @@ class SelfRepair:
         anchor = event.new_anchor.model_copy(
             update={
                 "template": f"templates/{step.id}_repair.png",
-                "structural": structural,
+                "structural": _patched_structural(step, structural),
                 "ocr_text": read,
                 "landmarks": landmarks,
             }
@@ -2149,6 +2149,22 @@ def _outline(png: bytes, region: tuple[int, int, int, int]) -> bytes:
     out = io.BytesIO()
     canvas.save(out, format="PNG")
     return out.getvalue()
+
+
+def _patched_structural(step: Step, structural: Any) -> Any:
+    """The structural locator a re-targeted step's anchor keeps.
+
+    A step with a ``submit_binding`` was recorded on the visual path: the
+    binding stands in for a record identity there, and a step may not carry
+    both it and a usable locator. Self-repair keeps that contract as it was
+    recorded, so the step stays visual (a new template crop) and keeps its
+    binding, which the save checks again at run time. Any other step takes
+    the locator found under the new point.
+    """
+
+    if step.submit_binding is not None:
+        return step.anchor.structural if step.anchor is not None else None
+    return structural
 
 
 def _recorded_crop(workflow: Workflow, bundle_dir: Path, step: Step) -> Optional[bytes]:

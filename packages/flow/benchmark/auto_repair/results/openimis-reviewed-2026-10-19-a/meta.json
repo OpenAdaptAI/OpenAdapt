@@ -1,0 +1,17 @@
+{
+  "written_at": "2026-10-19T13:32:46-0400",
+  "engine_git_head": "50d5fa85b5bcb0473380d30ee42851a9326b36a4",
+  "app": "openIMIS reference stack (pinned), synthetic data",
+  "program": "launch-4 claim-entry bundle (demo/cua_to_program)",
+  "bundle_label": "reviewed",
+  "risk_review": "step_002 and step_012 classified state_changing by a scripted reviewer (qualify set-risk), standing in for a person",
+  "ui_change": "icon-only Save relabelled 'Save claim' (#1331)",
+  "loop": "AutoRepair over SelfRepair; no fault probe; no policy",
+  "agent": "agent:anthropic:claude-sonnet-5-5:auto-repair-benchmark",
+  "approver": "benchmark:scripted-approver (stands in for a person; approves all)",
+  "items": {
+    "healthy": 2,
+    "changed": 3
+  },
+  "engine_note": "Engine: this PR's branch with #1337 merged locally (measure/auto-repair-openimis 50d5fa85), before two fixes this run found: a re-targeted visual save lost validation (submit_binding with a structural locator), and a probe could not open a second Playwright session. Kept as evidence; superseded by -b. An earlier attempt with OPENADAPT_FLOW_BROWSER=bundled halted every item at step_000, healthy ones included (the program was recorded in installed Chrome); it wrote nothing and was discarded."
+}
