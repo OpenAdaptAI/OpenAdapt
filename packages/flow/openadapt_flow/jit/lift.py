@@ -166,12 +166,13 @@ def lift_params(bundle_dir: Path | str, inputs: Mapping[str, str]) -> LiftReport
                 "typed inside longer text" if inside else "not typed in any step"
             )
             continue
-        step_id: Optional[str] = whole[0]
+        step_id = whole[0]
         if len(whole) > 1:
-            step_id, why = _pick_repeated(workflow, whole, value)
-            if step_id is None:
+            picked, why = _pick_repeated(workflow, whole, value)
+            if picked is None:
                 report.unlifted[name] = why
                 continue
+            step_id = picked
         clash = [
             e for e in existing if e.get("name") == name and e.get("step_id") != step_id
         ]
