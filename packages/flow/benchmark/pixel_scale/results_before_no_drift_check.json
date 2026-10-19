@@ -1,0 +1,2158 @@
+{
+  "commit": "8d0f2e1a755cc2152da4fa657b76fda8478c1b8a",
+  "font": {
+    "bold": "DejaVuSans-Bold.ttf",
+    "regular": "DejaVuSans.ttf"
+  },
+  "generated_at": "2026-10-18T18:45:39+00:00",
+  "layout_drift_check": false,
+  "platform": "Darwin arm64 py3.12.7",
+  "points": [
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 3.92,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "100% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": null,
+      "rows_written": 1,
+      "rung_counts": {
+        "template": 3
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save Note'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 2.31,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "100% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {
+        "template": 2
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save Note'",
+          "ok": false,
+          "rung": "template",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_003' (click 'Save Note'): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active: Grace Hopper MRN 73594' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save Note'",
+        "rung": "template",
+        "step_id": "step_003"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 3.48,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "100% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1,
+        "template": 1
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save Note'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_003' (click 'Save Note'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected 'recorded identifier crop', observed 'identifier pixels differ locally (spike 0.149, floor 0.093) \u2014 a different identifier' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save Note'",
+        "rung": "ocr",
+        "step_id": "step_003"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 2.78,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "100% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1,
+        "template": 1
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": null,
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save Note'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_003"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_003' (click 'Save Note'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active: Grace Hopper MRN 73594' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save Note'",
+        "rung": "ocr",
+        "step_id": "step_003"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 7.85,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "125% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN 24682'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(28, 138, 602, 107) \u2014 run aborted",
+        "gate": "postcondition",
+        "identity": null,
+        "intent": "click 'MRN 24682'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 5.92,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "125% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN 24682'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(28, 138, 602, 107) \u2014 run aborted",
+        "gate": "postcondition",
+        "identity": null,
+        "intent": "click 'MRN 24682'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 7.68,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "125% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN 24682'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(28, 138, 602, 107) \u2014 run aborted",
+        "gate": "postcondition",
+        "identity": null,
+        "intent": "click 'MRN 24682'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 6.47,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "125% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN 24682'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(28, 138, 602, 107) \u2014 run aborted",
+        "gate": "postcondition",
+        "identity": null,
+        "intent": "click 'MRN 24682'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 11.83,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "150% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN 24682'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(28, 138, 602, 107) \u2014 run aborted",
+        "gate": "postcondition",
+        "identity": null,
+        "intent": "click 'MRN 24682'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 6.67,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "150% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN 24682'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(28, 138, 602, 107) \u2014 run aborted",
+        "gate": "postcondition",
+        "identity": null,
+        "intent": "click 'MRN 24682'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 7.38,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "150% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN 24682'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(28, 138, 602, 107) \u2014 run aborted",
+        "gate": "postcondition",
+        "identity": null,
+        "intent": "click 'MRN 24682'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 5.95,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "150% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN 24682'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(28, 138, 602, 107) \u2014 run aborted",
+        "gate": "postcondition",
+        "identity": null,
+        "intent": "click 'MRN 24682'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 7.55,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "175% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN 24682'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(28, 138, 602, 107) \u2014 run aborted",
+        "gate": "postcondition",
+        "identity": null,
+        "intent": "click 'MRN 24682'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 6.66,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "175% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN 24682'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(28, 138, 602, 107) \u2014 run aborted",
+        "gate": "postcondition",
+        "identity": null,
+        "intent": "click 'MRN 24682'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 8.3,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "175% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN 24682'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(28, 138, 602, 107) \u2014 run aborted",
+        "gate": "postcondition",
+        "identity": null,
+        "intent": "click 'MRN 24682'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 6.27,
+      "font_scale": 1.0,
+      "kiosk": "canvas_notes",
+      "label": "175% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN 24682'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(28, 138, 602, 107) \u2014 run aborted",
+        "gate": "postcondition",
+        "identity": null,
+        "intent": "click 'MRN 24682'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": true,
+      "crash": null,
+      "elapsed_s": 7.9,
+      "font_scale": 1.25,
+      "kiosk": "canvas_notes",
+      "label": "100% ClearType on, fonts 125%",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN 24682'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(28, 138, 602, 107) \u2014 run aborted",
+        "gate": "postcondition",
+        "identity": null,
+        "intent": "click 'MRN 24682'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": true,
+      "crash": null,
+      "elapsed_s": 6.21,
+      "font_scale": 1.25,
+      "kiosk": "canvas_notes",
+      "label": "100% ClearType on, fonts 125%",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": null,
+          "intent": "click 'MRN 24682'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN 24682'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(28, 138, 602, 107) \u2014 run aborted",
+        "gate": "postcondition",
+        "identity": null,
+        "intent": "click 'MRN 24682'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 5.78,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "100% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": null,
+      "rows_written": 1,
+      "rung_counts": {
+        "template": 5
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save appointment'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 3.57,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "100% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {
+        "template": 4
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save appointment'",
+          "ok": false,
+          "rung": "template",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_007' (click 'Save appointment'): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Grace Hopper MRN B2002' (coverage 0.41) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save appointment'",
+        "rung": "template",
+        "step_id": "step_007"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 3.71,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "100% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "abstain",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click recorded visual target",
+          "ok": false,
+          "rung": "template",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Ada Lovelace MRN Al001' (coverage 1.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click recorded visual target",
+        "rung": "template",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 0.73,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "100% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "abstain",
+          "intent": "click 'MRN A1001'",
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click recorded visual target",
+          "ok": false,
+          "rung": "template",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Ada Lovelace MRN Al001' (coverage 1.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click recorded visual target",
+        "rung": "template",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 2.28,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "125% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": "mismatch",
+          "intent": "click 'MRN A1001'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_000' (click 'MRN A1001'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'velace MRN A1001' (coverage 0.42) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'MRN A1001'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 0.59,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "125% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": "mismatch",
+          "intent": "click 'MRN A1001'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_000' (click 'MRN A1001'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'velace MRN A1001' (coverage 0.42) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'MRN A1001'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 1.74,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "125% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": "mismatch",
+          "intent": "click 'MRN A1001'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_000' (click 'MRN A1001'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'MRN A1001 /elace' (coverage 0.42) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'MRN A1001'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 0.4,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "125% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": "mismatch",
+          "intent": "click 'MRN A1001'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_000' (click 'MRN A1001'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'MRN A1001 /elace' (coverage 0.42) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'MRN A1001'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 14.75,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "150% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": "unreadable",
+          "intent": "click 'MRN A1001'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN A1001'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(18, 134, 494, 118) \u2014 run aborted",
+        "gate": "identity",
+        "identity": "unreadable",
+        "intent": "click 'MRN A1001'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 6.78,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "150% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": "unreadable",
+          "intent": "click 'MRN A1001'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN A1001'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(18, 134, 494, 118) \u2014 run aborted",
+        "gate": "identity",
+        "identity": "unreadable",
+        "intent": "click 'MRN A1001'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 14.03,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "150% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": "unreadable",
+          "intent": "click 'MRN A1001'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN A1001'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(18, 134, 494, 118) \u2014 run aborted",
+        "gate": "identity",
+        "identity": "unreadable",
+        "intent": "click 'MRN A1001'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 6.85,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "150% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": "unreadable",
+          "intent": "click 'MRN A1001'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN A1001'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(18, 134, 494, 118) \u2014 run aborted",
+        "gate": "identity",
+        "identity": "unreadable",
+        "intent": "click 'MRN A1001'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 17.79,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "175% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": "unreadable",
+          "intent": "click 'MRN A1001'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN A1001'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(18, 134, 494, 118) \u2014 run aborted",
+        "gate": "identity",
+        "identity": "unreadable",
+        "intent": "click 'MRN A1001'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 8.63,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "175% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": "unreadable",
+          "intent": "click 'MRN A1001'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN A1001'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(18, 134, 494, 118) \u2014 run aborted",
+        "gate": "identity",
+        "identity": "unreadable",
+        "intent": "click 'MRN A1001'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 18.18,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "175% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": "unreadable",
+          "intent": "click 'MRN A1001'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN A1001'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(18, 134, 494, 118) \u2014 run aborted",
+        "gate": "identity",
+        "identity": "unreadable",
+        "intent": "click 'MRN A1001'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 7.44,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments",
+      "label": "175% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": "unreadable",
+          "intent": "click 'MRN A1001'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN A1001'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(18, 134, 494, 118) \u2014 run aborted",
+        "gate": "identity",
+        "identity": "unreadable",
+        "intent": "click 'MRN A1001'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": true,
+      "crash": null,
+      "elapsed_s": 2.33,
+      "font_scale": 1.25,
+      "kiosk": "rdp_appointments",
+      "label": "100% ClearType on, fonts 125%",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "mismatch",
+          "intent": "click 'MRN A1001'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_000' (click 'MRN A1001'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'MRN A1001 /elace' (coverage 0.42) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'MRN A1001'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": true,
+      "crash": null,
+      "elapsed_s": 0.41,
+      "font_scale": 1.25,
+      "kiosk": "rdp_appointments",
+      "label": "100% ClearType on, fonts 125%",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "mismatch",
+          "intent": "click 'MRN A1001'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_000' (click 'MRN A1001'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'MRN A1001 /elace' (coverage 0.42) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'MRN A1001'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 28.24,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "100% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": null,
+      "rows_written": 1,
+      "rung_counts": {
+        "template": 5
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "verified",
+          "intent": "click 'Save appointment'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 5.65,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "100% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {
+        "template": 4
+      },
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "verified",
+          "intent": "click 'MRN A3467'",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "intent": "type <appointment_slot>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "intent": "type <visit_type>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "intent": "click recorded visual target",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "identity": null,
+          "intent": "type <request_id>",
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "identity": "mismatch",
+          "intent": "click 'Save appointment'",
+          "ok": false,
+          "rung": "template",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_007' (click 'Save appointment'): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Grace Hopper MRN B7346' (coverage 0.41) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'Save appointment'",
+        "rung": "template",
+        "step_id": "step_007"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 3.39,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "100% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "mismatch",
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_000' (click 'MRN A3467'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected 'recorded identifier crop', observed 'identifier pixels differ locally (spike 0.041, floor 0.092) \u2014 a different identifier' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'MRN A3467'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 0.31,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "100% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "mismatch",
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_000' (click 'MRN A3467'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected 'recorded identifier crop', observed 'identifier pixels differ locally (spike 0.041, floor 0.092) \u2014 a different identifier' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'MRN A3467'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 3.63,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "125% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": "mismatch",
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_000' (click 'MRN A3467'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'MRN A3467 /elace' (coverage 0.42) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'MRN A3467'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 0.79,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "125% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": "mismatch",
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_000' (click 'MRN A3467'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'MRN A3467 /elace' (coverage 0.42) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'MRN A3467'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 2.93,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "125% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": "mismatch",
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_000' (click 'MRN A3467'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'MRN A3467 /elace' (coverage 0.42) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'MRN A3467'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 0.64,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "125% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.25,
+      "steps": [
+        {
+          "identity": "mismatch",
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_000' (click 'MRN A3467'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'MRN A3467 /elace' (coverage 0.42) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'MRN A3467'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 9.43,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "150% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": "unreadable",
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN A3467'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(18, 134, 494, 118) \u2014 run aborted",
+        "gate": "identity",
+        "identity": "unreadable",
+        "intent": "click 'MRN A3467'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 6.39,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "150% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": "unreadable",
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN A3467'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(18, 134, 494, 118) \u2014 run aborted",
+        "gate": "identity",
+        "identity": "unreadable",
+        "intent": "click 'MRN A3467'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 14.51,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "150% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": "unreadable",
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN A3467'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(18, 134, 494, 118) \u2014 run aborted",
+        "gate": "identity",
+        "identity": "unreadable",
+        "intent": "click 'MRN A3467'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 7.2,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "150% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.5,
+      "steps": [
+        {
+          "identity": "unreadable",
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN A3467'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(18, 134, 494, 118) \u2014 run aborted",
+        "gate": "identity",
+        "identity": "unreadable",
+        "intent": "click 'MRN A3467'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 14.49,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "175% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": "unreadable",
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN A3467'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(18, 134, 494, 118) \u2014 run aborted",
+        "gate": "identity",
+        "identity": "unreadable",
+        "intent": "click 'MRN A3467'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 6.94,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "175% ClearType on",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": "unreadable",
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN A3467'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(18, 134, 494, 118) \u2014 run aborted",
+        "gate": "identity",
+        "identity": "unreadable",
+        "intent": "click 'MRN A3467'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 10.61,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "175% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": "unreadable",
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN A3467'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(18, 134, 494, 118) \u2014 run aborted",
+        "gate": "identity",
+        "identity": "unreadable",
+        "intent": "click 'MRN A3467'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": false,
+      "control": false,
+      "crash": null,
+      "elapsed_s": 7.9,
+      "font_scale": 1.0,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "175% ClearType off",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.75,
+      "steps": [
+        {
+          "identity": "unreadable",
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Postconditions failed for step 'step_000' (click 'MRN A3467'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(18, 134, 494, 118) \u2014 run aborted",
+        "gate": "identity",
+        "identity": "unreadable",
+        "intent": "click 'MRN A3467'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "cleartype": true,
+      "control": true,
+      "crash": null,
+      "elapsed_s": 5.54,
+      "font_scale": 1.25,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "100% ClearType on, fonts 125%",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "mismatch",
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_000' (click 'MRN A3467'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'MRN A3467 velace' (coverage 0.42) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'MRN A3467'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "cleartype": true,
+      "control": true,
+      "crash": null,
+      "elapsed_s": 0.75,
+      "font_scale": 1.25,
+      "kiosk": "rdp_appointments_unambiguous_ids",
+      "label": "100% ClearType on, fonts 125%",
+      "layout_drift_check": false,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": null,
+      "rows_written": 0,
+      "rung_counts": {},
+      "scale": 1.0,
+      "steps": [
+        {
+          "identity": "mismatch",
+          "intent": "click 'MRN A3467'",
+          "ok": false,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_000' (click 'MRN A3467'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'MRN A3467 velace' (coverage 0.42) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "identity": "mismatch",
+        "intent": "click 'MRN A3467'",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    }
+  ],
+  "record_profile": "100% ClearType on",
+  "schema_version": "openadapt.pixel-scale-sweep.v1",
+  "summary": {
+    "crashes": 0,
+    "false_completions": 0,
+    "font_only_controls": 6,
+    "font_only_controls_halted": 6,
+    "healthy_halted": 21,
+    "healthy_passed": 3,
+    "healthy_points": 24,
+    "model_calls": 0,
+    "wrong_record_halted": 24,
+    "wrong_record_points": 24,
+    "wrong_writes": 0
+  }
+}

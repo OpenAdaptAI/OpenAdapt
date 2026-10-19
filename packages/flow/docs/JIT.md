@@ -50,6 +50,46 @@ Claude computer-use trajectory against the bundled MockMed app:
 python examples/jit/run_mockmed.py
 ```
 
+## Desktop and remote apps
+
+`WebApp(url=...)` is a browser app. `SurfaceApp` is any other app, named the
+way a deployment file names it: the `backend` section of a `deploy.yaml`.
+
+```python
+from openadapt_flow.jit import SurfaceApp
+
+app = SurfaceApp.from_deployment("deploy.yaml", record_reader=read_records)
+# or
+app = SurfaceApp({"kind": "windows", "agent_url": "http://127.0.0.1:5001"})
+```
+
+| `backend.kind` | The section names | The agent sees |
+| --- | --- | --- |
+| `windows` | `agent_url` (the in-guest agent) | screenshots; clicks keep the UI Automation locator |
+| `macos` | `macos_app`, optionally `macos_window_title` | screenshots; clicks keep the Accessibility locator |
+| `linux` | `linux_app`, `linux_window_title`, and `linux_allow_physical_input: true` (see below) | screenshots; clicks keep the AT-SPI locator |
+| `rdp` | `rdp_host`, or `rdp_window` for a local client window | pixels only |
+| `citrix` | nothing (the Citrix Workspace window) or `rdp_window`; runs need `rdp_readiness_text` | pixels only |
+
+An agent clicks at window coordinates. The Linux backend refuses
+coordinate input unless the section sets `linux_allow_physical_input: true`,
+which allows window-bound X11 input; without it the capture ends
+`capture_failed` with "coordinate input is disabled for native Linux".
+
+The agent drives the app through the same `AuthoringSession` and
+`CaptureComputer` the MCP recording tools use. Every canary and run opens a
+fresh backend from the same section. The app's origin is `<kind>://<target>`
+in lower case, for example `macos://textedit` or `rdp://10.0.0.5`. Window
+titles and credentials are left out: a title can carry a patient or document
+name. A program admitted on one origin is refused on any other, by the JIT
+wrapper and by `openadapt-flow run --config` alike. An admission policy names
+a desktop or remote app in `allowed_hosts` with its kind
+(`rdp://10.0.0.5`); a bare host there names a web app only, so it never
+covers the remote desktop on the same address.
+
+The Windows origin is the agent's host and port. Two VMs reached through the
+same tunnel port share it, so use a separate cache directory per environment.
+
 ## What each run does
 
 | State of the task | `run(**params)` does | `status` |
@@ -253,8 +293,13 @@ explores again.
 
 ## Limits
 
-- Web apps only. `AuthoringSession` can drive desktop, RDP and Citrix, but the
-  wrapper launches a Playwright browser for capture and for runs.
+- On RDP and Citrix the agent sees only pixels, and a pixel click carries no
+  verified record identity. The standard run gate refuses the canary
+  ("Identity coverage"), exactly as `run --profile standard` refuses any
+  pixel-only bundle that was not qualified. Nothing is sent to the window.
+- Citrix canaries and runs refuse without `backend.rdp_readiness_text`.
+- The `playwright_mcp` action format needs a browser page; a `SurfaceApp`
+  refuses it.
 - Without a `record_reader`, the candidate has no effect contract, admission
   refuses it, and no run can reach `VERIFIED`.
 - Secret inputs are not lifted. A secret is typed by a person at a pause

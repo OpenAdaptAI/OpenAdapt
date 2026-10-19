@@ -1,0 +1,13 @@
+{
+  "_note": "Scripted answers for the unattended demo. Each person is a made-up test principal.",
+  "staff": "intake_staff:demo-staff-1",
+  "approver": "physician:demo-physician-1",
+  "corrections": {
+    "referral-0007.pdf": {"subject_id": "TEST-0000-0007"}
+  },
+  "decisions": {
+    "referral-0007.pdf": "urgent",
+    "referral-0008.pdf": "routine",
+    "referral-0009.pdf": "soon"
+  }
+}
