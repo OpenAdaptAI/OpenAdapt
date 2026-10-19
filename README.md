@@ -32,8 +32,10 @@ browser through sign-in, the entry and the saved record read back (median):
 | OpenAdapt program, screen steps | `███████████` 22.5 s | 18 of 18 | $0 |
 | OpenAdapt program, API step | `██` 3.3 s | 18 of 18 | $0 |
 
-The API step replaces the program's 41 screen steps with the one save request
-the app itself sends, then reads the record back. In both program rows a
+The API step replaces the program's 41 screen steps with the one form
+submission the app itself sends, then reads the record back. It covers single
+HTML form saves like this one; other apps and request types are not yet
+measured. In both program rows a
 possible-duplicate referral stopped without saving, as it should. Both program
 rows ran on 19 Oct on one copy of the app, interleaved, without the approval
 gate and without resumable runs; the API step was admitted by the benchmark
