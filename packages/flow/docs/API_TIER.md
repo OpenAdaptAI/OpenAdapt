@@ -100,14 +100,46 @@ RECONCILIATION_REQUIRED` unless the record check proves the effect.
 The record check (`effects`) then confirms the save with the same verifier
 a GUI save uses.
 
+## Under an approval mode
+
+Under `each_item` (the default) and `problems_only`, the person approves the
+request the API step sends, not a screenshot of the form. The API step fills
+no form, so a screenshot would show an empty one.
+
+1. Before it asks, the run prepares the request: it reads the form page,
+   builds the body and runs the pre-checks. Only reads are sent. If the
+   request can't be prepared, nobody is asked and the GUI steps run; their
+   save asks the person as before.
+2. The approval request (`item-approval/request-<id>.json`) has
+   `form_state_kind: "api_request"` and an `api_request` block with the
+   method, the path and `payload_sha256`, the digest of every byte the save
+   sends (method, path, content type, encoded body and referer, session
+   values included). Its `form_state_sha256` is the operation digest: the
+   payload digest, the record the check reads back (the record check's
+   selector fields and their values for this run) and the record check's
+   contract hashes.
+3. The person sees the values this run supplies, the record the check reads
+   back and the request line, as rows on the phone and as the request's
+   image in Desktop. Session values are counted, never shown.
+4. After the approval, the run prepares the request again (fresh form, fresh
+   pre-checks). The last-point gate compares its operation digest with the
+   approved one. A different request, record or record check stops the item
+   before the save (`form_changed_after_approval`). A request that can't be
+   prepared again stops it too (`form_state_unreadable`). In both cases the
+   save isn't sent, and the GUI steps don't run in its place.
+5. The run sends exactly the request it just checked, once.
+
+An application that issues a new session value on every form read can't be
+approved this way: the second read changes the digest, and the item stops
+before saving.
+
 ## When it doesn't run
 
 The API step runs only in a plain linear run. It doesn't run, and the GUI
 steps run instead, when:
 
-- approval mode is `each_item` (the default) or `problems_only`. The person
-  approves what the screen shows, and an API step leaves the form empty, so
-  API steps run only with `--approval-mode not_gated`;
+- an approval mode is on and the API actuator can't prepare the request
+  before sending it (a deployment's own actuator without `prepare`);
 - the run is governed by qualification, is durable, or is resumed;
 - the step isn't admitted, or the program's steps, on-screen checks or the
   save's record check changed since it was proposed or admitted;
