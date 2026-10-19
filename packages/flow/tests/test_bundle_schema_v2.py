@@ -208,6 +208,9 @@ def _pre_frame_path_content(wf: Workflow, shape: str) -> dict:
         # key name -- see the note above.
         assert effect.pop("new_records") == []
         assert effect.pop("identity_field") == "id"
+        # Reviewed v2 omission: the collateral-change check postdates these
+        # seals (#1375).
+        assert effect.pop("forbid_collateral_change") is False
     return content
 
 
