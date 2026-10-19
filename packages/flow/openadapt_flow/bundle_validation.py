@@ -186,6 +186,15 @@ _SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
         ),
         _SealedCanonicalOmission(
             owner=Step,
+            field_name="hover",
+            omitted_values=(None,),
+            reason=(
+                "absent hover evidence predates the v2 field; a step CARRYING "
+                "a recorded hover response is new content and changes the digest"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Step,
             field_name="submit_binding",
             omitted_values=(None,),
             reason=(

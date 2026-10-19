@@ -208,7 +208,7 @@ def linespace(pt: int, bold: bool, scale: float = 1.0) -> int:
 class Widget:
     """A Tk widget placed at logical (100%) coordinates."""
 
-    kind: str  # label | button | entry
+    kind: str  # label | button | entry | icon
     name: str
     x: int
     y: int
@@ -223,6 +223,8 @@ class Widget:
     anchor_w: bool = False
     relief: str = "flat"
     bd: int = 0
+    #: Tooltip shown while the pointer rests on the widget (hover feedback on).
+    tooltip: Optional[str] = None
 
     def size(self) -> tuple[int, int]:
         """Logical size, from Tk's geometry rules at 100%."""
@@ -239,6 +241,8 @@ class Widget:
             return (w, h)
         if self.kind == "entry":
             return ((self.chars or 20) * avg + 2 * (1 + 1) + 2, line + 2 * (1 + 1) + 2)
+        if self.kind == "icon":
+            return (self.width or 48, self.height or 44)
         raise ValueError(self.kind)
 
 
@@ -258,6 +262,8 @@ class KioskSpec:
     fields: list[str]
     save_button: str
     rows: list[str]
+    #: Icon buttons and what they do: ``save`` or ``clear`` (empty the form).
+    icon_actions: dict[str, str] = field(default_factory=dict)
 
 
 def rdp_appointments_spec(
@@ -499,6 +505,44 @@ def rdp_appointments_unambiguous_spec() -> KioskSpec:
     )
 
 
+def rdp_appointments_icons_spec(swapped: bool = False) -> KioskSpec:
+    """The appointment kiosk with its Save button turned into a toolbar icon.
+
+    Two icons draw the same glyph and differ only by their tooltip:
+    ``Save appointment`` and ``Clear form``. ``swapped`` exchanges their
+    places, as a toolbar reorder between versions would. Record IDs are free
+    of OCR-confusable glyphs, so identity is not what stops a run here.
+    """
+    spec = rdp_appointments_spec(
+        (("Ada Lovelace", "MRN A3467"), ("Grace Hopper", "MRN B7346")),
+        name="rdp_appointments_icons_swapped" if swapped else "rdp_appointments_icons",
+    )
+    btn_bg = "#2d6fd8"
+    save_x, clear_x = (750, 550) if swapped else (550, 750)
+    widgets = [w for w in spec.widgets if w.name != "save"]
+    for name, x, tip in (
+        ("save", save_x, "Save appointment"),
+        ("clear", clear_x, "Clear form"),
+    ):
+        widgets.append(
+            Widget(
+                "icon",
+                name,
+                x,
+                570,
+                bg=btn_bg,
+                width=56,
+                height=48,
+                relief="raised",
+                bd=2,
+                tooltip=tip,
+            )
+        )
+    spec.widgets = widgets
+    spec.icon_actions = {"save": "save", "clear": "clear"}
+    return spec
+
+
 SPECS: dict[str, Callable[[], KioskSpec]] = {
     "rdp_appointments": rdp_appointments_spec,
     "rdp_appointments_unambiguous_ids": rdp_appointments_unambiguous_spec,
@@ -519,11 +563,18 @@ class KioskState:
 class ScaledKiosk:
     """Kiosk state machine plus a renderer for one :class:`RenderProfile`."""
 
-    def __init__(self, spec: KioskSpec, profile: RenderProfile) -> None:
+    def __init__(
+        self, spec: KioskSpec, profile: RenderProfile, *, hover_feedback: bool = False
+    ) -> None:
         self.spec = spec
         self.profile = profile
         self.state = KioskState(values={name: "" for name in spec.fields})
         self._by_name = {w.name: w for w in spec.widgets}
+        # Tk draws a button under the pointer in its active colour and the
+        # application may show a tooltip. Off by default: the display-scale
+        # sweep was measured without it.
+        self.hover_feedback = hover_feedback
+        self.pointer: Optional[tuple[int, int]] = None
 
     # -- geometry --------------------------------------------------------
     def logical_rect(self, name: str) -> tuple[int, int, int, int]:
@@ -550,7 +601,7 @@ class ScaledKiosk:
     # -- interaction -----------------------------------------------------
     def _hit(self, x: int, y: int) -> Optional[str]:
         for w in self.spec.widgets:
-            if w.kind not in ("button", "entry"):
+            if w.kind not in ("button", "entry", "icon"):
                 continue
             rx, ry, rw, rh = self._rect(w.name)
             if rx <= x < rx + rw and ry <= y < ry + rh:
@@ -565,6 +616,10 @@ class ScaledKiosk:
             self.state.active = self.spec.rows.index(name)
         elif name in self.spec.fields:
             self.state.focus = name
+        elif self.spec.icon_actions.get(name) == "clear":
+            self.state.values = {k: "" for k in self.state.values}
+            self.state.status = "Form cleared"
+            self.state.status_fg = "#b42318"
         elif name == self.spec.save_button:
             self.save()
 
@@ -612,6 +667,8 @@ class ScaledKiosk:
                 self.state.status_fg if w.name == self.spec.status_label else w.fg
             )
             bg = _rgb(w.bg) if w.bg else _rgb(self.spec.bg)
+            if w.kind in ("button", "icon") and self._under_pointer(w.name):
+                bg = _shade(bg, 1.18)  # Tk activebackground
             if w.kind != "label":
                 canvas[ry : ry + rh, rx : rx + rw] = bg
                 relief = w.relief
@@ -622,6 +679,9 @@ class ScaledKiosk:
                 ):
                     relief, bd = "sunken", 4
                 self._bevel(canvas, (rx, ry, rw, rh), bg, relief, max(1, self._px(bd)))
+            if w.kind == "icon":
+                self._glyph(canvas, (rx, ry, rw, rh))
+                continue
             pad = self._px(3)
             line = linespace(w.pt, w.bold, fs)
             if w.kind == "label":
@@ -646,7 +706,52 @@ class ScaledKiosk:
                 cx = origin[0] + text_width(text, w.pt, w.bold, fs) + 1
                 cw = max(1, self._px(2))
                 canvas[origin[1] : origin[1] + line, cx : cx + cw] = fg
+        self._tooltip(canvas)
         return Image.fromarray(canvas, "RGB")
+
+    def _under_pointer(self, name: str) -> bool:
+        if not self.hover_feedback or self.pointer is None:
+            return False
+        return self._hit(*self.pointer) == name
+
+    def _glyph(self, canvas: np.ndarray, rect: tuple[int, int, int, int]) -> None:
+        """The same white disc-and-bar glyph on every icon."""
+        x, y, w, h = rect
+        cx, cy = x + w // 2, y + h // 2
+        r = max(3, min(w, h) // 4)
+        yy, xx = np.ogrid[: canvas.shape[0], : canvas.shape[1]]
+        disc = (xx - cx) ** 2 + (yy - cy) ** 2 <= r * r
+        canvas[disc] = (255, 255, 255)
+        bar = max(1, r // 3)
+        canvas[cy - bar : cy + bar, cx - 2 * r : cx + 2 * r] = (255, 255, 255)
+
+    def _tooltip(self, canvas: np.ndarray) -> None:
+        if not self.hover_feedback or self.pointer is None:
+            return
+        name = self._hit(*self.pointer)
+        widget = self._by_name.get(name) if name else None
+        if widget is None or not widget.tooltip:
+            return
+        fs = self.profile.scale * self.profile.font_scale
+        px, py = self.pointer
+        tx, ty = px + self._px(12), py + self._px(20)
+        tw = text_width(widget.tooltip, 11, False, fs) + self._px(8)
+        th = linespace(11, False, fs) + self._px(6)
+        vh, vw = canvas.shape[:2]
+        tx, ty = min(tx, vw - tw - 1), min(ty, vh - th - 1)
+        canvas[ty : ty + th, tx : tx + tw] = (255, 255, 225)
+        canvas[ty, tx : tx + tw] = canvas[ty + th - 1, tx : tx + tw] = (0, 0, 0)
+        canvas[ty : ty + th, tx] = canvas[ty : ty + th, tx + tw - 1] = (0, 0, 0)
+        _draw_text(
+            canvas,
+            (tx + self._px(4), ty + self._px(3)),
+            widget.tooltip,
+            font_px=font_px(11, fs),
+            bold=False,
+            fg=(0, 0, 0),
+            cleartype=self.profile.cleartype,
+            clip=(tx, ty, tw, th),
+        )
 
     @staticmethod
     def _bevel(
@@ -702,7 +807,13 @@ class KioskBackend:
 
     def click(self, x: int, y: int, *, double: bool = False) -> None:
         self.clicks.append((int(x), int(y)))
+        self.kiosk.pointer = (int(x), int(y))
         self.kiosk.click(int(x), int(y))
+
+    def hover(self, x: int, y: int) -> None:
+        """Rest the pointer on (x, y); with hover feedback on, the kiosk draws
+        the control's active colour and tooltip."""
+        self.kiosk.pointer = (int(x), int(y))
 
     def type_text(self, text: str) -> None:
         self.kiosk.type_text(text)

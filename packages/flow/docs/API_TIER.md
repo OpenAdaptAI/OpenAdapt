@@ -17,8 +17,8 @@ with the same record check. The harness and the earlier spike are in
 openadapt-flow record --backend web --url https://app.example/ --capture-network --out rec/
 openadapt-flow compile rec/ --out bundle/ --name referral
 openadapt-flow api show bundle/
-openadapt-flow api admit bundle/        # a person, at a terminal
-openadapt-flow run bundle/ --approval-mode not_gated ...
+openadapt-flow api admit bundle/ --identity subject_name=lname   # a person, at a terminal
+openadapt-flow run bundle/ ...
 ```
 
 1. **Record with `--capture-network`.** Flow keeps the page's requests next
@@ -31,7 +31,9 @@ openadapt-flow run bundle/ --approval-mode not_gated ...
    `api admit` asks a person to type `admit`. Until then, the API step never
    runs. An agent, model, or service name can't admit it, and the admission
    is bound to the exact proposal. If the binding changes, it needs a new
-   admission.
+   admission. `--identity KEY=PARAM` names the parameter that identifies the
+   record (for example `subject_name=lname` or `record_id=mrn`); Standard
+   and Regulated runs need one (see [Under governance](#under-governance)).
 4. **Run.** An admitted API step runs in place of the GUI steps it covers.
    The run report marks those steps `actuation: "api_folded"`, and the save
    step is marked `actuation: "api"`. When the API step doesn't run, the
@@ -163,6 +165,91 @@ An application that issues a new session value on every form read can't be
 approved this way: the second read changes the digest, and the item stops
 before saving.
 
+## In a durable run
+
+A durable run (`--durable`) uses the API step too. The checkpoints and the
+resume rules keep the no-double-write rule. (Standard and Regulated runs are
+durable and governed; the governed exclusion below still applies to them.)
+
+- **Before the span**, the checkpoint is the last step before the steps the
+  API step covers.
+- **After the span**, the covered steps (`api_folded`) and the save (`api`)
+  are checkpointed together, once the save was sent. If the save wasn't
+  sent (for example, the record check's pre-state couldn't be read, or an
+  approval stopped the item), nothing in the span is checkpointed. A resume
+  then runs the whole API step again from the start: it prepares the
+  request again, asks again under an approval mode, and sends it once.
+- **After a send that may have landed** (a lost response, a rejected
+  response, or a save the record check didn't confirm), the pause is at the
+  save and the run reads `RECONCILIATION_REQUIRED` when the outcome is
+  unknown. Resume never sends that save again and never redoes it through
+  the GUI on an empty form. An ordinary resume is refused, as for any
+  uncertain delivery. A resume that authorizes one uncertain retry stops at
+  the save with that reason. The attended `reconcile` action reads the record
+  back with the record check and finishes the run when the record is there,
+  without sending anything.
+- A run that fell back to the GUI steps and stopped at the GUI save resumes
+  that GUI save, as before.
+
+Reconcile reads the record as it is now. A record check that compares with
+the state before the save (`exact_new_set`, `count_new_only` or a
+collateral-loss guard) can't be proven that way after the fact, so the pause
+stays for a person to check the record. The same limit applies to a GUI
+save.
+
+## Under governance
+
+Every `openadapt-flow run` carries a run authorization, and Standard and
+Regulated runs add the run gate's profile checks. An API step runs there
+under these rules:
+
+- **The authorization names it.** When the run gate admits the run, the
+  authorization lists each admitted API step (`api_steps`) with the digest
+  of the binding the person admitted, the folded-checks digest and the
+  record check's contract hashes. The runtime runs an API step only when
+  all three still match. A step the authorization doesn't list, such as one
+  admitted after the run was authorized, runs on the GUI. An API step that
+  no person admitted is GUI-only for the run gate too, so a proposal alone
+  never blocks a run.
+- **Right record.** A Standard or Regulated save needs an identity contract
+  on every path it can run. For an API step it's the parameter named at
+  admission (`api admit --identity`): the request must send that
+  parameter's run value as-is in a form field, and the record check must
+  select the record by the same parameter (in `match`, or in `new_records`
+  for a create). The runtime checks both sides before the request is sent,
+  and the outcome check checks them again. A form field's name is the
+  page's, not the record's (`form_lname` versus `lname`), so the field and
+  the record check are tied by the parameter, not by name. An API step
+  admitted without one is refused by the run gate's identity check, which
+  names the step and the `--identity` flag.
+- **Outcome.** The covered steps are skips, and the outcome check accepts
+  them only when the API step's own save in the same report ran on the API
+  path and succeeded, and every step it covers was folded. The save is then
+  checked like any other API action: delivered, confirmed by the record
+  check at the profile's evidence tier, with exact identity evidence. A run
+  like that reads `VERIFIED`.
+
+Not yet covered, so the GUI steps run with that reason:
+
+- **Qualification cases.** Qualification needs representative and fault
+  cases on the API path for an admitted API step, and a case run doesn't
+  run API steps yet. So a bundle with an admitted API step can't complete
+  qualification today, and a run under a production qualification admission
+  uses the GUI steps.
+- **Managed (Cloud) dispatch.** Cloud's run authorization doesn't list API
+  steps yet.
+
+## With parallel workers, pipelined read-back and self-repair
+
+- **Workers** (`--workers`): each item has its own run, authorization and
+  approval gate, so the API step runs in each, as in a single run.
+- **Pipelined read-back** (`--readback-window`): an API save's record check
+  is deferred like a GUI save's (same check, later timing). Durable runs
+  verify inline and say why ([THROUGHPUT.md](THROUGHPUT.md)).
+- **Self-repair**: the first run can use the API step. A repaired bundle's
+  probes and resumed run use the GUI steps, because the repair and the
+  person's approval are about the GUI step ([SELF_REPAIR.md](SELF_REPAIR.md)).
+
 ## When it doesn't run
 
 The API step runs only in a plain linear run. It doesn't run, and the GUI
@@ -170,10 +257,15 @@ steps run instead, when:
 
 - an approval mode is on and the API actuator can't prepare the request
   before sending it (a deployment's own actuator without `prepare`);
-- the run is governed by qualification, is durable, or is resumed;
+- the run's authorization didn't admit that API step, or it is a
+  qualification case, a managed (Cloud) dispatch, or a run under a
+  production qualification admission (see [Under governance](#under-governance));
 - the step isn't admitted, or the program's steps, on-screen checks or the
   save's record check changed since it was proposed or admitted;
-- there's no live browser session (`--backend web` only).
+- the save checks the right record on screen and the API step names no
+  right-record contract;
+- there's no live browser session (`--backend web` only);
+- it is a self-repair probe or the resumed run of a repaired bundle.
 
 `Replayer(api_steps=False)` keeps a run on the GUI.
 
@@ -190,10 +282,12 @@ withholds:
 - every header, so no cookie or authorization value;
 - the values of password-like fields and of `--secret` fields, everywhere
   they appear (`<secret>`);
-- CSRF and session tokens, found by field name (`csrf`, `xsrf`, `token`,
-  `nonce`, `authenticity`), everywhere they appear (`<session:NAME>`);
-- cookie values the browser sent, where a page echoes them
-  (`<session:cookie>`).
+- CSRF, session and API tokens, found by field name in forms, URL queries
+  and JSON request and response bodies, everywhere they appear
+  (`<session:NAME>`);
+- cookie values the browser sent or a response set, and `Authorization`
+  credentials, wherever a page echoes them (`<session:cookie>`,
+  `<session:authorization>`).
 
 Business values the person typed stay in the file, as they do in
 `events.jsonl`. A recording with capture is as sensitive as any other
