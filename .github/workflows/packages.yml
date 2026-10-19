@@ -296,6 +296,12 @@ jobs:
           cache: pip
       - name: Install
         run: pip install -e ../types -e ../capture -e '.[dev,capture,agent]'
+      - name: Install Harness² for the integration tests
+        # Not on PyPI. Pinned to the commit openadapt_flow.integrations.harness2
+        # is written against; it has no runtime dependencies.
+        run: >-
+          pip install --no-deps
+          'harness2 @ git+https://github.com/google-research/harness2@1cfe254e8d25b15f37048c3730134686abe60335'
       - name: Verify the in-tree openadapt-capture imports headless
         run: |
           python - <<'PY'
