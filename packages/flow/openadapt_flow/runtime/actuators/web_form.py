@@ -365,6 +365,36 @@ def folded_checks_digest(steps: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def web_form_pointer_template(binding: Any, pointer: str) -> Optional[str]:
+    """The template a ``web_form`` save sends at ``/body/<field name>``.
+
+    ``"{param}"`` when that form field sends a run parameter as-is, else None.
+    A form field's name is the page's, not the record's (``form_lname``
+    versus ``lname``), so an identity binding ties the field to the record
+    check by the parameter both use, not by name.
+    """
+
+    spec = getattr(binding, "web_form", None)
+    if spec is None:
+        return None
+    root, _, name = pointer.lstrip("/").partition("/")
+    if root != "body":
+        return None
+    for field in spec.fields:
+        if field.name == name and field.source == "param" and field.param:
+            return "{" + field.param + "}"
+    return None
+
+
+def effect_selector_rows(effect: Any) -> list[Any]:
+    """The selector rows of a record check: ``match``, then ``new_records``.
+
+    A create's record check names the new record in ``new_records``.
+    """
+
+    return [effect.match, *getattr(effect, "new_records", [])]
+
+
 # -- transport -------------------------------------------------------------------
 
 

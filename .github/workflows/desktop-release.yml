@@ -95,7 +95,13 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
           pypi="$(curl --silent --output /dev/null --write-out '%{http_code}' \
             "https://pypi.org/pypi/openadapt-desktop/${version}/json")"
-          release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '.draft' 2>/dev/null || echo none)"
+          # gh prints the 404 body on stdout, so a failed call must not be
+          # captured: "none" means no GitHub release exists for the tag.
+          if draft="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '.draft' 2>/dev/null)"; then
+            release="${draft}"
+          else
+            release=none
+          fi
           echo "PyPI ${version}: HTTP ${pypi}; GitHub release ${tag}: ${release}"
           if [ "${pypi}" = 200 ] && [ "${release}" = false ]; then
             echo "${tag} is fully released; nothing to do."
