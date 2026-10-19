@@ -1,0 +1,145 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openadapt-desktop"
+version = "0.20.0"
+description = "The OpenAdapt desktop app and local engine: record a data-entry task, run it on a list, and check each saved record"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+    { name = "MLDSAI Inc." },
+    { email = "hello@openadapt.ai" },
+]
+keywords = ["desktop", "recording", "workflow-authoring", "human-in-the-loop", "automation"]
+classifiers = [
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Desktop Environment",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    # Floor, not decoration. Desktop freezes an exact Flow pin whose own
+    # ``capture`` extra declares ``openadapt-capture>=1.2.0``, and Desktop's
+    # native record path runs Flow's capture adapter in-process against
+    # whatever capture this resolves to. Below that floor the producer never
+    # emits ``key.shortcut``, so Flow's adapter refuses every demonstration
+    # containing a modifier chord ("keyboard shortcut 'ctrl+s' has no flow
+    # equivalent") -- after the operator has already performed the workflow.
+    # 1.2.1 rather than 1.2.0 because 1.2.0 and every earlier release resolve
+    # ``capture transcribe``'s default ``auto`` backend to a hosted recognizer
+    # and upload the raw microphone waveform; 1.2.1 removed that path.
+    # 1.3.0 because shadow mode (``openadapt_desktop/shadow_mode.py``) needs
+    # ``openadapt_capture.shadow``: the recorder live tap, the consent notice,
+    # the encrypted bounded buffer, and on-device motif mining. Below 1.3.0
+    # the package is absent and shadow mode cannot start.
+    # ``tests/test_capture_runtime_contract.py`` asserts this floor against the
+    # bundled Flow distribution's own declared extra, so it cannot drift back.
+    "openadapt-capture>=1.3.0",
+    "openadapt-privacy>=1.0.0",
+    # Cross-surface status/target contract used by the presentation exporter
+    # and by the generated TypeScript projection checked into src/. 0.17.0
+    # retains the portable business-decision V2 contract used by the Desktop
+    # phone portal and Flow's governed runner. Keep the same bounded range as
+    # the Flow release pinned in the ``build`` extra, never an exact pin: an
+    # exact pin makes ``pip install openadapt openadapt-desktop`` downgrade
+    # the shared types package or fall back to an older Flow. The generated
+    # projection is still checked against the exact locked version
+    # (scripts/sync_control_overlay_contract.py), and
+    # tests/test_dependency_compat.py keeps this range equal to Flow's.
+    "openadapt-types>=0.18.0,<0.19.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "PyYAML>=6.0,<7",
+    "httpx>=0.28.1",
+    "keyring>=24",
+    # PEP 440 comparison is required before Desktop enables a Flow capability.
+    # Hand-parsing would accept pre-release builds such as 1.26.0rc1 as 1.26.0.
+    "packaging>=24",
+    # Qualification evidence is signed locally. Version 50 fixes
+    # PYSEC-2026-3552 and the other known advisories on the former Intel macOS
+    # pin. PyPI has no Intel wheel, so frozen builds compile it from the locked
+    # source archive against the static Homebrew OpenSSL libraries.
+    "cryptography>=50,<51",
+    "loguru",
+    "psutil",
+    # Pure-Python, dependency-free, BSD-licensed QR encoder. The mobile
+    # decision portal renders its one-use pairing link locally; nothing about
+    # a pairing ever leaves this machine to be encoded elsewhere.
+    "segno>=1.6.6",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+enterprise = ["boto3"]
+full = [
+    "openadapt-desktop[enterprise]",
+]
+build = [
+    "pyinstaller>=6.22.2,<7",
+    # The native installer freezes this exact canonical runtime into the
+    # engine sidecar.  Keep it exact: Desktop and Flow can release
+    # independently, while each installer remains reproducible and rollbackable.
+    #
+    # The ``console`` extra is load-bearing, not optional polish.  The mobile
+    # decision portal supervises ``openadapt-flow console --attend``; without
+    # this extra the frozen sidecar carries no fastapi/uvicorn and the console
+    # exits with an install hint instead of a capability banner, so the portal
+    # is dead in every signed installer. 1.34.0 also carries the strict hosted
+    # runner adapter that Desktop calls for leased work.
+    #
+    # ``browser`` is equally load-bearing: 1.25.0 moved Playwright from a core
+    # Flow dependency to that extra, and Desktop freezes the browser driver on
+    # purpose (see the pin below and the embedded ``-m playwright`` process
+    # mode). Without it the driver becomes build-only and the artifact gate
+    # correctly refuses the archive.
+    "openadapt-flow[browser,console]==2.1.0",
+    # Desktop deliberately embeds the optional browser driver so selecting a
+    # web workflow is one click. It does NOT bundle Chromium: that larger
+    # runtime is fetched only after the operator chooses the browser surface.
+    "playwright>=1.44",
+    # ONNX Runtime 1.27 dropped macOS Intel wheels. Flow's RapidOCR dependency
+    # accepts this universal2 release, which retains Python 3.12 Intel support.
+    "onnxruntime==1.20.1; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    # Keep the current runtime everywhere it publishes a compatible wheel.
+    "onnxruntime==1.27.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+]
+
+[project.scripts]
+openadapt-desktop = "openadapt_desktop.cli:main"
+
+[project.urls]
+Homepage = "https://openadapt.ai"
+Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/desktop"
+Issues = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["openadapt_desktop"]
+
+# click before 8.3.3 is PYSEC-2026-2132. Keep any extra that pulls click on
+# the audited fix.
+[tool.uv]
+constraint-dependencies = ["click>=8.3.3"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
