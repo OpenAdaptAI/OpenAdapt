@@ -37,8 +37,8 @@ pytest -q                          # tests
   hooks in `tests/conftest.py` snapshot the tracked-file status before the
   first test and after the last one, and fail the run when a new entry
   appears, because a regenerated golden can be committed by accident and
-  `scripts/check_release_consistency.py` pins a reviewed SHA-256 inventory of
-  the public files. Write to `tmp_path` (copy a fixture bundle there first)
+  the release workflow pins the SHA-256 of every public artifact file. Write to
+  `tmp_path` (copy a fixture bundle there first)
   instead. The check reports any tracked file that changed during the run, so
   editing files yourself while a long suite runs also trips it — set
   `OPENADAPT_FLOW_ALLOW_DIRTY_TREE=1` for that case.
@@ -60,9 +60,24 @@ claims checks:
 ```bash
 python scripts/check_release_consistency.py
 python scripts/validate_claims.py --check --structure-only
+python scripts/check_release_consistency.py --stamp-release-inventory
 uv build --wheel --sdist
 python scripts/check_release_consistency.py --require-dist
+git restore public-artifacts.json
 ```
+
+`public-artifacts.json` lists, by path, every file that can carry data,
+evidence, static assets, models or configuration (`.json`, `.yaml`, `.png` and
+the other suffixes it names). A pull request that adds, removes or renames such
+a file runs `python scripts/check_release_consistency.py
+--write-public-artifact-inventory` and commits the changed list; editing an
+already-listed file needs no inventory change. The list deliberately carries no
+hashes: hash rows changed with every edit to `claims.yaml` or a fixture, so
+parallel pull requests conflicted on them. The bytes are pinned at release
+instead. The release workflow runs `--stamp-release-inventory` on the exact
+commit it builds, which rewrites the list with each file's SHA-256, and then
+validates the wheel and sdist against it. The open-core path, signature and
+license checks run unchanged on every pull request.
 
 After that pull request merges, start the release from protected `main`:
 

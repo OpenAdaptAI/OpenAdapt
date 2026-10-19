@@ -75,6 +75,11 @@ from openadapt_flow.ir import (
 
 #: Bound on waiting for a newly opened page's first navigation.
 _NEW_PAGE_LOAD_TIMEOUT_S = 10.0
+
+# Mirrors openadapt_flow.runtime.hover_evidence.HOVER_DWELL_MS. Not imported:
+# the recorder must not pull in the runtime's vision dependencies.
+HOVER_DWELL_MS = 800
+
 # How long a recorded action that raises a browser dialog waits for it.
 _DIALOG_WAIT_S = 5.0
 
@@ -143,7 +148,13 @@ class Recorder:
         page_backend_factory: Optional[Callable[[Any], Backend]] = None,
         encryption_key: Optional[str] = None,
         finalize_on_finish: bool = True,
+        capture_hover: bool = False,
     ) -> None:
+        # Pixel surfaces: before each click, rest the pointer on the target
+        # and keep that frame (frames/{i}_hover.png) so the compiler can store
+        # the hover response as identity evidence (runtime.hover_evidence).
+        # Needs a backend with ``hover(x, y)``; ignored otherwise.
+        self._capture_hover = capture_hover
         # ``_backend`` is always the ACTIVE surface's backend; on a
         # single-surface recording it never changes.
         self._backend = backend
@@ -708,6 +719,9 @@ class Recorder:
         )
         if page_backend is not None:
             page_backend.expect_page_close()
+        hover_png = self._hover_frame(event)
+        if hover_png is not None:
+            event = {**event, "hover_dwell_ms": HOVER_DWELL_MS}
         try:
             act()
         finally:
@@ -735,7 +749,30 @@ class Recorder:
         # click that closes it.
         if self._closed_its_page(event):
             event = {**event, "closes_surface": True}
+        if hover_png is not None:
+            _sealed.write_bytes(
+                self._frames_dir / f"{self._i:04d}_hover.png", hover_png
+            )
         self._commit(event, before, after, structural_before)
+
+    def _hover_frame(self, event: dict[str, Any]) -> Optional[bytes]:
+        """Rest the pointer on a click target and capture the settled frame.
+
+        Only with ``capture_hover`` and a backend that can hover, and only for
+        click events. The pointer stays there for the click that follows.
+        """
+        if not self._capture_hover or event.get("kind") not in (
+            "click",
+            "double_click",
+            "right_click",
+        ):
+            return None
+        hover = getattr(self._backend, "hover", None)
+        if not callable(hover):
+            return None
+        hover(int(event["x"]), int(event["y"]))
+        time.sleep(HOVER_DWELL_MS / 1000.0)
+        return self._wait_settled()
 
     def record_observed(
         self,

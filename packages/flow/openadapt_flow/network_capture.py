@@ -10,15 +10,21 @@ step for a save whose requests it can explain
 What is never written:
 
 - headers, so no cookie or authorization value. Cookie values the browser
-  sent are also withheld where a page echoes them in a body or script
-  (``<session:cookie>``);
+  sent, cookie values a response set (``Set-Cookie``) and ``Authorization``
+  values are also withheld wherever a page echoes them in a body, URL or
+  script (``<session:cookie>``, ``<session:authorization>``);
 - values of password fields and of the recording's declared secret fields,
   in bodies, URLs and response text (replaced by ``<secret>``);
-- session tokens. A body or query field whose name looks like a CSRF or
-  session token (``csrf``, ``xsrf``, ``token``, ``nonce``, ``authenticity``)
-  has its value replaced by ``<session:NAME>`` everywhere it appears,
-  including the HTML that carried it. The API step reads a fresh token from
-  the live page each run.
+- session tokens. A field whose name looks like a CSRF, session or API token
+  (``csrf``, ``xsrf``, ``token``, ``nonce``, ``authenticity``, ``session``,
+  ``api_key``, ``jwt``, ``bearer``) has its value replaced by
+  ``<session:NAME>`` everywhere it appears, including the HTML that carried
+  it. The API step reads a fresh token from the live page each run.
+
+Names are found in form bodies, URL queries, and JSON request and response
+bodies at any depth. A JSON body has those values replaced field by field,
+whatever their length, then every value found is withheld wherever else it
+appears.
 
 Patient or other business values the person typed stay in the file, as they
 do in ``events.jsonl``. A recording made with capture is as sensitive as any
@@ -51,8 +57,15 @@ _SKIP_TYPES = frozenset(
 _TEXT_MIME = re.compile(
     r"text/html|application/json|text/plain|application/xhtml|\+json", re.I
 )
-TOKEN_NAME = re.compile(r"csrf|xsrf|token|nonce|authenticity", re.I)
-SECRET_NAME = re.compile(r"pass(word|wd)?\b|clearpass|pwd|secret", re.I)
+TOKEN_NAME = re.compile(
+    r"csrf|xsrf|token|nonce|authenticity|session|api[_-]?key|jwt|bearer"
+    r"|authorization|^sid$|^auth$",
+    re.I,
+)
+SECRET_NAME = re.compile(
+    r"pass(word|wd|phrase)?\b|passwd|clearpass|pwd|secret|private[_-]?key|^pin$|^otp$",
+    re.I,
+)
 SECRET = "<secret>"
 
 
@@ -76,9 +89,11 @@ class NetworkCapture:
     def __init__(self, context: Any, *, secret_names: Iterable[str] = ()) -> None:
         self._context = context
         self._secret_names = frozenset(secret_names)
-        # Cookie values the browser sent, kept in memory only so they can be
-        # withheld wherever a page echoes one. Never written.
+        # Cookie values the browser sent or a response set, and Authorization
+        # values, kept in memory only so they can be withheld wherever a page
+        # echoes one. Never written.
         self._cookie_values: set[str] = set()
+        self._auth_values: set[str] = set()
         self._lines: list[dict[str, Any]] = []
         self._lock = threading.Lock()
         self._attached = False
@@ -124,6 +139,8 @@ class NetworkCapture:
             response = None
         if response is not None:
             headers = {k.lower(): v for k, v in (response.headers or {}).items()}
+            for cookie in _set_cookie_values(response, headers):
+                self._cookie_values.add(cookie)
             line["status"] = response.status
             line["response_type"] = (
                 (headers.get("content-type") or "").split(";")[0].strip()
@@ -150,6 +167,12 @@ class NetworkCapture:
             value = part.partition("=")[2].strip()
             if len(value) >= 8:
                 self._cookie_values.add(value)
+        auth = (headers.get("authorization") or "").strip()
+        if auth:
+            # "Bearer abc", "Basic xyz": the credential is the last word.
+            credential = auth.split()[-1]
+            if len(credential) >= 4:
+                self._auth_values.add(credential)
         line: dict[str, Any] = {
             "_mono": time.monotonic(),
             "method": request.method,
@@ -198,6 +221,7 @@ class NetworkCapture:
             lines,
             secret_names=self._secret_names,
             session_values=set(self._cookie_values),
+            auth_values=set(self._auth_values),
         )
 
     def write(self, recording_dir: Path | str, t0_monotonic: float) -> Path:
@@ -219,35 +243,125 @@ def _frame_url(request: Any) -> Optional[str]:
         return None
 
 
+def _set_cookie_values(response: Any, headers: dict[str, str]) -> list[str]:
+    """The values a response set with ``Set-Cookie``."""
+
+    raw: list[str] = []
+    try:
+        for item in response.headers_array() or []:
+            if str(item.get("name", "")).lower() == "set-cookie":
+                raw.append(str(item.get("value", "")))
+    except Exception:  # noqa: BLE001 - older drivers have no headers_array
+        pass
+    if not raw and headers.get("set-cookie"):
+        raw = str(headers["set-cookie"]).split("\n")
+    values = []
+    for cookie in raw:
+        value = cookie.split(";", 1)[0].partition("=")[2].strip()
+        if len(value) >= 8:
+            values.append(value)
+    return values
+
+
+def _json(text: Any) -> Any:
+    if not isinstance(text, str) or not text.lstrip().startswith(("{", "[")):
+        return None
+    try:
+        return json.loads(text)
+    except ValueError:
+        return None
+
+
+def _json_pairs(value: Any) -> Iterable[tuple[str, str]]:
+    """Every (key, scalar value) pair in a JSON document, at any depth."""
+
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if isinstance(item, (dict, list)):
+                yield from _json_pairs(item)
+            elif item is not None and not isinstance(item, bool):
+                yield str(key), str(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _json_pairs(item)
+
+
 def redact(
     lines: list[dict[str, Any]],
     *,
     secret_names: Iterable[str] = (),
     session_values: Iterable[str] = (),
+    auth_values: Iterable[str] = (),
 ) -> list[dict[str, Any]]:
     """Withhold secret values and session tokens from captured lines.
 
-    Values are found by field name in request bodies and queries, then
-    replaced wherever the same value appears (other requests, URLs, response
-    text): password-like and declared secret names become ``<secret>``,
-    token-like names become ``<session:NAME>``.
+    Values are found by field name in request bodies, queries and JSON
+    request and response bodies (at any depth), then replaced wherever the
+    same value appears (other requests, URLs, response text): password-like
+    and declared secret names become ``<secret>``, token-like names become
+    ``<session:NAME>``. ``session_values`` (cookies) and ``auth_values``
+    (``Authorization`` credentials) are withheld wherever they appear.
     """
 
     declared = {n.lower() for n in secret_names}
+
+    def kind(name: str) -> Optional[str]:
+        if SECRET_NAME.search(name) or name.lower() in declared:
+            return SECRET
+        if TOKEN_NAME.search(name):
+            return session_placeholder(name)
+        return None
+
     replace: dict[str, str] = {
         v: session_placeholder("cookie") for v in session_values if v
     }
+    for v in auth_values:
+        if v:
+            replace.setdefault(v, session_placeholder("authorization"))
     for line in lines:
         pairs = list(line.get("form") or []) + up.parse_qsl(
             up.urlsplit(line["url"]).query, keep_blank_values=True
         )
+        for key in ("body", "response_text"):
+            pairs += list(_json_pairs(_json(line.get(key))))
         for name, value in pairs:
             if not value or len(value) < 4:
                 continue
-            if SECRET_NAME.search(name) or name.lower() in declared:
+            placeholder = kind(name)
+            if placeholder == SECRET:
                 replace[value] = SECRET
-            elif TOKEN_NAME.search(name) and len(value) >= 8:
-                replace.setdefault(value, session_placeholder(name))
+            elif placeholder is not None and len(value) >= 8:
+                replace.setdefault(value, placeholder)
+
+    def scrub_json(value: Any) -> Any:
+        # A JSON body's secret and token fields, replaced whatever their
+        # length: the field name, not the value, says what it is.
+        if isinstance(value, dict):
+            out: dict[Any, Any] = {}
+            for key, item in value.items():
+                placeholder = kind(str(key))
+                if (
+                    placeholder is not None
+                    and item not in (None, "")
+                    and not isinstance(item, (dict, list, bool))
+                ):
+                    out[key] = placeholder
+                else:
+                    out[key] = scrub_json(item)
+            return out
+        if isinstance(value, list):
+            return [scrub_json(item) for item in value]
+        return value
+
+    structured = []
+    for line in lines:
+        line = dict(line)
+        for key in ("body", "response_text"):
+            document = _json(line.get(key))
+            if document is not None:
+                line[key] = json.dumps(scrub_json(document), separators=(",", ":"))
+        structured.append(line)
+    lines = structured
     if not replace:
         return lines
     # Longest first, so a value inside another is not replaced half-way.
