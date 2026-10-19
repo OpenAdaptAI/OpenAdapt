@@ -1,0 +1,188 @@
+name: Native Installer Freshness
+
+# A published engine release creates a narrow version-sync pull request from
+# the current protected main. The pull request must strictly advance that base
+# and contain only the exact five-file transform. After review and merge, a
+# maintainer explicitly dispatches native-release.yml from protected main.
+#
+# ADMIN_TOKEN creates the proposal branch and pull request. This workflow has no
+# native tag or release publication authority.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Current engine version to prepare installers for (X.Y.Z; a leading v is stripped)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-freshness-proposal
+  cancel-in-progress: false
+
+jobs:
+  propose-native-version:
+    name: Propose the exact native version transform
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'release' &&
+       startsWith(github.event.release.tag_name, 'v') &&
+       !github.event.release.prerelease &&
+       !github.event.release.draft)
+    runs-on: ubuntu-22.04
+    env:
+      GH_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.ADMIN_TOKEN }}
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Resolve the published engine release
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            version="${INPUT_VERSION#v}"
+          else
+            version="${RELEASE_TAG#v}"
+          fi
+          if ! printf '%s' "${version}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "error: refusing non X.Y.Z version: ${version}" >&2
+            exit 1
+          fi
+
+          engine_tag="v${version}"
+          native_tag="desktop-v${version}"
+          engine_commit="$(git rev-parse --verify "refs/tags/${engine_tag}^{commit}")" || {
+            echo "error: matching engine tag ${engine_tag} does not exist" >&2
+            exit 1
+          }
+          if ! git merge-base --is-ancestor "${engine_commit}" origin/main; then
+            echo "error: ${engine_tag} is not an ancestor of current main" >&2
+            exit 1
+          fi
+          gh release view "${engine_tag}" \
+            --json databaseId,isDraft,isPrerelease,publishedAt,tagName,url \
+            > engine-release.json
+          python scripts/native_release.py validate-engine-release \
+            --file engine-release.json \
+            --repository "${GITHUB_REPOSITORY}" \
+            --engine-tag "${engine_tag}" \
+            --engine-commit "${engine_commit}"
+
+          {
+            echo "version=${version}"
+            echo "engine_tag=${engine_tag}"
+            echo "engine_commit=${engine_commit}"
+            echo "native_tag=${native_tag}"
+            echo "branch=native-version/${engine_tag}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Stop when the immutable native tag already exists
+        id: tag
+        env:
+          NATIVE_TAG: ${{ steps.version.outputs.native_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${NATIVE_TAG}" >/dev/null; then
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+            echo "${NATIVE_TAG} already exists; no version pull request is necessary."
+          else
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Check whether protected main already has the release version
+        id: main-version
+        env:
+          NATIVE_VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="$(python scripts/native_release.py version)"
+          if [ "${current}" = "${NATIVE_VERSION}" ]; then
+            echo "matches=true" >> "${GITHUB_OUTPUT}"
+            echo "Protected main already has native version ${NATIVE_VERSION}; no version pull request is necessary."
+          else
+            echo "matches=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Create or validate the exact version branch
+        if: >-
+          steps.tag.outputs.exists == 'false' &&
+          steps.main-version.outputs.matches == 'false'
+        id: branch
+        env:
+          BRANCH: ${{ steps.version.outputs.branch }}
+          NATIVE_VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$(git rev-parse origin/main)"
+          if git ls-remote --exit-code --heads origin "refs/heads/${BRANCH}" >/dev/null; then
+            git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
+            candidate="$(git rev-parse "refs/remotes/origin/${BRANCH}")"
+            parent="$(git rev-parse "${candidate}^")"
+            if [ "${parent}" != "${base}" ]; then
+              echo "error: existing ${BRANCH} is stale; recreate it from ${base}" >&2
+              exit 1
+            fi
+            python scripts/native_release.py validate-version-advance \
+              --base-ref "${base}" \
+              --candidate-ref "${candidate}" \
+              --version "${NATIVE_VERSION}"
+            echo "created=false" >> "${GITHUB_OUTPUT}"
+          else
+            git switch --detach "${base}"
+            git switch -c "${BRANCH}"
+            python scripts/native_release.py set-version "${NATIVE_VERSION}"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package.json package-lock.json \
+              src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json
+            git commit -m "chore(native): sync native installer version to ${NATIVE_VERSION}"
+            python scripts/native_release.py validate-version-advance \
+              --base-ref "${base}" \
+              --candidate-ref HEAD \
+              --version "${NATIVE_VERSION}"
+            git push origin "HEAD:refs/heads/${BRANCH}"
+            echo "created=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Open or report the protected-main pull request
+        if: >-
+          steps.tag.outputs.exists == 'false' &&
+          steps.main-version.outputs.matches == 'false'
+        env:
+          BRANCH: ${{ steps.version.outputs.branch }}
+          ENGINE_TAG: ${{ steps.version.outputs.engine_tag }}
+          NATIVE_TAG: ${{ steps.version.outputs.native_tag }}
+          NATIVE_VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          number="$(gh pr list --state open --base main --head "${BRANCH}" --json number --jq '.[0].number // empty')"
+          if [ -z "${number}" ]; then
+            gh pr create \
+              --base main \
+              --head "${BRANCH}" \
+              --title "chore(native): sync installer version to ${NATIVE_VERSION}" \
+              --body "Sync the five native version files from ${ENGINE_TAG}. After protected-main review and merge, dispatch native-release.yml from main for ${NATIVE_TAG}."
+          else
+            echo "Pull request #${number} already owns ${BRANCH}."
+          fi

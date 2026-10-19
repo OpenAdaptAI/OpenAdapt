@@ -36,6 +36,34 @@ from openadapt_flow.agent.runner import RunnerConfig, default_runs_dir
 __all__ = ["build_parser", "main"]
 
 
+def _authoring_section(args: argparse.Namespace) -> object:
+    """The ``backend:`` section to pin for authoring, with
+    ``--authoring-from-config``; otherwise None.
+
+    A ``--config`` given only for runs never pins authoring by itself. A web
+    section is pinned with ``--url --headed`` instead (a fresh browser window).
+    """
+
+    from openadapt_flow.agent.authoring import AuthoringError
+
+    if not getattr(args, "authoring_from_config", False):
+        return None
+    if not args.config:
+        raise AuthoringError("--authoring-from-config needs --config deploy.yaml")
+    from openadapt_flow.deployment import load_deployment
+
+    try:
+        section = load_deployment(args.config).backend
+    except (OSError, ValueError) as exc:
+        raise AuthoringError(f"could not read {args.config}: {exc}") from exc
+    if (section.kind or "web").strip().lower() == "web":
+        raise AuthoringError(
+            "the deployment file names a web app; pass --url URL --headed to "
+            "record it in a new Chromium window"
+        )
+    return section
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="openadapt-agent",
@@ -102,6 +130,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--authoring-from-config",
+        action="store_true",
+        help=(
+            "With --authoring and --config: record the app the deployment "
+            "file's backend: section names (windows, macos, linux, a local "
+            "rdp or citrix client window), the same app its runs drive. "
+            "Network RDP (rdp_host) is refused for authoring."
+        ),
+    )
+    p.add_argument(
         "--windows-agent-url",
         metavar="URL",
         help=(
@@ -145,6 +183,38 @@ def build_parser() -> argparse.ArgumentParser:
             "session from pixels. scrubbed removes identifiers first and "
             "shares nothing if that fails. Default off."
         ),
+    )
+    p.add_argument(
+        "--guard",
+        default=None,
+        metavar="VERIFY_YAML",
+        help=(
+            "Serve only the guarded-save tools (guard_begin, guard_commit, "
+            "guard_confirm) for any agent's own writes. VERIFY_YAML is the "
+            "verify-run file: the system-of-record reader and the record the "
+            "save must produce. Needs --guard-tasks and --guard-state."
+        ),
+    )
+    p.add_argument(
+        "--guard-tasks",
+        default=None,
+        metavar="DIR",
+        help="With --guard: folder of <task_id>.json task files the operator wrote",
+    )
+    p.add_argument(
+        "--guard-state",
+        default=None,
+        metavar="DIR",
+        help=(
+            "With --guard: folder for baselines, approval requests, receipts and "
+            "the per-task ledger"
+        ),
+    )
+    p.add_argument(
+        "--guard-approval",
+        choices=("each_item", "not_gated"),
+        default="each_item",
+        help="With --guard: each_item (default) holds every save for a person",
     )
     p.add_argument(
         "--tutorial",
@@ -201,7 +271,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         default=None,
         metavar="YAML",
-        help="Deployment config YAML forwarded to `openadapt-flow run --config`",
+        help=(
+            "Deployment config YAML forwarded to `openadapt-flow run --config`. "
+            "With --authoring-from-config, its backend: section also names the "
+            "app to record."
+        ),
     )
     p.add_argument(
         "--policy",
@@ -511,6 +585,8 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     from openadapt_flow.agent.runner import default_flow_cli
     from openadapt_flow.agent.tutorial import TutorialError
 
+    if args.guard:
+        return _serve_guard(args, serve)
     desktop_pin = bool(
         args.windows_agent_url
         or args.remote_window
@@ -657,6 +733,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                         remote_window=args.remote_window,
                         remote_window_title=args.remote_window_title,
                         citrix=args.citrix,
+                        deployment_backend=_authoring_section(args),
                     ),
                     out_dir=authoring_dir,
                     screens=args.authoring_screens,
@@ -791,6 +868,40 @@ def _cmd_serve(args: argparse.Namespace) -> int:
             closer = getattr(authoring_bridge.session, "close", None)
             if callable(closer):
                 closer()
+    return 0
+
+
+def _serve_guard(args: argparse.Namespace, serve) -> int:
+    """Serve only the guarded-save tools over local stdio."""
+    from openadapt_flow.agent.guard_tools import GuardBridge
+    from openadapt_flow.guard import GuardedSave
+    from openadapt_flow.verify_run import VerifyRunError
+
+    if args.authoring or args.bundles or args.tutorial:
+        print(
+            "serve: --guard serves only the guarded-save tools; it cannot be "
+            "combined with --authoring, --bundles or --tutorial",
+            file=sys.stderr,
+        )
+        return 2
+    if not args.guard_tasks or not args.guard_state:
+        print("serve: --guard needs --guard-tasks and --guard-state", file=sys.stderr)
+        return 2
+    try:
+        guarded = GuardedSave.from_file(
+            args.guard,
+            Path(args.guard_state).expanduser().resolve(),
+            approval=args.guard_approval,
+        )
+    except VerifyRunError as exc:
+        print(f"serve: {exc}", file=sys.stderr)
+        return 2
+    print(
+        f"openadapt-agent {__version__}: guarded-save tools over local stdio; "
+        f"approval {args.guard_approval}; tasks {args.guard_tasks}",
+        file=sys.stderr,
+    )
+    serve(None, guard=GuardBridge(guarded, Path(args.guard_tasks).expanduser()))
     return 0
 
 

@@ -1,5 +1,11 @@
 # Benchmark: compiled replay vs. computer-use agent
 
+> **Historical result.** This benchmark ran on openadapt-flow 0.1.0 in July
+> 2026, and both arms drove the screen pixel-only by design, to compare the same
+> input. The current engine reads page structure first and uses pixels only as a
+> fallback. Current capabilities and results:
+> [CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md).
+
 Date: 2026-07-08. Engine: a pre-`v0.2.0` source checkout declaring
 openadapt-flow 0.1.0. One task, two ways to automate it, one success check.
 
