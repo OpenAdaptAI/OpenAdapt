@@ -25,8 +25,8 @@ satisfies for :class:`RemoteDisplayBackend`:
 
 HONESTY: these are mock-contract tests. They prove the client implements the
 WindowClient seam correctly; they do NOT prove behavior on a real Windows
-host (no counted qualification batch exists — see claims.yaml
-``win32-window-replay-roadmap``).
+host (no counted qualification batch exists — see
+``claims/win32-window-replay-roadmap.yaml``).
 """
 
 from __future__ import annotations

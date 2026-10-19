@@ -61,6 +61,18 @@ def register_api_parser(sub: argparse._SubParsersAction) -> None:
     admit.add_argument("bundle", help="Bundle directory")
     admit.add_argument("--step", default=None, help="Admit only this save step")
     admit.add_argument("--by", default=None, help="Your name (default: the login name)")
+    admit.add_argument(
+        "--identity",
+        action="append",
+        default=[],
+        metavar="KEY=PARAM",
+        help=(
+            "The parameter that identifies the record, for example "
+            "subject_name=lname or record_id=mrn (repeatable). The request must "
+            "send it and the record check must select by it. Standard and "
+            "Regulated runs need one."
+        ),
+    )
     admit.set_defaults(func=cmd_api_admit)
 
 
@@ -169,9 +181,25 @@ def cmd_api_admit(
     if not found:
         print("api admit: no proposed API step to admit", file=sys.stderr)
         return 2
-    for step in found:
-        print(describe_api_step(step))
-        print()
+    identity: dict[str, str] = {}
+    for item in args.identity or []:
+        key, sep, param = item.partition("=")
+        if not sep or not key.strip() or not param.strip():
+            print(f"api admit: --identity {item!r} is not KEY=PARAM", file=sys.stderr)
+            return 2
+        identity[key.strip()] = param.strip()
+    # Build the admission first, so the person reads exactly what is admitted.
+    try:
+        updated, steps = admit_api_step(
+            workflow, admitted_by=args.by, step_id=args.step, identity=identity
+        )
+    except (ApiProposalError, ValueError) as exc:
+        print(f"api admit: {exc}", file=sys.stderr)
+        return 2
+    for step in updated.steps:
+        if step.id in steps:
+            print(describe_api_step(step))
+            print()
     answer = ask(
         f"Type '{ADMIT_WORD}' to let these requests save in place of the GUI steps "
         "(the record check still confirms every save): "
@@ -179,13 +207,6 @@ def cmd_api_admit(
     if answer.strip().lower() != ADMIT_WORD:
         print("Not admitted. Nothing changed.")
         return 1
-    try:
-        updated, steps = admit_api_step(
-            workflow, admitted_by=args.by, step_id=args.step
-        )
-    except ApiProposalError as exc:
-        print(f"api admit: {exc}", file=sys.stderr)
-        return 2
     updated.save(bundle)
     print(f"Admitted the API step on {', '.join(steps)}.")
     return 0
