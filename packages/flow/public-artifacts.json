@@ -1500,6 +1500,54 @@
       "sha256": "745ceef1f66c28255cc11cc895ad1e5b1fab6afce66e822ae185e20af54f1532"
     },
     {
+      "path": "benchmark/silent_saves/proof/evidence.json",
+      "sha256": "2c96b081ea656ab9f89f7f9fd9309f3fe42cacf949ea9f3e15c4b2b521fd6117"
+    },
+    {
+      "path": "benchmark/silent_saves/proof/item-011-partial.png",
+      "sha256": "1fb973bd25b3174e408481d36f9e39d3c157e76f10450a62e9bd0b961b0e7f33"
+    },
+    {
+      "path": "benchmark/silent_saves/proof/item-021-wrong_record.png",
+      "sha256": "14170ba359dc735207e1283a0261cfcd359413e99a33f9ca7473325452c11e67"
+    },
+    {
+      "path": "benchmark/silent_saves/proof/item-030-stale.png",
+      "sha256": "e1dad274c254ca52b96fd6696b27f78f6f1b75bfce27ffb45cc16fb2f97811f6"
+    },
+    {
+      "path": "benchmark/silent_saves/proof/item-031-optimistic.png",
+      "sha256": "9e986101e6fff151f494708f6837f3f5419454aeeec17bf061675693e987c5ed"
+    },
+    {
+      "path": "benchmark/silent_saves/results/screen-script+readback/2026-10-19/items.csv",
+      "sha256": "a5a1e3dd90e692c1fcc8283d74785b9031132573058b02c78b2823b54679902e"
+    },
+    {
+      "path": "benchmark/silent_saves/results/screen-script+readback/2026-10-19/meta.json",
+      "sha256": "be84ad2c500a98eec13ef541ac738e08a945c2832f60d33d1545f8fd67fa5ed5"
+    },
+    {
+      "path": "benchmark/silent_saves/results/screen-script+readback/2026-10-19/summary.json",
+      "sha256": "8d32414561ca84ac5bb24e6856cbf2e0190086fb3668938e4aadbcc896913e08"
+    },
+    {
+      "path": "benchmark/silent_saves/results/screen-script+readback/2026-10-19/verify.yaml",
+      "sha256": "bf4f2bf609b317204bf3a4def2db52b850fa7baefc3a57b4263fbd16ba6e76ce"
+    },
+    {
+      "path": "benchmark/silent_saves/results/screen-script/2026-10-19/items.csv",
+      "sha256": "22a116476f042d29120466e208229ddeffd7f516c145298d5653446fd2916bba"
+    },
+    {
+      "path": "benchmark/silent_saves/results/screen-script/2026-10-19/meta.json",
+      "sha256": "bb4f3de1b9f37b9cab219958d438746df029f7662f3e72f9a252133c9f3d73ee"
+    },
+    {
+      "path": "benchmark/silent_saves/results/screen-script/2026-10-19/summary.json",
+      "sha256": "579a53e9152e99900f98263ac072713372147997d68f8ee5eb360e703fd3cab4"
+    },
+    {
       "path": "benchmark/silent_wrong_action/results.json",
       "sha256": "af71ce1db2b0bf065230d775ec63251891f4dbe1cd0d95d44974740acd3cc38a"
     },
