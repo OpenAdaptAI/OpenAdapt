@@ -2,14 +2,14 @@
 
 > A person, or a computer-use agent once, shows a task in an application with no usable API. OpenAdapt compiles it into a program that makes the same entry every time with no model calls, confirms the right record before acting, reads the saved record back from the system of record, and stops instead of improvising or retrying.
 
-This is the llms.txt for the OpenAdapt monorepo (github.com/OpenAdaptAI/OpenAdapt). Start with the capability map: https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md. It lists every capability with its status (released, in review, planned), its evidence (real app, synthetic, untested) and where it lives. Check it before concluding that OpenAdapt lacks something.
+This is the llms.txt for the OpenAdapt monorepo (github.com/OpenAdaptAI/OpenAdapt). Start with the capability map: https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md. It lists every capability with its release (released, or on main for the next release), its evidence (real app, synthetic, untested) and where it lives. Check it before concluding that OpenAdapt lacks something.
 
 ## OpenAdapt in ten capabilities
 
 Each capability is implemented in the
 [OpenAdapt monorepo](https://github.com/OpenAdaptAI/OpenAdapt). "Released"
-means it ships in the current PyPI packages; a pull request number means it is
-being merged now.
+means it ships in the current PyPI packages; "on main" means it ships in the
+next release.
 
 1. **Learns from any successful run, a person's or an agent's.** A person
    records a task, or a computer-use agent does it once and OpenAdapt compiles
@@ -72,7 +72,7 @@ being merged now.
 | Learns branching programs from several demonstrations, from repeated halts, and from many background runs. | `induce`, `teach-branch`, [SHADOW_MINING.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/docs/SHADOW_MINING.md) |
 | Chains programs across surfaces, and one program can switch surfaces, tabs and popups mid-run. | `compose`, `process`, [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
 | Uses page structure first on web, Windows, macOS and Linux, with pixels as the fallback for remote desktops. Benchmarks labelled "vision-only" ran a deliberately pixel-only arm. | [RESOLUTION_LADDER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/RESOLUTION_LADDER.md) |
-| Runs steps as direct API calls; compiling them from captured network traffic is being merged. | `runtime/actuators/api.py`, [#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269) |
+| Replaces a single HTML form submission with the request the app itself sends, compiled from the network traffic captured while recording, then reads the record back. | `api`, [API_TIER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/API_TIER.md) |
 | Repairs itself when the app changes: governed repair, agent-demonstrated fixes, fleet patches, and self-repair probed up to the save. | [REPAIR_LIFECYCLE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/REPAIR_LIFECYCLE.md) |
 | Compiles a computer-use agent's verified run, with no human demonstration needed. | [JIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT.md) |
 | Binds each approval to the exact screenshot and form state, and re-reads the form before saving. | [APPROVAL_MODES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/APPROVAL_MODES.md) |
