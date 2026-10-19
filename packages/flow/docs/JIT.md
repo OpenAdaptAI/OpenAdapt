@@ -243,6 +243,16 @@ for the new value. `accept_params` must name exactly the task's parameters.
 The recompile can renumber the steps, so it comes before the review and
 returns the step ids the review asks for. It refuses once a review exists.
 
+A policy such as `clinical-write` also wants an idempotency key on every
+write, so that a duplicate submission is caught. One run can't show which
+input identifies a record; the person confirming names it:
+`confirm_params(..., idempotency_key="claim_no")`, or
+`openadapt-flow jit review --idempotency-key claim_no`. It must be a task
+parameter that the mined record check already selects the saved record by.
+That check then counts the records that carry the run's value and refuses
+more than one. Name it only when the app keeps that value unique, such as a
+claim number. `status()` lists the keys the program carries.
+
 ## A look-up the agent made
 
 When the agent looks the record up after it saves (types the identifier into
