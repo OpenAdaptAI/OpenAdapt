@@ -74,6 +74,50 @@ RECORDING_WARNING = (
 )
 
 
+def _reuse_refusal(
+    record: Mapping[str, Any], workflow: Any, task: TaskSignature, app: Any
+) -> Optional[str]:
+    """Why an admitted program may not be reused for this task here, or None.
+
+    Reuse is bound to intent, not just to the task id and parameter schema:
+    the record check must be the one admitted (and the one the caller pinned,
+    if any), and the app environment must be the one the canary ran in (and
+    the one the caller pinned, if any). Admissions from before these pins
+    existed carry neither; then only the caller's pins are checked.
+    """
+
+    from openadapt_flow.jit.signature import record_check_digest
+
+    current = record_check_digest(workflow)
+    admitted = record.get("record_check_digest")
+    if admitted is not None and admitted != current:
+        return (
+            f"the program's record check ({current[:12]}) is not the one admitted "
+            f"({str(admitted)[:12]}); admit it again"
+        )
+    if task.record_check is not None and task.record_check != current:
+        return (
+            f"the task pins record check {task.record_check[:12]}, the admitted "
+            f"program checks {current[:12]}; a changed record check is a new task"
+        )
+    try:
+        environment = app.environment
+    except Exception as exc:  # noqa: BLE001 - an unknown environment never matches
+        return f"the app's environment could not be read ({type(exc).__name__})"
+    canary_env = (record.get("canary") or {}).get("environment")
+    if canary_env is not None and canary_env != environment:
+        return (
+            f"the program was admitted in environment {canary_env!r}, this run is "
+            f"in {environment!r}; run a canary in this environment"
+        )
+    if task.environment is not None and task.environment != environment:
+        return (
+            f"the task is pinned to environment {task.environment!r}, the app "
+            f"reports {environment!r}"
+        )
+    return None
+
+
 def _print_warning(text: str) -> None:
     print(f"WARNING: {text}", file=sys.stderr)
 
@@ -104,6 +148,11 @@ class WebApp:
             the compiler reads. ``None`` keeps the authoring default. Raise
             it for an app whose lookups take seconds, or the program
             inherits checks compiled from a still-loading screen.
+        environment_id: Optional. What identifies this app environment
+            beyond its origin, such as the app's version or build
+            (``"7.0.2"``), or a callable that reads it from the app before
+            each canary and run. A program admitted under one environment is
+            refused under another (see :attr:`environment`).
     """
 
     url: str
@@ -113,6 +162,7 @@ class WebApp:
     setup: Optional[Callable[[Any], None]] = None
     record_video_dir: Optional[str] = None
     capture_settle_timeout_s: Optional[float] = None
+    environment_id: Optional[str | Callable[[], str]] = None
 
     def open(self) -> tuple[Any, Callable[[], None]]:
         """Open the browser at ``url`` and run :attr:`setup`; returns ``(backend, close)``."""
@@ -138,6 +188,12 @@ class WebApp:
     @property
     def kind(self) -> str:
         return "web"
+
+    @property
+    def environment(self) -> str:
+        """The app environment's identity: the origin, plus ``#<id>``."""
+
+        return _environment(self.origin, self.environment_id)
 
     @property
     def entry_url(self) -> Optional[str]:
@@ -193,12 +249,14 @@ class SurfaceApp:
         open_backend: Builds the live backend from ``backend``. Defaults to
             :func:`openadapt_flow.backends.factory.build_backend`. Pass one to
             inject a client (for example a test fixture).
+        environment_id: As for :class:`WebApp`.
     """
 
     backend: Any
     record_reader: Optional[Callable[[], Optional[list[dict[str, Any]]]]] = None
     reset: Optional[Callable[[], None]] = None
     open_backend: Optional[Callable[[Any], Any]] = field(default=None, repr=False)
+    environment_id: Optional[str | Callable[[], str]] = None
 
     def __post_init__(self) -> None:
         from openadapt_flow.deployment import BackendConfig
@@ -273,6 +331,12 @@ class SurfaceApp:
         return origin
 
     @property
+    def environment(self) -> str:
+        """As for :attr:`WebApp.environment`."""
+
+        return _environment(self.origin, self.environment_id)
+
+    @property
     def backend_hints(self) -> Optional[dict[str, Any]]:
         if self.kind not in ("rdp", "citrix"):
             return None
@@ -314,6 +378,19 @@ class SurfaceApp:
 
 #: What :func:`compile_agent` runs a task in.
 App = WebApp | SurfaceApp
+
+
+def _environment(origin: str, environment_id: Any) -> str:
+    """``origin`` or ``origin#id``. A callable id is read now; one that fails
+    or returns nothing raises, so an unknown environment never matches."""
+
+    value = environment_id() if callable(environment_id) else environment_id
+    if value is None:
+        return origin
+    text = str(value).strip()
+    if not text:
+        raise ValueError("the app's environment_id is empty")
+    return f"{origin}#{text}"
 
 
 @dataclass(frozen=True)
@@ -797,6 +874,14 @@ class CompiledAgent:
         candidate = self.candidate()
         if candidate is None or self.admitted:
             raise AdmissionError("a canary runs a DRAFT; there is none")
+        if (
+            self.task.environment is not None
+            and self.task.environment != self.app.environment
+        ):
+            raise AdmissionError(
+                f"the task is pinned to environment {self.task.environment!r}; "
+                f"this app reports {self.app.environment!r}"
+            )
         _, principal = lifecycle.resolve_actor(
             principal_id, self.program_dir, key_dir=self.key_dir
         )
@@ -841,6 +926,7 @@ class CompiledAgent:
                 report=report,
                 readback=readback,
                 target_origin=self.app.origin,
+                environment=self.app.environment,
                 run_dir=run_dir,
                 key_dir=self.key_dir,
             )
@@ -952,6 +1038,9 @@ class CompiledAgent:
                 f"the canary ran on {canary_origin}, not on {self.app.origin}; "
                 "admit a canary on this app"
             )
+        bound = _reuse_refusal(record, workflow, self.task, self.app)
+        if bound is not None:
+            return refused(bound)
         problems = lifecycle._readback_problems(
             lifecycle.readback_coverage(workflow, self.verifier)
         )

@@ -85,6 +85,7 @@ from openadapt_flow.ir import (
     Step,
     Workflow,
 )
+from openadapt_flow.jit.lifecycle import STANDARD_CHANGE_APPROVER
 from openadapt_flow.repair.candidate import (
     Actor,
     CampaignCaseResult,
@@ -194,6 +195,11 @@ class RepairRequest:
     expected_png: Optional[bytes] = None
     #: The item's parameters a bridge may type, by name. Secrets are left out.
     param_values: Mapping[str, str] = field(default_factory=dict, repr=False)
+    #: The program's record check: each saving step's effect contracts, with
+    #: literal values masked, and a digest of its record identity contract
+    #: (:func:`openadapt_flow.jit.signature.record_check_of`). A fix never
+    #: changes it; the probe and the resume check it again.
+    record_check: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
 
 @dataclass(frozen=True)
@@ -204,7 +210,8 @@ class RepairProposal:
     ``{"action": "left_click", "coordinate": [846, 457]}`` for ``anthropic``
     or ``{"kind": "click", "x": 846, "y": 457}`` for ``generic``).
     ``actions`` is a bridge of up to ``request.max_actions`` such actions,
-    in order; give one or the other. Clicks may name a point or, where the
+    in order; give one or the other. Give neither to give up while still
+    reporting the model calls and cost it took to decide that. Clicks may name a point or, where the
     dialect allows, a CSS selector. A bridge may type only a parameter's
     value or text the screen shows at that moment. The agent reports the
     model calls it made and their cost; Flow records them and can't measure
@@ -486,6 +493,9 @@ class _ProbeGate(ApprovalGate):
         super().__init__("not_gated")
         self._checks = checks
         self._resume_form_state = resume_form_state
+        #: In probe mode no save runs: the run gate admits a repaired copy
+        #: whose admission is only a repair probe (``jit.lifecycle``).
+        self.stops_before_first_save = resume_form_state is None
         self.outcome: Optional[ProbeOutcome] = None
         self._approved_result: Optional[int] = None
 
@@ -850,6 +860,9 @@ class SelfRepair:
         if expected_png is not None:
             expected_png = self._shown(expected_png)[0]
         assert step.anchor is not None  # _repairable checked it
+        from openadapt_flow.jit.signature import record_check_of
+
+        record_check = record_check_of(workflow, literals=False)
         refusals: list[str] = []
         current: Optional[AppSession] = session
         try:
@@ -887,6 +900,7 @@ class SelfRepair:
                     ),
                     expected_png=expected_png if mode == "after" else None,
                     param_values=_typable_params(workflow, self._params()),
+                    record_check=record_check,
                 )
                 evidence.attempts = attempt
                 try:
@@ -898,6 +912,14 @@ class SelfRepair:
                     detail = "the agent gave up" if proposal is None else ""
                 calls = max(int(getattr(proposal, "model_calls", 0) or 0), 0)
                 cost = max(float(getattr(proposal, "cost_usd", 0.0) or 0.0), 0.0)
+                if (
+                    proposal is not None
+                    and proposal.action is None
+                    and not proposal.actions
+                ):
+                    # A proposal with no action gives up but still reports
+                    # the model calls it took, so the ledger counts them.
+                    proposal, detail = None, "the agent gave up"
                 evidence.model_calls += calls
                 evidence.est_model_cost_usd = round(
                     evidence.est_model_cost_usd + cost, 6
@@ -1311,6 +1333,9 @@ class SelfRepair:
         checked = tuple(s.id for s in new_steps if s.anchor is not None) + (
             (step.id,) if mode == "replace" else ()
         )
+        _carry_admission(
+            bundle_dir, bundle_out, candidate.candidate_id, probe_only=True
+        )
         return _Patch(
             attempt=attempt,
             step=shown_step,
@@ -1371,7 +1396,7 @@ class SelfRepair:
         anchor = event.new_anchor.model_copy(
             update={
                 "template": f"templates/{step.id}_repair.png",
-                "structural": structural,
+                "structural": _patched_structural(step, structural),
                 "ocr_text": read,
                 "landmarks": landmarks,
             }
@@ -1646,6 +1671,15 @@ class SelfRepair:
                 evidence=evidence,
             )
             if standard is not None:
+                change = evidence.standard_change
+                _carry_admission(
+                    bundle_dir,
+                    patch.bundle_dir,
+                    standard.candidate_id,
+                    approved_by=STANDARD_CHANGE_APPROVER
+                    + (change.policy_id if change is not None else "unknown"),
+                    route="standard_change",
+                )
                 return self._resume(
                     patch, probe, standard, halted_report, run_dir, work, evidence, None
                 )
@@ -1726,6 +1760,13 @@ class SelfRepair:
             )
         assert candidate.approval is not None
         evidence.approved_by = candidate.approval.approved_by
+        _carry_admission(
+            bundle_dir,
+            patch.bundle_dir,
+            candidate.candidate_id,
+            approved_by=candidate.approval.approved_by,
+            route=route,
+        )
         evidence.steps.append(
             SelfRepairStepRecord(
                 stage="approval",
@@ -2164,6 +2205,61 @@ def _outline(png: bytes, region: tuple[int, int, int, int]) -> bytes:
     out = io.BytesIO()
     canvas.save(out, format="PNG")
     return out.getvalue()
+
+
+def _carry_admission(
+    prior: Path,
+    repaired: Path,
+    candidate_id: str,
+    *,
+    approved_by: Optional[str] = None,
+    route: Optional[str] = None,
+    probe_only: bool = False,
+) -> None:
+    """Carry an agent-compiled program's admission to its repaired copy.
+
+    A program compiled from an agent run (``openadapt_flow.jit``) runs only
+    under its admission, which pins its digest; every patch changes the
+    digest. The repair keeps the record check, so the admission carries over:
+    first for the probe only, then, once a person (or a signed standard
+    change) approved the fix, for the resumed run and later items. Any other
+    program has nothing to carry.
+    """
+
+    from openadapt_flow.jit import lifecycle
+
+    if not lifecycle.is_jit_bundle(prior):
+        return
+    try:
+        lifecycle.admit_repair(
+            prior,
+            repaired,
+            candidate_id=candidate_id,
+            approved_by=approved_by,
+            route=route,
+            probe_only=probe_only,
+        )
+    except lifecycle.AdmissionError as exc:
+        raise SelfRepairRefused(
+            "the program was compiled from an agent run and admitted, and its "
+            f"admission can't carry to this repair: {exc}"
+        ) from None
+
+
+def _patched_structural(step: Step, structural: Any) -> Any:
+    """The structural locator a re-targeted step's anchor keeps.
+
+    A step with a ``submit_binding`` was recorded on the visual path: the
+    binding stands in for a record identity there, and a step may not carry
+    both it and a usable locator. Self-repair keeps that contract as it was
+    recorded, so the step stays visual (a new template crop) and keeps its
+    binding, which the save checks again at run time. Any other step takes
+    the locator found under the new point.
+    """
+
+    if step.submit_binding is not None:
+        return step.anchor.structural if step.anchor is not None else None
+    return structural
 
 
 def _recorded_crop(workflow: Workflow, bundle_dir: Path, step: Step) -> Optional[bytes]:

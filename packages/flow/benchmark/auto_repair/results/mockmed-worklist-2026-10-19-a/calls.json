@@ -1,0 +1,52 @@
+{
+  "model": "claude-sonnet-5-5",
+  "cost_usd": 0.025158,
+  "calls": [
+    {
+      "turn": 1,
+      "started_s": 1792427468.994693,
+      "ended_s": 1792427471.11069,
+      "input_tokens": 5768,
+      "output_tokens": 139,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cost_usd": 0.012926,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              860,
+              159
+            ]
+          }
+        }
+      ],
+      "request_id": "req_011CgBv2r4MJj9zTeSXYVcTy",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 1,
+      "started_s": 1792427511.481853,
+      "ended_s": 1792427516.054673,
+      "input_tokens": 5776,
+      "output_tokens": 68,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cost_usd": 0.012232,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              845,
+              457
+            ]
+          }
+        }
+      ],
+      "request_id": "req_011CgBv5ySSPhV4GQPEQpRhE",
+      "stop_reason": "tool_use"
+    }
+  ]
+}

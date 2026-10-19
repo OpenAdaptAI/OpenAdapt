@@ -4035,6 +4035,11 @@ class StepResult(BaseModel):
     # (recorded for audit; empty unless an appliance is configured).
     postcondition_drift_rescues: list[str] = Field(default_factory=list)
     drift_oracle_calls: int = 0  # VLM state-verifier calls this step
+    #: The uniform page scale (for example 1.25 under 125% zoom) at which a
+    #: ``region_stable`` check found its recorded content, when it was found
+    #: only there. Set only when this step's own click showed the same scale.
+    #: Deterministic: no model is asked. ``None`` otherwise.
+    postcondition_page_scale: Optional[float] = None
     #: READ steps only: the value read, with its channels, grade and region.
     field_read: Optional[FieldRead] = None
     # The first identity check on this step mismatched WHILE the screen was

@@ -21,7 +21,7 @@ For the current evidence behind each capability claim, see
 | Browser record, compile, and replay | **Required CI and counted attach trials** | The launched-browser path runs end to end in automated and clean-environment tests. The attached-browser path reuses the same recorder and passes 3 real Chromium record-and-compile trials with secret exclusion and external-browser survival checks. A live resize case also compiles actions from two viewport and device-scale baselines. | It is not evidence for every site, browser extension, authentication flow, or long-running production workload. Attach mode requires a loopback CDP endpoint and one same-origin Chromium tab. An action that overlaps a resize is refused because its pre-action coordinate evidence is not exact. The custom Capture extension remains a prototype and is not a direct replay path. |
 | Healthy replay with zero model calls | **Required CI** | A run that resolves from retained evidence can execute without a language or vision model; the run report counts model calls. | Zero model calls does not mean zero network traffic. The target application, hosted control plane, remote backend, or effect verifier may still use the network. |
 | Deterministic re-resolution | **Required CI** | Bounded visual or structural drift can be resolved through non-model evidence and recorded as a reviewable change. | It is not general adaptation to a redesigned workflow, changed business rules, or missing evidence. |
-| AI-assisted repair | **Required CI contracts; deployment evidence required** | An explicitly enabled model can propose a target or interpret a changed screen. Existing runtime checks still apply. | A model proposal is not authorization, proof of identity, or proof that a business transaction succeeded. |
+| AI-assisted repair | **Required CI contracts; measured on synthetic apps; deployment evidence required** | An explicitly enabled model can propose a target or interpret a changed screen. Existing runtime checks still apply. Once a deployment names a repair agent, every stop that wrote nothing goes to it by default, and a person approves each fix unless a signed policy pre-approves its class. On MockMed's 22 drift modes, 6 of 21 stops that reached repair resumed and verified, with 0 wrong saves in 66 trials ([benchmark/auto_repair](../benchmark/auto_repair/README.md)). | A model proposal is not authorization, proof of identity, or proof that a business transaction succeeded. A stop after a possible write is never repaired automatically. The measured rate is for one agent on one synthetic app; it is not a field repair rate. |
 | Human teaching and resume | **Required CI contracts; field evidence required** | A halt can produce evidence for an operator correction, guarded promotion, and durable resume. | Field recovery time, broad authoring UX, enterprise identity integration, and non-repudiation are not established. |
 | Windows UI Automation | **Counted task acceptance** | The native UIA backend completed 3/3 exact WinForms effects and 3/3 refusals for both stale and ambiguous targets. | Acceptance is bound to the tested workflow and Windows environment; each application retains its own identity, effect, and version qualification. |
 | Native macOS automation | **Counted task acceptance** | The AX/AppKit backend completed 3/3 exact TextEdit file effects and refused an ambiguous two-window target; structural record/locate/refuse behavior is covered separately. Known AX-only ` - Google Chrome` and ` - Google Chrome for Testing` window-title suffixes are accepted only for the corresponding exact CoreGraphics application owner; PID, unique-candidate, focused/main, and topmost-window checks remain mandatory. | Acceptance is bound to the tested host and application. Accessibility exposure and supported native actions vary by application. |
@@ -128,6 +128,26 @@ OpenAdapt distinguishes:
 Target repair does not infer changed business intent. Adding a required step,
 removing a business state, changing a transaction's meaning, or introducing a
 new authorization rule requires a new or reviewed program.
+
+Automatic repair is bounded the same way. It takes only a stop that wrote
+nothing (`HALTED_BEFORE_EFFECT`). A stop after a step the run gate counts as a
+save has acted is `RECONCILIATION_REQUIRED`, even when the app saved nothing,
+and goes to reconciliation and a person. On the recorded OpenEMR referral
+stops of 2026-10-19 that was every stop (8 of 8): the "Create New Patient"
+click before the duplicate-check dialog counts as a save. Measured on MockMed,
+the default loop repaired a renamed or moved control (6 of 6 stops) and did
+not repair a control moved into a closed menu, a new interstitial, a new
+required choice, or a pixel postcondition that failed after a font change
+(0 of 15). On openIMIS's relabelled Save, once a person reviewed the two
+steps whose risk was unclassified, the stop reached repair 3 of 3, but no fix
+passed the probe: the replay sees the Save disabled where the fix was cropped
+from the enabled one. On silent-saves 1.1.0's UI-change blocks (#1380), 18
+of the 28 items that stopped every time now end correctly: a page zoom no
+longer fails a correct screen's check, and a repaired agent-compiled program
+keeps its admission. A What's New screen dismissed by "Continue to tasks" still
+stops every item: "Continue" can submit, so a person must classify that
+control first. A compiled program is also reused only for the record check and
+app environment it was admitted under ([JIT.md](JIT.md)).
 
 ## The main incorrect-success risks
 

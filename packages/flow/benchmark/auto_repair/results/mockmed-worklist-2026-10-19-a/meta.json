@@ -1,0 +1,15 @@
+{
+  "written_at": "2026-10-19T12:30:49-0400",
+  "engine_git_head": "64fbe45fde67b31e02c8ed36d87a2778c272ff1d",
+  "app": "MockMed, synthetic data",
+  "loop": "WorklistQueue: pre-flight, items, self-repair on the test record",
+  "drift_ships": "after the pre-flight, before item 1",
+  "items_per_mode": 5,
+  "agent": "agent:anthropic:claude-sonnet-5-5:auto-repair-benchmark",
+  "approver": "benchmark:scripted-approver (stands in for a person; approves all)",
+  "fault_probe": "drift=<mode>,missing",
+  "modes": [
+    "relink",
+    "redesign"
+  ]
+}

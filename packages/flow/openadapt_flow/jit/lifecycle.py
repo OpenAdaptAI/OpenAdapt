@@ -112,7 +112,14 @@ ADMISSION_FILE = "admission.json"
 CANARIES_FILE = "canaries.jsonl"
 #: Written when a draft is outside an agent's admission policy.
 NEEDS_PERSON_FILE = "needs_person.json"
-ADMISSION_MODES = ("person", "admitter_key", "agent_policy")
+#: An admission carried to a repaired copy of an admitted program, which keeps
+#: the program's record check (see :func:`admit_repair`). ``repair_probe``
+#: lets the copy run only behind a gate that stops before the first save;
+#: ``repair`` follows a person's approval, or a signed standard change.
+REPAIR_MODES = ("repair", "repair_probe")
+ADMISSION_MODES = ("person", "admitter_key", "agent_policy", *REPAIR_MODES)
+#: How a standard change names itself as the approver of a repair.
+STANDARD_CHANGE_APPROVER = "standard-change:"
 ADMISSION_SCHEMA = "openadapt-flow/jit-admission/v1"
 KEY_DIR_ENV = "OPENADAPT_JIT_KEY_DIR"
 
@@ -321,6 +328,7 @@ def ensure_runnable(
     execution_origin: Optional[str] = None,
     effect_verifier: Any = None,
     at_run: bool = False,
+    stops_before_save: bool = False,
 ) -> None:
     """Refuse to execute a JIT draft that has no valid admission.
 
@@ -337,6 +345,9 @@ def ensure_runnable(
     its admission on this run: the program's parameters are the admitted
     task's, ``execution_origin`` is the origin the canary ran on, and
     ``effect_verifier`` gives every write step an independent read-back.
+
+    A repaired copy whose admission is only a ``repair_probe`` runs only when
+    ``stops_before_save`` says the run's gate stops before the first save.
 
     Raises:
         DraftNotAdmitted: the draft is not admitted, this run does not match
@@ -360,6 +371,11 @@ def ensure_runnable(
             f"admitted ({exc}). Review, canary and admit it first "
             "(openadapt-flow jit status)."
         ) from None
+    if manifest.get("admission_mode") == "repair_probe" and not stops_before_save:
+        raise DraftNotAdmitted(
+            f"refused: {bundle} is a repair a person has not approved yet; it runs "
+            "only as a probe that stops before the save. Nothing ran."
+        )
     if not at_run:
         return
     try:
@@ -1084,11 +1100,16 @@ def record_canary(
     target_origin: str,
     run_dir: Optional[Path],
     key_dir: Optional[Path] = None,
+    environment: Optional[str] = None,
 ) -> dict[str, Any]:
     """Record an attended canary run. It passes only when it ended
     ``VERIFIED`` with zero model calls and every write step had an
     independent read-back. Every run is also appended to ``canaries.jsonl``,
-    which an admission policy's ``min_clean_canaries`` counts."""
+    which an admission policy's ``min_clean_canaries`` counts.
+
+    ``environment`` is the app environment the canary ran in (the app's
+    origin plus, when the caller names one, its environment id). The
+    admission pins it, and a run in another environment is refused."""
 
     program = Path(program_dir)
     _require_draft(program)
@@ -1108,6 +1129,9 @@ def record_canary(
         "readback": list(readback),
         "passed": outcome == "VERIFIED" and model_calls == 0 and not problems,
     }
+    if environment is not None:
+        # Only written when known, so canaries recorded before it verify.
+        record["environment"] = environment
     record["signature"] = _sign_record(record, key_dir)
     _write(program / CANARY_FILE, record)
     with (program / CANARIES_FILE).open("a") as f:
@@ -1284,8 +1308,13 @@ def _write_manifest(
                 "target_origin",
                 "outcome",
                 "model_calls",
+                "environment",
             )
+            if k in canary
         },
+        # What the person approved, apart from the anchors: a repair that
+        # re-anchors a step keeps it, a changed record check does not.
+        "record_check_digest": _record_check_digest(program),
         "readback": canary["readback"],
         "recorded_by": recorder.get("recorded_by"),
         "agent_principal_id": recorder.get("agent_principal_id"),
@@ -1309,6 +1338,12 @@ def _write_manifest(
     # verify this manifest.
     _event(program, "admitted", principal_id=name, digest=digest, mode=mode)
     return manifest
+
+
+def _record_check_digest(program: Path) -> str:
+    from openadapt_flow.jit.signature import record_check_digest
+
+    return record_check_digest(_load_workflow(program / "bundle"))
 
 
 def admit_with_key(
@@ -1520,6 +1555,9 @@ def _verify_mode(body: Mapping[str, Any], keys: Path) -> None:
     mode = body.get("admission_mode", "person")
     if mode not in ADMISSION_MODES:
         raise AdmissionError(f"unknown admission mode {mode!r}")
+    if mode in REPAIR_MODES:
+        _verify_repair(body, keys)
+        return
     name = str(body.get("admitted_by_principal_id") or "")
     if mode != "agent_policy":
         _self_check(name, body, agent=False)
@@ -1563,6 +1601,132 @@ def _verify_mode(body: Mapping[str, Any], keys: Path) -> None:
             "the manifest's self_admitted does not match who recorded the draft "
             "and who admitted it"
         )
+
+
+# -- repairs -------------------------------------------------------------------
+
+#: Fields a repaired copy's admission must carry over from the prior one.
+_REPAIR_KEPT = ("workflow_id", "task", "params", "policy", "canary", "readback")
+
+
+def admit_repair(
+    prior_bundle: Path | str,
+    repaired_bundle: Path | str,
+    *,
+    candidate_id: str,
+    approved_by: Optional[str] = None,
+    route: Optional[str] = None,
+    probe_only: bool = False,
+    key_dir: Optional[Path] = None,
+) -> dict[str, Any]:
+    """Carry an admitted program's admission to a repaired copy of it.
+
+    A repair (``openadapt_flow.repair``) re-anchors steps or adds a bridge;
+    it never changes the record check. So the copy keeps the prior admission
+    when its record check (:func:`~openadapt_flow.jit.signature.record_check_digest`)
+    and parameters are the prior program's, and it is admitted for the same
+    task, policy, app and read-back. The new manifest embeds the prior one,
+    which must still verify.
+
+    ``probe_only`` writes a ``repair_probe`` admission: the copy runs only
+    behind a gate that stops before the first save (see
+    :func:`ensure_runnable`). Otherwise ``approved_by`` is the person who
+    approved the repair, or ``standard-change:<policy digest>`` for a fix a
+    signed repair policy allowed.
+
+    Raises:
+        AdmissionError: the prior program is not admitted, the copy changes
+            its record check or parameters, or no approver is named.
+    """
+
+    from openadapt_flow.execute.keys import (
+        fingerprint_of,
+        load_or_create_private_key,
+        sign_bytes,
+    )
+    from openadapt_flow.jit.signature import record_check_digest
+
+    keys = Path(key_dir) if key_dir is not None else default_key_dir()
+    prior = verify_admission(prior_bundle, key_dir=keys)
+    if prior.get("admission_mode") == "repair_probe":
+        raise AdmissionError("a repair probe's admission can't carry to another copy")
+    prior_workflow = _load_workflow(Path(prior_bundle))
+    repaired = _load_workflow(Path(repaired_bundle))
+    if sorted(repaired.params) != sorted(prior.get("params") or []):
+        raise AdmissionError("the repair changes the program's parameters")
+    check = record_check_digest(repaired)
+    if check != record_check_digest(prior_workflow) or (
+        prior.get("record_check_digest") not in (None, check)
+    ):
+        raise AdmissionError(
+            "the repair changes the program's record check; it needs a new admission"
+        )
+    if probe_only:
+        name = "self-repair:probe"
+    else:
+        name = (approved_by or "").strip()
+        if not name:
+            raise AdmissionError("a repair's admission names who approved it")
+        if not name.startswith(STANDARD_CHANGE_APPROVER) and is_not_a_person_name(name):
+            raise AdmissionError(f"{name!r} is not a person; a model never approves")
+    private = load_or_create_private_key(keys)
+    body: dict[str, Any] = {
+        "schema": ADMISSION_SCHEMA,
+        "admission_mode": "repair_probe" if probe_only else "repair",
+        "state": BundleState.ADMITTED.value,
+        **{k: prior.get(k) for k in _REPAIR_KEPT},
+        **{k: prior.get(k) for k in RECORDER_FIELDS},
+        "digest": _digest(repaired),
+        "record_check_digest": check,
+        "admitted_by_principal_id": name,
+        "admitted_at": _now(),
+        "repair_of": {
+            "candidate_id": candidate_id,
+            "route": route,
+            "prior_digest": prior.get("digest"),
+            "prior_manifest": dict(prior),
+        },
+        "signing_key": fingerprint_of(private.public_key()),
+    }
+    manifest = {**body, "signature": sign_bytes(private, _canonical(body))}
+    _write(Path(repaired_bundle) / ADMISSION_FILE, manifest)
+    return manifest
+
+
+def _verify_repair(body: Mapping[str, Any], keys: Path) -> None:
+    """A repaired copy's admission: the prior one verifies, and nothing that
+    was admitted changed except the anchors and steps the repair touched."""
+
+    repair = body.get("repair_of")
+    if not isinstance(repair, Mapping):
+        raise AdmissionError("a repair admission names no prior admission")
+    prior = repair.get("prior_manifest")
+    if not isinstance(prior, Mapping) or not _record_signed(prior, keys):
+        raise AdmissionError("the prior admission's signature does not verify")
+    prior_body = {k: v for k, v in prior.items() if k != "signature"}
+    if prior_body.get("state") != BundleState.ADMITTED.value:
+        raise AdmissionError("the prior manifest does not admit its bundle")
+    if prior_body.get("admission_mode") == "repair_probe":
+        raise AdmissionError("a repair can't follow a repair probe")
+    _verify_mode(prior_body, keys)
+    if repair.get("prior_digest") != prior_body.get("digest"):
+        raise AdmissionError("the repair names another prior bundle")
+    for key in (*_REPAIR_KEPT, *RECORDER_FIELDS):
+        if body.get(key) != prior_body.get(key):
+            raise AdmissionError(f"the repair changed the admitted {key}")
+    pinned = prior_body.get("record_check_digest")
+    if not body.get("record_check_digest") or (
+        pinned is not None and pinned != body.get("record_check_digest")
+    ):
+        raise AdmissionError("the repair changed the admitted record check")
+    if body.get("admission_mode") == "repair":
+        name = str(body.get("admitted_by_principal_id") or "")
+        if not name.startswith(STANDARD_CHANGE_APPROVER):
+            if is_not_a_person_name(name):
+                raise AdmissionError(
+                    f"{name!r} is not a person; a model never approves"
+                )
+            _self_check(name, body, agent=False)
 
 
 def reject(

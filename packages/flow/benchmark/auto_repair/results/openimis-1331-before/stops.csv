@@ -1,0 +1,4 @@
+run,outcome,halted_step,halt_kind,identity,route,if_routed_to_repair
+item-050-1/run,RECONCILIATION_REQUIRED,step_014,"Step 'step_014' (scroll by (0, -600)): closed-loop scroll ex",,reconciliation,step_014 is not a click on an on-screen target
+item-050-2/run,RECONCILIATION_REQUIRED,step_014,"Step 'step_014' (scroll by (0, -600)): closed-loop scroll ex",,reconciliation,step_014 is not a click on an on-screen target
+item-050-3/run,RECONCILIATION_REQUIRED,step_014,"Step 'step_014' (scroll by (0, -600)): closed-loop scroll ex",,reconciliation,step_014 is not a click on an on-screen target

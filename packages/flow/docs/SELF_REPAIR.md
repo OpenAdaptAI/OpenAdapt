@@ -13,9 +13,58 @@ form and the record are the same as in the recording. Then one
 person accepts the fix with one tap, on the phone or at a terminal, and the run
 resumes. Healthy runs never call the agent and record zero model calls.
 
-Module: `openadapt_flow.repair.self_repair`. CLI: `openadapt-flow run
---self-repair`. Tests: `tests/test_self_repair.py`,
-`tests/test_self_repair_cli.py`, `tests/test_self_repair_bridge.py`.
+Module: `openadapt_flow.repair.self_repair`. CLI: `openadapt-flow run`,
+on by default once a repair agent is configured. Tests:
+`tests/test_self_repair.py`, `tests/test_self_repair_cli.py`,
+`tests/test_self_repair_bridge.py`, `tests/test_auto_repair.py`,
+`tests/test_auto_repair_cli.py`.
+
+## Repair is the default
+
+Once a deployment names a repair agent, every stop that wrote nothing goes to
+it. Nobody has to start a repair. Module: `openadapt_flow.repair.auto_repair`.
+
+```yaml
+# deploy.yaml
+repair:
+  agent: mypkg.agents:make_agent
+  screen_access_by: ops-lead
+  fault_urls: ["https://emr.test/?fault=missing"]
+```
+
+Each stop is routed by what the run may have written:
+
+| The run ended | Where the stop goes |
+| --- | --- |
+| `VERIFIED` | Nowhere. The agent is never called. |
+| `HALTED_BEFORE_EFFECT` (or a halt with no outcome word and no effect) | To the repair agent, then the probe, the replay and fault cases, one approval (or a standard change), and the resumed item. A halt self-repair doesn't handle, such as a wrong-record halt, goes to a person. |
+| `RECONCILIATION_REQUIRED` | Never to repair. A write may have happened, so it goes to reconciliation: the change ledger in `REPORT.md` and `openadapt-flow undo list <run_dir>` ([AFTER_A_STOP.md](AFTER_A_STOP.md)). |
+| Anything else | To a person. |
+
+The agent is shown the stop (the halted step, its intent and why it halted),
+the screen evidence (the live screen and the recorded crop, scrubbed unless
+set otherwise) and the record check (`request.record_check`: each save's
+effect contracts with literal values masked, and a digest of its record
+identity contract). It proposes a re-anchored step, a bridge of up to three
+steps, or a fix a signed policy pre-approves. A fix never changes the record
+check: the probe, the cases and the resumed run check it again. For a
+worklist, `WorklistQueue` holds the items that stopped the same way, repairs
+on the test record, and releases them all with one approval.
+
+Every stop, repaired or not, appends one row to
+`<repair-store>/auto-repair/ledger.jsonl`: the route, the halted step, the
+fixes proposed, whether one passed the probe and the cases, who approved it
+and how long the answer took, whether the item resumed and verified, and the
+agent's model calls and cost. `openadapt_flow.repair.auto_repair.summarize`
+turns the rows into the repair success rate, failures included.
+
+To turn it off for one run, pass `--no-auto-repair`. To turn it off for a
+deployment, set `repair.auto: false`. A run that can't be repaired (for
+example one pinned to `--pin-digest`) is not refused: it runs plainly and
+prints why repair is off for it. `--self-repair` still asks for repair
+explicitly, and then such a run is refused.
+
+See [Measured](#measured) for how often it works.
 
 ## What happens when a run halts
 
@@ -247,7 +296,8 @@ class MyAgent:
 - **One action.** A single-action proposal is one click or double click, matching
   the halted step's action. The agent may give a coordinate or, in the
   `playwright_mcp` dialect, a unique CSS selector. Anything else is refused.
-  Return `None` to give up.
+  To give up, return `RepairProposal(model_calls=..., cost_usd=...)` with no
+  action, so the calls it took are counted, or `None`.
 - **The customer's key.** An agent that calls a model must run on the
   customer's own key. Pass `model_key=load_customer_model_key("anthropic")`
   (see [JIT.md](JIT.md)). `SelfRepair` refuses to start without one unless the
@@ -266,30 +316,34 @@ class MyAgent:
 ## CLI
 
 ```bash
-openadapt-flow run bundles/triage --config deploy.yaml --url "$APP_URL" --run-dir runs/item-17 --self-repair --repair-agent mypkg.agents:make_agent --repair-screen-access-by ops-lead --repair-fault-url "$FAULT_URL"
+openadapt-flow run bundles/triage --config deploy.yaml --url "$APP_URL" --run-dir runs/item-17 --repair-agent mypkg.agents:make_agent --repair-screen-access-by ops-lead --repair-fault-url "$FAULT_URL"
 ```
 
-`run` admits the bundle as usual. The first run uses the same authorization
-and approval gate as without `--self-repair`. Probes and the resumed run
+With the deployment's `repair` section set, the flags aren't needed. A flag
+wins over the deployment file. `run` admits the bundle as usual. The first
+run uses the same authorization and approval gate as a run without repair. Probes and the resumed run
 admit the patched bundle through the same run gate settings, with a fresh
 authorization each. They don't use the deployment's approval mode: the
 person's answer to the repair request is the approval for the item's one
 save, and the resume refuses the save unless the form is the one they saw.
 
-| Flag | Default | Meaning |
-| --- | --- | --- |
-| `--self-repair` | off | Turn on self-repair for this run. |
-| `--repair-agent MODULE:NAME` | required | An agent object, class, or factory. |
-| `--repair-screen-access-by NAME` | required | Who allowed the agent to see screens. |
-| `--repair-screen-share-mode` | `scrubbed_only` | Or `allow_unscrubbed`. |
-| `--repair-model-provider`, `--repair-model-key-file` | none | Load the customer's own key. |
-| `--repair-store DIR` | `repair-store` | The repair store. |
-| `--repair-attempts N` | 3 | Proposals per halt. |
-| `--repair-fault-url URL` | none | A fault probe; repeatable. |
-| `--repair-approval-wait SECONDS` | 900 | How long to wait for the person. |
+| Flag | `deploy.yaml` `repair:` key | Default | Meaning |
+| --- | --- | --- | --- |
+| `--no-auto-repair` | `auto: false` | on | Leave stops for a person. |
+| `--self-repair` | none | off | Require repair: refuse a run that can't be repaired. |
+| `--repair-agent MODULE:NAME` | `agent` | none | An agent object, class, or factory. Repair is on when one is set. |
+| `--repair-screen-access-by NAME` | `screen_access_by` | required | Who allowed the agent to see screens. |
+| `--repair-screen-share-mode` | `screen_share_mode` | `scrubbed_only` | Or `allow_unscrubbed`. |
+| `--repair-model-provider`, `--repair-model-key-file` | `model_provider`, `model_key_file` | none | Load the customer's own key. |
+| `--repair-store DIR` | `store` | `repair-store` | The repair store, and the stop ledger. |
+| `--repair-attempts N` | `attempts` | 3 | Proposals per halt. |
+| `--repair-fault-url URL` | `fault_urls` | none | A fault probe; repeatable. |
+| `--repair-approval-wait SECONDS` | `approval_wait_s` | 900 | How long to wait for the person. |
 
-The CLI refuses to start self-repair when the run is bound to the exact
-original bundle:
+Repair is off for a run bound to the exact original bundle, and for a
+worklist run (use `WorklistQueue`), because a stop there may come after
+earlier items saved. With `--self-repair` such a run is refused; otherwise it
+runs plainly. The bindings are:
 
 - a signed qualification admission (`--qualification-authority-file`);
 - a managed dispatch;
@@ -324,6 +378,7 @@ the tutorial does.
 | `<run_dir>/item-approval/` | The request, the screenshot the person saw, and the answer. |
 | `<run_dir>/self-repair/preflight/` | The test record's run of the repaired bundle, when a fix applied without a person. |
 | The repair store | The candidate, its campaigns, its transitions, who reviewed and approved it, and its canary metrics. |
+| `<repair-store>/auto-repair/ledger.jsonl` | One row per stop: its route, what the agent proposed, the probe, the approval and its wait, the resumed outcome, model calls and cost. |
 
 The run's own `model_calls` stays the count for the deterministic run, which
 is 0. The agent's calls are counted in `self_repair.model_calls`.
@@ -546,8 +601,83 @@ it, and with WinForms-style UI Automation ids. The live tests (a repair, a
 pre-flight, a batch release) run on MockMed in a browser. No test drives a
 live RDP or Citrix session.
 
+## Measured
+
+The default loop was measured with a real Claude repair agent
+(`claude-sonnet-5-5`) and a scripted approver that approves every request
+that reaches it, so a bad fix that passed the probe would have been saved.
+Data, scripts and the full per-mode table are in
+[benchmark/auto_repair](../benchmark/auto_repair/README.md).
+
+| Where | Stops | Reached repair | Agent proposed | Passed the probe | Approved | Resumed and verified | Wrong saves | Person decisions |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| MockMed, 22 drift modes, 3 trials each (66 runs) | 30 | 21 | 12 | 6 | 6 | **6 of 21** | 0 | 6 |
+| MockMed worklist, `relink` and `redesign`, 5 items each (the change ships after the pre-flight) | 10 | 10 | 2 (one repair per group, on the test record) | 2 | 2 | **10 of 10** | 0 | 2 |
+| OpenEMR referral, #1347's recorded runs | 8 | 0 (all `RECONCILIATION_REQUIRED`) | - | - | - | 0 | - | - |
+| openIMIS relabelled Save (#1331), before #1337 | 3 | 0 (all `RECONCILIATION_REQUIRED`) | - | - | - | 0 | - | - |
+| openIMIS relabelled Save, live, with #1337 and a scripted risk review | 3 | **3** | 2 | 0 | 0 | 0 | 0 | 0 |
+| Silent-saves 1.1.0, the UI-change blocks that stopped arms 3 and 3r (#1380): `zoom`, `notice`, `relink`, 28 items with no server fault | 13 (before: 28) | 11 | 11 | 1 | 1 | **1 repaired, then 8 more items on the repaired program; 9 `zoom` items no longer stop: 18 of 28 correct** | 0 | 1 |
+
+What worked and what didn't:
+
+- **Repaired:** a renamed and moved control that opens the form (`relink`,
+  3 of 3) and a redesigned save with a decoy next to it (`redesign`, 3 of 3).
+  Each took one model call ($0.013 to $0.015) and one tap.
+- **Not repaired, and nothing written:** a save moved into a closed menu
+  (`menu`: the agent sees only "Actions"), a new interstitial (`notice`: the
+  fix needs two clicks and the second control isn't on screen yet), a new
+  required choice (`provider`: the agent declined to choose), and pixel
+  postconditions that failed after a font or zoom change (`font`, `zoom`:
+  false stops no click can fix). These need a look at more than one screen
+  (the staging-copy bridge search of
+  [#1302](https://github.com/OpenAdaptAI/OpenAdapt/pull/1302)), or a fix to
+  the check itself.
+- **Correctly never repaired:** a missing, absent or duplicated record (9
+  stops) went to a person.
+- **OpenEMR:** every recorded stop came after "Create New Patient", which the
+  run gate counts as a save, so all 8 went to reconciliation. Repair can't
+  help these; the fix for #1347 is the identity check's cause.
+- **openIMIS:** before #1337 the relabelled Save stopped on the scroll before
+  it with `RECONCILIATION_REQUIRED`, 3 of 3. With #1337 and a risk review of
+  the two steps nobody had classified, it halts on the Save before any effect
+  and reaches repair, 3 of 3. The agent found "SAVE CLAIM" in 2 of 3, but no
+  fix passed the probe: in the replay the Save is still disabled (grey) while
+  the scroll looks for it, and the new template was cropped from the enabled
+  button. Nothing was written. The first live run also found two bugs, now
+  fixed: a re-targeted save that carries a `submit_binding` failed
+  validation, and the probe couldn't open a second browser session from the
+  CLI.
+
+- **Silent-saves 1.1.0:** 18 of the 28 items that stopped every time in #1380
+  now end with the correct record. A repaired agent-compiled program now
+  keeps its admission (the `relink` repair could not even be probed before),
+  and a `region_stable` check now holds at the page scale its step's click
+  showed (`zoom` no longer stops). The What's New block still stops: its fix
+  clicks "Continue to tasks", which the write classifier reads as a possible
+  save, until a person classifies it. Details:
+  [benchmark/auto_repair](../benchmark/auto_repair/README.md).
+
+The approver was scripted, so its answer times (milliseconds) are not a
+person's. The measure of a person's time here is the count of decisions: one
+tap per repaired stop, or one per group of worklist items that stopped the
+same way.
+
 ## Limits
 
+- A fix that clicks a control the write classifier reads as a possible save
+  (for example "Continue") is refused, even on a dismiss screen, until a
+  person classifies that control.
+- A patch's new template is cropped from the screen at the halt. When the
+  app shows the control in another state during the replay (openIMIS shows
+  its Save disabled until the form validates), the probe doesn't find it and
+  refuses the fix.
+- Only a stop that wrote nothing is repaired. A stop after a step the run gate
+  counts as a save has acted is `RECONCILIATION_REQUIRED` and goes to
+  reconciliation, even when the app saved nothing; see [Measured](#measured)
+  for OpenEMR, where every recorded stop was of this kind.
+- The CLI repairs a single run. A worklist that stops after earlier items
+  saved is not repaired by `run`; use `WorklistQueue`, which repairs on the
+  test record and releases the waiting items.
 - One halted click per run is repaired, by one corrected click or a bridge of
   up to three actions, in a linear workflow with exactly one save. When the
   patched run halts at another step, the probe fails with that reason.

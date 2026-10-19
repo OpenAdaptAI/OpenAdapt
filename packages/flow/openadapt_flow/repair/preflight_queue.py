@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Literal, Optional, Sequence
+from typing import TYPE_CHECKING, Callable, Literal, Mapping, Optional, Sequence
 
 from openadapt_flow.ir import RunReport, Workflow
 from openadapt_flow.repair.standard_change import (
@@ -37,6 +37,7 @@ from openadapt_flow.repair.standard_change import (
 )
 
 if TYPE_CHECKING:
+    from openadapt_flow.repair.auto_repair import RepairLedger
     from openadapt_flow.repair.lifecycle import RepairStore
     from openadapt_flow.repair.self_repair import (
         SelfRepair,
@@ -73,6 +74,9 @@ class ItemResult:
     candidate_id: Optional[str] = None
     runs: int = 0
     reason: str = ""
+    #: The item's first run that did not verify, kept for the stop ledger.
+    stopped_report: Optional[RunReport] = None
+    stopped_run_dir: Optional[Path] = None
 
 
 @dataclass
@@ -124,6 +128,10 @@ class WorklistQueue:
             for a target (the test record's). Without it a halt stops the
             queue for a person, as today.
         max_repairs: Repairs per queue run before it stops for a person.
+        ledger: Where each stop and each repair goes
+            (:class:`~openadapt_flow.repair.auto_repair.RepairLedger`); by
+            default the repair store's, once a repair has run.
+        labels: Added to every ledger row.
     """
 
     def __init__(
@@ -134,12 +142,16 @@ class WorklistQueue:
         *,
         self_repair: Optional[Callable[["SelfRepairTarget"], "SelfRepair"]] = None,
         max_repairs: int = 3,
+        ledger: Optional["RepairLedger"] = None,
+        labels: Optional[Mapping[str, str]] = None,
     ) -> None:
         self.bundle_dir = Path(bundle_dir)
         self.test_record = test_record
         self.root = Path(root)
         self.self_repair = self_repair
         self.max_repairs = max(0, int(max_repairs))
+        self.ledger = ledger
+        self.labels = dict(labels or {})
         self._store: Optional["RepairStore"] = None
 
     def run(self, items: Sequence[QueueItem]) -> QueueResult:
@@ -152,9 +164,11 @@ class WorklistQueue:
         def done(
             status: QueueStatus, reason: str, preflight: PreflightResult
         ) -> QueueResult:
-            return QueueResult(
+            out = QueueResult(
                 status, reason, preflight, list(results.values()), repairs, bundle
             )
+            self._log(out)
+            return out
 
         preflight = run_preflight(self.test_record, bundle, self.root / "preflight")
         candidate_id: Optional[str] = None
@@ -216,6 +230,52 @@ class WorklistQueue:
 
     # -- pieces ------------------------------------------------------------
 
+    def _log(self, out: QueueResult) -> None:
+        """One ledger row per repair (on the test record) and per item stop."""
+
+        from openadapt_flow.repair.auto_repair import (
+            RepairLedger,
+            ledger_row,
+            outcome_of,
+            route_stop,
+        )
+
+        ledger = self.ledger
+        if ledger is None and self._store is not None:
+            ledger = RepairLedger(self._store.root)
+        if ledger is None:
+            return
+        for repair in out.repairs:
+            row = ledger_row(
+                repair.halted_report or repair.report,
+                repair.run_dir,
+                result=repair,
+                labels=self.labels,
+            )
+            row.scope = "test_record"
+            ledger.append(row)
+        for item in out.items:
+            if item.stopped_report is None:
+                continue
+            route, why = route_stop(item.stopped_report)
+            if route == "repair" and item.halt_code is None and item.runs <= 1:
+                route, why = "person", "a halt self-repair does not handle"
+            if route == "repair" and self.self_repair is None:
+                route, why = "off", "no repair agent for this queue"
+            row = ledger_row(
+                item.stopped_report,
+                item.stopped_run_dir or self.root,
+                route=route,
+                route_reason=why,
+                labels=self.labels,
+            )
+            if item.runs > 1:
+                row.repair_status = "released"
+                row.released_by = item.candidate_id
+                row.resumed = True
+                row.resumed_outcome = outcome_of(item.report) if item.report else None
+            ledger.append(row)
+
     def _still_in_use(
         self, candidate_id: Optional[str]
     ) -> Optional[tuple[QueueStatus, str]]:
@@ -261,6 +321,8 @@ class WorklistQueue:
         if _verified(report):
             result.status, result.reason = "verified", ""
         else:
+            if result.stopped_report is None:
+                result.stopped_report, result.stopped_run_dir = report, run_dir
             key = _halt_key(report, workflow)
             result.status = "halted" if report.halt is not None else "failed"
             result.reason = (report.halt.reason if report.halt else "not verified")[

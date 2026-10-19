@@ -313,6 +313,48 @@ def effect_field_checks(effect: Any, verdict: Any, tier: Any) -> list[Any]:
     return checks
 
 
+#: A uniform page scale is inferred only from a click point at least this far
+#: from both edges at the origin, only when both axes agree to within this
+#: fraction, and only inside these bounds (and not within 5% of 1).
+_PAGE_SCALE_MIN_COORD = 40
+_PAGE_SCALE_AXIS_AGREEMENT = 0.02
+_PAGE_SCALE_BOUNDS = (0.5, 2.0)
+#: One pixel of click-point noise moves the estimate by a few tenths of a
+#: percent, enough to drop a wide template below threshold; the check tries
+#: this tight band around it.
+_PAGE_SCALE_BAND = (0.99, 0.995, 1.0, 1.005, 1.01)
+
+
+def _uniform_page_scale(step: Any, result: Any) -> Optional[float]:
+    """The page scale this step's click showed, or ``None``.
+
+    The recorded click point and the point the ladder resolved this run,
+    divided axis by axis. A whole-page zoom multiplies both coordinates by
+    the same factor; a control that merely moved almost never does, so the
+    two axes must agree.
+    """
+
+    resolution = getattr(result, "resolution", None)
+    anchor = getattr(step, "anchor", None)
+    if resolution is None or anchor is None:
+        return None
+    try:
+        rx, ry = (float(v) for v in anchor.click_point)
+        lx, ly = (float(v) for v in resolution.point)
+    except (TypeError, ValueError):
+        return None
+    if min(rx, ry) < _PAGE_SCALE_MIN_COORD:
+        return None
+    sx, sy = lx / rx, ly / ry
+    if abs(sx - sy) > _PAGE_SCALE_AXIS_AGREEMENT * max(sx, sy):
+        return None
+    scale = (sx + sy) / 2
+    low, high = _PAGE_SCALE_BOUNDS
+    if not low <= scale <= high or abs(scale - 1.0) < 0.05:
+        return None
+    return round(scale, 3)
+
+
 def _frame_viewport(frame_png: bytes) -> tuple[int, int]:
     """Return the viewport of THIS frame, read from the frame itself.
 
@@ -1618,6 +1660,9 @@ class Replayer:
                 execution_origin=execution_origin or execution_target_origin,
                 effect_verifier=self.effect_verifier,
                 at_run=True,
+                stops_before_save=bool(
+                    getattr(self.approval_gate, "stops_before_first_save", False)
+                ),
             )
         bundle_dir = Path(bundle_dir)
         run_dir = Path(run_dir)
@@ -16846,18 +16891,28 @@ class Replayer:
             on, plus human-readable descriptions of the postconditions that
             failed the final check (empty when ok).
         """
-        ok, frame_png = self._poll_postconditions(
-            step, frame_png, bundle_dir, start_state
-        )
-        if ok:
-            return True, frame_png, []
-        # One re-settle retry.
-        frame_png = self.vision.wait_settled(self.backend)
-        failed_pcs = [
-            pc
-            for pc in step.expect
-            if not self._postcondition_passes(pc, frame_png, bundle_dir, start_state)
-        ]
+        self._pc_page_scale = _uniform_page_scale(step, result)
+        self._pc_scaled_match = False
+        try:
+            ok, frame_png = self._poll_postconditions(
+                step, frame_png, bundle_dir, start_state
+            )
+            if ok:
+                self._note_page_scale(result)
+                return True, frame_png, []
+            # One re-settle retry.
+            frame_png = self.vision.wait_settled(self.backend)
+            failed_pcs = [
+                pc
+                for pc in step.expect
+                if not self._postcondition_passes(
+                    pc, frame_png, bundle_dir, start_state
+                )
+            ]
+            if not failed_pcs:
+                self._note_page_scale(result)
+        finally:
+            self._pc_page_scale = None
         if (
             failed_pcs
             and self.state_verifier is not None
@@ -16866,6 +16921,13 @@ class Replayer:
             failed_pcs = self._drift_oracle_rescue(failed_pcs, frame_png, result)
         failed = [self._describe_postcondition(pc) for pc in failed_pcs]
         return not failed_pcs, frame_png, failed
+
+    def _note_page_scale(self, result: Optional[StepResult]) -> None:
+        """Record on ``result`` the page scale a passing check needed."""
+
+        scale = getattr(self, "_pc_page_scale", None)
+        if result is not None and scale is not None and self._pc_scaled_match:
+            result.postcondition_page_scale = scale
 
     @staticmethod
     def _postcondition_confirms_a_write(
@@ -17076,9 +17138,63 @@ class Replayer:
                     )
                     if match is not None:
                         return True
+                if self._scaled_region_match(frame_png, template_png, region):
+                    return True
             live = self.vision.phash_png(frame_png, region=region)
             distance = self.vision.phash_distance(live, pc.phash)
             return distance <= pc.phash_tolerance
+        return False
+
+    def _scaled_region_match(
+        self, frame_png: bytes, template_png: bytes, region: tuple[int, ...]
+    ) -> bool:
+        """The recorded content, at the page scale this step's click showed.
+
+        A whole-page zoom (browser zoom, or an app's own scale) grows every
+        element and moves it away from the top-left corner by the same
+        factor, so the recorded region falls outside the search window and
+        its content outside the matcher's scale band. When this step's own
+        click landed at the recorded point times one uniform factor
+        (:func:`_uniform_page_scale`), look for the same template at that
+        factor (within one percent), at the recorded region times that
+        factor. Thresholds are the unscaled check's: a modal, a missing panel or another layout still
+        fails.
+        """
+
+        scale = getattr(self, "_pc_page_scale", None)
+        if scale is None:
+            return False
+        x, y, w, h = region
+        scaled = (
+            int(round(x * scale)),
+            int(round(y * scale)),
+            int(round(w * scale)),
+            int(round(h * scale)),
+        )
+        search = pad_region(scaled, PC_TEMPLATE_SEARCH_PAD, _frame_viewport(frame_png))
+        matchers = [
+            (self.vision.find_template, PC_TEMPLATE_THRESHOLD),
+            (
+                getattr(self.vision, "find_structural_template", None),
+                PC_STRUCTURAL_TEMPLATE_THRESHOLD,
+            ),
+        ]
+        for matcher, threshold in matchers:
+            if not callable(matcher):
+                continue
+            try:
+                match = matcher(
+                    frame_png,
+                    template_png,
+                    search_region=search,
+                    scales=tuple(round(scale * f, 4) for f in _PAGE_SCALE_BAND),
+                    threshold=threshold,
+                )
+            except TypeError:  # a vision stand-in with no scale band
+                return False
+            if match is not None:
+                self._pc_scaled_match = True
+                return True
         return False
 
     def _dom_text_visible(self, text: str) -> bool:
