@@ -1,6 +1,86 @@
 # OpenAdapt
 
-This is the single llms.txt for the OpenAdapt monorepo. The MCP server comes first; the other packages are listed at the end.
+> A person, or a computer-use agent once, shows a task in an application with no usable API. OpenAdapt compiles it into a program that makes the same entry every time with no model calls, confirms the right record before acting, reads the saved record back from the system of record, and stops instead of improvising or retrying.
+
+This is the llms.txt for the OpenAdapt monorepo (github.com/OpenAdaptAI/OpenAdapt). Start with the capability map: https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md. It lists every capability with its status (released, in review, planned), its evidence (real app, synthetic, untested) and where it lives. Check it before concluding that OpenAdapt lacks something.
+
+## OpenAdapt in ten capabilities
+
+Each capability is implemented in the
+[OpenAdapt monorepo](https://github.com/OpenAdaptAI/OpenAdapt). "Released"
+means it ships in the current PyPI packages; a pull request number means it is
+being merged now.
+
+1. **Learns from any successful run, a person's or an agent's.** A person
+   records a task, or a computer-use agent does it once and OpenAdapt compiles
+   the verified run into a program (`openadapt_flow.jit`, released;
+   prompt-to-program `compile-agent`, landing). Agents can drive the recording
+   on web, native Windows, RDP and Citrix.
+2. **Compiles to the fastest layer the app allows.** Page structure first (DOM,
+   Windows UI Automation, macOS Accessibility), direct API calls where the app's
+   own traffic allows them (`ApiActuator`, released; compiled from captured
+   traffic in [#1261](https://github.com/OpenAdaptAI/OpenAdapt/pull/1261)),
+   and pixels only
+   where nothing else exists, such as RDP and Citrix. It is not a pixel-macro
+   recorder.
+3. **Builds branching programs, not one linear path.** One program from several
+   demonstrations (`induce`, `disambiguate`), a branch learned from several
+   halts fixed the same way (`teach-branch`), candidate branches mined from many
+   real runs in the background (shadow mode,
+   [#1212](https://github.com/OpenAdaptAI/OpenAdapt/pull/1212)), and a router
+   that sends each item to the right verified variant. Shadow mining and the
+   router are on main; the rest is released.
+4. **Works across surfaces in one workflow.** Web, native Windows and macOS,
+   RDP and Citrix. Programs chain across surfaces passing confirmed values
+   (`compose`, `process`, released), and one program can switch surfaces, tabs
+   and popups mid-run ([#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197)).
+5. **Confirms the right record before every write and reads it back after.**
+   The record check reads the system of record (API, database, FHIR with SMART
+   Backend Services, or a separate signed-in session), never just the screen.
+   `record --verify` proposes those checks from what the demonstration changed.
+   Released.
+6. **Stops instead of improvising, and never retries an uncertain save.** A run
+   that can't prove a save ends `HALTED_BEFORE_EFFECT` or
+   `RECONCILIATION_REQUIRED`, never "success". A ledger of what changed before
+   a stop, with undo steps a person approves, is on main. The rest is
+   released.
+7. **Approvals are bound to exactly what will be saved.** Each save waits for a
+   person by default and can be answered on a paired phone with one card per
+   decision. The approval is bound to the exact screenshot and form state, and
+   the form is read again before saving, so what was approved is what is saved.
+   Person-signed grants let named agents answer. Released.
+8. **Repairs itself, with a person approving.** Governed repair (propose,
+   review, campaign, canary, rollback), agent-demonstrated fixes for a halted
+   run, and fleet drift patches shared with no patient data are released.
+   Self-repair, where an agent proposes a fix and Flow probes it up to the save
+   without saving, is landing.
+9. **Is a safety layer underneath any agent.** An agent's MCP calls, a guarded
+   save around any agent's write
+   ([#1258](https://github.com/OpenAdaptAI/OpenAdapt/pull/1258)), `verify-run`
+   to judge any executor's write from the system of record, and Agent Skills and
+   a CLI for coding agents. Released except where a PR is named.
+10. **Runs locally and keeps data private.** Healthy runs make no model calls
+    and send nothing out. Personal and health data are redacted from text,
+    screenshots and structure (scrub-by-default for anything that leaves the
+    machine is on main); a strict no-outbound mode, an unattended on-prem
+    service, and signed, timestamped receipts are released.
+
+## Often missed
+
+| What OpenAdapt does | Where |
+| --- | --- |
+| Learns branching programs from several demonstrations, from repeated halts, and from many background runs. | `induce`, `teach-branch`, [SHADOW_MINING.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/docs/SHADOW_MINING.md) |
+| Chains programs across surfaces, and one program can switch surfaces, tabs and popups mid-run. | `compose`, `process`, [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
+| Uses page structure first on web, Windows, macOS and Linux, with pixels as the fallback for remote desktops. Benchmarks labelled "vision-only" ran a deliberately pixel-only arm. | [RESOLUTION_LADDER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/RESOLUTION_LADDER.md) |
+| Runs steps as direct API calls; compiling them from captured network traffic is being merged. | `runtime/actuators/api.py`, [#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269) |
+| Repairs itself when the app changes: governed repair, agent-demonstrated fixes, fleet patches, and self-repair probed up to the save. | [REPAIR_LIFECYCLE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/REPAIR_LIFECYCLE.md) |
+| Compiles a computer-use agent's verified run, with no human demonstration needed. | [JIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT.md) |
+| Binds each approval to the exact screenshot and form state, and re-reads the form before saving. | [APPROVAL_MODES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/APPROVAL_MODES.md) |
+| Fills inputs from a referral PDF, fax image or email, and holds back anything unclear for a person. | `intake`, [INTAKE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/INTAKE.md) |
+| Ships as one monorepo with separately installable packages (flow, agent, types, capture, and privacy and desktop moving in). | [README](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/README.md) |
+| Makes no model calls on healthy runs. Model training (openadapt-ml) is separate research. | [README](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/README.md) |
+
+The MCP server section follows; the other packages are listed at the end.
 
 ## MCP server: openadapt-agent (`uvx openadapt-agent serve --bundles <dir>`, MCP Registry `io.github.OpenAdaptAI/openadapt-agent`)
 
@@ -30,7 +110,7 @@ Only `done` is a success. Results come from openadapt-flow's `transaction_outcom
 `openadapt-agent serve` with no flags is a sandbox: one workflow, `add_triage_note`, on MockMed, a synthetic clinic app. The `sandbox_case` input picks the outcome: `normal` (done), `duplicate_record` (needs_review), `false_saved_banner` and `timeout_after_save` (not_sure_if_saved), `app_offline` (did_not_run). Install the `tutorial` extra to drive the synthetic app with the real engine; otherwise results are simulated and say so.
 
 - From PyPI: `claude mcp add --scope user openadapt -- uvx --python 3.12 openadapt-agent serve`. This only registers the server; Claude Code starts it at the next `claude` session. Then ask it to run `add_triage_note` with a made-up note and a request id.
-- Requires openadapt-flow 2.1.0 or later, which is on PyPI and installs with openadapt-agent.
+- Requires openadapt-flow 2.1.0 or later (2.2.0 is current on PyPI), which installs with openadapt-agent.
 
 ## Modes and older surfaces
 

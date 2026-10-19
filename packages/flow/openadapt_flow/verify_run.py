@@ -603,6 +603,7 @@ def verify_run(
     approver: Optional[Mapping[str, Any]] = None,
     remediates: Optional[str] = None,
     correlation_id: Optional[str] = None,
+    write_attempted: bool = False,
 ) -> dict[str, Any]:
     """Read the system of record and return ``{"receipt", "evidence"}``.
 
@@ -616,6 +617,11 @@ def verify_run(
     (its ``execution_id`` and salt) and the baseline is consumed. Without one,
     a new salt is drawn and written to ``private_dir/effect-run.private.json``
     (mode 0600), so ``private_dir`` is required.
+
+    ``write_attempted`` says the caller knows the save was dispatched (the
+    guarded save sets it after its commit step). Then a store that shows
+    nothing is ``reconciliation_required``, not ``halted_before_effect``: the
+    write may still land, so it must not be retried.
     """
 
     from openadapt_types.execute import (
@@ -777,7 +783,11 @@ def verify_run(
         outcome = ExecuteTerminalOutcomeV1.REJECTED_POLICY
     elif read_proves_write:
         outcome = ExecuteTerminalOutcomeV1.VERIFIED
-    elif effect_verdict == "REFUTED" and observed_effect == "absent":
+    elif (
+        effect_verdict == "REFUTED"
+        and observed_effect == "absent"
+        and not write_attempted
+    ):
         # The store shows nothing landed, whatever the executor said.
         outcome = ExecuteTerminalOutcomeV1.HALTED_BEFORE_EFFECT
     else:

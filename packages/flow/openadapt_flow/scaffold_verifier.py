@@ -722,6 +722,18 @@ def explain_run(run_dir: Path) -> str:
             "instead of guessing."
         )
 
+    # What may need undoing: the change ledger, in run order.
+    from openadapt_flow.after_stop import change_ledger_lines
+
+    lines.extend(
+        change_ledger_lines(
+            report,
+            undo_hint=command(
+                f"undo list {shlex.quote(str(run_dir))} --bundle <bundle-dir>"
+            ),
+        )
+    )
+
     # Next: derived from the transaction outcome (through the plain result).
     if plain.key == "done_and_checked":
         lines.append(

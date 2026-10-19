@@ -472,8 +472,36 @@ resolution and halt.
 
 A run may halt after earlier steps have already changed the application or
 system of record. OpenAdapt does not provide a general transaction spanning an
-arbitrary GUI workflow. Compensation exists only where a deployment has
-explicitly implemented and verified it.
+arbitrary GUI workflow, and it does not buffer writes until a workflow's checks
+have all passed.
+
+What it does provide ([`AFTER_A_STOP.md`](AFTER_A_STOP.md)):
+
+- Every run report has a change ledger: each step that could have changed the
+  app, in order, with each declared effect marked confirmed, refuted or
+  unknown. The halt message, `explain` and `REPORT.md` say what may need
+  undoing.
+- `lint` warns when a write comes before a right-record check or a halting
+  precondition that the program could have done first. It suggests an order
+  and never reorders the bundle.
+- A bundle can declare an undo step for an effect. After a halt it is offered
+  to a person, runs only after that person approves it, runs at most once,
+  and counts as done only when an independent read of the system of record
+  confirms its own declared effects.
+
+The limits of that:
+
+- A step with no declared effect is `unknown` in the ledger. Flow can't say
+  whether it changed anything.
+- An undo exists only where someone declared it. Flow doesn't infer one.
+- An undo can fail or be refused. Then a person must repair the record by
+  hand.
+- No undo is offered for a workflow with a loop: the undo can't be bound to
+  one iteration's record.
+- The write-ordering check covers straight-line bundles only, and it can't
+  tell whether a later check depends on an earlier write.
+- Duplicate-write compensation (`effects.compensation`) is the only automatic
+  repair, and only where a deployment has implemented and verified it.
 
 Before resuming or teaching a halted consequential workflow, reconcile prior
 effects, confirm the current entity and application state, and ensure the bundle
