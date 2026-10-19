@@ -258,6 +258,15 @@ fails when a command is added without being listed here.
   complete database read path caught all 72. This is a coverage test over a
   small, hand-authored set of faults, not a real-world error rate:
   [EFFECT_E2E.md](packages/flow/benchmark/effect_e2e/EFFECT_E2E.md).
+- **OpenEMR referral: agent, screen program and API step.** Median wall time
+  per referral, from a fresh browser through sign-in, the entry and the read-back:
+  agent alone 36.5 s (62 of 63 correct, the 14 to 15 Oct study); compiled program
+  on the screen 22.5 s (18 of 18); the same program with the API step 3.3 s
+  (18 of 18). The program rows ran on 19 Oct, interleaved on one copy, without
+  the approval gate or resumable runs, and the API step was admitted by the
+  benchmark harness. The approval-gated production profile still runs the
+  screen steps; making the API step work under it is in progress:
+  [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#openemr-agent-screen-program-and-api-step).
 - **An agent's claims versus the read-back.** Claude Sonnet 5.5 computer use,
   working alone on a test app whose server broke the save in 6 ways (5 items
   each), reported all 30 bad saves as done. `verify-run` flagged all 30 and

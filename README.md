@@ -21,6 +21,32 @@ each save, reads the save back from the system of record after it, and returns
 a plain outcome. When anything doesn't match, it stops and tells your agent
 instead of guessing.
 
+## Measured on OpenEMR
+
+One new-patient referral in a test copy of OpenEMR, timed from a fresh
+browser through sign-in, the entry and the saved record read back (median):
+
+| Who does the entry | Time per referral | Saved correctly | Model cost |
+|---|---|---|---|
+| Agent alone (Claude Sonnet 5.5 computer use) | `██████████████████` 36.5 s | 62 of 63 | about $0.08 |
+| OpenAdapt program, screen steps | `███████████` 22.5 s | 18 of 18 | $0 |
+| OpenAdapt program, API step | `██` 3.3 s | 18 of 18 | $0 |
+
+The API step replaces the program's 41 screen steps with the one save request
+the app itself sends, then reads the record back. In both program rows a
+possible-duplicate referral stopped without saving, as it should. Both program
+rows ran on 19 Oct on one copy of the app, interleaved, without the approval
+gate and without resumable runs; the API step was admitted by the benchmark
+harness, not by a person. The agent rows are the 14 to 15 Oct timing study, on
+its own copy of the app.
+[SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#openemr-agent-screen-program-and-api-step)
+has every run.
+
+A screen can't show a save that went wrong behind it. On a test app that
+shows a save as done before its server answers, with the server breaking the
+save in 6 ways, 5 times each, the agent reported all 30 bad saves as done. Reading each record back caught all 30, with no false
+alarms on 10 clean saves ([details below](#why-the-read-back-matters)).
+
 ## One harness, three modes
 
 | Mode | What happens | Model calls |
