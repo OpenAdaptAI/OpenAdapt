@@ -2568,12 +2568,13 @@ class Replayer:
             elif ids != list(binding.web_form.replaces_steps):
                 reason = "the program's steps no longer match the API step"
             elif (
-                folded_checks_digest(workflow.steps[step_index:end_index])
+                folded_checks_digest(workflow.steps[step_index : end_index + 1])
                 != binding.web_form.folded_checks_digest
             ):
                 reason = (
-                    "an on-screen check of the GUI steps changed after the API "
-                    "step was proposed, and the API step would skip it "
+                    "the steps the API step replaces changed after it was "
+                    "proposed (an action, value, target, check, guard or record "
+                    "check), so the API step no longer stands for them "
                     "(openadapt-flow api propose)"
                 )
             elif self.governed_authorization is not None and (

@@ -348,11 +348,19 @@ def option_for_label(control: dict[str, Any], label: str) -> Optional[str]:
 
 
 def folded_checks_digest(steps: Any) -> str:
-    """SHA-256 over the on-screen checks (``expect``) of the folded steps."""
+    """SHA-256 over the complete definition of the steps an API step replaces.
+
+    Every replaced step, the save included: its action and values, its
+    parameters, its target and identity evidence, its guards and waits, its
+    on-screen checks, its record check and its risk. Only the save's own API
+    binding is left out (it carries this digest). Any change to what the GUI
+    steps do or check changes the digest, and the API step doesn't run until
+    it is proposed and admitted again.
+    """
 
     import hashlib
 
-    payload = [[s.id, [p.model_dump(mode="json") for p in s.expect]] for s in steps]
+    payload = [s.model_dump(mode="json", exclude={"api_binding"}) for s in steps]
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 

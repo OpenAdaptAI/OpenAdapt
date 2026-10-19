@@ -612,9 +612,12 @@ class WebFormSpec(BaseModel):
     #: On-screen checks of folded steps that caused no request (screen-only,
     #: not repeated), listed for the person admitting the step.
     screen_only_checks: list[str] = Field(default_factory=list)
-    #: Digest of the folded steps' on-screen checks when this was proposed.
-    #: If a check is added or changed later, the API step does not run (it
-    #: would skip that check) until it is proposed again.
+    #: Digest of the complete definition of every replaced step, the save
+    #: included (minus its API binding), when this was proposed
+    #: (``folded_checks_digest`` in runtime.actuators.web_form). Any change to
+    #: those steps keeps the API step from running until it is proposed and
+    #: admitted again. Bindings proposed before it covered more than the
+    #: on-screen checks need proposing again.
     folded_checks_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
 

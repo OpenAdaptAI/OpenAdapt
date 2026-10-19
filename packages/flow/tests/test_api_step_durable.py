@@ -79,6 +79,28 @@ class AcceptedButNothingSaved(ScriptedActuator):
         )
 
 
+def _reproposed(wf: Workflow) -> Workflow:
+    """The span program after an edit to its steps, its API step proposed again.
+
+    The API step's admission binds the complete definition of the steps it
+    replaces, so an edited save needs the binding's digest recomputed, as
+    ``openadapt-flow api propose`` does, before it is admitted again.
+    """
+
+    from openadapt_flow.runtime.actuators.web_form import folded_checks_digest
+
+    save = wf.steps[-1]
+    spec = save.api_binding.web_form.model_copy(
+        update={"folded_checks_digest": folded_checks_digest(wf.steps)}
+    )
+    binding = save.api_binding.model_copy(update={"web_form": spec})
+    return wf.model_copy(
+        update={
+            "steps": [*wf.steps[:-1], save.model_copy(update={"api_binding": binding})]
+        }
+    )
+
+
 def _absolute_check_workflow() -> Workflow:
     """The span program with a record check that needs no before-snapshot.
 
@@ -91,7 +113,7 @@ def _absolute_check_workflow() -> Workflow:
     effect = save.effects[0].model_copy(update={"forbid_collateral_loss": False})
     binding = save.api_binding.model_copy(update={"effects": [effect]})
     save = save.model_copy(update={"effects": [effect], "api_binding": binding})
-    wf = wf.model_copy(update={"steps": [*wf.steps[:-1], save]})
+    wf = _reproposed(wf.model_copy(update={"steps": [*wf.steps[:-1], save]}))
     wf, _ = admit_api_step(wf, admitted_by="reviewer")
     return wf
 
@@ -330,7 +352,7 @@ def test_an_identity_checked_save_with_a_right_record_contract_runs_durably(tmp_
         update={"steps": [*wf.steps[:-1], save], "params": {**wf.params, "note": "api"}}
     )
     wf, _ = admit_api_step(
-        wf, admitted_by="reviewer", identity={"subject_name": "note"}
+        _reproposed(wf), admitted_by="reviewer", identity={"subject_name": "note"}
     )
     fx = Fixture(tmp_path, wf)
     try:
