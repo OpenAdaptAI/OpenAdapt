@@ -222,12 +222,15 @@ class Harness:
             if op.kind in ("click", "double_click", "right_click"):
                 # A click with no point lands where the pointer is.
                 point = (op.x, op.y) if op.x is not None else self.computer.pointer
-                if point is None or point[0] is None:
+                if point is None:
+                    continue
+                x, y = point
+                if x is None or y is None:
                     continue
                 at = _observe.element_at(
                     self.page,
-                    point[0],
-                    point[1],
+                    x,
+                    y,
                     backend=getattr(
                         getattr(self.computer, "session", None), "backend", None
                     ),

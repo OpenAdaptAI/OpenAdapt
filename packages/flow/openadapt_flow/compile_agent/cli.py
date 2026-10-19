@@ -257,13 +257,16 @@ def cmd_compile_agent(
     ask: Callable[[str], str] = input,
     interactive: Callable[[], bool] = _interactive,
 ) -> int:
-    from openadapt_flow.compile_agent.pipeline import compile_first_run, run_compiled
+    from openadapt_flow.compile_agent.pipeline import (
+        FirstRunCompiler,
+        compile_first_run,
+    )
 
     params = _pairs(args.param, "--param")
     if args.prompt == "run":
         if not args.task_dir:
             raise SystemExit("compile-agent run needs the compiled task directory")
-        replay = run_compiled(args.task_dir, **params)
+        replay = FirstRunCompiler.load(args.task_dir).run(**params)
         _print(replay.to_dict(), args.json)
         return 0 if replay.verified else 1
     from openadapt_flow.compile_agent.pipeline import UnsupportedTarget, check_target
