@@ -278,7 +278,7 @@ def run(
         MIN_OCR_CONFIDENCE,
         _discriminative_crop_region,
     )
-    from openadapt_flow.ir import Anchor, Resolution, Step, Workflow
+    from openadapt_flow.ir import ActionKind, Anchor, Resolution, Step, Workflow
     from openadapt_flow.runtime.identity import (
         band_region,
         context_region_from_lines,
@@ -344,7 +344,8 @@ def run(
                         ti, si = idx[id(pair.target)], idx[id(pair.sibling)]
                         for config in CLICK_CONFIGS:
                             pi = 0 if config == "click_name" else 1
-                            rec_click = rec.points[ti][pi]
+                            name_pt, open_pt = rec.points[ti][0], rec.points[ti][1]
+                            rec_click = name_pt if pi == 0 else open_pt
                             crop = _discriminative_crop_region(rec_bgr, rec_click)
                             box = context_region_from_lines(
                                 rec_lines,
@@ -384,7 +385,7 @@ def run(
                             step = Step(
                                 id=f"s{ti}_{config}",
                                 intent="open record",
-                                action="click",
+                                action=ActionKind.CLICK,
                                 anchor=anchor,
                                 risk="irreversible",
                             )

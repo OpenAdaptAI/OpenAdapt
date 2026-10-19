@@ -587,6 +587,29 @@ class CaptureComputer:
         self.log: list[dict[str, Any]] = []
         self.actions = 0
 
+    @property
+    def page(self) -> Any:
+        """The Playwright page behind the session, or None."""
+
+        return self._page
+
+    @property
+    def pointer(self) -> Optional[tuple[int, int]]:
+        """Where the last click or drag left the pointer, or None."""
+
+        return self._pointer
+
+    def screenshot(self) -> bytes:
+        """The current frame, without performing or recording an action."""
+
+        return self._session.screenshot()
+
+    @property
+    def session(self) -> Any:
+        """The authoring session the actions are recorded through."""
+
+        return self._session
+
     def execute(self, native: Mapping[str, Any]) -> Observation:
         """Perform one native action and return the new frame.
 

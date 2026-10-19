@@ -1,0 +1,23 @@
+{
+  "protocol_version": "2026-10-18.1",
+  "written_at": "2026-10-19T09:05:40-0400",
+  "machine": "arm64 Darwin 24.6.0",
+  "cpu_count": 12,
+  "python": "3.12.13",
+  "engine": {
+    "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+    "git_head": "76a99fdc8732566028e757c666c83ecdec955bac"
+  },
+  "benchmark_git_head": "76a99fdc8732566028e757c666c83ecdec955bac",
+  "task": "openimis",
+  "arm": "first_run",
+  "model": "claude-sonnet-5-5",
+  "in_table": true,
+  "imported_from": "demo/cua_to_program/results/sb-sonnet-1",
+  "source_sha256": {
+    "agent_ledger.json": "288c85f1021c7def7a69c1e4d648bd3ed0ff9731770d77bdfb9bbe06d4f35888",
+    "agent_run.json": "24717f1e5e9da25478c2f07f11231a5f0a3062afd0dcacf81160a6c96959b7d2",
+    "admission.json": "d2e9b9640daa78bfb44bfa73277219fc8d3676e1df37ee15a2cb4cc1310bc2c9"
+  },
+  "note": "host load not sampled for this run; untimed"
+}

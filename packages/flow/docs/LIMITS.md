@@ -45,6 +45,31 @@ class named with `--allow-halt`. A handoff copies an effect-bound parameter
 from a confirmed receipt. Missing evidence HALTs. Subflows and worklists
 stay inside each child, on that child's surface.
 
+## Parallel worklists
+
+`--workers N` runs a worklist's items on N signed-in sessions at once
+([`THROUGHPUT.md`](THROUGHPUT.md)). Every item keeps every check. The run
+refuses N above the deployment's `worklist.max_workers`, fewer accounts than
+workers, two accounts for the same user, two workers sharing one session, a
+program with steps outside its loop, and rows not declared
+`items_independent`. It can't tell on its own whether two rows touch the same
+record; that declaration is yours. A halt on any worker stops new items on
+all of them, and an item claimed before a crash is never run again
+automatically: it is marked `uncertain` for a person to check. The pipelined
+read-back window applies only to an item's last save and only to read-backs
+that don't use the screen; durable runs, which include the Standard and
+Regulated profiles, always read back inline. Parallel RDP runs use the
+FreeRDP session pool and have unit tests only. Throughput figures come from
+one machine and a local OpenEMR test copy, not from a production EMR.
+
+## Short parameter values
+
+The right-record check binds a typed value into its expected text only when
+the value has at least 4 characters. An item whose bound value is shorter,
+such as the first name "Bo", halts at the identity check instead of saving.
+This is deliberate: a short value matches too much unrelated text to identify
+a record.
+
 ## Save triage
 
 `openadapt-flow triage` orders verified saves for review under
@@ -165,7 +190,7 @@ before and after numbers are in
 
 Before a step stops on a look-alike identifier, the replayer takes extra looks
 that change nothing
-([`runtime/identity_looks.py`](../openadapt_flow/runtime/identity_looks.py)):
+([`openadapt_flow/runtime/identity_looks.py`](../openadapt_flow/runtime/identity_looks.py)):
 the same read on two fresh screenshots, the 2x re-read, the known-ID list when
 one is configured, and, where the surface allows it, a select-and-copy of the
 identifier's text box (`runtime.identity_copy_look`). OCR looks can't settle
@@ -436,18 +461,25 @@ grade is `screen_readback`, never `independent_readback`.
 
 **Without a read that is independent of the acting session, the run cannot
 be `VERIFIED`.** That read is either a system-of-record read (REST, FHIR, SQL,
-file; tier 1) or the application's record page read in a separate signed-in
-session (`ui_readback` for web, `fresh_session` for desktop and RDP,
-tested on mocks only; tier 2). The second goes through the same
-application, so it is not a system-of-record read and has its own limits
-([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback)).
-A pixel-only Citrix or RDP session with neither is that case. Reopening the
+file; tier 1) or the application's own screens read in a separate signed-in
+session (tier 2): a record page in a separate browser (`ui_readback`), a
+relaunched desktop app or a second RDP session (`fresh_session`, tested on
+mocks only), or a look-up in a separate desktop, RDP or Citrix session
+(`desktop_readback`, tier 2 with its own RDP logon). None of them goes around
+the application, so none is a system-of-record read, and each has its own
+limits ([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback),
+[`desktop_readback`](EFFECT_KIT.md#separate-session-desktop-read-back-desktop_readback)).
+If a person can look the record up, the check can too. A pixel-only Citrix or
+RDP deployment that declares no such check is the remaining case. Reopening the
 record in the acting session (tier 3) is reported as its own check level,
 `reopened` ("Reopened in the same session"), and is not `VERIFIED`: a
 confirmed reopen ends `COMPLETED_UNVERIFIED`, and the agent result says
 `not_sure_if_saved` with `checked_below_minimum`
 ([`READBACK_LADDER.md`](READBACK_LADDER.md)). A workflow's `minimum_readback`
-can raise the floor to `system_of_record`, never lower it. The on-screen
+can raise the floor to `system_of_record`, never lower it.
+A save that only a later report can confirm (a claim acknowledgment, a
+nightly export) ends `SAVED_AWAITING_CHECK` and becomes `VERIFIED` only when
+that report accepts it ([`deferred_report`](EFFECT_KIT.md#checked-later-deferred_report)). The on-screen
 oracle can still halt when the region is unreadable or wrong. If a
 consequential write may already have been delivered and the check did not
 confirm it, the production `transaction_outcome` is `RECONCILIATION_REQUIRED`,

@@ -170,10 +170,12 @@ def _new_records(before: list[dict], after: list[dict]) -> list[dict]:
 def _param_value_fields(record: dict, exclude_texts: tuple[str, ...]) -> dict[str, str]:
     """Fields of ``record`` whose value equals a demonstrated parameter value.
 
-    These are the write's PAYLOAD (the typed note), not its identity — each
-    becomes a ``field_equals`` read-back rather than part of the ``match``
-    selector. Comparison is on ``str()`` and exact (the value was typed
-    verbatim; unlike OCR text there is no glyph ambiguity to fuzz over).
+    These are the write's PAYLOAD (the typed note): each becomes a
+    ``field_equals`` read-back. They are left out of the constant selector;
+    once the parameters are confirmed, the ones bound to a parameter join the
+    ``match`` selector bound to it (see :func:`_mine_from_sor_delta`).
+    Comparison is on ``str()`` and exact (the value was typed verbatim;
+    unlike OCR text there is no glyph ambiguity to fuzz over).
     """
     wanted = {v for v in exclude_texts if v}
     out: dict[str, str] = {}
@@ -235,14 +237,32 @@ def _mine_from_sor_delta(
 
     effects: list[Effect] = []
 
+    # After a person confirms the parameters, a field holding a confirmed
+    # parameter's value narrows the selector to records carrying this run's
+    # value (a claim number, an order id). Match on it too, bound to the
+    # parameter: otherwise the selector is only the demonstration's constant
+    # fields, and on a table that already holds such records it matches every
+    # earlier one. This does not make the check count only new records: a
+    # record that already carried the same value would still match.
+    bindings = dict(param_bindings or {})
+    bound = {
+        fname: ValueExpr(param=bindings[fval])
+        for fname, fval in payload.items()
+        if fval in bindings
+    }
+    match = {**_vemap(selector), **bound}
+
     written = Effect(
         kind=EffectKind.RECORD_WRITTEN,
-        match=_vemap(selector),
+        match=match,
         expected_count=1,
         risk=step.risk,
         probe=(
             "a record matching "
-            + ", ".join(f"{k}={v!r}" for k, v in selector.items())
+            + ", ".join(
+                [f"{k}={v!r}" for k, v in selector.items()]
+                + [f"{k}=<{bindings[v]}>" for k, v in payload.items() if v in bindings]
+            )
             + " exists exactly once (mined from the demonstration's "
             "system-of-record delta)"
         ),
@@ -259,21 +279,20 @@ def _mine_from_sor_delta(
     # partial-save catch). Value is the DEMONSTRATED example (as the
     # hand-authored effects already bake ``value=NOTE``); per-run parameter
     # substitution of effect values is a separate runtime item.
-    bindings = dict(param_bindings or {})
     for fname, fval in payload.items():
-        bound = bindings.get(fval)
+        param = bindings.get(fval)
         effects.append(
             Effect(
                 kind=EffectKind.FIELD_EQUALS,
-                match=_vemap(selector),
+                match=dict(match),
                 field=fname,
-                value=ValueExpr(param=bound) if bound else _ve(fval),
+                value=ValueExpr(param=param) if param else _ve(fval),
                 risk=step.risk,
                 probe=(
                     f"field {fname!r} of the written record equals the run's "
-                    f"{bound!r} parameter (mined; the demonstration typed that "
+                    f"{param!r} parameter (mined; the demonstration typed that "
                     "parameter's value into this field)"
-                    if bound
+                    if param
                     else f"field {fname!r} of the written record equals the "
                     "demonstrated value (mined; the value is the recorded "
                     "example — substitute the run's parameter if this field "

@@ -1,0 +1,382 @@
+{
+  "model": "claude-opus-5-5",
+  "effort": "medium",
+  "tool": "computer_toolset_20260801",
+  "price_per_mtok_usd": {
+    "input": 4.0,
+    "output": 20.0,
+    "cache_read": 0.2,
+    "cache_write": 5.0
+  },
+  "started_at": 1792347503.2597592,
+  "finished_at": 1792347556.250144,
+  "model_calls": 9,
+  "actions": 37,
+  "cost_usd": 0.133234,
+  "final_text": "Claim CGXKM for insuree 999000110 (Kaur Asha) is saved with diagnosis A389 Scarlet fever, uncomplicated, the General Consultation service ($400), and the explanation; I typed the full diagnosis name rather than just \"Scarlet\" because Down+Enter would have picked the wrong match.",
+  "refused_actions": [],
+  "calls": [
+    {
+      "turn": 1,
+      "started_s": 1792347503.259764,
+      "ended_s": 1792347505.678447,
+      "input_tokens": 4,
+      "output_tokens": 122,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 5248,
+      "cost_usd": 0.028696,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              368,
+              220
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "999000110"
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Tab"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 3
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAAQ6GpSNQJ2hzpBsugX",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 2,
+      "started_s": 1792347510.50115,
+      "ended_s": 1792347512.633733,
+      "input_tokens": 2,
+      "output_tokens": 159,
+      "cache_read_input_tokens": 5248,
+      "cache_creation_input_tokens": 1554,
+      "cost_usd": 0.0120076,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              988,
+              288
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "CGXKM"
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              735,
+              288
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Scarlet"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAAQcmdHh3mt3FLxbB4f",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 3,
+      "started_s": 1792347517.55333,
+      "ended_s": 1792347520.388958,
+      "input_tokens": 2,
+      "output_tokens": 203,
+      "cache_read_input_tokens": 6802,
+      "cache_creation_input_tokens": 1592,
+      "cost_usd": 0.0133884,
+      "actions": [
+        {
+          "name": "type",
+          "input": {
+            "text": " fever, uncomplicated"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAAR8yZgRqQZAYn6cBPC",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 4,
+      "started_s": 1792347523.3745012,
+      "ended_s": 1792347525.9638789,
+      "input_tokens": 2,
+      "output_tokens": 190,
+      "cache_read_input_tokens": 8394,
+      "cache_creation_input_tokens": 1599,
+      "cost_usd": 0.013481799999999999,
+      "actions": [
+        {
+          "name": "key",
+          "input": {
+            "text": "Down"
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Return"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              600,
+              693
+            ]
+          }
+        },
+        {
+          "name": "scroll",
+          "input": {
+            "coordinate": [
+              600,
+              693
+            ],
+            "scroll_direction": "down",
+            "scroll_amount": 3
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAARZvk9yyiZhKu2c6Lb",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 5,
+      "started_s": 1792347530.595205,
+      "ended_s": 1792347532.783067,
+      "input_tokens": 2,
+      "output_tokens": 141,
+      "cache_read_input_tokens": 9993,
+      "cache_creation_input_tokens": 1635,
+      "cost_usd": 0.0130016,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              230,
+              535
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "General"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAAS6jQjRAikGBpuFQZ7",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 6,
+      "started_s": 1792347536.366963,
+      "ended_s": 1792347538.570726,
+      "input_tokens": 2,
+      "output_tokens": 107,
+      "cache_read_input_tokens": 11628,
+      "cache_creation_input_tokens": 1550,
+      "cost_usd": 0.012223600000000001,
+      "actions": [
+        {
+          "name": "key",
+          "input": {
+            "text": "Down"
+          }
+        },
+        {
+          "name": "key",
+          "input": {
+            "text": "Return"
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 2
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAASXRTtAUMtYTG5ZLaj",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 7,
+      "started_s": 1792347541.81234,
+      "ended_s": 1792347544.2706728,
+      "input_tokens": 2,
+      "output_tokens": 171,
+      "cache_read_input_tokens": 13178,
+      "cache_creation_input_tokens": 1514,
+      "cost_usd": 0.013633600000000001,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              410,
+              215
+            ]
+          }
+        },
+        {
+          "name": "type",
+          "input": {
+            "text": "Second visit, symptoms improving (#0)"
+          }
+        },
+        {
+          "name": "scroll",
+          "input": {
+            "coordinate": [
+              410,
+              215
+            ],
+            "scroll_direction": "up",
+            "scroll_amount": 3
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 1
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAASvghhH5uEnMEUmpb3",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 8,
+      "started_s": 1792347547.683292,
+      "ended_s": 1792347549.834062,
+      "input_tokens": 2,
+      "output_tokens": 111,
+      "cache_read_input_tokens": 14692,
+      "cache_creation_input_tokens": 1593,
+      "cost_usd": 0.0131314,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              1243,
+              752
+            ]
+          }
+        },
+        {
+          "name": "wait",
+          "input": {
+            "duration": 3
+          }
+        },
+        {
+          "name": "screenshot",
+          "input": {}
+        }
+      ],
+      "request_id": "req_011CgAATMk5hxXCZBAVzhiGj",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 9,
+      "started_s": 1792347553.549692,
+      "ended_s": 1792347556.249595,
+      "input_tokens": 2,
+      "output_tokens": 143,
+      "cache_read_input_tokens": 16285,
+      "cache_creation_input_tokens": 1509,
+      "cost_usd": 0.01367,
+      "actions": [],
+      "request_id": "req_011CgAATnvQ8WppgTM5TGbrb",
+      "stop_reason": "end_turn"
+    }
+  ]
+}

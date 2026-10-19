@@ -1,0 +1,4 @@
+{"model_calls": 0, "model_tokens": 0, "program_from": "selective", "receipt_outcome": "VERIFIED", "replay": 1, "seconds": 6.296, "status": "VERIFIED", "verified": true}
+{"model_calls": 0, "model_tokens": 0, "program_from": "selective", "receipt_outcome": "VERIFIED", "replay": 2, "seconds": 5.634, "status": "VERIFIED", "verified": true}
+{"model_calls": 0, "model_tokens": 0, "program_from": "every_turn", "receipt_outcome": "VERIFIED", "replay": 1, "seconds": 10.048, "status": "VERIFIED", "verified": true}
+{"model_calls": 0, "model_tokens": 0, "program_from": "every_turn", "receipt_outcome": "VERIFIED", "replay": 2, "seconds": 35.765, "status": "VERIFIED", "verified": true}

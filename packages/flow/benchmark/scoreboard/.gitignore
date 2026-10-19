@@ -1,0 +1,4 @@
+# JIT caches now live outside the package tree (schema.CACHE,
+# SCOREBOARD_CACHE). Kept as a guard in case an old run writes here.
+raw/**/jit-cache/
+__pycache__/
