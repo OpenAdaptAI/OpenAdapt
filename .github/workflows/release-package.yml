@@ -135,8 +135,20 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install 'build==1.6.1' 'twine==7.0.0'
+          if [ "$PACKAGE" = flow ]; then
+            # Flow commits a reviewed list of artifact paths, not their
+            # hashes, so parallel pull requests don't collide on hash rows.
+            # The hashes are pinned here, on the exact commit being built,
+            # and the archives must match them below.
+            (cd packages/flow && python scripts/check_release_consistency.py --stamp-release-inventory)
+          fi
           python -m build "packages/$PACKAGE" --outdir dist
           python -m twine check --strict dist/*
+          if [ "$PACKAGE" = flow ]; then
+            # Open-core, license and artifact-provenance boundary of the two
+            # files the publish job uploads.
+            (cd packages/flow && python scripts/check_release_consistency.py --validate-dist-dir ../../dist)
+          fi
           if [ "$PACKAGE" = capture ]; then
             # Capture's release contract: notes for this version, and archives
             # that carry only the public source boundary.

@@ -712,6 +712,24 @@ class GroundingModelConfig(BaseModel):
     api_key_env: str = ""
 
 
+class IdentityCopyLookSection(BaseModel):
+    """Select-and-copy look for a look-alike identifier on a pixel surface.
+
+    Turn on only where selecting the recorded identifier cell and copying it
+    changes nothing (a read-only text cell) and the session's clipboard reaches
+    the machine Flow runs on (RDP/Citrix clipboard redirection). See
+    :mod:`openadapt_flow.runtime.identity_looks`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    #: ``drag`` across the cell at mid height, or ``double_click`` its centre.
+    gesture: Literal["drag", "double_click"] = "drag"
+    #: Keys that copy the selection in the driven session.
+    copy_keys: list[str] = Field(default_factory=lambda: ["Control+c"], min_length=1)
+
+
 class RuntimeSection(BaseModel):
     """Runtime posture: durability and model-egress opt-in."""
 
@@ -761,6 +779,13 @@ class RuntimeSection(BaseModel):
     known_ids_confirmation_path: Optional[str] = None
     #: Oldest export (by its export time) replay will use.
     known_ids_max_age_hours: float = Field(default=24.0, gt=0)
+    #: Before stopping on a look-alike identifier, select the identifier cell,
+    #: copy it and read the clipboard. Settles the record only when the copy
+    #: equals a run parameter in the identity band; halts when the screen
+    #: changes outside the cell. Off by default. Never used by governed runs.
+    identity_copy_look: IdentityCopyLookSection = Field(
+        default_factory=IdentityCopyLookSection
+    )
     #: Font/layout drift check before each recorded click step
     #: (:mod:`openadapt_flow.runtime.layout_drift`). None (default) turns it on
     #: for remote-desktop replays (``rdp``/``citrix``) and off elsewhere;
@@ -1562,8 +1587,21 @@ def build_replayer(
             confirmation_path=runtime_config.known_ids_confirmation_path,
             max_age_s=runtime_config.known_ids_max_age_hours * 3600.0,
         )
+    identity_copy = None
+    read_clipboard = None
+    copy_cfg = runtime_config.identity_copy_look if runtime_config is not None else None
+    if copy_cfg is not None and copy_cfg.enabled:
+        from openadapt_flow.records.read import SystemClipboard
+        from openadapt_flow.runtime.identity_looks import IdentityCopyConfig
+
+        identity_copy = IdentityCopyConfig(
+            gesture=copy_cfg.gesture, copy_keys=tuple(copy_cfg.copy_keys)
+        )
+        read_clipboard = SystemClipboard()
     return Replayer(
         backend,
+        identity_copy=identity_copy,
+        read_clipboard=read_clipboard,
         layout_drift=(
             runtime_config.layout_drift_check if runtime_config is not None else None
         ),
