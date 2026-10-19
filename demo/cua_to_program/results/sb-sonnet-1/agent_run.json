@@ -1,0 +1,72 @@
+{
+  "phase": "agent_run",
+  "agent": "claude",
+  "status": "needs_human_admit",
+  "detail": null,
+  "values": {
+    "insurance_no": "999000110",
+    "claim_no": "SNXKM",
+    "explanation": "Second visit, symptoms improving (#0)"
+  },
+  "wall_s_including_setup_and_compile": 131.901,
+  "claim_rows_after": [
+    {
+      "claim_no": "SNXKM",
+      "insurance_no": "999000110",
+      "explanation": "Second visit, symptoms improving (#0)",
+      "claim_status": 2,
+      "hf_code": "VIHOS001",
+      "diagnosis": "A389",
+      "claimed": "400.00"
+    }
+  ],
+  "record_correct": true,
+  "video": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/demo/cua_to_program/results/sb-sonnet-1/video/agent/page@55c9c08bf89c1a65590b87d6b30dfc4a.webm",
+  "environment": {
+    "engine": {
+      "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+      "git_head": "76a99fdc8732566028e757c666c83ecdec955bac"
+    },
+    "machine": "arm64",
+    "system": "Darwin 24.6.0",
+    "python": "3.12.13",
+    "git_head": "76a99fdc8732566028e757c666c83ecdec955bac",
+    "app": "openIMIS 25.10 reference stack (synthetic demo data), linux/amd64 images under Rosetta in a colima VM"
+  },
+  "candidate_effects": [
+    {
+      "step_id": "step_013",
+      "kind": "record_written",
+      "needs_operator_confirmation": false
+    }
+  ],
+  "candidate_params": {
+    "lifted": [
+      {
+        "name": "claim_no",
+        "step_id": "step_003",
+        "field_label": null,
+        "masked_example": "S***M"
+      },
+      {
+        "name": "explanation",
+        "step_id": "step_012",
+        "field_label": null,
+        "masked_example": "Se*********************************0)"
+      },
+      {
+        "name": "insurance_no",
+        "step_id": "step_000",
+        "field_label": null,
+        "masked_example": "99*****10"
+      }
+    ],
+    "unlifted": {}
+  },
+  "agent_actions": 27,
+  "model": "claude-sonnet-5-5",
+  "model_calls": 7,
+  "cost_usd": 0.056372,
+  "agent_wall_s": 33.326,
+  "refused_actions": []
+}
