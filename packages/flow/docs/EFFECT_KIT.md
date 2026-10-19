@@ -362,7 +362,9 @@ The command looks for a read that returns a record holding them:
   a recorded value (bound as `{param: NAME}`, so each run is checked against
   its own values) and on fields the save sent with a fixed value under the
   same name (`type: Triage`). `forbid_collateral_loss` stops the run if a
-  record that was there before is gone.
+  record that was there before is gone. `forbid_collateral_change` (off by
+  default in a run, on in `verify-run`) also stops it if such a record is
+  still there but changed.
 - Recorded values in the read's URL become placeholders (`path_params`,
   FHIR `search_param_exprs`), so the read is scoped to the run's record. A
   path segment that looks like one record's id (an MRN, a number, a UUID)

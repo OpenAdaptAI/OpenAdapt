@@ -288,6 +288,16 @@ _SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
         ),
         _SealedCanonicalOmission(
             owner=Effect,
+            field_name="forbid_collateral_change",
+            omitted_values=(False,),
+            reason=(
+                "an effect that does not check unchanged non-target records is "
+                "what every earlier bundle held; a contract that turns the "
+                "collateral-change check on remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Effect,
             field_name="identity_field",
             omitted_values=("id",),
             reason=(

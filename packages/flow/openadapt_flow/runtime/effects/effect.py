@@ -656,6 +656,16 @@ class Effect(BaseModel):
     #: vanished is the collateral loss (an exact-set claim about additions
     #: must not quietly tolerate removals inside the same scope).
     forbid_collateral_loss: bool = True
+    #: ``record_written`` only: also REFUTE when a record that existed in the
+    #: pre-state, does NOT match :attr:`match`, and is still there (same
+    #: :func:`stable_id`) has CHANGED -- collateral change. The vanished-record
+    #: rule above misses a write that edits another record in place (a wrong
+    #: row updated alongside the right one). Records without an ``id`` are
+    #: identified by their whole content, so for them a change already reads
+    #: as a vanished record. Default False: a shared table that other actors
+    #: edit would otherwise refute every save; ``verify-run`` turns it on.
+    #: Bound into the contract hash only when set, so existing digests hold.
+    forbid_collateral_change: bool = False
     #: Consequential-write flag (mirrors ``Step.risk`` / RFC ``State.risk``).
     #: Compensation (``effects.compensation``) only fires for irreversible
     #: effects; a reversible effect just halts.
@@ -740,6 +750,15 @@ class Effect(BaseModel):
                 "count_new_only applies only to record_written effects "
                 "(a field_equals read-back has no newness delta; an "
                 "exact_new_set effect always counts new records only)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _collateral_change_scope(self) -> "Effect":
+        """``forbid_collateral_change`` is judged on ``record_written`` only."""
+        if self.forbid_collateral_change and self.kind is not EffectKind.RECORD_WRITTEN:
+            raise ValueError(
+                "forbid_collateral_change applies only to record_written effects"
             )
         return self
 
@@ -883,6 +902,8 @@ class Effect(BaseModel):
         }
         if self.count_new_only:
             payload["count_new_only"] = True
+        if self.forbid_collateral_change:
+            payload["forbid_collateral_change"] = True
         # Bound ONLY on the new kind, so every pre-existing effect's digest
         # (and every ledger entry that pins it) stays byte-identical.
         if self.kind is EffectKind.EXACT_NEW_SET:
@@ -953,6 +974,8 @@ class Effect(BaseModel):
         # its hash — PR #129) keeps its exact digest.
         if self.count_new_only:
             payload["count_new_only"] = True
+        if self.forbid_collateral_change:
+            payload["forbid_collateral_change"] = True
         if self.kind is EffectKind.EXACT_NEW_SET:
             payload["new_records"] = [
                 {k: str(v) for k, v in sorted(selector.items())}
