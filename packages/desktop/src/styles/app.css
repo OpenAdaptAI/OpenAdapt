@@ -2979,7 +2979,12 @@ select.input:focus {
 
 /* Check it's three questions: the learned record check and the values. */
 .learned-check p {
-  margin: 0 0 var(--space-2);
+  max-width: 64ch;
+  margin: var(--space-2) 0 0;
+}
+.value-choices,
+.learned-check + .simple-sub {
+  margin-top: var(--space-3);
 }
 .learned-check strong {
   font-family: var(--font-mono);
