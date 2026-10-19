@@ -565,6 +565,18 @@ def propose_api_step(
             and form_t < float(ln["t"]) < float(post["t"])
         }
     )
+    if others:
+        # The steps the API step would replace also wrote (a reservation, an
+        # autosave, a background call): the one request can't stand in for
+        # them, and skipping them would change what the program does.
+        return (
+            workflow,
+            None,
+            [
+                "the steps the API step would replace also sent "
+                f"{', '.join(others)}; one request can't stand in for them"
+            ],
+        )
     spec = WebFormSpec(
         form_path=form_path,
         fields=fields,
@@ -740,6 +752,11 @@ def admit_api_step(
             and b.kind == "web_form"
             and (step_id is None or step.id == step_id)
         ):
+            if b.web_form is not None and b.web_form.other_writes_seen:
+                raise ApiProposalError(
+                    f"{step.id}: the steps the API step would replace also sent "
+                    f"{', '.join(b.web_form.other_writes_seen)}; it can't be admitted"
+                )
             if not step.effects:
                 raise ApiProposalError(
                     f"{step.id} has no record check; an API step must be confirmed by one "

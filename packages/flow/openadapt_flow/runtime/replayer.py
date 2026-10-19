@@ -2545,6 +2545,13 @@ class Replayer:
                 )
             elif not binding.admitted():
                 reason = "the API step is not admitted (openadapt-flow api admit)"
+            elif binding.web_form.other_writes_seen:
+                # Proposed before such spans were refused: the steps it would
+                # replace also wrote, and one request can't stand in for them.
+                reason = (
+                    "the steps the API step would replace also sent other writes "
+                    f"({', '.join(binding.web_form.other_writes_seen)})"
+                )
             elif save.identity_armed and not binding.identity:
                 # The GUI save checks the right record on screen. The API step
                 # must check it too, so it needs a right-record contract.

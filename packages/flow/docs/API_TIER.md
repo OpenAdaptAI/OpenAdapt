@@ -80,6 +80,10 @@ doesn't propose an API step in these cases:
 - the save sends a secret field;
 - the form page wasn't captured;
 - the save isn't the program's last step;
+- the steps the API step would replace also sent another write (a POST,
+  PUT, PATCH or DELETE other than the save, such as a reservation, an
+  autosave or a background call). Admission and runs refuse such a binding
+  too;
 - the program has branches;
 - a URL value equals two inputs' values (ambiguous), or the save or a
   pre-check is on another origin than the form;
