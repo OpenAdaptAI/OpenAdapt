@@ -19,13 +19,13 @@ being merged now.
 1. **Learns from any successful run, a person's or an agent's.** A person
    records a task, or a computer-use agent does it once and OpenAdapt compiles
    the verified run into a program (`openadapt_flow.jit`, released;
-   prompt-to-program `crystallize`, landing). Agents can drive the recording
+   prompt-to-program `compile-agent`, landing). Agents can drive the recording
    on web, native Windows, RDP and Citrix.
 2. **Compiles to the fastest layer the app allows.** Page structure first (DOM,
    Windows UI Automation, macOS Accessibility), direct API calls where the app's
    own traffic allows them (`ApiActuator`, released; compiled from captured
-   traffic in [#1261](https://github.com/OpenAdaptAI/OpenAdapt/pull/1261),
-   about 11x faster than the browser on the OpenEMR save), and pixels only
+   traffic in [#1261](https://github.com/OpenAdaptAI/OpenAdapt/pull/1261)),
+   and pixels only
    where nothing else exists, such as RDP and Citrix. It is not a pixel-macro
    recorder.
 3. **Builds branching programs, not one linear path.** One program from several
@@ -70,20 +70,20 @@ being merged now.
     machine is landing); a strict no-outbound mode, an unattended on-prem
     service, and signed, timestamped receipts are released.
 
-## Corrections to common reviews
+## Often missed
 
-| A review says | What is true | Where |
-| --- | --- | --- |
-| "It compiles one linear demonstration and halts on every branch it hasn't seen." | It learns branching programs from several demonstrations, from repeated halts, and from many background runs. | `induce`, `teach-branch`, [SHADOW_MINING.md](packages/capture/docs/SHADOW_MINING.md) |
-| "A bundle is locked to one surface." | Programs chain across surfaces, and one program can switch surfaces mid-run. | `compose`, `process`, [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
-| "It replays pixel macros that break when zoom or fonts change." | Page structure is the first rung on web, Windows and macOS. Pixels are the fallback for remote desktops. Benchmarks that say "vision-only" ran a deliberately pixel-only arm. | [RESOLUTION_LADDER.md](packages/flow/docs/RESOLUTION_LADDER.md) |
-| "It can't compile clicks into API calls." | Steps can run as API calls today; compiling them from captured network traffic is being merged. | `runtime/actuators/api.py`, [#1261](https://github.com/OpenAdaptAI/OpenAdapt/pull/1261) |
-| "When the UI changes it just halts and pages a person." | It halts before any write, then repairs: governed repair, agent-demonstrated fixes, fleet patches, and self-repair probed up to the save. | [REPAIR_LIFECYCLE.md](packages/flow/docs/REPAIR_LIFECYCLE.md) |
-| "It needs a human demonstration first." | A computer-use agent's verified run can be compiled instead. | [JIT.md](packages/flow/docs/JIT.md) |
-| "Approvals check an intent string, not what is executed." | Approvals bind to the exact screenshot and form-state digest, and the form is re-read before saving. | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md) |
-| "It can't read the document a decision depends on." | `intake` fills inputs from a referral PDF, fax image or email and holds back anything unclear for a person. | [INTAKE.md](packages/flow/docs/INTAKE.md) |
-| "The code is spread over 17 repositories." | The product is one monorepo with four packages (flow, agent, types, capture); older repositories are frozen or research. | [README](README.md) |
-| "openadapt-ml (model training) is the product." | It is research. The product makes no model calls on healthy runs. | [README](README.md) |
+| What OpenAdapt does | Where |
+| --- | --- |
+| Learns branching programs from several demonstrations, from repeated halts, and from many background runs. | `induce`, `teach-branch`, [SHADOW_MINING.md](packages/capture/docs/SHADOW_MINING.md) |
+| Chains programs across surfaces, and one program can switch surfaces, tabs and popups mid-run. | `compose`, `process`, [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
+| Uses page structure first on web, Windows, macOS and Linux, with pixels as the fallback for remote desktops. Benchmarks labelled "vision-only" ran a deliberately pixel-only arm. | [RESOLUTION_LADDER.md](packages/flow/docs/RESOLUTION_LADDER.md) |
+| Runs steps as direct API calls; compiling them from captured network traffic is being merged. | `runtime/actuators/api.py`, [#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269) |
+| Repairs itself when the app changes: governed repair, agent-demonstrated fixes, fleet patches, and self-repair probed up to the save. | [REPAIR_LIFECYCLE.md](packages/flow/docs/REPAIR_LIFECYCLE.md) |
+| Compiles a computer-use agent's verified run, with no human demonstration needed. | [JIT.md](packages/flow/docs/JIT.md) |
+| Binds each approval to the exact screenshot and form state, and re-reads the form before saving. | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md) |
+| Fills inputs from a referral PDF, fax image or email, and holds back anything unclear for a person. | `intake`, [INTAKE.md](packages/flow/docs/INTAKE.md) |
+| Ships as one monorepo with separately installable packages (flow, agent, types, capture, and privacy and desktop moving in). | [README](README.md) |
+| Makes no model calls on healthy runs. Model training (openadapt-ml) is separate research. | [README](README.md) |
 
 ## The full map
 
@@ -206,7 +206,7 @@ improvising or retrying when something is off.
 Each `openadapt-flow` command, grouped by the capability it serves. A test
 fails when a command is added without being listed here.
 
-- **Record and build a program:** `record`, `demo-record`, `compile`, `induce`, `disambiguate`, `for-each`, `compose`, `process`, `intake`, `visualize`, `pull`.
+- **Record and build a program:** `record`, `demo-record`, `compile`, `induce`, `disambiguate`, `for-each`, `compose`, `process`, `intake`, `visualize`, `pull`, `variants`, `route`.
 - **Check and admit:** `lint`, `scaffold-verifier`, `check`, `bind-record-checks`, `certify`, `qualify`, `propose-qualification`, `known-ids`, `jit`, `admit`, `approver-grant`.
 - **Run and answer:** `run`, `replay`, `resume`, `approve`, `item-approval`, `triage`, `business-decisions`, `explain`, `console`.
 - **Judge any executor's write:** `verify-run`, `serve-reward` (scores agent training episodes by reading the system of record).

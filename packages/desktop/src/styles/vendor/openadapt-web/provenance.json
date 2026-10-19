@@ -1,0 +1,18 @@
+{
+  "canonical_repository": "OpenAdaptAI/openadapt-web",
+  "canonical_branch": "main",
+  "canonical_note": "openadapt-web owns the OpenAdapt design tokens. Every file in this directory is a byte-identical vendored copy. Never hand-edit one. Change a value in openadapt-web, then re-run `node scripts/vendor-design-tokens.mjs --write` here.",
+  "vendored_at_commit": "2c09ee2fd7028d722c4dda830d0b3c0b85017f5c",
+  "files": {
+    "tokens.json": {
+      "canonical_path": "styles/tokens.json",
+      "raw_url": "https://raw.githubusercontent.com/OpenAdaptAI/openadapt-web/main/styles/tokens.json",
+      "sha256": "bf52a448c70d1e7333867661d4dd3f25b5ec920705de3739b5e63d5778f0d4f7"
+    },
+    "tokens.css": {
+      "canonical_path": "styles/tokens.css",
+      "raw_url": "https://raw.githubusercontent.com/OpenAdaptAI/openadapt-web/main/styles/tokens.css",
+      "sha256": "3697a7c8f7c9f671397a7f678d00354114e0b94c7d13265d3a970ce973b7e7fa"
+    }
+  }
+}
