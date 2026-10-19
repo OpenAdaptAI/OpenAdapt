@@ -147,6 +147,7 @@ evidence (see `openadapt_flow.transaction`).
 | `REJECTED_POLICY` | Authorization / identity / qualification / environment refused execution before any effect. | no | no |
 | `COMPLETED_UNVERIFIED` | Demo-only completion with no production-grade effect evidence. | never | never |
 | `ROLLED_BACK` | A detected duplicate / collateral write was compensated and re-verified (legacy compensation path). | no | no |
+| `SAVED_AWAITING_CHECK` | The save went out, and its only check is a declared later report (`effects.kind: deferred_report`: an X12 999 or 277CA, a CSV export, a saved status page). Every other step is settled. The runtime does NOT retry. `openadapt-flow deferred settle` matches the report: an accepting row settles it `VERIFIED`; a rejecting or conflicting row, or no row by the deadline, settles it `RECONCILIATION_REQUIRED`. The settlement is a separate ledger record; `report.json` is never rewritten. The hosted runner and the Execute v1 and production-receipt wire formats carry it as `RECONCILIATION_REQUIRED`. | no, until settled `VERIFIED` | no, until settled `VERIFIED` |
 
 Mapping from the coarse outcome: `VERIFIED` and `ROLLED_BACK` map through
 1:1; a coarse `HALTED` splits into `REJECTED_POLICY` (a governed pre-execution

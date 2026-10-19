@@ -269,6 +269,14 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
                 "the executor; verify-run needs a system-of-record or "
                 "separate-session verifier"
             )
+    if any(
+        (kind or "").strip().lower() in ("deferred_report", "deferred-report")
+        for kind in kinds
+    ):
+        raise VerifyRunError(
+            "a deferred report check is settled later by 'openadapt-flow deferred "
+            "settle', not by verify-run"
+        )
     if cfg.verifier.candidates:
         raise VerifyRunError("verify-run does not support verifier candidates yet")
     for effect in cfg.effects:
