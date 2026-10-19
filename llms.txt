@@ -26,10 +26,9 @@ being merged now.
 3. **Builds branching programs, not one linear path.** One program from several
    demonstrations (`induce`, `disambiguate`), a branch learned from several
    halts fixed the same way (`teach-branch`), candidate branches mined from many
-   real runs in the background (shadow mode,
-   [#1212](https://github.com/OpenAdaptAI/OpenAdapt/pull/1212)), and a router
-   that sends each item to the right verified variant (landing). Released
-   except where a PR is named.
+   real runs in the background (shadow mode: Capture released, Flow's drafts
+   and `admit` merged for the next release), and a router that sends each item
+   to the right verified variant (landing). Released except where noted.
 4. **Works across surfaces in one workflow.** Web, native Windows and macOS,
    RDP and Citrix. Programs chain across surfaces passing confirmed values
    (`compose`, `process`, released), and one program can switch surfaces, tabs

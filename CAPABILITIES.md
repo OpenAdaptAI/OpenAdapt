@@ -13,8 +13,8 @@ an older version or an older page: check here, then the linked code.
 
 Each capability is implemented in the
 [OpenAdapt monorepo](https://github.com/OpenAdaptAI/OpenAdapt). "Released"
-means it ships in the current PyPI packages; a pull request number means it is
-being merged now.
+means it ships in the current PyPI packages; "merged" means it is on main for the
+next release; a pull request number means it is being merged now.
 
 1. **Learns from any successful run, a person's or an agent's.** A person
    records a task, or a computer-use agent does it once and OpenAdapt compiles
@@ -31,10 +31,9 @@ being merged now.
 3. **Builds branching programs, not one linear path.** One program from several
    demonstrations (`induce`, `disambiguate`), a branch learned from several
    halts fixed the same way (`teach-branch`), candidate branches mined from many
-   real runs in the background (shadow mode,
-   [#1212](https://github.com/OpenAdaptAI/OpenAdapt/pull/1212)), and a router
-   that sends each item to the right verified variant (landing). Released
-   except where a PR is named.
+   real runs in the background (shadow mode: Capture released, Flow's drafts
+   and `admit` merged for the next release), and a router that sends each item
+   to the right verified variant (landing). Released except where noted.
 4. **Works across surfaces in one workflow.** Web, native Windows and macOS,
    RDP and Citrix. Programs chain across surfaces passing confirmed values
    (`compose`, `process`, released), and one program can switch surfaces, tabs
@@ -92,6 +91,7 @@ Every capability, with its status, its evidence and where it lives.
 Status:
 
 - **Released**: in the current PyPI release (openadapt-flow 2.2.0).
+- **Merged**: on main, not yet in a PyPI release.
 - **In review**: an open pull request.
 - **Planned**: designed, not built.
 
@@ -132,7 +132,7 @@ improvising or retrying when something is off.
 | Each save waits for a person by default | Released | Synthetic | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md) |
 | Approve or decline a save on a paired phone, with one card per decision and swipe or tap | Released (Desktop) | Synthetic | openadapt-desktop `portal/shell` |
 | Person-signed grants let named agents or systems answer saves | Released | Unit tests | `openadapt-flow approver-grant` |
-| Admit once, then stop only on problems | Released, behind a readiness gate | Synthetic | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md) |
+| Admit once, then stop only on problems | Merged, behind a readiness gate | Synthetic | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md) |
 | Show the field values a save writes on the phone | In review ([#1257](https://github.com/OpenAdaptAI/OpenAdapt/pull/1257)) | Unit tests | `console/save_approvals.py` |
 
 ## Branching work, not one linear path
@@ -143,7 +143,7 @@ improvising or retrying when something is off.
 | Learn a guarded branch from several halts fixed the same way | Released | Synthetic | `openadapt-flow teach-branch`, `learning/branch_teach.py` |
 | Run a program over a worklist | Released | Real app | `openadapt-flow for-each` |
 | Typed business decisions inside a run | Released | Synthetic | `business_decision` states, `openadapt-flow business-decisions` |
-| Watch many real runs in the background and mine candidate branches (shadow mode) | Capture released; drafts in review ([#1212](https://github.com/OpenAdaptAI/OpenAdapt/pull/1212)) | Synthetic | [SHADOW_MINING.md](packages/capture/docs/SHADOW_MINING.md) |
+| Watch many real runs in the background and mine candidate branches (shadow mode) | Capture released; Flow's candidate drafts and `admit` merged | Synthetic | [SHADOW_MINING.md](packages/capture/docs/SHADOW_MINING.md), [LEARN_FROM_MANY_RUNS.md](packages/flow/docs/LEARN_FROM_MANY_RUNS.md) |
 | Fill a workflow's inputs from a referral PDF, fax image or email | Released | Synthetic | `openadapt-flow intake`, [INTAKE.md](packages/flow/docs/INTAKE.md) |
 | Use spoken narration while recording to learn why a branch was taken | Planned | Untested | Capture records audio (`--audio`, local Whisper). The compiler doesn't use it yet. |
 | Settle a disagreement between recordings by trying both paths on a test copy of the app and reading the record back | Planned | Untested | none yet (today `induce` names the recording that is missing) |
@@ -208,7 +208,7 @@ fails when a command is added without being listed here.
 
 - **Record and build a program:** `record`, `demo-record`, `compile`, `induce`, `disambiguate`, `for-each`, `compose`, `process`, `intake`, `visualize`, `pull`, `variants`, `route`.
 - **Check and admit:** `lint`, `scaffold-verifier`, `check`, `bind-record-checks`, `certify`, `qualify`, `propose-qualification`, `known-ids`, `jit`, `admit`, `approver-grant`.
-- **Run and answer:** `run`, `replay`, `resume`, `approve`, `item-approval`, `triage`, `business-decisions`, `explain`, `console`.
+- **Run and answer:** `run`, `replay`, `resume`, `approve`, `item-approval`, `triage`, `business-decisions`, `explain`, `console`, `undo` (undo steps a person approves after a stop).
 - **Judge any executor's write:** `verify-run`, `serve-reward` (scores agent training episodes by reading the system of record).
 - **Repair and learn from halts:** `teach`, `teach-branch`, `repair`, `fleet`.
 - **Give agents the program:** `emit-skill`, `emit-mcp`, `serve-execute`.
