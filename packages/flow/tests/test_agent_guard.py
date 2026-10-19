@@ -174,6 +174,9 @@ class FakePage:
     def notify(self, message: str, *, level: str) -> None:
         self.notices.append((level, message))
 
+    def clear_notice(self) -> None:
+        self.notices.append(("clear", ""))
+
     def save(self, rid: str = "r1", **kw: Any) -> HeldRequest:
         held = _req(origin=self.agent.base, rid=rid, body={"note": NOTE}, **kw)
         self.pending[rid] = held
@@ -232,7 +235,8 @@ def test_right_record_save_goes_through_and_reads_back_verified(sor, tmp_path):
     assert _rows(sor[1]) == [("p1", NOTE)]
     assert page.sent == ["r1"] and not page.blocked
     assert guard.summary.saves_held == 1 and len(guard.summary.hold_ms) == 1
-    assert page.notices[-1][0] == "ok"
+    # A verified save leaves nothing on the agent's page.
+    assert page.notices == [("clear", "")]
     events = [
         json.loads(line)
         for line in (tmp_path / "events.jsonl").read_text().splitlines()

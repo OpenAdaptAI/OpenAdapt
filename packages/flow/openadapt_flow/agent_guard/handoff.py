@@ -142,14 +142,40 @@ def _instruction(task: GuardTask, inputs: list[str], given: Optional[str]) -> st
     return f"On the record {record}, save {values}"
 
 
+def _pin(node: Any, fixed: Mapping[str, str]) -> Any:
+    """``{param: name}`` -> ``{literal: value}``, and ``{name}`` in a path
+    template -> the value, for each fixed value in a verifier section (reads
+    scoped by the record's identity)."""
+
+    if isinstance(node, dict):
+        if set(node) == {"param"} and node["param"] in fixed:
+            return {"literal": fixed[node["param"]]}
+        return {k: _pin(v, fixed) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_pin(v, fixed) for v in node]
+    if isinstance(node, str):
+        # A read's path template (``/patients/{patient_id}/notes``).
+        from urllib.parse import quote
+
+        for name, value in fixed.items():
+            node = node.replace("{" + name + "}", quote(value, safe=""))
+    return node
+
+
 def _propose_from_reads(
     recording: Path,
     cfg: GuardConfig,
     values: Mapping[str, str],
+    fixed: Mapping[str, str],
     out_dir: Path,
 ) -> tuple[Optional[str], dict[str, Any]]:
     """scaffold-verifier's check from the app's reads. Returns the rendered
-    file when it caught every fault, and what it found either way."""
+    file when it caught every fault, and what it found either way.
+
+    ``fixed`` are the task values every run writes the same (the record's
+    identity): scaffold-verifier finds the record by them too, and the check
+    pins them as literals, so the program can only save on that record.
+    """
 
     import yaml
 
@@ -161,7 +187,7 @@ def _propose_from_reads(
     try:
         proposal = rcs.synthesize(
             recording,
-            params=dict(values),
+            params={**fixed, **values},
             db_path=teach.db,
             verifier=section if isinstance(section, dict) else None,
             complete_read=teach.complete_read,
@@ -178,6 +204,24 @@ def _propose_from_reads(
     }
     if not proposal.effects:
         return None, report
+    from openadapt_flow.runtime.effects.effect import ValueExpr
+
+    proposal.effects = [
+        effect.model_copy(
+            update={
+                "match": {
+                    fld: (
+                        ValueExpr(literal=fixed[expr.param])
+                        if expr.param is not None and expr.param in fixed
+                        else expr
+                    )
+                    for fld, expr in effect.match.items()
+                }
+            }
+        )
+        for effect in proposal.effects
+    ]
+    proposal.verifier = _pin(proposal.verifier, fixed)
     check, proof = rcs.write(proposal, out_dir / "scaffold")
     report["file"] = str(check)
     report["proof"] = str(proof)
@@ -332,7 +376,14 @@ def handoff(
         )
 
     # 3. The proposed record check: the app's own reads first.
-    rendered, found = _propose_from_reads(kept, cfg, values, compiler.out_dir)
+    fixed = {
+        str(expr.param): str(task.params[expr.param])
+        for expr in _record_match(cfg).values()
+        if getattr(expr, "param", None)
+        and expr.param not in inputs
+        and expr.param in task.params
+    }
+    rendered, found = _propose_from_reads(kept, cfg, values, fixed, compiler.out_dir)
     if rendered is not None:
         compiler.out_dir.mkdir(parents=True, exist_ok=True)
         _write_private(compiler.out_dir / PROPOSED_FILE, rendered)

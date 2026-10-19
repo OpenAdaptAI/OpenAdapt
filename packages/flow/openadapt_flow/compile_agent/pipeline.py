@@ -774,19 +774,32 @@ class FirstRunCompiler:
                     + f" (confirmed by {name})"
                 )
             effects.append(effect)
-        # Exactly one effect claims the new record. Others may only say that
-        # nothing else was added, changed or removed (expected_count 0).
+        # One effect claims the new record. A check built from several reads
+        # (scaffold-verifier's) claims it once per read, routed to that read;
+        # then every claim must pin the record and read back every input.
+        # Other effects may only say that nothing else was added, changed or
+        # removed (expected_count 0).
         written = [e for e in effects if _claims_new_record(e)]
-        if len(written) != 1:
+        routes = [str(e.get("probe") or "").split("|", 1)[0] for e in written]
+        if not written or (
+            len(written) > 1
+            and (
+                len(set(routes)) != len(routes)
+                or not all(r.startswith(_SURFACE_ROUTE) for r in routes)
+            )
+        ):
             raise ValueError("the checks must claim exactly one new record")
-        match = written[0]["match"]
-        for key, wanted in self.expect.items():
-            if (match.get(key) or {}).get("literal") != wanted:
-                raise ValueError(f"the check does not pin {key!r} to {wanted!r}")
-        bound = {v.get("param") for v in match.values() if isinstance(v, dict)}
-        unbound = sorted(set(self.task.params) - bound)
-        if unbound:
-            raise ValueError(f"no check reads back input(s) {unbound}")
+        for claim in written:
+            if int(claim.get("expected_count", 1)) != 1:
+                raise ValueError("the checks must claim exactly one new record")
+            match = claim["match"]
+            for key, wanted in self.expect.items():
+                if (match.get(key) or {}).get("literal") != wanted:
+                    raise ValueError(f"the check does not pin {key!r} to {wanted!r}")
+            bound = {v.get("param") for v in match.values() if isinstance(v, dict)}
+            unbound = sorted(set(self.task.params) - bound)
+            if unbound:
+                raise ValueError(f"no check reads back input(s) {unbound}")
         # A check built from other reads than the task's verifier (for
         # example scaffold-verifier's) carries them; the person confirms both.
         verifier = doc.get("verifier")

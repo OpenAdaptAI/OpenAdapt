@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import sys
 from pathlib import Path
 from typing import Any
@@ -125,7 +126,18 @@ def cmd_guard(args: argparse.Namespace) -> int:
         f"guard: waiting for the agent's tab on {cfg.app_origin} ({mode}, "
         f"approval {cfg.approval})",
         file=sys.stderr,
+        flush=True,
     )
+    # Ctrl-C or SIGTERM ends the session between requests, so a paused save
+    # is blocked and the recording is finished instead of cut off.
+    stopping: list[int] = []
+
+    def _stop(signum: int, _frame: Any) -> None:
+        stopping.append(signum)
+
+    previous = {
+        sig: signal.signal(sig, _stop) for sig in (signal.SIGINT, signal.SIGTERM)
+    }
     try:
         run = guard_task(
             cfg,
@@ -139,11 +151,16 @@ def cmd_guard(args: argparse.Namespace) -> int:
             on_attached=lambda: print(
                 "guard: attached; saves are held until the right record is on screen",
                 file=sys.stderr,
+                flush=True,
             ),
+            stop=lambda: bool(stopping),
         )
     except BrowserAttachError as exc:
         print(f"guard: {exc}", file=sys.stderr)
         return 2
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
     result: dict[str, Any] = {"run": run.summary, "out": str(run.out_dir)}
     if run.verified and cfg.teach is not None and not args.no_teach:
         if run.recording is None:

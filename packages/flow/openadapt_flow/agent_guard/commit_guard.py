@@ -19,7 +19,9 @@ calls itself:
    task is blocked.
 3. The request goes on. When it finishes (or ``response_wait_s`` passes),
    :meth:`Guard.confirm <openadapt_flow.guard.Guard.confirm>` reads the
-   record back through ``verify-run`` and the agent is told the verdict.
+   record back through ``verify-run``. A verdict other than ``VERIFIED`` is
+   shown on the agent's page; a verified save shows nothing, so the run is
+   recorded as the app drew it.
 
 ``observe_only`` never blocks. It runs the same checks, logs what the guard
 would have blocked, and still reads the save back. Without a baseline (the
@@ -90,6 +92,8 @@ class GuardPage(Protocol):
     def screenshot(self) -> Optional[bytes]: ...
 
     def notify(self, message: str, *, level: str) -> None: ...
+
+    def clear_notice(self) -> None: ...
 
 
 @dataclass
@@ -262,6 +266,8 @@ class CommitGuard:
         self._save = _Save(guard=guard, network_id=request.network_id, sent_at=sent)
         hold_ms = round((sent - held_at) * 1000.0, 1)
         self.summary.hold_ms.append(hold_ms)
+        if guard is not None and guard.approval is not None:
+            self.page.clear_notice()  # the "waiting for a person" notice
         self.page.continue_request(request.request_id)
         self._log(request, "save", "continued", hold_ms=hold_ms)
 
@@ -348,8 +354,14 @@ class CommitGuard:
             verdict, message = self._observe_read_back(save)
         self.summary.readback_ms = round((self._clock() - started) * 1000.0, 1)
         self.summary.verdict = verdict.value
-        level = "ok" if verdict is GuardVerdict.VERIFIED else "error"
-        self.page.notify("OpenAdapt read the record back: " + message, level=level)
+        if verdict is GuardVerdict.VERIFIED:
+            # Nothing on the page: a verified run 1 is recorded as the app
+            # drew it, so run 2 never expects the guard's notice.
+            self.page.clear_notice()
+        else:
+            self.page.notify(
+                "OpenAdapt read the record back: " + message, level="error"
+            )
         self._event({"event": "read_back", "verdict": verdict.value})
 
     def _observe_read_back(self, save: _Save) -> tuple[GuardVerdict, str]:

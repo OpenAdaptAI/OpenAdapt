@@ -33,7 +33,7 @@ class AgentRun:
 class ScriptedAgent:
     """One browser, one tab, driven by a fixed script."""
 
-    def __init__(self, *, port: int, headless: bool = True, think_s: float = 0.5):
+    def __init__(self, *, port: int, headless: bool = True, think_s: float = 1.0):
         from playwright.sync_api import sync_playwright
 
         self.think_s = think_s
@@ -63,6 +63,9 @@ class ScriptedAgent:
         self._act(run, f"open {patient}", lambda: page.click(f"#open-{patient}"))
         self._act(run, "new encounter", lambda: page.click("#new-encounter"))
         self._act(run, "triage", lambda: page.click("#type-triage"))
+        # Click the field, then type, as a computer-use agent does. (A bare
+        # ``fill`` records no focus step; see GUARD_AN_AGENT.md, Limits.)
+        self._act(run, "click note", lambda: page.click("#note"))
         self._act(run, "type note", lambda: page.fill("#note", note))
         self._act(run, "save", lambda: page.click("#save-encounter"))
         # Look at the result, as an agent would before reporting back.

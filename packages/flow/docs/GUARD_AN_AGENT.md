@@ -77,7 +77,7 @@ Nothing leaves your computer, and the guard makes no model calls.
 ## What the guard does with each request
 
 The guard pauses the tab's requests with the CDP `Fetch` domain: documents
-(form posts), `fetch`, XHR, beacons, event sources and others. Images,
+(form posts), `fetch`, XHR, beacons and others. Images, event streams,
 scripts, styles, fonts and media aren't paused.
 
 | Request | What happens |

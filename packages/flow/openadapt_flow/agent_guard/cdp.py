@@ -9,7 +9,7 @@ queue them; :meth:`CdpGuardPage.drain` hands them to the
 session's loop.
 
 Paused resource types: documents (form posts), ``fetch``, XHR, beacons
-(``Ping``), event sources and ``Other``. Images, scripts, stylesheets, fonts
+(``Ping``) and ``Other``. Images, scripts, stylesheets, fonts, event streams
 and media are GETs and aren't paused. A save sent over a WebSocket isn't seen
 (CDP ``Fetch`` doesn't intercept WebSocket frames).
 
@@ -30,7 +30,7 @@ from openadapt_flow.agent_guard.requests import HeldRequest
 
 __all__ = ["CdpGuardPage", "PAUSED_TYPES"]
 
-PAUSED_TYPES = ("Document", "XHR", "Fetch", "Ping", "EventSource", "Other")
+PAUSED_TYPES = ("Document", "XHR", "Fetch", "Ping", "Other")
 
 NOTICE_ID = "openadapt-guard-notice"
 
@@ -63,6 +63,14 @@ _NOTIFY = """
 }
 """
 
+_CLEAR = """
+() => {
+  const old = document.getElementById(%(notice)s);
+  if (old) { old.remove(); }
+  return true;
+}
+"""
+
 
 def _call(source: str) -> str:
     return source % {"notice": json.dumps(NOTICE_ID)}
@@ -79,7 +87,8 @@ class CdpGuardPage:
         self._done: list[Optional[str]] = []
         #: Requests this session paused and hasn't answered yet.
         self._open: dict[str, HeldRequest] = {}
-        self.cdp.on("Fetch.requestPaused", self._paused.append)
+        # Playwright tags each handler, so a bound builtin won't do.
+        self.cdp.on("Fetch.requestPaused", lambda p: self._paused.append(p))
         self.cdp.on(
             "Network.loadingFinished", lambda p: self._done.append(p.get("requestId"))
         )
@@ -230,6 +239,19 @@ class CdpGuardPage:
                 },
             )
         except Exception:  # noqa: BLE001 - a notice is best effort; the block isn't
+            pass
+
+    def clear_notice(self) -> None:
+        try:
+            self.cdp.send(
+                "Runtime.callFunctionOn",
+                {
+                    "functionDeclaration": _call(_CLEAR),
+                    "executionContextId": self._context_id(),
+                    "returnByValue": True,
+                },
+            )
+        except Exception:  # noqa: BLE001 - best effort
             pass
 
     def _context_id(self) -> int:

@@ -14,7 +14,9 @@ store; three that MockMed's page delivers (it sends the save twice, paints
 success before the server answers, gives up after 1.2 s); and two the agent
 makes (it opens the wrong patient, or types another note than the task's).
 Every run is judged by the independent ground truth of ``effect_e2e``, which
-reads the SQLite file directly.
+reads the SQLite file directly. The page runs with ``idempotency=demo`` (a
+stable key on the save), as #1335's teach test does: the ``clinical-write``
+policy refuses to run a compiled save without one.
 
 Run 2: the first ``ok`` guarded run is handed to the teach dir, a person (a
 named stand-in here; this is the step a person takes) confirms the proposed
@@ -162,7 +164,7 @@ def write_setup(
     )
     guard.write_text(
         "schema_version: openadapt.agent-guard/v1\n"
-        f"app_url: {base}/?fault=ok#tasks\n"
+        f"app_url: {base}/?fault=ok&idempotency=demo#tasks\n"
         "verify: verify.yaml\n"
         'screen_selector: "#patient-banner"\n' + teach
     )
@@ -248,7 +250,11 @@ class _GuardProcess:
         except subprocess.TimeoutExpired:
             # No save went through (it was blocked): stop it as a person would.
             self.proc.send_signal(signal.SIGINT)
-            out, _ = self.proc.communicate(timeout=60)
+            try:
+                out, _ = self.proc.communicate(timeout=60)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+                out, _ = self.proc.communicate()
         try:
             return {"exit": self.proc.returncode, **json.loads(out)}
         except ValueError:
@@ -294,7 +300,9 @@ def run_one(
     agent = ScriptedAgent(port=port, think_s=think_s)
     guard: Optional[_GuardProcess] = None
     try:
-        agent.open(f"{app.base_url}/?fault={scenario.page_fault}#tasks")
+        agent.open(
+            f"{app.base_url}/?fault={scenario.page_fault}&idempotency=demo#tasks"
+        )
         if arm != "agent_alone":
             args = [
                 "--cdp",
@@ -344,7 +352,10 @@ def run_one(
         "readback_ms": summary.get("readback_ms"),
         "guard_exit": result.get("exit") if result else None,
         "guard_seconds": summary.get("seconds"),
+        "guard_ended": summary.get("ended"),
+        "guard_notes": summary.get("notes") or [],
         "model_calls": 0,
+        "load_avg_1m": round(os.getloadavg()[0], 2),
         "handoff": result.get("handoff") if result else None,
     }
     if result and "error" in result:
@@ -354,6 +365,54 @@ def run_one(
 
 
 # -- run 2 -------------------------------------------------------------------------
+
+
+def _person_admits(task_dir: Path) -> dict[str, Any]:
+    """The person's terminal path: ``compile-agent admit``. They give their
+    name, confirm the proposed record check, review the steps, attend the
+    canary and admit. A named stand-in types the answers here, as in #1335's
+    tests; a person's admission needs a terminal, which a script has none of.
+    """
+
+    import contextlib
+    import io
+    from unittest import mock
+
+    from openadapt_flow.__main__ import build_parser
+    from openadapt_flow.compile_agent.cli import cmd_compile_agent
+
+    answers = iter([PERSON, "ok", "ok", "ok"])
+    args = build_parser().parse_args(
+        [
+            "compile-agent",
+            "admit",
+            str(task_dir),
+            "--admit-as",
+            PERSON,
+            "--drop-field",
+            "key",
+            "--drop-field",
+            "source",
+            "--canary-param",
+            "note=Canary triage note",
+            "--json",
+        ]
+    )
+    out = io.StringIO()
+    with (
+        mock.patch("openadapt_flow.jit.lifecycle._has_terminal", lambda: True),
+        contextlib.redirect_stdout(out),
+    ):
+        code = cmd_compile_agent(
+            args, ask=lambda _prompt: next(answers), interactive=lambda: True
+        )
+    text = out.getvalue()
+    try:
+        result = json.loads(text[text.index("\n{") + 1 :])
+    except ValueError:
+        result = {"status": "error", "output": text[-3000:]}
+    result["exit"] = code
+    return result
 
 
 def run2(app: App, task_dir: Path, verify: Path, teach_dir: Path, runs: Path) -> dict:
@@ -371,15 +430,10 @@ def run2(app: App, task_dir: Path, verify: Path, teach_dir: Path, runs: Path) ->
     compiler = FirstRunCompiler.load(task_dir)
     proposed = compiler.proposed()
     started = time.monotonic()
-    compiler.confirm_checks(principal_id=PERSON, drop_fields=["key", "source"])
-    admitted = compiler.admit(
-        person=PERSON,
-        review=lambda _stage, _shown: True,
-        canary_params=[{"note": "Canary triage note"}],
-    )
+    admitted = _person_admits(task_dir)
     admit_s = round(time.monotonic() - started, 3)
-    if not admitted.admitted:
-        return {"admitted": False, "detail": admitted.detail, "proposed": proposed}
+    if admitted.get("status") != "admitted":
+        return {"admitted": False, "detail": admitted, "proposed": proposed}
     runs.mkdir(parents=True, exist_ok=True)
     workflows = AgentBridge(
         None, RunnerConfig(runs_dir=runs), allow_run=True, mode="production"
@@ -415,7 +469,11 @@ def run2(app: App, task_dir: Path, verify: Path, teach_dir: Path, runs: Path) ->
                         before = ground_truth.capture(app.db_path)
                         t0 = time.monotonic()
                         res = await session.call_tool(
-                            tool, {"inputs": {"note": NOTE}, "request_id": item.name}
+                            tool,
+                            {
+                                "inputs": {"note": NOTE},
+                                "request_id": f"bench-{item.name}-0001",
+                            },
                         )
                         seconds = round(time.monotonic() - t0, 3)
                         payload = json.loads(res.content[0].text)
@@ -433,9 +491,15 @@ def run2(app: App, task_dir: Path, verify: Path, teach_dir: Path, runs: Path) ->
                         rows.append(
                             {
                                 "scenario": item.name,
+                                "load_avg_1m": round(os.getloadavg()[0], 2),
                                 "tool": tool,
                                 "seconds": seconds,
                                 "tool_outcome": payload.get("outcome"),
+                                "tool_reply": {
+                                    k: payload.get(k)
+                                    for k in ("outcome", "reason", "error", "status")
+                                    if payload.get(k) is not None
+                                },
                                 "model_calls": payload.get("model_calls"),
                                 "truth": {
                                     "correct": truth.correct,
@@ -452,7 +516,7 @@ def run2(app: App, task_dir: Path, verify: Path, teach_dir: Path, runs: Path) ->
         "admitted": True,
         "admit_seconds": admit_s,
         "proposed": proposed,
-        "canaries": (admitted.admission or {}).get("canaries"),
+        "admission": admitted.get("admission"),
         "runs": rows,
     }
 
@@ -593,7 +657,7 @@ def summarize(results: dict[str, Any]) -> dict[str, Any]:
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--n", type=int, default=3)
-    parser.add_argument("--think", type=float, default=0.5)
+    parser.add_argument("--think", type=float, default=1.0)
     parser.add_argument("--arms", default=",".join(ARMS))
     parser.add_argument("--port", type=int, default=9400)
     parser.add_argument("--out", type=Path, default=HERE)

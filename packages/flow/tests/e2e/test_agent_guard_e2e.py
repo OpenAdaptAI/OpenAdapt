@@ -62,7 +62,7 @@ def test_guard_blocks_wrong_record_then_run_two_is_a_tool(tmp_path: Path) -> Non
             "guard",
             tmp_path / "run-wrong",
             _port(),
-            think_s=0.3,
+            think_s=1.0,
             files=plain,
             teach=False,
         )
@@ -78,7 +78,7 @@ def test_guard_blocks_wrong_record_then_run_two_is_a_tool(tmp_path: Path) -> Non
             "guard",
             tmp_path / "run-ok",
             _port(),
-            think_s=0.3,
+            think_s=1.0,
             files=files,
             teach=True,
         )
