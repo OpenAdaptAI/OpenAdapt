@@ -1,5 +1,5 @@
 {
-  "total_usd": 7.8976,
+  "total_usd": 9.466585,
   "entries": [
     {
       "usd": 0.577,
@@ -784,6 +784,221 @@
       "usd": 0.056372,
       "note": "openimis first_run sb-sonnet-1 (demo pipeline record, claude-sonnet-5-5)",
       "at": 1792415140.200813
+    },
+    {
+      "usd": 0.038668,
+      "note": "mockmed claims 2026-10-19-a item 1 (discarded: verify-run refused its run record, a config error; rerun as 2026-10-19-b)",
+      "at": 1792416065.201795
+    },
+    {
+      "usd": 0.038638,
+      "note": "mockmed claims 2026-10-19-a item 2 (discarded: verify-run refused its run record, a config error; rerun as 2026-10-19-b)",
+      "at": 1792416093.373365
+    },
+    {
+      "usd": 0.038688,
+      "note": "mockmed claims 2026-10-19-a item 3 (discarded: verify-run refused its run record, a config error; rerun as 2026-10-19-b)",
+      "at": 1792416115.993137
+    },
+    {
+      "usd": 0.012944,
+      "note": "mockmed claims 2026-10-19-b item 1",
+      "at": 1792416194.432558
+    },
+    {
+      "usd": 0.013264,
+      "note": "mockmed claims 2026-10-19-b item 2",
+      "at": 1792416219.555302
+    },
+    {
+      "usd": 0.023741,
+      "note": "mockmed claims 2026-10-19-b item 3",
+      "at": 1792416241.809909
+    },
+    {
+      "usd": 0.013274,
+      "note": "mockmed claims 2026-10-19-b item 4",
+      "at": 1792416268.0937788
+    },
+    {
+      "usd": 0.038698,
+      "note": "mockmed claims 2026-10-19-b item 5",
+      "at": 1792416293.613942
+    },
+    {
+      "usd": 0.038678,
+      "note": "mockmed claims 2026-10-19-b item 6",
+      "at": 1792416320.8830872
+    },
+    {
+      "usd": 0.038578,
+      "note": "mockmed claims 2026-10-19-b item 7",
+      "at": 1792416353.183489
+    },
+    {
+      "usd": 0.038678,
+      "note": "mockmed claims 2026-10-19-b item 8",
+      "at": 1792416385.0804858
+    },
+    {
+      "usd": 0.038698,
+      "note": "mockmed claims 2026-10-19-b item 9",
+      "at": 1792416414.117135
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 10",
+      "at": 1792416445.431474
+    },
+    {
+      "usd": 0.038488,
+      "note": "mockmed claims 2026-10-19-b item 11",
+      "at": 1792416482.0335438
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed claims 2026-10-19-b item 12",
+      "at": 1792416515.650254
+    },
+    {
+      "usd": 0.038578,
+      "note": "mockmed claims 2026-10-19-b item 13",
+      "at": 1792416559.908292
+    },
+    {
+      "usd": 0.038638,
+      "note": "mockmed claims 2026-10-19-b item 14",
+      "at": 1792416603.4478312
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 15",
+      "at": 1792416636.424244
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 16",
+      "at": 1792416672.684584
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 17",
+      "at": 1792416706.1887622
+    },
+    {
+      "usd": 0.038538,
+      "note": "mockmed claims 2026-10-19-b item 18",
+      "at": 1792416738.4358132
+    },
+    {
+      "usd": 0.038658,
+      "note": "mockmed claims 2026-10-19-b item 19",
+      "at": 1792416774.121108
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 20",
+      "at": 1792416834.140102
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed claims 2026-10-19-b item 21",
+      "at": 1792416875.408413
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 22",
+      "at": 1792416912.702267
+    },
+    {
+      "usd": 0.038678,
+      "note": "mockmed claims 2026-10-19-b item 23",
+      "at": 1792416962.130356
+    },
+    {
+      "usd": 0.038678,
+      "note": "mockmed claims 2026-10-19-b item 24",
+      "at": 1792416997.2318962
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 25",
+      "at": 1792417064.088784
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed claims 2026-10-19-b item 26",
+      "at": 1792417098.7083268
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 27",
+      "at": 1792417142.142247
+    },
+    {
+      "usd": 0.038678,
+      "note": "mockmed claims 2026-10-19-b item 28",
+      "at": 1792417181.5502589
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 29",
+      "at": 1792417223.996345
+    },
+    {
+      "usd": 0.038658,
+      "note": "mockmed claims 2026-10-19-b item 30",
+      "at": 1792417275.846605
+    },
+    {
+      "usd": 0.038488,
+      "note": "mockmed claims 2026-10-19-b item 31",
+      "at": 1792417320.029734
+    },
+    {
+      "usd": 0.038548,
+      "note": "mockmed claims 2026-10-19-b item 32",
+      "at": 1792417359.518861
+    },
+    {
+      "usd": 0.038768,
+      "note": "mockmed claims 2026-10-19-b item 33",
+      "at": 1792417399.166749
+    },
+    {
+      "usd": 0.038758,
+      "note": "mockmed claims 2026-10-19-b item 34",
+      "at": 1792417440.792922
+    },
+    {
+      "usd": 0.038658,
+      "note": "mockmed claims 2026-10-19-b item 35",
+      "at": 1792417489.3180091
+    },
+    {
+      "usd": 0.038598,
+      "note": "mockmed claims 2026-10-19-b item 36",
+      "at": 1792417598.906427
+    },
+    {
+      "usd": 0.038618,
+      "note": "mockmed claims 2026-10-19-b item 37",
+      "at": 1792417644.1306822
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed claims 2026-10-19-b item 38",
+      "at": 1792417698.559569
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 39",
+      "at": 1792417746.527189
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed claims 2026-10-19-b item 40",
+      "at": 1792417778.6049159
     }
   ]
 }

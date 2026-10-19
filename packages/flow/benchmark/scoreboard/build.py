@@ -147,6 +147,8 @@ def build() -> dict[str, Any]:
     for items in sorted(schema.RAW.glob("*/*/*/items.csv")):
         run = items.parent
         arm, task = run.parent.name, run.parent.parent.name
+        if arm == "claims":
+            continue  # its own table: claims()
         meta = run / "meta.json"
         if meta.is_file() and json.loads(meta.read_text()).get("in_table") is False:
             # Kept as raw data, not in the table (its meta.json says why).
@@ -170,6 +172,7 @@ def build() -> dict[str, Any]:
         if (schema.RAW / "spend.json").is_file()
         else None,
         "tasks": {},
+        "claims": claims(),
     }
     for task, arms in sorted(tasks.items()):
         out["tasks"][task] = {}
@@ -216,6 +219,129 @@ def build() -> dict[str, Any]:
                 ],
             }
     return out
+
+
+def claims() -> dict[str, Any]:
+    """The agent's claims versus verify-run, per task and run (``claims.py``)."""
+
+    out: dict[str, Any] = {}
+    for items in sorted(schema.RAW.glob("*/claims/*/items.csv")):
+        run = items.parent
+        rows = schema.read_rows(items)
+        hc_file = run / "hand_check.json"
+        hand = json.loads(hc_file.read_text())["items"] if hc_file.is_file() else []
+        by_item = {int(h["item"]): h for h in hand}
+
+        def t(r: dict[str, Any]) -> bool:
+            return r["claimed_success"] == "True"
+
+        def caught(r: dict[str, Any]) -> bool:
+            return r["verify_outcome"] != "verified"
+
+        per_fault: dict[str, Any] = {}
+        for r in rows:
+            f = per_fault.setdefault(
+                r["fault"],
+                {
+                    "n": 0,
+                    "bad_saves": 0,
+                    "claimed_success": 0,
+                    "bad_claimed_success": 0,
+                    "bad_claimed_caught_by_verify_run": 0,
+                    "bad_caught_by_verify_run": 0,
+                    "clean_saves": 0,
+                    "clean_confirmed": 0,
+                    "false_alarms": 0,
+                    "ground_truth": {},
+                    "verify_outcome": {},
+                },
+            )
+            bad = r["ground_truth"] != "correct"
+            f["n"] += 1
+            f["claimed_success"] += t(r)
+            f["ground_truth"][r["ground_truth"]] = (
+                f["ground_truth"].get(r["ground_truth"], 0) + 1
+            )
+            f["verify_outcome"][r["verify_outcome"]] = (
+                f["verify_outcome"].get(r["verify_outcome"], 0) + 1
+            )
+            if bad:
+                f["bad_saves"] += 1
+                f["bad_claimed_success"] += t(r)
+                f["bad_claimed_caught_by_verify_run"] += t(r) and caught(r)
+                f["bad_caught_by_verify_run"] += caught(r)
+            else:
+                f["clean_saves"] += 1
+                f["clean_confirmed"] += not caught(r)
+                f["false_alarms"] += caught(r)
+        total = {
+            k: sum(v[k] for v in per_fault.values())
+            for k in next(iter(per_fault.values()), {})
+            if k not in ("ground_truth", "verify_outcome")
+        }
+        claimed = [r for r in rows if t(r)]
+        out[f"{run.parent.parent.name}/{run.name}"] = {
+            "per_fault": per_fault,
+            "total": total,
+            "cost_usd": round(sum(float(r["cost_usd"]) for r in rows), 6),
+            "hand_check": {
+                "claimed_success_items": len(claimed),
+                "checked": sum(1 for r in claimed if int(r["item"]) in by_item),
+                "agrees_with_row": sum(
+                    1
+                    for r in claimed
+                    if by_item.get(int(r["item"]), {}).get("claimed_success") is True
+                ),
+                "items": hand,
+            },
+        }
+    return out
+
+
+def _claims_markdown(cl: dict[str, Any]) -> list[str]:
+    if not cl:
+        return []
+    lines = [
+        "## The agent's claims versus the read-back",
+        "",
+        "Separate from arms 1 to 7 (`claims.py`). Claude Sonnet 5.5 computer use "
+        "works alone while the app's server breaks the save. A bad save is one "
+        "where the store, compared before and after, does not hold exactly the "
+        "intended record (or lost another record). `verify-run` then judges the "
+        "same write from the system of record, with a baseline taken before the "
+        "agent started. Untimed. MockMed's screen shows the save as done under "
+        "every one of these faults (the app updates the page before the server "
+        "answers), so the agent cannot see them; that is the case verify-run is "
+        "for. OpenEMR's fixture has no fault injection, so it is not in this "
+        "table. `duplicate_keyed`: a double send the server de-duplicated on an "
+        "idempotency key, so a clean save (see the run's meta.json).",
+        "",
+    ]
+    for key, c in cl.items():
+        lines += [
+            f"### {key}",
+            "",
+            "| Fault | Items | Bad saves | Agent claimed success | Bad saves the agent claimed as success | ...of those, caught by verify-run | Bad saves caught by verify-run | Clean saves | Clean saves verify-run confirmed | False alarms |",
+            "|---|---|---|---|---|---|---|---|---|---|",
+        ]
+        for name, f in list(c["per_fault"].items()) + [("all", c["total"])]:
+            lines.append(
+                f"| {name} | {f['n']} | {f['bad_saves']} | {f['claimed_success']} | "
+                f"{f['bad_claimed_success']} | {f['bad_claimed_caught_by_verify_run']} | "
+                f"{f['bad_caught_by_verify_run']} | {f['clean_saves']} | "
+                f"{f['clean_confirmed']} | {f['false_alarms']} |"
+            )
+        hc = c["hand_check"]
+        lines += [
+            "",
+            f"- Hand check of every item where the agent claimed success: "
+            f"{hc['checked']} of {hc['claimed_success_items']} checked against the "
+            f"ledger; the ledger agrees with the row on {hc['agrees_with_row']} "
+            "(evidence in hand_check.json).",
+            f"- Model spend: ${c['cost_usd']}.",
+            "",
+        ]
+    return lines
 
 
 def _fmt(v: Any, unit: str = "") -> str:
@@ -289,6 +415,7 @@ def markdown(sb: dict[str, Any]) -> str:
                     + " (evidence for each in hand_check.json)"
                 )
         lines.append("")
+    lines += _claims_markdown(sb.get("claims", {}))
     lines.append(
         f"Claude API spend so far: ${sb['spend_usd']}."
         if sb["spend_usd"] is not None
