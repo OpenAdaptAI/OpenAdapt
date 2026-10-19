@@ -12188,13 +12188,39 @@ class Replayer:
                 # A run has one configured observer. A surface whose boundary
                 # names another observer uses that observer's own route below.
                 configured_observer = None
-        if configured_observer is None:
-            from openadapt_flow.qualification_web_session import (
-                SIGNED_IN_WEB_SESSION_OBSERVER_ID,
-                SignedInWebSessionObserver,
-            )
+        from openadapt_flow.qualification_environment import (
+            BackendQualificationEnvironmentObserver,
+        )
+        from openadapt_flow.qualification_web_session import (
+            SIGNED_IN_WEB_SESSION_OBSERVER_ID,
+            SignedInWebSessionObserver,
+        )
+        from openadapt_flow.qualify.environment import (
+            WEB_OBSERVER_ID,
+            WebEnvironmentObserver,
+        )
 
-            if boundary.environment_observer_id == SIGNED_IN_WEB_SESSION_OBSERVER_ID:
+        if isinstance(
+            configured_observer, BackendQualificationEnvironmentObserver
+        ) and boundary.environment_observer_id in (
+            SIGNED_IN_WEB_SESSION_OBSERVER_ID,
+            WEB_OBSERVER_ID,
+        ):
+            # The deployment's default is the backend's own marker observer.
+            # A project bound to a page-owned web observer uses that observer
+            # instead; its id, contract and environment digest below still
+            # have to match the project exactly.
+            configured_observer = None
+        if configured_observer is None:
+            if boundary.environment_observer_id == WEB_OBSERVER_ID:
+                # A web app with neither OpenAdapt markers nor a session
+                # cookie: its origin, browser, viewport, platform, runtime
+                # and the version the operator confirmed (qualify's observer).
+                configured_observer = WebEnvironmentObserver(
+                    application_version=boundary.application_version,
+                    headless=bool(getattr(self.backend, "headless", True)),
+                )
+            elif boundary.environment_observer_id == SIGNED_IN_WEB_SESSION_OBSERVER_ID:
                 # Real web apps carry no OpenAdapt markers: identify them by
                 # origin and signed-in session, with the version the operator
                 # confirmed in Check it. The contract and environment digests

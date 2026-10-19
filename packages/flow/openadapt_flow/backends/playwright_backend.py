@@ -3325,6 +3325,9 @@ class PlaywrightBackend:
             page = browser.new_page(viewport=viewport, device_scale_factor=1)
         page.goto(url)
         backend = cls(page)
+        # Read by the generic web environment observer: the environment
+        # digest of a headless and a headed browser differ.
+        backend.headless = headless
 
         def close() -> None:
             if shared is not None:
