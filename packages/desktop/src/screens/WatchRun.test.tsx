@@ -118,19 +118,19 @@ it("clears prior terminal evidence while a new run is in flight", async () => {
       onTeach={() => {}}
     />,
   );
-  await screen.findByText("Outcome evidence");
+  await screen.findByText("What was checked");
 
-  fireEvent.click(screen.getByRole("button", { name: "Run with safety gates" }));
+  fireEvent.click(screen.getByRole("button", { name: "Run it" }));
 
   await waitFor(() =>
-    expect(screen.queryByText("Outcome evidence")).toBeNull(),
+    expect(screen.queryByText("What was checked")).toBeNull(),
   );
 
   await act(async () => {
     finishRun(verified);
     await pendingRun;
   });
-  expect(await screen.findByText("Outcome evidence")).toBeTruthy();
+  expect(await screen.findByText("What was checked")).toBeTruthy();
 });
 
 it("keeps a report visible while local history is retried", async () => {
@@ -174,7 +174,7 @@ it("keeps a report visible while local history is retried", async () => {
   await waitFor(() =>
     expect(screen.queryByText("Local run history needs attention")).toBeNull(),
   );
-  expect(screen.getByText("Outcome evidence")).toBeTruthy();
+  expect(screen.getByText("What was checked")).toBeTruthy();
 });
 
 function firstWorkflowReview(

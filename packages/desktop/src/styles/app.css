@@ -1195,7 +1195,7 @@ select.input:focus {
 .advanced-target summary {
   color: var(--text-muted);
   cursor: pointer;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--fs-sm);
 }
 .advanced-target-body {
@@ -1262,7 +1262,7 @@ select.input:focus {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--fs-sm);
   color: var(--text-muted);
   margin-bottom: var(--space-3);
@@ -3110,4 +3110,26 @@ select.input:focus {
   display: grid;
   gap: var(--space-2);
   margin-bottom: var(--space-3);
+}
+.check-detail-count {
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.check-step-fold > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.check-step-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.check-step-fold > summary .check-step-state::after {
+  content: "Show";
+  margin-left: var(--space-3);
+  color: var(--text-faint);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.check-step-fold[open] > summary .check-step-state::after {
+  content: "Hide";
 }

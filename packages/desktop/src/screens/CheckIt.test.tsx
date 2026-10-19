@@ -312,7 +312,7 @@ it("approves, locks the version, and offers Run it", async () => {
   const onRun = vi.fn();
   render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={onRun} />);
 
-  fireEvent.click(await screen.findByRole("button", { name: "Approve for use" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Approve this workflow" }));
 
   expect(await screen.findByText("Approved and locked")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Run it" }));
@@ -322,7 +322,7 @@ it("approves, locks the version, and offers Run it", async () => {
 it("keeps approval off until the practice item passed", async () => {
   engine(project());
   render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
-  const approve = await screen.findByRole("button", { name: "Approve for use" });
+  const approve = await screen.findByRole("button", { name: "Approve this workflow" });
   expect((approve as HTMLButtonElement).disabled).toBe(true);
 });
 

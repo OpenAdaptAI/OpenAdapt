@@ -141,7 +141,7 @@ export function Results({ onNeedsYou }: { onNeedsYou: () => void }) {
     <div className="content simple wide">
       <PageHead
         title="Results"
-        sub="What OpenAdapt finished, what needed a person, and what it prevented. OpenAdapt doesn't send these results anywhere. If you turn on the hosted runner, it reports only a PHI-free outcome for each Cloud job it runs."
+        sub="What OpenAdapt finished, what needed a person, and what it prevented."
       />
 
       <div className="stats">
@@ -309,7 +309,9 @@ export function Results({ onNeedsYou }: { onNeedsYou: () => void }) {
           Only items that OpenAdapt saved and then read back from the record
           count as done and checked. Items a person finished or confirmed count
           under Needed a person. “No person” marks an item saved with every
-          check passed while “{SWITCH_LABEL}” was on.
+          check passed while “{SWITCH_LABEL}” was on. OpenAdapt doesn't send
+          these results anywhere. If you turn on the hosted runner, it reports
+          only a PHI-free outcome for each Cloud job it runs.
         </p>
       </section>
     </div>

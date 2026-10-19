@@ -118,11 +118,25 @@ function CheckSection({
     >
       <StepBadge state={state} index={index} passed={passed} />
       <div className="check-step-body">
-        <div className="check-step-head">
-          <h2 id={`check-${index}`}>{title}</h2>
-          <span className="check-step-state">{stateWord(state, doneWord)}</span>
-        </div>
-        {children}
+        {/* A finished part folds to its title so the open question stands out;
+            the last part keeps its Run button in view. */}
+        {state === "done" && index < 6 ? (
+          <details className="check-step-fold">
+            <summary className="check-step-head">
+              <h2 id={`check-${index}`}>{title}</h2>
+              <span className="check-step-state">{stateWord(state, doneWord)}</span>
+            </summary>
+            {children}
+          </details>
+        ) : (
+          <>
+            <div className="check-step-head">
+              <h2 id={`check-${index}`}>{title}</h2>
+              <span className="check-step-state">{stateWord(state, doneWord)}</span>
+            </div>
+            {children}
+          </>
+        )}
       </div>
     </section>
   );
@@ -299,6 +313,18 @@ function EffectQuestion({
       </Button>
     </div>
   );
+}
+
+/** Armed saving steps grouped by their identical sentence, in first-seen order. */
+function armedIdentityGroups<T extends { identityArmed: boolean; identityText: string }>(
+  writes: T[],
+): { text: string; count: number }[] {
+  const groups = new Map<string, number>();
+  for (const step of writes) {
+    if (!step.identityArmed) continue;
+    groups.set(step.identityText, (groups.get(step.identityText) ?? 0) + 1);
+  }
+  return [...groups].map(([text, count]) => ({ text, count }));
 }
 
 export function CheckIt({
@@ -914,7 +940,16 @@ export function CheckIt({
                 it asks how to recognize the right record.
               </p>
             )}
-            {plan.writes.map((step) => (
+            {/* Saving steps that check the record the same way say it once. */}
+            {armedIdentityGroups(plan.writes).map((group) => (
+              <div className="check-detail" key={`armed-${group.text}`}>
+                <p>{group.text}</p>
+                {group.count > 1 && (
+                  <p className="check-detail-count">For each of its {group.count} saving steps.</p>
+                )}
+              </div>
+            ))}
+            {plan.writes.filter((step) => !step.identityArmed).map((step) => (
               <div className="check-detail" key={step.id}>
                 <p>{step.identityText}</p>
                 {!step.identityArmed && step.canArm && plan.hasProject && (
@@ -1116,7 +1151,7 @@ export function CheckIt({
 
           <CheckSection
             index={6}
-            title="Approve for use"
+            title="Approve this workflow"
             doneWord="Approved"
             state={approved ? "done" : "todo"}
           >
@@ -1127,7 +1162,8 @@ export function CheckIt({
                 </Status>
                 <p>
                   This version is checked, approved, and encrypted on this
-                  computer. It's ready to run on real items.
+                  computer. It&rsquo;s ready to run on real items, and it stops
+                  to ask you only when something doesn&rsquo;t match.
                 </p>
                 <Button variant="primary" onClick={() => onRun(approvedId ?? workflowId)}>
                   Run it
@@ -1136,9 +1172,11 @@ export function CheckIt({
             ) : (
               <>
                 <p>
-                  Approving locks this version so it can't change without being
-                  checked again. OpenAdapt approves it only when every check
-                  above has passed.
+                  You approve a workflow once. After that it runs on its own and
+                  stops to ask a person only when something doesn&rsquo;t match.
+                  Approving locks this version, so any change is checked again.
+                  OpenAdapt lets you approve only when every check above has
+                  passed.
                 </p>
                 {plan.blockers.length > 0 && (
                   <TechnicalDetails>
@@ -1160,7 +1198,7 @@ export function CheckIt({
                     }
                     onClick={() => void approve()}
                   >
-                    {busy === "approve" ? "Approving…" : "Approve for use"}
+                    {busy === "approve" ? "Approving…" : "Approve this workflow"}
                   </Button>
                 </div>
               </>
