@@ -18,6 +18,12 @@ import os
 from pathlib import Path
 from typing import Any, Literal, Optional
 
+from openadapt_types.oracle import OracleChannel, OracleTier, tier_of
+from openadapt_types.process_capability import _digest_payload
+from openadapt_types.reward import (
+    RewardCertificateV1,
+    RewardContractV1,
+)
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -29,12 +35,6 @@ from pydantic import (
     model_validator,
 )
 
-from openadapt_flow.contracts.oracle import OracleChannel, OracleTier, tier_of
-from openadapt_flow.contracts.process_capability import _digest_payload
-from openadapt_flow.contracts.reward import (
-    RewardCertificateV1,
-    RewardContractV1,
-)
 from openadapt_flow.reward import REWARD_NOTICE
 from openadapt_flow.runtime.effects.effect import Effect
 

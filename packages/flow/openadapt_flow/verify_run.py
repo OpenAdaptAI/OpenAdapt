@@ -252,12 +252,14 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
         cfg = VerifyConfig.model_validate(data)
     except Exception as exc:
         raise VerifyRunError(f"invalid {source}: {exc}") from exc
-    if cfg.verifier.kind in _NOT_INDEPENDENT:
-        raise VerifyRunError(
-            f"verifier kind {cfg.verifier.kind!r} does not read independently of "
-            "the executor; verify-run needs a system-of-record or "
-            "separate-session verifier"
-        )
+    kinds = [cfg.verifier.kind] + [s.kind for s in cfg.verifier.surfaces.values()]
+    for kind in kinds:
+        if kind in _NOT_INDEPENDENT:
+            raise VerifyRunError(
+                f"verifier kind {kind!r} does not read independently of "
+                "the executor; verify-run needs a system-of-record or "
+                "separate-session verifier"
+            )
     if cfg.verifier.candidates:
         raise VerifyRunError("verify-run does not support verifier candidates yet")
     for effect in cfg.effects:
@@ -364,6 +366,11 @@ def _tag_reads(verifier: Any, execution_id: str) -> None:
     across runs of one ``verify.yaml``.
     """
 
+    routed = getattr(verifier, "verifiers", None)
+    if isinstance(routed, dict):
+        for sub in routed.values():
+            _tag_reads(sub, execution_id)
+        return
     if not hasattr(verifier, "headers"):
         return
     trace = secrets.token_hex(16)
@@ -587,6 +594,7 @@ def verify_run(
     approver: Optional[Mapping[str, Any]] = None,
     remediates: Optional[str] = None,
     correlation_id: Optional[str] = None,
+    write_attempted: bool = False,
 ) -> dict[str, Any]:
     """Read the system of record and return ``{"receipt", "evidence"}``.
 
@@ -600,9 +608,14 @@ def verify_run(
     (its ``execution_id`` and salt) and the baseline is consumed. Without one,
     a new salt is drawn and written to ``private_dir/effect-run.private.json``
     (mode 0600), so ``private_dir`` is required.
+
+    ``write_attempted`` says the caller knows the save was dispatched (the
+    guarded save sets it after its commit step). Then a store that shows
+    nothing is ``reconciliation_required``, not ``halted_before_effect``: the
+    write may still land, so it must not be retried.
     """
 
-    from openadapt_flow.contracts.execute import (
+    from openadapt_types.execute import (
         EffectStrengthV1,
         ExecuteEvidenceContractV1,
         ExecuteEvidenceReceiptV1,
@@ -754,7 +767,11 @@ def verify_run(
         outcome = ExecuteTerminalOutcomeV1.REJECTED_POLICY
     elif read_proves_write:
         outcome = ExecuteTerminalOutcomeV1.VERIFIED
-    elif effect_verdict == "REFUTED" and observed_effect == "absent":
+    elif (
+        effect_verdict == "REFUTED"
+        and observed_effect == "absent"
+        and not write_attempted
+    ):
         # The store shows nothing landed, whatever the executor said.
         outcome = ExecuteTerminalOutcomeV1.HALTED_BEFORE_EFFECT
     else:
@@ -872,7 +889,7 @@ def write_result(result: Mapping[str, Any], out_dir: Path) -> Path:
 def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
     """None when the receipt meets the schema and the cross-field rules."""
 
-    from openadapt_flow.contracts.execute import (
+    from openadapt_types.execute import (
         EXECUTE_EVIDENCE_RECEIPT_SCHEMA,
         ExecuteEvidenceReceiptV1,
     )
@@ -990,7 +1007,7 @@ def check_effect_receipt(
     missing signature is ``unsigned`` and is never a pass.
     """
 
-    from openadapt_flow.contracts.seal import parse_key_registry
+    from openadapt_types.seal import parse_key_registry
 
     receipt = document.get("receipt") if "receipt" in document else document
     result: dict[str, Any] = {"verified": False, "verified_outcome": False, "ok": False}

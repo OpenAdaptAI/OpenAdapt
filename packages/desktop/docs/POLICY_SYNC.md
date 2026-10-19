@@ -1,0 +1,223 @@
+# Policy Sync (unified, fail-closed)
+
+The desktop app renders and enforces a single **effective policy** resolved by
+the cloud control plane. Policy is layered in three tiers:
+
+| Tier | Object   | Meaning                                   | Who may edit                          |
+|------|----------|-------------------------------------------|---------------------------------------|
+| 1    | `user`   | Per-user preferences                      | The local user (persisted via `set_config`) |
+| 2    | `org`    | Org defaults                              | Org admins, **via the cloud API only** |
+| 3    | `safety` | Safety guardrails that gate whether a run may proceed | Org admins, **via the cloud API only** |
+
+The engine owns the **fetch + cache + fail-closed** half of this contract
+(`openadapt_desktop/policy.py`). The frontend renders the effective policy read-only in
+`src/screens/Settings.tsx`. Hosted organization and safety policy changes stay
+in the authenticated Cloud administration surface.
+
+---
+
+## The contract: `GET /api/policy/effective`
+
+Bearer-authed (the same `Authorization: Bearer <token>` the rest of the hosted
+loop uses, resolved for the exact destination by
+`openadapt_desktop.auth.store.auth_header(host)`). The cloud returns the
+org's fully-resolved policy:
+
+```jsonc
+{
+  "policy_version": 7,                // int, monotonic per org
+  "baseline_version": "2026.07",      // str, the safety baseline the org tracks
+  "org_id": "org_42",                 // str
+  "resolved_at": "2026-07-20T00:00:00Z", // iso8601
+  "role": "owner" | "admin" | "member",
+  "is_admin": true,                   // convenience bool derived from role
+
+  "user": { "<tier1 key>": <value>, ... },  // Tier-1 per-user prefs (editable locally)
+  "org":  { "<tier2 key>": <value>, ... },  // Tier-2 org defaults (read-only locally)
+
+  "safety": {                         // Tier-3 -- ALWAYS fully populated by the server
+    "effect_verification.required_for_consequential": true,
+    "halt_on_ambiguous": true,
+    "identity_gate.strictness": "strict",
+    "pixel_verify.consequential_policy": "disabled",
+    "unverified_write.allow": false,
+    "egress.artifact_policy": "managed-strict",
+    "model_calls.allowed_in_healthy_run": false
+  }
+}
+```
+
+### Why the payload carries `role` / `is_admin`
+
+The engine knows the `org_id` (via the stored `Credential` / `AuthStatus`) but
+has **no role or admin concept** of its own. Admin status is therefore carried
+in the policy payload and surfaced by the module, so the frontend can decide
+which cards are read-only. The engine never infers admin locally.
+
+### Safety keys and their safest values
+
+`engine.policy.SAFE_SAFETY_DEFAULTS` is the source of truth for the safest value
+of every safety key. A missing or unreachable value **always resolves to these**:
+
+| Key | Safe (fail-closed) value | Meaning of the safe value |
+|-----|--------------------------|---------------------------|
+| `effect_verification.required_for_consequential` | `true`  | Consequential actions must be effect-verified |
+| `halt_on_ambiguous`                              | `true`  | Halt rather than guess when ambiguous |
+| `identity_gate.strictness`                       | `"strict"` | Strictest identity matching |
+| `pixel_verify.consequential_policy`              | `"disabled"` | Do not rely on pixel-only verification for consequential steps |
+| `unverified_write.allow`                         | `false` | Never write without verification |
+| `egress.artifact_policy`                         | `"managed-strict"` | Tightest artifact-egress posture |
+| `model_calls.allowed_in_healthy_run`             | `false` | No model calls on a run the engine considers healthy |
+
+---
+
+## Cache location
+
+The last-known-good response body is cached in a closed envelope at:
+
+```
+~/.openadapt/policy.json
+```
+
+(the same `~/.openadapt/` directory as `config.toml`). The envelope binds the
+policy to the canonical hosted origin, a domain-separated credential digest,
+the organization id, the policy version, the exact policy-body digest, and the
+fetch time. A different host, credential, organization, version, or body cannot
+reuse it. A network response cannot move the version backwards or change a body
+without a new version. The cache expires after 24 hours. The old unbound cache
+format is rejected. Writes are **atomic**
+(temp file in the same dir + `os.replace`), so a reader can never observe a
+half-written file. The path is overridable in tests via
+`OPENADAPT_POLICY_CACHE`.
+
+The nested policy body does not contain the synthetic `source` field. `source`
+is added only to the in-memory resolved result.
+
+---
+
+## TTL / refresh policy
+
+Policy is refreshed:
+
+- **when Settings loads** (the first policy render performs a network-first resolve);
+- **immediately before a run** (a run must never start on a stale safety view).
+
+`refresh_policy` (dispatcher command) forces a network fetch and rewrites the
+cache. `get_effective_policy` resolves through the normal network → cache →
+fail-closed ladder.
+
+---
+
+## Fail-closed rule (the whole point)
+
+Safety must never *weaken* because the network is down, the cache is stale, or
+the server omitted a key.
+
+1. **Resolution ladder** (`resolve_effective_policy`):
+   `fetch_effective_policy` (network, `source="network"`) → on any failure
+   `load_cached_policy` (`source="cache"`) → if neither exists, the fully
+   fail-closed default (`source="fail-closed-default"`).
+2. **Every** resolved policy passes through `harden_safety`, which guarantees
+   each `SAFE_SAFETY_DEFAULTS` key is present. A **missing or `null`** safety
+   value becomes the safe default. Values the server *did* provide are preserved
+   (the server is authoritative when it speaks; we only fill gaps).
+3. A **missing `safety` object** in a response is treated exactly like an empty
+   one and hardened to all safe defaults.
+4. Network and cache failures **never raise** out of `resolve_effective_policy`
+   / `load_cached_policy`. They degrade, like the keychain gate in
+   `openadapt_desktop.auth.store`). Only `fetch_effective_policy` raises, so its caller can
+   choose to fall back.
+5. **A run whose engine cannot evaluate safety policy must refuse.** When
+   `source == "fail-closed-default"` the engine has no authoritative safety
+   view; the safest values still gate the run, and a consumer that requires a
+   confirmed policy (e.g. a consequential run) should treat that as a hard stop
+   rather than proceeding on defaults silently. `binding_safety` implements
+   that hard stop for local execution. Hosted execution uses the signed policy
+   contract in its exact workflow admission.
+
+---
+
+## Binding policy to a hosted run
+
+Desktop doesn't rewrite the deployment config for a hosted run. The Cloud lease
+contains the signed admission for one exact product release and one exact
+workflow version. Flow verifies both admissions locally before it resolves
+parameters or starts the workflow.
+
+```
+register -> poll -> Flow hosted adapter -> per-edge permit/ack -> terminal callback
+```
+
+Desktop passes the strict lease, local `runner.toml`, run directory, and managed
+delivery authority to Flow. Flow owns admission checks, parameter resolution,
+one-use delivery, execution, and terminal verification. Desktop keeps the
+outbound HTTPS transport and the local status view.
+
+`runner.toml` is an operator-authored trust manifest, so Desktop doesn't edit
+it. Its protected `[runner].host` must contain the same canonical HTTPS origin
+as Desktop's hosted control-plane setting before the runner can register.
+
+The current bridge fails closed until the approved hosted terminal projection
+is present. It reports apparent success as `RECONCILIATION_REQUIRED` instead of
+publishing `VERIFIED` from an incomplete projection.
+
+### What each safety key does to a run
+
+The local policy projection remains strengthen-only for local execution. It can
+tighten a run, but it can't relax one.
+
+| Safety key | Effect on the run |
+|---|---|
+| `pixel_verify.consequential_policy` | `required` → `runtime.pixel_verify_enabled = true`. `disabled` is the platform *baseline*, not a prohibition, so a locally-armed check stays armed. |
+| `model_calls.allowed_in_healthy_run` | `false` → `runtime.allow_model_grounding = false` (fully local). `true` is a permission, not an instruction to enable. |
+| `effect_verification.required_for_consequential`, `unverified_write.allow`, `identity_gate.strictness`, `halt_on_ambiguous` | Any at its strict value requires a **production execution profile** (effect contracts, identity coverage, settled frames, no blanket unverified-write approval). `demo` is escalated to `standard`. An **absent** profile stays absent because Flow resolves it to `regulated`, which is stricter than anything Desktop would write. |
+| `egress.artifact_policy` | Validated, **not** projected onto the run: artifact egress is governed by the upload path (`openadapt_desktop/upload_manager.py`, `openadapt_desktop/hosted.py`), not the replay runtime. |
+
+The `grounding_model` projection is deliberately **not** bound to runs here: it
+is an egress *capability*, and auto-enabling a capability from a cached policy is
+the opposite of failing closed.
+
+### When a hosted run stops
+
+Flow refuses before actuation if an admission is missing, expired, revoked, or
+doesn't match the exact release, workflow, bundle, environment, or policy
+contract. It also refuses when it can't resolve an admitted parameter safely.
+After a possible input delivery, uncertainty produces
+`RECONCILIATION_REQUIRED`. Desktop never asks Flow to replay that work.
+
+Refusal evidence stays PHI-free. It names bounded contract fields and stable
+codes, not parameter values, screenshots, local paths, or exception text.
+
+---
+
+## Engine surface (implemented here)
+
+| Symbol | Purpose |
+|--------|---------|
+| `openadapt_desktop/policy.py :: SAFE_SAFETY_DEFAULTS` | Safest value for every safety key |
+| `openadapt_desktop/policy.py :: fetch_effective_policy(host, timeout=10.0)` | Bearer GET, atomic-cache-write, raises `PolicyFetchError` on failure |
+| `openadapt_desktop/policy.py :: load_cached_policy(host)` | Read only a fresh cache bound to this exact host and credential; `None` on any mismatch or error |
+| `openadapt_desktop/policy.py :: harden_safety(policy)` | Fill missing/`None` safety keys with safe defaults (fail-closed) |
+| `openadapt_desktop/policy.py :: resolve_effective_policy(host)` | network → cache → fail-closed, always hardened, adds `source` |
+| `openadapt_desktop/policy.py :: SAFETY_VALUE_DOMAINS` | Exact allowed values per safety key (mirrors the cloud registry) |
+| `openadapt_desktop/policy.py :: binding_safety(policy)` | The pre-run gate: refuses a non-authoritative/malformed policy (`PolicyEnforcementError`) |
+| `openadapt_desktop/policy.py :: apply_safety_policy(deployment, safety)` | Strengthen-only projection onto a Flow deployment config |
+| `openadapt_desktop/hosted_runner.py :: RunnerService` | Registers, polls, delegates the exact lease to Flow, and sends Flow's terminal callback |
+| `openadapt_flow.runner.hosted_adapter :: HostedRunnerAdapter` | Verifies admissions, resolves admitted parameters, owns one-use execution, and builds terminal evidence |
+| `openadapt_desktop/dispatch.py :: get_effective_policy` | Dispatcher command; never raises; returns the fail-closed default on error |
+| `openadapt_desktop/dispatch.py :: refresh_policy` | Dispatcher command; forces a network fetch, then falls back like `get_effective_policy` |
+
+Both commands are auto-exposed over the Tauri stdin/stdout wire (`openadapt_desktop/ipc.py`)
+and the tray loopback (`openadapt_desktop/socket_server.py`) because they are registered in
+`EngineDispatcher._register`.
+
+---
+
+## Frontend behavior
+
+`src/lib/engine.ts` carries the effective-policy commands and
+`src/screens/Settings.tsx` loads the policy on mount. The Desktop renders the
+resolved grounding and governance state. It does not grant local authority to
+edit organization or safety policy. Host changes pass through the engine's
+canonical HTTPS-origin validator. A refused host value returns a visible error
+and the UI restores the last saved engine configuration.

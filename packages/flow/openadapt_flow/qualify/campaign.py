@@ -214,6 +214,12 @@ def apply_verify_config(
                 effect.idempotency_key = ValueExpr(param=config.record.duplicate_key)
                 effect.key_field = config.record.duplicate_key
                 notes.append({"change": "duplicate_key", "step": save.id})
+    if (
+        config.minimum_readback is not None
+        and workflow.minimum_readback != config.minimum_readback
+    ):
+        workflow.minimum_readback = config.minimum_readback
+        notes.append({"change": "minimum_readback", "minimum": config.minimum_readback})
     return save, notes
 
 
@@ -1202,16 +1208,25 @@ def qualify(
     if verifier_tier is None:
         raise QualifyConfigError("verifier declares no verification tier")
     verifier_tier = VerificationTier(verifier_tier)
-    tier = (
-        VerificationTier.INDEPENDENT_SYSTEM
-        if config.minimum_effect_strength == "independent_system_of_record"
-        else VerificationTier.INDEPENDENT_SESSION
+    from openadapt_flow.readback_ladder import workflow_tier_floor
+
+    tier = config.minimum_tier()
+    wanted = (
+        f"minimum_readback {config.minimum_readback}"
+        if config.minimum_readback is not None
+        else f"minimum_effect_strength {config.minimum_effect_strength}"
     )
     if int(verifier_tier) > int(tier):
         raise QualifyConfigError(
-            f"verifier reads at {verifier_tier.name.lower()}, weaker than "
-            f"minimum_effect_strength {config.minimum_effect_strength}"
+            f"verifier reads at {verifier_tier.name.lower()}, weaker than {wanted}"
         )
+    if workflow.minimum_readback is not None:
+        workflow_floor = workflow_tier_floor(workflow)
+        if workflow_floor is not None and int(verifier_tier) > int(workflow_floor):
+            raise QualifyConfigError(
+                f"verifier reads at {verifier_tier.name.lower()}, weaker than the "
+                f"workflow's minimum_readback {workflow.minimum_readback}"
+            )
     from openadapt_flow.qualify.result import (
         build_result,
         case_entry,
