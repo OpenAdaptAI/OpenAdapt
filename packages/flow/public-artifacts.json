@@ -148,6 +148,10 @@
       "sha256": "d6594bf87583158de54935ae777eebbb6dc21f44636907921e79422ea5ddd59c"
     },
     {
+      "path": "benchmark/at_rest/results.json",
+      "sha256": "7c942699ad13b0781376d0de24f1942531a4bac2ef3f1904f410a00b1580b93c"
+    },
+    {
       "path": "benchmark/canvas_ladder/results.json",
       "sha256": "4502affb014de71e5c584e48cef5bc6a7631983e2517551d5ea9c20c8a0668e2"
     },
