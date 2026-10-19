@@ -114,7 +114,6 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "ruff",
-    "python-semantic-release>=10.6.1,<11",
 ]
 
 [project.scripts]
@@ -122,17 +121,15 @@ openadapt-desktop = "openadapt_desktop.cli:main"
 
 [project.urls]
 Homepage = "https://openadapt.ai"
-Repository = "https://github.com/OpenAdaptAI/openadapt-desktop"
-Issues = "https://github.com/OpenAdaptAI/openadapt-desktop/issues"
+Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/desktop"
+Issues = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
 
 
 [tool.hatch.build.targets.wheel]
 packages = ["openadapt_desktop"]
 
-# python-semantic-release 10.6.2 still accepts click 8.1.8, which pip-audit
-# reports as PYSEC-2026-2132 (fix: 8.3.3). The GitHub Action is SHA-pinned at
-# v10.6.2 and does not use this lock; the constraint keeps the local extra
-# from regressing the audited tree.
+# click before 8.3.3 is PYSEC-2026-2132. Keep any extra that pulls click on
+# the audited fix.
 [tool.uv]
 constraint-dependencies = ["click>=8.3.3"]
 
@@ -143,22 +140,6 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
 
-
-[tool.semantic_release]
-version_toml = ["pyproject.toml:project.version"]
-version_variables = ["openadapt_desktop/__init__.py:__version__"]
-commit_message = "chore: release {version}"
-major_on_zero = false
-allow_zero_version = true
-build_command = "python -m ensurepip --upgrade && python -m pip install --disable-pip-version-check uv==0.11.29 && python scripts/check_release_consistency.py --sync && python scripts/native_release.py sync-from-engine && git add uv.lock package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json && uv build --wheel --sdist && python scripts/check_release_consistency.py --require-dist && python scripts/check_source_boundary.py --require-dist && python scripts/verify_build_artifact.py python-distribution"
-
-[tool.semantic_release.branches.main]
-match = "main"
-
-[tool.semantic_release.commit_parser_options]
-allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
-minor_tags = ["feat"]
-patch_tags = ["fix", "perf"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

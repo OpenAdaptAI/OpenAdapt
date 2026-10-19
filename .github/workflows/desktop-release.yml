@@ -1,0 +1,158 @@
+# Release openadapt-desktop automatically when a reviewed version lands on main.
+#
+# A Desktop pull request that should ship bumps the version and the changelog
+# itself (packages/desktop/scripts/prepare_release.py), and the desktop
+# release-intent check in packages.yml fails a feat or fix that does not. There
+# is no bot version commit: the version is reviewed like any other change.
+#
+# When main changes packages/desktop/pyproject.toml, this workflow:
+#   1. stops quietly if that version is already on PyPI;
+#   2. waits for that commit's Packages run, and refuses unless its desktop
+#      test and desktop build jobs ran and succeeded;
+#   3. refuses if packages/desktop changed on main after that commit, because
+#      the release would then build source that this check did not see;
+#   4. dispatches release-package.yml for desktop on main.
+# release-package.yml then does what it does for every package: refuses a
+# version already on PyPI, publishes through the pypi-desktop environment and
+# Trusted Publishing, and has the openadapt-release App create the immutable
+# openadapt-desktop-vX.Y.Z tag and GitHub Release.
+#
+# Dispatch this workflow by hand to retry a release whose dispatch failed. A
+# dispatch judges the newest main commit that changed packages/desktop, not the
+# tip, whose Packages run may have skipped the desktop jobs.
+name: Desktop release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - packages/desktop/pyproject.toml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: Release the reviewed Desktop version
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Read the version and skip one that is already published
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(python3 - <<'PY'
+          import tomllib
+          with open("packages/desktop/pyproject.toml", "rb") as fh:
+              print(tomllib.load(fh)["project"]["version"])
+          PY
+          )"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            "https://pypi.org/pypi/openadapt-desktop/${version}/json")"
+          case "${status}" in
+            200) echo "openadapt-desktop ${version} is already on PyPI; nothing to release."
+                 echo "release=false" >> "${GITHUB_OUTPUT}" ;;
+            404) echo "openadapt-desktop ${version} is not on PyPI yet."
+                 echo "release=true" >> "${GITHUB_OUTPUT}" ;;
+            *)   echo "PyPI returned HTTP ${status}; refusing to guess." >&2; exit 1 ;;
+          esac
+
+      - name: Choose the commit whose checks decide the release
+        if: steps.version.outputs.release == 'true'
+        id: subject
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "${EVENT_NAME}" = push ]; then
+            subject="${GITHUB_SHA}"
+          else
+            subject="$(git log -1 --format=%H "${GITHUB_SHA}" -- packages/desktop)"
+          fi
+          echo "Release checks follow ${subject}."
+          echo "sha=${subject}" >> "${GITHUB_OUTPUT}"
+
+      - name: Wait for that commit's Packages run and its desktop jobs
+        if: steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUBJECT: ${{ steps.subject.outputs.sha }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 3600))
+          while [ "${SECONDS}" -lt "${deadline}" ]; do
+            run="$(gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/packages.yml/runs" \
+              --raw-field head_sha="${SUBJECT}" \
+              --raw-field event=push \
+              --raw-field per_page=20 \
+              --jq '[.workflow_runs[] | select(.head_sha == env.SUBJECT)]
+                    | sort_by(.created_at) | last
+                    | "\(.id // 0) \(.status // "missing") \(.conclusion // "pending")"')"
+            echo "Packages for ${SUBJECT}: ${run}"
+            read -r run_id status conclusion <<<"${run}"
+            if [ "${status}" = completed ]; then
+              if [ "${conclusion}" != success ]; then
+                echo "Refusing to release: Packages concluded ${conclusion}." >&2
+                exit 1
+              fi
+              # A green run with the desktop jobs skipped proves nothing about
+              # Desktop. Require that both desktop workflows ran and passed.
+              gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100" \
+                --jq '.jobs[] | "\(.conclusion)\t\(.name)"' > "${RUNNER_TEMP}/jobs.tsv"
+              for prefix in "desktop test / " "desktop build / "; do
+                if ! grep -q $'^success\t'"${prefix}" "${RUNNER_TEMP}/jobs.tsv"; then
+                  echo "Refusing to release: no successful '${prefix}' job in run ${run_id}." >&2
+                  exit 1
+                fi
+              done
+              if grep -E $'^(failure|cancelled|timed_out)\tdesktop (test|build) / ' "${RUNNER_TEMP}/jobs.tsv"; then
+                echo "Refusing to release: a desktop job did not pass." >&2
+                exit 1
+              fi
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "Refusing to release: Packages did not succeed within 60 minutes." >&2
+          exit 1
+
+      - name: Require that main has not changed Desktop since that commit
+        if: steps.version.outputs.release == 'true'
+        env:
+          SUBJECT: ${{ steps.subject.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor "${SUBJECT}" refs/remotes/origin/main
+          if ! git diff --quiet "${SUBJECT}" refs/remotes/origin/main -- packages/desktop; then
+            echo "packages/desktop changed on main after ${SUBJECT}." >&2
+            echo "Release the current version by dispatching this workflow once main is green." >&2
+            exit 1
+          fi
+
+      - name: Dispatch the package release
+        if: steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh workflow run release-package.yml --repo "${GITHUB_REPOSITORY}" --ref main \
+            -f package=desktop -f version="${VERSION}"
+          echo "Dispatched release-package.yml for openadapt-desktop ${VERSION}."

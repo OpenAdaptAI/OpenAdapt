@@ -1,5 +1,34 @@
 # Release Policy
 
+## Releasing from the OpenAdapt monorepo
+
+OpenAdapt Desktop lives in the OpenAdapt monorepo at `packages/desktop`. The
+engine (PyPI) lane releases from there:
+
+1. A pull request that should ship bumps the version and the changelog itself:
+   `python scripts/prepare_release.py` (or `--bump patch|minor|major`, or
+   `--version X.Y.Z`). It sets `pyproject.toml`, `openadapt_desktop/__init__.py`,
+   `uv.lock` and the five native installer version files, and writes a dated
+   `CHANGELOG.md` section from the conventional commits since the last version.
+2. The `desktop release intent` check fails a pull request with a `feat`, `fix`
+   or `perf` commit under `packages/desktop` that keeps the version, and prints
+   the command above. It also requires every version source, native included,
+   to carry the one version.
+3. When the bump merges, `.github/workflows/desktop-release.yml` waits for that
+   exact commit's Packages run to pass, then dispatches `release-package.yml`.
+   That publishes `openadapt-desktop` to PyPI and creates the immutable
+   `openadapt-desktop-vX.Y.Z` tag and GitHub Release. No bot commit lands on
+   main, and `v*` tags stay the launcher's.
+
+Engine tags through `v0.20.0` and every `desktop-v*` native release live in the
+OpenAdaptAI/openadapt-desktop repository. The native installer,
+candidate channel and Production channel lanes below have not moved yet: they
+update published releases in place, and OpenAdapt's releases are immutable.
+Their workflows are kept, inert, under `.github/` here. The rest of this
+document describes those lanes as they ran in openadapt-desktop.
+
+## Two lanes in openadapt-desktop
+
 This repository publishes unadmitted candidates from two lanes. Production is
 an admission-driven channel with a separate manual derivation step. This
 document defines the outputs, ordering, and release-selection rules.

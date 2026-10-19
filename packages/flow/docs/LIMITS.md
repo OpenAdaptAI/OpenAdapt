@@ -369,7 +369,8 @@ grade is `screen_readback`, never `independent_readback`.
 **Without a read that is independent of the acting session, the run cannot
 be `VERIFIED`.** That read is either a system-of-record read (REST, FHIR, SQL,
 file; tier 1) or the application's record page read in a separate signed-in
-browser session (`ui_readback`; tier 2). The second goes through the same
+session (`ui_readback` for web, `fresh_session` for desktop and RDP,
+tested on mocks only; tier 2). The second goes through the same
 application, so it is not a system-of-record read and has its own limits
 ([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback)).
 A pixel-only Citrix or RDP session with neither is that case. Reopening the
