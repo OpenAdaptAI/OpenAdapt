@@ -238,6 +238,8 @@ asyncio.run(main())
 
 The SDK starts the server with only a few environment variables. To pass others, such as `OPENADAPT_BUNDLE_KEY`, add `env=` to `StdioServerParameters`.
 
+To let your agent add workflows itself, see [Teach a new workflow from your agent](#teach-a-new-workflow-from-your-agent).
+
 [scripts/smoke_client.py](scripts/smoke_client.py) is a fuller example that runs every sandbox case. From a clone of this repository, run `pip install -e .`, then:
 
 ```bash
@@ -383,6 +385,46 @@ ChatGPT and Claude in a web browser can't start a server on your computer. To re
    ```
 
 It claims the job, polls openadapt.ai over outgoing HTTPS, and asks you in the terminal before a chat account may drive it. Don't confuse it with the launcher's `openadapt connect`, which pairs a computer with OpenAdapt Cloud. [docs/MAILBOX_CLI.md](docs/MAILBOX_CLI.md) has the details.
+
+### Teach a new workflow from your agent
+
+`serve --teach` lets your agent add a workflow it doesn't have yet, without leaving the conversation. It does the task once through OpenAdapt; OpenAdapt checks the record it saved, compiles the run, and once the run is admitted your agent calls it as a tool. Every later call runs the compiled program with no model calls and reads the save back.
+
+```bash
+claude mcp add --scope user openadapt-teach -- uvx --python 3.12 --from 'openadapt-agent[tutorial]' openadapt-agent serve --teach verify.yaml --url https://emr-test.example.org --runs-dir ~/.openadapt/runs
+```
+
+`verify.yaml` needs only a `verifier:` section that reads the app's records (`rest`, `sql`, `fhir`, `graphql` or `file`), the same file `openadapt-flow record --verify` uses. The first run makes a real entry in the app, so point `--url` at a test copy with test records.
+
+Your agent then:
+
+1. Calls `teach_start` with the task (`{note}` for each input), this run's `inputs`, the `record_fields` the saved record must have (such as its patient id), and `on_screen`, the record's identity as the screen shows it (a name and an MRN).
+2. Calls `teach_observe` and `teach_act` until the task is done. On the web, `teach_observe` lists the page as short lines with a ref for each control, and before every save OpenAdapt checks that the record's identity is shown next to the control. A save on the wrong record is refused and ends the run.
+3. Calls `teach_finish`. OpenAdapt compiles the run and reads the app's records: exactly one record must have appeared, with every `record_fields` value and every input. The result is the draft: its steps, its inputs, the proposed record check, and what still needs a person.
+4. Calls `teach_confirm_checks`. Your MCP client shows a person the proposed check, and only their answer there, with their name, confirms it. Your agent has no argument that confirms it.
+5. Calls `teach_admit` with `canary_inputs`, the values each canary saves. A canary is a real save on the same record, so use values that are safe there.
+
+`teach_admit` admits only under the rules in [JIT_ADMISSION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT_ADMISSION.md). The operator starts the server with `--teach-key agent.pem --teach-policy signed-policy.json`: the key of the agent registered with `openadapt-flow jit register --role agent`, and an admission policy a person signed with `openadapt-flow jit sign-policy`. The server records the run as that agent, so admitting it is self-admission, which the policy must allow (`allow_self_admission`). Without a key and a policy, `teach_admit` refuses and returns the command a person runs at a terminal instead:
+
+```bash
+openadapt-flow compile-agent admit <task dir> --admit-as "<your name>" --canary-param note="Canary test note"
+```
+
+Once the program is admitted, it is in `list_workflows` and `run_workflow` at once and has its own `taught_<name>` tool, and the server sends `notifications/tools/list_changed` to clients that support it. A server started later lists every program taught in its `--teach-dir`.
+
+It works on a web app (`--url`) and on the app a deployment file's `backend:` section names (`--config deploy.yaml`): a native Windows, macOS or Linux window, or a local RDP or Citrix client window. Off the web, OpenAdapt can't read which record a form shows, so a person approves, in your client's form, every action that might save: any click except on a text field, a check box, a tab or a control that plainly navigates (Open, New, Cancel), any click at x,y, Enter, typing outside a text field, and shortcuts. Each answer covers that one action on the screen as it was; if anything changes first, the action isn't done. A client without forms can't save. RDP and Citrix have no control tree, and the Windows, macOS and Linux backends don't list controls yet, so off the web your agent needs `--teach-screens scrubbed` to see the screen, and clicks x,y pixels. Admission there fails closed for now: a pixel-only click carries no checked record identity, so the canary is refused and says why. Network RDP (`rdp_host`) is refused.
+
+| Flag | What it does |
+| --- | --- |
+| `--teach VERIFY_YAML` | Adds `teach_start`, `teach_observe`, `teach_act`, `teach_finish`, `teach_abort`, `teach_status`, `teach_confirm_checks` and `teach_admit`, and turns on runs of taught workflows. |
+| `--teach-dir DIR` | Where drafts and taught programs live (default `RUNS_DIR/teach`). |
+| `--teach-key PEM`, `--teach-policy JSON` | The registered agent's encrypted key (passphrase in `OPENADAPT_JIT_KEY_PASSPHRASE`) and the signed admission policy. Only an agent key under a policy; an admitter key admits from CI with `openadapt-flow jit admit`. |
+| `--key-dir DIR` | The JIT key directory (default `OPENADAPT_JIT_KEY_DIR` or `~/.openadapt/jit`). |
+| `--teach-hold` | On the web, a person also approves every save in the first run. Without it, your agent names the identity the save gate checks (`on_screen`); a value every form shows proves nothing, and then only the record check after the run and the person confirming it catch a wrong record. |
+| `--teach-screens scrubbed` | Adds `teach_screen`: the app's screen with identifiers scrubbed, and nothing shared if scrubbing fails. `unscrubbed` skips scrubbing. Off by default. |
+| `--mode production --bundles DIR` | Serves your other workflows next to the taught ones. |
+
+[COMPILE_AGENT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/COMPILE_AGENT.md) describes the pipeline underneath: the harness, the record check, the canaries and the files it keeps.
 
 ## Track a long job
 

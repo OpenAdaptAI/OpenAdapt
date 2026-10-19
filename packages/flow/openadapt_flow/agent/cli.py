@@ -205,6 +205,68 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--teach",
+        default=None,
+        metavar="VERIFY_YAML",
+        help=(
+            "Add the teach tools: the agent does a task once in the app at --url "
+            "(or the --config backend: Windows, macOS, Linux, RDP, Citrix), "
+            "Flow checks the saved record through VERIFY_YAML's verifier, "
+            "compiles the run, and once it is admitted the agent calls it as a "
+            "tool with no model calls. Run 1 makes a real entry: use a test copy."
+        ),
+    )
+    p.add_argument(
+        "--teach-dir",
+        default=None,
+        metavar="DIR",
+        help="With --teach: where drafts and taught programs live (default RUNS_DIR/teach)",
+    )
+    p.add_argument(
+        "--teach-key",
+        default=None,
+        metavar="PEM",
+        help=(
+            "With --teach and --teach-policy: the encrypted key of the registered "
+            "agent that may admit what it taught (passphrase from "
+            "$OPENADAPT_JIT_KEY_PASSPHRASE). Without it, a person admits at a "
+            "terminal (openadapt-flow compile-agent admit)."
+        ),
+    )
+    p.add_argument(
+        "--teach-policy",
+        default=None,
+        metavar="JSON",
+        help=(
+            "With --teach-key: the admission policy a person signed "
+            "(openadapt-flow jit sign-policy). The agent admits its own draft "
+            "only if it sets allow_self_admission."
+        ),
+    )
+    p.add_argument(
+        "--key-dir",
+        default=None,
+        metavar="DIR",
+        help="With --teach: the JIT key directory (default $OPENADAPT_JIT_KEY_DIR or ~/.openadapt/jit)",
+    )
+    p.add_argument(
+        "--teach-hold",
+        action="store_true",
+        help=(
+            "With --teach on a web app: a person also approves every save in "
+            "the client's form (always on for other surfaces)."
+        ),
+    )
+    p.add_argument(
+        "--teach-screens",
+        choices=("off", "scrubbed", "unscrubbed"),
+        default="off",
+        help=(
+            "With --teach: add teach_screen so the agent sees the app (RDP and "
+            "Citrix need it). scrubbed shares nothing if scrubbing fails."
+        ),
+    )
+    p.add_argument(
         "--guard-tasks",
         default=None,
         metavar="DIR",
@@ -596,6 +658,17 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
     if args.guard:
         return _serve_guard(args, serve)
+    if args.teach:
+        return _serve_teach(args, serve)
+    if (
+        args.teach_key
+        or args.teach_policy
+        or args.teach_dir
+        or args.teach_hold
+        or args.teach_screens != "off"
+    ):
+        print("serve: the --teach-* flags need --teach VERIFY_YAML", file=sys.stderr)
+        return 2
     desktop_pin = bool(
         args.windows_agent_url
         or args.remote_window
@@ -917,6 +990,131 @@ def _serve_guard(args: argparse.Namespace, serve) -> int:
     guard = GuardBridge(guarded, Path(args.guard_tasks).expanduser())
     _attach_ledger(args, guard, Path(args.guard_state).expanduser().resolve())
     serve(None, guard=guard)
+    return 0
+
+
+def _teach_app(args: argparse.Namespace) -> tuple[Optional[str], Any]:
+    """The app to teach in: (url, None) for a web app, (None, backend section)
+    for any other surface."""
+
+    if not args.config:
+        if not args.url:
+            raise ValueError("--teach needs the app: --url, or --config deploy.yaml")
+        return args.url, None
+    from openadapt_flow.deployment import load_deployment
+
+    section = load_deployment(args.config).backend
+    if (section.kind or "web").strip().lower() == "web":
+        url = args.url or getattr(section, "url", None)
+        if not url:
+            raise ValueError("the deployment names a web app; pass --url")
+        return url, None
+    if args.url:
+        raise ValueError("--url names a web app; the deployment names another surface")
+    if section.kind == "rdp" and section.rdp_host:
+        raise ValueError(
+            "network RDP (rdp_host) can't be taught; use the local client window "
+            "(rdp_window), as for authoring"
+        )
+    return None, section
+
+
+def _serve_teach(args: argparse.Namespace, serve) -> int:
+    """Serve the teach tools next to the workflow tools over local stdio."""
+    from openadapt_flow.agent.bridge import AgentBridge
+    from openadapt_flow.agent.runner import default_flow_cli
+    from openadapt_flow.agent.teach import TeachBridge, TeachConfig
+
+    if args.authoring or args.tutorial or args.mode in ("sandbox", "attended"):
+        print(
+            "serve: --teach has its own recording tools; it can't be combined "
+            "with --authoring, --tutorial, or --mode sandbox/attended",
+            file=sys.stderr,
+        )
+        return 2
+    if bool(args.teach_key) != bool(args.teach_policy):
+        print("serve: --teach-key and --teach-policy go together", file=sys.stderr)
+        return 2
+    if args.bundles and args.mode != "production":
+        print(
+            "serve: with --teach, --bundles needs --mode production",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        from openadapt_flow.record_sor import load_observer
+
+        url, surface = _teach_app(args)
+        # Read the verifier now: a typo fails here, not at the agent's first task.
+        load_observer(Path(args.teach).expanduser().resolve())
+        key_dir = Path(args.key_dir).expanduser().resolve() if args.key_dir else None
+        admitter = None
+        if args.teach_key:
+            from openadapt_flow.jit import authority, lifecycle
+
+            admitter = authority.principal_from_key(
+                authority.load_encrypted_key(Path(args.teach_key)),
+                key_dir or lifecycle.default_key_dir(),
+                policy=authority.SignedAdmissionPolicy.load(args.teach_policy),
+            )
+        runs_dir = (
+            (Path(args.runs_dir) if args.runs_dir else default_runs_dir())
+            .expanduser()
+            .resolve()
+        )
+        config = TeachConfig(
+            verify=Path(args.teach).expanduser().resolve(),
+            cache_dir=(
+                Path(args.teach_dir).expanduser().resolve()
+                if args.teach_dir
+                else runs_dir / "teach"
+            ),
+            url=url,
+            surface=surface,
+            key_dir=key_dir,
+            admitter=admitter,
+            hold=args.teach_hold,
+            headless=not args.headed,
+            screens=args.teach_screens,
+        )
+    except Exception as exc:  # noqa: BLE001 - every setup problem is a refusal
+        print(f"serve: {exc}", file=sys.stderr)
+        return 2
+    runner_config = RunnerConfig(
+        flow_cli=(
+            tuple(shlex.split(args.flow_cli)) if args.flow_cli else default_flow_cli()
+        ),
+        runs_dir=runs_dir,
+        url=args.url,
+        deployment_config=args.config,
+        policy=args.policy,
+        timeout_s=args.timeout,
+        approval_mode=args.approval_mode,
+    )
+    bridge = AgentBridge(
+        Path(args.bundles) if args.bundles else None,
+        runner_config,
+        allow_run=True,
+        mode="production",
+    )
+    _attach_ledger(args, bridge, runs_dir)
+    teach = TeachBridge(config, workflows=bridge)
+    print(
+        f"openadapt-agent {__version__}: teach tools over local stdio on the "
+        f"{teach.backend_kind} app; admission "
+        + (
+            f"by agent {admitter.principal_id} under policy "
+            f"{admitter.policy.policy.policy_id}"
+            if admitter is not None
+            else "by a person at a terminal"
+        )
+        + f"; {len(teach.taught)} taught workflow(s); runs folder {runs_dir}",
+        file=sys.stderr,
+    )
+    try:
+        serve(bridge, teach=teach)
+    finally:
+        teach.close()
     return 0
 
 
