@@ -119,6 +119,21 @@ def test_prepare_sets_every_version_source_and_the_changelog(repo: Path) -> None
     assert "explain the portal" not in changelog
 
 
+def test_prepare_works_on_a_crlf_checkout(repo: Path) -> None:
+    """Git on Windows checks files out with CRLF; every version source must still move."""
+
+    for relative in VERSION_FILES:
+        path = repo / relative
+        path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+    _commit(repo, "chore: check out with CRLF")
+    _commit(repo, "fix(portal): keep the card", touch="src/portal.txt")
+
+    version = prepare_release.prepare(repo, today=datetime.date(2026, 10, 19))
+
+    assert set(check_release_consistency.release_versions(repo).values()) == {version}
+    assert _load("native_release").native_version(repo) == version
+
+
 def test_prepare_refuses_without_a_releasable_commit(repo: Path) -> None:
     _commit(repo, "docs: only words", touch="docs/words.md")
     with pytest.raises(ValueError, match="no feat, fix, perf"):
