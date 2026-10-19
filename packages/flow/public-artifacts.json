@@ -316,6 +316,26 @@
       "sha256": "580eef16facc7bb7fc9b225daabded6bb7344c2bf2e9aa070364a3c1215ed9b7"
     },
     {
+      "path": "benchmark/harness2_scorer/evidence/base/results.json",
+      "sha256": "a562e33d7841e0baae976845522290d07c91419db89fcb6eb5f58925faa3e6c1"
+    },
+    {
+      "path": "benchmark/harness2_scorer/evidence/harness2/results.json",
+      "sha256": "57d9e94ee6954f56628c3c93d3dc930f4fb48f09ba944e7719c95a4fd67b237a"
+    },
+    {
+      "path": "benchmark/harness2_scorer/evidence/harness2_readback/results.json",
+      "sha256": "b6845f0eb488fc5db87100474fce16ecde4782c18f3e4f0cdca47bc55db22e42"
+    },
+    {
+      "path": "benchmark/harness2_scorer/evidence/raw.tar.gz",
+      "sha256": "fb6f25ae9c58352183b5602fc4cbec375a38a348800cc1f8bd21e9a7251ec3f5"
+    },
+    {
+      "path": "benchmark/harness2_scorer/evidence/summary.json",
+      "sha256": "e3a28f0d17c149abf689960792f7c88828bee4a09ce551a8ef34b667d75307a4"
+    },
+    {
       "path": "benchmark/hybrid/results.json",
       "sha256": "cd4e736884b70d0f7723c7ece17bbfdd83d1553922ee576a374ff85114997984"
     },
