@@ -142,6 +142,7 @@ environment-assigned surrogate key is the right choice for it.
 | `onscreen` | `OnScreenReadbackVerifier` | re-OCR the saved value off the live screen — the **no-API default** for GUI-only recordings; auto-derived from the demonstration. **Different-path** (re-open the record) is default-eligible; **same-surface** (re-read the write's own form) is opt-in only | measured in `benchmark/effect_readback/` — different-path false-CONFIRM 0, same-surface > 0. **A read-back CONFIRMED is a consistency signal, NOT transactional proof** (`docs/LIMITS.md`) |
 | `ui_readback` | `SeparateSessionReadbackVerifier` | the application's own record page, opened by identifier in a separate browser with its own sign-in, read-only, fields read from the page structure. **Tier 2: not a system-of-record read** | CI against MockMed's server-rendered record pages in a real browser; measured in `benchmark/ui_readback/` (see [the section below](#separate-session-ui-read-back-ui_readback)) |
 | `desktop_readback` | `DesktopReadbackVerifier` | the record looked up the way a person does it, in a separate desktop, RDP or Citrix session: search, open the one matching result, read the fields through UI Automation or OCR. Types only into the search box. **Tier 2 with its own sign-in, tier 3 without; not a system-of-record read** | CI against the WinForms patient-notes fixture (UI Automation, through the real agent and client) and the RDP kiosk's look-up panel (real OCR); see [the section below](#separate-session-desktop-read-back-desktop_readback) |
+| `deferred_report` | `DeferredReportVerifier` | nothing during the run: the save waits for a later report (X12 999 or 277CA, a CSV export, a saved status page) that `openadapt-flow deferred settle` matches by the item's key. The run ends `SAVED_AWAITING_CHECK`, never billable until settled | CI against synthetic 999, 277CA and CSV reports, through the real replayer and the CLI (see [the section below](#checked-later-deferred_report)) |
 | `rest` | `RestRecordVerifier` | GET a JSON records document (templatable path, secret-isolated auth headers) | live in CI against the MockMed transactional back end; Frappe-shaped read in the reference matrix (PR #131) |
 | `fhir` | `FhirEffectVerifier` | FHIR R4 search → flattened resources | CI against a byte-faithful fake FHIR server; **opt-in live test** against a real local OpenEMR |
 | `graphql` | `GraphQLRecordVerifier` | ONE read-only GraphQL query (a `mutation`/`subscription` refuses to construct), records extracted at a dotted path; optional freshness window → STALE demotion | **contract-proven in CI against a fake session** -- read-only guard, entity binding, error-body handling, staleness; not live-proven against a production GraphQL endpoint |
@@ -261,7 +262,60 @@ delete that line. The confirmed file is a normal `verify.yaml`, so
 
 Both reads are kept in `sor_snapshots.json` (mode 0600, raw records). The
 proposed file is also mode 0600 and copies `verifier:` as written, with
-`${NAME}` references unexpanded. Without `--verify`, `record` is unchanged.
+`${NAME}` references unexpanded. Without `--verify`, `record` reads no records;
+it still looks for a look-up after the save
+([below](#a-check-learned-from-a-look-up)).
+
+## A check learned from a look-up
+
+People often check a save by looking the record up. When a recording shows
+that after the save, Flow learns the check from it, with no marking and no
+configuration (`openadapt_flow/compiler/lookup_detect.py`). It runs at the
+end of `record` (browser, desktop, RDP, Citrix) and after an agent's JIT
+capture. It finds, in order:
+
+1. the save: the last click whose label has a save word (read from the
+   recorded control, or with OCR on the frame before the click);
+2. after it, one value the run typed (a recorded parameter), typed into a box
+   and submitted with Enter or a click: the search. Everything after the save
+   must look like a look-up: clicks, that one typed search, Enter, Tab and
+   scrolling. Any other key, a second typed text, or a click whose label has a
+   save-like word (OK, Yes, Add, Save, and the rest of the read-back guard's
+   list) means it isn't one, and nothing is proposed;
+3. optionally, a click that opens a result;
+4. on the last frame, the recorded values the look-up brought onto the
+   screen, each read with OCR, with the label next to it or above it. A value
+   that was already on screen before the look-up (the form that was just
+   saved) and the search box's own text don't count. Values shorter than three
+   characters are ignored.
+
+The check starts at the first event after the save, so anything between the
+save and the search (closing a "Saved" message, opening a search tab) is
+part of the check, not left in the task.
+
+It writes two proposals beside the recording:
+
+- `check.proposed.json`: the look-up as a check in the same session (tier 3,
+  the next section). `openadapt-flow check accept REC` makes it the
+  recording's `check.json`, and a person still admits the compiled check;
+- `readback.proposed.yaml`, for a desktop, RDP or Citrix recording: the same
+  look-up as a separate-session `desktop_readback` (tier 2 for RDP, where it
+  carries the read-back account's logon; tier 3 otherwise), in `verify.yaml`
+  form. Its session address is `UNRESOLVED`, and
+  every effect is a `field_equals` marked `needs_operator_confirmation`.
+
+`openadapt-flow record --verify` with no file uses this: it prints "Look the
+record up once so OpenAdapt can check future saves." before the recording,
+and writes the separate-session proposal as `verify.proposed.yaml` after it.
+Every `record` ends with that prompt when it finds no look-up. A web
+recording gets the same-session proposal only; a separate-session web check is
+`ui_readback`, which needs selectors the frames don't show.
+
+Nothing found means nothing proposed, and nothing proposed is trusted until a
+person reviews it. Both files are mode 0600, and the printed summary names
+parameters, never their values. A failure while looking never fails the
+recording. The detector reads frames with OCR (at most the last 50 clicks)
+and makes no model calls.
 
 ## A record check built from the app's own reads (`scaffold-verifier`)
 
@@ -843,6 +897,81 @@ Citrix session.
 - Citrix is a separate Workspace window named in `session`. Opening a new
   Citrix session for each check is the operator's launcher, not Flow's.
 
+## Checked later (`deferred_report`)
+
+Some saves can only be confirmed by a report that arrives after the run: a
+claim by the payer's acknowledgment (X12 999 or 277CA), an order by tonight's
+export or end-of-day file, a request by a status page that changes overnight.
+Declare that report as the check:
+
+```yaml
+effects:
+  kind: deferred_report
+  deferred_report:
+    report: { format: x12-277ca }
+    key: { param: claim_id }        # the claim's patient control number
+    deadline_hours: 48
+    ledger: /var/lib/openadapt/deferred
+    describe: payer 277CA
+```
+
+After the save, the run writes a pending entry to the ledger and stops. It
+ends `SAVED_AWAITING_CHECK`: saved, waiting for its check. That outcome is
+never `VERIFIED`, never billable, and never retried. Every other step of the
+run must be settled; anything else uncertain makes the run
+`RECONCILIATION_REQUIRED` as before.
+
+When the report arrives:
+
+```bash
+openadapt-flow deferred settle --config deployment.yaml --report ack.277
+openadapt-flow deferred settle --config export.yaml --report orders.csv \
+    --report-time 2026-10-18T23:00:00-04:00
+openadapt-flow deferred status runs/claim-0412 --config deployment.yaml
+```
+
+| The report says, for the item's key | The run becomes |
+|---|---|
+| accepted (277CA `STC` `A2`; a CSV or text status you list under `accept`) | `VERIFIED`, billable |
+| rejected (999 `R`, `M`, `W`, `X`; 277CA `A3`, `A4`, `A6`, `A7`, `A8`; your `reject` values), or two rows that disagree | `RECONCILIATION_REQUIRED` |
+| still pending (999 `A` or `E`: the file passed syntax checks, which is not acceptance; 277CA `A1`, received; any other status) | still `SAVED_AWAITING_CHECK` |
+| nothing by the deadline | `RECONCILIATION_REQUIRED`. Overdue entries expire before any report is matched, so a report that arrives late never promotes one (`deferred settle` with no `--report` only expires) |
+| two waiting saves with the same key | `RECONCILIATION_REQUIRED` for both: the report can't say which one it means |
+
+A report settles only saves made before it was issued: an X12 report's time
+comes from its `BHT` (or `ISA`) header, allowing 14 hours for the missing time
+zone; a CSV or text report needs `--report-time`. It settles only entries
+waiting on the exact same report format (columns, accept and reject values,
+pattern), and `deferred status` only counts an entry written for the run's
+own effect. Ledger changes happen under a file lock, and an entry only ever
+moves out of "waiting". `verify-run` refuses a deferred check.
+
+Formats: `x12-999` (key: `AK1-02:AK2-02`, the group and transaction set
+control numbers), `x12-277ca` (key: `TRN-02` with `TRN-01` `2` under a
+patient-level `HL`), `csv` (`key_column`,
+`status_column`, `accept`, `reject`), and `text` for a saved status page (a
+regular expression with named groups `key` and `status`).
+
+The settlement is a separate record in the ledger. The run's `report.json`,
+and any seal over it, is never rewritten; `deferred status` combines the two.
+The ledger holds no record values: each key is stored as an HMAC-SHA256
+digest under a salt kept in the ledger directory, and the directory and its
+files are private (0700 and 0600).
+
+**What the report proves.** It says what the counterparty or the export says
+about the item with that key: accepted or not. It doesn't compare field
+values the way a read-back does. The check declares tier 1
+(`INDEPENDENT_SYSTEM`), because the report comes from outside the
+application's screens.
+
+**Where it isn't settled yet.** The hosted runner and the Execute v1 and
+production-receipt wire formats have no such outcome; they carry the run as
+`RECONCILIATION_REQUIRED`. Put the deferred save last in the workflow and give
+its step no other effect: the run stops there, and a step with an effect that
+was never checked is `RECONCILIATION_REQUIRED`. A run that failed or was
+canceled is never waiting. `deferred status` reads `report.json` as given; it
+doesn't check a seal over it.
+
 ## Configuration reference (`deployment.yaml` → `effects:`)
 
 Complete commented example: [`docs/deployment.example.yaml`](./deployment.example.yaml).
@@ -879,6 +1008,7 @@ Per-kind required fields:
 | `onscreen` | (none — auto-derived from the demo) | `readback_region`, `readback_min_ratio` (hand-config fallback) |
 | `ui_readback` | `ui_readback` section: `record_url`, `sign_in` (env-var names for the read-back account), `ready_selector`, `row_selector`, `fields`, `identity` | `url_params`, `empty_selector`, `not_found_selector`, `read_post_paths`, per-field `attribute` / `date_format` / `casefold`, `truncation_markers`, `navigation_timeout_s` |
 | `desktop_readback` | `desktop_readback` section: `session` (a `backend:`-style config for the read-back session), `search` (`box`, `query`), `ready`, `identity`, `fields` | `credentials` (env-var names), `sign_in`, `search.submit`, `open.results`, `not_found`, per-control `shows` / `region` / `at`, per-field `date_format` / `casefold`, `min_ocr_confidence`, `navigation_timeout_s`, `settle_s` |
+| `deferred_report` | `deferred_report` section: `report` (`format`, and for csv/text its columns or pattern and `accept`), `key`, `deadline_hours`, `ledger` | `report.reject`, `describe` |
 | `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `path_params`, `auth`, `records_drop_fields` |
 | `graphql` | `base_url` + `graphql_query` | `graphql_variables` (`{param: ...}` entity binding), `graphql_records_path`, `graphql_freshness_field` + `graphql_freshness_window_s`, `auth` |
 | `fhir` | `base_url` | `resource_type`, `search_params`, `search_param_exprs`, `field_paths`, `access_token_env` or `smart_backend`, `verify_tls`, `records_drop_fields` |
@@ -1033,6 +1163,7 @@ softens one:
 | `unavailable` | system of record unreachable / credential failure | `RECONCILIATION_REQUIRED` |
 | `stale` | data read but outside the declared freshness window | `RECONCILIATION_REQUIRED` |
 | `indeterminate` | cannot certify for another reason (e.g. unreadable baseline) | `RECONCILIATION_REQUIRED` |
+| `indeterminate` with a deferred check | the save waits for its declared later report (`deferred_report`) | `SAVED_AWAITING_CHECK` when every other step is settled; `VERIFIED` or `RECONCILIATION_REQUIRED` once the report settles it |
 
 ### Confidence tiers (screen read-back is demoted, explicitly)
 

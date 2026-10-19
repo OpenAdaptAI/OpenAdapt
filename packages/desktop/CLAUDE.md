@@ -28,8 +28,9 @@ perf: short description         -> patch bump
 A pull request with a `feat`, `fix` or `perf` commit must bump the version, or
 the `desktop release intent` check fails. Run
 `python scripts/prepare_release.py` in `packages/desktop`, review the new
-`CHANGELOG.md` section, and commit. After merge, `desktop-release.yml` publishes
-the version to PyPI and tags `openadapt-desktop-vX.Y.Z`. See RELEASES.md.
+`CHANGELOG.md` section, and commit. After merge, `desktop-release.yml` builds
+the wheel, the sdist and every installer, and publishes one
+`openadapt-desktop-vX.Y.Z` release and the PyPI package. See RELEASES.md.
 
 ---
 

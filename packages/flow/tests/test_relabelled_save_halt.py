@@ -187,5 +187,5 @@ def test_reviewed_risk_makes_the_halt_repairable(bundle, tmp_path) -> None:
     assert steps_requiring_reconciliation(report) == []
     found = _repairable(report, workflow)
     assert not isinstance(found, str), found
-    step, index, halted = found
-    assert (step.id, index, halted.step_id) == ("step_015", 3, "step_015")
+    step, mode, halted = found
+    assert (step.id, mode, halted.step_id) == ("step_015", "replace", "step_015")

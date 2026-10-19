@@ -6,23 +6,27 @@ none of the recorded ways to find it work. Without self-repair, the run stops
 and waits for a person to re-teach the step.
 
 Self-repair closes that loop. A computer-use agent proposes a fix for the
-halted step. Flow replays the fix up to the save without saving, and checks
-that the form and the record are the same as in the recording. Then one
+halted step: one corrected click, or a short bridge of up to three new
+actions when the vendor added a required dialog or moved a control into a
+menu. Flow replays the fix up to the save without saving, and checks that the
+form and the record are the same as in the recording. Then one
 person accepts the fix with one tap, on the phone or at a terminal, and the run
 resumes. Healthy runs never call the agent and record zero model calls.
 
 Module: `openadapt_flow.repair.self_repair`. CLI: `openadapt-flow run
 --self-repair`. Tests: `tests/test_self_repair.py`,
-`tests/test_self_repair_cli.py`.
+`tests/test_self_repair_cli.py`, `tests/test_self_repair_bridge.py`.
 
 ## What happens when a run halts
 
 1. **Halt.** The run halts as usual. Self-repair starts only when all of
    these hold:
    - no input reached a step that saves, and no effect was observed;
-   - the halted step is a click that never acted;
-   - the halt is one of the ladder's own two refusals: it found no target, or
-     it found the target only by geometry and refused to act on that;
+   - the halted step is a click, and the halt is one of two kinds:
+     - **replace:** the click never acted, because the ladder found no target
+       or found it only by geometry and refused to act on that;
+     - **after:** a click that doesn't save acted on the target the ladder
+       found, but its expected screen never came (a new dialog appeared);
    - the workflow has exactly one save (for now).
 
    A halt on the record check (an identity mismatch) is never repaired, and
@@ -41,18 +45,43 @@ Module: `openadapt_flow.repair.self_repair`. CLI: `openadapt-flow run
    `openadapt-flow qualify set-risk` makes the same halt
    `HALTED_BEFORE_EFFECT`, and self-repair can take it.
 2. **Propose.** The repair agent is shown the step's intent, the recorded
-   evidence (the target crop, its label, its place) and the live screen. It
-   proposes one action in its own dialect. Its model calls and their cost go
-   into the ledger.
-3. **Patch.** Flow builds a patched anchor from the live screen at the
-   proposed point: a new template crop, the DOM locator under the point, and
-   the label read there. Identity evidence is copied unchanged, so the patch
-   can't weaken the record check (the repair invariants check this again).
-   Flow refuses the proposal when:
-   - the step saves and the new control does not read as a save (for example,
-     `Consult` for a step recorded on `Save Encounter`);
-   - the step does not save and the new control reads as a save;
-   - the new control is one that another step already uses.
+   evidence (the target crop, its label, its place), the live screen, the
+   halt kind, and for `after` the text of the screen the step expected. It
+   proposes one action, or a bridge of up to three, in its own dialect. Its
+   model calls and their cost go into the ledger.
+3. **Patch.** Flow builds the patch on the halted page, one action at a time.
+   - **replace:** the last action becomes the halted step's new target. Flow
+     builds it from the live screen with the heal code: a new template crop,
+     the DOM locator under the point, and the label read there. Identity
+     evidence is copied unchanged, so the patch can't weaken the record check
+     (the repair invariants check this again). Actions before it, such as
+     opening a menu, become new steps that run first.
+   - **after:** every action becomes a new step after the halted one. The
+     last new step takes over the halted step's expected screen, and the
+     halted step now expects the new dialog.
+   - **New steps.** Each new click is captured from the live screen and then
+     performed, so the next action sees the screen it will act on. It gets
+     the same evidence a recorded click has: a template crop, its DOM
+     locator, a postcondition derived from the before and after screens, and
+     an identity check. The identity is the record the page shows under the
+     click, hashed with the bundle's salt, and it must match a record the
+     recording verified.
+
+   Flow refuses the proposal, before performing anything that remains, when:
+   - the bridge has more than three actions;
+   - a saving step's new control does not read as a save (for example,
+     `Consult` for a step recorded on `Save Encounter`), or a step that
+     doesn't save would point at one that does;
+   - a new step would click a control that reads as a save, or one with no
+     readable label (an unlabeled control may save);
+   - a new step's control is not inside the recorded record;
+   - the new control is one that another step already uses;
+   - the bridge types a value that is neither one of the item's parameters
+     (the step is then bound to that parameter) nor text the screen shows at
+     that moment.
+
+   After an attempt that performed bridge actions, the next attempt first
+   reaches the same halt again in a fresh session, behind the probe gate.
 4. **Probe.** The patched bundle replays in a fresh session, admitted by the
    same run gate with its own authorization. A gate stops it at the last point
    before the first save, after the target and the record check resolved.
@@ -61,7 +90,8 @@ Module: `openadapt_flow.repair.self_repair`. CLI: `openadapt-flow run
    | Check | Passes when |
    | --- | --- |
    | `nothing_written` | No earlier step that saves received input. |
-   | `target_found` | The deterministic ladder found the patched target by its DOM locator, template, or label, not by geometry or a model. |
+   | `zero_model_calls` | The run made no model call before the save. |
+   | `target_found` | Every new or re-targeted step ran, and the deterministic ladder found its target by DOM locator, template, or label, not by geometry or a model. |
    | `same_record` | Every identity check in the probe verified, including the save's own. |
    | `same_fields` | Each value the workflow typed is in a form field. |
    | `same_form` | The form is exactly as it was when the run halted (when the halt was at this save). |
@@ -72,11 +102,11 @@ Module: `openadapt_flow.repair.self_repair`. CLI: `openadapt-flow run
    [repair store](REPAIR_LIFECYCLE.md): source `model_suggestion`, provenance
    `repaired_by: self_repair`, with the agent's id. The replay and fault
    campaigns run before anyone is asked:
-   - When the step's identity can be read from pixels (an OCR band or
-     identity tokens), Flow runs the existing frame campaigns, plus the live
-     probe as one more healthy case.
-   - When the step's identity is read from the DOM, the frame campaigns can't
-     judge it. The live probe is the healthy case, and each fault probe is an
+   - When the patch re-targets one step and its identity can be read from
+     pixels (an OCR band or identity tokens), Flow runs the existing frame
+     campaigns, plus the live probe as one more healthy case.
+   - When the step's identity is read from the DOM, or the patch adds steps,
+     the frame campaigns can't judge it. The live probe is the healthy case, and each fault probe is an
      adversarial case: a session that presents a fault (for example, the
      record is missing) and must stop before the save. Without fault probes
      the candidate stops here with status `needs_fault_probes`.
@@ -209,7 +239,12 @@ class MyAgent:
         return RepairProposal(action=action, model_calls=1, cost_usd=0.004)
 ```
 
-- **One action.** A proposal is exactly one click or double click, matching
+- **A bridge.** `RepairProposal(actions=[...])` gives up to
+  `request.max_actions` actions in order: clicks, double clicks, and typing.
+  Type only a parameter's value (`request.param_values`) or text the screen
+  shows. In `replace` mode the last action must be the halted step's kind of
+  click.
+- **One action.** A single-action proposal is one click or double click, matching
   the halted step's action. The agent may give a coordinate or, in the
   `playwright_mcp` dialect, a unique CSS selector. Anything else is refused.
   Return `None` to give up.
@@ -314,6 +349,22 @@ because it changes the save.
 `tests/test_self_repair.py` does all of this with a scripted agent in about 40
 seconds.
 
+Two more drifts need a bridge:
+
+- `?drift=menu` moves the save behind a menu: **Actions → Billing → Submit
+  encounter**. The run halts at the save (`replace`). A bridge of
+  `#actions-menu`, `#menu-billing`, `#menu-submit` adds two new steps and
+  re-targets the save.
+- `?drift=provider` adds a required **Ordering provider** screen after New
+  Encounter. The run halts there (`after`). A bridge of `#provider-1`,
+  `#provider-use` adds two new steps. The screen also has a `Save as draft`
+  button and an optional note field, for the refusals: clicking `Save as
+  draft` is refused, and so is typing a note that is not a parameter value.
+
+`tests/test_self_repair_bridge.py` runs both bridges to `VERIFIED` and the
+three refusals (a bridge that would save, one that types an invented value,
+one longer than three actions).
+
 ## Standard changes: repairs without a person
 
 In ITIL, a *standard change* is a low-risk change that a person approves
@@ -358,8 +409,10 @@ Policies signed before this field existed keep their signatures.
 The signer can't be one of the repair agents. A dismiss label that reads as a
 save (for example `Submit`) is refused when the policy is built. The
 `dismiss_dialog` and `menu_path` classes judge fixes that add steps, which
-the bridge follow-up to self-repair produces. Until that lands, self-repair
-proposes one action and only `relabel_or_move` fixes reach the policy.
+self-repair proposes as a bridge (see [What happens when a run
+halts](#what-happens-when-a-run-halts)). A bridge that fits neither class,
+such as choosing a value in a new dialog or reaching the save through a menu,
+goes to a person.
 
 ### When a fix applies without a person
 
@@ -485,9 +538,12 @@ live RDP or Citrix session.
 
 ## Limits
 
-- Only clicks on linear steps are repaired, one halted step per run, in a
-  workflow with exactly one save. When the patched run halts at another step,
-  the probe fails with that reason.
+- One halted click per run is repaired, by one corrected click or a bridge of
+  up to three actions, in a linear workflow with exactly one save. When the
+  patched run halts at another step, the probe fails with that reason.
+- A bridge's new clicks need a DOM identity (a browser) and a readable,
+  non-saving label. A bridge acts on the halted page while it is captured;
+  each action is checked first, and the page is discarded afterwards.
 - The probe stops before every step the run gate classifies as a save, the
   same fail-closed classifier the approval gate uses. A step that writes but
   that the classifier misses would run during a probe.

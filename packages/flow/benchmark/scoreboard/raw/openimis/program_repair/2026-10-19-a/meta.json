@@ -1,0 +1,19 @@
+{
+  "protocol_version": "2026-10-18.1",
+  "written_at": "2026-10-19T09:09:37-0400",
+  "machine": "arm64 Darwin 24.6.0",
+  "cpu_count": 12,
+  "python": "3.12.13",
+  "engine": {
+    "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+    "git_head": "42aadc09d9d0f514bfad7efa1923866e70c6782b"
+  },
+  "benchmark_git_head": "42aadc09d9d0f514bfad7efa1923866e70c6782b",
+  "task": "openimis",
+  "arm": "program_repair",
+  "program_run": "launch-4",
+  "profile": "demo (plain Replayer, SQL record check attached); not admitted",
+  "repair": "SelfRepair (#1265); no signed repair policy (#1294); no fault probe",
+  "approver": "scoreboard:scripted-approver (stands in for a person)",
+  "model": "claude-sonnet-5-5 (repair agent, only if a halt is accepted)"
+}

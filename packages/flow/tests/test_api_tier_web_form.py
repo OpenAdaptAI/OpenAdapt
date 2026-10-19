@@ -672,18 +672,21 @@ def test_gui_steps_run_when_the_api_step_may_not(tmp_path, mutate, kw, reason):
     assert ("press", "Tab") in [(a[0], a[1]) for a in backend.actions]
 
 
-@pytest.mark.parametrize(
-    "mode, runs", [("each_item", False), ("problems_only", False), ("not_gated", True)]
-)
-def test_only_an_ungated_run_uses_api_steps(mode, runs):
+@pytest.mark.parametrize("mode", ["each_item", "problems_only", "not_gated"])
+@pytest.mark.parametrize("can_prepare", [True, False])
+def test_a_gated_run_uses_api_steps_that_can_show_their_request(mode, can_prepare):
     from openadapt_flow.approval_mode.model import ApprovalMode
 
-    replayer = Replayer(FakeBackend(), vision=FakeVision(), web_form_actuator=object())
+    actuator = WebFormActuator(FakeTransport()) if can_prepare else object()
+    replayer = Replayer(FakeBackend(), vision=FakeVision(), web_form_actuator=actuator)
     replayer.approval_gate = type("Gate", (), {"mode": ApprovalMode(mode)})()
     _end, _save, reason = replayer._web_form_span_at(_span_workflow(), 0, durable=False)
+    # Under an approval mode the person approves the exact request
+    # (tests/test_api_step_approval.py), so the actuator must prepare it.
+    runs = can_prepare or mode == "not_gated"
     assert (reason is None) is runs
     if not runs:
-        assert "approval mode" in reason
+        assert "approval mode needs the exact request" in reason
 
 
 class LostResponseActuator(ScriptedActuator):
