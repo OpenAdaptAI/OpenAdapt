@@ -49,11 +49,14 @@ def _fresh(path: Path) -> Path:
     return path / "items.csv"
 
 
-def openimis_demo(run_id: str, program_only: bool = False) -> None:
+def openimis_demo(
+    run_id: str, program_only: bool = False, first_run_only: bool = False
+) -> None:
     src = DEMO / run_id
     if not program_only:
         _openimis_first_run(src, run_id)
-    _openimis_program(src, run_id)
+    if not first_run_only:
+        _openimis_program(src, run_id)
 
 
 def _openimis_first_run(src: Path, run_id: str) -> None:
@@ -101,6 +104,9 @@ def _openimis_first_run(src: Path, run_id: str) -> None:
         task="openimis",
         arm="first_run",
         model=ledger["model"],
+        # One model per table: arm 2's row is the Sonnet 5.5 run. The launch
+        # demo's Opus 5.5 run stays here as raw data.
+        in_table=ledger["model"] == "claude-sonnet-5-5",
         imported_from=str(src.relative_to(REPO)),
         source_sha256={
             p.name: _sha(p)
@@ -294,10 +300,11 @@ def main() -> int:
     p = sub.add_parser("openimis-demo")
     p.add_argument("--run-id", required=True)
     p.add_argument("--program-only", action="store_true")
+    p.add_argument("--first-run-only", action="store_true")
     sub.add_parser("openemr")
     args = parser.parse_args()
     if args.cmd == "openimis-demo":
-        openimis_demo(args.run_id, args.program_only)
+        openimis_demo(args.run_id, args.program_only, args.first_run_only)
     else:
         openemr()
     return 0

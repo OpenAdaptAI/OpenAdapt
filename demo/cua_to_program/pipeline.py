@@ -177,6 +177,7 @@ def cmd_record(args: argparse.Namespace) -> int:
             ledger_path=out / "agent_ledger.json",
             frames_dir=out / "agent_frames",
             max_cost_usd=args.max_cost,
+            model=args.model,
         )
         model_key = load_customer_model_key("anthropic")
     else:
@@ -637,6 +638,11 @@ def main() -> int:
     p = sub.add_parser("record")
     p.add_argument("--agent", choices=["claude", "scripted"], default="claude")
     p.add_argument("--max-cost", type=float, default=4.0)
+    p.add_argument(
+        "--model",
+        default="claude-opus-5-5",
+        help="Claude model for --agent claude (the launch demo used claude-opus-5-5)",
+    )
     p.set_defaults(func=cmd_record)
     sub.add_parser("admit").set_defaults(func=cmd_admit)
     sub.add_parser("compile").set_defaults(func=cmd_compile)

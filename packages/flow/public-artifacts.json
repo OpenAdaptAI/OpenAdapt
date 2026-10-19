@@ -652,6 +652,10 @@
       "sha256": "b831d52f5a387abda6467886e9fd1f06fdb44e8127cc9da4b23b5424e5f2fbef"
     },
     {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/hand_check.json",
+      "sha256": "c7f91e26337a880ed3d97614ed6da0f8ded6396e1bacea6935932a83a09cc5d6"
+    },
+    {
       "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/items.csv",
       "sha256": "f01bdc1ea66d42a17bc8c6651b3c4e05b663da67b09b706e080639ed61e9badf"
     },
@@ -1084,6 +1088,10 @@
       "sha256": "77dcd3f4575e3854aeb4172a453efdbdce5dc5a9889abc3a3d8747d150a578b6"
     },
     {
+      "path": "benchmark/scoreboard/raw/openemr_referral/agent/study-main-0c642bc0/hand_check.json",
+      "sha256": "e2d9e3f1a15e84ed5d5fc0b293610d5f680a8e166b6d3b30134a22010b85ea60"
+    },
+    {
       "path": "benchmark/scoreboard/raw/openemr_referral/agent/study-main-0c642bc0/items.csv",
       "sha256": "10e47e5abf98172ccd3068c8005a1faeeb1cd317e8bb44a26a885fa0e7575f01"
     },
@@ -1116,8 +1124,12 @@
       "sha256": "5a1f6e18b6d1736702dbfea5c3ae9d4562ac23090170d55a8f1eea3681f7352b"
     },
     {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/hand_check.json",
+      "sha256": "e2e1761631920004bf67b177afb5d65c42677a26e28540f65ec750cc37561fc0"
+    },
+    {
       "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/items.csv",
-      "sha256": "8d672d6dfa3444fe6493c96b39b20ac050c910d9a0292fab02dd36912c6a9929"
+      "sha256": "d1efa8d67bb331c14e9ece8f9097fe693c9305f0712612904c3a671f90e1f9d3"
     },
     {
       "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-001.json",
@@ -1316,8 +1328,12 @@
       "sha256": "a1be20a3d613a099c84820483a6442cf7f2a1ec41913839a6aae80601db77389"
     },
     {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-050-2.json",
+      "sha256": "aeb081f8d337b1b7e7e50ac06c7855e7fdc2b7242e421b615152fa0c77bc581f"
+    },
+    {
       "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/meta.json",
-      "sha256": "b9949c3b20f19ce6fc6733c070d31f07731bdf97a6a1076f0bc8b749730bfec0"
+      "sha256": "79cede4d506e1f271301c1e9616faa6c4171f4f5b12858bfa1c25a68da99443d"
     },
     {
       "path": "benchmark/scoreboard/raw/openimis/first_run/launch-4/items.csv",
@@ -1325,7 +1341,15 @@
     },
     {
       "path": "benchmark/scoreboard/raw/openimis/first_run/launch-4/meta.json",
-      "sha256": "2d1464611c08d74bbdc69ded97a5a367a21072e5b782e363bbd6958bc10920bb"
+      "sha256": "abe7035c8842b3680a38f5663d5c8b9c233e0b73e8c4664ccd7ed551ecbf6158"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/first_run/sb-sonnet-1/items.csv",
+      "sha256": "21985dcc3e70e12891679233cfc173f81c91a2ae68e281985b2a9abd551890aa"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/first_run/sb-sonnet-1/meta.json",
+      "sha256": "f609091c0c92d8b909ed75f2a90bb507d24438262afd9d618174b8ca2699bdd9"
     },
     {
       "path": "benchmark/scoreboard/raw/openimis/program/launch-4-c100/items.csv",
@@ -1344,12 +1368,20 @@
       "sha256": "09a60306c3355fb57d58c108c3c5762dd30f3a25dd18885aefc080995c4b1b36"
     },
     {
+      "path": "benchmark/scoreboard/raw/openimis/program_repair/2026-10-19-a/items.csv",
+      "sha256": "d03ce4c699bee7e2a658e4dc10aa40e2ce53cd72185ce8e04ec428aff8372743"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/program_repair/2026-10-19-a/meta.json",
+      "sha256": "aec5c9f9f5beb069dcb330f0b8631065b05a99ac019cdc9f74e6e2d065f1457f"
+    },
+    {
       "path": "benchmark/scoreboard/raw/spend.json",
-      "sha256": "a7c00271e64ef3f18dc3d008690e7609bce91542b0da5eb3bd7df2bec14f40ea"
+      "sha256": "0ea09548610ba073a8e4c75421f455b181cad5e8146f6789c465f0758a76dd80"
     },
     {
       "path": "benchmark/scoreboard/scoreboard.json",
-      "sha256": "1c595b5bbb392a09d716d784ed1ac2456e5d96783f796d33921900e8dbecdb99"
+      "sha256": "da8c58c28fffc7b7335b960996075971c4fa9b78424c65e88d6e5e704ebd5ad0"
     },
     {
       "path": "benchmark/scoreboard/superseded/mockmed/code_agent/2026-10-18-a/items.csv",

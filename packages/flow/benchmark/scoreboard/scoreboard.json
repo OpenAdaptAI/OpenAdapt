@@ -1,13 +1,13 @@
 {
   "protocol_version": "2026-10-18.1",
   "timed_load_max": 12.0,
-  "spend_usd": 6.730591,
+  "spend_usd": 7.8976,
   "tasks": {
     "mockmed": {
       "agent": {
         "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
-        "items": 82,
-        "attempts": 82,
+        "items": 100,
+        "attempts": 100,
         "runs": [
           "2026-10-18-a"
         ],
@@ -16,7 +16,7 @@
         "correct_rate": 1.0,
         "silent_wrong": 2,
         "safe_stops_normal": 0,
-        "fault_items": 35,
+        "fault_items": 53,
         "fault_items_by_kind": {
           "optimistic": {
             "correct": 0,
@@ -25,7 +25,7 @@
             "flagged_wrong": 0
           },
           "ui_change": {
-            "correct": 33,
+            "correct": 51,
             "silent_wrong": 0,
             "safe_stop": 0,
             "flagged_wrong": 0
@@ -37,24 +37,49 @@
             "flagged_wrong": 0
           }
         },
-        "planned_items": 82,
-        "done_correctly_all_items": 80,
+        "planned_items": 100,
+        "done_correctly_all_items": 98,
         "flagged_wrong": 0,
         "paused": 0,
         "model_calls_per_item": 5.0,
         "tokens_per_item": 40629,
-        "cost_usd_total": 3.1656,
+        "cost_usd_total": 3.8604,
         "cost_usd_per_item": 0.0386,
         "approvals_asked": 0,
-        "timed_correct_items": 0,
-        "item_s_median": null,
-        "item_s_p90": null,
-        "wall_s_median": null,
-        "wall_s_p90": null,
-        "items_per_hour": null,
+        "timed_correct_items": 3,
+        "item_s_median": 16.38,
+        "item_s_p90": 16.67,
+        "wall_s_median": 20.1,
+        "wall_s_p90": 20.22,
+        "items_per_hour": 181.1,
         "host_load_1m": {
-          "min": 19.51,
+          "min": 8.46,
           "max": 523.94
+        },
+        "hand_check": {
+          "rows_not_correct": 2,
+          "checked": 2,
+          "confirmed": 2,
+          "items": [
+            {
+              "run": "2026-10-18-a",
+              "item": 30,
+              "attempt": 1,
+              "fault": "optimistic",
+              "row_outcome": "silent_wrong",
+              "confirmed": true,
+              "evidence": "ledgers/item-030.json final_text says the note was saved and that the encounter list shows it in full. The fault server rejected the write, and the read-back of /api/db after the item found no record (readback=missing). The agent reported a save that did not land."
+            },
+            {
+              "run": "2026-10-18-a",
+              "item": 40,
+              "attempt": 1,
+              "fault": "wrong_record",
+              "row_outcome": "silent_wrong",
+              "confirmed": true,
+              "evidence": "ledgers/item-040.json final_text says it saved the note on Jane Sample's referral. The fault server stored the write on another patient, and the read-back found no Triage record for p1 with this note (readback=wrong). The agent reported success on a record saved to the wrong patient."
+            }
+          ]
         },
         "sources": [
           {
@@ -99,6 +124,12 @@
         "host_load_1m": {
           "min": 176.29,
           "max": 176.29
+        },
+        "hand_check": {
+          "rows_not_correct": 0,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
         },
         "sources": [
           {
@@ -163,6 +194,12 @@
           "min": 82.45,
           "max": 532.93
         },
+        "hand_check": {
+          "rows_not_correct": 4,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
         "sources": [
           {
             "run": "2026-10-18-a",
@@ -215,6 +252,103 @@
           "min": 2.572265625,
           "max": 17.49951171875
         },
+        "hand_check": {
+          "rows_not_correct": 10,
+          "checked": 10,
+          "confirmed": 10,
+          "items": [
+            {
+              "run": "study-main-0c642bc0",
+              "item": 204,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-02/4-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"I did not save a chart. OpenEMR flagged a possible existing patient, so I stopped as instructed.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 303,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-03/3-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"No chart was saved. I stopped because OpenEMR flagged a possible existing patient.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 402,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-04/2-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"No chart was saved. OpenEMR flagged a possible existing patient, so I stopped as instructed.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 501,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-05/1-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"I did not save a chart. OpenEMR warned of a possible existing patient when I clicked Create New Patient, so I cancelled.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 607,
+              "attempt": 1,
+              "fault": "none",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-06/7-r5-grace-adeyemi/transcript.json, kept with that study, not here) ends: \"I can't operate the browser, so I haven't registered anything. My calls to the `computer` tool returned an error saying no such tool exists, and no other browser tools are available to me.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 608,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-06/8-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"I did not save a chart. OpenEMR showed a possible existing patient, so I stopped, as instructed.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 707,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-07/7-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"I stopped without saving a chart. The EMR flagged a possible existing patient, so no new chart was created.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 806,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-08/6-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"No chart was saved. I stopped because OpenEMR showed a possible existing patient when I tried to create the chart.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 905,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-09/5-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"I stopped without saving a chart, because OpenEMR flagged a possible existing patient.\" The SQL read-back found no new chart"
+            },
+            {
+              "run": "study-main-0c642bc0",
+              "item": 1004,
+              "attempt": 1,
+              "fault": "duplicate_check",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "The study's transcript (runs/main-0c642bc0/agent-sonnet-warm/block-10/4-r6-rosa-delgado/transcript.json, kept with that study, not here) ends: \"No chart was saved. OpenEMR flagged a possible existing patient, so I stopped before creating anything.\" The SQL read-back found no new chart"
+            }
+          ]
+        },
         "sources": [
           {
             "run": "study-main-0c642bc0",
@@ -260,6 +394,12 @@
         "host_load_1m": {
           "min": 4.28,
           "max": 4.28
+        },
+        "hand_check": {
+          "rows_not_correct": 0,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
         },
         "sources": [
           {
@@ -312,6 +452,12 @@
           "min": 3.044921875,
           "max": 12.78515625
         },
+        "hand_check": {
+          "rows_not_correct": 10,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
         "sources": [
           {
             "run": "study-main-0c642bc0",
@@ -328,36 +474,59 @@
     "openimis": {
       "agent": {
         "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
-        "items": 43,
-        "attempts": 43,
+        "items": 50,
+        "attempts": 51,
         "runs": [
           "2026-10-18-a"
         ],
-        "normal_items": 43,
-        "correct": 43,
+        "normal_items": 49,
+        "correct": 49,
         "correct_rate": 1.0,
         "silent_wrong": 0,
         "safe_stops_normal": 0,
-        "fault_items": 0,
-        "fault_items_by_kind": {},
-        "planned_items": 43,
-        "done_correctly_all_items": 43,
+        "fault_items": 1,
+        "fault_items_by_kind": {
+          "ui_change": {
+            "correct": 1,
+            "silent_wrong": 0,
+            "safe_stop": 0,
+            "flagged_wrong": 0
+          }
+        },
+        "planned_items": 50,
+        "done_correctly_all_items": 50,
         "flagged_wrong": 0,
         "paused": 0,
-        "model_calls_per_item": 7.33,
-        "tokens_per_item": 75292,
-        "cost_usd_total": 2.5255,
-        "cost_usd_per_item": 0.0587,
+        "model_calls_per_item": 7.34,
+        "tokens_per_item": 75520,
+        "cost_usd_total": 2.9414,
+        "cost_usd_per_item": 0.0588,
         "approvals_asked": 0,
-        "timed_correct_items": 3,
-        "item_s_median": 36.92,
-        "item_s_p90": 41.28,
-        "wall_s_median": 44.82,
-        "wall_s_p90": 49.05,
-        "items_per_hour": 79.0,
+        "timed_correct_items": 4,
+        "item_s_median": 39.64,
+        "item_s_p90": 52.49,
+        "wall_s_median": 47.46,
+        "wall_s_p90": 74.58,
+        "items_per_hour": 64.9,
         "host_load_1m": {
           "min": 6.94,
           "max": 498.31
+        },
+        "hand_check": {
+          "rows_not_correct": 1,
+          "checked": 1,
+          "confirmed": 1,
+          "items": [
+            {
+              "run": "2026-10-18-a",
+              "item": 50,
+              "attempt": 1,
+              "fault": "ui_change",
+              "row_outcome": "safe_stop",
+              "confirmed": true,
+              "evidence": "Harness failure, not the agent's: the item process was killed at 600 s with 0 model calls (ItemTimeout), and the insuree's claim count did not change. Attempt 2 saved claim 50 correctly with the relabelled Save."
+            }
+          ]
         },
         "sources": [
           {
@@ -375,7 +544,7 @@
         "items": 1,
         "attempts": 1,
         "runs": [
-          "launch-4"
+          "sb-sonnet-1"
         ],
         "normal_items": 1,
         "correct": 1,
@@ -388,10 +557,10 @@
         "done_correctly_all_items": 1,
         "flagged_wrong": 0,
         "paused": 0,
-        "model_calls_per_item": 8.0,
-        "tokens_per_item": 87010,
-        "cost_usd_total": 0.1176,
-        "cost_usd_per_item": 0.1176,
+        "model_calls_per_item": 7.0,
+        "tokens_per_item": 70048,
+        "cost_usd_total": 0.0564,
+        "cost_usd_per_item": 0.0564,
         "approvals_asked": 0,
         "timed_correct_items": 0,
         "item_s_median": null,
@@ -400,14 +569,20 @@
         "wall_s_p90": null,
         "items_per_hour": null,
         "host_load_1m": null,
+        "hand_check": {
+          "rows_not_correct": 0,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
         "sources": [
           {
-            "run": "launch-4",
-            "imported_from": "demo/cua_to_program/results/launch-4",
-            "model": "claude-opus-5-5",
+            "run": "sb-sonnet-1",
+            "imported_from": "demo/cua_to_program/results/sb-sonnet-1",
+            "model": "claude-sonnet-5-5",
             "engine": {
               "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
-              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+              "git_head": "76a99fdc8732566028e757c666c83ecdec955bac"
             },
             "note": "host load not sampled for this run; untimed"
           }
@@ -454,6 +629,12 @@
           "min": 59.0,
           "max": 619.5
         },
+        "hand_check": {
+          "rows_not_correct": 6,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
         "sources": [
           {
             "run": "launch-4",
@@ -470,6 +651,64 @@
             "engine": {
               "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
               "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+            },
+            "profile": "demo (plain Replayer, SQL record check attached); not admitted"
+          }
+        ]
+      },
+      "program_repair": {
+        "label": "3r. Compiled program with self-repair (#1265, #1294)",
+        "items": 6,
+        "attempts": 8,
+        "runs": [
+          "2026-10-19-a"
+        ],
+        "normal_items": 5,
+        "correct": 5,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 1,
+        "fault_items_by_kind": {
+          "ui_change": {
+            "correct": 0,
+            "silent_wrong": 0,
+            "safe_stop": 1,
+            "flagged_wrong": 0
+          }
+        },
+        "planned_items": 56,
+        "done_correctly_all_items": 5,
+        "flagged_wrong": 0,
+        "paused": 50,
+        "model_calls_per_item": 0.0,
+        "tokens_per_item": 0,
+        "cost_usd_total": 0.0,
+        "cost_usd_per_item": 0.0,
+        "approvals_asked": 0,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": {
+          "min": 11.22,
+          "max": 26.3
+        },
+        "hand_check": {
+          "rows_not_correct": 3,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
+        "sources": [
+          {
+            "run": "2026-10-19-a",
+            "model": "claude-sonnet-5-5 (repair agent, only if a halt is accepted)",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "42aadc09d9d0f514bfad7efa1923866e70c6782b"
             },
             "profile": "demo (plain Replayer, SQL record check attached); not admitted"
           }

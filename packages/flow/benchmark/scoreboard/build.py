@@ -35,6 +35,7 @@ ARM_ORDER = [
     "agent",
     "first_run",
     "program",
+    "program_repair",
     "program_fast",
     "program_api",
     "parallel",
@@ -44,6 +45,7 @@ ARM_LABEL = {
     "agent": "1. Agent alone (Claude Sonnet 5.5 computer use)",
     "first_run": "2. Agent's first run under OpenAdapt (recorded, read back, compiled)",
     "program": "3. Compiled program driving the UI",
+    "program_repair": "3r. Compiled program with self-repair (#1265, #1294)",
     "program_fast": "4. Compiled program, throughput fast path",
     "program_api": "5. Compiled program with the API step",
     "parallel": "6. Fast path or API step, N parallel workers",
@@ -145,10 +147,18 @@ def build() -> dict[str, Any]:
     for items in sorted(schema.RAW.glob("*/*/*/items.csv")):
         run = items.parent
         arm, task = run.parent.name, run.parent.parent.name
+        meta = run / "meta.json"
+        if meta.is_file() and json.loads(meta.read_text()).get("in_table") is False:
+            # Kept as raw data, not in the table (its meta.json says why).
+            continue
         rows = schema.read_rows(items)
         tasks.setdefault(task, {}).setdefault(arm, {"rows": [], "meta": []})
         tasks[task][arm]["rows"].extend(rows)
-        meta = run / "meta.json"
+        hc = run / "hand_check.json"
+        if hc.is_file():
+            tasks[task][arm].setdefault("hand_checks", []).extend(
+                {"run": run.name, **i} for i in json.loads(hc.read_text())["items"]
+            )
         if meta.is_file():
             tasks[task][arm]["meta"].append(
                 {"run": run.name, **json.loads(meta.read_text())}
@@ -167,9 +177,28 @@ def build() -> dict[str, Any]:
             arms, key=lambda a: ARM_ORDER.index(a) if a in ARM_ORDER else 99
         ):
             data = arms[arm]
+            # Rows that are not correct and not paused, against the hand check.
+            to_check = {
+                (r["run_id"], int(r["item"]), int(r["attempt"]))
+                for r in data["rows"]
+                if r["outcome"] not in ("correct", "paused")
+            }
+            checks = data.get("hand_checks", [])
+            checked = {(c["run"], c["item"], c["attempt"]) for c in checks}
             out["tasks"][task][arm] = {
                 "label": ARM_LABEL.get(arm, arm),
                 **summarize(data["rows"]),
+                "hand_check": {
+                    "rows_not_correct": len(to_check),
+                    "checked": len(to_check & checked),
+                    "confirmed": sum(
+                        1
+                        for c in checks
+                        if c["confirmed"]
+                        and (c["run"], c["item"], c["attempt"]) in to_check
+                    ),
+                    "items": checks,
+                },
                 "sources": [
                     {
                         k: m.get(k)
@@ -240,6 +269,24 @@ def markdown(sb: dict[str, Any]) -> str:
             if s["fault_items"]:
                 lines.append(
                     f"- {task} / {arm}: fault items {json.dumps(s['fault_items_by_kind'])}"
+                )
+        for arm, s in arms.items():
+            hc = s["hand_check"]
+            if arm == "agent" and hc["rows_not_correct"]:
+                lines.append(
+                    f"- {task} / {arm}: hand check of rows that are not correct: "
+                    f"{hc['checked']} of {hc['rows_not_correct']} checked, "
+                    f"{hc['confirmed']} outcomes confirmed"
+                    + "".join(
+                        f"; item {c['item']} ({c['fault']}): {c['row_outcome']}"
+                        + (
+                            f", {c['evidence'].rstrip('.')}"
+                            if c["row_outcome"] in ("silent_wrong", "flagged_wrong")
+                            else ""
+                        )
+                        for c in hc["items"]
+                    )
+                    + " (evidence for each in hand_check.json)"
                 )
         lines.append("")
     lines.append(
