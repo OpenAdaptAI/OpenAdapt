@@ -3293,6 +3293,26 @@ class KnownIdEvidence(BaseModel):
     export_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
+class IdentityLook(BaseModel):
+    """One extra look taken before stopping on a look-alike identifier.
+
+    See :mod:`openadapt_flow.runtime.identity_looks`. Holds no identifier
+    values: only what kind of look it was, what it concluded, and the
+    SHA-256 of the frame it read when it read one.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["frame", "magnified", "known_ids", "clipboard"]
+    #: ``agrees``: consistent with the first read, settles nothing alone.
+    #: ``resolves``: names exactly one record, the expected one.
+    #: ``contradicts``: names another record; the step stops.
+    #: ``unavailable``: the look could not be taken or read nothing usable.
+    outcome: Literal["agrees", "resolves", "contradicts", "unavailable"]
+    reason: Optional[str] = Field(default=None, max_length=80)
+    frame_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
 class IdentityCheck(BaseModel):
     """Outcome of the pre-click target-identity check (runtime.identity).
 
@@ -3375,6 +3395,20 @@ class IdentityCheck(BaseModel):
             "Set when the known-ID list was needed but may not be used: no "
             "admission confirmation, the export changed since it was "
             "confirmed, or it is older than the configured age. The step halts."
+        ),
+    )
+    looks: list[IdentityLook] = Field(
+        default_factory=list,
+        description=(
+            "Extra looks taken because the first read abstained only on a "
+            "look-alike identifier (runtime.identity_looks), in order."
+        ),
+    )
+    look_halt: Optional[Literal["identity_look_changed_screen"]] = Field(
+        default=None,
+        description=(
+            "Set when an extra look changed the screen outside the "
+            "identifier it read. The step halts."
         ),
     )
 

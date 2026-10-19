@@ -35,6 +35,7 @@ promote a new bundle.
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import hashlib
 import hmac
@@ -99,6 +100,7 @@ from openadapt_flow.ir import (
     FreshActuationEvent,
     HaltObservation,
     IdentityCheck,
+    IdentityLook,
     IdentitySignalEvidence,
     Interstitial,
     InterstitialActionResult,
@@ -151,6 +153,7 @@ from openadapt_flow.run_gate import is_consequential
 from openadapt_flow.runtime import heal as heal_mod
 from openadapt_flow.runtime import healing as healing_mod
 from openadapt_flow.runtime import identity as identity_mod
+from openadapt_flow.runtime import identity_looks as looks_mod
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     RuntimeParamScalar,
@@ -184,6 +187,9 @@ from openadapt_flow.runtime.effects.adapter import (
 )
 from openadapt_flow.runtime.effects.adapter import (
     verifier_identity as effect_verifier_identity,
+)
+from openadapt_flow.runtime.known_ids import (
+    lookalike_class as known_ids_lookalike_class,
 )
 from openadapt_flow.runtime.program_predicates import (
     evaluate_program_predicate,
@@ -675,9 +681,19 @@ class Replayer:
             structured-text, pixel-compare, OCR, and halt with no model.
         known_ids: Optional complete ``runtime.known_ids.KnownIdList``. When
             set, an OCR identity check that abstained only because the band
-            rests on a look-alike identifier is lifted to verified if two OCR
-            reads agree and exactly one listed identifier is in that
-            look-alike class. None (default) keeps the abstain.
+            rests on a look-alike identifier is lifted to verified if the
+            reads of three separate screenshots agree and exactly one listed
+            identifier is in that look-alike class. None (default) keeps the
+            abstain.
+        identity_copy: Optional
+            :class:`~openadapt_flow.runtime.identity_looks.IdentityCopyConfig`.
+            With a ``read_clipboard`` channel, a look-alike abstain on a step
+            with a recorded identifier cell takes one more look: select the
+            cell, copy it, read the clipboard. The copy settles the record only
+            when it equals a run parameter embedded in the band; it stops the
+            run when it names another record or the screen changed outside the
+            cell. Never taken in governed or qualification runs. None
+            (default) takes no copy look.
         effect_verifier: Optional system-of-record ``EffectVerifier``
             (``runtime.effects``) bound to the deployment's system of record
             (a REST/FHIR API, a document store). When set, any step that
@@ -764,6 +780,8 @@ class Replayer:
     _render_scale_attempted: bool = False
     _render_scale_inner: Optional[Backend] = None
     _render_scale_evidence: Optional[dict[str, Any]] = None
+    identity_copy: Optional[looks_mod.IdentityCopyConfig] = None
+    _identity_input_looks: bool = False
 
     def __init__(
         self,
@@ -808,6 +826,7 @@ class Replayer:
         attended_draft_by: Optional[Any] = None,
         draft_key_dir: Optional[Path] = None,
         read_clipboard: Optional[Any] = None,
+        identity_copy: Optional[looks_mod.IdentityCopyConfig] = None,
         deployment_surface: Optional[str] = None,
         layout_drift: Optional[bool] = None,
         layout_drift_tolerances: Optional[Any] = None,
@@ -1073,6 +1092,13 @@ class Replayer:
         # Optional complete known-ID list (runtime.known_ids): lifts a
         # look-alike identifier abstain only when no listed twin exists.
         self.known_ids = known_ids
+        # Optional select-and-copy look for look-alike identifiers
+        # (runtime.identity_looks). It is input, so only the step-entry
+        # identity check takes it; the actuation-time check reuses its read
+        # through a pixel-matched binding.
+        self.identity_copy = identity_copy
+        self._identity_input_looks = False
+        self._identity_look_bindings: dict[str, looks_mod.LookBinding] = {}
         # Optional VLM drift-oracle (state-verifier), OFF by default. When set,
         # it may CONFIRM a render-drift-sensitive postcondition that
         # deterministically false-failed (the same heal-under-drift the
@@ -7446,7 +7472,7 @@ class Replayer:
                 )
                 last_frame = before_png
                 pre_identity_halt = (result.safety_halt, result.failure_category)
-                error = self._identity_gate_error(
+                error = self._entry_identity_gate_error(
                     step,
                     resolution,
                     before_png,
@@ -7517,7 +7543,7 @@ class Replayer:
                         result.resolution = resolution
                         # The first read's halt flags belong to that read.
                         result.safety_halt, result.failure_category = pre_identity_halt
-                        error = self._identity_gate_error(
+                        error = self._entry_identity_gate_error(
                             step,
                             resolution,
                             before_png,
@@ -9685,6 +9711,26 @@ class Replayer:
                 return False
         return False
 
+    def _entry_identity_gate_error(
+        self,
+        step: Step,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Optional[str]:
+        """The identity gate at step entry, where an extra look may use input.
+
+        Only this check may select and copy the identifier cell
+        (:mod:`openadapt_flow.runtime.identity_looks`). The actuation-time
+        check that follows takes no input and reuses that read only through a
+        pixel-matched binding.
+        """
+        self.__dict__.setdefault("_identity_look_bindings", {}).pop(step.id, None)
+        self._identity_input_looks = True
+        try:
+            return self._identity_gate_error(step, *args, **kwargs)
+        finally:
+            self._identity_input_looks = False
+
     def _identity_gate_error(
         self,
         step: Step,
@@ -9788,6 +9834,13 @@ class Replayer:
                 f"{check.quorum_required or 0} independent signals verified "
                 "on the fresh frame — refusing to act; run aborted"
             )
+        elif check.look_halt is not None:
+            error = (
+                f"Step '{step.id}' ({step.intent}) took an extra look at a "
+                "look-alike identifier and the screen changed outside the "
+                f"identifier ({check.look_halt}) — refusing to act"
+            )
+            result.safety_halt = True
         elif check.known_id_halt is not None:
             names = {
                 "known_ids_unconfirmed": "has no admission confirmation",
@@ -14687,6 +14740,26 @@ class Replayer:
                 rw,
                 rh,
             )
+        if identifier_region is not None and not self._identity_input_looks:
+            # The check just before the click takes no input. When the step-entry
+            # check settled the record with a copy and the identifier shows the
+            # same pixels now, the same record is on screen: reuse that verdict.
+            binding = self.__dict__.get("_identity_look_bindings", {}).get(step.id)
+            if (
+                binding is not None
+                and binding.verdict is not None
+                and binding.same_pixels(
+                    step.id, looks_mod.crop_png(before_png, identifier_region)
+                )
+            ):
+                reused = IdentityLook(
+                    kind="clipboard",
+                    outcome="resolves",
+                    reason="same_pixels_as_step_entry_copy",
+                )
+                return binding.verdict.model_copy(
+                    update={"looks": [*binding.verdict.looks, reused]}
+                )
         band = identity_mod.band_region(
             resolution.point, anchor.region[3], self.backend.viewport
         )
@@ -14786,10 +14859,23 @@ class Replayer:
             )
 
         check = native_attempt(before_png, first_row_lines)
-        if check.status == "verified" or identity_read_contradicts(check):
-            # A read that names a different record is final: a later read of
-            # the same screen must never overrule it into "verified".
+        if check.status == "verified":
             return check
+        if identity_read_contradicts(check):
+            # A read that names a different record is final: a later read of
+            # the same screen must never overrule it into "verified". The one
+            # exception is a run parameter OCR read with look-alike glyphs
+            # (C0X1234 read as COX1234): extra looks may confirm the exact
+            # value; otherwise this mismatch stands.
+            return self._lookalike_param_looks(
+                step,
+                check,
+                native_attempt,
+                params,
+                workflow,
+                identifier_region,
+                before_png,
+            )
         upscaled = identity_mod.upscale_crop(before_png, live_region)
         if upscaled is None:
             return check
@@ -14808,16 +14894,20 @@ class Replayer:
             ),
             scoped_identifier=identifier_region is not None,
         )
+        pending_looks: list[Any] = []
         if (
-            self.known_ids is not None
-            and retry.status not in ("verified", "mismatch")
-            and check.status == "abstain"
-            and check.abstain_reason == "glyph_confusable_identifier"
+            retry.status not in ("verified", "mismatch")
+            and looks_mod.is_glyph_abstain(check)
+            and (
+                self.known_ids is not None
+                or self._copy_look_possible(identifier_region)
+            )
         ):
-            # The band rests on a look-alike identifier. A confirmed,
-            # complete known-ID list with exactly one member in that class
-            # rules out a twin (runtime.known_ids), provided a second read
-            # from a FRESH screenshot agrees with the first.
+            # The band rests on a look-alike identifier. Take extra looks that
+            # change nothing (runtime.identity_looks): fresh frames, the 2x
+            # re-read above, the known-ID list, and, where configured, a
+            # select-and-copy of the identifier cell. Only the list or an
+            # exact copy can settle it; any contradiction is final.
             matches: Optional[Callable[[str], bool]] = None
             if anchor.identity_template is not None and anchor.identity_template.tokens:
                 from openadapt_flow.runtime import identity_template as itmpl
@@ -14825,9 +14915,30 @@ class Replayer:
                 matches = functools.partial(
                     itmpl.recorded_identifier_matches, anchor.identity_template
                 )
-            lifted = self._known_id_lift(check, native_attempt, params, matches)
-            if lifted is not None:
-                return lifted
+            looked = self._look_again(
+                step,
+                check,
+                retry,
+                native_attempt,
+                params,
+                workflow,
+                identifier_region,
+                before_png,
+                matches,
+            )
+            if (
+                looked.status != "abstain"
+                or looked.known_id_halt is not None
+                or looked.look_halt is not None
+            ):
+                return looked
+            pending_looks = list(looked.looks)
+
+        def with_looks(final: IdentityCheck) -> IdentityCheck:
+            if not pending_looks or final.status == "verified" or final.looks:
+                return final
+            return final.model_copy(update={"looks": pending_looks})
+
         check = better_identity_read(check, retry)
         if (
             check.status == "verified"
@@ -14836,7 +14947,7 @@ class Replayer:
         ):
             # A read of a different record is final: the row re-read below
             # must never overrule it into "verified".
-            return check
+            return with_looks(check)
         # Last, re-read the point's own text row alone (see
         # identity.row_region): the same verdict rules, on a crop that holds
         # no part of the neighbouring rows.
@@ -14849,7 +14960,7 @@ class Replayer:
             )
         )
         if row is None or row_png is None:
-            return check
+            return with_looks(check)
         f = identity_mod.ROW_REREAD_FACTOR
         row_check = attempt(
             row_png,
@@ -14862,22 +14973,180 @@ class Replayer:
                 exclude[3] * f,
             ),
         )
-        return better_identity_read(check, row_check)
+        return with_looks(better_identity_read(check, row_check))
 
-    def _known_id_lift(
+    def _band_check(
         self,
+        anchor: Anchor,
+        observed: str,
+        run_values: Mapping[str, str],
+        workflow: Workflow,
+    ) -> IdentityCheck:
+        """The OCR-tier verdict for ``observed`` with the given run values."""
+        tmpl = anchor.identity_template
+        if tmpl is not None and tmpl.tokens:
+            from openadapt_flow.runtime import identity_template as itmpl
+
+            return itmpl.verify_template_identity(
+                tmpl, observed, params=dict(run_values), param_examples=workflow.params
+            )
+        return identity_mod.verify_target_identity(
+            anchor.context_text or "",
+            observed,
+            params=dict(run_values),
+            param_examples=workflow.params,
+        )
+
+    def _lookalike_param_read(
+        self,
+        check: IdentityCheck,
+        anchor: Anchor,
+        params: Mapping[str, RuntimeParamScalar],
+        workflow: Workflow,
+    ) -> Optional[IdentityCheck]:
+        """A run-parameter mismatch that is only a look-alike misread, as the
+        look-alike abstain it would be, or None.
+
+        The parameter's identifier is read with look-alike glyphs (the run
+        value ``C0X1234`` read as ``COX1234``). The band is checked again with
+        the value as OCR read it; when every other identity budget then passes
+        and only the look-alike identifier remains, OCR cannot say which of the
+        two it is. Used only to decide whether extra looks may run; the caller
+        keeps the mismatch unless a look settles the record.
+        """
+        if check.status != "mismatch" or check.mode != "param" or not check.param:
+            return None
+        run_values = runtime_params_for_gui(params)
+        run = run_values.get(check.param)
+        if not isinstance(run, str):
+            return None
+        run_tokens = looks_mod.identifier_tokens(run)
+        if not any(identity_mod._is_glyph_vulnerable_identifier(t) for t in run_tokens):
+            return None
+        seen = looks_mod.identifier_tokens(check.observed)
+        as_read: list[str] = []
+        for token in run_tokens:
+            same = {
+                o
+                for o in seen
+                if known_ids_lookalike_class(o) == known_ids_lookalike_class(token)
+            }
+            if len(same) != 1:
+                return None
+            as_read.append(same.pop())
+        if as_read == run_tokens:
+            return None
+        again = self._band_check(
+            anchor,
+            check.observed,
+            {**run_values, check.param: " ".join(as_read)},
+            workflow,
+        )
+        if not looks_mod.is_glyph_abstain(again):
+            return None
+        return again
+
+    def _lookalike_param_looks(
+        self,
+        step: Step,
+        check: IdentityCheck,
+        native_attempt: Callable[[bytes], IdentityCheck],
+        params: Mapping[str, RuntimeParamScalar],
+        workflow: Workflow,
+        identifier_region: Optional[Region],
+        frame_png: bytes,
+    ) -> IdentityCheck:
+        """Extra looks for a look-alike run-parameter mismatch.
+
+        Returns the looks' ``verified`` verdict, a named halt, or ``check``
+        unchanged (with the looks recorded). Never turns a mismatch into an
+        abstain.
+        """
+        anchor = step.anchor
+        assert anchor is not None
+        first = self._lookalike_param_read(check, anchor, params, workflow)
+        if first is None or not (
+            self.known_ids is not None or self._copy_look_possible(identifier_region)
+        ):
+            return check
+
+        def read(png: bytes) -> IdentityCheck:
+            got = native_attempt(png)
+            return self._lookalike_param_read(got, anchor, params, workflow) or got
+
+        matches: Optional[Callable[[str], bool]] = None
+        if anchor.identity_template is not None and anchor.identity_template.tokens:
+            from openadapt_flow.runtime import identity_template as itmpl
+
+            matches = functools.partial(
+                itmpl.recorded_identifier_matches, anchor.identity_template
+            )
+        looked = self._look_again(
+            step,
+            first,
+            None,
+            read,
+            params,
+            workflow,
+            identifier_region,
+            frame_png,
+            matches,
+        )
+        if (
+            looked.status == "verified"
+            or looked.known_id_halt is not None
+            or looked.look_halt is not None
+        ):
+            return looked
+        return check.model_copy(update={"looks": list(looked.looks)})
+
+    def _copy_look_allowed(self) -> bool:
+        """The copy look is input: never in governed or qualification runs."""
+        return (
+            self.identity_copy is not None
+            and self._read_clipboard is not None
+            and self.governed_authorization is None
+            and self.managed_dispatch_binding is None
+            and self.production_qualification_guard is None
+            and self.qualification_campaign_guard is None
+            and self.qualification_fault_driver is None
+            and getattr(self, "approval_gate", None) is None
+        )
+
+    def _copy_look_possible(self, identifier_region: Optional[Region]) -> bool:
+        return identifier_region is not None and self._copy_look_allowed()
+
+    def _embedded_identity_params(
+        self, anchor: Anchor, workflow: Workflow
+    ) -> list[str]:
+        """Workflow parameters whose demonstrated value is in the identity band."""
+        tmpl = anchor.identity_template
+        if tmpl is not None and tmpl.tokens:
+            return list(tmpl.param_token_indices)
+        if anchor.context_text:
+            return identity_mod.embedded_params(anchor.context_text, workflow.params)
+        return []
+
+    def _look_again(
+        self,
+        step: Step,
         first: IdentityCheck,
+        magnified: Optional[IdentityCheck],
         read: Callable[[bytes], IdentityCheck],
         params: Optional[Mapping[str, RuntimeParamScalar]],
+        workflow: Workflow,
+        identifier_region: Optional[Region],
+        frame_png: bytes,
         recorded_id_matches: Optional[Callable[[str], bool]] = None,
-    ) -> Optional[IdentityCheck]:
-        """Known-ID cross-check for a look-alike abstain.
+    ) -> IdentityCheck:
+        """Extra looks before stopping on a look-alike identifier.
 
-        Returns a ``verified`` check, the abstain marked with a named
-        ``known_id_halt`` when the list may not be used now, the fresh read
-        when it is a ``mismatch`` (final), or None (keep the original
-        verdict). The second read comes from a new screenshot,
-        so a transient render state on one capture cannot satisfy both.
+        Returns the verdict of :func:`identity_looks.decide`: ``verified``
+        when every fresh frame agrees and the known-ID list or an exact copy
+        settles the record, the contradicting read when a look names another
+        record, or ``first`` carrying the looks. A known-ID list that may not
+        be used now, or a copy look that changed the screen, returns ``first``
+        marked with a named halt.
         """
         from openadapt_flow.runtime import known_ids as known_ids_mod
 
@@ -14886,34 +15155,136 @@ class Replayer:
             if isinstance(self.known_ids, known_ids_mod.KnownIdAdmission)
             else None
         )
+        known: Any = self.known_ids
         if admission is not None:
             halt = admission.check()
             if halt is not None:
                 return first.model_copy(update={"known_id_halt": halt.reason})
-            known: Any = admission.known_ids
-        else:
-            known = self.known_ids
-        second = read(self.backend.screenshot())
-        if second.status == "mismatch":
-            # The fresh read names a different record; that is final.
-            return second
-        lifted = known_ids_mod.resolve_lookalike_abstain(
-            [first, second],
-            known,
-            run_values=runtime_params_for_gui(params or {}),
-            recorded_id_matches=recorded_id_matches,
+            known = admission.known_ids
+        run_values = runtime_params_for_gui(params or {})
+
+        frames: list[tuple[IdentityCheck, Optional[str]]] = []
+        for _ in range(looks_mod.FRAME_LOOKS):
+            time.sleep(self.poll_interval_s)
+            png = self.backend.screenshot()
+            frames.append((read(png), sha256_bytes(png)))
+            if frames[-1][0].status == "mismatch":
+                break  # final; no further looks
+
+        frame_reads = [first, *(r for r, _ in frames)]
+        known_lift: Optional[IdentityCheck] = None
+        if known is not None and all(
+            looks_mod.is_glyph_abstain(r) for r in frame_reads
+        ):
+            lifted = known_ids_mod.resolve_lookalike_abstain(
+                frame_reads,
+                known,
+                run_values=run_values,
+                recorded_id_matches=recorded_id_matches,
+            )
+            if lifted is not None and lifted.known_id_evidence is not None:
+                update: dict[str, Any] = {"frames": len(frame_reads)}
+                if admission is not None:
+                    update["confirmed_at"] = admission.confirmation.confirmed_at
+                    update["export_sha256"] = admission.confirmation.sha256
+                known_lift = lifted.model_copy(
+                    update={
+                        "known_id_evidence": lifted.known_id_evidence.model_copy(
+                            update=update
+                        )
+                    }
+                )
+
+        copied: Optional[looks_mod.ClipboardRead] = None
+        classes = looks_mod.lookalike_classes(first.observed)
+        bindings = self.__dict__.setdefault("_identity_look_bindings", {})
+        if (
+            identifier_region is not None
+            and self._copy_look_allowed()
+            and all(r.status != "mismatch" for r, _ in frames)
+        ):
+            assert self.identity_copy is not None
+            if self._identity_input_looks:
+                try:
+                    cell_lines = self.vision.ocr(frame_png, region=identifier_region)
+                except Exception:  # noqa: BLE001 - no box, no copy look
+                    cell_lines = []
+                cell = looks_mod.copy_region(cell_lines, identifier_region)
+                copied = (
+                    looks_mod.copy_identifier(
+                        self.backend,
+                        self._read_clipboard,
+                        cell,
+                        gesture=self.identity_copy.gesture,
+                        copy_keys=self.identity_copy.copy_keys,
+                        crop_region=identifier_region,
+                    )
+                    if cell is not None
+                    else looks_mod.ClipboardRead(
+                        text=None, reason="no_single_identifier_box"
+                    )
+                )
+                if copied.changed_outside:
+                    look = IdentityLook(
+                        kind="clipboard",
+                        outcome="unavailable",
+                        reason="screen_changed_outside_cell",
+                        frame_sha256=copied.frame_sha256,
+                    )
+                    return first.model_copy(
+                        update={
+                            "look_halt": "identity_look_changed_screen",
+                            "looks": [look],
+                        }
+                    )
+                crops = tuple(
+                    c
+                    for c in (
+                        looks_mod.crop_png(frame_png, identifier_region),
+                        copied.pre_crop,
+                        copied.post_crop,
+                    )
+                    if c is not None
+                )
+                bindings[step.id] = looks_mod.LookBinding(
+                    step_id=step.id, classes=classes, read=copied, crops=crops
+                )
+            else:
+                binding = bindings.get(step.id)
+                live_crop = looks_mod.crop_png(frame_png, identifier_region)
+                if binding is not None and binding.matches(step.id, classes, live_crop):
+                    copied = binding.read
+
+        known_list = None
+        if known is not None:
+            known_list = getattr(known, "known_ids", known)
+        decided = looks_mod.decide(
+            first,
+            frames=frames,
+            magnified=magnified,
+            contradicts=identity_read_contradicts,
+            known_ids=known_list,
+            known_ids_lift=known_lift,
+            clipboard=copied,
+            exact_expected=looks_mod.exact_expected_ids(
+                run_values,
+                self._embedded_identity_params(step.anchor, workflow)
+                if step.anchor is not None
+                else [],
+            ),
         )
-        if lifted is None or lifted.known_id_evidence is None:
-            return None
-        update: dict[str, Any] = {"frames": 2}
-        if admission is not None:
-            update["confirmed_at"] = admission.confirmation.confirmed_at
-            update["export_sha256"] = admission.confirmation.sha256
-        return lifted.model_copy(
-            update={
-                "known_id_evidence": lifted.known_id_evidence.model_copy(update=update)
-            }
-        )
+        binding = bindings.get(step.id)
+        if (
+            self._identity_input_looks
+            and binding is not None
+            and decided.status == "verified"
+            and any(
+                look.kind == "clipboard" and look.outcome == "resolves"
+                for look in decided.looks
+            )
+        ):
+            bindings[step.id] = dataclasses.replace(binding, verdict=decided)
+        return decided
 
     # -- typed-input verification -------------------------------------------------
 
