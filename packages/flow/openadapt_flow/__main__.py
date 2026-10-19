@@ -10957,6 +10957,10 @@ def build_parser() -> argparse.ArgumentParser:
     register_check_parser(sub)
     register_api_parser(sub)
 
+    from openadapt_flow.cli_deferred import register_deferred_parser
+
+    register_deferred_parser(sub)
+
     from openadapt_flow.cli_undo import register as _register_undo
 
     _register_undo(

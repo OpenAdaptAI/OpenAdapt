@@ -9521,6 +9521,7 @@ class Replayer:
                         observed_effect=final_verdict.observed_effect,
                         endpoint_scope=scope,
                         reconciliation_actions=comp.actions_taken,
+                        deferred_check=verdict.deferred_check,
                     )
                 )
                 result.effect_results.append(
@@ -9549,6 +9550,7 @@ class Replayer:
                     final_verdict=verdict.verdict.value,
                     observed_effect=verdict.observed_effect,
                     endpoint_scope=scope,
+                    deferred_check=verdict.deferred_check,
                 )
             )
             result.effect_results.append(
