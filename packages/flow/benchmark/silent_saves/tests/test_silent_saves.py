@@ -78,6 +78,8 @@ def test_app_js_hook_is_still_there() -> None:
     assert "var FAULT = 'partial';" in out
     with pytest.raises(ValueError):
         rewrite_app_js("var FAULT = '';", "x'; alert(1); '")
+    with pytest.raises(RuntimeError):
+        rewrite_app_js("var FAULT = 'moved';", "partial")
 
 
 def test_proxy_hides_the_fault_and_blocks_reset() -> None:
