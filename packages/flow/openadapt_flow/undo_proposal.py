@@ -1357,6 +1357,7 @@ class DeploymentUndoTestCopy:
             contract = Path(deployment_path).parent / contract
         bundle = RewardBundle.load(contract)
         self._oracle = build_oracle(bundle.oracle, bundle.directory)
+        self._identity_keys = tuple(bundle.identity_keys)
         self._params: dict[str, Any] = {}
 
     def reset(self) -> None:
@@ -1365,7 +1366,13 @@ class DeploymentUndoTestCopy:
     def snapshot(self) -> Optional[list[dict[str, Any]]]:
         from openadapt_flow.reward.oracles import records_of
 
-        return records_of(self._oracle.read({}))
+        # The read returns every record in the collection; the identity only
+        # labels the observation (``reward.oracles.VerifierOracle.read``).
+        identity = {
+            key: str(self._params.get(key) or "undo-propose-snapshot")
+            for key in self._identity_keys or ("subject",)
+        }
+        return records_of(self._oracle.read(identity))
 
     def read_records(self) -> Optional[list[dict[str, Any]]]:
         from openadapt_flow.after_stop import records_reader

@@ -885,3 +885,47 @@ def test_each_step_without_an_undo_says_what_would_close_the_gap(tmp_path):
     assert "browser form post" in second.reason
     assert "the app's own delete or cancel path" in second.to_close_the_gap
     assert "'Delete'" in second.to_close_the_gap
+
+
+def test_deployment_test_copy_resets_and_reads_every_record(tmp_path, mockmed):
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from openadapt_flow.deployment import load_deployment
+    from openadapt_flow.reward.seed import write_bundle
+    from openadapt_flow.undo_proposal import DeploymentUndoTestCopy
+
+    write_bundle(
+        tmp_path / "contract",
+        contract_id="undo_copy",
+        oracle={"kind": "rest", "base_url": mockmed},
+        channel="api",
+        key=Ed25519PrivateKey.generate(),
+        issuer_key_id="self_signed:test",
+        certify=False,
+        required_effects=[
+            {
+                "kind": "record_written",
+                "match": {"patient_id": {"param": "patient_id"}, "type": "Triage"},
+                "expected_count": 1,
+                "count_new_only": True,
+            }
+        ],
+        forbidden_effects=[],
+    )
+    config = tmp_path / "deployment.yaml"
+    config.write_text(
+        "name: copy\n"
+        f"backend:\n  kind: web\n  url: {mockmed}/\n"
+        f"effects:\n  kind: rest\n  base_url: {mockmed}\n"
+        "test_copy:\n  declared: true\n"
+        f"  reset_url: {mockmed}/api/reset\n"
+        "  reward_contract: contract\n"
+    )
+    copy = DeploymentUndoTestCopy(load_deployment(config), deployment_path=config)
+    requests.post(f"{mockmed}/api/encounter", json={"patient_id": "p1"}, timeout=5)
+    requests.post(f"{mockmed}/api/encounter", json={"patient_id": "p2"}, timeout=5)
+    # Every record, not only the subject's: the collateral guard needs them.
+    assert len(copy.snapshot()) == 2
+    assert len(copy.read_records()) == 2
+    copy.reset()
+    assert copy.snapshot() == []

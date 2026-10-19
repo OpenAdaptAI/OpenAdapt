@@ -50,6 +50,8 @@ class Fixture:
     extra_match: tuple[tuple[str, str], ...] = ()
     #: Plain words on what this fixture's save does.
     note: str = ""
+    #: Text in the compiled save step's intent (``click 'Save Encounter'``).
+    save_label: str = ""
 
 
 def _fixtures() -> dict[str, Fixture]:
@@ -67,6 +69,7 @@ def _fixtures() -> dict[str, Fixture]:
             match_fields=("patient_id", "type"),
             identity_key="patient_id",
             note="Save Encounter writes one encounter record",
+            save_label="Save Encounter",
         ),
         "mockloan": Fixture(
             name="mockloan",
@@ -78,6 +81,7 @@ def _fixtures() -> dict[str, Fixture]:
             identity_key="loan_id",
             extra_match=(("surface", "disbursements"),),
             note="Authorize writes one disbursement record",
+            save_label="Authorize",
         ),
         "mockloan-fee-row": Fixture(
             name="mockloan-fee-row",
@@ -92,6 +96,7 @@ def _fixtures() -> dict[str, Fixture]:
                 "Authorize writes the disbursement and also a fee row on a "
                 "second surface (MockLoan's collateral mode)"
             ),
+            save_label="Authorize",
         ),
     }
 
@@ -133,17 +138,28 @@ def _save_body(recording: Path) -> dict[str, Any]:
     return {}
 
 
-def _bind_save_effect(bundle: Path, fixture: Fixture, body: dict[str, Any]) -> str:
-    """Bind the save's record effect as an operator would; return its step id."""
+def _bind_save_effect(
+    bundle: Path, fixture: Fixture, body: dict[str, Any]
+) -> tuple[str, bool]:
+    """Bind the save's record effect as an operator would.
+
+    Returns the save step's id and whether the compiler had already labelled
+    it a write. Binding a record check makes the step consequential either
+    way.
+    """
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime.effects.effect import Effect, EffectKind
     from openadapt_flow.undo_proposal import saving_steps
 
     workflow = Workflow.load(bundle)
-    saves = saving_steps(workflow)
-    if len(saves) != 1:
-        raise SystemExit(f"{fixture.name}: expected one saving step, got {len(saves)}")
-    index, step = saves[-1]
+    labelled = [i for i, _s in saving_steps(workflow)]
+    matches = [
+        i for i, step in enumerate(workflow.steps) if fixture.save_label in step.intent
+    ]
+    if not matches:
+        raise SystemExit(f"{fixture.name}: no step names {fixture.save_label!r}")
+    index = matches[-1]
+    step = workflow.steps[index]
     match = {k: str(body[k]) for k in fixture.match_fields if k in body}
     if len(match) != len(fixture.match_fields):
         raise SystemExit(
@@ -163,7 +179,7 @@ def _bind_save_effect(bundle: Path, fixture: Fixture, body: dict[str, Any]) -> s
     ]
     workflow.steps[index] = step
     workflow.save(bundle)
-    return step.id
+    return step.id, index in labelled
 
 
 def _contract(directory: Path, base_url: str, fixture: Fixture, body: dict) -> Path:
@@ -243,7 +259,7 @@ def run_fixture(fixture: Fixture, out_dir: Path, work: Path) -> dict[str, Any]:
         bundle = work / "bundle"
         compile_recording(recording, bundle, name=f"{fixture.name}-demo")
         body = _save_body(recording)
-        step_id = _bind_save_effect(bundle, fixture, body)
+        step_id, compiler_labelled = _bind_save_effect(bundle, fixture, body)
         contract = _contract(work / "contract", base, fixture, body)
         deployment = _deployment(work / "deployment.yaml", fixture, base, contract)
         report_path = out_dir / f"{fixture.name}.json"
@@ -271,6 +287,7 @@ def run_fixture(fixture: Fixture, out_dir: Path, work: Path) -> dict[str, Any]:
         "mode": "live (real browser, app declared a test copy)",
         "exit_code": code,
         "save_step": step_id,
+        "compiler_labelled_the_save_a_write": compiler_labelled,
         "seconds": round(time.monotonic() - started, 1),
         "summary": report["summary"],
         "steps": _rows(report),

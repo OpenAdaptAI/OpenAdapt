@@ -1,10 +1,70 @@
 {
   "schema": "openadapt.undo-propose-measurement/v1",
-  "engine_commit": "835803ff14f7e0da6ee1b8de3f7ba37157819e6c",
-  "measured_at": "2026-10-19T11:16:15-0400",
+  "engine_commit": "b5189495df43a0884b7ce316b7502e3e89f171bc",
+  "measured_at": "2026-10-19T11:24:47-0400",
   "host": "macOS-15.7.3-arm64-arm-64bit",
-  "load_1m": 135.74,
+  "load_1m": 251.62,
   "fixtures": [
+    {
+      "fixture": "mockloan",
+      "what_the_save_does": "Authorize writes one disbursement record",
+      "mode": "live (real browser, app declared a test copy)",
+      "exit_code": 0,
+      "save_step": "step_010",
+      "compiler_labelled_the_save_a_write": false,
+      "seconds": 18.5,
+      "summary": {
+        "no_verified_undo": 0,
+        "saving_steps": 1,
+        "verified_undo": 1
+      },
+      "steps": [
+        {
+          "step_id": "step_010",
+          "verified_undo": "undo-step_010-network-1",
+          "reason": "",
+          "to_close_the_gap": "",
+          "candidates": [
+            {
+              "source": "network",
+              "status": "verified",
+              "basis": "the save's JSON POST /api/disbursement returned a record id; REST convention gives DELETE /api/disbursement/{undo_record_id}",
+              "reason": "the undo ran, its record read-back confirmed it, and every record matches the read-back from before the save"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "fixture": "mockloan-fee-row",
+      "what_the_save_does": "Authorize writes the disbursement and also a fee row on a second surface (MockLoan's collateral mode)",
+      "mode": "live (real browser, app declared a test copy)",
+      "exit_code": 0,
+      "save_step": "step_010",
+      "compiler_labelled_the_save_a_write": false,
+      "seconds": 78.3,
+      "summary": {
+        "no_verified_undo": 1,
+        "saving_steps": 1,
+        "verified_undo": 0
+      },
+      "steps": [
+        {
+          "step_id": "step_010",
+          "verified_undo": null,
+          "reason": "network: after the undo the test copy differs from before the save: 1 record(s) added since before the save remain (also: no other recordings were given; the save creates a record; there is no old value to restore)",
+          "to_close_the_gap": "record a person doing the app's own delete or cancel path and pass it with --from-recording; if the only difference is a timestamp or audit field, a person may name it with --ignore-field",
+          "candidates": [
+            {
+              "source": "network",
+              "status": "failed",
+              "basis": "the save's JSON POST /api/disbursement returned a record id; REST convention gives DELETE /api/disbursement/{undo_record_id}",
+              "reason": "after the undo the test copy differs from before the save: 1 record(s) added since before the save remain"
+            }
+          ]
+        }
+      ]
+    },
     {
       "fixture": "openemr-new-patient",
       "what_the_save_does": "OpenEMR fixture: the new-patient form saves one chart (browser form post)",
@@ -61,8 +121,8 @@
     }
   ],
   "totals": {
-    "saving_steps": 3,
-    "verified_undo": 0,
-    "no_verified_undo": 3
+    "saving_steps": 5,
+    "verified_undo": 1,
+    "no_verified_undo": 4
   }
 }
