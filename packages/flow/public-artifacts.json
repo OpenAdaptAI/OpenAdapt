@@ -1240,6 +1240,14 @@
       "sha256": "d914dc40053fc91f9234a493980264b2debc4adbe343f5429b15d4b2a6762a90"
     },
     {
+      "path": "benchmark/scoreboard/raw/openemr_referral/program/api-tier-2026-10-19/items.csv",
+      "sha256": "6a19cd56e24a8667a67da569a9366a71b81c8dc99378df0bca3f32e96923a3a3"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/program/api-tier-2026-10-19/meta.json",
+      "sha256": "b406fcdbda768132001aab9ada05e94a9721dfec59cd2b3da7202a720a23be0d"
+    },
+    {
       "path": "benchmark/scoreboard/raw/openemr_referral/program/study-main-0c642bc0/items.csv",
       "sha256": "fa0a1f7e34ee333e8cc8e9db0b435621c9938f24dbd72a52f4da9722ddc18d0a"
     },
@@ -1254,6 +1262,14 @@
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/program/worklist-std-2026-10-19/meta.json",
       "sha256": "12815e3746f21acf7b4db097189f6869c7c1ca77b9c99588e716a505eb75745f"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/program_api/api-tier-2026-10-19/items.csv",
+      "sha256": "7e2e38082599b76e8327db35fccb729a8eca3fd0d6cef48f5fb34f6942b7deb9"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/program_api/api-tier-2026-10-19/meta.json",
+      "sha256": "5de3dde71d5028ac200a49d6b736ad3bd7e90aed9eca7c1f8821516217e67414"
     },
     {
       "path": "benchmark/scoreboard/raw/openemr_referral/program_fast/worklist-fast-2026-10-19/items.csv",
@@ -1521,7 +1537,7 @@
     },
     {
       "path": "benchmark/scoreboard/scoreboard.json",
-      "sha256": "8fde84e877dc5f7ab91d319de934bb67e1a750ff2636f0c45a633169e6737a9a"
+      "sha256": "1f37183621b78892b891ef054477bf787b3c5a46334bb0ef5ac5b33f9ff3a0ed"
     },
     {
       "path": "benchmark/silent_wrong_action/results.json",
