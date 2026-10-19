@@ -81,6 +81,7 @@
     "benchmark/appliance_validation/results.json",
     "benchmark/appliance_validation/results_identity_full.json",
     "benchmark/appliance_validation/results_supplement.json",
+    "benchmark/at_rest/results.json",
     "benchmark/auto_repair/results/mockmed-2026-10-19-a/calls.json",
     "benchmark/auto_repair/results/mockmed-2026-10-19-a/items.csv",
     "benchmark/auto_repair/results/mockmed-2026-10-19-a/ledger.jsonl",
