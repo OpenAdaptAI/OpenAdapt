@@ -5,6 +5,7 @@
       "intent": "click recorded visual target",
       "reason": "no candidate: no other recordings were given; the recording has no network capture (record --capture-network); the save creates a record; there is no old value to restore",
       "step_id": "step_015",
+      "to_close_the_gap": "record a person doing the app's own delete or cancel path and pass it with --from-recording",
       "verified_undo": null
     }
   ],

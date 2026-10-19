@@ -468,6 +468,7 @@ def _cmd_undo_propose(args: argparse.Namespace) -> int:
             print(f"  {row.step_id}: verified undo {row.verified_undo}")
         else:
             print(f"  {row.step_id}: no verified undo. {row.reason}")
+            print(f"    To close the gap: {row.to_close_the_gap}.")
     if report.written:
         quoted = shlex.quote(str(bundle))
         print(

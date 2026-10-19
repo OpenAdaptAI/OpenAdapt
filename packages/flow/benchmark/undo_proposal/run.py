@@ -283,6 +283,7 @@ def _rows(report: dict[str, Any]) -> list[dict[str, Any]]:
             "step_id": row["step_id"],
             "verified_undo": row["verified_undo"],
             "reason": row["reason"],
+            "to_close_the_gap": row.get("to_close_the_gap", ""),
             "candidates": [
                 {k: c[k] for k in ("source", "status", "basis", "reason")}
                 for c in row["candidates"]

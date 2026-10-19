@@ -329,9 +329,7 @@ def _undo_replayer(url: str) -> Replayer:
     )
 
 
-def test_a_wrong_endpoint_fails_with_its_reason_and_is_never_written(
-    tmp_path, mockmed
-):
+def test_a_wrong_endpoint_fails_with_its_reason_and_is_never_written(tmp_path, mockmed):
     workflow = Workflow(name="one-save", steps=[_save("save_triage", "Triage")])
     bundle = _bundle(tmp_path, workflow)
     report, verified = propose_undos(
@@ -705,9 +703,12 @@ def test_a_save_without_a_bound_record_effect_gets_no_candidate():
 def test_compare_snapshots_reports_counts_and_field_names_only():
     before = [{"id": 1, "patient_id": "p1", "note": "a"}]
     assert compare_snapshots(before, [dict(before[0])]) is None
-    assert compare_snapshots(
-        before, [{"id": 1, "patient_id": "p1", "note": "a", "at": 2}], ignore={"at"}
-    ) is None
+    assert (
+        compare_snapshots(
+            before, [{"id": 1, "patient_id": "p1", "note": "a", "at": 2}], ignore={"at"}
+        )
+        is None
+    )
     why = compare_snapshots(before, [{"id": 1, "patient_id": "p1", "note": "b"}])
     assert "1 record(s) changed (fields: note)" in why
     assert "p1" not in why and "'b'" not in why
@@ -848,3 +849,39 @@ def test_the_save_request_is_found_when_the_selector_has_a_field_it_lacks():
     wrong = _network()[:1]
     wrong[0]["body"] = json.dumps({"patient_id": "p9", "type": "Triage"})
     assert "could not be found" in network_candidates(step, effect, wrong, {})[1]
+
+
+def test_each_step_without_an_undo_says_what_would_close_the_gap(tmp_path):
+    unbound = _save("save_unbound", "Triage")
+    unbound.effects = [
+        unbound.effects[0].model_copy(update={"needs_operator_confirmation": True})
+    ]
+    form = _save("save_form", "Vitals")
+    workflow = Workflow(name="two", steps=[unbound, form])
+    bundle = _bundle(tmp_path, workflow)
+    lines = [
+        {
+            "method": "POST",
+            "url": "http://x/save.php",
+            "form": [["patient_id", "p1"], ["type", "Vitals"]],
+            "status": 200,
+        },
+        {
+            "method": "GET",
+            "url": "http://x/chart",
+            "status": 200,
+            "response_type": "text/html",
+            "response_text": "<a href='d'>Delete</a>",
+        },
+    ]
+    report, _ = propose_undos(
+        workflow,
+        bundle_dir=bundle,
+        sources=Sources(network_lines=lines),
+        target=None,
+    )
+    first, second = report.saving_steps
+    assert "bind the save's record check" in first.to_close_the_gap
+    assert "browser form post" in second.reason
+    assert "the app's own delete or cancel path" in second.to_close_the_gap
+    assert "'Delete'" in second.to_close_the_gap

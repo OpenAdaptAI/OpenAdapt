@@ -5,6 +5,7 @@
       "intent": "click recorded visual target",
       "reason": "no candidate: the save declares no record effect Flow can check (bind its record_written or field_equals effect first)",
       "step_id": "step_039",
+      "to_close_the_gap": "bind the save's record check (a record_written or field_equals effect), then propose again",
       "verified_undo": null
     },
     {
@@ -21,6 +22,7 @@
       "intent": "click recorded visual target",
       "reason": "app_ui: Flow found 'Cancel' on the pages after the save but builds an undo from a control only from a recording of a person using it; record that and pass it with --from-recording (also: no other recordings were given; the save is a browser form post (POST /interface/new/new_comprehensive_save.php); Flow builds an API undo only from a JSON request; the save creates a record; there is no old value to restore)",
       "step_id": "step_040",
+      "to_close_the_gap": "record a person doing the app's own delete or cancel path (pages loaded after the save have 'Cancel' controls) and pass it with --from-recording",
       "verified_undo": null
     }
   ],

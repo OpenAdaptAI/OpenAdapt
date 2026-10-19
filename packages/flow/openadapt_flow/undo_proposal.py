@@ -132,6 +132,8 @@ class SavingStepResult(BaseModel):
     verified_undo: Optional[str] = None
     #: Why the step has no verified undo (empty when it has one).
     reason: str = ""
+    #: What would give the step a verified undo (empty when it has one).
+    to_close_the_gap: str = ""
     candidates: list[CandidateResult] = Field(default_factory=list)
 
 
@@ -1173,10 +1175,40 @@ def propose_undos(
                     row.reason = "no candidate: " + "; ".join(notes)
                 if notes and row.candidates:
                     row.reason += " (also: " + "; ".join(notes) + ")"
+                row.to_close_the_gap = _gap_hint(row, notes, target is not None)
     finally:
         if own_tmp:
             shutil.rmtree(work, ignore_errors=True)
     return report, verified
+
+
+def _gap_hint(row: SavingStepResult, notes: list[str], had_target: bool) -> str:
+    """What a person can do so the step gets a verified undo."""
+    if any("declares no record effect" in note for note in notes):
+        return (
+            "bind the save's record check (a record_written or field_equals "
+            "effect), then propose again"
+        )
+    if any(c.status == "failed" for c in row.candidates):
+        return (
+            "record a person doing the app's own delete or cancel path and pass "
+            "it with --from-recording; if the only difference is a timestamp or "
+            "audit field, a person may name it with --ignore-field"
+        )
+    built = [c for c in row.candidates if c.source != "app_ui"]
+    if not had_target and any(c.status == "not_run" for c in built):
+        return "run again with --config naming a declared test copy"
+    ui = next((c for c in row.candidates if c.source == "app_ui"), None)
+    if ui is not None:
+        return (
+            "record a person doing the app's own delete or cancel path ("
+            + ui.basis
+            + ") and pass it with --from-recording"
+        )
+    return (
+        "record a person doing the app's own delete or cancel path and pass it "
+        "with --from-recording"
+    )
 
 
 def write_proposals(

@@ -1,9 +1,9 @@
 {
   "schema": "openadapt.undo-propose-measurement/v1",
-  "engine_commit": "1a73a547f73068bd5170118d680b4b1e68587a0f",
-  "measured_at": "2026-10-19T11:09:49-0400",
+  "engine_commit": "835803ff14f7e0da6ee1b8de3f7ba37157819e6c",
+  "measured_at": "2026-10-19T11:16:15-0400",
   "host": "macOS-15.7.3-arm64-arm-64bit",
-  "load_1m": 27.67,
+  "load_1m": 135.74,
   "fixtures": [
     {
       "fixture": "openemr-new-patient",
@@ -20,12 +20,14 @@
           "step_id": "step_039",
           "verified_undo": null,
           "reason": "no candidate: the save declares no record effect Flow can check (bind its record_written or field_equals effect first)",
+          "to_close_the_gap": "bind the save's record check (a record_written or field_equals effect), then propose again",
           "candidates": []
         },
         {
           "step_id": "step_040",
           "verified_undo": null,
           "reason": "app_ui: Flow found 'Cancel' on the pages after the save but builds an undo from a control only from a recording of a person using it; record that and pass it with --from-recording (also: no other recordings were given; the save is a browser form post (POST /interface/new/new_comprehensive_save.php); Flow builds an API undo only from a JSON request; the save creates a record; there is no old value to restore)",
+          "to_close_the_gap": "record a person doing the app's own delete or cancel path (pages loaded after the save have 'Cancel' controls) and pass it with --from-recording",
           "candidates": [
             {
               "source": "app_ui",
@@ -39,7 +41,7 @@
     },
     {
       "fixture": "openimis-claim",
-      "what_the_save_does": "openIMIS fixture: the claim form saves one claim (scoreboard bundle; its recording has no network capture)",
+      "what_the_save_does": "openIMIS fixture: the claim form saves one claim (scoreboard bundle; its recording has no network capture; the live fixture was not started)",
       "mode": "offline (no test copy; nothing was run)",
       "exit_code": 0,
       "summary": {
@@ -52,6 +54,7 @@
           "step_id": "step_015",
           "verified_undo": null,
           "reason": "no candidate: no other recordings were given; the recording has no network capture (record --capture-network); the save creates a record; there is no old value to restore",
+          "to_close_the_gap": "record a person doing the app's own delete or cancel path and pass it with --from-recording",
           "candidates": []
         }
       ]
