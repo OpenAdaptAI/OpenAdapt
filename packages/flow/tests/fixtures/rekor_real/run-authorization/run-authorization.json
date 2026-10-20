@@ -1,0 +1,21 @@
+{
+  "authorizer": "github:abrichr",
+  "bundle_content_digest": "ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+  "issued_at": "2026-10-20T05:51:31Z",
+  "nonce": "8691f588a507ca4882bc0cabe9371a706d0c33bf740137f303a80958101ffbc9",
+  "schema": "openadapt.run-authorization/v1",
+  "scope": {
+    "items": [
+      "r3",
+      "r4",
+      "r5",
+      "r6"
+    ],
+    "profile": "standard",
+    "reusable": false,
+    "seal_key_ids": [
+      "seal-ed25519-ca08dd7f42a4be01"
+    ]
+  },
+  "signer_fingerprint": "SHA256:x+1MwCSAsNNHpc+UcIdbktY/Z+/FByyqfhuwiRzeO9A"
+}
