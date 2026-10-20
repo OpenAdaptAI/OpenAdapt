@@ -61,7 +61,7 @@ from typing import Any, Optional
 
 HERE = Path(__file__).resolve().parent
 FLOW = HERE.parents[1]
-VERIFY_YAML = FLOW / "benchmark" / "openemr_local" / "verify.yaml"
+VERIFY_YAML = HERE / "verify.yaml"
 DEFAULT_SOURCE = (
     Path.home() / "oa/scratch/qualify-referral/certified-referrals-qual10/bundle"
 )
@@ -70,8 +70,6 @@ RUNNER_ID = "lifecycle-proof-runner-1"
 DEDICATED_USER = "openadapt_actor"
 STATUS_KEY_ID = "lifecycle-proof-status-1"
 
-#: Inputs this program fixes (see phase_admit).
-FIXED_INPUTS = {"state_label": "Massachusetts"}
 #: Synthetic referrals (benchmark/openemr_api_tier/common.py), unique emails.
 BATCH = ("r1-nadia-brennan", "r2-marcus-feld", "r3-ines-carvalho")
 CRASH = "r4-theo-lindqvist"
@@ -164,11 +162,7 @@ def referral_params(key: str) -> dict[str, str]:
     from benchmark.openemr_api_tier.common import REFERRALS, spec_for
 
     ref = {r.key: r for r in REFERRALS}[key]
-    return {
-        k: str(v)
-        for k, v in spec_for(ref).params().items()
-        if k not in FIXED_INPUTS
-    }
+    return {k: str(v) for k, v in spec_for(ref).params().items()}
 
 
 def _config_and_hooks() -> tuple[Any, Any, dict[str, Any]]:
@@ -567,23 +561,6 @@ def phase_admit(ctx: dict[str, Any], source: Path, trials: int) -> None:
             source, sealed, ignore=shutil.ignore_patterns("benchmark-contract.json")
         )
         workflow = Workflow.load(sealed)
-        # This program registers Massachusetts referrals. The state is a fixed
-        # value of the program, not a run input: the record stores the state
-        # code (MA) while the form shows its label, and the record check
-        # reads back the code. A run input the record check can't read back
-        # would send every problems-only item to a person (input_not_read_back).
-        for index, step in enumerate(workflow.steps):
-            if step.param in FIXED_INPUTS:
-                workflow.steps[index] = step.model_copy(
-                    update={
-                        "param": None,
-                        "text": FIXED_INPUTS[step.param],
-                        "intent": f"type {FIXED_INPUTS[step.param]}",
-                    }
-                )
-        for name in FIXED_INPUTS:
-            workflow.params.pop(name, None)
-            workflow.param_specs.pop(name, None)
         invalidated = _invalidate_prior_certification(
             workflow, reason="encrypted at rest for the Regulated profile"
         )
