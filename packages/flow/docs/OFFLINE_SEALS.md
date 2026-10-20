@@ -117,6 +117,14 @@ openadapt-flow local-seal verify runs/job-0007 --keys site-keys.json
 openadapt-flow local-seal verify export.csv --seal export.csv.seal.json --keys site-keys.json
 ```
 
+A file that `verify`, `timestamp` or `anchor` can't use stops the command
+with one line and exit code 2, never a traceback. That covers a missing or
+empty file, text that isn't JSON, JSON with a repeated key, a key registry
+in the wrong shape, and a web page saved in place of the file. For a web
+page the line reads, for example, `site-keys.json is not JSON (it starts
+with '<!DOCTYPE html>': it looks like a web page, check the URL)`. Exit
+code 1 means the files were read and the Seal was refused.
+
 `site-keys.json` has the same shape as the Cloud Seal key registry, so a key
 can be marked `revoked` with a `revoked_at` time. Refusal reasons are closed:
 `unsigned`, `malformed`, `subject_mismatch`, `unknown_key`, `revoked_key`,

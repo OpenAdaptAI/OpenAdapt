@@ -29,13 +29,98 @@ def _signer(args: argparse.Namespace) -> Any:
     return signer
 
 
+class InputError(Exception):
+    """A file the user named can't be used. Reported in one line, exit code 2."""
+
+
+def _guarded(func: Any) -> Any:
+    """Turn any input problem into one clear line and exit code 2, never a traceback."""
+    import functools
+
+    @functools.wraps(func)
+    def run(args: argparse.Namespace) -> int:
+        try:
+            return int(func(args))
+        except InputError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+
+    return run
+
+
+def _starts(raw: bytes) -> str:
+    head = (
+        raw.lstrip()[:40].decode("utf-8", "replace").splitlines()[0]
+        if raw.strip()
+        else ""
+    )
+    return head[:40]
+
+
+def _input_bytes(path: Path) -> bytes:
+    """The bytes of an input file; refuses a missing, unreadable or empty one."""
+    path = Path(path)
+    if not path.exists():
+        raise InputError(f"{path}: no such file")
+    if path.is_dir():
+        raise InputError(f"{path} is a folder, not a file")
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise InputError(f"{path} can't be read ({exc.strerror or exc})") from exc
+    if not raw.strip():
+        raise InputError(f"{path} is empty")
+    return raw
+
+
+def _looks_like_web_page(raw: bytes) -> bool:
+    head = raw.lstrip()[:200].lower()
+    return head.startswith((b"<!doctype html", b"<html", b"<head", b"<?xml")) or (
+        head.startswith(b"<") and b"<html" in head
+    )
+
+
+def _input_json(path: Path) -> Any:
+    """Parse an input file as JSON (repeated keys refused), or explain in one line."""
+    from openadapt_flow.offline_seal import loads_strict
+
+    raw = _input_bytes(path)
+    try:
+        return loads_strict(raw)
+    except UnicodeDecodeError as exc:
+        raise InputError(f"{path} is not JSON (it isn't UTF-8 text)") from exc
+    except ValueError as exc:
+        start = _starts(raw)
+        if _looks_like_web_page(raw):
+            raise InputError(
+                f"{path} is not JSON (it starts with {start!r}: it looks like a web "
+                "page, check the URL)"
+            ) from exc
+        if "duplicate JSON key" in str(exc):
+            raise InputError(f"{path} is not valid: {exc}") from exc
+        raise InputError(f"{path} is not JSON (it starts with {start!r})") from exc
+
+
+def _input_pem_certs(path: Path, what: str) -> list[Any]:
+    raw = _input_bytes(path)
+    if _looks_like_web_page(raw):
+        raise InputError(
+            f"{path} is not a {what} (it looks like a web page, check the URL)"
+        )
+    return [raw]
+
+
 def _registry(args: argparse.Namespace) -> Any:
     from openadapt_types.seal import parse_key_registry
 
     from openadapt_flow.offline_seal import load_registry
 
     if args.keys:
-        return load_registry(Path(args.keys))
+        _input_json(Path(args.keys))
+        try:
+            return load_registry(Path(args.keys))
+        except ValueError as exc:
+            raise InputError(f"{args.keys} is not a key registry ({exc})") from exc
     # No pinned file: trust only the configured Seal key, and say so.
     signer = _signer(args)
     print(
@@ -103,7 +188,6 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     from openadapt_flow.offline_seal import (
         LocalSealError,
         check_anchor,
-        loads_strict,
         verify_local_seal,
         verify_run,
     )
@@ -114,14 +198,8 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     except LocalSealError as exc:
         print(f"not valid: {exc}", file=sys.stderr)
         return 1
-    except (OSError, ValueError) as exc:
-        print(f"not valid: unusable key registry ({exc})", file=sys.stderr)
-        return 1
-    try:
-        log_keys = _log_keys(args)
-    except (OSError, ValueError) as exc:
-        print(f"not valid: unusable log key ({exc})", file=sys.stderr)
-        return 1
+    log_keys = _log_keys(args)
+    _tsa_trusted(args)
     fetch = None
     if args.live:
         if not args.require_anchor:
@@ -132,6 +210,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
             return 1
         fetch = fetch_entry
     target = Path(args.target)
+    _check_verify_inputs(args, target)
     auth = None
     if args.authorization:
         if not target.is_dir():
@@ -156,12 +235,8 @@ def _cmd_verify(args: argparse.Namespace) -> int:
         if not args.seal:
             print("verify FILE needs --seal FILE.seal.json", file=sys.stderr)
             return 2
-        try:
-            seal = loads_strict(Path(args.seal).read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            print("not valid: malformed", file=sys.stderr)
-            return 1
-        digest = hashlib.sha256(target.read_bytes()).hexdigest()
+        seal = _input_json(Path(args.seal))
+        digest = hashlib.sha256(_input_bytes(target)).hexdigest()
         result = verify_local_seal(seal, digest, registry)
         if args.require_anchor:
             result = check_anchor(
@@ -205,6 +280,39 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     return 1
 
 
+def _check_verify_inputs(args: argparse.Namespace, target: Path) -> None:
+    """Every file verify will read: present, non-empty, and JSON where JSON is due."""
+    from openadapt_flow.run_authorization import _paths
+    from openadapt_flow.seal_anchor import anchor_path
+    from openadapt_flow.seal_timestamp import timestamp_path
+
+    seal: Optional[Path]
+    if target.is_dir():
+        _input_json(target / "report.json")
+        seal = target / "seal.json"
+    else:
+        _input_bytes(target)
+        if target.suffix == ".json":
+            _input_json(target)
+        seal = Path(args.seal) if args.seal else None
+    if seal is not None:
+        _input_json(seal)
+        # Optional companions: a missing one is a verdict (exit 1), a broken one an input error.
+        if args.require_anchor and anchor_path(seal).exists():
+            _input_json(anchor_path(seal))
+        if getattr(args, "require_timestamp", False) and timestamp_path(seal).exists():
+            _input_json(timestamp_path(seal))
+    if args.authorization:
+        statement, sig, _, anchor_file = _paths(Path(args.authorization))
+        _input_json(statement)
+        if sig.exists():
+            _input_bytes(sig)
+        if args.allowed_signers:
+            _input_bytes(Path(args.allowed_signers))
+        if args.require_anchor and anchor_file.exists():
+            _input_json(anchor_file)
+
+
 def _tsa_trusted(args: argparse.Namespace) -> Any:
     if not getattr(args, "tsa_cert", None):
         return None  # the bundled Sigstore TSA root
@@ -212,7 +320,16 @@ def _tsa_trusted(args: argparse.Namespace) -> Any:
 
     certs: list[Any] = []
     for path in args.tsa_cert:
-        certs.extend(load_pem_certificates(Path(path).read_bytes()))
+        raw = _input_bytes(Path(path))
+        try:
+            certs.extend(load_pem_certificates(raw))
+        except ValueError as exc:
+            hint = (
+                ": it looks like a web page, check the URL"
+                if _looks_like_web_page(raw)
+                else ""
+            )
+            raise InputError(f"{path} is not a PEM certificate{hint}") from exc
     return certs
 
 
@@ -264,21 +381,27 @@ def _cmd_timestamp(args: argparse.Namespace) -> int:
     )
 
     target = Path(args.target)
+    if target.is_dir() and (target / STATEMENT_FILE).is_file():
+        record = target / STATEMENT_FILE
+    elif target.name == STATEMENT_FILE:
+        record = target
+    else:
+        record = target / "seal.json" if target.is_dir() else target
+    _input_json(record)
+    if record.name == STATEMENT_FILE:
+        _input_bytes(record.with_name(record.name + ".sig"))
+    trusted = _tsa_trusted(args)
     try:
-        if target.is_dir() and (target / STATEMENT_FILE).is_file():
-            record = target / STATEMENT_FILE
+        if record.name == STATEMENT_FILE:
             fields = authorization_fields(record)
-        elif target.name == STATEMENT_FILE:
-            record, fields = target, authorization_fields(target)
         else:
-            record = target / "seal.json" if target.is_dir() else target
             fields = seal_fields(record)
         out = timestamp_path(record)
         stamp = timestamp_record(
             fields,
             out,
             HttpTsa(args.tsa_url or SIGSTORE_TSA_URL),
-            trusted=_tsa_trusted(args),
+            trusted=trusted,
         )
     except (RecordTimestampError, OSError, ValueError) as exc:
         print(f"not timestamped: {exc}", file=sys.stderr)
@@ -365,8 +488,16 @@ def _cmd_authorize_create(args: argparse.Namespace) -> int:
     return 0
 
 
+def _statement_input(target: str) -> None:
+    from openadapt_flow.run_authorization import _paths
+
+    _input_json(_paths(Path(target))[0])
+
+
 def _cmd_authorize_sign(args: argparse.Namespace) -> int:
     from openadapt_flow.authorization_summary import sign
+
+    _statement_input(args.statement)
 
     return sign(
         Path(args.statement),
@@ -377,6 +508,7 @@ def _cmd_authorize_sign(args: argparse.Namespace) -> int:
 
 
 def _cmd_authorize_verify(args: argparse.Namespace) -> int:
+    _statement_input(args.authorization)
     try:
         registry = _registry(args) if args.require_anchor else []
         log_keys = _log_keys(args)
@@ -396,6 +528,8 @@ def _cmd_authorize_anchor(args: argparse.Namespace) -> int:
     from openadapt_flow.offline_seal import LocalSealError
     from openadapt_flow.run_authorization import AuthorizationError, anchor
     from openadapt_flow.seal_anchor import AnchorError
+
+    _statement_input(args.authorization)
 
     try:
         entry = anchor(
@@ -464,7 +598,19 @@ def _log_keys(args: argparse.Namespace) -> Any:
     if not args.log_key:
         return default_log_keys()
     origin = args.log_origin or urlparse(args.log_url).hostname or ""
-    return [LogKey.from_pem(Path(p).read_bytes(), origin=origin) for p in args.log_key]
+    keys = []
+    for p in args.log_key:
+        raw = _input_bytes(Path(p))
+        try:
+            keys.append(LogKey.from_pem(raw, origin=origin))
+        except (TypeError, ValueError) as exc:
+            hint = (
+                ": it looks like a web page, check the URL"
+                if _looks_like_web_page(raw)
+                else ""
+            )
+            raise InputError(f"{p} is not a PEM public key{hint}") from exc
+    return keys
 
 
 def _utc(seconds: Any) -> str:
@@ -481,11 +627,11 @@ def _cmd_anchor(args: argparse.Namespace) -> int:
 
     target = Path(args.target)
     seal_path = target / SEAL_FILE if target.is_dir() else target
+    _input_json(seal_path)
+    log_keys = _log_keys(args)
     try:
         signer = _signer(args)
-        anchor = anchor_seal(
-            seal_path, signer, log_url=args.log_url, log_keys=_log_keys(args)
-        )
+        anchor = anchor_seal(seal_path, signer, log_url=args.log_url, log_keys=log_keys)
     except (LocalSealError, AnchorError, OSError, ValueError) as exc:
         print(f"not anchored: {exc}", file=sys.stderr)
         return 1
@@ -706,14 +852,14 @@ def register(sub: Any) -> None:
         action="store_true",
         help="Re-sign an existing, never-anchored Seal over the same report",
     )
-    r.set_defaults(func=_cmd_run)
+    r.set_defaults(func=_guarded(_cmd_run))
 
     f = s.add_parser("file", help="Seal any file: a record, an export, an audit report")
     f.add_argument("path")
     f.add_argument("--kind", choices=["record", "export", "file"], default="file")
     f.add_argument("--run-id", default=None)
     f.add_argument("--out", default=None, help="Default: PATH.seal.json")
-    f.set_defaults(func=_cmd_file)
+    f.set_defaults(func=_guarded(_cmd_file))
 
     v = s.add_parser("verify", help="Verify a run directory, or a file with --seal")
     v.add_argument("target")
@@ -753,7 +899,7 @@ def register(sub: Any) -> None:
         default=[],
         help="Pinned TSA certificate PEM (default: the bundled Sigstore TSA root)",
     )
-    v.set_defaults(func=_cmd_verify)
+    v.set_defaults(func=_guarded(_cmd_verify))
 
     a = s.add_parser(
         "anchor",
@@ -770,7 +916,7 @@ def register(sub: Any) -> None:
         help="The log's public key PEM, to check its answer (default: Sigstore Rekor)",
     )
     _log_args(a)
-    a.set_defaults(func=_cmd_anchor)
+    a.set_defaults(func=_guarded(_cmd_anchor))
 
     ts = s.add_parser(
         "timestamp",
@@ -783,7 +929,7 @@ def register(sub: Any) -> None:
         "--tsa-url", default=None, help="RFC 3161 TSA URL (default Sigstore)"
     )
     ts.add_argument("--tsa-cert", action="append", default=[])
-    ts.set_defaults(func=_cmd_timestamp)
+    ts.set_defaults(func=_guarded(_cmd_timestamp))
 
     z = s.add_parser(
         "authorize", help="Run authorizations signed with a person's GitHub SSH key"
@@ -805,7 +951,7 @@ def register(sub: Any) -> None:
         default=[],
         help="Seal key allowed to seal under it (default: the configured key)",
     )
-    zc.set_defaults(func=_cmd_authorize_create)
+    zc.set_defaults(func=_guarded(_cmd_authorize_create))
     zg = zs.add_parser(
         "sign",
         help="Show what the authorization allows, ask, then sign with ssh-keygen",
@@ -824,7 +970,7 @@ def register(sub: Any) -> None:
         help="The program bundle the statement names (default: ./bundle next to it)",
     )
     zg.add_argument("--dry-run", action="store_true", help="Print the summary only")
-    zg.set_defaults(func=_cmd_authorize_sign)
+    zg.set_defaults(func=_guarded(_cmd_authorize_sign))
     zv = zs.add_parser("verify", help="Verify a signed run authorization")
     zv.add_argument("authorization")
     zv.add_argument("--allowed-signers", default=None)
@@ -835,14 +981,14 @@ def register(sub: Any) -> None:
     )
     zv.add_argument("--log-key", action="append", default=[])
     _log_args(zv)
-    zv.set_defaults(func=_cmd_authorize_verify)
+    zv.set_defaults(func=_guarded(_cmd_authorize_verify))
     za = zs.add_parser(
         "anchor", help="Log the authorization's digest in Rekor with the Seal key"
     )
     za.add_argument("authorization")
     za.add_argument("--log-key", action="append", default=[])
     _log_args(za)
-    za.set_defaults(func=_cmd_authorize_anchor)
+    za.set_defaults(func=_guarded(_cmd_authorize_anchor))
 
     pr = s.add_parser(
         "profile",
@@ -860,26 +1006,26 @@ def register(sub: Any) -> None:
     pr.add_argument("--log-key", action="append", default=[])
     pr.add_argument("--out", default=None, help="Default ./operator-profile.json")
     _log_args(pr)
-    pr.set_defaults(func=_cmd_profile, live=False, require_anchor=False)
+    pr.set_defaults(func=_guarded(_cmd_profile), live=False, require_anchor=False)
 
     k = s.add_parser("key", help="Print the Seal key's public half for pinning")
-    k.set_defaults(func=_cmd_key)
+    k.set_defaults(func=_guarded(_cmd_key))
     ks = k.add_subparsers(dest="key_cmd")
     kc = ks.add_parser(
         "create", help="Make a new key at --key file:PATH or keychain:NAME"
     )
-    kc.set_defaults(func=_cmd_key_create)
+    kc.set_defaults(func=_guarded(_cmd_key_create))
     kp = ks.add_parser("pin", help="Add the Seal key to a pinned key registry")
     kp.add_argument("registry", help="Key registry JSON to create or extend")
-    kp.set_defaults(func=_cmd_key_pin)
+    kp.set_defaults(func=_guarded(_cmd_key_pin))
     kr = ks.add_parser("revoke", help="Mark a pinned key revoked from a time on")
     kr.add_argument("registry")
     kr.add_argument("key_id")
     kr.add_argument("--at", default=None, help="UTC YYYY-MM-DDTHH:MM:SSZ (default now)")
-    kr.set_defaults(func=_cmd_key_revoke)
+    kr.set_defaults(func=_guarded(_cmd_key_revoke))
 
     b = s.add_parser("batch", help="Fold queued Seals into one Merkle batch (local)")
-    b.set_defaults(func=_cmd_batch)
+    b.set_defaults(func=_guarded(_cmd_batch))
 
     t = s.add_parser(
         "submit",
@@ -888,10 +1034,10 @@ def register(sub: Any) -> None:
     t.add_argument(
         "--tsa-url", default=None, help="RFC 3161 TSA URL (default Sigstore)"
     )
-    t.set_defaults(func=_cmd_submit)
+    t.set_defaults(func=_guarded(_cmd_submit))
 
     q = s.add_parser(
         "proof", help="Show the batch, root and inclusion proof for a Seal"
     )
     q.add_argument("seal")
-    q.set_defaults(func=_cmd_proof)
+    q.set_defaults(func=_guarded(_cmd_proof))
