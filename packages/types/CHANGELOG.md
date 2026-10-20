@@ -1,6 +1,16 @@
 # CHANGELOG
 
 
+## v0.24.0 (2026-10-20)
+
+The models live in this package again, and it depends only on `pydantic>=2.5`; the Python 3.13 cap is gone. `openadapt-flow` 2.3.0 and later depend on it, and `openadapt_flow.contracts` returns the same modules as `openadapt_types` ([#1270](https://github.com/OpenAdaptAI/OpenAdapt/pull/1270)). Upgrade `openadapt-flow` to 2.3.0 together with this package: openadapt-flow 2.2.0 carries its own copy of the models, so with 0.24.0 alone, `isinstance` checks between the two copies fail.
+
+### Features
+
+- `import openadapt_types` loads no models until a name is used; public names and submodules still resolve as attributes ([#1270](https://github.com/OpenAdaptAI/OpenAdapt/pull/1270)).
+- `checked_how` on the RFC-0002 effect receipt: `CheckedHowLabel` and `CHECKED_HOW_VALUES` (`unchecked`, `same_screen`, `reopened`, `separate_session`, `system_of_record`, `counterparty_confirmed`) ([#1240](https://github.com/OpenAdaptAI/OpenAdapt/pull/1240)).
+- The `SAVED_AWAITING_CHECK` outcome: the entry was saved and counts as done only when a later report confirms it; not safe to retry ([#1297](https://github.com/OpenAdaptAI/OpenAdapt/pull/1297)).
+
 ## v0.23.0 (2026-10-18)
 
 First release from the [OpenAdapt monorepo](https://github.com/OpenAdaptAI/OpenAdapt) (`packages/types`). The models now live in `openadapt_flow.contracts`; this package re-exports them, so `import openadapt_types` keeps working. It requires `openadapt-flow>=2.2.0,<3`.
