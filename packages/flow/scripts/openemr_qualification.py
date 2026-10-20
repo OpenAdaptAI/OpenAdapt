@@ -20,7 +20,8 @@ business rule the application enforces. The real-duplicate check is one: the
 existing chart Rosa Delgado (born 1958-03-27) is seeded, and the certified
 bundle runs, as a certified run, on Rosa Delgado born 1958-03-22. OpenEMR's
 duplicate dialog lists the existing chart, and the program must halt before
-saving: ``HALTED_BEFORE_EFFECT``, with no new or changed chart in SQL, on every
+saving: transaction outcome ``HALTED_BEFORE_EFFECT``, halted at the dialog's
+"No matches were found." check, with no new or changed chart in SQL, on every
 trial. A failure fails the qualification. It never calls a model. Keys are local test keys generated per
 campaign, never a production trust root.
 
@@ -226,7 +227,15 @@ def duplicate_check(result: Any, out: Path, trials: int) -> dict[str, Any]:
 
     key = "r6-rosa-delgado"
     root = out / "duplicate-check"
+    from scripts.openemr_local_demo import NO_MATCH_TEXT
+
     env = certified_env(Path(result.bundle_dir))
+    # The program must stop at the duplicate dialog, on its "no matches" check.
+    guard_step = next(
+        step.id
+        for step in env["workflow"].steps
+        if any(p.text == NO_MATCH_TEXT for p in step.expect)
+    )
     rows = []
     for trial in range(1, trials + 1):
         report, sql, seeded = run_certified(
@@ -238,14 +247,19 @@ def duplicate_check(result: Any, out: Path, trials: int) -> dict[str, Any]:
             trial=trial,
             policy=result.policy,
         )
+        failed = [r.step_id for r in report.results if not r.ok]
+        halted_at = failed[0] if failed else None
         rows.append(
             {
                 "trial": trial,
                 "execution_outcome": report.execution_outcome,
+                "transaction_outcome": report.transaction_outcome,
+                "halted_at": halted_at,
                 "existing_chart_seed_status": seeded,
                 "new_charts": sql["new_charts"],
                 "changed_charts": sql["changed_charts"],
-                "passed": report.execution_outcome == "HALTED_BEFORE_EFFECT"
+                "passed": report.transaction_outcome == "HALTED_BEFORE_EFFECT"
+                and halted_at == guard_step
                 and seeded in (200, 201)
                 and sql["new_charts"] == 0
                 and sql["changed_charts"] == 0,
@@ -256,7 +270,11 @@ def duplicate_check(result: Any, out: Path, trials: int) -> dict[str, Any]:
         "schema_version": "openadapt.openemr-duplicate-check/v1",
         "existing_chart": "Rosa Delgado, born 1958-03-27 (seeded)",
         "run_params": key,
-        "required": "HALTED_BEFORE_EFFECT, no new or changed chart in SQL",
+        "required": (
+            "transaction outcome HALTED_BEFORE_EFFECT, halted at the duplicate "
+            "dialog's no-matches check, no new or changed chart in SQL"
+        ),
+        "guard_step": guard_step,
         "trials": rows,
         "passed": all(r["passed"] for r in rows),
     }
@@ -267,12 +285,15 @@ def duplicate_check(result: Any, out: Path, trials: int) -> dict[str, Any]:
         "",
         "The existing chart Rosa Delgado (born 1958-03-27) is seeded, and the "
         "certified bundle runs on Rosa Delgado born 1958-03-22. Required: "
-        "HALTED_BEFORE_EFFECT and no new or changed chart in SQL.",
+        f"transaction outcome HALTED_BEFORE_EFFECT, halted at {guard_step} (the "
+        "duplicate dialog's no-matches check), and no new or changed chart in SQL.",
         "",
-        "| Trial | Outcome | New charts | Changed charts | Pass |",
-        "|---|---|---|---|---|",
+        "| Trial | Execution | Transaction | Halted at | New charts "
+        "| Changed charts | Pass |",
+        "|---|---|---|---|---|---|---|",
         *(
-            f"| {r['trial']} | {r['execution_outcome']} | {r['new_charts']} | "
+            f"| {r['trial']} | {r['execution_outcome']} | "
+            f"{r['transaction_outcome']} | {r['halted_at']} | {r['new_charts']} | "
             f"{r['changed_charts']} | {'yes' if r['passed'] else 'no'} |"
             for r in rows
         ),
