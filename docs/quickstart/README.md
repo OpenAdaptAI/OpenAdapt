@@ -34,7 +34,8 @@ about 22 seconds.
   with status 2. It never falls back to MockMed.
 - **Setup.** The pinned fixture from `packages/flow/benchmark/openemr_local/`:
   pinned image digests, verified source files, a hashed SQL baseline, loopback
-  ports 9741 (HTTP) and 9740 (HTTPS), and its own Compose project
+  ports 9741 (HTTP) and 9740 (HTTPS) (set `OPENADAPT_QUICKSTART_OPENEMR_HTTP_PORT`
+  and `OPENADAPT_QUICKSTART_OPENEMR_HTTPS_PORT` to move them), and its own Compose project
   (`openadapt-quickstart-openemr`). Its state stays in
   `~/.cache/openadapt/quickstart-openemr`. The first run downloads the images
   if they're missing (about 2.6 GB unpacked), installs OpenEMR, and adds
@@ -54,8 +55,9 @@ about 22 seconds.
   born 1958-03-27), then runs a referral for a Rosa Delgado born 1958-03-22.
   OpenEMR's duplicate check lists the match, and the program stops before
   saving ("Stopped before saving: possible duplicate"). SQL finds 0 new charts.
-- **Finale.** The same receipt card and Seal, plus a link to the published
-  Seals at <https://openadapt.ai/seals>.
+- **Finale.** The same receipt card and Seal. Every quickstart, in either app,
+  ends the receipt with "See real Seals from OpenEMR runs:
+  https://openadapt.ai/seals".
 
 To stop the fixture, run
 `docker compose -p openadapt-quickstart-openemr stop`. The next quickstart

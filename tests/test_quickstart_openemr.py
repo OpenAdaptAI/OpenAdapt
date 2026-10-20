@@ -409,7 +409,7 @@ def test_a_new_chart_in_act_three_is_never_called_a_clean_stop(root):
 
 def test_the_finale_links_the_published_seals(root):
     output, _ = _plain(FakeOpenEMR(root))
-    assert f"Published Seals: {SEALS_URL}" in output
+    assert f"See real Seals from OpenEMR runs: {SEALS_URL}" in output
     assert "agent serve --bundles openadapt-quickstart/bundle" in output
 
 

@@ -135,6 +135,30 @@ def _fixture(tmp_path: Path, runner: _Runner, monkeypatch) -> q.QuickstartFixtur
     return fixture
 
 
+def test_ports_come_from_the_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENADAPT_QUICKSTART_OPENEMR_HTTP_PORT", "9541")
+    monkeypatch.setenv("OPENADAPT_QUICKSTART_OPENEMR_HTTPS_PORT", "9540")
+    fixture = q.QuickstartFixture(tmp_path / "state")
+    assert fixture.ui_base_url == "http://127.0.0.1:9541"
+    assert fixture.api_base_url == "https://127.0.0.1:9540"
+    monkeypatch.setenv("OPENADAPT_QUICKSTART_OPENEMR_HTTP_PORT", "80; rm")
+    with pytest.raises(fx.FixtureError):
+        q.ports()
+
+
+def test_a_fixture_on_other_ports_is_removed_and_set_up_again(tmp_path, monkeypatch):
+    runner = _Runner()
+    fixture = _fixture(tmp_path, runner, monkeypatch)
+    _bootstrapped(fixture.state_dir)
+    monkeypatch.setenv("OPENADAPT_QUICKSTART_OPENEMR_HTTP_PORT", "9541")
+    moved = _fixture(tmp_path, runner, monkeypatch)
+    assert not moved.bootstrapped()
+    monkeypatch.setattr(q, "default_state_dir", lambda: moved.state_dir)
+    moved.discard()
+    assert any(call[-2:] == ["down", "--volumes"] for call in runner.calls)
+    assert not moved.state_dir.exists()
+
+
 def test_own_project_and_loopback_ports(tmp_path):
     fixture = q.QuickstartFixture(tmp_path / "state")
     assert (

@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import IO, Any, Iterator, Mapping, Optional
 
 from openadapt.quickstart.engine import BreakFacts, DemoStep, RunFacts
-from openadapt.quickstart.scene import MOCKMED, Scene
+from openadapt.quickstart.scene import MOCKMED, SEALS_LINE, SEALS_URL, Scene
 from openadapt.quickstart.story import NextSteps, Outcome, display_path
 
 #: Width of the step and note column, so times line up.
@@ -294,10 +294,9 @@ class PlainView:
         self._say("Receipt")
         for name, value in receipt_rows(outcome, self.marks, self.scene):
             self._say(f"  {name:<9}  {value}")
+        self._say(SEALS_LINE)
         if steps.verify:
             self._say(f"Check it: {steps.verify}")
-        if self.scene.seals_url:
-            self._say(f"Published Seals: {self.scene.seals_url}")
         self._say(details_line(outcome))
         for line in next_step_lines(steps):
             self._say(line)
@@ -528,12 +527,10 @@ class RichView:
         self.console.print(
             Panel(table, title="Receipt", title_align="left", expand=False)
         )
+        label = SEALS_LINE[: -len(SEALS_URL)].rstrip()
+        self.console.print(f"[dim]{label}[/] [bold cyan]{SEALS_URL}[/]")
         if steps.verify:
             self.console.print(f"[dim]Check it:[/] [bold]{_escape(steps.verify)}[/]")
-        if self.scene.seals_url:
-            self.console.print(
-                f"[dim]Published Seals:[/] [bold cyan]{self.scene.seals_url}[/]"
-            )
         self.console.print(f"[dim]{_escape(details_line(outcome))}[/]")
         for line in next_step_lines(steps):
             label, _, command = line.partition(": ")

@@ -43,10 +43,24 @@ from . import fixture as fx
 HERE = Path(__file__).resolve().parent
 FLOW = HERE.parents[1]
 
-#: The quickstart's own Compose project and loopback ports.
+#: The quickstart's own Compose project and its default loopback ports;
+#: ``OPENADAPT_QUICKSTART_OPENEMR_HTTP_PORT`` and ``..._HTTPS_PORT`` move them
+#: (a fixture set up on other ports is set up again on the new ones).
 PROJECT = "openadapt-quickstart-openemr"
 UI_PORT = "9741"
 API_PORT = "9740"
+
+
+def ports() -> tuple[str, str]:
+    """(HTTP, HTTPS) loopback ports, from the environment or the defaults."""
+
+    http = os.environ.get("OPENADAPT_QUICKSTART_OPENEMR_HTTP_PORT") or UI_PORT
+    https = os.environ.get("OPENADAPT_QUICKSTART_OPENEMR_HTTPS_PORT") or API_PORT
+    for port in (http, https):
+        if not re.fullmatch(r"[1-9][0-9]{2,4}", port) or int(port) > 65535:
+            raise fx.FixtureError(f"not a port: {port!r}")
+    return http, https
+
 
 #: Act 2's referrals and Act 3's possible duplicate: the referral timing
 #: benchmark's synthetic patients, the same ones behind the site's Seals.
@@ -95,22 +109,23 @@ class QuickstartFixture(fx.OpenEMRFixture):
     def __init__(self, state_dir: Path | str, **kwargs: Any) -> None:
         super().__init__(state_dir, **kwargs)
         self.lock = {**self.lock, "project": PROJECT}
+        self.http_port, self.https_port = ports()
 
     @property
     def ui_base_url(self) -> str:
-        return f"http://127.0.0.1:{UI_PORT}"
+        return f"http://127.0.0.1:{self.http_port}"
 
     @property
     def api_base_url(self) -> str:
-        return f"https://127.0.0.1:{API_PORT}"
+        return f"https://127.0.0.1:{self.https_port}"
 
     def _expected_runtime(self) -> dict[str, str]:
         return {
             "OPENEMR_IMAGE": self.lock["services"]["openemr"],
             "MARIADB_IMAGE": self.lock["services"]["mariadb"],
             "OPENEMR_ACTOR_USER": "openadapt_actor",
-            "OPENEMR_HTTP_PORT": UI_PORT,
-            "OPENEMR_HTTPS_PORT": API_PORT,
+            "OPENEMR_HTTP_PORT": self.http_port,
+            "OPENEMR_HTTPS_PORT": self.https_port,
         }
 
     def _validate_runtime_env(self) -> None:
@@ -152,8 +167,12 @@ class QuickstartFixture(fx.OpenEMRFixture):
     # -- state ------------------------------------------------------------
 
     def bootstrapped(self) -> bool:
-        """True when a previous quickstart finished setting this fixture up."""
+        """True when a previous quickstart set this fixture up, on these ports."""
 
+        try:
+            self._validate_runtime_env()
+        except fx.FixtureError:
+            return False
         return all(
             path.is_file()
             for path in (
@@ -201,8 +220,24 @@ class QuickstartFixture(fx.OpenEMRFixture):
         """
 
         if self.runtime_env.exists():
+            # Not through _compose: its check of runtime.env refuses a copy
+            # set up on other ports, which is exactly the one to remove.
             with contextlib.suppress(fx.FixtureError):
-                self._compose("down", "--volumes", timeout_s=180.0)
+                self._run(
+                    [
+                        "docker",
+                        "compose",
+                        "--env-file",
+                        str(self.runtime_env),
+                        "-f",
+                        str(self._compose_path()),
+                        "-p",
+                        self.lock["project"],
+                        "down",
+                        "--volumes",
+                    ],
+                    timeout_s=180.0,
+                )
         if self.state_dir.name == default_state_dir().name or os.environ.get(
             "OPENADAPT_QUICKSTART_OPENEMR_STATE"
         ):
