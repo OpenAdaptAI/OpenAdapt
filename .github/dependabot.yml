@@ -30,6 +30,14 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+  # packages/tray keeps its own uv.lock, like packages/capture.
+  - package-ecosystem: "uv"
+    directory: "/packages/tray"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
   # packages/desktop: its uv.lock, the frontend's package-lock.json and the
   # Tauri shell's Cargo.lock. Minor and patch bumps are grouped, as they were
   # in openadapt-desktop.

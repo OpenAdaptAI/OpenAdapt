@@ -163,7 +163,14 @@ def cmd_guard(args: argparse.Namespace) -> int:
             signal.signal(sig, handler)
     result: dict[str, Any] = {"run": run.summary, "out": str(run.out_dir)}
     if run.verified and cfg.teach is not None and not args.no_teach:
-        if run.recording is None:
+        if run.left_scope:
+            # Page content or the agent reached outside the task's scope:
+            # what was recorded is not a run to compile.
+            result["handoff"] = {
+                "status": "refused",
+                "detail": "the run went outside the task's scope; no draft",
+            }
+        elif run.recording is None:
             result["handoff"] = {"status": "no_recording"}
         else:
             try:
@@ -186,6 +193,8 @@ def _print(result: dict[str, Any], *, as_json: bool) -> None:
     print(f"verdict: {run.get('verdict') or 'no save went through'}")
     for item in run.get("blocked") or []:
         print(f"  blocked a save: {item['code']}")
+    for item in run.get("scope_blocked") or []:
+        print(f"  blocked outside the task's scope: {item['code']} ({item['origin']})")
     for item in run.get("would_block") or []:
         print(f"  would have blocked (observe-only): {item['code']}")
     if run.get("hold_ms"):

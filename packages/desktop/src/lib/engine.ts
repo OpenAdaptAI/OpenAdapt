@@ -55,6 +55,7 @@ export const CMD = {
   TURN_OFF_APPROVAL_MODE: "turn_off_approval_mode",
   RUN_SAMPLE: "run_sample",
   GET_QUALIFICATION: "get_qualification",
+  EDIT_PROGRAM_SECTIONS: "edit_program_sections",
   // Check it pre-filled from the recording; answered by a person or their agent.
   GET_CHECK_SETUP: "get_check_setup",
   ANSWER_CHECK_SETUP: "answer_check_setup",

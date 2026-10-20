@@ -31,7 +31,6 @@ from openadapt_flow.agent_guard.requests import HeldRequest
 __all__ = ["CdpGuardPage", "PAUSED_TYPES"]
 
 PAUSED_TYPES = ("Document", "XHR", "Fetch", "Ping", "Other")
-
 NOTICE_ID = "openadapt-guard-notice"
 
 _READ_SCREEN = """
@@ -79,7 +78,13 @@ def _call(source: str) -> str:
 class CdpGuardPage:
     """A :class:`~openadapt_flow.agent_guard.commit_guard.GuardPage` over CDP."""
 
-    def __init__(self, page: Any, *, screen_selector: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        page: Any,
+        *,
+        screen_selector: Optional[str] = None,
+        all_resources: bool = False,
+    ) -> None:
         self.page = page
         self.screen_selector = screen_selector
         self.cdp = page.context.new_cdp_session(page)
@@ -96,15 +101,16 @@ class CdpGuardPage:
             "Network.loadingFailed", lambda p: self._done.append(p.get("requestId"))
         )
         self.cdp.send("Network.enable", {})
-        self.cdp.send(
-            "Fetch.enable",
-            {
-                "patterns": [
-                    {"urlPattern": "*", "resourceType": kind, "requestStage": "Request"}
-                    for kind in PAUSED_TYPES
-                ]
-            },
-        )
+        if all_resources:
+            # A teach scope: every request is paused, so a read to an
+            # undeclared origin (an image beacon, a script, a font) is seen.
+            patterns = [{"urlPattern": "*", "requestStage": "Request"}]
+        else:
+            patterns = [
+                {"urlPattern": "*", "resourceType": kind, "requestStage": "Request"}
+                for kind in PAUSED_TYPES
+            ]
+        self.cdp.send("Fetch.enable", {"patterns": patterns})
 
     # -- the loop ------------------------------------------------------------------
 

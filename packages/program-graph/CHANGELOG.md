@@ -2,6 +2,11 @@
 
 ## v0.1.0 (2026-10-19)
 
+- Compiled sections: the map folds `spec.sections`, which Flow computes for
+  every bundle, when the host passes no `folds`. `onEditSection` lets a
+  reviewer rename, merge or split them; `sectionFolds` and `sectionReview` are
+  exported. The demo fixture's sections are now Flow's, not a hand-written
+  table.
 - `ProgramWorkbench`: the program map, selected-step inspector, evidence lanes
   and stop rules for a Flow program graph (spec v2), with keyboard navigation
   and screen-reader descriptions.

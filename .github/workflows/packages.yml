@@ -42,10 +42,20 @@
 # on main, and the bundled-Flow qualification contract) and desktop-build.yml
 # (frontend, Python distribution, frozen sidecar, and Tauri installers). Their
 # jobs are in packages-gate like every other package's.
+#
+# openadapt-tray (packages/tray) keeps its own uv.lock and runs `uv sync
+# --locked` against it: its suite on Linux with Python 3.10 and 3.12 for a PR,
+# plus 3.11, macOS and Windows on main; ruff, the version and changelog
+# contract, `uv build` and the archive boundary; and Desktop's socket test
+# against this tray client, so a tray change cannot break the protocol
+# without the desktop suite running. A desktop change runs that same test in
+# desktop-test.yml.
 name: Packages
 
 on:
   pull_request:
+  # The merge queue tests each group before it lands on main.
+  merge_group:
   push:
     branches: [main]
   workflow_dispatch:
@@ -54,10 +64,33 @@ permissions:
   contents: read
 
 concurrency:
-  # A pull request's newer push supersedes its older run. Runs on main are
-  # never cancelled: desktop-release.yml needs every main commit's own result.
-  group: packages-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # A pull request's newer push supersedes its older run.
+  #
+  # On main, desktop-release.yml waits for the Packages run of the newest
+  # first-parent commit that changed packages/desktop (#1398). A push whose
+  # commits touch packages/desktop/ therefore keeps its own group and is never
+  # cancelled. Every other push to main shares one group, so a newer one
+  # cancels it instead of queueing behind it. The test is conservative: any
+  # mention of packages/desktop/ in the push payload (file lists or messages)
+  # counts as a Desktop change. A push with no commit list, or with 20 or more
+  # commits (GitHub truncates the payload's list at 20, which could hide a
+  # Desktop change), keeps its own group. Merge queue groups and dispatches
+  # are never cancelled.
+  group: >-
+    packages-${{
+      github.event.pull_request.number
+      || (github.event_name == 'push'
+          && github.event.head_commit
+          && !github.event.commits[19]
+          && !contains(toJSON(github.event.commits), 'packages/desktop/')
+          && 'main-without-desktop')
+      || github.sha }}
+  cancel-in-progress: >-
+    ${{ github.event_name == 'pull_request'
+        || (github.event_name == 'push'
+            && github.event.head_commit != null
+            && !github.event.commits[19]
+            && !contains(toJSON(github.event.commits), 'packages/desktop/')) }}
 
 env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -74,6 +107,7 @@ jobs:
       capture: ${{ steps.classify.outputs.capture }}
       privacy: ${{ steps.classify.outputs.privacy }}
       desktop: ${{ steps.classify.outputs.desktop }}
+      tray: ${{ steps.classify.outputs.tray }}
       program_graph: ${{ steps.classify.outputs.program_graph }}
       weight: ${{ steps.classify.outputs.weight }}
     steps:
@@ -86,15 +120,23 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BEFORE_SHA: ${{ github.event.before }}
+          GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: |
           set -euo pipefail
           all() {
-            for pkg in flow types agent capture privacy desktop program_graph weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
+            for pkg in flow types agent capture privacy desktop tray program_graph weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
             exit 0
           }
           case "$EVENT_NAME" in
             workflow_dispatch) all ;;
             pull_request) base="HEAD^1" ;;  # the PR merge commit's first parent is the base tip
+            # A queue group runs the full matrix (the PR tier ran one lane)
+            # for every package the group's PRs touch, measured from the main
+            # commit the group was built on.
+            merge_group)
+              base="$GROUP_BASE_SHA"
+              git cat-file -e "$base^{commit}" 2>/dev/null || all
+              ;;
             *)
               if [ -z "${BEFORE_SHA:-}" ] || [ "$BEFORE_SHA" = 0000000000000000000000000000000000000000 ] \
                 || ! git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then
@@ -118,7 +160,9 @@ jobs:
           agent="$(hit "^packages/(agent|flow|types)/|$wf")"
           capture="$(hit "^packages/capture/|$wf")"
           privacy="$(hit "^packages/privacy/|$wf")"
-          desktop="$(hit "^packages/desktop/|^\.github/workflows/desktop-[a-z-]+\.yml$|$wf")"
+          # Desktop bundles the program map from packages/program-graph.
+          desktop="$(hit "^packages/(desktop|program-graph)/|^\.github/workflows/desktop-[a-z-]+\.yml$|$wf")"
+          tray="$(hit "^packages/tray/|$wf")"
           # The program map checks its schema against Flow's copy.
           program_graph="$(hit "^packages/program-graph/|^packages/flow/schemas/program-graph-v2\.json$|^\.github/workflows/release-program-graph\.yml$|$wf")"
           # Any package's metadata, or the launcher's, can change what an
@@ -131,6 +175,7 @@ jobs:
             echo "capture=$capture"
             echo "privacy=$privacy"
             echo "desktop=$desktop"
+            echo "tray=$tray"
             echo "program_graph=$program_graph"
             echo "weight=$weight"
           } | tee -a "$GITHUB_OUTPUT"
@@ -681,6 +726,90 @@ jobs:
     if: needs.scope.outputs.desktop == 'true'
     uses: ./.github/workflows/desktop-build.yml
 
+  tray:
+    name: tray (${{ matrix.os }}, py${{ matrix.python-version }})
+    needs: scope
+    if: needs.scope.outputs.tray == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        # A pull request runs Linux on the oldest and newest Python; main adds
+        # 3.11, macOS and Windows, where the tray's platform handlers differ.
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-latest","python-version":"3.10"},{"os":"ubuntu-latest","python-version":"3.12"}]' || '[{"os":"ubuntu-latest","python-version":"3.10"},{"os":"ubuntu-latest","python-version":"3.11"},{"os":"ubuntu-latest","python-version":"3.12"},{"os":"macos-latest","python-version":"3.12"},{"os":"windows-latest","python-version":"3.12"}]') }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: packages/tray
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Set up Python
+        run: uv python install ${{ matrix.python-version }}
+      - name: Install
+        run: uv sync --locked --python ${{ matrix.python-version }} --extra dev
+      - name: Test
+        env:
+          # No display or input device on the Linux runners.
+          PYNPUT_BACKEND: ${{ runner.os == 'Linux' && 'dummy' || '' }}
+          PYSTRAY_BACKEND: ${{ runner.os == 'Linux' && 'dummy' || '' }}
+        run: uv run --no-sync pytest tests -q
+
+  tray-contract:
+    name: tray lint and release contract
+    needs: scope
+    if: needs.scope.outputs.tray == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: packages/tray
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install
+        run: uv sync --locked --python 3.12 --extra dev
+      # The whole package, including examples/ and the root helper scripts.
+      - name: Ruff
+        run: uv run --no-sync ruff check .
+      - name: Build wheel and source distribution
+        run: uv build
+      - name: Versions agree and both distributions exist
+        run: uv run --no-sync python scripts/check_release_consistency.py --require-dist
+      - name: Verify release archive boundaries
+        run: uv run --no-sync python scripts/check_source_boundary.py --require-dist
+
+  tray-desktop-ipc:
+    # Desktop's socket server against this tray's IPC client, both from this
+    # commit. desktop-test.yml runs the same test when Desktop changes.
+    name: tray and desktop IPC contract
+    needs: scope
+    if: needs.scope.outputs.tray == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: packages/desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install Desktop
+        run: uv sync --locked --python 3.12 --extra dev
+      - name: Exercise the Desktop and Tray IPC contract
+        env:
+          OPENADAPT_TRAY_SOURCE: ../tray/src
+        run: uv run --no-sync pytest tests/test_tray_integration.py -v
+
   program-graph:
     name: program-graph (test, build, vendor)
     needs: scope
@@ -806,6 +935,9 @@ jobs:
       - privacy-contract
       - desktop-test
       - desktop-build
+      - tray
+      - tray-contract
+      - tray-desktop-ipc
       - program-graph
       - install-weight
       - capture-core-record

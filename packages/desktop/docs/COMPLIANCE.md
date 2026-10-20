@@ -64,8 +64,8 @@ and uninstalls every package on clean runners. That is packaging evidence. It
 isn't workflow qualification, which stays specific to each workflow and each
 environment.
 
-CI also runs the exact `openadapt-tray` IPC client against this engine's
-loopback socket server. The two applications haven't been run together end to
+CI also runs the `openadapt-tray` IPC client from the same commit
+(`packages/tray`) against this engine's loopback socket server. The two applications haven't been run together end to
 end.
 
 Area-by-area evidence boundaries are in

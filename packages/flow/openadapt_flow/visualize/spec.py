@@ -324,6 +324,43 @@ class GraphEdge(BaseModel):
     )
 
 
+class SectionKind(str, Enum):
+    """What a section holds: fields to fill, the save, or other steps."""
+
+    FIELDS = "fields"
+    SAVE = "save"
+    STEPS = "steps"
+
+
+class SectionTitleSource(str, Enum):
+    """Where a section's title came from (see :mod:`openadapt_flow.sections`)."""
+
+    UI = "ui"
+    NARRATION = "narration"
+    FIELDS = "fields"
+    PERSON = "person"
+
+
+class GraphSection(BaseModel):
+    """A named, contiguous group of action nodes, compiled with the bundle.
+
+    Display metadata from the bundle's ``sections.json``: a surface may fold
+    a section into one card. Execution never reads it.
+    """
+
+    id: str = Field(description="Section id; never equal to a node id")
+    title: str
+    subtitle: str = Field(description="One line such as '6 steps · 3 fields'")
+    kind: SectionKind
+    title_source: SectionTitleSource
+    nodes: list[str] = Field(description="Member node ids, in program order")
+    section: str = Field(description="The bundle's section id, for review edits")
+    steps: list[str] = Field(description="The members' step ids, parallel to nodes")
+    fields: list[str] = Field(
+        default_factory=list, description="Readable names of the fields it fills"
+    )
+
+
 class ProgramGraphSpec(BaseModel):
     """The complete, self-describing visualization spec for one compiled bundle.
 
@@ -335,3 +372,7 @@ class ProgramGraphSpec(BaseModel):
     bundle: BundleMeta
     nodes: list[GraphNode] = Field(default_factory=list)
     edges: list[GraphEdge] = Field(default_factory=list)
+    sections: list[GraphSection] = Field(
+        default_factory=list,
+        description="Named groups of action nodes from the bundle's sections.json",
+    )

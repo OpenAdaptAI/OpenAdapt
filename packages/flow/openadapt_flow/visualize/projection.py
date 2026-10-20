@@ -36,6 +36,7 @@ from openadapt_flow.visualize.spec import (
     EffectInfo,
     GraphEdge,
     GraphNode,
+    GraphSection,
     IdentityInfo,
     NodeKind,
     ParamInfo,
@@ -43,6 +44,7 @@ from openadapt_flow.visualize.spec import (
     ProvenanceInfo,
     ResolutionInfo,
     ResolutionRung,
+    SectionKind,
 )
 
 
@@ -253,7 +255,23 @@ _EDGE_PUBLIC: Final = frozenset({"source", "target", "kind", "label"})
 # guard: free-text predicate summary; guard_reason: spoken sentence.
 _EDGE_LOCAL: Final = frozenset({"guard", "guard_reason"})
 
-_SPEC_PUBLIC: Final = frozenset({"spec_version", "bundle", "nodes", "edges"})
+_SECTION_PUBLIC: Final = frozenset(
+    {
+        "id",  # synthetic section identity
+        "title",  # REPLACED by a closed phrase per kind
+        "subtitle",  # REBUILT from counts
+        "kind",  # closed vocabulary
+        "title_source",  # closed vocabulary
+        "nodes",  # node ids; topology is retained by contract
+        "section",  # synthetic section identity
+        "steps",  # step ids, already part of the node ids
+    }
+)
+_SECTION_LOCAL: Final = frozenset({"fields"})  # recorded field labels
+
+_SPEC_PUBLIC: Final = frozenset(
+    {"spec_version", "bundle", "nodes", "edges", "sections"}
+)
 _SPEC_LOCAL: Final[frozenset[str]] = frozenset()
 
 #: model -> (fields that may leave, fields that must not). Together these must
@@ -265,6 +283,7 @@ FIELD_BOUNDARY: Final[dict[type[BaseModel], tuple[frozenset[str], frozenset[str]
     ProvenanceInfo: (_PROVENANCE_PUBLIC, _PROVENANCE_LOCAL),
     ParamInfo: (_PARAM_PUBLIC, _PARAM_LOCAL),
     GraphNode: (_NODE_PUBLIC, _NODE_LOCAL),
+    GraphSection: (_SECTION_PUBLIC, _SECTION_LOCAL),
     ResolutionInfo: (_RESOLUTION_PUBLIC, _RESOLUTION_LOCAL),
     ResolutionRung: (_RUNG_PUBLIC, _RUNG_LOCAL),
     IdentityInfo: (_IDENTITY_PUBLIC, _IDENTITY_LOCAL),
@@ -562,4 +581,27 @@ def project_program_graph(
         bundle=_project_bundle(spec.bundle),
         nodes=[_project_node(node) for node in spec.nodes],
         edges=[_project_edge(edge) for edge in spec.edges],
+        sections=[_project_section(section) for section in spec.sections],
+    )
+
+
+#: Public section titles: interface text and field labels stay local.
+_SECTION_TITLES: Final = {
+    SectionKind.FIELDS: "Fill declared inputs",
+    SectionKind.SAVE: "Commit the write",
+    SectionKind.STEPS: "Run declared steps",
+}
+
+
+def _project_section(section: GraphSection) -> GraphSection:
+    count = len(section.nodes)
+    return GraphSection(
+        id=section.id,
+        title=_SECTION_TITLES[section.kind],
+        subtitle=f"{count} {'step' if count == 1 else 'steps'}",
+        kind=section.kind,
+        title_source=section.title_source,
+        nodes=list(section.nodes),
+        section=section.section,
+        steps=list(section.steps),
     )

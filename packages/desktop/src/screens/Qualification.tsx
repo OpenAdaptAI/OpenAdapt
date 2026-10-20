@@ -17,10 +17,15 @@ import { Button, Callout, Card, CardHead, Pill } from "../ui/primitives";
 import { QualificationJourney } from "../ui/QualificationJourney";
 import { BusinessDecisionAuthoring } from "../ui/BusinessDecisionAuthoring";
 import { JudgmentCaseCapture } from "../ui/JudgmentCaseCapture";
-import { ProgramWorkbench } from "../ui/ProgramWorkbench";
+import { ProgramWorkbench, type SectionEdit } from "@openadapt/program-graph";
+import { PROGRAM_WORKBENCH_NOTES, PROGRAM_WORKBENCH_SURFACE } from "../lib/programWorkbench";
 import { QualificationLifecycle } from "./QualificationLifecycle";
 
 const POLICY = "clinical-write";
+
+type EditProgramSectionsResponse =
+  | { ok: true; graph: QualificationProject["graph"] }
+  | { ok: false; error: string };
 const IDENTITY_NORMALIZERS: {
   value: QualificationIdentityNormalizer;
   label: string;
@@ -233,6 +238,25 @@ export function Qualification({
   const [capabilities, setCapabilities] = useState("");
   const [minimumTier, setMinimumTier] = useState(3);
   const [projectMinimumTier, setProjectMinimumTier] = useState(3);
+
+  // Rename, merge or split a named section. Flow stores it in the bundle's
+  // sections.json; the program and its certification do not change.
+  async function editSection(edit: SectionEdit) {
+    setError("");
+    try {
+      const response = await engineInvoke<EditProgramSectionsResponse>(
+        CMD.EDIT_PROGRAM_SECTIONS,
+        { workflow_id: workflowId, edit },
+      );
+      if (!response.ok) {
+        setError(response.error);
+        return;
+      }
+      setProject((current) => (current ? { ...current, graph: response.graph } : current));
+    } catch (reason) {
+      setError(String(reason));
+    }
+  }
 
   async function load() {
     setBusy("loading");
@@ -1072,7 +1096,12 @@ export function Qualification({
               title="Compiled structure and evidence contract"
               sub="Inspect the exact topology, recorded target evidence, identity gates, independent checks, and stop rules before you qualify this version."
             />
-            <ProgramWorkbench graph={project.graph} />
+            <ProgramWorkbench
+              spec={project.graph}
+              className={PROGRAM_WORKBENCH_SURFACE}
+              notes={PROGRAM_WORKBENCH_NOTES}
+              onEditSection={project.graph.sections?.length ? editSection : undefined}
+            />
           </Card>
 
           {project.project && (

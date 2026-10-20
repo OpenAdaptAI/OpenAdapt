@@ -43,6 +43,9 @@ Nothing leaves your computer, and the guard makes no model calls.
    not_saves:                               # optional: writes that aren't the save
      - {method: POST, path: /chart/signin}
    approval: not_gated                      # each_item: a person approves each save
+   allow_origins: []                        # optional: other origins the tab may reach
+   write_adapter: openadapt_flow.mockmed.teach_scope:EncounterWrites  # optional
+   allow_text: [Triage]                     # optional: values a save may carry besides the task's
    teach:                                   # optional: make run 2 a program
      dir: .openadapt-teach
      name: triage_note
@@ -76,16 +79,27 @@ Nothing leaves your computer, and the guard makes no model calls.
 
 ## What the guard does with each request
 
-The guard pauses the tab's requests with the CDP `Fetch` domain: documents
-(form posts), `fetch`, XHR, beacons and others. Images, event streams,
-scripts, styles, fonts and media aren't paused.
+The guard pauses every request of the tab with the CDP `Fetch` domain:
+documents (form posts and navigations), `fetch`, XHR, beacons, images,
+scripts, styles, fonts and media.
+
+The task's teach scope ([THREAT_MODEL.md](THREAT_MODEL.md)) decides first.
+The tab may reach the app's origin, the origins in `allow_origins` and the
+origins of `not_saves` rules, and nothing else, so text on the page that
+steers the agent to another site, or an image beacon the page loads by
+itself, is blocked. With `write_adapter`, the guard also reads each save
+before the identity check: a save to another record, or with a field value
+that is neither the task's nor in `allow_text`, is blocked.
 
 | Request | What happens |
 |---|---|
+| Any request to an origin outside the scope | Blocked (`egress_origin_not_declared`). |
 | `GET`, `HEAD`, `OPTIONS`, a GraphQL `query` | Goes on at once. |
 | A write listed in `not_saves` | Goes on. |
-| `POST`, `PUT`, `PATCH`, `DELETE`, another method, or a GraphQL `mutation` to the app's origin | Held. This is a save. |
+| `POST`, `PUT`, `PATCH`, `DELETE`, another method, or a GraphQL `mutation` to the app's origin | Held. This is a save. With `write_adapter`, a save the task doesn't declare is blocked (`write_wrong_record`, `write_field_not_declared`, `write_value_not_declared`, `write_unattributed`). |
 | A write to another origin | Blocked, unless it is in `not_saves`. |
+
+A run in which anything went outside the scope is never handed to run 2.
 
 A GraphQL body that Flow can't read, such as a persisted query with no text,
 counts as a save.
@@ -233,6 +247,10 @@ GUI steps, and the run-2 times are GUI times.
 - One tab: the tab on the app's origin. A save from another tab or a popup
   isn't guarded.
 - Saves sent over a WebSocket aren't seen. CDP `Fetch` doesn't pause them.
+- The guard sees requests, not keystrokes: the agent drives its own browser,
+  so the guard can't refuse typed text the way the compile-agent harness
+  does. Without `write_adapter`, a save's values are judged by the read-back
+  after it lands, not before.
 - The record check is text on the screen. If the screen shows the expected
   values for two records (a list), the check can pass on the wrong row. Set
   `screen_selector` to the element that shows the open record.

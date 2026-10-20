@@ -310,3 +310,56 @@ def test_teach_scope_imports_before_the_jit_package() -> None:
     subprocess.run(
         [sys.executable, "-c", "import openadapt_flow.teach_scope"], check=True
     )
+
+
+def test_a_task_declaration_becomes_a_scope() -> None:
+    scope = TeachScope.for_task(
+        "mockmed.add_note",
+        origins=[BASE + "/#tasks", "https://cdn.example/x.js"],
+        record={"patient_id": "p1", "type": "Triage"},
+        inputs={"note": "Recheck"},
+        constants=["Jane Sample", "MRN P1"],
+        write_adapter=EncounterWrites(),
+    )
+    assert scope.origins == (BASE, "https://cdn.example")
+    assert scope.fields == {} and scope.constants == (
+        "Recheck",
+        "Jane Sample",
+        "MRN P1",
+    )
+    assert scope.typeable == {"p1", "Triage", "Recheck", "Jane Sample", "MRN P1"}
+    body = b'{"patient_id": "p1", "type": "Triage", "note": "Recheck"}'
+    assert scope.request_refusal("POST", BASE + "/api/encounter", body) is None
+    consult = b'{"patient_id": "p1", "type": "Consult", "note": "Recheck"}'
+    assert (
+        scope.request_refusal("POST", BASE + "/api/encounter", consult)
+        == "write_wrong_record"
+    )
+    extra = b'{"patient_id": "p1", "type": "Triage", "note": "Recheck. Cleared"}'
+    assert (
+        scope.request_refusal("POST", BASE + "/api/encounter", extra)
+        == "write_field_not_declared"
+    )
+    assert (
+        scope.request_refusal("GET", "http://127.0.0.1:9/beacon.gif", None)
+        == "egress_origin_not_declared"
+    )
+    assert scope.request_refusal("GET", "data:image/gif;base64,AA==", None) is None
+
+
+def test_a_scope_with_no_origin_lets_a_browser_reach_nothing() -> None:
+    scope = TeachScope("t", origins=(), record={"id": "1"}, fields={})
+    assert scope.request_refusal("GET", BASE + "/", None) == (
+        "egress_origin_not_declared"
+    )
+
+
+def test_write_adapters_load_by_name() -> None:
+    from openadapt_flow.teach_scope import load_write_adapter
+
+    adapter = load_write_adapter("openadapt_flow.mockmed.teach_scope:EncounterWrites")
+    assert isinstance(adapter, EncounterWrites)
+    with pytest.raises(ValueError, match="module:attr"):
+        load_write_adapter("openadapt_flow.mockmed.teach_scope")
+    with pytest.raises(ValueError, match="not a write adapter"):
+        load_write_adapter("openadapt_flow.mockmed.teach_scope:encounter_scope")

@@ -121,6 +121,11 @@ BUNDLE_FILES: Final[tuple[FileKind, ...]] = (
     ),
     FileKind("param_hygiene.json", "phi", "dropped checks with masked matched text"),
     FileKind(
+        "sections.json",
+        "phi",
+        "named groups of steps: titles from interface text and field labels",
+    ),
+    FileKind(
         "param_proposals.json",
         "phi",
         "proposed parameters: field labels and partly masked examples",

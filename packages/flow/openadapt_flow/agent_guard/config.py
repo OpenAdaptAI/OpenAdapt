@@ -48,6 +48,9 @@ _KEYS = {
     "observe_only",
     "response_wait_s",
     "teach",
+    "allow_origins",
+    "allow_text",
+    "write_adapter",
 }
 _TEACH_KEYS = {
     "dir",
@@ -95,6 +98,16 @@ class GuardConfig:
     observe_only: bool = False
     response_wait_s: float = 30.0
     teach: Optional[TeachSection] = None
+    #: More origins the agent's tab may reach besides the app's; every other
+    #: origin is blocked (the task's teach scope).
+    allow_origins: tuple[str, ...] = ()
+    #: ``module:attr`` of the app's write adapter
+    #: (:class:`~openadapt_flow.teach_scope.WriteAdapter`): each save is read
+    #: against the task's record and values before it is sent.
+    write_adapter: Optional[str] = None
+    #: Values a save may carry besides the task's own (a fixed encounter
+    #: type), for the write adapter's check.
+    allow_text: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not origin_of(self.app_url).startswith(("http://", "https://")):
@@ -165,6 +178,11 @@ def parse_config(raw: Mapping[str, Any], *, base: Path) -> GuardConfig:
         observe_only=bool(raw.get("observe_only", False)),
         response_wait_s=float(raw.get("response_wait_s", 30.0)),
         teach=teach,
+        allow_origins=tuple(
+            origin_of(str(o)) or str(o) for o in (raw.get("allow_origins") or [])
+        ),
+        write_adapter=raw.get("write_adapter") or None,
+        allow_text=tuple(str(t) for t in (raw.get("allow_text") or []) if str(t)),
     )
 
 
