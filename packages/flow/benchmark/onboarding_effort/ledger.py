@@ -27,6 +27,8 @@ RATE_CARD = {
     "command": 0.5,
 }
 PROTOCOL_VERSION = "onboarding-effort/v1"
+#: v2: readiness remedies (identifier, set-risk, save step); stop when the product blocks.
+IMPLEMENTER_VERSION = "v2"
 
 
 def host_load() -> float:
@@ -69,6 +71,7 @@ class Row:
     ts: float = field(default_factory=time.time)
     load1: float = field(default_factory=host_load)
     protocol: str = PROTOCOL_VERSION
+    implementer: str = IMPLEMENTER_VERSION
     manifest_sha256: str = ""
     engine_commit: str = ""
 

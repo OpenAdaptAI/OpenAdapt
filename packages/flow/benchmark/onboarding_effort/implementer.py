@@ -89,6 +89,9 @@ class Implementer:
         self.budget = budget
         self.s = State()
         out.mkdir(parents=True, exist_ok=True)
+        self.identifiers: list[str] = []
+        self.risk_answered: set[str] = set()
+        self.last_lint = ""
         os.environ["OE_WORKFLOW"] = wf.id
         os.environ["OE_INSTALLATION"] = installation
 
@@ -143,6 +146,12 @@ class Implementer:
     # -- teach surfaces --------------------------------------------------------
     def demonstrate(self, item: dict[str, str], tag: str, *, keyed: bool = False,
                     many: Optional[list[dict[str, str]]] = None) -> Path:
+        """One scripted demonstration through the product recorder.
+
+        With ``self.identifiers`` set (the engineer marked the record's
+        identifying field, as ``record --identifier FIELD`` does), clicks carry
+        that field's rect.
+        """
         from openadapt_flow.backends.playwright_backend import PlaywrightBackend
         from openadapt_flow.recorder import Recorder
 
@@ -161,7 +170,13 @@ class Implementer:
         ok, err, events = False, "", 0
         try:
             self.wf.start(page, self.inst)
-            rec = Recorder(PlaywrightBackend(page), rec_dir, app_url=page.url)
+            if self.identifiers:
+                from benchmark.onboarding_effort.recorder_ext import IdentifierRecorder
+
+                rec = IdentifierRecorder(PlaywrightBackend(page), rec_dir, app_url=page.url,
+                                         page=page, identifiers=self.identifiers)
+            else:
+                rec = Recorder(PlaywrightBackend(page), rec_dir, app_url=page.url)
             if keyed:
                 self.wf.demonstrate_keyed(rec, page, item)
             else:
@@ -216,6 +231,7 @@ class Implementer:
 
     def lint(self, bundle: Path, tag: str) -> str:
         _, text = self.cli("lint", "lint", ["lint", str(bundle)], log_name=f"lint-{tag}")
+        self.last_lint = text
         return text
 
     def write_verify(self, previous: Optional[Path] = None) -> Path:
@@ -361,13 +377,10 @@ class Implementer:
                     continue
                 if self.s.verify is None:
                     self.write_verify()
-                ok, text, certified = self.qualify(bundle, tag)
-                if not ok and self.classify(text) != "re-demonstrate":
-                    remedy = self.classify(text)
-                    self.stuck("qualify", text, remedy=remedy)
-                    self.correction(remedy)
-                    self.edit_verify(remedy, text)
-                    ok, text, certified = self.qualify(bundle, tag + "b")
+                ok, text, certified = self.qualify_with_remedies(bundle, tag, build)
+                if ok is None:
+                    self.s.outcome = f"failed: blocked by the product ({text})"
+                    return self.s.outcome
                 if not ok:
                     self.stuck("qualify", text, remedy="next strategy")
                     continue
@@ -384,6 +397,81 @@ class Implementer:
             self.log("end", "out of budget", ok=False, detail={"budget": str(exc), "stuck": self.s.stuck,
                                                                "summary": str(exc)})
             return self.s.outcome
+
+    def qualify_with_remedies(self, bundle: Path, tag: str, build: Any) -> tuple[Optional[bool], str, Optional[Path]]:
+        """qualify, then apply the product's documented fix for each refusal.
+
+        Returns (True, text, certified), (False, text, None) to move to the
+        next strategy, or (None, reason, None) when the product itself blocks
+        every strategy (no fix an engineer can apply).
+        """
+        n = 0
+        while True:
+            n += 1
+            ok, text, certified = self.qualify(bundle, f"{tag}q{n}")
+            if ok:
+                return True, text, certified
+            remedy = self.classify(text)
+            self.stuck("qualify", text, remedy=remedy)
+            if remedy == "blocked":
+                return None, _blocker(text), None
+            if remedy == "mark identifier":
+                if self.identifiers:
+                    return False, text, None
+                fields = self.identifier_fields(bundle)
+                if not fields:
+                    return False, text, None
+                self.correction("mark the record's identifying field (record --identifier)")
+                self.identifiers = fields
+                self.log("config", "answer: which field identifies the record", questions=1, ok=True,
+                         detail={"identifiers": fields, "summary": ", ".join(fields)})
+                rebuilt = build(f"{tag}i")
+                if rebuilt is None:
+                    return False, text, None
+                bundle = rebuilt
+                continue
+            if remedy == "set risk":
+                steps = sorted(set(re.findall(r"\[(step_\d{3})\]", self.last_lint)) - self.risk_answered)
+                if not steps:
+                    return False, text, None
+                self.correction("classify the risk of the flagged key steps (qualify set-risk)")
+                self.answer_risk(bundle, steps, tag)
+                continue
+            if remedy.startswith("name the save step"):
+                self.correction(remedy)
+                self.edit_verify(remedy, text)
+                continue
+            return False, text, None
+
+    def identifier_fields(self, bundle: Path) -> list[str]:
+        """The field the record's match key was typed into (from the recording)."""
+        verify = self.s.verify.read_text() if self.s.verify else ""
+        m = re.search(r"match:\s*\[([^\],]+)", verify) or re.search(r"match: \{(\w+):", verify)
+        if not m:
+            return []
+        key = m.group(1).strip()
+        rec = self.s.recordings[-1] if self.s.recordings else None
+        if rec is None:
+            return []
+        events = [json.loads(x) for x in (rec / "events.jsonl").read_text().splitlines()]
+        for i, e in enumerate(events):
+            if e.get("kind") == "type" and e.get("param") == key:
+                for prev in reversed(events[:i]):
+                    sel = ((prev.get("structural") or {}).get("selector"))
+                    if prev.get("kind") == "click" and sel:
+                        return [sel]
+        return []
+
+    def answer_risk(self, bundle: Path, steps: list[str], tag: str) -> None:
+        if not (bundle / "qualification").exists():
+            self.cli("qualify", "qualify init", ["qualify", "init", str(bundle), "--target", "web"],
+                     log_name=f"init-{tag}")
+        for step in steps:
+            self.cli("qualify", f"set-risk {step}",
+                     ["qualify", "set-risk", str(bundle), "--step", step, "--classification", "read_only",
+                      "--explanation", "Closes a dropdown list; changes nothing"],
+                     log_name=f"set-risk-{tag}-{step}", counts={"questions": 1})
+            self.risk_answered.add(step)
 
     def edit_verify(self, remedy: str, text: str) -> None:
         """Apply the one verify.yaml edit the product asked for."""
@@ -435,6 +523,14 @@ class Implementer:
 
     def classify(self, text: str) -> str:
         t = text.lower()
+        # Fix what an engineer can fix first; stop only when what is left
+        # needs a product change.
+        if "has no armed identity check" in t and not self.identifiers:
+            return "mark identifier"
+        if "has no structural selector" in t:
+            return "blocked"
+        if "risk_review_required" in t or "qualification override" in t:
+            return "set risk"
         if "save_step" in t or "no irreversible step" in t or "several irreversible" in t:
             return "name the save step in verify.yaml"
         return "re-demonstrate"
@@ -442,6 +538,13 @@ class Implementer:
     def _last_tail(self, log_name: str) -> str:
         p = self.out / f"{log_name}.log"
         return p.read_text()[-4000:] if p.exists() else ""
+
+
+def _blocker(text: str) -> str:
+    for line in text.splitlines():
+        if "has no structural selector" in line:
+            return line.strip(" -")
+    return _reason(text)
 
 
 def _reason(text: str) -> str:

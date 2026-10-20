@@ -123,28 +123,37 @@ class Workflow:
 
 
 class _PlainRecorder:
-    """Recorder stand-in for spec validation: the same input, nothing recorded."""
+    """Real pointer and keyboard input, nothing recorded by this object.
 
-    def __init__(self, page: Any) -> None:
+    Used for spec validation and, at a person's pace (``pace_s``), as the
+    hands of a demonstration the product's own recorder watches.
+    """
+
+    def __init__(self, page: Any, pace_s: float = 0.15, key_delay_ms: int = 0) -> None:
         self.page = page
+        self.pace_ms = int(pace_s * 1000)
+        self.key_delay_ms = key_delay_ms
 
     def click(self, x: int, y: int) -> None:
+        self.page.mouse.move(x, y)
         self.page.mouse.click(x, y)
-        self.page.wait_for_timeout(150)
+        self.page.wait_for_timeout(self.pace_ms)
 
     def double_click(self, x: int, y: int) -> None:
         self.page.mouse.dblclick(x, y)
+        self.page.wait_for_timeout(self.pace_ms)
 
     def type_text(self, text: str, param: Optional[str] = None) -> None:
-        self.page.keyboard.type(text)
+        self.page.keyboard.type(text, delay=self.key_delay_ms)
+        self.page.wait_for_timeout(self.pace_ms)
 
     def press(self, key: str) -> None:
         self.page.keyboard.press(key)
-        self.page.wait_for_timeout(150)
+        self.page.wait_for_timeout(self.pace_ms)
 
     def scroll(self, dx: int, dy: int) -> None:
         self.page.mouse.wheel(dx, dy)
-        self.page.wait_for_timeout(150)
+        self.page.wait_for_timeout(self.pace_ms)
 
     def finish(self) -> None:
         return None

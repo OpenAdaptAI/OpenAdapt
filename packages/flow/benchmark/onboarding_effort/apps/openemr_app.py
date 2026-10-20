@@ -26,6 +26,9 @@ from benchmark.openemr_local import fixture as fx
 PROJECT = "openadapt-openemr-onboard"
 HTTP_PORT = "9481"
 HTTPS_PORT = "9480"
+DB_PORT = "9482"
+READER_USER = "oe_reader"
+READER_PASS = "synthetic-reader-pass"  # throwaway local test copy
 MIN_FREE_BYTES = 10 * 1024**3
 
 
@@ -93,6 +96,25 @@ class OnboardOpenEMR(fx.OpenEMRFixture):
             if not re.fullmatch(r"[A-Za-z0-9_-]{24,}", values.get(secret_name, "")):
                 raise fx.FixtureError(f"runtime.env {secret_name} malformed")
         self.runtime_env.chmod(0o600)
+
+    def _compose_path(self) -> Path:
+        """Upstream's pinned compose plus a loopback MariaDB port for read-back."""
+        base = super()._compose_path()
+        merged = self.state_dir / "compose.onboard.yml"
+        import yaml
+
+        doc = yaml.safe_load(base.read_text())
+        doc["services"]["db"]["ports"] = [f"127.0.0.1:{DB_PORT}:3306"]
+        self._protect_state_dir()
+        merged.write_text(yaml.safe_dump(doc, sort_keys=False))
+        return merged
+
+    def create_reader(self) -> None:
+        """A read-only SQL account for the engineer's verify.yaml."""
+        self._db(
+            f"CREATE USER IF NOT EXISTS '{READER_USER}'@'%' IDENTIFIED BY '{READER_PASS}';"
+            f"GRANT SELECT ON openemr.* TO '{READER_USER}'@'%'; FLUSH PRIVILEGES;"
+        )
 
     def runtime_preflight(self) -> None:
         self._validate_lock()
