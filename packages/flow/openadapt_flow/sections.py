@@ -45,7 +45,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, Literal, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Final, Iterable, Literal, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -53,7 +53,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from openadapt_flow.ir import Step, Workflow
 
 SECTIONS_FILE = "sections.json"
-SECTIONS_SCHEMA = "openadapt.flow.sections/v1"
+SECTIONS_SCHEMA: Final = "openadapt.flow.sections/v1"
 
 #: A section with more fields than this splits where the kind of field changes.
 MAX_FIELDS = 4
@@ -143,9 +143,7 @@ class ProgramSections(BaseModel):
     context: dict[str, StepContext] = Field(default_factory=dict)
 
     def dump(self) -> str:
-        return (
-            json.dumps(self.model_dump(mode="json", by_alias=True), indent=2) + "\n"
-        )
+        return json.dumps(self.model_dump(mode="json", by_alias=True), indent=2) + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -334,6 +332,8 @@ def humanize_field(raw: str) -> str:
             out.append(lowered)
     if len(out) == 2 and out[1] in _QUALIFIERS:
         out = [out[1], out[0]]
+    if out == ["country", "code"]:  # forms label it "Country"
+        out = ["country"]
     return " ".join(out) or raw
 
 
@@ -827,7 +827,9 @@ def validate_sections(workflow: "Workflow", sections: Sequence[Section]) -> list
         run_ids = {r for r, _ in places}
         if len(run_ids) != 1:
             problems.append(f"{section.id}: spans more than one straight run")
-        elif [i for _, i in places] != list(range(places[0][1], places[0][1] + len(places))):
+        elif [i for _, i in places] != list(
+            range(places[0][1], places[0][1] + len(places))
+        ):
             problems.append(f"{section.id}: steps are not contiguous and in order")
         if previous is not None and places[0] <= previous:
             problems.append(f"{section.id}: out of order")
@@ -878,7 +880,9 @@ def _rebuilt(
     members = [by_id[s] for s in step_ids]
     inputs = [s for s in members if is_input(s)]
     fields = [n for s in inputs for n in [field_name(s)] if n]
-    kind: SectionKind = "save" if like.kind == "save" else ("fields" if fields else "steps")
+    kind: SectionKind = (
+        "save" if like.kind == "save" else ("fields" if fields else "steps")
+    )
     prefix = _derived_prefix(like)
     if prefix is not None and fields:
         title, source = f"{prefix}: {', '.join(fields)}", like.title_source
@@ -1135,7 +1139,9 @@ def load(bundle_dir: Path | str, workflow: "Workflow") -> ProgramSections:
     )
 
 
-def write(bundle_dir: Path | str, doc: ProgramSections, *, key: Optional[str] = None) -> Path:
+def write(
+    bundle_dir: Path | str, doc: ProgramSections, *, key: Optional[str] = None
+) -> Path:
     from openadapt_flow import sealed_set
 
     path = Path(bundle_dir) / SECTIONS_FILE

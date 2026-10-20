@@ -1690,7 +1690,11 @@ def _form_bundle(path: Path) -> Path:
                 template="templates/x.png",
                 region=(0, 0, 10, 10),
                 click_point=(5, 5),
-                structural=StructuralLocator(selector=selector, role=kw.pop("role", "textbox"), name=kw.pop("name", None)),
+                structural=StructuralLocator(
+                    selector=selector,
+                    role=kw.pop("role", "textbox"),
+                    name=kw.pop("name", None),
+                ),
             ),
             **kw,
         )
@@ -1723,7 +1727,8 @@ def test_review_graph_carries_the_named_sections_and_edits_them(tmp_path: Path) 
         edit={"op": "rename", "section": graph["sections"][0]["section"], "title": "Patient name"},
     )
     assert edited["graph"]["sections"][0]["title"] == "Patient name"
-    assert inspect_bundle(bundle, workflow_id="wf-1")["graph"]["sections"][0]["title"] == "Patient name"
+    reloaded = inspect_bundle(bundle, workflow_id="wf-1")["graph"]
+    assert reloaded["sections"][0]["title"] == "Patient name"
     assert Workflow.load(bundle).manifest.content_digest == digest
 
     with pytest.raises(QualificationError, match="save section stays separate"):

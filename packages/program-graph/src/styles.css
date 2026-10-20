@@ -643,6 +643,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* A folded section's title can take two lines ("Contact: street, city, state, postal code"). */
+.opg-node[data-fold="folded"] .opg-node-copy strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
+}
 .opg-node-signals {
   display: flex;
   align-items: center;

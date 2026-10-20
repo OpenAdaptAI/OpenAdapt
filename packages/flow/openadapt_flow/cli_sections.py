@@ -120,5 +120,7 @@ def cmd_sections(args: argparse.Namespace) -> int:
         )
         print(f"{section.id:<24} {section.title}  [{section.kind}; {span}]")
     if doc.edits:
-        print(f"{len(doc.edits)} review edit(s) stored in {program_sections.SECTIONS_FILE}")
+        print(
+            f"{len(doc.edits)} review edit(s) stored in {program_sections.SECTIONS_FILE}"
+        )
     return 0

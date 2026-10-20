@@ -73,12 +73,12 @@ describe("compiled sections", () => {
     const onEditSection = vi.fn();
     render(<ProgramWorkbench spec={spec} onEditSection={onEditSection} />);
     // The first card is selected.
-    fireEvent.click(screen.getByRole("button", { name: "Rename “Who”" }));
+    fireEvent.click(screen.getByRole("button", { name: "Rename this section" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Section title" }), { target: { value: "  Patient  name " } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(onEditSection).toHaveBeenLastCalledWith({ op: "rename", section: "fields-step_000", title: "Patient name" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Merge with “Contact”" }));
+    fireEvent.click(screen.getByRole("button", { name: "Merge with the next section" }));
     expect(onEditSection).toHaveBeenLastCalledWith({ op: "merge", section: "fields-step_000", other: "fields-step_002" });
 
     fireEvent.click(screen.getByRole("button", { name: "Show the 2 steps" }));

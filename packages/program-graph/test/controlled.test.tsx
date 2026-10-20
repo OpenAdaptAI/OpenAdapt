@@ -60,9 +60,9 @@ describe("host-driven workbench", () => {
   it("traceStateFromPlayhead marks earlier steps reached", () => {
     const display = deriveDisplayGraph(referral.spec, { folds: referral.folds });
     const state = traceStateFromPlayhead(display.spec, { node: "for_each::s::step_020", iteration: 1, status: "running" }, display.ownerOf);
-    expect(state.nodes.get("name")?.status).toBe("done");
-    expect(state.nodes.get("address")?.status).toBe("active");
-    expect(state.nodes.has("contact")).toBe(false);
+    expect(state.nodes.get("section:fields-step_000")?.status).toBe("done");
+    expect(state.nodes.get("section:fields-step_015")?.status).toBe("active");
+    expect(state.nodes.has("section:fields-step_030")).toBe(false);
   });
 
   it("can drop the chrome: no title bar, tabs, player or inspector", () => {
@@ -78,7 +78,7 @@ describe("host-driven workbench", () => {
 
   it("renders the inspector, the evidence lanes and the stop rules on their own", () => {
     render(<StepInspector spec={referral.spec} folds={referral.folds} nodeId="for_each::s::step_040" plainStopRules />);
-    expect(screen.getByLabelText("Selected program step").textContent).toContain("Create the chart");
+    expect(screen.getByLabelText("Selected program step").textContent).toContain("Create New Patient");
     expect(screen.getByText("Stops if reading the saved record back doesn’t confirm it.")).toBeTruthy();
     cleanup();
     render(<EvidenceLanes spec={processRecords} />);
@@ -93,8 +93,8 @@ describe("numbering", () => {
   it("numbers only the actions 1 to 29 and labels the loop", () => {
     render(<ProgramWorkbench spec={referral.spec} folds={referral.folds} numbering="actions" trace={referral.trace} initialCursor={referral.trace.events.length} />);
     expect(screen.getByRole("button", { name: /^loop: / }).textContent).toContain("LOOP");
-    expect(screen.getByRole("button", { name: /^Steps 01–06, 6 steps: Name/ })).toBeTruthy();
-    const save = screen.getByRole("button", { name: /^Steps 28–29, 2 steps: Create the chart/ });
+    expect(screen.getByRole("button", { name: /^Steps 01–06, 6 steps: Who: title, first name, last name/ })).toBeTruthy();
+    const save = screen.getByRole("button", { name: /^Steps 28–29, 2 steps: Create New Patient/ });
     expect(save.getAttribute("data-run")).toBe("halted");
     fireEvent.click(screen.getByRole("tab", { name: "Stop rules" }));
     expect(screen.getByText(/this run stopped at step 28/)).toBeTruthy();

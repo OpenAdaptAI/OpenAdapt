@@ -678,7 +678,9 @@ def _graph_sections(
                 parts.append("reads the record back")
             out.append(
                 GraphSection(
-                    id=f"section:{section.id}" if count == 1 else f"section:{k}:{section.id}",
+                    id=f"section:{section.id}"
+                    if count == 1
+                    else f"section:{k}:{section.id}",
                     title=section.title,
                     subtitle=" · ".join(parts),
                     kind=SectionKind(section.kind),

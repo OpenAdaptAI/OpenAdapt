@@ -112,9 +112,7 @@ def _form(fields: list[tuple[str, str]], *, save_name="Save", start=0) -> list[S
         steps.append(_click(i, selector))
         steps.append(_type(i + 1, param=param))
         i += 2
-    steps.append(
-        _click(i, "#save", role="button", name=save_name, risk="irreversible")
-    )
+    steps.append(_click(i, "#save", role="button", name=save_name, risk="irreversible"))
     return steps
 
 
@@ -134,7 +132,11 @@ def test_openemr_referral_matches_the_five_form_sections() -> None:
             "fields",
             "Contact: street, city, state, postal code",
         ),
-        (("step_029", "step_037"), "fields", "Contact: home phone, email, country code"),
+        (
+            ("step_029", "step_037"),
+            "fields",
+            "Contact: home phone, email, country",
+        ),
         (("step_038", "step_040"), "save", "Create New Patient"),
     ]
     assert [s.params for s in sections[:4]] == [
@@ -150,14 +152,22 @@ def test_openemr_referral_titles_from_the_recorded_form_structure() -> None:
     workflow = Workflow.load(REFERRAL)
     events = []
     for step in workflow.steps:
-        selector = step.anchor.structural.selector if step.anchor and step.anchor.structural else None
+        selector = (
+            step.anchor.structural.selector
+            if step.anchor and step.anchor.structural
+            else None
+        )
         index = int(step.id.split("_")[1])
         event = {"i": index, "kind": step.action.value}
         if step.anchor and step.anchor.structural:
             event["structural"] = step.anchor.structural.model_dump(exclude_none=True)
         if selector in _OPENEMR_FORM:
             event["section"] = {"kind": "accordion", "text": _OPENEMR_FORM[selector]}
-        if step.anchor and step.anchor.structural and step.anchor.structural.name == "Contact":
+        if (
+            step.anchor
+            and step.anchor.structural
+            and step.anchor.structural.name == "Contact"
+        ):
             event["section"] = {"kind": "accordion", "text": "Contact", "header": True}
         events.append(event)
     context = S.context_for_workflow(events, workflow)
@@ -166,7 +176,7 @@ def test_openemr_referral_titles_from_the_recorded_form_structure() -> None:
         "Who: title, first name, last name",
         "Who: date of birth, sex",
         "Contact: street, city, state, postal code",
-        "Contact: home phone, email, country code",
+        "Contact: home phone, email, country",
         "Create New Patient",
     ]
 
@@ -287,7 +297,9 @@ def test_unknown_fields_stay_together() -> None:
 
 def test_a_title_never_carries_a_recorded_value() -> None:
     steps = _form([("#a", "fname"), ("#b", "lname")])
-    context = {"step_000": S.StepContext(container="Patient: Rosa Delgado", kind="heading")}
+    context = {
+        "step_000": S.StepContext(container="Patient: Rosa Delgado", kind="heading")
+    }
     workflow = _workflow(steps, params={"fname": "Rosa", "lname": "Delgado"})
     titles = [s.title for s in S.compute_sections(workflow, context=context)]
     assert titles[0] == "2 fields: first name, last name"
@@ -372,9 +384,14 @@ def test_review_cannot_break_the_save_section() -> None:
             S.SectionEdit(op="split", section="save-step_038", at="step_039"),
         )
     moved = [s.model_copy() for s in sections]
-    moved[-2] = moved[-2].model_copy(update={"steps": [*moved[-2].steps, "step_038", "step_039"]})
+    moved[-2] = moved[-2].model_copy(
+        update={"steps": [*moved[-2].steps, "step_038", "step_039"]}
+    )
     moved[-1] = moved[-1].model_copy(update={"steps": ["step_040"]})
-    assert any("write outside a save section" in p for p in S.validate_sections(workflow, moved))
+    assert any(
+        "write outside a save section" in p
+        for p in S.validate_sections(workflow, moved)
+    )
 
 
 # -- review edits ------------------------------------------------------------------------
@@ -388,7 +405,9 @@ def test_rename_merge_and_split() -> None:
         sections,
         [
             S.SectionEdit(op="rename", section="fields-step_000", title="  Name "),
-            S.SectionEdit(op="merge", section="fields-step_000", other="fields-step_009"),
+            S.SectionEdit(
+                op="merge", section="fields-step_000", other="fields-step_009"
+            ),
             S.SectionEdit(op="split", section="fields-step_015", at="step_020"),
         ],
     )
@@ -396,7 +415,7 @@ def test_rename_merge_and_split() -> None:
         ("fields-step_000", "Name", "person"),
         ("fields-step_015", "Contact: street", "ui"),
         ("fields-step_020", "Contact: city, state, postal code", "ui"),
-        ("fields-step_029", "Contact: home phone, email, country code", "ui"),
+        ("fields-step_029", "Contact: home phone, email, country", "ui"),
         ("save-step_038", "Create New Patient", "ui"),
     ]
     assert S.validate_sections(workflow, sections) == []
@@ -409,7 +428,9 @@ def test_only_adjacent_sections_merge() -> None:
         S.apply_edit(
             workflow,
             sections,
-            S.SectionEdit(op="merge", section="fields-step_000", other="fields-step_015"),
+            S.SectionEdit(
+                op="merge", section="fields-step_000", other="fields-step_015"
+            ),
         )
 
 
@@ -428,7 +449,11 @@ def test_sections_are_outside_both_digests(bundle: Path) -> None:
     digest = workflow.manifest.content_digest
     contract = workflow_contract_sha256(workflow)
     S.write(bundle, S.build(workflow))
-    S.edit(bundle, workflow, [S.SectionEdit(op="rename", section="save-step_038", title="Create the chart")])
+    S.edit(
+        bundle,
+        workflow,
+        [S.SectionEdit(op="rename", section="save-step_038", title="Create the chart")],
+    )
     again = Workflow.load(bundle)  # verifies integrity
     assert again.manifest.content_digest == digest
     assert compute_content_digest(again, again.manifest.file_hashes) == digest
@@ -439,7 +464,13 @@ def test_sections_are_outside_both_digests(bundle: Path) -> None:
     assert stored["sections"][-1]["title"] == "Create the chart"
     assert stored["compiled"][-1]["title"] == "Create New Patient"
     assert stored["edits"] == [
-        {"op": "rename", "section": "save-step_038", "title": "Create the chart", "other": None, "at": None}
+        {
+            "op": "rename",
+            "section": "save-step_038",
+            "title": "Create the chart",
+            "other": None,
+            "at": None,
+        }
     ]
 
 
@@ -470,7 +501,11 @@ def test_execution_ignores_sections() -> None:
 def test_load_recomputes_a_stale_file_and_keeps_edits(bundle: Path) -> None:
     workflow = Workflow.load(bundle)
     S.write(bundle, S.build(workflow))
-    S.edit(bundle, workflow, [S.SectionEdit(op="rename", section="fields-step_000", title="Name")])
+    S.edit(
+        bundle,
+        workflow,
+        [S.SectionEdit(op="rename", section="fields-step_000", title="Name")],
+    )
     stored = json.loads((bundle / S.SECTIONS_FILE).read_text())
     stored["workflow_contract_sha256"] = "0" * 64
     (bundle / S.SECTIONS_FILE).write_text(json.dumps(stored))
@@ -489,7 +524,9 @@ def test_a_tampered_file_that_breaks_a_rule_is_not_shown(bundle: Path) -> None:
 
 def test_missing_file_is_computed(tmp_path: Path) -> None:
     workflow = Workflow.load(REFERRAL)
-    assert [s.title for s in S.load(tmp_path, workflow).sections][-1] == "Create New Patient"
+    assert [s.title for s in S.load(tmp_path, workflow).sections][
+        -1
+    ] == "Create New Patient"
 
 
 # -- programs and the graph spec --------------------------------------------------------------
@@ -512,7 +549,9 @@ def test_loop_body_sections_and_graph_spec() -> None:
     for section in spec.sections:
         assert section.id not in nodes
         assert set(section.nodes) <= nodes
-        assert all(node.endswith(step) for node, step in zip(section.nodes, section.steps))
+        assert all(
+            node.endswith(step) for node, step in zip(section.nodes, section.steps)
+        )
     save = spec.sections[-1]
     assert save.kind.value == "save"
     assert save.subtitle == "3 steps · reads the record back"
@@ -533,14 +572,28 @@ def test_for_each_carries_the_body_sections(bundle: Path, tmp_path: Path) -> Non
     import sys
 
     workflow = Workflow.load(bundle)
-    S.edit(bundle, workflow, [S.SectionEdit(op="rename", section="fields-step_000", title="Name")])
+    S.edit(
+        bundle,
+        workflow,
+        [S.SectionEdit(op="rename", section="fields-step_000", title="Name")],
+    )
     records = tmp_path / "records.csv"
     records.write_text(
         ",".join(workflow.params) + "\n" + ",".join("x" for _ in workflow.params) + "\n"
     )
     out = tmp_path / "loop"
     subprocess.run(
-        [sys.executable, "-m", "openadapt_flow", "for-each", str(bundle), "--records", str(records), "--out", str(out)],
+        [
+            sys.executable,
+            "-m",
+            "openadapt_flow",
+            "for-each",
+            str(bundle),
+            "--records",
+            str(records),
+            "--out",
+            str(out),
+        ],
         check=True,
         cwd=_FLOW,
         capture_output=True,
@@ -548,18 +601,37 @@ def test_for_each_carries_the_body_sections(bundle: Path, tmp_path: Path) -> Non
     looped = Workflow.load(out)
     doc = S.load(out, looped)
     assert doc.workflow_contract_sha256 == workflow_contract_sha256(looped)
-    assert [s.title for s in doc.sections][:2] == ["Name", "2 fields: date of birth, sex"]
+    assert [s.title for s in doc.sections][:2] == [
+        "Name",
+        "2 fields: date of birth, sex",
+    ]
 
 
-def test_visualize_json_carries_the_bundle_sections(bundle: Path, tmp_path: Path) -> None:
+def test_visualize_json_carries_the_bundle_sections(
+    bundle: Path, tmp_path: Path
+) -> None:
     import subprocess
     import sys
 
     workflow = Workflow.load(bundle)
-    S.edit(bundle, workflow, [S.SectionEdit(op="rename", section="save-step_038", title="Create the chart")])
+    S.edit(
+        bundle,
+        workflow,
+        [S.SectionEdit(op="rename", section="save-step_038", title="Create the chart")],
+    )
     out = tmp_path / "graph.json"
     subprocess.run(
-        [sys.executable, "-m", "openadapt_flow", "visualize", str(bundle), "--format", "json", "-o", str(out)],
+        [
+            sys.executable,
+            "-m",
+            "openadapt_flow",
+            "visualize",
+            str(bundle),
+            "--format",
+            "json",
+            "-o",
+            str(out),
+        ],
         check=True,
         cwd=_FLOW,
         capture_output=True,
@@ -606,23 +678,63 @@ def test_compile_writes_sections_from_the_recorded_form(tmp_path: Path) -> None:
     recording = tmp_path / "recording"
     (recording / "frames").mkdir(parents=True)
     events = [
-        {"i": 0, "kind": "click", "x": 500, "y": 190, "t": 1.0,
-         "structural": {"selector": "#first", "role": "textbox"},
-         "section": {"kind": "legend", "text": "Patient"}},
-        {"i": 1, "kind": "type", "text": "Ada", "param": "first", "field_label": "First name", "t": 2.0},
-        {"i": 2, "kind": "click", "x": 500, "y": 290, "t": 3.0,
-         "structural": {"selector": "#last", "role": "textbox"},
-         "section": {"kind": "legend", "text": "Patient"}},
-        {"i": 3, "kind": "type", "text": "Lovelace", "param": "last", "field_label": "Last name", "t": 4.0},
-        {"i": 4, "kind": "click", "x": 500, "y": 490, "t": 5.0,
-         "structural": {"selector": "#save", "role": "button", "name": "Save patient"}},
+        {
+            "i": 0,
+            "kind": "click",
+            "x": 500,
+            "y": 190,
+            "t": 1.0,
+            "structural": {"selector": "#first", "role": "textbox"},
+            "section": {"kind": "legend", "text": "Patient"},
+        },
+        {
+            "i": 1,
+            "kind": "type",
+            "text": "Ada",
+            "param": "first",
+            "field_label": "First name",
+            "t": 2.0,
+        },
+        {
+            "i": 2,
+            "kind": "click",
+            "x": 500,
+            "y": 290,
+            "t": 3.0,
+            "structural": {"selector": "#last", "role": "textbox"},
+            "section": {"kind": "legend", "text": "Patient"},
+        },
+        {
+            "i": 3,
+            "kind": "type",
+            "text": "Lovelace",
+            "param": "last",
+            "field_label": "Last name",
+            "t": 4.0,
+        },
+        {
+            "i": 4,
+            "kind": "click",
+            "x": 500,
+            "y": 490,
+            "t": 5.0,
+            "structural": {
+                "selector": "#save",
+                "role": "button",
+                "name": "Save patient",
+            },
+        },
     ]
     ok, buf = cv2.imencode(".png", _frame())
     assert ok
     for event in events:
         for suffix in ("before", "after"):
-            (recording / "frames" / f"{event['i']:04d}_{suffix}.png").write_bytes(buf.tobytes())
-    (recording / "events.jsonl").write_text("\n".join(json.dumps(e) for e in events) + "\n")
+            (recording / "frames" / f"{event['i']:04d}_{suffix}.png").write_bytes(
+                buf.tobytes()
+            )
+    (recording / "events.jsonl").write_text(
+        "\n".join(json.dumps(e) for e in events) + "\n"
+    )
     (recording / "meta.json").write_text(
         json.dumps(
             {
@@ -643,7 +755,13 @@ def test_compile_writes_sections_from_the_recorded_form(tmp_path: Path) -> None:
         ("Patient", "fields"),
         ("Save patient", "save"),
     ]
-    assert stored["context"]["step_000"] == {"container": "Patient", "kind": "legend", "header": False}
+    assert stored["context"]["step_000"] == {
+        "container": "Patient",
+        "kind": "legend",
+        "header": False,
+    }
     assert stored["workflow_contract_sha256"] == workflow_contract_sha256(workflow)
     # The context is display metadata only: it never reaches the program.
-    assert "Patient" not in (out / "workflow.json").read_text().replace("Save patient", "")
+    assert "Patient" not in (out / "workflow.json").read_text().replace(
+        "Save patient", ""
+    )

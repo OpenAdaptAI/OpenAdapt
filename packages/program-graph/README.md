@@ -24,9 +24,13 @@ with this package.
   its screen and read-back checks, and when it stops before acting.
 - **Evidence lanes.** The declared checks for every step in one table.
 - **Stop rules.** Every step that can stop the run, and every end state.
-- **Folds.** A long program can show each section as one card ("Name, 9
-  steps, 3 fields"). A viewer can open any card to see its exact steps and fold
-  it again.
+- **Folds.** A long program shows each section as one card ("Contact: street,
+  city, state, postal code · 11 steps · 4 fields"). Flow compiles the
+  sections with every bundle (`spec.sections`; see Flow's
+  [SECTIONS.md](../flow/docs/SECTIONS.md)), and the map folds them unless the
+  host passes its own `folds`. A viewer can open any card to see its exact
+  steps and fold it again. With `onEditSection`, a reviewer can rename, merge
+  or split sections.
 - **Run trace.** Play, pause, step and scrub a recorded run. The current step
   stays in view, the inspector shows what happened at the step (the rung that
   found the target, the record check, the screen check, read-back results and
@@ -59,7 +63,8 @@ import "@openadapt/program-graph/styles.css";
 | --- | --- |
 | `spec` | The program graph. Required. |
 | `title`, `kicker` | Heading and the small label over it. The heading defaults to the bundle name. |
-| `folds` | `{ groups: [{ id, title, subtitle, nodes }] }`. Each group shows as one card. |
+| `folds` | `{ groups: [{ id, title, subtitle, nodes }] }`. Each group shows as one card. Without it, the map folds the spec's compiled sections; `null` turns folding off. |
+| `onEditSection` | `(edit) => void`, with `edit` one of `{ op: "rename", section, title }`, `{ op: "merge", section, other }` or `{ op: "split", section, at }`, in the bundle's section and step ids. Adds Rename, Merge and "Start a new section at this step" to the inspector. The host stores the edit (Flow: `openadapt-flow sections`) and passes back the new spec. The save section is never merged with fields or split. |
 | `stopExits` | `[{ node, label }]`. Draws each stop rule as an exit to a "Stop the run" card. |
 | `trace` | A run trace (below). Adds the player. |
 | `initialCursor`, `autoPlay`, `speed` | Where the trace starts, whether it plays on load (never when the viewer prefers reduced motion), and how much faster than recorded time it plays. |
@@ -71,7 +76,7 @@ import "@openadapt/program-graph/styles.css";
 | `showHeader`, `showPlayer`, `showInspector` | Hide the title bar, the player or the inspector. |
 | `plainStopRules` | Show stop rules in plain words (`stopRuleWords`), not Flow's rule names. Use it with the public projection, which names rules only "declared stop rule N". |
 | `numbering` | `index` (default) numbers every node, so a loop counts as a step. `actions` numbers only the actions, 1 to N, and shows the loop as "LOOP". |
-| `compact` | A fixed-height stage (500 px; 380 px below 520 px of width) with zoom, fit, drag to pan and Ctrl or Cmd with the wheel to zoom; an inspector the viewer can close; straight runs of steps folded when `folds` is not given (`null` turns folding off); and an "Expand" control for the full height. |
+| `compact` | A fixed-height stage (500 px; 380 px below 520 px of width) with zoom, fit, drag to pan and Ctrl or Cmd with the wheel to zoom; an inspector the viewer can close; straight runs of steps folded when `folds` is not given and the spec has no sections (`null` turns folding off); and an "Expand" control for the full height. |
 | `resolveMedia` | `(ref, { node, kind, iteration }) => url \| null`. Turns step media references into URLs. Without it, no pictures show. |
 | `tour`, `tourSeen`, `onTourEnd` | A guided tour (`true` for the default stops, or your own `TourStop[]`). It opens unless `tourSeen`; `onTourEnd("done" \| "skipped")` lets the host store the seen flag. |
 | `titleFor` | Replaces a node's displayed title. |
@@ -88,7 +93,9 @@ stacks under the map, and the map pans in both directions; below 520 px the
 title bar wraps. While a run plays, the card it is at stays in view.
 
 The package also exports the pieces: `layoutProgramGraph`, `rankNodes`,
-`deriveDisplayGraph`, `foldSequences` (folds for a program that has none),
+`deriveDisplayGraph`, `sectionFolds` (the spec's compiled sections as folds),
+`sectionReview` (the edits a reviewer may make to one section),
+`foldSequences` (folds for a program that has no sections),
 `validateFolds`, `traceStateAt`, `traceStateFromPlayhead`, `stopRuleWords`,
 and the spec and trace types.
 
@@ -172,8 +179,12 @@ compiled program and a real recorded run, both on synthetic data:
   made-up patients; its content digest is in `folds.json`), wrapped in a loop
   over `worklist.csv`, in the public projection, which carries no recorded
   text or values.
-- `folds.json`: the five form sections the steps fill, and the save step's
-  stop rule.
+- `folds.json`: the five sections Flow compiled for the loop body (titles
+  from OpenEMR's "Who" and "Contact" accordions, the field names, and the
+  "Create New Patient" button), and the save step's stop rule. The titles come
+  from `ui-structure/events.jsonl`: a recording of the same demonstration made
+  with the form-structure capture, reduced to each event's target and
+  section. They apply only to steps with the same targets.
 - `media.json` and `media/`: the bundle's recorded target crop for each click
   step, and the screen after each step of the first and the fourth referral,
   640 px wide. Synthetic data only. `media/` is in the vendored copy, not in
@@ -191,7 +202,8 @@ compiled program and a real recorded run, both on synthetic data:
   run's Seal.
 
 [`scripts/build_openemr_fixture.py`](scripts/build_openemr_fixture.py)
-regenerates all of them from the bundle and the certified runs.
+regenerates all of them from the bundle, the certified runs and the
+form-structure recording.
 
 ## Install
 

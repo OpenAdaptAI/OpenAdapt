@@ -305,7 +305,7 @@ function SectionReviewControls({
       ) : (
         folded && (
           <button type="button" className="opg-fold-toggle" onClick={() => setRenaming(true)}>
-            Rename “{section.title}”
+            Rename this section
           </button>
         )
       )}
@@ -315,7 +315,7 @@ function SectionReviewControls({
           className="opg-fold-toggle"
           onClick={() => onEditSection({ op: "merge", section: section.section, other: mergeWith.section })}
         >
-          Merge with “{mergeWith.title}”
+          Merge with the next section
         </button>
       )}
       {!folded && splitAt && (
@@ -858,7 +858,7 @@ function MapPanel({
                   <span className="opg-node-index">{chipFor(node, nodeFold, numberOf)}</span>
                   <span className="opg-node-copy">
                     <small>{nodeFold ? (nodeFold.subtitle ?? `${nodeFold.members.length} steps`) : kindLabel(node)}</small>
-                    <strong>{title}</strong>
+                    <strong title={nodeFold ? title : undefined}>{title}</strong>
                   </span>
                   <span className="opg-node-signals" aria-hidden="true">
                     {nodeKind(node) === "loop" && run && run.iterations > 0 && <b>×{run.iterations}</b>}
