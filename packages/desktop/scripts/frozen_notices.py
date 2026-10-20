@@ -268,6 +268,48 @@ REVIEWED_EXTERNAL_NOTICE_FILES: dict[tuple[str, str], dict[str, str]] = {
             "e5dcffe836b6ec8a58e492419b550e65fb8cbdc308503979e5dacb33ac7ea3b7"
         ),
     },
+    ("pyobjc-core", "12.2.2"): {
+        "relative_path": "pyobjc/LICENSE.txt",
+        "source_url": (
+            "https://github.com/ronaldoussoren/pyobjc/blob/"
+            "38cdf73fc049ef2d176973eff4ac8d5c76b0a34b/"
+            "pyobjc-core/License.txt"
+        ),
+        "source_commit": "38cdf73fc049ef2d176973eff4ac8d5c76b0a34b",
+        "sha256": "0ca04b07928d4872b9d9bb22187ca0426dd8bfab08f26eada0999a71dc81aaff",
+        "license_expression": "MIT",
+        "license_evidence_sha256": (
+            "e5dcffe836b6ec8a58e492419b550e65fb8cbdc308503979e5dacb33ac7ea3b7"
+        ),
+    },
+    ("pyobjc-framework-coremedia", "12.2.2"): {
+        "relative_path": "pyobjc/LICENSE.txt",
+        "source_url": (
+            "https://github.com/ronaldoussoren/pyobjc/blob/"
+            "38cdf73fc049ef2d176973eff4ac8d5c76b0a34b/"
+            "pyobjc-framework-CoreMedia/License.txt"
+        ),
+        "source_commit": "38cdf73fc049ef2d176973eff4ac8d5c76b0a34b",
+        "sha256": "0ca04b07928d4872b9d9bb22187ca0426dd8bfab08f26eada0999a71dc81aaff",
+        "license_expression": "MIT",
+        "license_evidence_sha256": (
+            "e5dcffe836b6ec8a58e492419b550e65fb8cbdc308503979e5dacb33ac7ea3b7"
+        ),
+    },
+    ("pyobjc-framework-screencapturekit", "12.2.2"): {
+        "relative_path": "pyobjc/LICENSE.txt",
+        "source_url": (
+            "https://github.com/ronaldoussoren/pyobjc/blob/"
+            "38cdf73fc049ef2d176973eff4ac8d5c76b0a34b/"
+            "pyobjc-framework-ScreenCaptureKit/License.txt"
+        ),
+        "source_commit": "38cdf73fc049ef2d176973eff4ac8d5c76b0a34b",
+        "sha256": "0ca04b07928d4872b9d9bb22187ca0426dd8bfab08f26eada0999a71dc81aaff",
+        "license_expression": "MIT",
+        "license_evidence_sha256": (
+            "e5dcffe836b6ec8a58e492419b550e65fb8cbdc308503979e5dacb33ac7ea3b7"
+        ),
+    },
     ("rapidocr-onnxruntime", "1.4.4"): {
         "relative_path": "rapidocr/LICENSE",
         "source_url": (

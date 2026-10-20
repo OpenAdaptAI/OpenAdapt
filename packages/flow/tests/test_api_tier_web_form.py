@@ -561,7 +561,7 @@ def _span_workflow(*, admitted=True) -> Workflow:
             WebFormPrecheck(path="/dup.php", require_text=["No matches were found."])
         ],
         replaces_steps=["step_000", "step_001"],
-        folded_checks_digest=folded_checks_digest(steps[:1]),
+        folded_checks_digest=folded_checks_digest(steps),
     )
     binding = ApiBinding(
         kind="web_form", url_template="/save.php", effects=[effect], web_form=spec
@@ -666,7 +666,7 @@ def test_a_rejected_save_halts_without_gui_retry(tmp_path):
                 }
             ),
             {},
-            "on-screen check",
+            "replaces changed",
         ),
     ],
 )

@@ -91,20 +91,25 @@ version, metadata, commit, and byte-hash gate used for FlatBuffers.
 
 ## PyObjC macOS runtime
 
-- Distributions: `pyobjc-core==12.2.1` and
-  `pyobjc-framework-ApplicationServices==12.2.1`
+- Distributions: `pyobjc-core` (`12.2.1` and `12.2.2`),
+  `pyobjc-framework-ApplicationServices==12.2.1`,
+  `pyobjc-framework-CoreMedia==12.2.2` and
+  `pyobjc-framework-ScreenCaptureKit==12.2.2`
 - Upstream repository: `https://github.com/ronaldoussoren/pyobjc`
-- Upstream tag and commit: `v12.2.1`,
-  `cb525f3e7f433c851b68725dea54bc70d35681b8`
-- Source paths: `pyobjc-core/License.txt` and
-  `pyobjc-framework-ApplicationServices/License.txt`
+- Upstream tags and commits: `v12.2.1`,
+  `cb525f3e7f433c851b68725dea54bc70d35681b8`; `v12.2.2`,
+  `38cdf73fc049ef2d176973eff4ac8d5c76b0a34b`
+- Source paths: `pyobjc-core/License.txt`,
+  `pyobjc-framework-ApplicationServices/License.txt`,
+  `pyobjc-framework-CoreMedia/License.txt` and
+  `pyobjc-framework-ScreenCaptureKit/License.txt`
 - Pinned license SHA-256:
   `0ca04b07928d4872b9d9bb22187ca0426dd8bfab08f26eada0999a71dc81aaff`
 - License: MIT
-- Modification status: the two source files are byte-identical; copied without
-  modification as `pyobjc/LICENSE.txt`
+- Modification status: the source files are byte-identical at both tags;
+  copied without modification as `pyobjc/LICENSE.txt`
 
-The two applicable macOS wheels omit a concrete license file. The
-frozen-runtime build supplies their shared exact upstream license only when
-both package version and license metadata match the reviewed records. Symbol
-files whose names merely contain `copying` are not treated as license notices.
+These macOS wheels omit a concrete license file. The frozen-runtime build
+supplies their shared exact upstream license only when both package version
+and license metadata match the reviewed records. Symbol files whose names
+merely contain `copying` are not treated as license notices.

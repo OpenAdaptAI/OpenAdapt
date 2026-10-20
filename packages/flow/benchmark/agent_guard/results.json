@@ -1,0 +1,3446 @@
+{
+  "arms": [
+    "agent_alone",
+    "guard",
+    "observe_only"
+  ],
+  "date": "2026-10-19",
+  "handoff": {
+    "api_step": {
+      "proposed": false,
+      "reasons": [
+        "the recording has no parameters to map into a request"
+      ],
+      "step": null
+    },
+    "detail": "run 1 read back correctly; a person confirms the record check, then admits",
+    "expect": {
+      "patient_id": "p1",
+      "type": "Triage"
+    },
+    "inputs": [
+      "note"
+    ],
+    "next_steps": [
+      "openadapt-flow compile-agent admit <work>/teach/triage_note-1ffb76035f26 --admit-as '<your name>' --canary-param note=<safe value>",
+      "openadapt-agent serve --teach <work>/verify.yaml --teach-dir <work>/teach (serves the admitted program as a tool)"
+    ],
+    "proposed_check": {
+      "faults": 33,
+      "faults_caught": 33,
+      "file": "<work>/teach/triage_note-1ffb76035f26/compiled/scaffold/record_check.proposed.yaml",
+      "misses": [],
+      "proof": "<work>/teach/triage_note-1ffb76035f26/compiled/scaffold/record_check.proof.json",
+      "proposed": true,
+      "proposed_file": "<work>/teach/triage_note-1ffb76035f26/compiled/verify.proposed.yaml",
+      "reads": [
+        "the rest verifier section",
+        "the rest verifier section, compared by content",
+        "table banner",
+        "table banner, compared by content",
+        "table billing",
+        "table encounters",
+        "table encounters, compared by content"
+      ],
+      "source": "scaffold-verifier",
+      "working": true
+    },
+    "record_check": {
+      "changed": 0,
+      "created": 1,
+      "fields": [
+        "id",
+        "key",
+        "note",
+        "patient_id",
+        "source",
+        "type"
+      ],
+      "passed": true,
+      "reasons": [],
+      "removed": 0
+    },
+    "status": "draft",
+    "task_dir": "<work>/teach/triage_note-1ffb76035f26",
+    "task_key": "triage_note-1ffb76035f26"
+  },
+  "model_calls": 0,
+  "n": 2,
+  "run2": {
+    "admission": {
+      "admitted_by": "Bench Reviewer",
+      "canaries": [
+        {
+          "halt_reason": null,
+          "model_calls": 0,
+          "receipt": "<work>/teach/triage_note-1ffb76035f26/receipts/canary-1-20261019T161158-10a247/effect-receipt.json",
+          "receipt_outcome": "VERIFIED",
+          "status": "VERIFIED"
+        }
+      ],
+      "digest": "66a792ff1862b0b9ec2fe159fe3c518ad07121b58a839aa22e6e76e15e4a1382",
+      "mode": "person",
+      "policy_id": null
+    },
+    "admit_seconds": 8.293,
+    "admitted": true,
+    "paired": [
+      {
+        "run1_agent_seconds": 6.256,
+        "run1_load_avg_1m": 18.65,
+        "run1_outcome": "clean",
+        "run2_load_avg_1m": 18.65,
+        "run2_model_calls": 0,
+        "run2_outcome": "done",
+        "run2_seconds": 4.14
+      },
+      {
+        "run1_agent_seconds": 6.299,
+        "run1_load_avg_1m": 22.64,
+        "run1_outcome": "clean",
+        "run2_load_avg_1m": 22.64,
+        "run2_model_calls": 0,
+        "run2_outcome": "done",
+        "run2_seconds": 4.456
+      },
+      {
+        "run1_agent_seconds": 6.241,
+        "run1_load_avg_1m": 20.27,
+        "run1_outcome": "clean",
+        "run2_load_avg_1m": 20.27,
+        "run2_model_calls": 0,
+        "run2_outcome": "done",
+        "run2_seconds": 4.041
+      },
+      {
+        "run1_agent_seconds": 6.234,
+        "run1_load_avg_1m": 19.75,
+        "run1_outcome": "clean",
+        "run2_load_avg_1m": 19.75,
+        "run2_model_calls": 0,
+        "run2_outcome": "done",
+        "run2_seconds": 4.393
+      },
+      {
+        "run1_agent_seconds": 6.369,
+        "run1_load_avg_1m": 20.19,
+        "run1_outcome": "clean",
+        "run2_load_avg_1m": 20.19,
+        "run2_model_calls": 0,
+        "run2_outcome": "done",
+        "run2_seconds": 6.404
+      }
+    ],
+    "proposed": {
+      "effects": [
+        {
+          "kind": "record_written",
+          "match": {
+            "key": "mockmed-triage-p1-v1",
+            "note": "{param: note}",
+            "patient_id": "p1",
+            "type": "Triage"
+          }
+        },
+        {
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": "-"
+          }
+        },
+        {
+          "kind": "record_written",
+          "match": {
+            "note": "{param: note}",
+            "patient_id": "p1",
+            "type": "Triage"
+          }
+        },
+        {
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": "-"
+          }
+        },
+        {
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {}
+        },
+        {
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": "-"
+          }
+        },
+        {
+          "kind": "record_written",
+          "match": {
+            "key": "mockmed-triage-p1-v1",
+            "note": "{param: note}",
+            "patient_id": "p1",
+            "type": "Triage"
+          }
+        },
+        {
+          "expected_count": 0,
+          "kind": "record_written",
+          "match": {
+            "_openadapt_no_such_field": "-"
+          }
+        }
+      ],
+      "file": "<work>/teach/triage_note-1ffb76035f26/compiled/verify.proposed.yaml",
+      "params": [
+        "note"
+      ],
+      "reads": [
+        "banner",
+        "banner.content",
+        "billing",
+        "encounters",
+        "encounters.content",
+        "rest_read",
+        "rest_read.content"
+      ]
+    },
+    "runs": [
+      {
+        "load_avg_1m": 24.3,
+        "model_calls": 0,
+        "outcome": "clean",
+        "scenario": "ok",
+        "seconds": 3.713,
+        "tool": "taught_triage_note",
+        "tool_outcome": "done",
+        "tool_reply": {
+          "outcome": "done",
+          "reason": "saved_and_checked"
+        },
+        "truth": {
+          "correct": true,
+          "fault_class": "correct"
+        }
+      },
+      {
+        "load_avg_1m": 21.18,
+        "model_calls": 0,
+        "outcome": "caught_by_readback",
+        "scenario": "no_persist",
+        "seconds": 19.643,
+        "tool": "taught_triage_note",
+        "tool_outcome": "not_sure_if_saved",
+        "tool_reply": {
+          "outcome": "not_sure_if_saved",
+          "reason": "save_not_confirmed"
+        },
+        "truth": {
+          "correct": false,
+          "fault_class": "absent"
+        }
+      },
+      {
+        "load_avg_1m": 18.94,
+        "model_calls": 0,
+        "outcome": "caught_by_readback",
+        "scenario": "partial",
+        "seconds": 19.407,
+        "tool": "taught_triage_note",
+        "tool_outcome": "not_sure_if_saved",
+        "tool_reply": {
+          "outcome": "not_sure_if_saved",
+          "reason": "save_not_confirmed"
+        },
+        "truth": {
+          "correct": false,
+          "fault_class": "partial"
+        }
+      },
+      {
+        "load_avg_1m": 16.81,
+        "model_calls": 0,
+        "outcome": "caught_by_readback",
+        "scenario": "duplicate",
+        "seconds": 19.197,
+        "tool": "taught_triage_note",
+        "tool_outcome": "not_sure_if_saved",
+        "tool_reply": {
+          "outcome": "not_sure_if_saved",
+          "reason": "save_not_confirmed"
+        },
+        "truth": {
+          "correct": false,
+          "fault_class": "duplicate"
+        }
+      },
+      {
+        "load_avg_1m": 15.38,
+        "model_calls": 0,
+        "outcome": "caught_by_readback",
+        "scenario": "wrong_record",
+        "seconds": 19.226,
+        "tool": "taught_triage_note",
+        "tool_outcome": "not_sure_if_saved",
+        "tool_reply": {
+          "outcome": "not_sure_if_saved",
+          "reason": "save_not_confirmed"
+        },
+        "truth": {
+          "correct": false,
+          "fault_class": "wrong_record"
+        }
+      },
+      {
+        "load_avg_1m": 16.96,
+        "model_calls": 0,
+        "outcome": "caught_by_readback",
+        "scenario": "stale",
+        "seconds": 20.908,
+        "tool": "taught_triage_note",
+        "tool_outcome": "not_sure_if_saved",
+        "tool_reply": {
+          "outcome": "not_sure_if_saved",
+          "reason": "save_not_confirmed"
+        },
+        "truth": {
+          "correct": false,
+          "fault_class": "collateral_loss"
+        }
+      },
+      {
+        "load_avg_1m": 16.68,
+        "model_calls": 0,
+        "outcome": "caught_by_readback",
+        "scenario": "collateral_unaudited",
+        "seconds": 9.608,
+        "tool": "taught_triage_note",
+        "tool_outcome": "not_sure_if_saved",
+        "tool_reply": {
+          "outcome": "not_sure_if_saved",
+          "reason": "save_not_confirmed"
+        },
+        "truth": {
+          "correct": false,
+          "fault_class": "collateral_write"
+        }
+      },
+      {
+        "load_avg_1m": 18.73,
+        "model_calls": 0,
+        "outcome": "caught_by_readback",
+        "scenario": "optimistic",
+        "seconds": 21.771,
+        "tool": "taught_triage_note",
+        "tool_outcome": "not_sure_if_saved",
+        "tool_reply": {
+          "outcome": "not_sure_if_saved",
+          "reason": "save_not_confirmed"
+        },
+        "truth": {
+          "correct": false,
+          "fault_class": "absent"
+        }
+      },
+      {
+        "load_avg_1m": 17.0,
+        "model_calls": 0,
+        "outcome": "caught_by_readback",
+        "scenario": "session",
+        "seconds": 27.908,
+        "tool": "taught_triage_note",
+        "tool_outcome": "not_sure_if_saved",
+        "tool_reply": {
+          "outcome": "not_sure_if_saved",
+          "reason": "save_not_confirmed"
+        },
+        "truth": {
+          "correct": false,
+          "fault_class": "absent"
+        }
+      },
+      {
+        "load_avg_1m": 20.12,
+        "model_calls": 0,
+        "outcome": "clean",
+        "scenario": "timeout",
+        "seconds": 5.458,
+        "tool": "taught_triage_note",
+        "tool_outcome": "done",
+        "tool_reply": {
+          "outcome": "done",
+          "reason": "saved_and_checked"
+        },
+        "truth": {
+          "correct": true,
+          "fault_class": "correct"
+        }
+      }
+    ]
+  },
+  "run2_rerun_date": "2026-10-19 12:11",
+  "runs": [
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.241,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 175.11,
+      "model_calls": 0,
+      "outcome": "clean",
+      "readback_ms": null,
+      "run1_seconds": 6.241,
+      "scenario": "ok",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.25,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 8.327,
+      "handoff": {
+        "api_step": {
+          "proposed": false,
+          "reasons": [
+            "the recording has no parameters to map into a request"
+          ],
+          "step": null
+        },
+        "detail": "run 1 read back correctly; a person confirms the record check, then admits",
+        "expect": {
+          "patient_id": "p1",
+          "type": "Triage"
+        },
+        "inputs": [
+          "note"
+        ],
+        "next_steps": [
+          "openadapt-flow compile-agent admit <work>/teach/triage_note-1ffb76035f26 --admit-as '<your name>' --canary-param note=<safe value>",
+          "openadapt-agent serve --teach <work>/verify.yaml --teach-dir <work>/teach (serves the admitted program as a tool)"
+        ],
+        "proposed_check": {
+          "faults": 33,
+          "faults_caught": 33,
+          "file": "<work>/teach/triage_note-1ffb76035f26/compiled/scaffold/record_check.proposed.yaml",
+          "misses": [],
+          "proof": "<work>/teach/triage_note-1ffb76035f26/compiled/scaffold/record_check.proof.json",
+          "proposed": true,
+          "proposed_file": "<work>/teach/triage_note-1ffb76035f26/compiled/verify.proposed.yaml",
+          "reads": [
+            "the rest verifier section",
+            "the rest verifier section, compared by content",
+            "table banner",
+            "table banner, compared by content",
+            "table billing",
+            "table encounters",
+            "table encounters, compared by content"
+          ],
+          "source": "scaffold-verifier",
+          "working": true
+        },
+        "record_check": {
+          "changed": 0,
+          "created": 1,
+          "fields": [
+            "id",
+            "key",
+            "note",
+            "patient_id",
+            "source",
+            "type"
+          ],
+          "passed": true,
+          "reasons": [],
+          "removed": 0
+        },
+        "status": "draft",
+        "task_dir": "<work>/teach/triage_note-1ffb76035f26",
+        "task_key": "triage_note-1ffb76035f26"
+      },
+      "hold_ms": [
+        6.7
+      ],
+      "load_avg_1m": 184.69,
+      "model_calls": 0,
+      "outcome": "clean",
+      "readback_ms": 40.9,
+      "run1_seconds": 12.462,
+      "scenario": "ok",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.236,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 8.4,
+      "handoff": null,
+      "hold_ms": [
+        7.5
+      ],
+      "load_avg_1m": 205.09,
+      "model_calls": 0,
+      "outcome": "clean",
+      "readback_ms": 38.9,
+      "run1_seconds": 7.474,
+      "scenario": "ok",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.223,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 202.51,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.223,
+      "scenario": "no_persist",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.276,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.377,
+      "handoff": null,
+      "hold_ms": [
+        21.1
+      ],
+      "load_avg_1m": 220.18,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1084.0,
+      "run1_seconds": 8.516,
+      "scenario": "no_persist",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.279,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.371,
+      "handoff": null,
+      "hold_ms": [
+        10.8
+      ],
+      "load_avg_1m": 227.78,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1079.9,
+      "run1_seconds": 8.515,
+      "scenario": "no_persist",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.255,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 229.39,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.255,
+      "scenario": "partial",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "partial"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.245,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.315,
+      "handoff": null,
+      "hold_ms": [
+        7.5
+      ],
+      "load_avg_1m": 227.21,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1074.3,
+      "run1_seconds": 8.496,
+      "scenario": "partial",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "partial"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.229,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.413,
+      "handoff": null,
+      "hold_ms": [
+        17.0
+      ],
+      "load_avg_1m": 222.99,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1062.5,
+      "run1_seconds": 8.428,
+      "scenario": "partial",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "partial"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.26,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 221.39,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.26,
+      "scenario": "duplicate",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "duplicate"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.251,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.371,
+      "handoff": null,
+      "hold_ms": [
+        7.4
+      ],
+      "load_avg_1m": 205.98,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1070.8,
+      "run1_seconds": 8.498,
+      "scenario": "duplicate",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "duplicate"
+      },
+      "verdict": "REFUTED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.405,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.772,
+      "handoff": null,
+      "hold_ms": [
+        7.5
+      ],
+      "load_avg_1m": 220.17,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1077.2,
+      "run1_seconds": 8.651,
+      "scenario": "duplicate",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "duplicate"
+      },
+      "verdict": "REFUTED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.259,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 225.52,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.259,
+      "scenario": "wrong_record",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "wrong_record"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.264,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 10.315,
+      "handoff": null,
+      "hold_ms": [
+        6.6
+      ],
+      "load_avg_1m": 249.41,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1071.4,
+      "run1_seconds": 8.664,
+      "scenario": "wrong_record",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "wrong_record"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.207,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.426,
+      "handoff": null,
+      "hold_ms": [
+        5.3
+      ],
+      "load_avg_1m": 236.9,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1061.6,
+      "run1_seconds": 8.461,
+      "scenario": "wrong_record",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "wrong_record"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.22,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 203.18,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.22,
+      "scenario": "stale",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "collateral_loss"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.232,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.426,
+      "handoff": null,
+      "hold_ms": [
+        7.3
+      ],
+      "load_avg_1m": 174.87,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1062.4,
+      "run1_seconds": 8.446,
+      "scenario": "stale",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "collateral_loss"
+      },
+      "verdict": "REFUTED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.239,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.337,
+      "handoff": null,
+      "hold_ms": [
+        6.0
+      ],
+      "load_avg_1m": 174.28,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1066.8,
+      "run1_seconds": 8.475,
+      "scenario": "stale",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "collateral_loss"
+      },
+      "verdict": "REFUTED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.206,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 180.34,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.206,
+      "scenario": "collateral_unaudited",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "collateral_write"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.254,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 8.292,
+      "handoff": null,
+      "hold_ms": [
+        7.0
+      ],
+      "load_avg_1m": 161.9,
+      "model_calls": 0,
+      "outcome": "got_through",
+      "readback_ms": 42.0,
+      "run1_seconds": 7.429,
+      "scenario": "collateral_unaudited",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "collateral_write"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.209,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 8.267,
+      "handoff": null,
+      "hold_ms": [
+        6.4
+      ],
+      "load_avg_1m": 140.78,
+      "model_calls": 0,
+      "outcome": "got_through",
+      "readback_ms": 36.6,
+      "run1_seconds": 7.413,
+      "scenario": "collateral_unaudited",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "collateral_write"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.205,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 121.02,
+      "model_calls": 0,
+      "outcome": "visible_error",
+      "readback_ms": null,
+      "run1_seconds": 6.205,
+      "scenario": "optimistic",
+      "screen_after": "error",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.265,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.323,
+      "handoff": null,
+      "hold_ms": [
+        7.8
+      ],
+      "load_avg_1m": 105.51,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1087.4,
+      "run1_seconds": 8.456,
+      "scenario": "optimistic",
+      "screen_after": "error",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.226,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.282,
+      "handoff": null,
+      "hold_ms": [
+        5.9
+      ],
+      "load_avg_1m": 93.95,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1064.7,
+      "run1_seconds": 8.426,
+      "scenario": "optimistic",
+      "screen_after": "error",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 10.183,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 88.06,
+      "model_calls": 0,
+      "outcome": "visible_error",
+      "readback_ms": null,
+      "run1_seconds": 10.183,
+      "scenario": "session",
+      "screen_after": "nothing",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": "OpenAdapt read the record back: The system of record doesn't show this save, or couldn't be read. It may still land. Don't retry. A person must check the record.",
+      "agent_seconds": 10.219,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.371,
+      "handoff": null,
+      "hold_ms": [
+        8.0
+      ],
+      "load_avg_1m": 77.46,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1063.3,
+      "run1_seconds": 10.219,
+      "scenario": "session",
+      "screen_after": "nothing",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": "OpenAdapt read the record back: the system of record doesn't show this save, or couldn't be read. A person must check the record.",
+      "agent_seconds": 10.127,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.277,
+      "handoff": null,
+      "hold_ms": [
+        5.9
+      ],
+      "load_avg_1m": 69.75,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1062.6,
+      "run1_seconds": 10.127,
+      "scenario": "session",
+      "screen_after": "nothing",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 7.692,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 67.19,
+      "model_calls": 0,
+      "outcome": "clean",
+      "readback_ms": null,
+      "run1_seconds": 7.692,
+      "scenario": "timeout",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 7.685,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 9.73,
+      "handoff": null,
+      "hold_ms": [
+        6.5
+      ],
+      "load_avg_1m": 61.61,
+      "model_calls": 0,
+      "outcome": "clean",
+      "readback_ms": 39.5,
+      "run1_seconds": 8.895,
+      "scenario": "timeout",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 7.703,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 9.783,
+      "handoff": null,
+      "hold_ms": [
+        6.4
+      ],
+      "load_avg_1m": 56.89,
+      "model_calls": 0,
+      "outcome": "clean",
+      "readback_ms": 37.9,
+      "run1_seconds": 8.945,
+      "scenario": "timeout",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.269,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "page",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 54.98,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.269,
+      "scenario": "page_duplicate",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "duplicate"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 2
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": "OpenAdapt blocked this save: this task was already committed and its result is not verified; a person must check the record before anything else is written. Nothing was sent to the app. Don't retry this save.",
+      "agent_seconds": 6.268,
+      "arm": "guard",
+      "blocked": [
+        "needs_reconciliation"
+      ],
+      "family": "page",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 8.262,
+      "handoff": null,
+      "hold_ms": [
+        7.8
+      ],
+      "load_avg_1m": 54.82,
+      "model_calls": 0,
+      "outcome": "blocked",
+      "readback_ms": 40.8,
+      "run1_seconds": 7.429,
+      "scenario": "page_duplicate",
+      "screen_after": "blocked",
+      "trial": 0,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.25,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "page",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.326,
+      "handoff": null,
+      "hold_ms": [
+        6.3
+      ],
+      "load_avg_1m": 51.24,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1060.6,
+      "run1_seconds": 8.464,
+      "scenario": "page_duplicate",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "duplicate"
+      },
+      "verdict": "REFUTED",
+      "would_block": [
+        "already_committed"
+      ],
+      "writes": 2
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.223,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "page",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 49.38,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.223,
+      "scenario": "page_optimistic",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.234,
+      "arm": "guard",
+      "blocked": [],
+      "family": "page",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.317,
+      "handoff": null,
+      "hold_ms": [
+        7.2
+      ],
+      "load_avg_1m": 48.21,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1059.0,
+      "run1_seconds": 8.467,
+      "scenario": "page_optimistic",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.229,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "page",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.286,
+      "handoff": null,
+      "hold_ms": [
+        5.9
+      ],
+      "load_avg_1m": 43.46,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1067.5,
+      "run1_seconds": 8.496,
+      "scenario": "page_optimistic",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 7.323,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "page",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 40.78,
+      "model_calls": 0,
+      "outcome": "false_alarm",
+      "readback_ms": null,
+      "run1_seconds": 7.323,
+      "scenario": "page_timeout",
+      "screen_after": "error",
+      "trial": 0,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 7.43,
+      "arm": "guard",
+      "blocked": [],
+      "family": "page",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 9.452,
+      "handoff": null,
+      "hold_ms": [
+        9.3
+      ],
+      "load_avg_1m": 33.86,
+      "model_calls": 0,
+      "outcome": "clean",
+      "readback_ms": 41.7,
+      "run1_seconds": 8.597,
+      "scenario": "page_timeout",
+      "screen_after": "error",
+      "trial": 0,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 7.425,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "page",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 9.441,
+      "handoff": null,
+      "hold_ms": [
+        6.5
+      ],
+      "load_avg_1m": 30.51,
+      "model_calls": 0,
+      "outcome": "clean",
+      "readback_ms": 42.0,
+      "run1_seconds": 8.578,
+      "scenario": "page_timeout",
+      "screen_after": "error",
+      "trial": 0,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.239,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "agent",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 28.86,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.239,
+      "scenario": "agent_wrong_patient",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "wrong_record"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": "OpenAdapt blocked this save: the open record does not match the task (not found: name, patient_id); nothing may be written. Nothing was sent to the app. Open the record the task names and save again, or stop and tell a person.",
+      "agent_seconds": 6.26,
+      "arm": "guard",
+      "blocked": [
+        "identity_mismatch"
+      ],
+      "family": "agent",
+      "guard_ended": "stopped",
+      "guard_exit": 3,
+      "guard_notes": [],
+      "guard_seconds": 15.261,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 25.09,
+      "model_calls": 0,
+      "outcome": "blocked",
+      "readback_ms": null,
+      "run1_seconds": 14.389,
+      "scenario": "agent_wrong_patient",
+      "screen_after": "blocked",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 0
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.255,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "agent",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.342,
+      "handoff": null,
+      "hold_ms": [
+        6.4
+      ],
+      "load_avg_1m": 22.87,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1070.9,
+      "run1_seconds": 8.483,
+      "scenario": "agent_wrong_patient",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "wrong_record"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [
+        "identity_mismatch"
+      ],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.289,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "agent",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 23.2,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.289,
+      "scenario": "agent_wrong_value",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "partial"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.29,
+      "arm": "guard",
+      "blocked": [],
+      "family": "agent",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.392,
+      "handoff": null,
+      "hold_ms": [
+        8.7
+      ],
+      "load_avg_1m": 22.64,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1074.0,
+      "run1_seconds": 8.545,
+      "scenario": "agent_wrong_value",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "partial"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.242,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "agent",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.412,
+      "handoff": null,
+      "hold_ms": [
+        7.0
+      ],
+      "load_avg_1m": 26.27,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1065.9,
+      "run1_seconds": 8.465,
+      "scenario": "agent_wrong_value",
+      "screen_after": "saved",
+      "trial": 0,
+      "truth": {
+        "correct": false,
+        "fault_class": "partial"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.24,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 25.12,
+      "model_calls": 0,
+      "outcome": "clean",
+      "readback_ms": null,
+      "run1_seconds": 6.24,
+      "scenario": "ok",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.221,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 8.255,
+      "handoff": null,
+      "hold_ms": [
+        8.1
+      ],
+      "load_avg_1m": 23.23,
+      "model_calls": 0,
+      "outcome": "clean",
+      "readback_ms": 41.5,
+      "run1_seconds": 7.39,
+      "scenario": "ok",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.207,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 8.239,
+      "handoff": null,
+      "hold_ms": [
+        5.9
+      ],
+      "load_avg_1m": 23.53,
+      "model_calls": 0,
+      "outcome": "clean",
+      "readback_ms": 39.1,
+      "run1_seconds": 7.394,
+      "scenario": "ok",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.254,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 22.37,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.254,
+      "scenario": "no_persist",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.246,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.299,
+      "handoff": null,
+      "hold_ms": [
+        7.7
+      ],
+      "load_avg_1m": 21.22,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1061.8,
+      "run1_seconds": 8.431,
+      "scenario": "no_persist",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.245,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.283,
+      "handoff": null,
+      "hold_ms": [
+        5.8
+      ],
+      "load_avg_1m": 21.58,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1072.7,
+      "run1_seconds": 8.441,
+      "scenario": "no_persist",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.201,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 23.69,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.201,
+      "scenario": "partial",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "partial"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.314,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.441,
+      "handoff": null,
+      "hold_ms": [
+        10.3
+      ],
+      "load_avg_1m": 36.42,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1128.3,
+      "run1_seconds": 8.616,
+      "scenario": "partial",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "partial"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.243,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.353,
+      "handoff": null,
+      "hold_ms": [
+        9.9
+      ],
+      "load_avg_1m": 39.88,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1069.7,
+      "run1_seconds": 8.488,
+      "scenario": "partial",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "partial"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.244,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 43.87,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.244,
+      "scenario": "duplicate",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "duplicate"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.254,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.508,
+      "handoff": null,
+      "hold_ms": [
+        6.7
+      ],
+      "load_avg_1m": 40.48,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1192.8,
+      "run1_seconds": 8.624,
+      "scenario": "duplicate",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "duplicate"
+      },
+      "verdict": "REFUTED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.22,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.273,
+      "handoff": null,
+      "hold_ms": [
+        6.1
+      ],
+      "load_avg_1m": 36.03,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1067.9,
+      "run1_seconds": 8.416,
+      "scenario": "duplicate",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "duplicate"
+      },
+      "verdict": "REFUTED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.236,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 31.72,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.236,
+      "scenario": "wrong_record",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "wrong_record"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.206,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.258,
+      "handoff": null,
+      "hold_ms": [
+        6.2
+      ],
+      "load_avg_1m": 28.95,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1063.2,
+      "run1_seconds": 8.41,
+      "scenario": "wrong_record",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "wrong_record"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.216,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.404,
+      "handoff": null,
+      "hold_ms": [
+        5.7
+      ],
+      "load_avg_1m": 26.16,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1064.8,
+      "run1_seconds": 8.46,
+      "scenario": "wrong_record",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "wrong_record"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.238,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 24.46,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.238,
+      "scenario": "stale",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "collateral_loss"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.217,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.3,
+      "handoff": null,
+      "hold_ms": [
+        6.7
+      ],
+      "load_avg_1m": 21.26,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1066.3,
+      "run1_seconds": 8.442,
+      "scenario": "stale",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "collateral_loss"
+      },
+      "verdict": "REFUTED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.217,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.289,
+      "handoff": null,
+      "hold_ms": [
+        6.2
+      ],
+      "load_avg_1m": 19.75,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1060.2,
+      "run1_seconds": 8.431,
+      "scenario": "stale",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "collateral_loss"
+      },
+      "verdict": "REFUTED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.222,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 18.89,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.222,
+      "scenario": "collateral_unaudited",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "collateral_write"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.255,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 8.319,
+      "handoff": null,
+      "hold_ms": [
+        8.2
+      ],
+      "load_avg_1m": 16.91,
+      "model_calls": 0,
+      "outcome": "got_through",
+      "readback_ms": 37.8,
+      "run1_seconds": 7.472,
+      "scenario": "collateral_unaudited",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "collateral_write"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.255,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 8.343,
+      "handoff": null,
+      "hold_ms": [
+        6.2
+      ],
+      "load_avg_1m": 16.66,
+      "model_calls": 0,
+      "outcome": "got_through",
+      "readback_ms": 40.3,
+      "run1_seconds": 7.455,
+      "scenario": "collateral_unaudited",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "collateral_write"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.256,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 23.11,
+      "model_calls": 0,
+      "outcome": "visible_error",
+      "readback_ms": null,
+      "run1_seconds": 6.256,
+      "scenario": "optimistic",
+      "screen_after": "error",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.269,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.386,
+      "handoff": null,
+      "hold_ms": [
+        7.5
+      ],
+      "load_avg_1m": 22.3,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1087.6,
+      "run1_seconds": 8.484,
+      "scenario": "optimistic",
+      "screen_after": "error",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.255,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.347,
+      "handoff": null,
+      "hold_ms": [
+        8.7
+      ],
+      "load_avg_1m": 20.59,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1068.8,
+      "run1_seconds": 8.456,
+      "scenario": "optimistic",
+      "screen_after": "error",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 10.211,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 21.03,
+      "model_calls": 0,
+      "outcome": "visible_error",
+      "readback_ms": null,
+      "run1_seconds": 10.211,
+      "scenario": "session",
+      "screen_after": "nothing",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": "OpenAdapt read the record back: The system of record doesn't show this save, or couldn't be read. It may still land. Don't retry. A person must check the record.",
+      "agent_seconds": 10.198,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.656,
+      "handoff": null,
+      "hold_ms": [
+        11.3
+      ],
+      "load_avg_1m": 21.28,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1111.2,
+      "run1_seconds": 10.199,
+      "scenario": "session",
+      "screen_after": "nothing",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": "OpenAdapt read the record back: the system of record doesn't show this save, or couldn't be read. A person must check the record.",
+      "agent_seconds": 10.247,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.705,
+      "handoff": null,
+      "hold_ms": [
+        7.0
+      ],
+      "load_avg_1m": 20.62,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1078.9,
+      "run1_seconds": 10.247,
+      "scenario": "session",
+      "screen_after": "nothing",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 7.733,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 24.9,
+      "model_calls": 0,
+      "outcome": "clean",
+      "readback_ms": null,
+      "run1_seconds": 7.733,
+      "scenario": "timeout",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 7.801,
+      "arm": "guard",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 10.768,
+      "handoff": null,
+      "hold_ms": [
+        15.9
+      ],
+      "load_avg_1m": 33.02,
+      "model_calls": 0,
+      "outcome": "clean",
+      "readback_ms": 53.2,
+      "run1_seconds": 8.97,
+      "scenario": "timeout",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 7.735,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "effect_e2e",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 10.197,
+      "handoff": null,
+      "hold_ms": [
+        11.9
+      ],
+      "load_avg_1m": 32.42,
+      "model_calls": 0,
+      "outcome": "clean",
+      "readback_ms": 39.9,
+      "run1_seconds": 8.936,
+      "scenario": "timeout",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.204,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "page",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 28.89,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.204,
+      "scenario": "page_duplicate",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "duplicate"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 2
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": "OpenAdapt blocked this save: this task was already committed and its result is not verified; a person must check the record before anything else is written. Nothing was sent to the app. Don't retry this save.",
+      "agent_seconds": 6.248,
+      "arm": "guard",
+      "blocked": [
+        "needs_reconciliation"
+      ],
+      "family": "page",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 8.281,
+      "handoff": null,
+      "hold_ms": [
+        7.3
+      ],
+      "load_avg_1m": 25.9,
+      "model_calls": 0,
+      "outcome": "blocked",
+      "readback_ms": 40.6,
+      "run1_seconds": 7.43,
+      "scenario": "page_duplicate",
+      "screen_after": "blocked",
+      "trial": 1,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.247,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "page",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 10.139,
+      "handoff": null,
+      "hold_ms": [
+        5.9
+      ],
+      "load_avg_1m": 23.72,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1129.2,
+      "run1_seconds": 8.544,
+      "scenario": "page_duplicate",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "duplicate"
+      },
+      "verdict": "REFUTED",
+      "would_block": [
+        "already_committed"
+      ],
+      "writes": 2
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.272,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "page",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 23.18,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.272,
+      "scenario": "page_optimistic",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.225,
+      "arm": "guard",
+      "blocked": [],
+      "family": "page",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.433,
+      "handoff": null,
+      "hold_ms": [
+        7.3
+      ],
+      "load_avg_1m": 23.6,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1066.3,
+      "run1_seconds": 8.465,
+      "scenario": "page_optimistic",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.243,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "page",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.302,
+      "handoff": null,
+      "hold_ms": [
+        6.4
+      ],
+      "load_avg_1m": 21.27,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1060.4,
+      "run1_seconds": 8.436,
+      "scenario": "page_optimistic",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 7.38,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "page",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 20.77,
+      "model_calls": 0,
+      "outcome": "false_alarm",
+      "readback_ms": null,
+      "run1_seconds": 7.38,
+      "scenario": "page_timeout",
+      "screen_after": "error",
+      "trial": 1,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 7.443,
+      "arm": "guard",
+      "blocked": [],
+      "family": "page",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 9.656,
+      "handoff": null,
+      "hold_ms": [
+        8.5
+      ],
+      "load_avg_1m": 19.44,
+      "model_calls": 0,
+      "outcome": "clean",
+      "readback_ms": 41.0,
+      "run1_seconds": 8.586,
+      "scenario": "page_timeout",
+      "screen_after": "error",
+      "trial": 1,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 7.377,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "page",
+      "guard_ended": "read_back",
+      "guard_exit": 0,
+      "guard_notes": [],
+      "guard_seconds": 9.323,
+      "handoff": null,
+      "hold_ms": [
+        5.9
+      ],
+      "load_avg_1m": 17.83,
+      "model_calls": 0,
+      "outcome": "clean",
+      "readback_ms": 39.2,
+      "run1_seconds": 8.461,
+      "scenario": "page_timeout",
+      "screen_after": "error",
+      "trial": 1,
+      "truth": {
+        "correct": true,
+        "fault_class": "correct"
+      },
+      "verdict": "VERIFIED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.212,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "agent",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 18.16,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.212,
+      "scenario": "agent_wrong_patient",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "wrong_record"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": "OpenAdapt blocked this save: the open record does not match the task (not found: name, patient_id); nothing may be written. Nothing was sent to the app. Open the record the task names and save again, or stop and tell a person.",
+      "agent_seconds": 6.207,
+      "arm": "guard",
+      "blocked": [
+        "identity_mismatch"
+      ],
+      "family": "agent",
+      "guard_ended": "stopped",
+      "guard_exit": 3,
+      "guard_notes": [],
+      "guard_seconds": 15.571,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 16.57,
+      "model_calls": 0,
+      "outcome": "blocked",
+      "readback_ms": null,
+      "run1_seconds": 14.372,
+      "scenario": "agent_wrong_patient",
+      "screen_after": "blocked",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "absent"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 0
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.229,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "agent",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.384,
+      "handoff": null,
+      "hold_ms": [
+        6.6
+      ],
+      "load_avg_1m": 16.9,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1067.3,
+      "run1_seconds": 8.433,
+      "scenario": "agent_wrong_patient",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "wrong_record"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [
+        "identity_mismatch"
+      ],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.221,
+      "arm": "agent_alone",
+      "blocked": [],
+      "family": "agent",
+      "guard_ended": null,
+      "guard_exit": null,
+      "guard_notes": [],
+      "guard_seconds": null,
+      "handoff": null,
+      "hold_ms": [],
+      "load_avg_1m": 16.1,
+      "model_calls": 0,
+      "outcome": "silent_wrong",
+      "readback_ms": null,
+      "run1_seconds": 6.221,
+      "scenario": "agent_wrong_value",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "partial"
+      },
+      "verdict": null,
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.214,
+      "arm": "guard",
+      "blocked": [],
+      "family": "agent",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.314,
+      "handoff": null,
+      "hold_ms": [
+        6.5
+      ],
+      "load_avg_1m": 21.66,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1067.0,
+      "run1_seconds": 8.445,
+      "scenario": "agent_wrong_value",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "partial"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    },
+    {
+      "agent_actions": 6,
+      "agent_notice": null,
+      "agent_seconds": 6.273,
+      "arm": "observe_only",
+      "blocked": [],
+      "family": "agent",
+      "guard_ended": "read_back",
+      "guard_exit": 4,
+      "guard_notes": [],
+      "guard_seconds": 9.618,
+      "handoff": null,
+      "hold_ms": [
+        14.9
+      ],
+      "load_avg_1m": 21.96,
+      "model_calls": 0,
+      "outcome": "caught_by_readback",
+      "readback_ms": 1077.5,
+      "run1_seconds": 8.494,
+      "scenario": "agent_wrong_value",
+      "screen_after": "saved",
+      "trial": 1,
+      "truth": {
+        "correct": false,
+        "fault_class": "partial"
+      },
+      "verdict": "RECONCILIATION_REQUIRED",
+      "would_block": [],
+      "writes": 1
+    }
+  ],
+  "schema": "openadapt.agent-guard-benchmark/v1",
+  "setup_files": {
+    "guard": "schema_version: openadapt.agent-guard/v1\napp_url: http://127.0.0.1:52449/?fault=ok&idempotency=demo#tasks\nverify: verify.yaml\nscreen_selector: \"#patient-banner\"\nteach:\n  dir: <work>/teach\n  name: triage_note\n  db: <work>/app.sqlite\n  key_dir: <work>/keys\n",
+    "task": "{\n  \"schema_version\": \"openadapt.guard-task/v1\",\n  \"task_id\": \"triage-p1-0001\",\n  \"expected_record\": {\n    \"patient_id\": \"p1\",\n    \"name\": \"Jane Sample\"\n  },\n  \"intended_fields\": {\n    \"type\": \"Triage\",\n    \"note\": \"Agent guard benchmark triage note\"\n  }\n}\n",
+    "verify": "schema_version: openadapt.verify/v1\nverifier:\n  kind: rest\n  base_url: http://127.0.0.1:52449\n  records_path: /api/records\n  records_key: records\neffects:\n  - kind: record_written\n    match:\n      patient_id: {param: patient_id}\n      type: {param: type}\n      note: {param: note}\n    expected_count: 1\n    count_new_only: true\n    forbid_collateral_loss: true\n    timeout_s: 1.0\n"
+  },
+  "setup_lines": {
+    "agent_code": 1,
+    "command": 1,
+    "guard_yaml": 9,
+    "task_json_per_task": 12,
+    "verify_yaml": 16
+  },
+  "summary": {
+    "counts": {
+      "agent_alone:agent": {
+        "silent_wrong": 2
+      },
+      "agent_alone:effect_e2e": {
+        "clean": 1,
+        "silent_wrong": 6,
+        "visible_error": 2
+      },
+      "agent_alone:page": {
+        "false_alarm": 1,
+        "silent_wrong": 2
+      },
+      "guard:agent": {
+        "blocked": 1,
+        "caught_by_readback": 1
+      },
+      "guard:effect_e2e": {
+        "caught_by_readback": 7,
+        "clean": 1,
+        "got_through": 1
+      },
+      "guard:page": {
+        "blocked": 1,
+        "caught_by_readback": 1,
+        "clean": 1
+      },
+      "observe_only:agent": {
+        "caught_by_readback": 2
+      },
+      "observe_only:effect_e2e": {
+        "caught_by_readback": 7,
+        "clean": 1,
+        "got_through": 1
+      },
+      "observe_only:page": {
+        "caught_by_readback": 2,
+        "clean": 1
+      }
+    },
+    "per_scenario": {
+      "agent_wrong_patient": {
+        "agent_alone": [
+          "silent_wrong"
+        ],
+        "guard": [
+          "blocked"
+        ],
+        "observe_only": [
+          "caught_by_readback"
+        ]
+      },
+      "agent_wrong_value": {
+        "agent_alone": [
+          "silent_wrong"
+        ],
+        "guard": [
+          "caught_by_readback"
+        ],
+        "observe_only": [
+          "caught_by_readback"
+        ]
+      },
+      "collateral_unaudited": {
+        "agent_alone": [
+          "silent_wrong"
+        ],
+        "guard": [
+          "got_through"
+        ],
+        "observe_only": [
+          "got_through"
+        ]
+      },
+      "duplicate": {
+        "agent_alone": [
+          "silent_wrong"
+        ],
+        "guard": [
+          "caught_by_readback"
+        ],
+        "observe_only": [
+          "caught_by_readback"
+        ]
+      },
+      "no_persist": {
+        "agent_alone": [
+          "silent_wrong"
+        ],
+        "guard": [
+          "caught_by_readback"
+        ],
+        "observe_only": [
+          "caught_by_readback"
+        ]
+      },
+      "ok": {
+        "agent_alone": [
+          "clean"
+        ],
+        "guard": [
+          "clean"
+        ],
+        "observe_only": [
+          "clean"
+        ]
+      },
+      "optimistic": {
+        "agent_alone": [
+          "visible_error"
+        ],
+        "guard": [
+          "caught_by_readback"
+        ],
+        "observe_only": [
+          "caught_by_readback"
+        ]
+      },
+      "page_duplicate": {
+        "agent_alone": [
+          "silent_wrong"
+        ],
+        "guard": [
+          "blocked"
+        ],
+        "observe_only": [
+          "caught_by_readback"
+        ]
+      },
+      "page_optimistic": {
+        "agent_alone": [
+          "silent_wrong"
+        ],
+        "guard": [
+          "caught_by_readback"
+        ],
+        "observe_only": [
+          "caught_by_readback"
+        ]
+      },
+      "page_timeout": {
+        "agent_alone": [
+          "false_alarm"
+        ],
+        "guard": [
+          "clean"
+        ],
+        "observe_only": [
+          "clean"
+        ]
+      },
+      "partial": {
+        "agent_alone": [
+          "silent_wrong"
+        ],
+        "guard": [
+          "caught_by_readback"
+        ],
+        "observe_only": [
+          "caught_by_readback"
+        ]
+      },
+      "session": {
+        "agent_alone": [
+          "visible_error"
+        ],
+        "guard": [
+          "caught_by_readback"
+        ],
+        "observe_only": [
+          "caught_by_readback"
+        ]
+      },
+      "stale": {
+        "agent_alone": [
+          "silent_wrong"
+        ],
+        "guard": [
+          "caught_by_readback"
+        ],
+        "observe_only": [
+          "caught_by_readback"
+        ]
+      },
+      "timeout": {
+        "agent_alone": [
+          "clean"
+        ],
+        "guard": [
+          "clean"
+        ],
+        "observe_only": [
+          "clean"
+        ]
+      },
+      "wrong_record": {
+        "agent_alone": [
+          "silent_wrong"
+        ],
+        "guard": [
+          "caught_by_readback"
+        ],
+        "observe_only": [
+          "caught_by_readback"
+        ]
+      }
+    },
+    "run2": {
+      "admitted": true,
+      "ok_model_calls": 0,
+      "ok_seconds": 3.713,
+      "per_scenario": {
+        "collateral_unaudited": "caught_by_readback",
+        "duplicate": "caught_by_readback",
+        "no_persist": "caught_by_readback",
+        "ok": "clean",
+        "optimistic": "caught_by_readback",
+        "partial": "caught_by_readback",
+        "session": "caught_by_readback",
+        "stale": "caught_by_readback",
+        "timeout": "clean",
+        "wrong_record": "caught_by_readback"
+      }
+    },
+    "timing_ok": {
+      "agent_alone": {
+        "agent_actions": 6.0,
+        "hold_ms_median": null,
+        "readback_ms_median": null,
+        "run1_seconds_median": 6.24
+      },
+      "guard": {
+        "agent_actions": 6.0,
+        "hold_ms_median": 7.4,
+        "readback_ms_median": 41.2,
+        "run1_seconds_median": 9.926
+      },
+      "observe_only": {
+        "agent_actions": 6.0,
+        "hold_ms_median": 6.7,
+        "readback_ms_median": 39.0,
+        "run1_seconds_median": 7.434
+      }
+    }
+  },
+  "think_s": 1.0
+}

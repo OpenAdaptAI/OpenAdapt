@@ -343,7 +343,7 @@ class AdmittedApiStep(BaseModel):
     """One API step (``web_form`` binding) admitted into a governed run.
 
     Binds the exact binding a person admitted (``admission_digest``), the
-    on-screen checks of the GUI steps it stands for (``folded_checks_digest``)
+    complete definition of the GUI steps it stands for (``folded_checks_digest``)
     and its record check (``effect_contract_hashes``). The runtime runs an API
     step under a governed authorization only when all three still match.
     """
@@ -545,7 +545,7 @@ class GovernedRunAuthorization(BaseModel):
             row.admission_digest != binding.admission_digest()
             or row.folded_checks_digest != binding.web_form.folded_checks_digest
             or row.folded_checks_digest
-            != folded_checks_digest(workflow.steps[start:end])
+            != folded_checks_digest(workflow.steps[start : end + 1])
             or list(row.effect_contract_hashes)
             != [effect.contract_hash() for effect in step.effects]
         ):

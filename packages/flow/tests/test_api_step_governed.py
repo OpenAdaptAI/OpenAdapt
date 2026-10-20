@@ -96,7 +96,7 @@ def _workflow(*, admitted: bool = True, identity: bool = True) -> Workflow:
         ],
         controls=["csrf", "lname"],
         replaces_steps=[typing.id, submit.id],
-        folded_checks_digest=folded_checks_digest([typing]),
+        folded_checks_digest=folded_checks_digest([typing, submit]),
     )
     submit = submit.model_copy(
         update={

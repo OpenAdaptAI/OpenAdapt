@@ -225,12 +225,14 @@ class NetworkCapture:
         )
 
     def write(self, recording_dir: Path | str, t0_monotonic: float) -> Path:
+        from openadapt_flow import sealed_set
+
         path = Path(recording_dir) / NETWORK_FILE
         lines = self.lines(t0_monotonic)
-        with path.open("w", encoding="utf-8") as fh:
-            fh.write(json.dumps({"schema": SCHEMA, "exchanges": len(lines)}) + "\n")
-            for line in lines:
-                fh.write(json.dumps(line, sort_keys=True) + "\n")
+        text = json.dumps({"schema": SCHEMA, "exchanges": len(lines)}) + "\n"
+        text += "".join(json.dumps(line, sort_keys=True) + "\n" for line in lines)
+        # Sealed in memory when the recording is encrypted.
+        sealed_set.write_text(path, text)
         return path
 
 
@@ -403,12 +405,14 @@ def redact(
 def load(recording_dir: Path | str) -> list[dict[str, Any]]:
     """Read ``network.jsonl``; an absent file is an empty capture."""
 
+    from openadapt_flow import sealed_set
+
     path = Path(recording_dir) / NETWORK_FILE
-    if not path.is_file():
+    if not sealed_set.is_file(path):
         return []
     rows = [
         json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
+        for line in sealed_set.read_text(path).splitlines()
         if line.strip()
     ]
     if not rows or rows[0].get("schema") != SCHEMA:

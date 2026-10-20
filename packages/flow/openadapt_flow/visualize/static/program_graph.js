@@ -182,6 +182,7 @@
         "guard",
         node.guard + " → " + (node.guard_on_unmet || "halt")
       );
+    narratedRow(detail, node);
     if (node.param) detailRow(detail, "input", "parameter " + node.param);
     if (detail.childNodes.length) card.appendChild(detail);
 
@@ -211,6 +212,25 @@
     return card;
   }
 
+  var CERTIFIED_BY = {
+    recordings_agree: "every recording agrees",
+    probe: "confirmed on a test copy",
+    person: "accepted by a person",
+  };
+
+  function narratedRow(detail, node) {
+    if (!node.guard_reason) return;
+    detailRow(
+      detail,
+      "because",
+      "\u201c" +
+        node.guard_reason +
+        "\u201d (said while recording; certified: " +
+        (CERTIFIED_BY[node.guard_certified_by] || "unknown") +
+        ")"
+    );
+  }
+
   function renderControlNode(node) {
     var card = el("div", "opg-node");
     var head = el("div", "opg-node-head");
@@ -230,6 +250,11 @@
         chips.appendChild(chip(bd));
       });
       card.appendChild(chips);
+    }
+    if (node.guard_reason) {
+      var why = el("div", "opg-detail");
+      narratedRow(why, node);
+      card.appendChild(why);
     }
     return card;
   }

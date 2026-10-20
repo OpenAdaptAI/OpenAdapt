@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from openadapt_flow import bundle_sealing, crypto
+from openadapt_flow import bundle_sealing, crypto, sealed_set
 from openadapt_flow.__main__ import main
 from openadapt_flow.bundle_sealing import BundleSealingError, seal_bundle
 from openadapt_flow.ir import (
@@ -32,7 +32,7 @@ def _source(tmp_path: Path) -> Path:
     bundle = tmp_path / "source"
     (bundle / "templates").mkdir(parents=True)
     (bundle / "templates" / "submit.png").write_bytes(_CROP)
-    (bundle / "operator-notes.txt").write_text("complete-bundle-marker")
+    (bundle / "param_hygiene.json").write_text('{"note": "complete-bundle-marker"}')
     Workflow(
         name="graph-ready",
         steps=[
@@ -101,7 +101,17 @@ def test_cli_seal_preserves_source_and_verifies_encrypted_copy(
     assert main(["seal", str(source), "--out", str(destination)]) == 0
 
     assert _snapshot(source) == before
-    assert (destination / "operator-notes.txt").read_text() == "complete-bundle-marker"
+    # Every file that can hold patient data is ciphertext; only the
+    # structural manifest and the sealed-set header stay readable.
+    assert not (destination / "param_hygiene.json").exists()
+    assert crypto.is_encrypted((destination / "param_hygiene.json.enc").read_bytes())
+    on_disk = b"".join(_snapshot(destination).values())
+    assert b"complete-bundle-marker" not in on_disk
+    assert _CROP not in on_disk
+    assert b"Submitted" not in on_disk
+    assert sealed_set.read_text(destination / "param_hygiene.json") == (
+        '{"note": "complete-bundle-marker"}'
+    )
     assert not (destination / "workflow.json").exists()
     assert crypto.is_encrypted((destination / "workflow.json.enc").read_bytes())
     sealed_crop = destination / "templates" / "submit.png.enc"
@@ -312,5 +322,6 @@ def test_sealed_template_tampering_fails_authentication(
     payload[-1] ^= 1
     crop.write_bytes(payload)
 
-    with pytest.raises(crypto.DecryptionError):
+    # The sealed index catches the changed bytes before any decryption.
+    with pytest.raises(sealed_set.SealedSetError, match="changed after sealing"):
         Workflow.load(destination, key=_KEY, verify_integrity=True)

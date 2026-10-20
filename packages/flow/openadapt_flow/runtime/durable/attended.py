@@ -34,6 +34,7 @@ from typing import Any, Callable, Iterator, Literal, Optional, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.ir import (
     AttendedProgramTransitionEvidence,
     IdentityCheck,
@@ -794,6 +795,11 @@ class AttendedActionStore:
 
     @staticmethod
     def _atomic_write(path: Path, payload: bytes, *, mode: int = 0o600) -> None:
+        if _sealed.is_sealed_path(path):
+            # The run of a sealed bundle: this state can carry the source
+            # record's identity, so it is encrypted in memory.
+            _sealed.write_bytes(path, payload)
+            return
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
         fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, mode)
@@ -971,20 +977,22 @@ class AttendedActionStore:
                 "the attended capability path must not be a symlink"
             )
         capabilities: list[AttendedPauseCapability] = []
-        if self.capability_path.is_file():
+        if _sealed.is_file(self.capability_path):
             try:
                 capabilities.append(
                     AttendedPauseCapability.model_validate_json(
-                        self.capability_path.read_text()
+                        _sealed.read_text(self.capability_path)
                     )
                 )
             except ValueError as exc:
                 raise AttendedActionRefused(
                     "the current attended capability is invalid"
                 ) from exc
-        if self.capability_history_path.is_file():
+        if _sealed.is_file(self.capability_history_path):
             try:
-                raw_history = json.loads(self.capability_history_path.read_text())
+                raw_history = json.loads(
+                    _sealed.read_text(self.capability_history_path)
+                )
                 if not isinstance(raw_history, list):
                     raise ValueError("history is not a list")
                 capabilities.extend(
@@ -1185,7 +1193,7 @@ class AttendedActionStore:
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         if os.name != "nt":
             os.chmod(path.parent, 0o700)
-        if path.is_file():
+        if _sealed.is_file(path):
             existing = self.read_reconciliation_receipt(sealed.pause_id)
             if existing != sealed:
                 raise AttendedActionRefused(
@@ -1205,7 +1213,7 @@ class AttendedActionStore:
             )
         try:
             receipt = AttendedReconciliationReceipt.model_validate_json(
-                path.read_text()
+                _sealed.read_text(path)
             )
         except (FileNotFoundError, ValueError) as exc:
             raise AttendedActionRefused(
@@ -1250,7 +1258,7 @@ class AttendedActionStore:
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         if os.name != "nt":
             os.chmod(path.parent, 0o700)
-        if path.is_file():
+        if _sealed.is_file(path):
             existing = self.read_program_receipt(sealed.pause_id)
             if existing != sealed:
                 raise AttendedActionRefused(
@@ -1269,7 +1277,9 @@ class AttendedActionStore:
                 "the private program receipt path must not be a symlink"
             )
         try:
-            receipt = ProgramTransitionReceipt.model_validate_json(path.read_text())
+            receipt = ProgramTransitionReceipt.model_validate_json(
+                _sealed.read_text(path)
+            )
         except (FileNotFoundError, ValueError) as exc:
             raise AttendedActionRefused(
                 "the exact program transition receipt is missing or invalid"
@@ -1352,7 +1362,7 @@ class AttendedActionStore:
             delivery_state,
         )
         event_sequence = 1
-        if self.capability_path.is_file():
+        if _sealed.is_file(self.capability_path):
             existing = self.read()
             if (
                 existing.pause_digest == pause_digest
@@ -1376,9 +1386,11 @@ class AttendedActionStore:
             # an append-only history and let the engine issue the new pause;
             # browser callers still present the exact current digest.
             history: list[dict[str, Any]] = []
-            if self.capability_history_path.is_file():
+            if _sealed.is_file(self.capability_history_path):
                 try:
-                    raw_history = json.loads(self.capability_history_path.read_text())
+                    raw_history = json.loads(
+                        _sealed.read_text(self.capability_history_path)
+                    )
                     if isinstance(raw_history, list):
                         history = [
                             item for item in raw_history if isinstance(item, dict)
@@ -1393,7 +1405,7 @@ class AttendedActionStore:
                 json.dumps(history, indent=2, sort_keys=True).encode("utf-8"),
             )
             event_sequence = existing.event_sequence + 1
-        elif self.capability_history_path.is_file():
+        elif _sealed.is_file(self.capability_history_path):
             historical = self._signed_capabilities()
             event_sequence = max(item.event_sequence for item in historical) + 1
         now = _now()
@@ -1443,13 +1455,15 @@ class AttendedActionStore:
         must not remain visible as the current operator action surface.
         """
 
-        if not self.capability_path.is_file():
+        if not _sealed.is_file(self.capability_path):
             return
         existing = self.read()
         history: list[dict[str, Any]] = []
-        if self.capability_history_path.is_file():
+        if _sealed.is_file(self.capability_history_path):
             try:
-                raw_history = json.loads(self.capability_history_path.read_text())
+                raw_history = json.loads(
+                    _sealed.read_text(self.capability_history_path)
+                )
                 if not isinstance(raw_history, list) or not all(
                     isinstance(item, dict) for item in raw_history
                 ):
@@ -1466,13 +1480,13 @@ class AttendedActionStore:
                 self.capability_history_path,
                 json.dumps(history, indent=2, sort_keys=True).encode("utf-8"),
             )
-        self.capability_path.unlink()
+        _sealed.unlink(self.capability_path)
         self._fsync_parent(self.capability_path)
 
     def read(self) -> AttendedPauseCapability:
         try:
             capability = AttendedPauseCapability.model_validate_json(
-                self.capability_path.read_text()
+                _sealed.read_text(self.capability_path)
             )
         except (FileNotFoundError, ValueError) as exc:
             raise AttendedActionRefused(
@@ -1567,10 +1581,10 @@ class AttendedActionStore:
                 "the external attended decision journal is unavailable or invalid"
             ) from exc
         if snapshot is None:
-            if self.decisions_path.is_file():
+            if _sealed.is_file(self.decisions_path):
                 try:
                     local = AttendedDecisionLog.model_validate_json(
-                        self.decisions_path.read_text()
+                        _sealed.read_text(self.decisions_path)
                     )
                 except (OSError, ValueError) as exc:
                     raise AttendedActionRefused(
@@ -1591,9 +1605,9 @@ class AttendedActionStore:
         payload = snapshot.encode("utf-8")
         try:
             local_matches = (
-                self.decisions_path.is_file()
+                _sealed.is_file(self.decisions_path)
                 and not self.decisions_path.is_symlink()
-                and self.decisions_path.read_bytes() == payload
+                and _sealed.read_bytes(self.decisions_path) == payload
             )
         except OSError:
             local_matches = False
@@ -3638,7 +3652,7 @@ class BoundAttendedExecutor:
             + [item.decision_index for item in pending.program_exception_evidence_delta]
         )
         receipt_path = action_store._receipt_path(receipt.pause_id)
-        receipt_sha256 = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+        receipt_sha256 = hashlib.sha256(_sealed.read_bytes(receipt_path)).hexdigest()
         control_payload = json.dumps(
             [frame.model_dump(mode="json") for frame in pending.program_frames],
             sort_keys=True,
@@ -3661,8 +3675,8 @@ class BoundAttendedExecutor:
             raise AttendedActionRefused(
                 "the attended transition control path leaves the run directory"
             )
-        if control_path.is_file():
-            if control_path.read_bytes() != control_payload:
+        if _sealed.is_file(control_path):
+            if _sealed.read_bytes(control_path) != control_payload:
                 raise AttendedActionRefused(
                     "the attended transition control digest has other bytes"
                 )

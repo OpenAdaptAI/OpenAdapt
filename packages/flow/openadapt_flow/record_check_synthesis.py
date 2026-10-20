@@ -51,6 +51,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
 from urllib.parse import parse_qsl, quote, urlsplit
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.runtime.effects._common import judge_records
 from openadapt_flow.runtime.effects.effect import (
     Effect,
@@ -103,12 +104,12 @@ def load_network(recording_dir: Path) -> list[dict[str, Any]]:
     """The capture's request lines; an absent file is an empty capture."""
 
     path = Path(recording_dir) / NETWORK_FILE
-    if not path.is_file():
+    if not _sealed.is_file(path):
         return []
     try:
         rows = [
             json.loads(line)
-            for line in path.read_text(encoding="utf-8").splitlines()
+            for line in _sealed.read_text(path).splitlines()
             if line.strip()
         ]
     except (OSError, ValueError) as exc:
@@ -126,7 +127,9 @@ def recorded_params(recording_dir: Path) -> dict[str, str]:
     """The demonstration's parameter values from ``meta.json``."""
 
     try:
-        meta = json.loads((Path(recording_dir) / "meta.json").read_text("utf-8"))
+        meta = json.loads(_sealed.read_text(Path(recording_dir) / "meta.json"))
+    except _sealed.SealedSetError:
+        raise
     except (OSError, ValueError):
         return {}
     params = meta.get("params") if isinstance(meta, dict) else None
@@ -431,9 +434,9 @@ def _save_event_times(recording_dir: Path) -> tuple[Optional[float], Optional[fl
 
     times: dict[int, float] = {}
     events_path = Path(recording_dir) / "events.jsonl"
-    if not events_path.is_file():
+    if not _sealed.is_file(events_path):
         return None, None
-    for index, line in enumerate(events_path.read_text("utf-8").splitlines()):
+    for index, line in enumerate(_sealed.read_text(events_path).splitlines()):
         try:
             event = json.loads(line) if line.strip() else {}
         except ValueError:
@@ -1513,9 +1516,9 @@ def synthesize(
         snapshots = None
         if recording_dir is not None:
             snap = Path(recording_dir) / "sor_snapshots.json"
-            if snap.is_file():
+            if _sealed.is_file(snap):
                 try:
-                    snapshots = json.loads(snap.read_text("utf-8"))
+                    snapshots = json.loads(_sealed.read_text(snap))
                 except ValueError:
                     snapshots = None
         reads_from_verifier(verifier, params, search, snapshots=snapshots)
@@ -1608,10 +1611,11 @@ def write(proposal: Proposal, out_dir: Path) -> tuple[Path, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     check = out_dir / PROPOSED_NAME
     proof = out_dir / PROOF_NAME
-    check.write_text(render(proposal), encoding="utf-8")
-    proof.write_text(
+    # Sealed in memory when ``out_dir`` is an encrypted recording or bundle.
+    _sealed.write_text(check, render(proposal))
+    _sealed.write_text(
+        proof,
         json.dumps(proposal.proof(), indent=2, sort_keys=True, default=str) + "\n",
-        encoding="utf-8",
     )
     return check, proof
 

@@ -576,6 +576,12 @@ class AuthoringSession:
 
         self._nodes[node_id] = _pixels_from_mapping(backend_pixels)
 
+    def node_center(self, node_id: str) -> Optional[tuple[int, int]]:
+        """The backend-pixel center of an observed node, or None if unknown."""
+
+        target = self._nodes.get(node_id)
+        return target.center if target is not None else None
+
     def observe(self) -> dict[str, Any]:
         """Return a PHI-safe authoring tree of the pinned window.
 

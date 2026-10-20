@@ -1,0 +1,61 @@
+{
+  "saving_steps": [
+    {
+      "candidates": [
+        {
+          "basis": "the save's JSON POST /api/disbursement returned a record id; REST convention gives DELETE /api/disbursement/{undo_record_id}",
+          "candidate_id": "undo-step_010-network-1",
+          "evidence": {
+            "after_save": {
+              "records": 2,
+              "sha256": "7684265eafe6dde20e630141fe6de95396b8533ad769a34745032c5859956d85"
+            },
+            "after_undo": {
+              "records": 1,
+              "sha256": "41cdfc3100b763dd693744a12ccf4b1aae8de5b1a6f18a22f7f89950a836c8fa"
+            },
+            "basis": "the save's JSON POST /api/disbursement returned a record id; REST convention gives DELETE /api/disbursement/{undo_record_id}",
+            "before": {
+              "records": 0,
+              "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+            },
+            "candidate_id": "undo-step_010-network-1",
+            "earlier_saves": 0,
+            "finished_at": "2026-10-19T15:24:47.244521+00:00",
+            "ignored_fields": [],
+            "reason": "after the undo the test copy differs from before the save: 1 record(s) added since before the save remain",
+            "save": "completed",
+            "save_model_calls": 0,
+            "schema": "openadapt.undo-verification/v1",
+            "source": "network",
+            "started_at": "2026-10-19T15:24:30.572482+00:00",
+            "test_copy": "mockloan-fee-row-test-copy",
+            "undo": "completed",
+            "undo_digest": "c64b712caff380bd1da7ddd6252eea092c48616da0aae77ba023e5fe24511a13",
+            "undo_judgement": "every undo step ran and an independent read of the system of record confirmed its declared effects",
+            "undo_model_calls": 0,
+            "undoes": "step_010",
+            "verdict": "failed"
+          },
+          "reason": "after the undo the test copy differs from before the save: 1 record(s) added since before the save remain",
+          "source": "network",
+          "status": "failed"
+        }
+      ],
+      "intent": "click 'AuthorizeDisbursement'",
+      "reason": "network: after the undo the test copy differs from before the save: 1 record(s) added since before the save remain (also: no other recordings were given; the save creates a record; there is no old value to restore)",
+      "step_id": "step_010",
+      "to_close_the_gap": "record a person doing the app's own delete or cancel path and pass it with --from-recording; if the only difference is a timestamp or audit field, a person may name it with --ignore-field",
+      "verified_undo": null
+    }
+  ],
+  "schema": "openadapt.undo-propose-report/v1",
+  "summary": {
+    "no_verified_undo": 1,
+    "saving_steps": 1,
+    "verified_undo": 0
+  },
+  "test_copy": "mockloan-fee-row-test-copy",
+  "workflow_name": "mockloan-fee-row-demo",
+  "written": false
+}

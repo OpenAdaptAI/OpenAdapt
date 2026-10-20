@@ -1,14 +1,14 @@
 {
   "protocol_version": "2026-10-18.1",
-  "written_at": "2026-10-18T17:20:50-0400",
+  "written_at": "2026-10-19T11:28:24-0400",
   "machine": "arm64 Darwin 24.6.0",
   "cpu_count": 12,
   "python": "3.12.13",
   "engine": {
-    "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
-    "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+    "path": "/Users/abrichr/oa/worktrees/demo-engine-main-plus-1293/packages/flow/openadapt_flow",
+    "git_head": "a8cca993c564fdc13b4c65c01e3e884dcaa50c44"
   },
-  "benchmark_git_head": "13d3327c58636033adf5b71460774165a026dd4c",
+  "benchmark_git_head": "b46f941432f7b8542c723c46c55745a97675b9ff",
   "task": "openimis",
   "arm": "program",
   "imported_from": "demo/cua_to_program/results/launch-4",

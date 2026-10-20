@@ -1,0 +1,23 @@
+{
+  "benchmark": "silent-saves",
+  "version": "1.0.0",
+  "protocol": "silent-saves/2026-10-19.1",
+  "app": "mockmed",
+  "executor": "screen-script",
+  "agent_spec": "screen-script",
+  "readback": true,
+  "per_fault": 5,
+  "faults": [
+    "ok",
+    "no_persist",
+    "partial",
+    "duplicate",
+    "wrong_record",
+    "stale",
+    "optimistic"
+  ],
+  "git_head": "dacf2c4d15025500a94f71c0dfd2eed2326dd731",
+  "machine": "arm64 Darwin 24.6.0",
+  "python": "3.12.13",
+  "written_at": "2026-10-19T11:41:26-0400"
+}

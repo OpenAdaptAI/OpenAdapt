@@ -379,6 +379,12 @@ def propose_effects(
 
 
 def _write_private(path: Path, text: str) -> None:
+    from openadapt_flow import sealed_set
+
+    if sealed_set.is_sealed_path(path):
+        # An encrypted recording: seal the rows in memory, never as plaintext.
+        sealed_set.write_text(path, text)
+        return
     tmp = path.with_name(path.name + ".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -477,7 +483,11 @@ class RecordingObservation:
 
 def _recorded_params(recording: Path) -> dict[str, str]:
     try:
-        meta = json.loads((recording / "meta.json").read_text(encoding="utf-8"))
+        from openadapt_flow import sealed_set
+
+        meta = json.loads(sealed_set.read_text(recording / "meta.json"))
+    except sealed_set.SealedSetError:
+        raise
     except (OSError, ValueError):
         return {}
     params = meta.get("params") if isinstance(meta, dict) else None

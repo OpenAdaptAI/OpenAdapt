@@ -1,0 +1,161 @@
+item,fault,kind,expect,release,drift,executor,claimed_success,readback_confirmed,reported_success,store_verdict,store_changed,outcome,outcome_alone,model_calls,cost_usd,item_s,readback_s,host_load_1m,human_events,human_minutes,final_text,error
+1,ok,control,save,baseline,,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.926,,5.04,,0,Encounter saved — Synthetic follow-up note 1: recheck in 8,
+2,ok,control,save,baseline,,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.831,,5.04,,0,Encounter saved — Synthetic follow-up note 2: recheck in 9,
+3,ok,control,save,baseline,,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.837,,5.04,,0,Encounter saved — Synthetic follow-up note 3: recheck in 1,
+4,ok,control,save,baseline,,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.861,,5.03,,0,Encounter saved — Synthetic follow-up note 4: recheck in 1,
+5,ok,control,save,baseline,,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.847,,5.03,,0,Encounter saved — Synthetic follow-up note 5: recheck in 1,
+6,ok,control,save,baseline,,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.855,,5.03,,0,Encounter saved — Synthetic follow-up note 6: recheck in 1,
+7,ok,control,save,baseline,,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.854,,4.87,,0,Encounter saved — Synthetic follow-up note 7: recheck in 1,
+8,ok,control,save,baseline,,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.85,,4.87,,0,Encounter saved — Synthetic follow-up note 8: recheck in 1,
+9,ok,control,save,baseline,,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.85,,4.72,,0,Encounter saved — Synthetic follow-up note 9: recheck in 1,
+10,ok,control,save,baseline,,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.851,,4.72,,0,Encounter saved — Synthetic follow-up note 10: recheck in,
+11,ok,control,save,baseline,,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.834,,4.72,,0,Encounter saved — Synthetic follow-up note 11: recheck in,
+12,ok,control,save,baseline,,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.838,,4.66,,0,Encounter saved — Synthetic follow-up note 12: recheck in,
+13,ok,control,save,baseline,,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.851,,4.66,,0,Encounter saved — Synthetic follow-up note 13: recheck in,
+14,ok,control,save,baseline,,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.838,,4.66,,0,Encounter saved — Synthetic follow-up note 14: recheck in,
+15,ok,control,save,baseline,,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.838,,5.09,,0,Encounter saved — Synthetic follow-up note 15: recheck in,
+16,ok,change,save,renamed controls,rename,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.855,,5.09,,0,Encounter saved — Synthetic follow-up note 16: recheck in,
+17,ok,change,save,renamed controls,rename,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.852,,4.84,,0,Encounter saved — Synthetic follow-up note 17: recheck in,
+18,ok,change,save,renamed controls,rename,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.849,,4.84,,0,Encounter saved — Synthetic follow-up note 18: recheck in,
+19,ok,change,save,renamed controls,rename,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.85,,4.84,,0,Encounter saved — Synthetic follow-up note 19: recheck in,
+20,no_persist,fault,save,renamed controls,rename,screen-script,True,,True,missing,False,silent_wrong,silent_wrong,0,0.0,0.859,,4.53,,0,Encounter saved — Synthetic follow-up note 20: recheck in,
+21,ok,change,save,renamed controls,rename,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.832,,4.53,,0,Encounter saved — Synthetic follow-up note 21: recheck in,
+22,ok,change,save,renamed controls,rename,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.849,,4.53,,0,Encounter saved — Synthetic follow-up note 22: recheck in,
+23,ok,change,save,renamed controls,rename,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.85,,4.41,,0,Encounter saved — Synthetic follow-up note 23: recheck in,
+24,ok,change,save,renamed controls,rename,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.831,,4.41,,0,Encounter saved — Synthetic follow-up note 24: recheck in,
+25,ok,change,save,renamed controls,rename,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.836,,4.3,,0,Encounter saved — Synthetic follow-up note 25: recheck in,
+26,ok,change,save,display scaling,zoom,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.852,,4.3,,0,Encounter saved — Synthetic follow-up note 26: recheck in,
+27,ok,change,save,display scaling,zoom,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.832,,4.3,,0,Encounter saved — Synthetic follow-up note 27: recheck in,
+28,ok,change,save,display scaling,zoom,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.84,,4.19,,0,Encounter saved — Synthetic follow-up note 28: recheck in,
+29,ok,change,save,display scaling,zoom,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.855,,4.19,,0,Encounter saved — Synthetic follow-up note 29: recheck in,
+30,wrong_record,fault,save,display scaling,zoom,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.857,,4.19,,0,Encounter saved — Synthetic follow-up note 30: recheck in,
+31,ok,change,save,display scaling,zoom,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.853,,4.82,,0,Encounter saved — Synthetic follow-up note 31: recheck in,
+32,ok,change,save,display scaling,zoom,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.852,,4.82,,0,Encounter saved — Synthetic follow-up note 32: recheck in,
+33,ok,change,save,display scaling,zoom,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.857,,4.82,,0,Encounter saved — Synthetic follow-up note 33: recheck in,
+34,ok,change,save,display scaling,zoom,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.856,,4.99,,0,Encounter saved — Synthetic follow-up note 34: recheck in,
+35,ok,change,save,display scaling,zoom,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.835,,4.99,,0,Encounter saved — Synthetic follow-up note 35: recheck in,
+36,ok,change,save,moved controls,move,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.846,,5.23,,0,Encounter saved — Synthetic follow-up note 36: recheck in,
+37,ok,change,save,moved controls,move,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.85,,5.23,,0,Encounter saved — Synthetic follow-up note 37: recheck in,
+38,ok,change,save,moved controls,move,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.853,,5.23,,0,Encounter saved — Synthetic follow-up note 38: recheck in,
+39,ok,change,save,moved controls,move,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.84,,4.89,,0,Encounter saved — Synthetic follow-up note 39: recheck in,
+40,partial,fault,save,moved controls,move,screen-script,True,,True,partial,True,silent_wrong,silent_wrong,0,0.0,0.845,,4.89,,0,Encounter saved — Synthetic follow-up note 40: recheck in,
+41,ok,change,save,moved controls,move,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.852,,4.89,,0,Encounter saved — Synthetic follow-up note 41: recheck in,
+42,ok,change,save,moved controls,move,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.852,,4.74,,0,Encounter saved — Synthetic follow-up note 42: recheck in,
+43,ok,change,save,moved controls,move,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.833,,4.74,,0,Encounter saved — Synthetic follow-up note 43: recheck in,
+44,ok,change,save,moved controls,move,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.851,,4.76,,0,Encounter saved — Synthetic follow-up note 44: recheck in,
+45,ok,change,save,moved controls,move,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.854,,4.76,,0,Encounter saved — Synthetic follow-up note 45: recheck in,
+46,ok,change,save,new interstitial,notice,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.578,,4.76,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("".open-btn"").first
+"
+47,ok,change,save,new interstitial,notice,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.559,,4.56,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("".open-btn"").first
+"
+48,ok,change,save,new interstitial,notice,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.557,,4.44,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("".open-btn"").first
+"
+49,ok,change,save,new interstitial,notice,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.554,,4.24,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("".open-btn"").first
+"
+50,ok,change,save,new interstitial,notice,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.557,,4.5,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("".open-btn"").first
+"
+51,ok,change,save,new interstitial,notice,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.56,,4.54,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("".open-btn"").first
+"
+52,ok,change,save,new interstitial,notice,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.55,,4.74,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("".open-btn"").first
+"
+53,ok,change,save,new interstitial,notice,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.563,,4.6,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("".open-btn"").first
+"
+54,ok,change,save,new interstitial,notice,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.556,,4.36,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("".open-btn"").first
+"
+55,ok,change,save,new interstitial,notice,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.55,,4.49,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator("".open-btn"").first
+"
+56,ok,change,save,latency,slow,screen-script,True,,True,correct,True,correct,correct,0,0.0,7.324,,4.29,,0,Encounter saved — Synthetic follow-up note 56: recheck in,
+57,ok,change,save,latency,slow,screen-script,True,,True,correct,True,correct,correct,0,0.0,7.326,,4.02,,0,Encounter saved — Synthetic follow-up note 57: recheck in,
+58,ok,change,save,latency,slow,screen-script,True,,True,correct,True,correct,correct,0,0.0,7.32,,3.79,,0,Encounter saved — Synthetic follow-up note 58: recheck in,
+59,ok,change,save,latency,slow,screen-script,True,,True,correct,True,correct,correct,0,0.0,7.306,,3.73,,0,Encounter saved — Synthetic follow-up note 59: recheck in,
+60,duplicate,fault,save,latency,slow,screen-script,True,,True,duplicate,True,silent_wrong,silent_wrong,0,0.0,7.325,,3.68,,0,Encounter saved — Synthetic follow-up note 60: recheck in,
+61,ok,change,save,latency,slow,screen-script,True,,True,correct,True,correct,correct,0,0.0,7.33,,3.5,,0,Encounter saved — Synthetic follow-up note 61: recheck in,
+62,ok,change,save,latency,slow,screen-script,True,,True,correct,True,correct,correct,0,0.0,7.344,,3.38,,0,Encounter saved — Synthetic follow-up note 62: recheck in,
+63,ok,change,save,latency,slow,screen-script,True,,True,correct,True,correct,correct,0,0.0,7.314,,3.31,,0,Encounter saved — Synthetic follow-up note 63: recheck in,
+64,ok,change,save,latency,slow,screen-script,True,,True,correct,True,correct,correct,0,0.0,7.324,,3.04,,0,Encounter saved — Synthetic follow-up note 64: recheck in,
+65,ok,change,save,latency,slow,screen-script,True,,True,correct,True,correct,correct,0,0.0,7.335,,2.95,,0,Encounter saved — Synthetic follow-up note 65: recheck in,
+66,ok,trap,save,reordered queue,sort,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.863,,3.28,,0,Encounter saved — Synthetic follow-up note 66: recheck in,
+67,ok,trap,save,reordered queue,sort,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.853,,3.28,,0,Encounter saved — Synthetic follow-up note 67: recheck in,
+68,ok,trap,save,reordered queue,sort,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.837,,3.58,,0,Encounter saved — Synthetic follow-up note 68: recheck in,
+69,ok,trap,save,reordered queue,sort,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.846,,3.58,,0,Encounter saved — Synthetic follow-up note 69: recheck in,
+70,ok,trap,save,reordered queue,sort,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.836,,3.69,,0,Encounter saved — Synthetic follow-up note 70: recheck in,
+71,ok,trap,save,reordered queue,sort,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.841,,3.69,,0,Encounter saved — Synthetic follow-up note 71: recheck in,
+72,ok,trap,save,reordered queue,sort,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.851,,3.69,,0,Encounter saved — Synthetic follow-up note 72: recheck in,
+73,ok,trap,save,reordered queue,sort,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.856,,3.48,,0,Encounter saved — Synthetic follow-up note 73: recheck in,
+74,ok,trap,save,reordered queue,sort,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.833,,3.48,,0,Encounter saved — Synthetic follow-up note 74: recheck in,
+75,ok,trap,save,reordered queue,sort,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.849,,3.48,,0,Encounter saved — Synthetic follow-up note 75: recheck in,
+76,ok,change,save,renamed and moved New Encounter,relink,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.597,,3.52,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator(""#new-encounter"")
+"
+77,ok,change,save,renamed and moved New Encounter,relink,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.594,,3.32,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator(""#new-encounter"")
+"
+78,ok,change,save,renamed and moved New Encounter,relink,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.599,,3.21,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator(""#new-encounter"")
+"
+79,ok,change,save,renamed and moved New Encounter,relink,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.604,,3.33,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator(""#new-encounter"")
+"
+80,optimistic,fault,save,renamed and moved New Encounter,relink,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.592,,3.14,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator(""#new-encounter"")
+"
+81,ok,change,save,renamed and moved New Encounter,relink,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.602,,3.45,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator(""#new-encounter"")
+"
+82,ok,change,save,renamed and moved New Encounter,relink,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.6,,3.32,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator(""#new-encounter"")
+"
+83,ok,change,save,renamed and moved New Encounter,relink,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.622,,3.45,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator(""#new-encounter"")
+"
+84,ok,change,save,renamed and moved New Encounter,relink,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.604,,3.25,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator(""#new-encounter"")
+"
+85,ok,change,save,renamed and moved New Encounter,relink,screen-script,False,,False,missing,False,safe_stop,safe_stop,0,0.0,5.599,,3.14,,0,,"TimeoutError: Locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator(""#new-encounter"")
+"
+86,ok,trap,save,look-alike referral,lookalike,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.849,,3.05,,0,Encounter saved — Synthetic follow-up note 86: recheck in,
+87,ok,trap,save,look-alike referral,lookalike,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.856,,3.05,,0,Encounter saved — Synthetic follow-up note 87: recheck in,
+88,ok,trap,save,look-alike referral,lookalike,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.864,,2.88,,0,Encounter saved — Synthetic follow-up note 88: recheck in,
+89,ok,trap,save,look-alike referral,lookalike,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.863,,2.88,,0,Encounter saved — Synthetic follow-up note 89: recheck in,
+90,ok,trap,save,look-alike referral,lookalike,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.858,,2.88,,0,Encounter saved — Synthetic follow-up note 90: recheck in,
+91,ok,trap,save,relabeled and reordered type,typelabel,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.853,,2.81,,0,Encounter saved — Synthetic follow-up note 91: recheck in,
+92,ok,trap,save,relabeled and reordered type,typelabel,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.85,,2.81,,0,Encounter saved — Synthetic follow-up note 92: recheck in,
+93,ok,trap,save,relabeled and reordered type,typelabel,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.853,,2.91,,0,Encounter saved — Synthetic follow-up note 93: recheck in,
+94,ok,trap,save,relabeled and reordered type,typelabel,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.854,,2.91,,0,Encounter saved — Synthetic follow-up note 94: recheck in,
+95,ok,trap,save,relabeled and reordered type,typelabel,screen-script,True,,True,correct,True,correct,correct,0,0.0,0.854,,2.91,,0,Encounter saved — Synthetic follow-up note 95: recheck in,
+96,ok,trap,stop,target referral gone,missing,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.855,,2.83,,0,Encounter saved — Synthetic follow-up note 96: recheck in,
+97,ok,trap,stop,target referral gone,missing,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.86,,2.83,,0,Encounter saved — Synthetic follow-up note 97: recheck in,
+98,ok,trap,stop,target referral gone,missing,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.829,,2.83,,0,Encounter saved — Synthetic follow-up note 98: recheck in,
+99,ok,trap,stop,target referral gone,missing,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.851,,3.01,,0,Encounter saved — Synthetic follow-up note 99: recheck in,
+100,ok,trap,stop,target referral gone,missing,screen-script,True,,True,wrong_record,True,silent_wrong,silent_wrong,0,0.0,0.853,,3.01,,0,Encounter saved — Synthetic follow-up note 100: recheck in,
