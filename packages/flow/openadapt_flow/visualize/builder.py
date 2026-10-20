@@ -12,7 +12,7 @@ summaries. It never fabricates structure that the compiler did not produce.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional, Sequence
 
 from openadapt_flow.runtime.authorization import runtime_param_text
 from openadapt_flow.visualize.spec import (
@@ -22,6 +22,7 @@ from openadapt_flow.visualize.spec import (
     EffectInfo,
     GraphEdge,
     GraphNode,
+    GraphSection,
     IdentityInfo,
     NodeKind,
     ParamInfo,
@@ -29,6 +30,8 @@ from openadapt_flow.visualize.spec import (
     ProvenanceInfo,
     ResolutionInfo,
     ResolutionRung,
+    SectionKind,
+    SectionTitleSource,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -41,6 +44,7 @@ if TYPE_CHECKING:  # pragma: no cover
         Workflow,
     )
     from openadapt_flow.runtime.effects.effect import Effect
+    from openadapt_flow.sections import Section
 
 
 # Human labels for the resolution ladder, strongest-first. ``api`` sits ABOVE
@@ -391,7 +395,9 @@ def _build_linear(workflow: "Workflow") -> tuple[list[GraphNode], list[GraphEdge
     return nodes, edges
 
 
-def _build_program(workflow: "Workflow") -> tuple[list[GraphNode], list[GraphEdge]]:
+def _build_program(
+    workflow: "Workflow", step_nodes: Optional[dict[str, list[str]]] = None
+) -> tuple[list[GraphNode], list[GraphEdge]]:
     """Project a Phase-2 ``Workflow.program`` graph to spec nodes/edges,
     preserving branches, loops, subflow calls, exception handlers, and
     terminals so richer compiled structure renders without a spec break.
@@ -425,6 +431,7 @@ def _build_program(workflow: "Workflow") -> tuple[list[GraphNode], list[GraphEdg
         edges=edges,
         next_index=_next_index,
         ancestors=frozenset(),
+        step_nodes=step_nodes,
     )
     return nodes, edges
 
@@ -439,6 +446,7 @@ def _emit_graph(
     edges: list[GraphEdge],
     next_index: "Callable[[], int]",
     ancestors: frozenset[str],
+    step_nodes: Optional[dict[str, list[str]]] = None,
 ) -> None:
     """Emit the nodes/edges of one ``ProgramGraph`` (the top-level program or an
     expanded loop-body subflow), namespacing every state id with ``prefix``.
@@ -494,6 +502,8 @@ def _emit_graph(
         idx = next_index()
         if state.kind == StateKind.ACTION and state.step is not None:
             node = _action_node(state.step, idx, node_id, NodeKind.ACTION)
+            if step_nodes is not None:
+                step_nodes.setdefault(state.step.id, []).append(node_id)
         else:
             node = GraphNode(
                 id=node_id,
@@ -551,6 +561,7 @@ def _emit_graph(
                     edges=edges,
                     next_index=next_index,
                     ancestors=ancestors | {state.loop.body},
+                    step_nodes=step_nodes,
                 )
         # transitions
         for tr in state.transitions:
@@ -613,18 +624,71 @@ def _state_title(state: "State") -> str:
     return state.id
 
 
-def build_program_graph(workflow: "Workflow") -> ProgramGraphSpec:
+def build_program_graph(
+    workflow: "Workflow",
+    sections: Optional[Sequence["Section"]] = None,
+) -> ProgramGraphSpec:
     """Emit the shared :class:`ProgramGraphSpec` for a compiled ``workflow``.
 
     A linear bundle (``workflow.program is None``) projects to a straight chain
     of ``action`` nodes; a Phase-2 program projects its full state graph. Either
     way the emitted spec is the single artifact every visualization surface
-    renders.
+    renders. ``sections`` (from :func:`openadapt_flow.sections.load`) become
+    the spec's named groups of action nodes.
     """
     is_program = workflow.program is not None
+    step_nodes: dict[str, list[str]] = {}
     if is_program:
-        nodes, edges = _build_program(workflow)
+        nodes, edges = _build_program(workflow, step_nodes)
     else:
         nodes, edges = _build_linear(workflow)
+        step_nodes = {step.id: [step.id] for step in workflow.steps}
     meta = _bundle_meta(workflow, nodes, is_program)
-    return ProgramGraphSpec(bundle=meta, nodes=nodes, edges=edges)
+    return ProgramGraphSpec(
+        bundle=meta,
+        nodes=nodes,
+        edges=edges,
+        sections=_graph_sections(sections or (), step_nodes, nodes),
+    )
+
+
+def _graph_sections(
+    sections: Sequence["Section"],
+    step_nodes: dict[str, list[str]],
+    nodes: list[GraphNode],
+) -> list[GraphSection]:
+    """Map each section's step ids to node ids, once per rendered copy.
+
+    A loop body expanded under two loops renders twice; each copy gets its
+    own section. A section whose steps are not all rendered is dropped.
+    """
+    by_id = {node.id: node for node in nodes}
+    out: list[GraphSection] = []
+    for section in sections:
+        copies = [step_nodes.get(step_id, []) for step_id in section.steps]
+        count = min((len(c) for c in copies), default=0)
+        for k in range(count):
+            members = [c[k] for c in copies]
+            effects = any(by_id[m].effects for m in members if m in by_id)
+            parts = [f"{len(members)} {'step' if len(members) == 1 else 'steps'}"]
+            if section.fields:
+                n = len(section.fields)
+                parts.append(f"{n} {'field' if n == 1 else 'fields'}")
+            if effects:
+                parts.append("reads the record back")
+            out.append(
+                GraphSection(
+                    id=f"section:{section.id}"
+                    if count == 1
+                    else f"section:{k}:{section.id}",
+                    title=section.title,
+                    subtitle=" · ".join(parts),
+                    kind=SectionKind(section.kind),
+                    title_source=SectionTitleSource(section.title_source),
+                    nodes=members,
+                    section=section.id,
+                    steps=list(section.steps),
+                    fields=list(section.fields),
+                )
+            )
+    return out

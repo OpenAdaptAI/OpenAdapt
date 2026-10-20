@@ -149,6 +149,8 @@
       "postconditions": [],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -223,6 +225,8 @@
       ],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -260,6 +264,8 @@
       "postconditions": [],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -331,6 +337,8 @@
       ],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -368,6 +376,8 @@
       "postconditions": [],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -439,6 +449,8 @@
       ],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -476,6 +488,8 @@
       "postconditions": [],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -548,6 +562,8 @@
       ],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -585,6 +601,8 @@
       "postconditions": [],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -656,6 +674,8 @@
       ],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -693,6 +713,8 @@
       "postconditions": [],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -728,6 +750,8 @@
       "postconditions": [],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -800,6 +824,8 @@
       ],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -837,6 +863,8 @@
       "postconditions": [],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -908,6 +936,8 @@
       ],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -945,6 +975,8 @@
       "postconditions": [],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -1016,6 +1048,8 @@
       ],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -1053,6 +1087,8 @@
       "postconditions": [],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -1124,6 +1160,8 @@
       ],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -1161,6 +1199,8 @@
       "postconditions": [],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -1232,6 +1272,8 @@
       ],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -1269,6 +1311,8 @@
       "postconditions": [],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -1340,6 +1384,8 @@
       ],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -1377,6 +1423,8 @@
       "postconditions": [],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -1448,6 +1496,8 @@
       ],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -1485,6 +1535,8 @@
       "postconditions": [],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -1556,6 +1608,8 @@
       ],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -1593,6 +1647,8 @@
       "postconditions": [],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -1665,6 +1721,8 @@
       ],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -1806,6 +1864,8 @@
       ],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": null,
       "reason": "",
@@ -1840,6 +1900,8 @@
       "postconditions": [],
       "guard": null,
       "guard_on_unmet": null,
+      "guard_reason": null,
+      "guard_certified_by": null,
       "wait_until": null,
       "outcome": "success",
       "reason": "",
@@ -1855,217 +1917,373 @@
       "target": "for_each::s::step_000",
       "kind": "loop_body",
       "label": "declared loop",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_000",
       "target": "for_each::s::step_001",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_001",
       "target": "for_each::s::step_003",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_003",
       "target": "for_each::s::step_005",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_005",
       "target": "for_each::s::step_006",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_006",
       "target": "for_each::s::step_008",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_008",
       "target": "for_each::s::step_009",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_009",
       "target": "for_each::s::step_011",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_011",
       "target": "for_each::s::step_012",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_012",
       "target": "for_each::s::step_013",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_013",
       "target": "for_each::s::step_015",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_015",
       "target": "for_each::s::step_016",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_016",
       "target": "for_each::s::step_017",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_017",
       "target": "for_each::s::step_018",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_018",
       "target": "for_each::s::step_020",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_020",
       "target": "for_each::s::step_021",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_021",
       "target": "for_each::s::step_023",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_023",
       "target": "for_each::s::step_024",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_024",
       "target": "for_each::s::step_025",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_025",
       "target": "for_each::s::step_027",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_027",
       "target": "for_each::s::step_029",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_029",
       "target": "for_each::s::step_030",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_030",
       "target": "for_each::s::step_032",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_032",
       "target": "for_each::s::step_033",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_033",
       "target": "for_each::s::step_035",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_035",
       "target": "for_each::s::step_036",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_036",
       "target": "for_each::s::step_037",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_037",
       "target": "for_each::s::step_039",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_039",
       "target": "for_each::s::step_040",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each::s::step_040",
       "target": "for_each",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
     },
     {
       "source": "for_each",
       "target": "__loop_done__",
       "kind": "sequence",
       "label": "",
-      "guard": null
+      "guard": null,
+      "guard_reason": null
+    }
+  ],
+  "sections": [
+    {
+      "id": "section:fields-step_000",
+      "title": "Fill declared inputs",
+      "subtitle": "6 steps",
+      "kind": "fields",
+      "title_source": "ui",
+      "nodes": [
+        "for_each::s::step_000",
+        "for_each::s::step_001",
+        "for_each::s::step_003",
+        "for_each::s::step_005",
+        "for_each::s::step_006",
+        "for_each::s::step_008"
+      ],
+      "section": "fields-step_000",
+      "steps": [
+        "step_000",
+        "step_001",
+        "step_003",
+        "step_005",
+        "step_006",
+        "step_008"
+      ],
+      "fields": []
+    },
+    {
+      "id": "section:fields-step_009",
+      "title": "Fill declared inputs",
+      "subtitle": "4 steps",
+      "kind": "fields",
+      "title_source": "ui",
+      "nodes": [
+        "for_each::s::step_009",
+        "for_each::s::step_011",
+        "for_each::s::step_012",
+        "for_each::s::step_013"
+      ],
+      "section": "fields-step_009",
+      "steps": [
+        "step_009",
+        "step_011",
+        "step_012",
+        "step_013"
+      ],
+      "fields": []
+    },
+    {
+      "id": "section:fields-step_015",
+      "title": "Fill declared inputs",
+      "subtitle": "11 steps",
+      "kind": "fields",
+      "title_source": "ui",
+      "nodes": [
+        "for_each::s::step_015",
+        "for_each::s::step_016",
+        "for_each::s::step_017",
+        "for_each::s::step_018",
+        "for_each::s::step_020",
+        "for_each::s::step_021",
+        "for_each::s::step_023",
+        "for_each::s::step_024",
+        "for_each::s::step_025",
+        "for_each::s::step_027",
+        "for_each::s::step_029"
+      ],
+      "section": "fields-step_015",
+      "steps": [
+        "step_015",
+        "step_016",
+        "step_017",
+        "step_018",
+        "step_020",
+        "step_021",
+        "step_023",
+        "step_024",
+        "step_025",
+        "step_027",
+        "step_029"
+      ],
+      "fields": []
+    },
+    {
+      "id": "section:fields-step_030",
+      "title": "Fill declared inputs",
+      "subtitle": "6 steps",
+      "kind": "fields",
+      "title_source": "ui",
+      "nodes": [
+        "for_each::s::step_030",
+        "for_each::s::step_032",
+        "for_each::s::step_033",
+        "for_each::s::step_035",
+        "for_each::s::step_036",
+        "for_each::s::step_037"
+      ],
+      "section": "fields-step_030",
+      "steps": [
+        "step_030",
+        "step_032",
+        "step_033",
+        "step_035",
+        "step_036",
+        "step_037"
+      ],
+      "fields": []
+    },
+    {
+      "id": "section:save-step_039",
+      "title": "Commit the write",
+      "subtitle": "2 steps",
+      "kind": "save",
+      "title_source": "ui",
+      "nodes": [
+        "for_each::s::step_039",
+        "for_each::s::step_040"
+      ],
+      "section": "save-step_039",
+      "steps": [
+        "step_039",
+        "step_040"
+      ],
+      "fields": []
     }
   ]
 }

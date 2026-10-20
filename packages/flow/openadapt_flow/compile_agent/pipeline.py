@@ -234,7 +234,9 @@ class CompileResult:
     (run 1 passed; checks or admission wait for a person), ``needs_person``
     (outside the agent's admission policy), or why nothing can be admitted:
     ``refused_wrong_record``, ``refused_by_hold``, ``record_check_failed``,
-    ``canary_failed``, ``capture_failed``, ``unsupported``.
+    ``canary_failed``, ``capture_failed``, ``unsupported``, ``scope_refused``
+    (run 1 went outside the task's declared scope), ``readback_refused``
+    (the system of record did not show exactly the declared write).
     """
 
     status: str
@@ -356,6 +358,9 @@ class FirstRunCompiler:
         backend: str = "web",
         surface: Optional[Mapping[str, Any]] = None,
         open_backend: Optional[Callable[[Any], Any]] = None,
+        allow_origins: Sequence[str] = (),
+        constants: Sequence[str] = (),
+        write_adapter: Optional[Any] = None,
     ) -> None:
         from openadapt_flow.record_sor import load_observer
 
@@ -405,6 +410,11 @@ class FirstRunCompiler:
         self.on_warning = on_warning
         self.model_key = model_key
         self.observer, self.verifier_section = load_observer(self.verify_path)
+        #: Run 1's teach scope (see :meth:`teach_scope`): more app origins,
+        #: more text the agent may type, and the app's write adapter.
+        self.allow_origins = [str(o) for o in allow_origins]
+        self.constants = [str(c) for c in constants if str(c)]
+        self.write_adapter = write_adapter
         self._baseline: Optional[list[dict[str, Any]]] = None
         self._pending: Optional[tuple[Any, dict[str, str], Path]] = None
         self._receipt_baseline: Optional[Path] = None
@@ -454,6 +464,30 @@ class FirstRunCompiler:
             model_key=self.model_key,
             key_dir=self.key_dir,
             on_warning=self.on_warning,
+            teach_scope=self.teach_scope,
+        )
+
+    def teach_scope(self, params: Mapping[str, Any]) -> Any:
+        """What run 1 may do, from what this task declares before the agent
+        reads a page: the app's origin, the record (``expect``), the inputs
+        and the record's identity on screen (``on_screen``).
+
+        Typed text must be one of those values, the browser reaches only the
+        declared origins, a write is read before it is sent when there is a
+        write adapter, and the system of record is read back after the run
+        (see ``docs/THREAT_MODEL.md``).
+        """
+
+        from openadapt_flow.teach_scope import TeachScope
+
+        origins = [*([self.url] if self.url else []), *self.allow_origins]
+        return TeachScope.for_task(
+            self.task.task_id,
+            origins=origins,
+            record=self.expect,
+            inputs={k: v for k, v in params.items() if v is not None},
+            constants=[*self.on_screen, *self.constants],
+            write_adapter=self.write_adapter,
         )
 
     def _on_reset(self) -> None:
@@ -495,6 +529,8 @@ class FirstRunCompiler:
                 "cache_dir": str(self.cache_dir),
                 "key_dir": str(self.key_dir) if self.key_dir else None,
                 "headless": self.headless,
+                "allow_origins": self.allow_origins,
+                "constants": self.constants,
             },
         )
 
@@ -525,6 +561,8 @@ class FirstRunCompiler:
             key_dir=spec.get("key_dir"),
             reset=reset,
             headless=bool(spec.get("headless", True)),
+            allow_origins=spec.get("allow_origins") or (),
+            constants=spec.get("constants") or (),
         )
 
     # -- step 1: run 1 and its record check --------------------------------------
@@ -1176,6 +1214,9 @@ def compile_first_run(
     reset: Optional[Callable[[], None]] = None,
     headless: bool = True,
     on_warning: Optional[Callable[[str], None]] = None,
+    allow_origins: Sequence[str] = (),
+    constants: Sequence[str] = (),
+    write_adapter: Optional[Any] = None,
 ) -> CompileResult:
     """Turn an agent's first verified run of ``prompt`` into an admitted program.
 
@@ -1207,6 +1248,13 @@ def compile_first_run(
             task names, so choose values that are safe there. Required.
         model_key: The customer's own model key, for a model-driven agent.
         reset: Called before every run to reset a test app. Tests only.
+        allow_origins: More origins run 1's browser may reach besides the
+            app's (a sign-in host, a CDN). Every other origin is refused.
+        constants: More text the agent may type besides the inputs, the
+            ``expect`` values and the ``on_screen`` identity.
+        write_adapter: The app's
+            :class:`~openadapt_flow.teach_scope.WriteAdapter`, so run 1's
+            writes are read before they are sent.
 
     The agent is called once, only when the task has no draft and no
     admitted program.
@@ -1227,6 +1275,9 @@ def compile_first_run(
         headless=headless,
         on_warning=on_warning,
         model_key=model_key,
+        allow_origins=allow_origins,
+        constants=constants,
+        write_adapter=write_adapter,
     )
     jit = compiler._jit()
     first: Optional[CompileResult] = None

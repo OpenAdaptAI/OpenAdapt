@@ -605,6 +605,11 @@ class Recording:
                 guard.finish()
             except ScopeViolation as late:
                 exc = late
+        if guard is not None and exc is None and guard.violations:
+            # The agent caught a refusal and went on. A run that tried to
+            # leave its scope once never becomes a draft.
+            first = guard.violations[0]
+            exc = ScopeViolation(first["code"], first["detail"])
         if isinstance(exc, ScopeViolation):
             session.halt()
             return owner._capture_refused(
@@ -818,18 +823,16 @@ class CompiledAgent:
                 f"{self.task.task_id!r}"
             )
         # Every declared input is a value the scope declares, so the agent
-        # can type it and the save may write it. Nothing else is typed.
-        declared = set(scope.record.values()) | set(scope.fields.values())
+        # can type it. Nothing else is typed.
         missing = sorted(
             name
             for name, value in params.items()
-            if value is not None and str(value) not in declared
+            if value is not None and str(value) not in scope.typeable
         )
         if missing:
             raise ValueError(
                 "the teach scope does not declare the task's input(s) "
                 + ", ".join(missing)
-                + " as a record or field value"
             )
         if self.app.record_reader is None and scope.write_adapter is None:
             raise ValueError(

@@ -687,6 +687,12 @@ class Recorder:
             structured = self._structured_identity_at(int(event["x"]), int(event["y"]))
             if structured:
                 event = {**event, "structured_identity": structured}
+            # The part of the form the target sits in (a legend, an accordion
+            # or tab header, a heading), for the program's named sections.
+            # Display only: the compiler never puts it on a step.
+            section = self._section_context_at(int(event["x"]), int(event["y"]))
+            if section:
+                event = {**event, "section": section}
             # An unlabeled control has no structural locator. Observe how it
             # relates to the fields typed into so far (form ownership, submit
             # role, position, uniqueness) so the compiler can bind it to the
@@ -977,6 +983,22 @@ class Recorder:
             return None
         label = " ".join(label.split())
         return label or None
+
+    def _section_context_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """The section around the element under (x, y), if the backend can tell.
+
+        Backends MAY expose ``section_context_at`` (the browser backends do):
+        ``{"kind", "text", "header"?}`` from the nearest legend, accordion or
+        tab header, dialog, landmark or heading. Feeds
+        :mod:`openadapt_flow.sections` only; None on any failure.
+        """
+        getter = getattr(self._backend, "section_context_at", None)
+        if getter is None:
+            return None
+        try:
+            return getter(int(x), int(y))
+        except Exception:
+            return None
 
     def _structured_identity_at(self, x: int, y: int) -> Optional[str]:
         """Structured (DOM / a11y) identity text under (x, y), if available.

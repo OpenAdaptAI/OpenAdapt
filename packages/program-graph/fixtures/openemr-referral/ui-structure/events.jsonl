@@ -1,0 +1,41 @@
+{"i": 0, "kind": "click", "structural": {"selector": "#form_title", "role": "combobox"}, "section": {"kind": "accordion", "text": "Who"}}
+{"i": 1, "kind": "type"}
+{"i": 2, "kind": "key"}
+{"i": 3, "kind": "click", "structural": {"selector": "#form_fname", "role": "textbox"}, "section": {"kind": "accordion", "text": "Who"}}
+{"i": 4, "kind": "key"}
+{"i": 5, "kind": "type"}
+{"i": 6, "kind": "click", "structural": {"selector": "#form_lname", "role": "textbox"}, "section": {"kind": "accordion", "text": "Who"}}
+{"i": 7, "kind": "key"}
+{"i": 8, "kind": "type"}
+{"i": 9, "kind": "click", "structural": {"selector": "#form_DOB", "role": "textbox"}, "section": {"kind": "accordion", "text": "Who"}}
+{"i": 10, "kind": "key"}
+{"i": 11, "kind": "type"}
+{"i": 12, "kind": "click", "structural": {"selector": "#form_sex", "role": "combobox"}, "section": {"kind": "accordion", "text": "Who"}}
+{"i": 13, "kind": "type"}
+{"i": 14, "kind": "key"}
+{"i": 15, "kind": "scroll"}
+{"i": 16, "kind": "click", "structural": {"role": "button", "name": "Contact"}, "section": {"kind": "accordion", "text": "Contact", "header": true}}
+{"i": 17, "kind": "scroll"}
+{"i": 18, "kind": "click", "structural": {"selector": "#form_street", "role": "textbox"}, "section": {"kind": "accordion", "text": "Contact"}}
+{"i": 19, "kind": "key"}
+{"i": 20, "kind": "type"}
+{"i": 21, "kind": "click", "structural": {"selector": "#form_city", "role": "textbox"}, "section": {"kind": "accordion", "text": "Contact"}}
+{"i": 22, "kind": "key"}
+{"i": 23, "kind": "type"}
+{"i": 24, "kind": "click", "structural": {"selector": "#form_state", "role": "combobox"}, "section": {"kind": "accordion", "text": "Contact"}}
+{"i": 25, "kind": "type"}
+{"i": 26, "kind": "key"}
+{"i": 27, "kind": "click", "structural": {"selector": "#form_postal_code", "role": "textbox"}, "section": {"kind": "accordion", "text": "Contact"}}
+{"i": 28, "kind": "key"}
+{"i": 29, "kind": "type"}
+{"i": 30, "kind": "click", "structural": {"selector": "#form_phone_home", "role": "textbox"}, "section": {"kind": "accordion", "text": "Contact"}}
+{"i": 31, "kind": "key"}
+{"i": 32, "kind": "type"}
+{"i": 33, "kind": "click", "structural": {"selector": "#form_email", "role": "textbox"}, "section": {"kind": "accordion", "text": "Contact"}}
+{"i": 34, "kind": "key"}
+{"i": 35, "kind": "type"}
+{"i": 36, "kind": "click", "structural": {"selector": "#form_country_code", "role": "combobox"}, "section": {"kind": "accordion", "text": "Contact"}}
+{"i": 37, "kind": "type"}
+{"i": 38, "kind": "key"}
+{"i": 39, "kind": "click", "structural": {"selector": "#create", "role": "button"}, "section": {"kind": "heading", "text": "Related"}}
+{"i": 40, "kind": "click", "structural": {"selector": "#confirmCreate", "role": "button", "name": "Create New Patient"}, "section": {"kind": "heading", "text": "No matches were found."}}

@@ -347,6 +347,24 @@ def request_validation_challenge(
     return _validate_challenge(challenge)
 
 
+def _entry_url_forms(entry_url: Optional[str]) -> set[Optional[str]]:
+    """The attested entry URL as requested and as the report records it.
+
+    A run report stores URLs with session tokens redacted
+    (openadapt_flow.report_redaction), so a target URL that carries one
+    matches its redacted form.
+    """
+    from openadapt_flow import report_redaction
+
+    if not entry_url:
+        return {entry_url}
+    try:
+        policy = report_redaction.load_policy()
+    except report_redaction.RedactionPolicyError:
+        policy = report_redaction.DEFAULT_POLICY
+    return {entry_url, report_redaction.redact_text(entry_url, policy)[0]}
+
+
 def create_runtime_validation_attestation(
     *,
     recording_derivative: Path,
@@ -569,7 +587,7 @@ def create_runtime_validation_attestation(
             raise RuntimeValidationError(
                 "Run report browser origin does not match the attested target origin"
             )
-        if report.execution_entry_url != execution["entry_url"]:
+        if report.execution_entry_url not in _entry_url_forms(execution["entry_url"]):
             raise RuntimeValidationError(
                 "Run report browser entry URL does not match the attested target URL"
             )

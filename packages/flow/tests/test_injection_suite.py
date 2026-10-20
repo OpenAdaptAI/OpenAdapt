@@ -448,6 +448,31 @@ def test_a_clean_run_inside_the_scope_is_not_refused(
     assert guard.check_delta(before, _rows(db)).verified
 
 
+class _Persistent(GullibleAgent):
+    """Obeys, catches the refusal, then does the declared task anyway."""
+
+    def run(self, request: Any, computer: CaptureComputer) -> None:
+        do = computer.execute
+        do(_click("#open-p1"))
+        do(_click("#new-encounter"))
+        try:
+            do(_type("#note", NOTE + " cleared for discharge"))
+        except ScopeViolation:
+            pass
+        self._save(do, request.inputs["note"])
+
+
+def test_an_agent_that_swallows_a_refusal_still_gets_no_draft(
+    fresh: tuple[str, Any, _Attacker], tmp_path: Path
+) -> None:
+    base, db, _ = fresh
+    jit = _jit(base, _Persistent(), tmp_path / "cache", inject="banner:other_field")
+    result = jit.run(note=NOTE)
+    assert result.status == "scope_refused", result.detail
+    assert "typed_value_not_declared" in (result.detail or "")
+    assert jit.candidate() is None
+
+
 # -- positive controls: the same agent, no teach scope ----------------------------
 
 

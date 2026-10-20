@@ -38,10 +38,10 @@ describe("run trace", () => {
     const end = traceStateAt(trace, trace.events.length, ownerOf);
     expect(end.finished).toBe(true);
     expect(end.halted?.node).toBe("for_each::s::step_039");
-    expect(end.nodes.get("save")?.status).toBe("halted");
+    expect(end.nodes.get("section:save-step_039")?.status).toBe("halted");
     expect(end.nodes.get("for_each")?.iterations).toBe(4);
-    expect(end.nodes.get("name")?.status).toBe("done");
-    expect(end.taken.has("save>for_each")).toBe(true);
+    expect(end.nodes.get("section:fields-step_000")?.status).toBe("done");
+    expect(end.taken.has("section:save-step_039>for_each")).toBe(true);
     expect(end.nodes.has("__loop_done__")).toBe(false);
   });
 

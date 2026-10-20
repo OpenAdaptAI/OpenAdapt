@@ -73,11 +73,11 @@ describe("ProgramWorkbench", () => {
   it("folds a long program into sections and unfolds one on request", () => {
     render(<ProgramWorkbench spec={referral.spec} folds={referral.folds} />);
     expect(screen.getByText("31 nodes · 31 exact edges · 7 cards")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Steps 29–30, 2 steps: Create the chart/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Steps 29–30, 2 steps: Create New Patient/ }));
     fireEvent.click(screen.getByRole("button", { name: "Show the 2 steps" }));
     const member = screen.getByRole("button", { name: /^step 29, action:/ });
     expect(document.activeElement).toBe(member);
-    fireEvent.click(screen.getByRole("button", { name: /Fold into “Create the chart”/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Fold into “Create New Patient”/ }));
     expect(screen.getByRole("button", { name: /Steps 29–30/ })).toBeTruthy();
   });
 

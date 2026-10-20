@@ -2248,7 +2248,7 @@ def _terminate_rejected_run(
     # record that this run is over.
     target = run_dir / "report.json"
     tmp = target.with_suffix(".json.rejecting")
-    tmp.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    tmp.write_bytes(report.report_bytes())
     os.replace(tmp, target)
     return outcome.value
 

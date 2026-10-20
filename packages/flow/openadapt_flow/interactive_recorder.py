@@ -93,6 +93,7 @@ from openadapt_flow.backends.playwright_backend import (
 )
 from openadapt_flow.ir import StructuralLocator, structural_locator_is_locatable
 from openadapt_flow.recorder import Recorder
+from openadapt_flow.section_capture import SECTION_CONTEXT_JS
 from openadapt_flow.submit_binding import (
     OBSERVE_SUBMIT_BINDING_JS,
     SUBMIT_BINDING_FIELD_SELECTOR,
@@ -1942,6 +1943,22 @@ _INIT_JS = r"""
     } catch (e) { return null; }
   }
 
+  // The part of the form a clicked target sits in (a legend, an accordion or
+  // tab header, a heading), for the program's display-only named sections.
+  // Dropped, never rewritten, when it could hold a declared value.
+  const sectionContextOf = __SECTION_CONTEXT__;
+  function sectionEvidence(target) {
+    try {
+      if (opaqueSecretActive || !target || !target.closest) return null;
+      const el = target.closest(
+        'button, a[href], input, select, textarea, [role]') || target;
+      const ctx = sectionContextOf(el);
+      if (!ctx || typeof ctx.text !== 'string') return null;
+      if (secretValueIn(ctx.text, identityMatchValues()) !== null) return null;
+      return ctx;
+    } catch (e) { return null; }
+  }
+
   listen('click', (e) => {
     if (e.button !== 0) return;
     if (suppressClick) { suppressClick = false; return; }
@@ -1965,6 +1982,8 @@ _INIT_JS = r"""
     };
     if (rowIdentity.withheld) pointerEvent.sid_withheld = rowIdentity.withheld;
     if (submitBinding) pointerEvent.submit_binding = submitBinding;
+    const section = sectionEvidence(target);
+    if (section) pointerEvent.section = section;
     emitInFrameSpace(pointerEvent);
   });
 
@@ -2177,6 +2196,7 @@ _INIT_JS = (
     _INIT_JS.replace("__SUBMIT_ACTIONABLE__", json.dumps(GUARDED_ACTIONABLE_SELECTOR))
     .replace("__SUBMIT_FIELD__", json.dumps(SUBMIT_BINDING_FIELD_SELECTOR))
     .replace("__OBSERVE_SUBMIT_BINDING__", OBSERVE_SUBMIT_BINDING_JS)
+    .replace("__SECTION_CONTEXT__", SECTION_CONTEXT_JS)
 )
 
 
@@ -4113,6 +4133,12 @@ class InteractiveRecorder:
                 event["drag_end_structural"] = ev["end_structural"]
         if ev.get("structural"):
             event["structural"] = ev["structural"]
+        section = ev.get("section")
+        if isinstance(section, dict) and isinstance(section.get("text"), str):
+            # Display metadata for named sections; never put on a step.
+            event["section"] = {
+                k: section[k] for k in ("kind", "text", "header") if k in section
+            }
         if (
             kind in ("click", "double_click")
             and ev.get("submit_binding")

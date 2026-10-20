@@ -112,3 +112,26 @@ def test_the_finale_prints_keep_it_and_the_shadow_warning(
     )
     finale = lines[lines.index("Receipt") :]
     assert len(finale) <= 12
+
+
+def test_version_check_never_recurses(monkeypatch) -> None:
+    """The child ``openadapt --version`` gets a guard, and the guard stops the check."""
+    seen = {}
+
+    def fake_run(args, **kwargs):
+        seen["env"] = kwargs.get("env") or {}
+
+        class R:
+            stdout = "openadapt, version 0.0.1"
+            stderr = ""
+
+        return R()
+
+    assert cli._launcher_version("/x/openadapt", fake_run) == "0.0.1"
+    assert seen["env"].get(cli._NO_LAUNCHER_CHECK) == "1"
+
+    called = []
+    monkeypatch.setenv(cli._NO_LAUNCHER_CHECK, "1")
+    monkeypatch.setattr(cli, "_launcher_conflicts", lambda: called.append(1) or [])
+    cli._warn_about_launcher_conflicts()
+    assert called == []

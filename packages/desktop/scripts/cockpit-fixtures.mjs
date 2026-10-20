@@ -381,7 +381,7 @@ const REPORTS = {
 };
 
 // The compiled program behind the halted workflow, as the qualification
-// projection shapes it for src/ui/ProgramWorkbench.tsx. The six run steps above
+// projection shapes it for the program map (@openadapt/program-graph). The six run steps above
 // are the executable actions here; the loop, branch, and terminal nodes are the
 // control structure the compiler recovered around them.
 const QUALIFICATION_LADDER = (present) => [

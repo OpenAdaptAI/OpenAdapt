@@ -643,6 +643,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* A folded section's title can take two lines ("Contact: street, city, state, postal code"). */
+.opg-node[data-fold="folded"] .opg-node-copy strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
+}
 .opg-node-signals {
   display: flex;
   align-items: center;
@@ -1024,4 +1032,44 @@
   .opg-node:hover {
     transform: none;
   }
+}
+.opg-section-review {
+  margin-top: var(--opg-space-4);
+}
+.opg-section-review > span {
+  color: var(--opg-text-faint);
+  font-family: var(--opg-font-mono);
+  font-size: 7px;
+  text-transform: uppercase;
+}
+.opg-section-review form {
+  display: flex;
+  gap: var(--opg-space-2);
+  margin-top: var(--opg-space-3);
+}
+.opg-section-review input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px var(--opg-space-2);
+  border: 1px solid var(--opg-border);
+  border-radius: var(--opg-radius-1);
+  background: transparent;
+  color: var(--opg-text-strong);
+  font: inherit;
+  font-size: 11px;
+}
+.opg-section-review form button {
+  padding: 4px var(--opg-space-2);
+  border: 1px solid var(--opg-border);
+  border-radius: var(--opg-radius-1);
+  background: transparent;
+  color: var(--opg-text-strong);
+  cursor: pointer;
+  font-family: var(--opg-font-mono);
+  font-size: 9px;
+}
+.opg-section-review input:focus-visible,
+.opg-section-review form button:focus-visible {
+  outline: 2px solid var(--opg-focus);
+  outline-offset: 2px;
 }

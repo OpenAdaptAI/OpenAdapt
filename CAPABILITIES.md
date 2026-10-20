@@ -96,7 +96,7 @@ shipping in the next release.
 | Binds each approval to the exact screenshot and form state, and re-reads the form before saving. | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md) |
 | Has a written threat model for prompt injection against the agent that teaches or repairs a program, with tests. | [THREAT_MODEL.md](packages/flow/docs/THREAT_MODEL.md) |
 | Fills inputs from a referral PDF, fax image or email, and holds back anything unclear for a person. | `intake`, [INTAKE.md](packages/flow/docs/INTAKE.md) |
-| Ships as one monorepo with separately installable packages (flow, agent, types, capture, privacy and desktop), each released from the monorepo. | [README](README.md) |
+| Ships as one monorepo with separately installable packages (flow, agent, types, capture, privacy, desktop and tray), each released from the monorepo. | [README](README.md) |
 | Makes no model calls on healthy runs. Model training (openadapt-ml) is separate research. | [README](README.md) |
 
 ## The full map
@@ -113,7 +113,6 @@ Evidence:
 - **Real app**: run against a real third-party application, such as a local
   OpenEMR or openIMIS.
 - **Synthetic**: run against OpenAdapt's own test apps (MockMed and fixtures).
-- **Untested**: no run yet.
 
 All patient and claim data in every test and benchmark is synthetic.
 
@@ -233,7 +232,7 @@ improvising or retrying when something is off.
 | Teach over MCP: an agent does a new task once through OpenAdapt; the run is read back, compiled and admitted (a person confirms the record check; the agent admits only under a person-signed policy), and becomes a tool it calls with no model calls. Web, and Windows, macOS, Linux, RDP and Citrix with a person approving each save | On main ([#1335](https://github.com/OpenAdaptAI/OpenAdapt/pull/1335)) | Synthetic (MockMed over MCP, and through the real RDP and Citrix backends) | `openadapt-agent serve --teach`, [packages/agent](packages/agent/README.md#teach-a-new-workflow-from-your-agent) |
 | Guard an agent you already run: attach to its own Chromium over CDP (one added line), hold each save until the record on screen is the one the task names, block it and tell the agent why when it isn't, read the save back; a run that reads back correctly becomes a draft program with a record check from scaffold-verifier, which a person confirms and admits, then a `taught_*` tool with no model calls. `--observe-only` never blocks | On main ([#1357](https://github.com/OpenAdaptAI/OpenAdapt/pull/1357), stacked on [#1335](https://github.com/OpenAdaptAI/OpenAdapt/pull/1335)) | Synthetic (MockMed, scripted Playwright agent, `effect_e2e` faults) | `openadapt-flow guard`, [GUARD_AN_AGENT.md](packages/flow/docs/GUARD_AN_AGENT.md) |
 | Task ledger per job: rules locked when the job opens and enforced on every run, item status set only from OpenAdapt's own results, and yes-or-no questions a person answers on the phone or in Desktop, including when a run stops | On main ([#1332](https://github.com/OpenAdaptAI/OpenAdapt/pull/1332)) | Synthetic (30-item MockMed worklist, scripted agent, no model calls) | MCP tools `open_job`, `get_job`, `add_items`, `record_evidence`, `ask_user`, `get_answer`, `change_constraint`, `close_job`; [Track a long job](packages/agent/README.md#track-a-long-job) |
-| Limit a teaching agent to the declared task: typed text must be a declared value, links and browser requests to other origins are refused, writes are checked before they are sent, and the record is read back before a draft exists. Injected instructions in record notes, banners, tooltips, alt text and server responses are blocked or caught on MockMed (scripted agent; a live-model mode is off by default). Self-repair refuses a control that leaves the app | On main ([#1359](https://github.com/OpenAdaptAI/OpenAdapt/pull/1359)) | Synthetic | `openadapt_flow.teach_scope`, [THREAT_MODEL.md](packages/flow/docs/THREAT_MODEL.md) |
+| Limit a teaching agent to the declared task on every teach path (`compile_agent`, `compile-agent`, teach over MCP, the airbag guard): typed text must be a declared value, links and browser requests to other origins are refused, writes are checked before they are sent, and the record is read back before a draft exists. Injected instructions in record notes, banners, tooltips, alt text and server responses are blocked or caught on MockMed through each path (scripted agent; a live-model mode is off by default). Self-repair refuses a control that leaves the app | On main ([#1359](https://github.com/OpenAdaptAI/OpenAdapt/pull/1359), [#1386](https://github.com/OpenAdaptAI/OpenAdapt/pull/1386)) | Synthetic | `openadapt_flow.teach_scope`, [THREAT_MODEL.md](packages/flow/docs/THREAT_MODEL.md) |
 | Compile an agent's first verified run from a prompt (`compile-agent`), and a code-as-action authoring agent | On main ([#1277](https://github.com/OpenAdaptAI/OpenAdapt/pull/1277), [#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)); the agent harness behind it runs on every backend, on main ([#1283](https://github.com/OpenAdaptAI/OpenAdapt/pull/1283)) | Synthetic | `compile-agent` |
 | Score harness optimizers (Harness², Meta-Harness) on GUI tasks with the record read-back as the reward, with full trace export | On main ([#1299](https://github.com/OpenAdaptAI/OpenAdapt/pull/1299), [#1300](https://github.com/OpenAdaptAI/OpenAdapt/pull/1300), [#1301](https://github.com/OpenAdaptAI/OpenAdapt/pull/1301)) | Synthetic (scripted proposer) | `integrations/harness2/` |
 | One scoreboard comparing the agent alone with OpenAdapt across tasks (correctness by read-back, cost, time, items per hour) | On main ([#1303](https://github.com/OpenAdaptAI/OpenAdapt/pull/1303)) | Synthetic and local OpenEMR and openIMIS test copies | `benchmark/scoreboard/` |
@@ -245,12 +244,16 @@ improvising or retrying when something is off.
 | Record mouse, keyboard, screen video and accessibility trees on one clock (Windows, macOS, Linux X11) | Released (capture 1.3.0) | Real OS | [packages/capture](packages/capture/README.md); Wayland is not supported |
 | Find and redact personal and health data in text, screenshots and structure | Released (privacy 1.1.3) | Unit tests | [packages/privacy](packages/privacy/README.md), [PRIVACY.md](packages/flow/docs/PRIVACY.md) |
 | Scrub by default before anything leaves the machine | On main ([#1262](https://github.com/OpenAdaptAI/OpenAdapt/pull/1262)) | Unit tests | `openadapt-privacy` |
+| Start and stop Desktop recordings from the menu bar or system tray, and see Desktop's state and how many cloud runs need a person | Released (tray 0.3.7) | Unit tests; CI runs the tray client against Desktop's socket server. The two haven't been run together from packaged installs | [packages/tray](packages/tray/README.md) |
 | Each package installs on its own within a size budget, checked in CI (privacy without desktop, capture without plotting) | On main ([#1270](https://github.com/OpenAdaptAI/OpenAdapt/pull/1270), [#1271](https://github.com/OpenAdaptAI/OpenAdapt/pull/1271), [#1279](https://github.com/OpenAdaptAI/OpenAdapt/pull/1279)) | CI | `.github/workflows/packages.yml` |
 | See a compiled program as a map (every step, exact edge, loop and stop rule, with each step's checks) and play a recorded run over it; one React package that Desktop, app.openadapt.ai and openadapt.ai share | On main ([packages/program-graph](packages/program-graph/README.md)) | Real compiled OpenEMR referral program and a recorded scoreboard run, both on synthetic data | `@openadapt/program-graph`; `openadapt-flow visualize --format json` |
+| Named sections for every compiled program ("Who: title, first name, last name", "Contact", "Create New Patient"), found without a model from the save, the recorded form structure, the fields and any narration; a person can rename, merge or split them on the review screen | On main | Unit tests; the certified OpenEMR referral bundle and a real recording of it on a local test copy with made-up patients | `openadapt-flow sections`; [SECTIONS.md](packages/flow/docs/SECTIONS.md) |
 | Encrypt PHI at rest: every bundle file that can hold patient data under one sealed index (unknown files refused), web recordings from the first frame, and the run directories of sealed bundles; compile, induce, scaffold-verifier, qualify, admit, run, resume and undo read them in memory and refuse without the key | On main | Synthetic (no-plaintext audit-hook test over record, compile and a VERIFIED run; per-frame cost measured) | `openadapt-flow seal`, `record`; [phi_at_rest.md](packages/flow/docs/phi_at_rest.md) |
 | Signed receipts (Seals), countersigned and timestamped, offline by default | Released | Unit tests, real TSA tokens | `openadapt-flow seal`, `countersign`, `local-seal` |
 | Offline Seals signed with a key the customer holds: a key file, the OS keychain, or a PKCS#11 token or HSM; pinned keys with rotation and revocation; no fallback to a generated key | On main ([#1392](https://github.com/OpenAdaptAI/OpenAdapt/pull/1392)) | Unit tests with synthetic data (keychain and PKCS#11 through stand-ins) | `openadapt-flow local-seal --key`, `local-seal key create`, `pin`, `revoke`; `openadapt seal verify FOLDER` checks every sealed run in a folder; [OFFLINE_SEALS.md](packages/flow/docs/OFFLINE_SEALS.md#customer-held-keys) |
 | Anchor an offline Seal in the public Sigstore Rekor transparency log (opt-in; sends one digest and the public key), and verify the anchor offline from the stored inclusion proof | On main ([#1394](https://github.com/OpenAdaptAI/OpenAdapt/pull/1394)) | Unit tests against a simulated Rekor log; Ed25519ph matches the RFC 8032 test vector | `openadapt-flow local-seal anchor`, `local-seal verify --require-anchor`; [OFFLINE_SEALS.md](packages/flow/docs/OFFLINE_SEALS.md#optional-anchor-a-seal-in-a-public-transparency-log) |
+| Run authorizations signed with the authorizer's GitHub SSH key (`ssh-keygen -Y sign`, after a summary of what it allows), naming the signing key and bound to the bundle digest, items, profile and Seal keys, and referenced by each Seal; the identity checked against github.com (`--live`) or pinned allowed signers; a pseudonymous operator profile counted from anchored Seals only | On main ([#1401](https://github.com/OpenAdaptAI/OpenAdapt/pull/1401)) | Unit tests with synthetic data; signatures checked against OpenSSH's `ssh-keygen` both ways | `openadapt-flow local-seal authorize`, `local-seal run --authorization`, `local-seal profile`; [OFFLINE_SEALS.md](packages/flow/docs/OFFLINE_SEALS.md#run-authorizations-who-authorized-the-runs) |
+| Run reports redacted before they are sealed: session and CSRF tokens, OAuth grants and credential headers become `<redacted>` and are listed in `redactions`; a Seal refuses a report that still holds one; per-app policy | On main ([#1407](https://github.com/OpenAdaptAI/OpenAdapt/pull/1407)) | Unit tests with generated tokens; 7,773 local reports scanned, only OpenEMR `token_main` matched | `openadapt-flow redact-report`, `local-seal run --allow-unredacted`; [REPORT_REDACTION.md](packages/flow/docs/REPORT_REDACTION.md) |
 | Strict no-outbound mode and an unattended on-prem service | Released | Synthetic | `openadapt-flow no-outbound`, `service`; [ON_PREM.md](packages/flow/docs/ON_PREM.md) |
 
 ## Every command, by capability
@@ -278,6 +281,7 @@ A test fails when a command has no file or this list is out of date.
 - `pull`
 - `record`
 - `route`
+- `sections`: Show, rename, merge or split the named sections a program map folds
 - `variants`
 - `visualize`
 
@@ -332,7 +336,8 @@ A test fails when a command has no file or this list is out of date.
 
 - `attach-seal`
 - `countersign`
-- `local-seal`: Offline Seals: customer-held keys, pinned verification, optional Rekor anchoring.
+- `local-seal`: Offline Seals: customer-held keys, pinned verification, Rekor anchoring, run authorizations, operator profiles.
+- `redact-report`: Strip session tokens from an existing run's report so it can be sealed again; the original stays local
 - `seal`
 
 **Run on premises:**
@@ -414,21 +419,19 @@ A test fails when a command has no file or this list is out of date.
   each), reported all 30 bad saves as done. `verify-run` flagged all 30 and
   confirmed all 10 clean saves, with no false alarms. The app shows "saved"
   before the server answers, so this measures what the screen can't show, not
-  the agent's care. Not yet run on OpenEMR:
+  the agent's care:
   [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back).
 
 ## Limits
 
-- No commercial EMR, claims system or real Citrix session has been tested.
-- Repair by default has resumed items only on MockMed. On the recorded
-  OpenEMR stops none reached repair (each came after "Create New Patient",
-  which counts as a save). On openIMIS, with #1337 and a risk review, the
-  relabelled Save reached repair 3 of 3, but no fix passed the probe.
-- Prompt-injection limits (the teach scope) are on `openadapt_flow.jit` only.
-  `compile-agent`, teach over MCP and the airbag guard do not pass a scope. No
-  live model has been run against the injection fixtures. A steered agent can still read other
-  records in the same app. See
-  [THREAT_MODEL.md](packages/flow/docs/THREAT_MODEL.md).
+- Published results use synthetic records on open-source systems and
+  OpenAdapt's own test apps. Each workflow is qualified on the customer's own
+  system before it touches a real record.
+- Repair by default resumed 6 of 21 eligible stops on MockMed. On the
+  recorded OpenEMR and openIMIS stops it stopped safely for a person instead:
+  OpenEMR's came after "Create New Patient", which counts as a save, and on
+  openIMIS the relabelled Save reached repair 3 of 3 with no fix passing the
+  probe.
 - Windows installers are unsigned, and macOS builds are ad-hoc signed.
-- Several capabilities have run only on OpenAdapt's synthetic apps. The
-  Evidence column says which.
+- The Evidence column says which capabilities ran on a real app and which on
+  OpenAdapt's synthetic apps.

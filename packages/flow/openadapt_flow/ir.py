@@ -26,6 +26,7 @@ import json
 import os
 import re
 import secrets
+import sys
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path, PurePosixPath
@@ -5118,6 +5119,25 @@ class VariantRouteStamp(BaseModel):
     fingerprint_digest: Optional[str] = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
+class ReportRedaction(BaseModel):
+    """One value removed from a run report: where it was and why, never what."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pointer: str = Field(description="RFC 6901 JSON pointer to the string.")
+    reason: str = Field(
+        description="What was removed, e.g. url_param:token_main or header:cookie."
+    )
+    by: Optional[str] = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "redact-report when applied to an existing run's report; absent "
+            "when the report was redacted as it was written."
+        ),
+    )
+
+
 class RunReport(BaseModel):
     workflow_name: str
     started_at: str
@@ -5520,6 +5540,17 @@ class RunReport(BaseModel):
         exclude_if=lambda value: value is None,
         description="The admitted variant the router chose for this run.",
     )
+    # Session tokens and credentials removed when the report was written
+    # (openadapt_flow.report_redaction). Present only when something was
+    # redacted, so every other report serializes exactly as before.
+    redactions: list[ReportRedaction] = Field(
+        default_factory=list,
+        exclude_if=lambda value: not value,
+        description=(
+            "Each value replaced with <redacted> before the report was "
+            "written or sealed: a JSON pointer and a reason, never the value."
+        ),
+    )
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -5612,6 +5643,37 @@ class RunReport(BaseModel):
             raise ValueError("ROLLED_BACK is a non-success outcome")
         return self
 
+    def report_bytes(self) -> bytes:
+        """The bytes written as ``report.json``, with secret values redacted.
+
+        Session and CSRF tokens, credentials and OAuth grants in URLs and
+        header-like strings become ``<redacted>`` and are listed in
+        ``redactions`` (openadapt_flow.report_redaction), so the bytes a Seal
+        later signs never hold them. The in-memory report is not changed.
+        """
+        from openadapt_flow import report_redaction as _redaction
+
+        try:
+            policy = _redaction.load_policy()
+        except _redaction.RedactionPolicyError as exc:
+            # The default list only ever redacts more than a policy that keeps
+            # a word; a Seal refuses the report if the policy wanted more.
+            print(f"report redaction policy not used: {exc}", file=sys.stderr)
+            policy = _redaction.DEFAULT_POLICY
+        data = self.model_dump(mode="json")
+        redacted, new = _redaction.redact_report(data, policy)
+        if not new:
+            return self.model_dump_json(indent=2).encode("utf-8")
+        try:
+            return (
+                type(self)
+                .model_validate(redacted)
+                .model_dump_json(indent=2)
+                .encode("utf-8")
+            )
+        except ValueError:
+            return _redaction.dumps_report(redacted)
+
     def save(
         self,
         run_dir: Path | str,
@@ -5623,7 +5685,7 @@ class RunReport(BaseModel):
         if Path(filename).name != filename:
             raise ValueError("report filename must be one local file name")
         path = run / filename
-        payload = self.model_dump_json(indent=2).encode("utf-8")
+        payload = self.report_bytes()
         from openadapt_flow import sealed_set as _sealed
 
         if _sealed.is_sealed_path(path):

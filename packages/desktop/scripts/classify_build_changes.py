@@ -4,9 +4,10 @@ Pull requests keep the representative frozen-sidecar builds, and a pull
 request that changes the Tauri shell or its JavaScript locks also builds the
 Linux installer, so a native dependency bump compiles before it merges. Release
 candidates and explicit dispatches keep the complete platform matrix. A push
-to protected ``main`` repeats the expensive matrix only when a dependency,
-toolchain, packaging, or native-runtime input changed. The immutable native
-release workflow always rebuilds every installer from its release tag.
+to protected ``main``, and a merge queue group about to become ``main``,
+repeats the expensive matrix only when a dependency, toolchain, packaging, or
+native-runtime input changed. The immutable native release workflow always
+rebuilds every installer from its release tag.
 """
 
 from __future__ import annotations
@@ -123,7 +124,8 @@ def classify_build_scope(event: str, changed_paths: Iterable[str]) -> BuildScope
         if native:
             return BuildScope(True, True, f"pull request changes the native shell: {native[0]}")
         return BuildScope(True, False, "representative pull-request sidecar")
-    if event != "push":
+    # A merge queue group is about to become main, so it gets main's scope.
+    if event not in ("push", "merge_group"):
         return BuildScope(True, True, f"unknown event {event!r}; fail toward full evidence")
 
     if not paths:

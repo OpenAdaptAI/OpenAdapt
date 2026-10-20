@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ProgramWorkbench,
@@ -6,6 +7,7 @@ import {
   type NodeMedia,
   type ProgramGraphSpec,
   type RunTrace,
+  type SectionEdit,
   type StopExit,
 } from "../src/index.js";
 import "../src/styles.css";
@@ -16,7 +18,7 @@ import media from "../fixtures/openemr-referral/media.json";
 import { processRecords } from "../test/fixtures.js";
 
 // ?case=referral|records  &cursor=N|end  &theme=light  &view=evidence|stops  &unfold=1  &play=1
-// &compact=1  &media=1 (the fixture's synthetic pictures)  &tour=1
+// &compact=1  &media=1 (the fixture's synthetic pictures)  &tour=1  &review=1
 const q = new URLSearchParams(location.search);
 const theme = q.get("theme") === "light" ? "light" : "dark";
 document.body.dataset.theme = theme;
@@ -46,4 +48,39 @@ const referral = (
   />
 );
 const records = <ProgramWorkbench spec={processRecords} initialView={view} theme={theme} />;
-createRoot(document.getElementById("root")!).render(q.get("case") === "records" ? records : referral);
+
+// &review=1: the compiled sections with their interface titles (the public
+// spec carries fixed phrases; folds.json carries Flow's titles), folded by
+// default, with the reviewer's rename, merge and split controls. Edits only
+// rename here; Desktop sends them to Flow.
+function Review() {
+  const titles = new Map((folds as FoldSpec).groups.map((g) => [g.id, g.title ?? g.id]));
+  const [sections, setSections] = useState(
+    ((spec as ProgramGraphSpec).sections ?? []).map((s) => ({ ...s, title: titles.get(s.id) ?? s.title })),
+  );
+  const [last, setLast] = useState<SectionEdit | null>(null);
+  const onEditSection = (edit: SectionEdit) => {
+    setLast(edit);
+    if (edit.op === "rename") {
+      setSections((all) => all.map((s) => (s.section === edit.section ? { ...s, title: edit.title, title_source: "person" } : s)));
+    }
+  };
+  return (
+    <>
+      <ProgramWorkbench
+        spec={{ ...(spec as ProgramGraphSpec), sections }}
+        title="New referral, for each referral in the list"
+        kicker="Review"
+        onEditSection={onEditSection}
+        numbering="actions"
+        theme={theme}
+        titleFor={(node) => (node.kind === "loop" ? "For each referral in the list" : node.title)}
+      />
+      {last && <pre style={{ color: "#888" }}>{JSON.stringify(last)}</pre>}
+    </>
+  );
+}
+
+createRoot(document.getElementById("root")!).render(
+  q.get("review") ? <Review /> : q.get("case") === "records" ? records : referral,
+);

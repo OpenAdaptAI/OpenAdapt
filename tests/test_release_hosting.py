@@ -100,6 +100,7 @@ def _package_ruleset(pattern: str, *rule_types: str) -> dict:
         "openadapt-privacy",
         "openadapt-desktop",
         "openadapt-capture",
+        "openadapt-tray",
     ],
 )
 def test_release_hosting_accepts_a_package_tag_under_its_own_rules(package: str) -> None:
