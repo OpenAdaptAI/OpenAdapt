@@ -2846,6 +2846,34 @@ def _pinned_lineage(args: argparse.Namespace, cfg: Any) -> Any:
     return pinned_lineage(args, cfg)
 
 
+#: The run-authorization fields a managed dispatch must agree on with the
+#: authorization this runner builds for the same bundle and inputs.
+MANAGED_SAFETY_FIELDS = (
+    "bundle_content_digest",
+    "runtime_inputs_digest",
+    "admitted_policy_name",
+    "admitted_policy_contract_sha256",
+    "execution_profile",
+    "minimum_effect_tier",
+    "qualified_effect_requirements",
+    "required_identity_step_ids",
+    "unverified_write_approvals",
+)
+
+
+def managed_authorization_mismatch(authorization: Any, local: Any) -> bool:
+    """Whether Cloud's run authorization disagrees with the local one.
+
+    Cloud may admit only API steps the bundle itself admits. An API step Cloud
+    doesn't name runs on the GUI, so naming fewer is allowed.
+    """
+
+    return any(
+        getattr(authorization, field) != getattr(local, field)
+        for field in MANAGED_SAFETY_FIELDS
+    ) or any(row not in local.api_steps for row in authorization.api_steps)
+
+
 def _replay_worklist_pool(
     args: argparse.Namespace,
     cfg,
@@ -3634,25 +3662,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
             params=runtime_params,
             worklists=runtime_worklists,
         )
-        safety_fields = (
-            "bundle_content_digest",
-            "runtime_inputs_digest",
-            "admitted_policy_name",
-            "admitted_policy_contract_sha256",
-            "execution_profile",
-            "minimum_effect_tier",
-            "qualified_effect_requirements",
-            "required_identity_step_ids",
-            "unverified_write_approvals",
-        )
         if (
             selected_profile is None
             or selected_profile.value not in {"standard", "regulated"}
             or workflow.manifest is None
-            or any(
-                getattr(authorization, field) != getattr(local_authorization, field)
-                for field in safety_fields
-            )
+            or managed_authorization_mismatch(authorization, local_authorization)
             or (
                 authorization.bundle_content_digest != workflow.manifest.content_digest
                 or authorization.validate_workflow(workflow) is not None

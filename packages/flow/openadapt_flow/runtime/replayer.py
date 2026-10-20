@@ -2769,10 +2769,12 @@ class Replayer:
     ) -> Optional[str]:
         """Why a governed run can't use this API step, or None when it can.
 
-        The run's authorization must have admitted this exact API step. A
-        qualification case runs the path it names, and a managed (Cloud)
-        dispatch or a production qualification admission doesn't bind API
-        steps yet, so those run the GUI steps.
+        The run's authorization must have admitted this exact API step. For a
+        managed (Cloud) dispatch that is Cloud's authorization, whose
+        ``api_steps`` are inside the dispatch binding digest Cloud signs. A
+        qualification case runs the path it names, and a production
+        qualification admission doesn't cover API steps yet, so those run the
+        GUI steps.
         """
 
         authorization = self.governed_authorization
@@ -2782,8 +2784,6 @@ class Replayer:
                 "a qualification case runs the GUI path it names; qualifying "
                 "an API step's path is not supported yet"
             )
-        if self.managed_dispatch_binding is not None:
-            return "a managed dispatch doesn't bind API steps yet"
         if authorization.production_qualification_admission_id is not None:
             return (
                 "a production qualification admission doesn't cover API steps "
@@ -3115,7 +3115,15 @@ class Replayer:
         if (variant_route := current_variant_route()) is not None:
             report.variant_route = variant_route
         self._stamp_execution_outcome(report, workflow, run_dir)
-        self._stamp_approval(report)
+        hold = getattr(self.approval_gate, "hold_for_readback", None)
+        if handed_off and callable(hold):
+            # The item's approval decision waits for its record check: the
+            # settled verdict decides it (_settle_pipelined_readback). Deciding
+            # now, on the held report, would read a save still being checked
+            # as an uncertain result and switch problems_only off.
+            hold()
+        else:
+            self._stamp_approval(report)
         if persist:
             persisted_path = report.save(run_dir)
             # The evidence file must exist before the terminal projection.  A
@@ -3319,17 +3327,23 @@ class Replayer:
     ) -> RunReport:
         """Apply a finished deferred read-back to the saved item report."""
 
-        self._copy_pipelined_evidence(entry, error)
-        error = self._settle_durable_readback(entry, error)
-        if error is not None:
-            self._apply_pipelined_verdict(report, error, entry=entry)
-        else:
-            # The execution completed; it was held unsuccessful only until the
-            # read-back confirmed. Re-derive the outcome from that evidence.
-            report.execution_completed = True
-            report.success = True
-        self._stamp_execution_outcome(report, workflow, run_dir)
-        self._stamp_approval(report)
+        try:
+            self._copy_pipelined_evidence(entry, error)
+            error = self._settle_durable_readback(entry, error)
+            if error is not None:
+                self._apply_pipelined_verdict(report, error, entry=entry)
+            else:
+                # The execution completed; it was held unsuccessful only until
+                # the read-back confirmed. Re-derive the outcome from that
+                # evidence.
+                report.execution_completed = True
+                report.success = True
+            self._stamp_execution_outcome(report, workflow, run_dir)
+        finally:
+            # The held approval decision is always made, even when settling
+            # fails: the report then still says unsuccessful, so the item goes
+            # to a person, and it never stays held open for the next item.
+            self._stamp_approval(report)
         report.save(run_dir)
         return report
 

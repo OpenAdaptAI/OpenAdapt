@@ -408,6 +408,12 @@ def _expand(
     return value
 
 
+#: ``openadapt.verify/v1`` sections only ``verify-run`` reads. Qualify accepts
+#: and ignores them, so one file serves both (the mirror of verify-run's
+#: ``QUALIFY_ONLY_SECTIONS``).
+VERIFY_RUN_ONLY_SECTIONS: tuple[str, ...] = ("frame",)
+
+
 def parse_verify_config(
     data: Any,
     *,
@@ -418,6 +424,7 @@ def parse_verify_config(
 
     if not isinstance(data, dict):
         raise QualifyConfigError("verify.yaml must be a YAML mapping")
+    data = {k: v for k, v in data.items() if k not in VERIFY_RUN_ONLY_SECTIONS}
     missing: list[str] = []
     data = _expand(data, missing, env)
     if missing:

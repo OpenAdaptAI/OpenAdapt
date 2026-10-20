@@ -135,7 +135,6 @@ API_QUALIFIED = (
     "a production qualification admission doesn't cover API steps yet, so the "
     "qualified GUI path runs"
 )
-API_MANAGED = "a managed dispatch doesn't bind API steps yet"
 POOL_LOCAL_ONLY = (
     "--workers and --readback-window apply to local runs, not a managed dispatch "
     "or a qualification case"
@@ -214,10 +213,11 @@ CELLS: tuple[Cell, ...] = (
     Cell(
         "api_step",
         "managed",
-        "refused",
-        reason=API_MANAGED,
+        "works",
+        note="Cloud's authorization names the API step, and each send still needs Cloud's delivery permit",
         evidence=(
-            "tests/test_compatibility_matrix.py::test_api_step_refuses_where_the_matrix_says",
+            "tests/test_api_step_managed.py::test_the_api_step_runs_when_clouds_authorization_admits_it",
+            "tests/test_api_step_managed.py::test_without_clouds_admission_the_gui_steps_run_and_say_why",
         ),
     ),
     # -- pipelined read-back ------------------------------------------------------

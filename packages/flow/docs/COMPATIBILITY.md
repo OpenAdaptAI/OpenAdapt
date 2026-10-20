@@ -46,7 +46,7 @@ self-repair are still refused, each with its reason below.
 
 | Feature | Default (gated) | Durable | Governed | Pinned | Qualified | Managed |
 | --- | --- | --- | --- | --- | --- | --- |
-| API step | Works | Works | Works | Works | Refused | Refused |
+| API step | Works | Works | Works | Works | Refused | Works |
 | Pipelined read-back | Works | Works | Works | Works | Works | Refused |
 | Self-repair | Works | Works | Works | Works | Refused | Refused |
 | Standard changes | Works | Works | Works | Works | Refused | Refused |
@@ -67,7 +67,7 @@ refuses says it in those words.
 | Governed | Works: needs `api admit --identity` |
 | Pinned | Works: the pin is checked before the run |
 | Qualified | Refused: a production qualification admission doesn't cover API steps yet, so the qualified GUI path runs |
-| Managed | Refused: a managed dispatch doesn't bind API steps yet |
+| Managed | Works: Cloud's authorization names the API step, and each send still needs Cloud's delivery permit |
 
 ### Pipelined read-back
 
@@ -143,7 +143,7 @@ Each cell names the tests that show it. They run in CI.
 - API step / Governed: `tests/test_api_step_governed.py::test_the_default_profile_runs_the_admitted_api_step`
 - API step / Pinned: `tests/test_compatibility_matrix.py::test_api_step_runs_where_the_matrix_says`
 - API step / Qualified: `tests/test_compatibility_matrix.py::test_api_step_refuses_where_the_matrix_says`
-- API step / Managed: `tests/test_compatibility_matrix.py::test_api_step_refuses_where_the_matrix_says`
+- API step / Managed: `tests/test_api_step_managed.py::test_the_api_step_runs_when_clouds_authorization_admits_it`, `tests/test_api_step_managed.py::test_without_clouds_admission_the_gui_steps_run_and_say_why`
 - Pipelined read-back / Default (gated): `tests/test_readback_pipeline.py::test_confirmed_readback_settles_the_saved_report`, `tests/test_api_step_readback_repair.py::test_an_api_save_reads_back_while_the_next_item_runs`, `tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says`
 - Pipelined read-back / Durable: `tests/test_durable_pipelined_readback.py::test_a_durable_run_defers_its_last_record_check_and_settles_it`, `tests/test_durable_pipelined_readback.py::test_a_crash_mid_window_resumes_the_check_and_never_resends`, `tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says`
 - Pipelined read-back / Governed: `tests/test_durable_pipelined_readback.py::test_a_durable_run_defers_its_last_record_check_and_settles_it`, `tests/test_durable_pipelined_readback.py::test_a_crash_mid_window_resumes_the_check_and_never_resends`, `tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says`

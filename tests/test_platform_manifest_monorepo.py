@@ -69,7 +69,7 @@ def _monorepo_flow(manifest: dict, version: str = "2.3.0") -> dict:
     for evidence in moved["qualification_evidence"]:
         if evidence.get("source_component") != "flow":
             continue
-        package_path = evidence["path"]
+        package_path = evidence["path"].removeprefix("packages/flow/")
         evidence["repository"] = MONOREPO_REPOSITORY
         evidence["path"] = f"packages/flow/{package_path}"
         evidence["source_commit"] = COMMIT
@@ -235,10 +235,12 @@ def test_schema_sources_are_read_from_the_package_in_the_monorepo(
         MONOREPO_REPOSITORY
     }
     assert schemas["workflow_bundle"]["source_commit"] == COMMIT
-    # Components still on standalone releases keep their package-relative paths.
-    assert ("OpenAdaptAI/openadapt-types", "openadapt_types/human_decision.py") in (
-        requested
-    )
+    # Every other component is read where its own selected release lives.
+    types = components["types"]["provenance"]
+    assert (
+        types["repository"],
+        _source_path(types, "openadapt_types/human_decision.py"),
+    ) in requested
 
 
 def test_validator_accepts_a_monorepo_release(manifest: dict) -> None:
@@ -247,7 +249,7 @@ def test_validator_accepts_a_monorepo_release(manifest: dict) -> None:
     assert _provenance_and_evidence_errors(report) == []
 
 
-def test_validator_accepts_the_standalone_releases_already_pinned(
+def test_validator_accepts_the_releases_already_pinned(
     manifest: dict,
 ) -> None:
     report = Report()
