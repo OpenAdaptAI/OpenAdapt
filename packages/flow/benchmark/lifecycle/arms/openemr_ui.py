@@ -213,7 +213,7 @@ class RestReader:
     def _s(self) -> Any:
         # Tokens are short-lived; take a fresh one every 5 minutes.
         if self._session is None or time.time() - self._issued > 300:
-            getter = self.env.extra.get("rest_session")
+            getter = self.env.extra.get("rest_read_session") or self.env.extra.get("rest_session")
             if getter is not None:
                 self._session = getter()
             else:
