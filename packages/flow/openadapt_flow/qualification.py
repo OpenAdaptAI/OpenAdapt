@@ -29,6 +29,7 @@ from typing import (
     Final,
     Iterable,
     Literal,
+    Mapping,
     Optional,
     Protocol,
 )
@@ -133,6 +134,28 @@ def qualification_run_id_sha256(run_id: str) -> str:
     """Return the canonical digest used to bind one qualification run."""
 
     return _qualification_identifier_sha256(run_id, kind="run")
+
+
+def api_folded_step_ids(
+    workflow: "Workflow", action_paths: Mapping[str, str]
+) -> set[str]:
+    """The steps an API step folds on the path a case names for its save.
+
+    An API step (a ``web_form`` binding) stands for the GUI steps it
+    replaces. On its API path they are folded, not executed, and the save's
+    own result carries the action and record-check evidence. On any other
+    path nothing is folded.
+    """
+
+    return {
+        step_id
+        for save in workflow.steps
+        if save.api_binding is not None
+        and save.api_binding.kind == "web_form"
+        and save.api_binding.web_form is not None
+        and action_paths.get(save.id) == "api"
+        for step_id in save.api_binding.web_form.replaces_steps[:-1]
+    }
 
 
 def _qualification_actuation_path(
@@ -3573,7 +3596,17 @@ def _case_run_report_integrity_error(
             and report.results[-1].step_id == "<terminal>"
             else report.results
         )
-        prior_action_results = action_results[:-1]
+        api_folded_ids = api_folded_step_ids(workflow, expected_action_paths)
+        prior_action_results = [
+            item
+            for item in action_results[:-1]
+            if not (
+                item.actuation == "api_folded"
+                and item.skipped
+                and item.step_id in api_folded_ids
+                and item.step_id not in expected_action_paths
+            )
+        ]
         if any(
             item.step_id in expected_action_paths
             and expected_action_paths[item.step_id]

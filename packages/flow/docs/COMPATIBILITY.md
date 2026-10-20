@@ -45,7 +45,7 @@ self-repair are still refused, each with its reason below.
 
 | Feature | Default (gated) | Durable | Governed | Pinned | Qualified | Managed |
 | --- | --- | --- | --- | --- | --- | --- |
-| API step | Works | Works | Works | Works | Refused | Works |
+| API step | Works | Works | Works | Works | Works | Works |
 | Pipelined read-back | Works | Refused | Refused | Works | Refused | Refused |
 | Self-repair | Works | Works | Works | Refused | Refused | Refused |
 | Standard changes | Works | Works | Works | Refused | Refused | Refused |
@@ -65,7 +65,7 @@ refuses says it in those words.
 | Durable | Works: a save that may have landed is never resent |
 | Governed | Works: needs `api admit --identity` |
 | Pinned | Works: the pin is checked before the run |
-| Qualified | Refused: a production qualification admission doesn't cover API steps yet, so the qualified GUI path runs |
+| Qualified | Works: when the signed admission's qualified effect contract names the save's API path; otherwise the qualified GUI path runs and says why |
 | Managed | Works: Cloud's authorization names the API step, and each send still needs Cloud's delivery permit |
 
 ### Pipelined read-back
@@ -141,7 +141,7 @@ Each cell names the tests that show it. They run in CI.
 - API step / Durable: `tests/test_api_step_durable.py::test_a_durable_run_uses_the_api_step_and_checkpoints_after_it`, `tests/test_api_step_durable.py::test_an_uncertain_send_is_never_resent_by_resume`
 - API step / Governed: `tests/test_api_step_governed.py::test_the_default_profile_runs_the_admitted_api_step`
 - API step / Pinned: `tests/test_compatibility_matrix.py::test_api_step_runs_where_the_matrix_says`
-- API step / Qualified: `tests/test_compatibility_matrix.py::test_api_step_refuses_where_the_matrix_says`
+- API step / Qualified: `tests/test_api_step_qualified.py::test_the_api_step_runs_when_the_admission_qualified_its_path`, `tests/test_api_step_qualified.py::test_a_gui_only_qualification_keeps_the_qualified_gui_path`, `tests/test_api_step_qualified.py::test_a_qualification_case_runs_the_path_its_contract_names`
 - API step / Managed: `tests/test_api_step_managed.py::test_the_api_step_runs_when_clouds_authorization_admits_it`, `tests/test_api_step_managed.py::test_without_clouds_admission_the_gui_steps_run_and_say_why`
 - Pipelined read-back / Default (gated): `tests/test_readback_pipeline.py::test_confirmed_readback_settles_the_saved_report`, `tests/test_api_step_readback_repair.py::test_an_api_save_reads_back_while_the_next_item_runs`, `tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says`
 - Pipelined read-back / Durable: `tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says`

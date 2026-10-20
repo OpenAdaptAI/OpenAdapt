@@ -131,10 +131,6 @@ FEATURES: tuple[Feature, ...] = (
     ),
 )
 
-API_QUALIFIED = (
-    "a production qualification admission doesn't cover API steps yet, so the "
-    "qualified GUI path runs"
-)
 DURABLE_INLINE = "durable runs verify inline"
 POOL_LOCAL_ONLY = (
     "--workers and --readback-window apply to local runs, not a managed dispatch "
@@ -197,10 +193,15 @@ CELLS: tuple[Cell, ...] = (
     Cell(
         "api_step",
         "qualified",
-        "refused",
-        reason=API_QUALIFIED,
+        "works",
+        note=(
+            "when the signed admission's qualified effect contract names the "
+            "save's API path; otherwise the qualified GUI path runs and says why"
+        ),
         evidence=(
-            "tests/test_compatibility_matrix.py::test_api_step_refuses_where_the_matrix_says",
+            "tests/test_api_step_qualified.py::test_the_api_step_runs_when_the_admission_qualified_its_path",
+            "tests/test_api_step_qualified.py::test_a_gui_only_qualification_keeps_the_qualified_gui_path",
+            "tests/test_api_step_qualified.py::test_a_qualification_case_runs_the_path_its_contract_names",
         ),
     ),
     Cell(
