@@ -3501,6 +3501,19 @@ def _compile_recording(
     write_compile_notes(bundle, compile_notes)
     workflow.save(bundle)
     _sealed.write_text(bundle / "workflow.py", render_workflow_py(workflow))
+    # Named sections for program maps (display metadata; see
+    # openadapt_flow.sections). Computed from the final program, the recorded
+    # UI structure and any narration; outside both bundle digests.
+    from openadapt_flow import sections as _sections
+
+    _sections.write(
+        bundle,
+        _sections.build(
+            workflow,
+            context=_sections.context_for_workflow(events, workflow),
+            narration=_sections.narration_by_step(recording),
+        ),
+    )
     return workflow
 
 

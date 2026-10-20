@@ -55,6 +55,7 @@ export const CMD = {
   TURN_OFF_APPROVAL_MODE: "turn_off_approval_mode",
   RUN_SAMPLE: "run_sample",
   GET_QUALIFICATION: "get_qualification",
+  EDIT_PROGRAM_SECTIONS: "edit_program_sections",
   INITIALIZE_QUALIFICATION: "initialize_qualification",
   PROPOSE_QUALIFICATION_FROM_DEMO: "propose_qualification_from_demo",
   SET_QUALIFICATION_RISK: "set_qualification_risk",

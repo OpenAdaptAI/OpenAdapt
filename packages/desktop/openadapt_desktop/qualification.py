@@ -772,6 +772,65 @@ def _certification_is_current(workflow, report, *, policy_name: str) -> bool:
     )
 
 
+def _sections_api() -> Any:
+    """Flow's named-sections module, or None on a Flow without it."""
+
+    try:
+        from openadapt_flow import sections
+    except ImportError:
+        return None
+    return sections
+
+
+def program_graph(bundle_dir: Path, workflow: Any) -> dict:
+    """The program-graph spec with the bundle's named sections, when Flow has them.
+
+    Sections are display metadata (sections.json). A Flow without them, or a
+    sections file that cannot be read, gives the graph without sections.
+    """
+
+    build = _flow_api()["build_program_graph"]
+    sections = _sections_api()
+    if sections is None:
+        return build(workflow).model_dump(mode="json")
+    try:
+        found = sections.load(bundle_dir, workflow).sections
+    except Exception:  # noqa: BLE001 - display metadata never blocks review
+        found = None
+    return build(workflow, found).model_dump(mode="json")
+
+
+def edit_program_sections(
+    bundle_dir: Path,
+    *,
+    edit: dict,
+    bundle_key: str | None = None,
+) -> dict:
+    """Rename, merge or split a named section and store it in sections.json.
+
+    Execution, the outcome classifier and both bundle digests ignore the
+    file, so the edit never changes a certification.
+    """
+
+    sections = _sections_api()
+    if sections is None:
+        raise QualificationError(
+            "This Desktop build's OpenAdapt Flow cannot edit sections. Update "
+            "OpenAdapt Desktop to rename, merge or split them."
+        )
+    workflow = _load(bundle_dir, key=bundle_key)
+    try:
+        change = sections.SectionEdit.model_validate(edit)
+    except ValueError as exc:
+        raise QualificationError(f"That is not a section edit: {exc}") from exc
+    try:
+        doc = sections.edit(bundle_dir, workflow, [change], key=bundle_key)
+    except sections.SectionsError as exc:
+        raise QualificationError(f"The sections were not changed: {exc}") from exc
+    build = _flow_api()["build_program_graph"]
+    return {"ok": True, "graph": build(workflow, doc.sections).model_dump(mode="json")}
+
+
 def inspect_bundle(
     bundle_dir: Path,
     *,
@@ -784,7 +843,7 @@ def inspect_bundle(
     api = _flow_api()
     workflow = _load(bundle_dir, key=bundle_key)
     policy = _policy(policy_source)
-    graph_payload = api["build_program_graph"](workflow).model_dump(mode="json")
+    graph_payload = program_graph(bundle_dir, workflow)
     lint = api["lint_workflow"](workflow)
     runtime_policy = api["evaluate_policy"](workflow, policy)
     report = api["evaluate_qualification"](

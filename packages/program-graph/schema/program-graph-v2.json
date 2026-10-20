@@ -224,6 +224,19 @@
           "default": null,
           "description": "Guard summary for a branch edge",
           "title": "Guard"
+        },
+        "guard_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The scrubbed spoken sentence that suggested this branch",
+          "title": "Guard Reason"
         }
       },
       "required": [
@@ -409,6 +422,32 @@
           "description": "halt|skip when guard unmet",
           "title": "Guard On Unmet"
         },
+        "guard_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The scrubbed spoken sentence that suggested this guard",
+          "title": "Guard Reason"
+        },
+        "guard_certified_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "recordings_agree|probe|person: what certified a narrated guard",
+          "title": "Guard Certified By"
+        },
         "wait_until": {
           "anyOf": [
             {
@@ -486,6 +525,72 @@
         "title"
       ],
       "title": "GraphNode",
+      "type": "object"
+    },
+    "GraphSection": {
+      "description": "A named, contiguous group of action nodes, compiled with the bundle.\n\nDisplay metadata from the bundle's ``sections.json``: a surface may fold\na section into one card. Execution never reads it.",
+      "properties": {
+        "id": {
+          "description": "Section id; never equal to a node id",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "subtitle": {
+          "description": "One line such as '6 steps \u00b7 3 fields'",
+          "title": "Subtitle",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/SectionKind"
+        },
+        "title_source": {
+          "$ref": "#/$defs/SectionTitleSource"
+        },
+        "nodes": {
+          "description": "Member node ids, in program order",
+          "items": {
+            "type": "string"
+          },
+          "title": "Nodes",
+          "type": "array"
+        },
+        "section": {
+          "description": "The bundle's section id, for review edits",
+          "title": "Section",
+          "type": "string"
+        },
+        "steps": {
+          "description": "The members' step ids, parallel to nodes",
+          "items": {
+            "type": "string"
+          },
+          "title": "Steps",
+          "type": "array"
+        },
+        "fields": {
+          "description": "Readable names of the fields it fills",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "subtitle",
+        "kind",
+        "title_source",
+        "nodes",
+        "section",
+        "steps"
+      ],
+      "title": "GraphSection",
       "type": "object"
     },
     "IdentityInfo": {
@@ -800,6 +905,27 @@
       ],
       "title": "ResolutionRung",
       "type": "object"
+    },
+    "SectionKind": {
+      "description": "What a section holds: fields to fill, the save, or other steps.",
+      "enum": [
+        "fields",
+        "save",
+        "steps"
+      ],
+      "title": "SectionKind",
+      "type": "string"
+    },
+    "SectionTitleSource": {
+      "description": "Where a section's title came from (see :mod:`openadapt_flow.sections`).",
+      "enum": [
+        "ui",
+        "narration",
+        "fields",
+        "person"
+      ],
+      "title": "SectionTitleSource",
+      "type": "string"
     }
   },
   "description": "The complete, self-describing visualization spec for one compiled bundle.\n\nSerialize with ``spec.model_dump_json()`` (or ``model_dump()``); every\nsurface renders THIS, none re-parse the bundle. See the module docstring.",
@@ -824,6 +950,14 @@
         "$ref": "#/$defs/GraphEdge"
       },
       "title": "Edges",
+      "type": "array"
+    },
+    "sections": {
+      "description": "Named groups of action nodes from the bundle's sections.json",
+      "items": {
+        "$ref": "#/$defs/GraphSection"
+      },
+      "title": "Sections",
       "type": "array"
     }
   },

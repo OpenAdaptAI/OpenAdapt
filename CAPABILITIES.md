@@ -277,6 +277,7 @@ A test fails when a command has no file or this list is out of date.
 - `pull`
 - `record`
 - `route`
+- `sections`: Show, rename, merge or split the named sections a program map folds
 - `variants`
 - `visualize`
 

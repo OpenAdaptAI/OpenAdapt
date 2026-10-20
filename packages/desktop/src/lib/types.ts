@@ -861,6 +861,8 @@ export interface QualificationProject {
     };
     nodes: QualificationNode[];
     edges: { source: string; target: string; kind: EdgeKind; label: string }[];
+    /** The compiled named sections (the bundle's sections.json), when Flow has them. */
+    sections?: ProgramGraphSection[];
   };
   lint: {
     findings: QualificationFinding[];
@@ -892,6 +894,19 @@ export interface QualificationRefusal {
   ok: false;
   workflow_id: string;
   error: string;
+}
+
+/** One named section of the compiled program (Flow's GraphSection). */
+export interface ProgramGraphSection {
+  id: string;
+  title: string;
+  subtitle: string;
+  kind: "fields" | "save" | "steps";
+  title_source: "ui" | "narration" | "fields" | "person";
+  nodes: string[];
+  section: string;
+  steps: string[];
+  fields?: string[];
 }
 
 export type QualificationResponse =

@@ -19,6 +19,7 @@ import {
   type EdgeKind,
   type GraphEdge,
   type GraphNode,
+  type GraphSection,
   type ProgramGraphSpec,
 } from "./spec.js";
 
@@ -208,6 +209,69 @@ export function deriveDisplayGraph(
   }
 
   return { spec: { ...spec, nodes: shown, edges }, folds, ownerOf };
+}
+
+/**
+ * The compiled sections Flow ships with the spec (`spec.sections`, from the
+ * bundle's sections.json), as folds: one card per section, titled from the
+ * interface ("Contact", "Create New Patient") or by its fields. Null when the
+ * spec has none.
+ */
+export function sectionFolds(spec: ProgramGraphSpec): FoldSpec | null {
+  const sections = spec.sections ?? [];
+  if (!sections.length) return null;
+  return {
+    groups: sections.map((section) => ({
+      id: section.id,
+      title: section.title,
+      subtitle: section.subtitle,
+      nodes: [...section.nodes],
+    })),
+  };
+}
+
+/** A person's change to the compiled sections, in the bundle's terms. Flow
+ *  stores it in sections.json (`openadapt-flow sections`), so execution and
+ *  the bundle digests never change. */
+export type SectionEdit =
+  | { op: "rename"; section: string; title: string }
+  | { op: "merge"; section: string; other: string }
+  | { op: "split"; section: string; at: string };
+
+/** What a reviewer may do with the section behind one card or step. */
+export interface SectionReview {
+  section: GraphSection;
+  /** The next section in the same straight run, when the two may merge. */
+  mergeWith?: GraphSection;
+  /** The step id a split at the selected member would start the new section at. */
+  splitAt?: string;
+}
+
+/**
+ * The review actions for fold `foldId` (and, for an unfolded section, the
+ * selected member `nodeId`). The save section is never merged with field
+ * sections or split; Flow refuses both too.
+ */
+export function sectionReview(spec: ProgramGraphSpec, foldId: string, nodeId?: string): SectionReview | null {
+  const sections = spec.sections ?? [];
+  const index = sections.findIndex((section) => section.id === foldId);
+  if (index < 0) return null;
+  const section = sections[index];
+  const next = sections[index + 1];
+  const nodes = specNodes(spec);
+  const adjacent =
+    next !== undefined &&
+    (next.kind === "save") === (section.kind === "save") &&
+    specEdges(spec).some(
+      (edge) => edge.source === section.nodes[section.nodes.length - 1] && edge.target === next.nodes[0],
+    ) &&
+    nodes.some((node) => node.id === next.nodes[0]);
+  const at = nodeId ? section.nodes.indexOf(nodeId) : -1;
+  return {
+    section,
+    mergeWith: adjacent ? next : undefined,
+    splitAt: section.kind !== "save" && at > 0 ? section.steps[at] : undefined,
+  };
 }
 
 /**

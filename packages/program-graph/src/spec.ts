@@ -149,6 +149,8 @@ export interface GraphNode {
   api_summary?: string | null;
   postconditions?: string[];
   guard?: string | null;
+  guard_reason?: string | null;
+  guard_certified_by?: string | null;
   guard_on_unmet?: string | null;
   wait_until?: string | null;
   outcome?: string | null;
@@ -165,6 +167,30 @@ export interface GraphEdge {
   kind?: EdgeKind;
   label?: string;
   guard?: string | null;
+  guard_reason?: string | null;
+}
+
+/** What a section holds: fields to fill, the save, or other steps. */
+export type SectionKind = "fields" | "save" | "steps";
+
+/** Where a section's title came from: interface text, narration, the field
+ *  names (no title was found), or a person in review. */
+export type SectionTitleSource = "ui" | "narration" | "fields" | "person";
+
+/** A named, contiguous group of action nodes that Flow compiles with every
+ *  bundle (its sections.json). Display metadata; execution never reads it. */
+export interface GraphSection {
+  id: string;
+  title: string;
+  subtitle: string;
+  kind: SectionKind;
+  title_source: SectionTitleSource;
+  nodes: string[];
+  /** The bundle's section id: what a review edit names. */
+  section: string;
+  /** The members' step ids, parallel to `nodes`. */
+  steps: string[];
+  fields?: string[];
 }
 
 export interface ProgramGraphSpec {
@@ -172,6 +198,7 @@ export interface ProgramGraphSpec {
   bundle: BundleMeta;
   nodes?: GraphNode[];
   edges?: GraphEdge[];
+  sections?: GraphSection[];
 }
 
 /** A cheap structural check for data read from a file or a network response. */

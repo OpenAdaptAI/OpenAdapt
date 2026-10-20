@@ -305,6 +305,7 @@ class EngineDispatcher:
             "teach_branch": self.teach_branch,
             # qualification cockpit (canonical Flow graph/policy/manifests)
             "get_qualification": self.get_qualification,
+            "edit_program_sections": self.edit_program_sections,
             "initialize_qualification": self.initialize_qualification,
             "propose_qualification_from_demo": self.propose_qualification_from_demo,
             "set_qualification_risk": self.set_qualification_risk,
@@ -2630,6 +2631,26 @@ class EngineDispatcher:
                 bundle,
                 bundle_key=self._qualification_bundle_key(workflow_id),
             )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def edit_program_sections(self, **params: Any) -> dict:
+        """Rename, merge or split a named section of the program in review."""
+
+        from openadapt_desktop.qualification import edit_program_sections
+
+        workflow_id = str(params.get("workflow_id") or "")
+        edit = params.get("edit")
+        try:
+            if not isinstance(edit, dict):
+                raise ValueError("edit is required")
+            result = edit_program_sections(
+                self._qualification_bundle_dir(workflow_id),
+                edit=edit,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            result["workflow_id"] = workflow_id
             return result
         except Exception as exc:
             return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}

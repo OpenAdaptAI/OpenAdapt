@@ -31,6 +31,7 @@ from openadapt_flow.visualize.spec import (
     EffectInfo,
     GraphEdge,
     GraphNode,
+    GraphSection,
     IdentityInfo,
     MediaRef,
     NodeKind,
@@ -40,6 +41,8 @@ from openadapt_flow.visualize.spec import (
     ProvenanceInfo,
     ResolutionInfo,
     ResolutionRung,
+    SectionKind,
+    SectionTitleSource,
 )
 
 __all__ = [
@@ -50,6 +53,7 @@ __all__ = [
     "EffectInfo",
     "GraphEdge",
     "GraphNode",
+    "GraphSection",
     "IdentityInfo",
     "MediaRef",
     "NodeKind",
@@ -60,6 +64,8 @@ __all__ = [
     "ProvenanceInfo",
     "ResolutionInfo",
     "ResolutionRung",
+    "SectionKind",
+    "SectionTitleSource",
     "build_composition_graph",
     "build_program_graph",
     "project_program_graph",
