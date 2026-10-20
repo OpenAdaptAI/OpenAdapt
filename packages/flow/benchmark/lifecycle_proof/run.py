@@ -70,6 +70,8 @@ RUNNER_ID = "lifecycle-proof-runner-1"
 DEDICATED_USER = "openadapt_actor"
 STATUS_KEY_ID = "lifecycle-proof-status-1"
 
+#: Inputs this program fixes (see phase_admit).
+FIXED_INPUTS = {"state_label": "Massachusetts"}
 #: Synthetic referrals (benchmark/openemr_api_tier/common.py), unique emails.
 BATCH = ("r1-nadia-brennan", "r2-marcus-feld", "r3-ines-carvalho")
 CRASH = "r4-theo-lindqvist"
@@ -162,7 +164,11 @@ def referral_params(key: str) -> dict[str, str]:
     from benchmark.openemr_api_tier.common import REFERRALS, spec_for
 
     ref = {r.key: r for r in REFERRALS}[key]
-    return {k: str(v) for k, v in spec_for(ref).params().items()}
+    return {
+        k: str(v)
+        for k, v in spec_for(ref).params().items()
+        if k not in FIXED_INPUTS
+    }
 
 
 def _config_and_hooks() -> tuple[Any, Any, dict[str, Any]]:
@@ -561,6 +567,23 @@ def phase_admit(ctx: dict[str, Any], source: Path, trials: int) -> None:
             source, sealed, ignore=shutil.ignore_patterns("benchmark-contract.json")
         )
         workflow = Workflow.load(sealed)
+        # This program registers Massachusetts referrals. The state is a fixed
+        # value of the program, not a run input: the record stores the state
+        # code (MA) while the form shows its label, and the record check
+        # reads back the code. A run input the record check can't read back
+        # would send every problems-only item to a person (input_not_read_back).
+        for index, step in enumerate(workflow.steps):
+            if step.param in FIXED_INPUTS:
+                workflow.steps[index] = step.model_copy(
+                    update={
+                        "param": None,
+                        "text": FIXED_INPUTS[step.param],
+                        "intent": f"type {FIXED_INPUTS[step.param]}",
+                    }
+                )
+        for name in FIXED_INPUTS:
+            workflow.params.pop(name, None)
+            workflow.param_specs.pop(name, None)
         invalidated = _invalidate_prior_certification(
             workflow, reason="encrypted at rest for the Regulated profile"
         )
@@ -662,9 +685,16 @@ def phase_switch(ctx: dict[str, Any]) -> None:
 
     out = ctx["out"]
     doc = _read(out / "admission" / "admission.json")
+    current = out / "current-bundle.json"
+    if current.exists():
+        # A re-admitted repair: the switch Cloud issues for the new version,
+        # from the passing cases of its own re-qualification.
+        doc = {**doc, **_read(current)}
+        digest = doc["digest"]
+    else:
+        digest = doc["pinned_digest"]
     floor, dialogs = _passing_screen_facts(Path(doc["qualification_dir"]))
     verifier = ctx["hooks"].make_verifier({})
-    digest = doc["pinned_digest"]
     opened = int(time.time())
     record = SwitchRecord(
         switch_id=f"switch-lifecycle-proof-{digest[:12]}-{opened}",
@@ -709,12 +739,16 @@ def phase_batch(ctx: dict[str, Any], keys: tuple[str, ...], name: str) -> list[A
     from openadapt_flow.runtime.readback_pipeline import ReadbackPipeline
 
     out, ledger = ctx["out"], ctx["ledger"]
+    base, attempt = out / name, 1
+    while base.exists():
+        attempt += 1
+        base = out / f"{name}-{attempt}"
     pipeline = ReadbackPipeline()
     handoffs = []
     reports = []
     try:
         for key in keys:
-            item = Item(ctx, key, out / name / key, pipeline=pipeline)
+            item = Item(ctx, key, base / key, pipeline=pipeline)
             t0 = time.time()
             report = item.run(ctx["bundle"])
             handoff = pipeline.take()
@@ -1002,7 +1036,15 @@ def phase_drift(ctx: dict[str, Any], trials: int, agent: Any) -> dict[str, Any]:
     ledger.add("drift.result", item=DRIFT, **summary)
     if evidence.readmitted_bundle_digest:
         bundle = ctx["store"] / "bundles" / evidence.readmitted_bundle_digest
-        _write(out / "current-bundle.json", {"bundle": str(bundle)})
+        requalified = sorted((run_dir / "self-repair").glob("requalify-*"))
+        _write(
+            out / "current-bundle.json",
+            {
+                "bundle": str(bundle),
+                "digest": evidence.readmitted_bundle_digest,
+                "qualification_dir": str(requalified[-1]) if requalified else "",
+            },
+        )
         ctx["bundle"] = bundle
     return summary
 
@@ -1051,7 +1093,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     phases = (
         [args.phase]
         if args.phase != "all"
-        else ["admit", "switch", "batch", "crash", "drift", "continue"]
+        else ["admit", "switch", "batch", "crash", "drift", "switch", "continue"]
     )
     for phase in phases:
         ledger.add("phase.start", phase=phase)
