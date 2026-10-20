@@ -1658,7 +1658,23 @@ class Replayer:
                         return "a business-decision state"
         return None
 
-    def _run_unsealed(
+    def _run_unsealed(self, workflow: Workflow, **kwargs: Any) -> RunReport:
+        """Run the workflow; see :meth:`_run_unsealed_steps`.
+
+        However the run ends, a deferred record check it still holds is
+        released: a durable run's check waits for its pause, and a run that
+        left before writing it must not block the read-back thread forever.
+        """
+
+        try:
+            return self._run_unsealed_steps(workflow, **kwargs)
+        finally:
+            entry = getattr(self, "_pipelined_readback", None)
+            start = getattr(entry, "start", None)
+            if start is not None:
+                start.set()
+
+    def _run_unsealed_steps(
         self,
         workflow: Workflow,
         *,

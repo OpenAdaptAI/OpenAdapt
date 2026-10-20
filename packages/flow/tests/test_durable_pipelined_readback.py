@@ -250,3 +250,27 @@ def test_the_check_starts_only_once_the_pause_holds_it(tmp_path):
         pipeline.close()
 
     assert seen and all(seen)
+
+
+def test_a_run_that_raises_before_the_pause_still_releases_the_check(
+    tmp_path, monkeypatch
+):
+    import threading
+
+    from openadapt_flow.runtime.durable.controller import DurableRun
+
+    def broken(self, *args, **kwargs):
+        raise RuntimeError("the pause could not be written")
+
+    monkeypatch.setattr(DurableRun, "record_deferred_readback", broken)
+    pipeline = ReadbackPipeline()
+    run = Run(tmp_path, "governed", pipeline=pipeline)
+    try:
+        run.run()
+    except RuntimeError:
+        pass
+    # The read-back thread isn't left waiting for a pause that never comes.
+    closer = threading.Thread(target=pipeline.close, daemon=True)
+    closer.start()
+    closer.join(timeout=30)
+    assert not closer.is_alive()
