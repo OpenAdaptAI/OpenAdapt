@@ -1,0 +1,62 @@
+{
+  "machine": "Darwin arm64",
+  "python": "3.12.13",
+  "commands": {
+    "before": "flow tutorial --break-it --out",
+    "after": "quickstart --headless --out"
+  },
+  "runs": [
+    {
+      "command": "before",
+      "round": 0,
+      "exit_code": 0,
+      "wall_s": 21.11,
+      "load_1m": 19.1,
+      "lines": 54
+    },
+    {
+      "command": "after",
+      "round": 0,
+      "exit_code": 0,
+      "wall_s": 31.44,
+      "load_1m": 22.9,
+      "lines": 40
+    },
+    {
+      "command": "before",
+      "round": 1,
+      "exit_code": 0,
+      "wall_s": 23.01,
+      "load_1m": 37.6,
+      "lines": 54
+    },
+    {
+      "command": "after",
+      "round": 1,
+      "exit_code": 0,
+      "wall_s": 40.22,
+      "load_1m": 46.8,
+      "lines": 39
+    },
+    {
+      "command": "before",
+      "round": 2,
+      "exit_code": 0,
+      "wall_s": 22.12,
+      "load_1m": 36.7,
+      "lines": 54
+    },
+    {
+      "command": "after",
+      "round": 2,
+      "exit_code": 0,
+      "wall_s": 32.87,
+      "load_1m": 27.4,
+      "lines": 39
+    }
+  ],
+  "median_wall_s": {
+    "before": 22.12,
+    "after": 32.87
+  }
+}
