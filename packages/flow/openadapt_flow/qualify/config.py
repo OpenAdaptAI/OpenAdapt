@@ -411,7 +411,7 @@ def _expand(
 #: ``openadapt.verify/v1`` sections only ``verify-run`` reads. Qualify accepts
 #: and ignores them, so one file serves both (the mirror of verify-run's
 #: ``QUALIFY_ONLY_SECTIONS``).
-VERIFY_RUN_ONLY_SECTIONS: tuple[str, ...] = ("frame",)
+VERIFY_RUN_ONLY_SECTIONS: tuple[str, ...] = ("frame", "admission")
 
 
 def parse_verify_config(

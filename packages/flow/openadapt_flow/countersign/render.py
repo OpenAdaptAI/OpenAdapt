@@ -98,6 +98,12 @@ def checked_line(checked: dict[str, Any]) -> str:
             out.append("source: the inputs were the authorized instruction")
         else:
             out.append(f"{part} ({_PART_TEXT[part]}): {state}")
+    cover = checked.get("coverage")
+    if isinstance(cover, dict):
+        out.append(
+            f"fault coverage: {cover.get('killed')} of {cover.get('applicable')} "
+            f"faults caught, admission policy {cover.get('policy')}"
+        )
     return "; ".join(out)
 
 
