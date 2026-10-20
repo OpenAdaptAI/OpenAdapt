@@ -88,11 +88,7 @@ def main():
     \b
     Quick Start (Python 3.10-3.12):
         python -m pip install --upgrade openadapt
-        openadapt flow tutorial
-
-    \b
-    Halt demo:
-        openadapt quickstart --break-it
+        openadapt quickstart
 
     \b
     Manual Demo Lifecycle:
@@ -303,7 +299,7 @@ def _python_fix() -> str:
         "have it:\n"
         f"{installer}"
         "  uv tool install --python 3.12 openadapt\n"
-        f"Then run: openadapt quickstart --break-it{script}"
+        f"Then run: openadapt quickstart{script}"
     )
 
 
