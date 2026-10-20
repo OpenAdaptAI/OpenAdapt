@@ -1,9 +1,11 @@
+import { ProgramWorkbench } from "@openadapt/program-graph";
+import { PROGRAM_WORKBENCH_NOTES, PROGRAM_WORKBENCH_SURFACE } from "../lib/programWorkbench";
 import type { QualificationProject } from "../lib/types";
-import { ProgramWorkbench } from "./ProgramWorkbench";
 
 const graph = {
   bundle: {
     name: "Process incoming records",
+    schema_version: 2,
     action_count: 4,
     irreversible_count: 1,
     identity_armed_count: 1,
@@ -101,7 +103,7 @@ const graph = {
         has_identifier_crop: true,
       },
       effects: [
-        { kind: "field_equals", risk: "irreversible", needs_operator_confirmation: false },
+        { kind: "field_equals", summary: "record field status == {status}", risk: "irreversible", needs_operator_confirmation: false },
       ],
       postconditions: ["confirmation is visible"],
       halts: ["fresh frame changed", "effect cannot be verified independently"],
@@ -137,11 +139,11 @@ const graph = {
     },
   ],
   edges: [
-    { source: "open_worklist", target: "for_each_record", kind: "next", label: "ready" },
+    { source: "open_worklist", target: "for_each_record", kind: "sequence", label: "ready" },
     { source: "for_each_record", target: "open_record", kind: "loop_body", label: "next record" },
-    { source: "for_each_record", target: "done", kind: "loop_exit", label: "worklist empty" },
-    { source: "open_record", target: "write_update", kind: "next", label: "identity verified" },
-    { source: "write_update", target: "record_complete", kind: "next", label: "effect verified" },
+    { source: "for_each_record", target: "done", kind: "sequence", label: "worklist empty" },
+    { source: "open_record", target: "write_update", kind: "sequence", label: "identity verified" },
+    { source: "write_update", target: "record_complete", kind: "sequence", label: "effect verified" },
     { source: "record_complete", target: "for_each_record", kind: "branch", label: "more" },
     { source: "record_complete", target: "done", kind: "branch", label: "complete" },
   ],
@@ -176,7 +178,7 @@ export function ProgramWorkbenchPreview() {
               <h2>Compiled structure and evidence contract</h2>
               <span className="page-sub">Inspect the exact topology, recorded target evidence, identity gates, independent checks, and stop rules before you qualify this version.</span>
             </div>
-            <ProgramWorkbench graph={graph} />
+            <ProgramWorkbench spec={graph} className={PROGRAM_WORKBENCH_SURFACE} notes={PROGRAM_WORKBENCH_NOTES} />
           </div>
         </div>
       </main>

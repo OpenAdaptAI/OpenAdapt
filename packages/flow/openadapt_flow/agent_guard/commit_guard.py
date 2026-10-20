@@ -112,6 +112,9 @@ class GuardSummary:
     readback_ms: Optional[float] = None
     requests: dict[str, int] = field(default_factory=dict)
     model_calls: int = 0
+    #: Requests the task's teach scope stopped: code, method, origin and
+    #: resource type. No paths, no values.
+    scope_blocked: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {"schema": SUMMARY_SCHEMA, **self.__dict__}
@@ -149,8 +152,13 @@ class CommitGuard:
         response_wait_s: float = 30.0,
         events_path: Optional[Path] = None,
         clock: Callable[[], float] = time.monotonic,
+        scope: Optional[Any] = None,
     ) -> None:
         self.guarded = guarded
+        #: The task's :class:`~openadapt_flow.teach_scope.TeachScope`: reads
+        #: to an undeclared origin are blocked, and a save is read against
+        #: the declared record and values when it has a write adapter.
+        self.scope = scope
         self.task = task
         self.page = page
         self.app_origin = origin_of(app_origin) or app_origin
@@ -197,6 +205,15 @@ class CommitGuard:
 
         kind = classify(request, app_origin=self.app_origin, not_saves=self.not_saves)
         self.summary.requests[kind] = self.summary.requests.get(kind, 0) + 1
+        if self.scope is not None and kind in ("read", "save"):
+            code = self.scope.request_refusal(
+                request.method,
+                request.url,
+                request.post_data.encode("utf-8") if request.post_data else None,
+            )
+            if code is not None:
+                self._scope_refuse(request, kind, code)
+                return
         if kind in ("read", "not_a_save"):
             self.page.continue_request(request.request_id)
             if kind == "not_a_save":
@@ -403,6 +420,43 @@ class CommitGuard:
         return verdict, text
 
     # -- refusing -----------------------------------------------------------------
+
+    def _scope_refuse(self, request: HeldRequest, kind: str, code: str) -> None:
+        """A request outside the task's teach scope: page content (an image
+        beacon, a script's fetch) or the agent steered toward another origin,
+        record or value."""
+
+        self.summary.scope_blocked.append(
+            {
+                "code": code,
+                "method": request.method,
+                "origin": origin_of(request.url),
+                "resource_type": request.resource_type,
+            }
+        )
+        if kind == "save":
+            self._refuse(
+                request,
+                kind,
+                self._clock(),
+                code,
+                "the save is not the one the task declared (another record, "
+                "field or value)",
+            )
+            return
+        if self.observe_only:
+            self.summary.would_block.append({"code": code})
+            self.page.continue_request(request.request_id)
+            self._log(request, kind, "would_block", code=code)
+            return
+        self.page.block_request(
+            request.request_id,
+            status=BLOCK_STATUS,
+            body="",
+            content_type="text/plain",
+            headers={GUARD_HEADER: f"blocked; code={code}"},
+        )
+        self._log(request, kind, "blocked", code=code)
 
     def _refuse(
         self,

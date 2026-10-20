@@ -975,7 +975,7 @@ def test_cli_malformed_seal_file_and_log_key(tmp_path):
     seal = tmp_path / "export.csv.seal.json"
     seal.write_text("{broken")
     bad = _cli(tmp_path, "verify", str(export), "--seal", str(seal), "--require-anchor")
-    assert bad.returncode == 1 and "malformed" in bad.stderr
+    assert bad.returncode == 2 and "is not JSON" in bad.stderr
     assert "Traceback" not in bad.stderr
     assert _cli(tmp_path, "file", str(export)).returncode == 0
     junk_pem = tmp_path / "junk.pem"
@@ -990,4 +990,4 @@ def test_cli_malformed_seal_file_and_log_key(tmp_path):
         "--log-key",
         str(junk_pem),
     )
-    assert out.returncode == 1 and "Traceback" not in out.stderr
+    assert out.returncode == 2 and "Traceback" not in out.stderr

@@ -2814,6 +2814,7 @@ class TestMisc:
             "retry_run_persistence",
             "teach_fix",
             "get_qualification",
+            "edit_program_sections",
             "initialize_qualification",
             "set_qualification_risk",
             "arm_qualification_identity",

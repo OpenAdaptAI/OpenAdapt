@@ -10,6 +10,7 @@
 #   agent    openadapt-agent  pypi-agent
 #   capture  openadapt-capture  pypi-capture
 #   privacy  openadapt-privacy  pypi-privacy
+#   tray     openadapt-tray     pypi-tray
 #
 # Manual dispatch only: there is no tag or push trigger, so nothing here runs
 # unless someone starts it. openadapt-desktop is not here: desktop-release.yml
@@ -36,7 +37,7 @@ on:
         description: "Package directory under packages/"
         required: true
         type: choice
-        options: [flow, types, agent, capture, privacy]
+        options: [flow, types, agent, capture, privacy, tray]
       version:
         description: "Version to publish; must equal packages/<package>/pyproject.toml"
         required: true
@@ -96,6 +97,7 @@ jobs:
               "agent": "openadapt-agent",
               "capture": "openadapt-capture",
               "privacy": "openadapt-privacy",
+              "tray": "openadapt-tray",
           }[pkg]
           if project["name"] != expected:
               sys.exit(f"packages/{pkg} is {project['name']!r}, expected {expected!r}")

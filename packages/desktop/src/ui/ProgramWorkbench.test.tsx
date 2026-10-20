@@ -1,11 +1,18 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { ProgramWorkbench } from "@openadapt/program-graph";
+import { PROGRAM_WORKBENCH_NOTES, PROGRAM_WORKBENCH_SURFACE } from "../lib/programWorkbench";
 import type { QualificationProject } from "../lib/types";
-import { ProgramWorkbench } from "./ProgramWorkbench";
+
+// Desktop renders the shared program map from @openadapt/program-graph
+// (packages/program-graph, which has the component's own tests). These check
+// Desktop's wiring: the alias resolves, the qualification graph type is a
+// program-graph spec, and Desktop's surface and notes apply.
 
 const graph = {
   bundle: {
     name: "Reference program",
+    schema_version: 2,
     action_count: 2,
     irreversible_count: 0,
     identity_armed_count: 1,
@@ -65,31 +72,36 @@ const graph = {
     },
   ],
   edges: [
-    { source: "open", target: "loop", kind: "next", label: "" },
+    { source: "open", target: "loop", kind: "sequence", label: "" },
     { source: "loop", target: "open", kind: "loop_body", label: "next item" },
-    { source: "loop", target: "done", kind: "loop_exit", label: "complete" },
+    { source: "loop", target: "done", kind: "sequence", label: "complete" },
   ],
 } as QualificationProject["graph"];
 
 afterEach(cleanup);
 
-describe("ProgramWorkbench", () => {
+const renderDesktop = () =>
+  render(<ProgramWorkbench spec={graph} className={PROGRAM_WORKBENCH_SURFACE} notes={PROGRAM_WORKBENCH_NOTES} />);
+
+describe("ProgramWorkbench in Desktop", () => {
   it("renders every exact edge and marks the loop return", () => {
-    const { container } = render(<ProgramWorkbench graph={graph} />);
-    expect(container.querySelectorAll(".program-edges > g")).toHaveLength(3);
+    const { container } = renderDesktop();
+    expect(container.querySelectorAll(".opg-edges > g")).toHaveLength(3);
     expect(container.querySelectorAll('[data-back-edge="true"]')).toHaveLength(1);
+    expect(container.querySelector(".opg-root")?.classList.contains("surface-phosphor")).toBe(true);
   });
 
   it("switches from the map to the declared evidence lanes", () => {
-    render(<ProgramWorkbench graph={graph} />);
+    renderDesktop();
     fireEvent.click(screen.getByRole("tab", { name: "Evidence lanes" }));
     expect(screen.getByText("Finds the field")).toBeTruthy();
     expect(screen.getByText("Structural")).toBeTruthy();
     expect(screen.getByText(/do not report a live verdict/i)).toBeTruthy();
+    expect(screen.getByText(/Desktop binds live evidence only after/)).toBeTruthy();
   });
 
   it("updates the inspector from an exact selected node", () => {
-    render(<ProgramWorkbench graph={graph} />);
+    renderDesktop();
     fireEvent.click(screen.getByRole("button", { name: /For each item/i }));
     const inspector = screen.getByLabelText("Selected program step");
     expect(inspector.textContent).toContain("For each item");

@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { ControlOverlay } from "./overlay/ControlOverlay";
 import { ProgramWorkbenchPreview } from "./ui/ProgramWorkbenchPreview";
+import "@openadapt/program-graph/styles.css";
 import "./styles/app.css";
 
 const surface = new URLSearchParams(window.location.search).get("surface");

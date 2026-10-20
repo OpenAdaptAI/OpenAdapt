@@ -65,6 +65,7 @@ __all__ = [
     "WriteClaim",
     "instruction_like",
     "link_target_at",
+    "load_write_adapter",
     "origin_of",
     "provenance_for",
 ]
@@ -151,6 +152,28 @@ class WriteAdapter(Protocol):
     def claim_row(self, row: Mapping[str, Any]) -> Optional[WriteClaim]: ...
 
 
+def load_write_adapter(ref: str) -> WriteAdapter:
+    """The write adapter ``module:attr`` names (a class or a factory, called
+    with no arguments, or an adapter object). For CLI and config files."""
+
+    import importlib
+
+    module_name, sep, attr = str(ref).partition(":")
+    if not sep or not module_name or not attr:
+        raise ValueError(f"a write adapter is module:attr, not {ref!r}")
+    obj: Any = getattr(importlib.import_module(module_name), attr)
+    if isinstance(obj, type) or (callable(obj) and not hasattr(obj, "claim")):
+        try:
+            obj = obj()
+        except TypeError as exc:
+            raise ValueError(f"{ref} is not a write adapter ({exc})") from None
+    if not callable(getattr(obj, "claim", None)) or not callable(
+        getattr(obj, "claim_row", None)
+    ):
+        raise ValueError(f"{ref} is not a write adapter (claim and claim_row)")
+    return obj  # type: ignore[no-any-return]
+
+
 def _frozen(values: Mapping[str, Any], what: str) -> Mapping[str, str]:
     out: dict[str, str] = {}
     for name, value in values.items():
@@ -169,7 +192,9 @@ class TeachScope:
     Args:
         task_id: The task this scope belongs to.
         origins: The app's origins (``scheme://host[:port]``). The browser may
-            reach only these; any URL is reduced to its origin.
+            reach only these; any URL is reduced to its origin. Empty for an
+            app with no browser (a native or remote-desktop surface); a
+            browser under an empty scope may reach nothing.
         record: The record the save belongs to, as the record reader names
             it (``{"patient_id": "p1"}``).
         fields: The fields the save may write and the exact value of each
@@ -203,8 +228,6 @@ class TeachScope:
             if origin is None:
                 raise ValueError(f"not an http(s) origin: {raw!r}")
             origins.append(origin)
-        if not origins:
-            raise ValueError("a teach scope names at least one app origin")
         object.__setattr__(self, "origins", tuple(dict.fromkeys(origins)))
         if not self.record:
             raise ValueError("a teach scope names the record the save belongs to")
@@ -243,6 +266,104 @@ class TeachScope:
             constants=tuple(constants),
             write_adapter=write_adapter,
         )
+
+    @classmethod
+    def for_task(
+        cls,
+        task_id: str,
+        *,
+        origins: Sequence[str],
+        record: Mapping[str, Any],
+        inputs: Mapping[str, Any],
+        fields: Optional[Mapping[str, Any]] = None,
+        constants: Sequence[str] = (),
+        write_adapter: Optional[WriteAdapter] = None,
+        allowed_write_paths: Sequence[str] = (),
+    ) -> "TeachScope":
+        """The scope of a task as its assigner declared it.
+
+        ``record`` names the saved record; ``inputs`` are the run's values,
+        which the agent may type. ``fields`` are the record fields whose
+        values the save and the read-back must match, when the declaration
+        names them; an input that is not a field is a typeable constant. A
+        field also named in ``record`` stays in ``record``.
+        """
+
+        record_values = {str(k): str(v) for k, v in record.items()}
+        field_values = {
+            str(k): str(v)
+            for k, v in (fields or {}).items()
+            if str(k) not in record_values
+        }
+        declared = set(record_values.values()) | set(field_values.values())
+        extra = [str(v) for v in inputs.values() if v is not None]
+        return cls(
+            task_id=task_id,
+            origins=tuple(origins),
+            record=record_values,
+            fields=field_values,
+            constants=tuple(
+                dict.fromkeys(
+                    [*(v for v in extra if v not in declared), *map(str, constants)]
+                )
+            ),
+            write_adapter=write_adapter,
+            allowed_write_paths=tuple(allowed_write_paths),
+        )
+
+    def request_refusal(
+        self, method: str, url: str, body: Optional[bytes]
+    ) -> Optional[str]:
+        """Why a browser request is outside the scope, or ``None`` if it may go.
+
+        A request to an undeclared origin is refused. A write to a declared
+        origin is read by the write adapter, when there is one; without one
+        the write goes and the read-back judges it.
+        """
+
+        method = method.upper()
+        if _is_local_url(url):
+            return None
+        if not self.allows_origin(url):
+            return "egress_origin_not_declared"
+        if method not in WRITE_METHODS or self.write_adapter is None:
+            return None
+        try:
+            claim = self.write_adapter.claim(method, url, body)
+        except Exception:  # noqa: BLE001 - an adapter failure is a refusal
+            claim = None
+        if claim is None:
+            if urlsplit(url).path in self.allowed_write_paths:
+                return None
+            return "write_unattributed"
+        return self.claim_refusal(claim, write=True)
+
+    def claim_refusal(self, claim: "WriteClaim", *, write: bool) -> Optional[str]:
+        """Why a write (or a read-back row) is not the declared one, or ``None``."""
+
+        prefix = "write" if write else "readback"
+        named = {**dict(claim.fields), **dict(claim.record)}
+        for name, value in self.record.items():
+            if name not in named or not _same(named[name], value):
+                return f"{prefix}_wrong_record"
+        for name, value in claim.fields.items():
+            if name in self.record:
+                continue
+            if name not in self.fields:
+                if value is None or not str(value).strip():
+                    continue  # an empty undeclared field writes nothing
+                # An undeclared field may carry only a declared value (a
+                # typed input the declaration did not name as a field).
+                if str(value) in self.typeable:
+                    continue
+                return (
+                    f"{prefix}_field_not_declared" if write else f"{prefix}_wrong_value"
+                )
+            if not _same(value, self.fields[name]):
+                return (
+                    f"{prefix}_value_not_declared" if write else f"{prefix}_wrong_value"
+                )
+        return None
 
     @property
     def typeable(self) -> frozenset[str]:
@@ -418,45 +539,16 @@ class TeachGuard:
         route.abort("blockedbyclient")
 
     def _request_refusal(self, method: str, url: str, request: Any) -> Optional[str]:
-        if not self.scope.allows_origin(url):
-            return "egress_origin_not_declared"
-        if method not in WRITE_METHODS:
-            return None
-        adapter = self.scope.write_adapter
-        if adapter is None:
-            # No adapter: the write goes, and the read-back judges it.
-            return None
-        try:
-            body = request.post_data_buffer
-        except Exception:  # noqa: BLE001 - an unreadable body can't be attributed
-            body = None
-        try:
-            claim = adapter.claim(method, url, body)
-        except Exception:  # noqa: BLE001 - an adapter failure is a refusal
-            claim = None
-        if claim is None:
-            if urlsplit(url).path in self.scope.allowed_write_paths:
-                return None
-            return "write_unattributed"
-        return self._claim_refusal(claim, write=True)
+        body = None
+        if method in WRITE_METHODS and self.scope.write_adapter is not None:
+            try:
+                body = request.post_data_buffer
+            except Exception:  # noqa: BLE001 - an unreadable body can't be attributed
+                body = None
+        return self.scope.request_refusal(method, url, body)
 
     def _claim_refusal(self, claim: WriteClaim, *, write: bool) -> Optional[str]:
-        prefix = "write" if write else "readback"
-        for name, value in self.scope.record.items():
-            if name not in claim.record or not _same(claim.record[name], value):
-                return f"{prefix}_wrong_record"
-        for name, value in claim.fields.items():
-            if name not in self.scope.fields:
-                if value is None or not str(value).strip():
-                    continue  # an empty undeclared field writes nothing
-                return (
-                    f"{prefix}_field_not_declared" if write else f"{prefix}_wrong_value"
-                )
-            if not _same(value, self.scope.fields[name]):
-                return (
-                    f"{prefix}_value_not_declared" if write else f"{prefix}_wrong_value"
-                )
-        return None
+        return self.scope.claim_refusal(claim, write=write)
 
     # -- actions ------------------------------------------------------------------
 

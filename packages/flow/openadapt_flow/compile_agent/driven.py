@@ -31,6 +31,7 @@ from openadapt_flow.compile_agent.agents import AgentLedger
 from openadapt_flow.compile_agent.harness import GateRefused, GateRequest, StaleRef
 from openadapt_flow.jit.adapters import UnsupportedAction
 from openadapt_flow.jit.compile_agent import TaskRequest
+from openadapt_flow.teach_scope import ScopeViolation
 
 __all__ = ["DrivenAgent", "DrivenRun", "RunEnded", "ACTIONS"]
 
@@ -101,6 +102,11 @@ class DrivenAgent:
                 break
             try:
                 command.future.set_result(self._handle(command))
+            except ScopeViolation as exc:
+                # Outside the task's declared scope: run 1 ends with no draft,
+                # like a refused save.
+                command.future.set_result({"refused": str(exc)})
+                raise
             except (StaleRef, UnsupportedAction, LookupError, ValueError) as exc:
                 # Nothing was performed: report it and keep the run going.
                 command.future.set_result(

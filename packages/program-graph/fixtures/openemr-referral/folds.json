@@ -1,8 +1,8 @@
 {
   "groups": [
     {
-      "id": "name",
-      "title": "Name",
+      "id": "section:fields-step_000",
+      "title": "Who: title, first name, last name",
       "subtitle": "6 steps \u00b7 3 fields",
       "nodes": [
         "for_each::s::step_000",
@@ -14,8 +14,8 @@
       ]
     },
     {
-      "id": "birth",
-      "title": "Date of birth and sex",
+      "id": "section:fields-step_009",
+      "title": "Who: date of birth, sex",
       "subtitle": "4 steps \u00b7 2 fields",
       "nodes": [
         "for_each::s::step_009",
@@ -25,8 +25,8 @@
       ]
     },
     {
-      "id": "address",
-      "title": "Address",
+      "id": "section:fields-step_015",
+      "title": "Contact: street, city, state, postal code",
       "subtitle": "11 steps \u00b7 4 fields",
       "nodes": [
         "for_each::s::step_015",
@@ -43,8 +43,8 @@
       ]
     },
     {
-      "id": "contact",
-      "title": "Phone, email and country",
+      "id": "section:fields-step_030",
+      "title": "Contact: home phone, email, country",
       "subtitle": "6 steps \u00b7 3 fields",
       "nodes": [
         "for_each::s::step_030",
@@ -56,9 +56,9 @@
       ]
     },
     {
-      "id": "save",
-      "title": "Create the chart",
-      "subtitle": "2 steps \u00b7 reads the chart back",
+      "id": "section:save-step_039",
+      "title": "Create New Patient",
+      "subtitle": "2 steps \u00b7 reads the record back",
       "nodes": [
         "for_each::s::step_039",
         "for_each::s::step_040"
@@ -75,6 +75,7 @@
     "body_bundle": "openemr/new-referral, certified for clinical-write",
     "body_content_digest": "ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
     "source_recording_sha256": "243fb7853b228a2e0fd93c51c1d43e7b84fff567f1aac917bdcd91a54d044894",
+    "sections": "compiled by Flow (openadapt-flow sections, titles from the form structure in ui-structure/events.jsonl)",
     "loop": "openadapt-flow for-each --records fixtures/openemr-referral/worklist.csv",
     "spec": "openadapt-flow visualize --format json --profile public-synthetic"
   }
