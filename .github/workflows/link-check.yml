@@ -2,7 +2,9 @@ name: Link check
 
 # Links in the repository's Markdown, including every package README.
 # Pull requests check local files and anchors offline, so an external outage
-# can't block a merge. External targets break without a commit here, so they
+# can't block a merge, and only in the Markdown files they change, so a link
+# broken elsewhere doesn't fail unrelated work. Every push to main checks all
+# files, which catches a link broken by a moved or deleted target. External targets break without a commit here, so they
 # are checked on a schedule. A failure lists each broken link in the job
 # summary. Frozen history (legacy/, CHANGELOG.md) and .github/ are skipped.
 on:
@@ -42,14 +44,33 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 2
           persist-credentials: false
 
+      - name: Choose the files to check
+        id: targets
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ] \
+            || git diff --name-only HEAD^1 HEAD | grep -qx '.github/workflows/link-check.yml'; then
+            echo "paths=$LYCHEE_PATHS" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files="$(git diff --name-only --diff-filter=d HEAD^1 HEAD -- '*.md' \
+            | grep -Ev '(^|/)(legacy|node_modules|\.venv|growth-worktrees|\.claude|\.github)/|(^|/)CHANGELOG\.md$' \
+            | sed "s/.*/'&'/" | tr '\n' ' ' || true)"
+          echo "paths=$files" >> "$GITHUB_OUTPUT"
+          echo "Checking: ${files:-nothing}"
+
       - name: Check local links and anchors
+        if: steps.targets.outputs.paths != ''
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
           args: >-
             --offline --include-fragments --no-progress
-            ${{ env.LYCHEE_PATHS }}
+            ${{ steps.targets.outputs.paths }}
           jobSummary: false
 
   external:
