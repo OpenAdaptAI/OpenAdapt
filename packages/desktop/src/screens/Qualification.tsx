@@ -17,7 +17,8 @@ import { Button, Callout, Card, CardHead, Pill } from "../ui/primitives";
 import { QualificationJourney } from "../ui/QualificationJourney";
 import { BusinessDecisionAuthoring } from "../ui/BusinessDecisionAuthoring";
 import { JudgmentCaseCapture } from "../ui/JudgmentCaseCapture";
-import { ProgramWorkbench } from "../ui/ProgramWorkbench";
+import { ProgramWorkbench } from "@openadapt/program-graph";
+import { PROGRAM_WORKBENCH_NOTES, PROGRAM_WORKBENCH_SURFACE } from "../lib/programWorkbench";
 import { QualificationLifecycle } from "./QualificationLifecycle";
 
 const POLICY = "clinical-write";
@@ -1072,7 +1073,7 @@ export function Qualification({
               title="Compiled structure and evidence contract"
               sub="Inspect the exact topology, recorded target evidence, identity gates, independent checks, and stop rules before you qualify this version."
             />
-            <ProgramWorkbench graph={project.graph} />
+            <ProgramWorkbench spec={project.graph} className={PROGRAM_WORKBENCH_SURFACE} notes={PROGRAM_WORKBENCH_NOTES} />
           </Card>
 
           {project.project && (

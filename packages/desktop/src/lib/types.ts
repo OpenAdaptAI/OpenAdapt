@@ -1,5 +1,6 @@
 // Shared frontend types mirroring the engine's IPC payloads (spec §3).
 
+import type { EdgeKind, NodeKind } from "@openadapt/program-graph";
 import type { PlainResultKey } from "./outcomes";
 
 export type DeploymentLane = "cloud" | "byoc";
@@ -580,7 +581,7 @@ export interface QualificationParameter {
 export interface QualificationNode {
   id: string;
   index: number;
-  kind: string;
+  kind: NodeKind;
   title: string;
   action?: string | null;
   resolution?: {
@@ -842,9 +843,12 @@ export interface QualificationProject {
     }[];
   };
   certification_current: boolean;
+  /** Flow's program-graph spec (`build_program_graph(...).model_dump()`). */
   graph: {
+    spec_version?: number;
     bundle: {
       name: string;
+      schema_version: number;
       action_count: number;
       irreversible_count: number;
       identity_armed_count: number;
@@ -856,7 +860,7 @@ export interface QualificationProject {
       };
     };
     nodes: QualificationNode[];
-    edges: { source: string; target: string; kind: string; label: string }[];
+    edges: { source: string; target: string; kind: EdgeKind; label: string }[];
   };
   lint: {
     findings: QualificationFinding[];
