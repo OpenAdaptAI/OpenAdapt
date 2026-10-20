@@ -71,6 +71,10 @@ class SealSigner:
     def sign(self, payload: bytes) -> bytes:
         raise NotImplementedError
 
+    def sign_ph(self, message: bytes) -> bytes:
+        """Ed25519ph (prehashed, empty context) over ``message``, as Rekor checks it."""
+        raise NotImplementedError
+
     @property
     def key_id(self) -> str:
         return seal_key_id(self.public_raw())
@@ -106,6 +110,20 @@ class SoftwareSigner(SealSigner):
 
     def sign(self, payload: bytes) -> bytes:
         return self._key.sign(payload)
+
+    def sign_ph(self, message: bytes) -> bytes:
+        import hashlib
+
+        from cryptography.hazmat.primitives import serialization
+
+        from openadapt_flow.ed25519ph import sign_prehashed
+
+        seed = self._key.private_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PrivateFormat.Raw,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        return sign_prehashed(seed, hashlib.sha512(message).digest())
 
 
 def configured_spec(env: Optional[Mapping[str, str]] = None) -> Optional[str]:
@@ -414,6 +432,23 @@ class Pkcs11Signer(SealSigner):
                 "key_unavailable", "the token's signature does not verify"
             ) from exc
         return signature
+
+    def sign_ph(self, message: bytes) -> bytes:
+        import hashlib
+
+        from openadapt_flow.ed25519ph import verify_prehashed
+
+        digest = hashlib.sha512(message).digest()
+        # PKCS#11 3.0 CKM_EDDSA with phFlag set. Tokens differ on whether they
+        # hash the input themselves, so try the message, then the digest, and
+        # keep only a signature that verifies.
+        for data in (message, digest):
+            signature = self._sign(data, mechanism_param=(True, None))
+            if verify_prehashed(self.public_raw(), digest, signature):
+                return signature
+        raise KeyUnavailable(
+            "key_unavailable", "the token did not produce a valid Ed25519ph signature"
+        )
 
 
 def _ec_point_raw(point: bytes) -> bytes:
