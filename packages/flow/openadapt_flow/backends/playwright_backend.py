@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 from urllib.parse import urlsplit
 
+from openadapt_flow.backends import _write_fence
 from openadapt_flow.backends._page_quiescence import PageQuiescence
 from openadapt_flow.backends._server_responses import ServerResponseLog
 from openadapt_flow.runtime.step_timing import timed_span
@@ -1177,6 +1178,20 @@ class PlaywrightBackend:
         # The server's answers to write requests, kept as save evidence (see
         # openadapt_flow.backends._server_responses). Never a check.
         self._server_responses = ServerResponseLog(page)
+        # Which WebSockets the page has open, for the write fence (see
+        # openadapt_flow.backends._write_fence). ``launch`` arms it before
+        # the first document; a page wrapped later is fully tracked only from
+        # its next document load.
+        self._websockets = _write_fence.tracker_for(page)
+
+    def write_fence(self) -> Any:
+        """A context manager that blocks every write while its body runs.
+
+        Yields a :class:`~openadapt_flow.backends._write_fence.FenceReport`:
+        ``refusal`` when the fence could not go up, else the write attempts
+        it blocked.
+        """
+        return _write_fence.write_fence(self.page, self._websockets)
 
     def server_response_mark(self) -> int:
         """Where the log of server answers to write requests stands now."""
@@ -3621,6 +3636,7 @@ class PlaywrightBackend:
             except BaseException:
                 close()
                 raise
+        _write_fence.track(page)
         page.goto(url)
         backend = cls(page)
         # Read by the generic web environment observer: the environment

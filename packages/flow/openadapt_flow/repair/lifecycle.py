@@ -846,16 +846,11 @@ class RepairStore:
             metrics.verified_runs += 1
 
         if regression:
-            reason = (
-                "canary regression on run "
-                f"{observation.run_id!r}: "
-                + (
-                    "silent-incorrect result"
-                    if observation.silent_incorrect
-                    else "verification regression"
-                )
-                + (f" ({observation.detail})" if observation.detail else "")
-            )
+            reason = "canary regression on run " f"{observation.run_id!r}: " + (
+                "silent-incorrect result"
+                if observation.silent_incorrect
+                else "verification regression"
+            ) + (f" ({observation.detail})" if observation.detail else "")
             metrics.halted = True
             metrics.halt_reason = reason
             self._revert_pointer(candidate, note=reason)

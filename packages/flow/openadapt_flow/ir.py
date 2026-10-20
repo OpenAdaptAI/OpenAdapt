@@ -1032,6 +1032,24 @@ class Interstitial(BaseModel):
         description="Expected visual postcondition after dismissal. It must hold "
         "and the detection predicate must no longer hold before replay continues.",
     )
+    write_fence: Optional[bool] = Field(
+        default=None,
+        description="Dismiss only while the browser blocks every write "
+        "(openadapt_flow.backends._write_fence). A backend that can't fence, a "
+        "fence that can't go up, or any write the dismissal attempts halts the "
+        "run. Set on dismissals a repair learned: their non-consequential "
+        "declaration rests on that evidence.",
+    )
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Leave ``write_fence`` out when unset, so every existing
+        interstitial (and bundle digest) serializes exactly as before."""
+
+        data: dict[str, Any] = handler(self)
+        if self.write_fence is None:
+            data.pop("write_fence", None)
+        return data
 
     @model_validator(mode="after")
     def _validate_safe_detection_and_dismissal(self) -> "Interstitial":
@@ -1043,6 +1061,8 @@ class Interstitial(BaseModel):
             raise ValueError(
                 "interstitial must declare at most one dismissal mechanism"
             )
+        if self.write_fence and self.dismiss_anchor is None:
+            raise ValueError("a write-fenced interstitial must dismiss by a click")
         if self.dismiss_anchor is not None and not self.dismiss_anchor.template.strip():
             structural = self.dismiss_anchor.structural
             has_structural_identity = structural is not None and any(
