@@ -53,7 +53,7 @@ from typing import Any, Optional
 
 from .arm import WorkItem
 
-WORKLOAD_VERSION = "lifecycle-workload/2026-10-20.1"
+WORKLOAD_VERSION = "lifecycle-workload/2026-10-20.2"
 
 EXCEPTION_MIX: dict[str, float] = {
     "dup_existing": 0.03,
@@ -87,14 +87,18 @@ FIRST = (
     "Henrik Talia Oren Signe Mateo Leilani Fergus Ilse Kwame Rosalind Zeno "
     "Petra Anouk Calum Dalia Emeric Farida Gideon Hollis Ida Jasper Kalinda"
 ).split()
-LAST = (
-    "Brennan Feld Carvalho Lindqvist Adeyemi Whitcombe Raman Okafor Vance "
-    "Halvorsen Quist Marchetti Szabo Tanaka Delacroix Mbeki Novak Ferreira "
-    "Ashby Kowalczyk Lund Pereira Ostrowski Nakamura Esposito Fairweather "
-    "Galloway Hartigan Ibarra Jablonski Kestrel Larkspur Merriweather Nyberg "
-    "Oyelaran Pemberton Quennell Rasmussen Stavros Thorne Ulloa Vasquez "
-    "Wexford Yarrow Zielinski Abernathy Birchall Caddick Dunmore Ng Li"
+#: 300 invented surnames (20 stems x 15 endings). OpenEMR's duplicate search
+#: lists any chart that shares a last name, so the size of this pool sets how
+#: often a new patient meets a namesake; a real practice has common surnames
+#: too. Short surnames are kept for the same reason as short first names.
+_STEMS = (
+    "Ash Birch Cald Dun Ell Fair Gal Hart Ivers Jess Kell Lang Mar Nor Oak "
+    "Pem Quen Rad Stan Thorn"
 ).split()
+_ENDINGS = (
+    "by ford wick ton ley more well wood field brook combe stead mere gate ridge"
+).split()
+LAST = [a + b for a in _STEMS for b in _ENDINGS][:298] + ["Ng", "Li"]
 STREETS = (
     "WILLOW BEND ROAD QUARRY HILL DRIVE LANTERN COURT FERRY STREET CEDAR ROW "
     "BEACON TERRACE STATION AVENUE MILL ROAD ORCHARD LANE HARBOR WAY"

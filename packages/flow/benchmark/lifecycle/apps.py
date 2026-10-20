@@ -40,9 +40,11 @@ from typing import Any, Optional
 
 HERE = Path(__file__).resolve().parent
 BENCH = HERE.parent
-PROJECT = "openadapt-openemr-lifecycle"
-UI_PORT = "9421"
-API_PORT = "9420"
+#: Another session can run its own copy: set these three (and
+#: LIFECYCLE_OPENEMR_STATE) to its own project, ports and state folder.
+PROJECT = os.environ.get("LIFECYCLE_OPENEMR_PROJECT", "openadapt-openemr-lifecycle")
+UI_PORT = os.environ.get("LIFECYCLE_UI_PORT", "9421")
+API_PORT = os.environ.get("LIFECYCLE_API_PORT", "9420")
 WEBROOT = "/var/www/localhost/htdocs/openemr"
 FORM = f"{WEBROOT}/interface/new/new_comprehensive.php"
 POPUP = f"{WEBROOT}/interface/new/new_search_popup.php"
@@ -281,6 +283,7 @@ class OpenEMRApp:
             "api_port": int(API_PORT),
             "rest_read_session": lambda: self.fx.token_session("oracle"),
             "rest_write_session": lambda: self.fx.token_session("actor"),
+            "fixture": self.fx,
         }
 
     def point_hooks_here(self) -> None:
@@ -447,9 +450,11 @@ class OpenEMRApp:
                 "CREATE TABLE IF NOT EXISTS lifecycle.fault_budget "
                 "(k VARCHAR(190) PRIMARY KEY, n INT) ENGINE=Aria TRANSACTIONAL=0; "
                 f"REPLACE INTO lifecycle.fault_budget VALUES ('{email}', {int(inj.get('times', 0))}); "
-                "DROP TRIGGER IF EXISTS openemr.oa_lifecycle_fault; "
+                "DROP TRIGGER IF EXISTS openemr.oa_lifecycle_fault;\n"
+                "DELIMITER //\n"
                 "CREATE TRIGGER openemr.oa_lifecycle_fault BEFORE INSERT ON openemr.patient_data "
-                f"FOR EACH ROW BEGIN {body} END;"
+                f"FOR EACH ROW BEGIN {body} END//\n"
+                "DELIMITER ;\n"
             )
             return {"event": event, "trigger": body}
         raise ValueError(f"unknown injection {event}")

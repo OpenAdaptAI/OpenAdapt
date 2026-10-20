@@ -166,8 +166,45 @@ def render(res: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def stops(run_dir: Path) -> list[dict[str, Any]]:
+    """One row per item an arm did not claim done, with the oracle's view of
+    whether anything was actually wrong (for false-stop root-causing)."""
+
+    out = []
+    for r in load(run_dir):
+        if r["type"] != "item_result" or r["claimed"] == "done":
+            continue
+        d = r.get("detail") or {}
+        repair = d.get("self_repair") or {}
+        out.append(
+            {
+                "arm": r["arm"],
+                "seq": r["seq"],
+                "item_id": r["item_id"],
+                "evidence": r.get("evidence"),
+                "app": "openemr",
+                "exception": r["exception"],
+                "drift_active": r.get("drift_active"),
+                "halt_step": d.get("halt_step"),
+                "halt_reason": d.get("halt_reason"),
+                "execution_outcome": d.get("execution_outcome"),
+                "transaction_outcome": d.get("transaction_outcome"),
+                "repair": repair if isinstance(repair, dict) else str(repair),
+                "outcome": r["outcome"],
+                "anything_wrong": r["outcome"] not in ("false_stop",),
+                "oracle": r["oracle"].get("verdict"),
+                "final": r["final_oracle"],
+                "product_status": r["product_status"],
+            }
+        )
+    return out
+
+
 def write_report(run_dir: Path) -> dict[str, Any]:
     res = results(run_dir)
+    (run_dir / "stops.jsonl").write_text(
+        "".join(json.dumps(s, sort_keys=True) + "\n" for s in stops(run_dir))
+    )
     (run_dir / "results.json").write_text(
         json.dumps(res, indent=2, sort_keys=True) + "\n"
     )

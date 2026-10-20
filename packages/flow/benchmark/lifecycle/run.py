@@ -235,7 +235,7 @@ def run_arm(
         for th in during:
             th.join(timeout=60)
         cleared = app.clear_item_events()
-        for phase in result.phases:
+        for phase in [*result.phases, *result.detail.get("maintenance_phases", [])]:
             ledger.write(
                 {
                     "type": "phase",
