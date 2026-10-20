@@ -181,14 +181,20 @@ def test_monorepo_engine_release_publishes_only_a_green_reviewed_version() -> No
     gate = workflow[workflow.index("\n  gate:") : workflow.index("\n  build-python:")]
     state = gate.index("- name: Read the version and the state of its release")
     subject = gate.index("- name: Choose the commit whose checks decide the release")
-    wait = gate.index("- name: Wait for that commit's Packages run and its desktop jobs")
+    wait = gate.index(
+        "- name: Require that commit's Packages run and its desktop jobs to have passed"
+    )
     unchanged = gate.index("- name: Require that main has not changed Desktop since that commit")
 
     assert (
-        "  push:\n    branches: [main]\n    paths:\n      - packages/desktop/pyproject.toml"
-        in triggers
+        "  workflow_run:\n    workflows: [Packages]\n    types: [completed]\n"
+        "    branches: [main]" in triggers
     )
-    assert state < subject < wait < unchanged
+    assert "  push:" not in triggers
+    # The subject is classified first, so an unrelated commit never reaches
+    # the release-state check.
+    assert subject < state < wait < unchanged
+    assert 'subject="${PACKAGES_HEAD_SHA}"' in gate
     assert "https://pypi.org/pypi/openadapt-desktop/${version}/json" in gate
     assert "partly published" in gate
     assert "actions/workflows/packages.yml/runs" in gate

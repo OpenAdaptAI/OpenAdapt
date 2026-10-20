@@ -57,7 +57,16 @@ _TRAY_COMMANDS = frozenset(
 # Local coding-agent coach. Same loopback socket as the tray, different
 # vocabulary: coach events are never forwarded to tray clients.
 _LOCAL_AGENT_COMMANDS = frozenset({"set_coach", "get_coach", "clear_coach"})
-_SOCKET_COMMANDS = _TRAY_COMMANDS | _LOCAL_AGENT_COMMANDS
+
+# The person's own agent can set up Check it: read what OpenAdapt filled in
+# from the recording, answer the record-check and values questions, and run
+# the practice item and drills (the practice save still waits for a person in
+# the window). Approving is not here: only a person approves, in the window.
+# Every answer that arrives here is recorded as the agent's.
+_SETUP_AGENT_COMMANDS = frozenset(
+    {"get_workflows", "get_check_setup", "answer_check_setup", "run_check_cases"}
+)
+_SOCKET_COMMANDS = _TRAY_COMMANDS | _LOCAL_AGENT_COMMANDS | _SETUP_AGENT_COMMANDS
 
 # Events the tray's IPCMessageType enum can decode. Anything else is dropped
 # before forwarding so the tray never hits a from_json ValueError.
@@ -233,7 +242,10 @@ class DesktopSocketServer:
         if cmd not in _SOCKET_COMMANDS:
             logger.warning("Tray sent unsupported command: {c}", c=cmd)
             return
-        params = frame.get("data") or {}
+        params = dict(frame.get("data") or {})
+        if cmd == "answer_check_setup":
+            # A socket caller is never the person at the window.
+            params["answered_by"] = "agent"
         try:
             with self._dispatch_lock:
                 result = self.dispatcher.dispatch(cmd, params)
@@ -249,6 +261,8 @@ class DesktopSocketServer:
         # to a tray client that cannot decode the type.
         if cmd in _LOCAL_AGENT_COMMANDS and result is not None:
             self._send(conn, "coach", result)
+        if cmd in _SETUP_AGENT_COMMANDS:
+            self._send(conn, "check_setup", {"cmd": cmd, "result": result})
 
     # ------------------------------------------------------------- send/emit
 

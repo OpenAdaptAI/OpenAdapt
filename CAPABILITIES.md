@@ -84,7 +84,7 @@ shipping in the next release.
 | Learns branching programs from several demonstrations, from repeated halts, and from many background runs. | `induce`, `teach-branch`, [SHADOW_MINING.md](packages/capture/docs/SHADOW_MINING.md), [LEARN_FROM_MANY_RUNS.md](packages/flow/docs/LEARN_FROM_MANY_RUNS.md) |
 | Chains programs across surfaces, and one program can switch surfaces, tabs and popups mid-run. | `compose`, `process`, [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
 | Uses page structure first on web, Windows, macOS and Linux, with pixels as the fallback for remote desktops. Benchmarks labelled "vision-only" ran a deliberately pixel-only arm. | [RESOLUTION_LADDER.md](packages/flow/docs/RESOLUTION_LADDER.md) |
-| Runs steps as direct API calls, compiled from the network traffic captured while recording. | `api`, [#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269) |
+| Replaces a single HTML form submission with the request the app itself sends, compiled from the network traffic captured while recording, then reads the record back. JSON or GraphQL requests, multi-step wizards and governed runs still use the screen steps. | `api`, [API_TIER.md](packages/flow/docs/API_TIER.md) |
 | Builds the record check itself. After a save, the app usually reads the record back to show it; `scaffold-verifier` finds that read in the captured traffic or a read-only database, builds the check from it and tries to break it before a person reviews it. No API or SQL needs to be written by hand. | [EFFECT_KIT.md](packages/flow/docs/EFFECT_KIT.md#a-record-check-built-from-the-apps-own-reads-scaffold-verifier) |
 | Checks a save on desktop, RDP and Citrix apps with no API at all, by looking the record up in the app's own screens in a separate session. | [EFFECT_KIT.md](packages/flow/docs/EFFECT_KIT.md#separate-session-desktop-read-back-desktop_readback) |
 | Keeps pixel-path runs working across display scaling from 100% to 175% and font smoothing on or off, and stops rather than saves when the record changed. | [benchmark/pixel_scale](packages/flow/benchmark/pixel_scale/README.md) |
@@ -128,6 +128,7 @@ improvising or retrying when something is off.
 | Capability | Status | Evidence | Where |
 | --- | --- | --- | --- |
 | Compile one or more demonstrations into a deterministic program | Released | Real app (OpenEMR referral, 62 timed runs) | `openadapt-flow record`, `compile`; [packages/flow](packages/flow/README.md) |
+| Classify common local edits without a person (select-all, Enter in a field or dropdown, an in-form tab, an informational dialog's dismiss), only when the recording's network capture shows no write and a runtime check confirms only the expected change | On main ([#1366](https://github.com/OpenAdaptAI/OpenAdapt/pull/1366)) | Synthetic; OpenEMR referral recording re-admitted offline (violations 12 to 1 under `permissive`) | [LOCAL_EDIT_CLASSIFICATION.md](packages/flow/docs/design/LOCAL_EDIT_CLASSIFICATION.md), `compiler/local_edit.py` |
 | Right-record check before any write (structure, then OCR, then pixels) | Released | Real app and synthetic | [RESOLUTION_LADDER.md](packages/flow/docs/RESOLUTION_LADDER.md), `runtime/identity.py` |
 | Read the saved record back from the system of record (API, database, FHIR, separate session) | Released | Real app (OpenEMR 12 of 12 fields) | [VERIFICATION.md](packages/flow/docs/VERIFICATION.md), `runtime/effects/` |
 | Read values out of an app as a workflow step (READ), with a records format, a signed review queue and export to CSV or a database | On main ([#1229](https://github.com/OpenAdaptAI/OpenAdapt/pull/1229), [#1215](https://github.com/OpenAdaptAI/OpenAdapt/pull/1215), [#1218](https://github.com/OpenAdaptAI/OpenAdapt/pull/1218)–[#1224](https://github.com/OpenAdaptAI/OpenAdapt/pull/1224)) | Synthetic (mock desktop apps) | `openadapt_flow/interchange/` |
@@ -184,6 +185,8 @@ improvising or retrying when something is off.
 | One program that switches surfaces, tabs and popups mid-run | On main ([#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197)) | Real Chromium; Windows switch on a mock | [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
 | Halt when a workflow qualified with page structure runs on a pixels-only surface | Released | Synthetic | `openadapt-flow qualify` |
 | Lift look-alike identity stops with a complete known-ID list | Released | Synthetic (rendered record list) | `openadapt-flow known-ids` |
+| Take extra looks before stopping on a look-alike record ID: fresh frames, the known-ID list, and a select-and-copy of the ID where the surface allows it | On main ([#1333](https://github.com/OpenAdaptAI/OpenAdapt/pull/1333)) | Synthetic (dense record list in a browser) | `runtime.identity_copy_look` in deployment.yaml; [IDENTITY_LOOKS.md](packages/flow/benchmark/identity_looks/IDENTITY_LOOKS.md) |
+| Check an icon-only click target's hover response (highlight, tooltip) before clicking on a pixel surface, and re-check the target and identity regions on a fresh frame right before every pixel click | On main ([#1334](https://github.com/OpenAdaptAI/OpenAdapt/pull/1334)) | Synthetic (in-process kiosk) | `Recorder(capture_hover=True)`; [hover_identity](packages/flow/benchmark/hover_identity/README.md) |
 
 ## The fastest layer the app allows
 
@@ -197,6 +200,7 @@ improvising or retrying when something is off.
 | Run an API step in a durable run: checkpoint the span after the save is sent, never resend or redo a save that may have landed, and reconcile it by reading the record back | On main ([#1358](https://github.com/OpenAdaptAI/OpenAdapt/pull/1358)) | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#in-a-durable-run) |
 | Run an admitted API step under a governed run authorization and the Standard or Regulated profile: the authorization names the API step by digest, the person who admits it names the right-record parameter, and the outcome reads `VERIFIED` | On main ([#1361](https://github.com/OpenAdaptAI/OpenAdapt/pull/1361)) | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#under-governance) |
 | Defer an API save's read-back with pipelined read-back, as for a GUI save, and keep self-repair's probes and resumed run on the repaired GUI step | On main ([#1362](https://github.com/OpenAdaptAI/OpenAdapt/pull/1362)) | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#with-parallel-workers-pipelined-read-back-and-self-repair) |
+| Say, for every feature under every run profile, whether it works or is refused and why, checked against the runtime in CI | On main ([#1364](https://github.com/OpenAdaptAI/OpenAdapt/pull/1364)) | Synthetic | [COMPATIBILITY.md](packages/flow/docs/COMPATIBILITY.md) |
 | Run a worklist on several workers at once, one signed-in session each, each item claimed once, with a stop on any worker stopping all | On main ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic patients on a local OpenEMR test copy | `--workers`, [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md) |
 | Read a save back while the next item runs (pipelined read-back, REST, FHIR, GraphQL or SQL record checks) | On main ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic | `--readback-window`, [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md) |
 | A faster speed profile that keeps every check (one insert per plain text field, shorter page-quiet wait) | On main ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic | `runtime.speed: fast`, [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md) |
@@ -242,8 +246,11 @@ improvising or retrying when something is off.
 | Find and redact personal and health data in text, screenshots and structure | Released (privacy 1.1.3) | Unit tests | [packages/privacy](packages/privacy/README.md), [PRIVACY.md](packages/flow/docs/PRIVACY.md) |
 | Scrub by default before anything leaves the machine | On main ([#1262](https://github.com/OpenAdaptAI/OpenAdapt/pull/1262)) | Unit tests | `openadapt-privacy` |
 | Each package installs on its own within a size budget, checked in CI (privacy without desktop, capture without plotting) | On main ([#1270](https://github.com/OpenAdaptAI/OpenAdapt/pull/1270), [#1271](https://github.com/OpenAdaptAI/OpenAdapt/pull/1271), [#1279](https://github.com/OpenAdaptAI/OpenAdapt/pull/1279)) | CI | `.github/workflows/packages.yml` |
+| See a compiled program as a map (every step, exact edge, loop and stop rule, with each step's checks) and play a recorded run over it; one React package that Desktop, app.openadapt.ai and openadapt.ai share | On main ([packages/program-graph](packages/program-graph/README.md)) | Real compiled OpenEMR referral program and a recorded scoreboard run, both on synthetic data | `@openadapt/program-graph`; `openadapt-flow visualize --format json` |
 | Encrypt PHI at rest: every bundle file that can hold patient data under one sealed index (unknown files refused), web recordings from the first frame, and the run directories of sealed bundles; compile, induce, scaffold-verifier, qualify, admit, run, resume and undo read them in memory and refuse without the key | On main | Synthetic (no-plaintext audit-hook test over record, compile and a VERIFIED run; per-frame cost measured) | `openadapt-flow seal`, `record`; [phi_at_rest.md](packages/flow/docs/phi_at_rest.md) |
 | Signed receipts (Seals), countersigned and timestamped, offline by default | Released | Unit tests, real TSA tokens | `openadapt-flow seal`, `countersign`, `local-seal` |
+| Offline Seals signed with a key the customer holds: a key file, the OS keychain, or a PKCS#11 token or HSM; pinned keys with rotation and revocation; no fallback to a generated key | On main ([#1392](https://github.com/OpenAdaptAI/OpenAdapt/pull/1392)) | Unit tests with synthetic data (keychain and PKCS#11 through stand-ins) | `openadapt-flow local-seal --key`, `local-seal key create`, `pin`, `revoke`; [OFFLINE_SEALS.md](packages/flow/docs/OFFLINE_SEALS.md#customer-held-keys) |
+| Anchor an offline Seal in the public Sigstore Rekor transparency log (opt-in; sends one digest and the public key), and verify the anchor offline from the stored inclusion proof | On main ([#1394](https://github.com/OpenAdaptAI/OpenAdapt/pull/1394)) | Unit tests against a simulated Rekor log; Ed25519ph matches the RFC 8032 test vector | `openadapt-flow local-seal anchor`, `local-seal verify --require-anchor`; [OFFLINE_SEALS.md](packages/flow/docs/OFFLINE_SEALS.md#optional-anchor-a-seal-in-a-public-transparency-log) |
 | Strict no-outbound mode and an unattended on-prem service | Released | Synthetic | `openadapt-flow no-outbound`, `service`; [ON_PREM.md](packages/flow/docs/ON_PREM.md) |
 
 ## Every command, by capability
@@ -325,7 +332,7 @@ A test fails when a command has no file or this list is out of date.
 
 - `attach-seal`
 - `countersign`
-- `local-seal`
+- `local-seal`: Offline Seals: customer-held keys, pinned verification, optional Rekor anchoring.
 - `seal`
 
 **Run on premises:**
@@ -352,6 +359,7 @@ A test fails when a command has no file or this list is out of date.
 - `bench`
 - `benchmark`
 - `demo`
+- `silent-saves`: Scores any GUI agent on injected bad saves, from the source checkout.
 - `tutorial`
 
 **Guard an agent you already run:**
@@ -385,6 +393,29 @@ A test fails when a command has no file or this list is out of date.
   complete database read path caught all 72. This is a coverage test over a
   small, hand-authored set of faults, not a real-world error rate:
   [EFFECT_E2E.md](packages/flow/benchmark/effect_e2e/EFFECT_E2E.md).
+- **OpenEMR referral: agent, screen program and API step.** Median wall time
+  per referral, from a fresh browser through sign-in, the entry and the read-back:
+  agent alone 36.5 s (62 of 63 correct, the 14 to 15 Oct study); compiled program
+  on the screen 22.5 s (18 of 18); the same program with the API step 3.3 s
+  (18 of 18). The program rows ran on 19 Oct, interleaved on one copy, without
+  the approval gate or resumable runs, and the API step was admitted by the
+  benchmark harness:
+  [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#openemr-agent-screen-program-and-api-step).
+- **An agent's claims versus the read-back, on OpenEMR.** With faults injected
+  in the fixture's database (partial, wrong value, duplicate, not persisted,
+  another chart deleted, another chart edited; 5 items each), Claude Sonnet 5.5
+  computer use claimed success on all 30 bad saves. `verify-run` caught 25 and
+  confirmed 5 of 5 clean saves with no false alarms. It missed all 5 edits to a
+  different chart: its collateral check finds a removed record, not a changed
+  one.:
+  [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back).
+- **An agent's claims versus the read-back.** Claude Sonnet 5.5 computer use,
+  working alone on a test app whose server broke the save in 6 ways (5 items
+  each), reported all 30 bad saves as done. `verify-run` flagged all 30 and
+  confirmed all 10 clean saves, with no false alarms. The app shows "saved"
+  before the server answers, so this measures what the screen can't show, not
+  the agent's care. Not yet run on OpenEMR:
+  [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back).
 
 ## Limits
 

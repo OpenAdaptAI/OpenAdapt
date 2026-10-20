@@ -1,15 +1,26 @@
 # API steps from a recording's network traffic
 
-A web form save that OpenAdapt can repeat as one HTTP request runs as one
-request instead of as the clicks and keystrokes that filled the form. The
-right-record check before the save and the record check after it stay the
-same. If anything the API step depends on has changed, the recorded GUI
+**Scope: a single HTML form submission.** An API step repeats one
+`application/x-www-form-urlencoded` POST of one HTML form, read again from
+the live page, in place of the clicks and keystrokes that filled it. It is
+not a general API client: JSON or script-built requests, more than one
+write, multi-page server state, and forms whose script validates or rewrites
+values all stay on the GUI.
+
+The right-record check before the save and the record check after it stay
+the same. If anything the API step depends on has changed, the recorded GUI
 steps run instead.
 
 Its speed is measured on the local OpenEMR referral as arm `program_api` of
 the benchmark scoreboard, against the same program on the GUI (`program`),
 with the same record check. The harness and the earlier spike are in
 [benchmark/openemr_api_tier](../benchmark/openemr_api_tier/README.md).
+
+Under per-item approval and a durable run (no run gate; the harness answers
+the approvals and their wait is left out), the API step saved each new
+referral correctly with one approval at a median 1.12 s of engine time,
+against 15.95 s and two approvals with API steps off (20 runs each,
+2026-10-19): [results](../benchmark/openemr_api_tier/results/approval_durable/README.md).
 
 ## How to use it
 
@@ -40,9 +51,11 @@ openadapt-flow run bundle/ ...
    first of those steps carries `api_fallback` with the reason, and the GUI
    steps run as recorded.
 
-If you change a check on one of the covered steps after compiling (for
-example, you add a required on-screen text), the API step stops running
-because it would skip that check. Run `openadapt-flow api propose bundle/
+If you change any of the covered steps after compiling (an action, a typed
+value or parameter, a target or its identity evidence, a guard, an on-screen
+check, or the save's record check), the API step stops running: its
+admission is bound to a digest of the complete definition of every step it
+replaces, the save included. Run `openadapt-flow api propose bundle/
 --recording rec/` to propose it again, then admit it.
 
 ## What the compiler checks
@@ -80,6 +93,10 @@ doesn't propose an API step in these cases:
 - the save sends a secret field;
 - the form page wasn't captured;
 - the save isn't the program's last step;
+- the steps the API step would replace also sent another write (a POST,
+  PUT, PATCH or DELETE other than the save, such as a reservation, an
+  autosave or a background call). Admission and runs refuse such a binding
+  too;
 - the program has branches;
 - a URL value equals two inputs' values (ambiguous), or the save or a
   pre-check is on another origin than the form;
@@ -108,9 +125,16 @@ Before it sends the save, the API step:
 1. reads the form page again in this session;
 2. refuses if the form's fields or its client-side validation rules (for
    example, OpenEMR's `constraints` object) differ from the recording;
-3. builds the body, and refuses if a field the form requires would be
-   empty;
-4. runs the pre-checks.
+3. refuses if the form runs script it can't run: an `on*` handler on the
+   form (`onsubmit`) or on a field it sends (`onchange`, `oninput`,
+   `onblur`, script that can validate or rewrite a value), a page script
+   listening for the submit, or a validate.js rule kind other than
+   `presence`, `length`, `format`, `numericality` and `email`;
+4. builds the body and checks it the way the browser would before it
+   submits: native HTML constraints (`required`, `minlength`, `maxlength`,
+   `pattern`, `min`, `max`, and the `email`, `url`, `number` and `date`
+   input types) and the page's validate.js rules;
+5. runs the pre-checks.
 
 Each of these refusals means the save wasn't sent, so the GUI steps run.
 After the save request starts, the API tier's no-double-write rule
@@ -239,6 +263,9 @@ Not yet covered, so the GUI steps run with that reason:
   probes and resumed run use the GUI steps, because the repair and the
   person's approval are about the GUI step ([SELF_REPAIR.md](SELF_REPAIR.md)).
 
+Every feature under every run profile, and the API step with each other
+feature, is in [COMPATIBILITY.md](COMPATIBILITY.md).
+
 ## When it doesn't run
 
 The API step runs only in a plain linear run. It doesn't run, and the GUI
@@ -291,9 +318,16 @@ recording.
   over a websocket aren't proposed.
 - The server may enforce less than the page. On OpenEMR, the duplicate
   check and the required fields run only in the browser. The API step
-  carries over the checks it can see (pre-checks and `constraints`
-  presence rules). Logic in the page's script that it can't see is the main
-  risk of this tier, and it's why a person admits each API step.
+  carries over the checks it can evaluate (pre-checks, native HTML
+  constraints and validate.js rules of the kinds above), and leaves a form
+  whose script it can't run to the GUI. A `pattern` is evaluated with
+  Python's regular expressions, which differ from the browser's in rare
+  syntax; one that doesn't compile keeps the save on the GUI. Letting
+  qualification show that the server enforces a script-only rule, so the
+  API step can run anyway, isn't built yet.
+- OpenEMR's new-patient form runs script on submit (`submitme(...)`) and on
+  each name field (`capitalizeMe`, which rewrites the typed value), and its
+  `constraints` use a custom `pastDate` rule. So its save stays on the GUI.
 - Multi-step server state (wizards, uploads, locks held between pages) needs
   the whole request sequence, and isn't proposed.
 

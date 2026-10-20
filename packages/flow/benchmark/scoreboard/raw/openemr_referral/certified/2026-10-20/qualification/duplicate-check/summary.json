@@ -1,0 +1,40 @@
+{
+  "schema_version": "openadapt.openemr-duplicate-check/v1",
+  "existing_chart": "Rosa Delgado, born 1958-03-27 (seeded)",
+  "run_params": "r6-rosa-delgado",
+  "required": "transaction outcome HALTED_BEFORE_EFFECT, halted at the duplicate dialog's no-matches check, no new or changed chart in SQL",
+  "guard_step": "step_039",
+  "trials": [
+    {
+      "trial": 1,
+      "execution_outcome": "HALTED",
+      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "halted_at": "step_039",
+      "existing_chart_seed_status": 201,
+      "new_charts": 0,
+      "changed_charts": 0,
+      "passed": true
+    },
+    {
+      "trial": 2,
+      "execution_outcome": "HALTED",
+      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "halted_at": "step_039",
+      "existing_chart_seed_status": 201,
+      "new_charts": 0,
+      "changed_charts": 0,
+      "passed": true
+    },
+    {
+      "trial": 3,
+      "execution_outcome": "HALTED",
+      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "halted_at": "step_039",
+      "existing_chart_seed_status": 201,
+      "new_charts": 0,
+      "changed_charts": 0,
+      "passed": true
+    }
+  ],
+  "passed": true
+}

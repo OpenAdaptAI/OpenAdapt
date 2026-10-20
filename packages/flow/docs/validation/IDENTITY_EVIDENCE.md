@@ -53,6 +53,49 @@ The current matcher's same-entity false-abort rates on those corpora (60.5%
 for v1, 47.3% for v2) are higher than the published 43.6% to 49.3%, because
 later fixes made the matcher more conservative.
 
+## Extra looks before stopping
+
+Before a step stops on a look-alike identifier, the replayer now takes extra
+looks that change nothing: two fresh screenshots, the 2x re-read, the
+known-ID list, and, where the deployment allows it, a select-and-copy of the
+identifier's text box. Only the list, or a copied ID that equals a run
+parameter in the identity band, can settle the record; any look that names
+another record is final. Measured on 2026-10-19 with the real replayer
+against a live browser render of the dense record list (288 armed clicks on
+the correct row and 288 on the adjacent sibling, seeds 1 to 3, four render
+conditions, two click configs), on the pixel path the compiler builds for a
+pixel recording:
+
+- with no list and no copy, false stops on the correct row stayed
+  **232 / 288** (80.6%); the extra looks need a list or a copy to settle
+  anything;
+- with the known-ID list, **122 / 288** before and after (three agreeing
+  frames instead of two cost nothing here);
+- with the copy look and the record's ID as a run parameter, **24 / 288**
+  (8.3%), with or without the list; 22 of the 24 are IDs that the recording
+  itself read with a look-alike glyph, so the band was not linked to the
+  parameter;
+- in a workflow that always opens the recorded record, the copy look changed
+  nothing (**232 / 288**): the recorded ID is OCR text, so a copy can stop a
+  run there but never confirm one;
+- wrong-record accepts on the sibling row: **0 / 288** in every
+  configuration, before and after.
+
+See [`benchmark/identity_looks/IDENTITY_LOOKS.md`](../../benchmark/identity_looks/IDENTITY_LOOKS.md).
+These pages are rendered in a browser, where selecting text is inert and the
+clipboard is local. On RDP or Citrix the copy look needs clipboard redirection,
+which many deployments turn off.
+
+## Hover response before an icon-only click
+
+An icon-only click has no text that names its control. When the recording
+captured the target's hover response (its highlight or tooltip), replay
+compares it before clicking. On an in-process kiosk with two identical icons
+that differ only by tooltip, swapped between recording and replay, the wrong
+icon was clicked in 2 of 3 runs before and 0 of 3 after; click steps with
+identity evidence went from 1 of 5 to 2 of 5. See
+[`benchmark/hover_identity`](../../benchmark/hover_identity/README.md).
+
 ## Interpretation
 
 The high false-abort rate is intentional: when evidence cannot distinguish the

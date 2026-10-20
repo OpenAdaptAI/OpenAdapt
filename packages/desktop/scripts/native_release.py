@@ -70,7 +70,9 @@ NATIVE_RELEASE_PROVENANCE_SCHEMA = "openadapt.native-release-provenance/v3"
 # paths name the root file.
 NATIVE_RELEASE_WORKFLOW = ".github/workflows/desktop-release.yml"
 NATIVE_RELEASE_WORKFLOW_NAME = "Desktop release"
-NATIVE_RELEASE_EVENTS = frozenset({"push", "workflow_dispatch"})
+# Releases start from a successful Packages run on main (workflow_run) or a
+# dispatch; "push" stays valid for the releases made before that.
+NATIVE_RELEASE_EVENTS = frozenset({"push", "workflow_dispatch", "workflow_run"})
 DEFAULT_REPOSITORY = "OpenAdaptAI/OpenAdapt"
 VERIFIED_RELEASE_CHANNEL = "openadapt-desktop-channel.json"
 NATIVE_RELEASE_CHANNEL_SCHEMA = "openadapt.desktop-release-channel/v3"
@@ -271,7 +273,9 @@ def set_native_version(version: str, root: Path = ROOT) -> dict[str, str]:
     result with the Git blobs of the candidate tag. Text-mode I/O would break
     that: on Windows it rewrites every ``\\n`` as ``\\r\\n``, and an omitted
     encoding decodes with the locale default. All reads and writes below are
-    therefore explicit UTF-8 bytes with LF endings.
+    therefore explicit UTF-8 bytes with LF endings. The Cargo patterns also
+    accept CRLF, because Git on Windows checks files out with CRLF by default,
+    and they keep whatever ending each line already has.
     """
 
     if not VERSION_PATTERN.fullmatch(version):
@@ -301,7 +305,10 @@ def set_native_version(version: str, root: Path = ROOT) -> dict[str, str]:
 
     cargo_toml = root / "src-tauri" / "Cargo.toml"
     text, replaced = re.subn(
-        r'(?m)^version = "[^"]+"$', f'version = "{version}"', read_source(cargo_toml), count=1
+        r'(?m)^version = "[^"]+"(?=\r?$)',
+        f'version = "{version}"',
+        read_source(cargo_toml),
+        count=1,
     )
     if replaced != 1:
         raise ValueError(f"could not rewrite package version in {cargo_toml}")
@@ -309,7 +316,7 @@ def set_native_version(version: str, root: Path = ROOT) -> dict[str, str]:
 
     cargo_lock = root / "src-tauri" / "Cargo.lock"
     text, replaced = re.subn(
-        r'(name = "openadapt-desktop"\nversion = ")[^"]+(")',
+        r'(name = "openadapt-desktop"\r?\nversion = ")[^"]+(")',
         rf"\g<1>{version}\g<2>",
         read_source(cargo_lock),
         count=1,
@@ -1017,7 +1024,8 @@ def _validate_attestation_record(record: object, *, provenance: dict, checksums:
     commit = provenance["source_commit"]
     run_id = provenance["run_id"]
     run_attempt = provenance["run_attempt"]
-    # A release runs on the push that merged the version, or on a dispatch.
+    # A release runs when Packages passes on main, or on a dispatch; releases
+    # before 0.22.0 ran on the push that merged the version.
     trigger = provenance["event"]
     repository_url = f"https://github.com/{repository}"
     workflow_uri = f"{repository_url}/{NATIVE_RELEASE_WORKFLOW}@refs/heads/main"

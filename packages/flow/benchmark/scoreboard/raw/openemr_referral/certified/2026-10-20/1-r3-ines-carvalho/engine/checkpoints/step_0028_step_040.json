@@ -1,0 +1,276 @@
+{
+  "schema_version": 2,
+  "run_id": "openemr-referral-r3-ines-carvalho-1792465396",
+  "workflow_name": "openemr-create-synthetic-patient",
+  "bundle_version": "sha256:ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+  "step_index": 28,
+  "step_id": "step_040",
+  "intent": "click 'Confirm Create New Patient'",
+  "state_id": null,
+  "next_step_index": 29,
+  "params": {
+    "title": "Mrs.",
+    "fname": "Ines",
+    "lname": "Carvalho",
+    "DOB": "1949-12-11",
+    "sex": "Female",
+    "street": "9 LANTERN COURT",
+    "city": "EXAMPLETON",
+    "state_label": "Massachusetts",
+    "postal_code": "02139",
+    "phone_home": "555-0131",
+    "email": "ines.carvalho@example.invalid",
+    "country_code": "USA"
+  },
+  "effect_verified": true,
+  "effect_approved_unverified": false,
+  "effect_contract_hashes": [
+    "sha256:4e62a81ba54524e87b8f1f9110ce5ff8b187487440ac50e524a1495d5eab17db",
+    "sha256:f1e312b601310bc7d1eb450c419b335d08222f026b1b863cc550ea65204f66bc",
+    "sha256:a67fdbc8b61ac085413cae3ccadaf849f34a794a55c9cbf1bd7306e274d66734",
+    "sha256:e2edc11ff5a6611407cb831879c797ec74791b21f3154a3e8614b13534e950dc",
+    "sha256:b2579045fee4a56bba3e07ad3af220443679a2c68ae9fcc1e1b8cafb7b230479",
+    "sha256:d88b0ae54a95f9a38052388dd1afd725ba77209b25b8f6e11626902d8a216c70",
+    "sha256:117d6795803ff2fc8d1bc72e4fea05143f1ca46f4749cf919aa579787b843a76",
+    "sha256:916eb47fd6b8d7ea8685b2138414b862ec8b5ecc48092042bbca75382fab51bd",
+    "sha256:d40109eb9c134b6043a415e7d56650ed11e34bcd5c18ff179f9a77c5f29624c1",
+    "sha256:e5df47a0ff94595db645d6ea0958cb23c0221837ffb4ee1fa220adbd8c0b4b9d",
+    "sha256:c28585d05ba1774b13cbd450a648754fcc1be02f052cfdfd5fd8571defde224e"
+  ],
+  "effect_evidence": [
+    {
+      "effect_contract_hash": "sha256:4e62a81ba54524e87b8f1f9110ce5ff8b187487440ac50e524a1495d5eab17db",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:f1e312b601310bc7d1eb450c419b335d08222f026b1b863cc550ea65204f66bc",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:a67fdbc8b61ac085413cae3ccadaf849f34a794a55c9cbf1bd7306e274d66734",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:e2edc11ff5a6611407cb831879c797ec74791b21f3154a3e8614b13534e950dc",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:b2579045fee4a56bba3e07ad3af220443679a2c68ae9fcc1e1b8cafb7b230479",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:d88b0ae54a95f9a38052388dd1afd725ba77209b25b8f6e11626902d8a216c70",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:117d6795803ff2fc8d1bc72e4fea05143f1ca46f4749cf919aa579787b843a76",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:916eb47fd6b8d7ea8685b2138414b862ec8b5ecc48092042bbca75382fab51bd",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:d40109eb9c134b6043a415e7d56650ed11e34bcd5c18ff179f9a77c5f29624c1",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:e5df47a0ff94595db645d6ea0958cb23c0221837ffb4ee1fa220adbd8c0b4b9d",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:c28585d05ba1774b13cbd450a648754fcc1be02f052cfdfd5fd8571defde224e",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    }
+  ],
+  "identity": {
+    "status": "verified",
+    "mode": "structured",
+    "coverage": 1.0,
+    "expected": "<structured identity template>",
+    "observed": "{\"form_path\":\"/interface/new/new_comprehensive.php\",\"label\":\"Confirm Create New Patient\",\"target_id\":\"confirm_create\",\"target_kind\":\"action\"}",
+    "param": null,
+    "signal_evidence": [],
+    "quorum_required": null,
+    "quorum_verified": null,
+    "pixel_evidence": null,
+    "abstain_reason": null,
+    "known_id_evidence": null,
+    "known_id_halt": null,
+    "hover": null,
+    "looks": [],
+    "look_halt": null
+  },
+  "input_verified": null,
+  "starting_state_settled": true,
+  "delivery_attempted": true,
+  "delivery_receipt": {
+    "status": "delivered",
+    "receipt_id": "playwright-6947e9b8a9374f17b66af705e7701e67",
+    "operation": "dom_click",
+    "native": false,
+    "target_fingerprint": "a9883c970a0fb9746cf9cf7dc32c22e4d8afd4cb8af1b139bf6ce63e57d25d7a",
+    "delivered_at": "2026-10-20T03:03:39.275620+00:00",
+    "outcome_verified": false
+  },
+  "drag_end_resolution": null,
+  "fresh_actuation_events": [],
+  "before_png": "steps/step_040_before.png",
+  "governed_authorization_id": "f654392c0f76442ea00ba1db3f18c91f",
+  "governed_approval_source": "local-cli-explicit-flag",
+  "postconditions_ok": true,
+  "expected_postconditions": [
+    {
+      "kind": "region_stable",
+      "text": null,
+      "region": [
+        0,
+        255,
+        1280,
+        545
+      ],
+      "phash": "fe4b96c1c9196970",
+      "phash_tolerance": 16,
+      "timeout_s": 5.0,
+      "template": "templates/step_040_expect.png"
+    },
+    {
+      "kind": "text_present",
+      "text": "Medical Record Dashboard",
+      "region": null,
+      "phash": null,
+      "phash_tolerance": 8,
+      "timeout_s": 10.0,
+      "template": null
+    }
+  ],
+  "skipped": false,
+  "actuation": "dom",
+  "delivery_uncertainty": null,
+  "resolution": {
+    "rung": "structural",
+    "point": [
+      600,
+      280
+    ],
+    "confidence": 1.0,
+    "elapsed_ms": 42.57275024428964,
+    "structural_handle": {
+      "point": [
+        600,
+        280
+      ],
+      "confidence": 1.0,
+      "region": [
+        488,
+        261,
+        225,
+        38
+      ],
+      "target_fingerprint": "a9883c970a0fb9746cf9cf7dc32c22e4d8afd4cb8af1b139bf6ce63e57d25d7a",
+      "candidate_count": 1,
+      "supported_operations": [
+        "dom_click",
+        "dom_double_click",
+        "dom_drag"
+      ]
+    }
+  },
+  "drift_oracle_calls": 0,
+  "heal": null,
+  "attended_capability_digest": null,
+  "attended_reconciliation_request_digest": null,
+  "attended_reconciliation_expected_transition_digest": null,
+  "attended_reconciliation_delivery_state": null,
+  "attended_reconciliation_effect_contract_hashes": [],
+  "attended_reconciliation_at": null,
+  "created_at": "2026-10-20T03:03:40.775921+00:00"
+}

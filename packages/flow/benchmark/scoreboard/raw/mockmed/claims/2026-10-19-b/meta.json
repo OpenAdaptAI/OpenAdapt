@@ -60,5 +60,6 @@
       ],
       "per_fault": 5
     }
-  ]
+  ],
+  "complete": true
 }

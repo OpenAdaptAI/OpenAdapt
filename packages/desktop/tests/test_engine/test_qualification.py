@@ -378,7 +378,9 @@ def test_local_case_result_refuses_unbound_retained_evidence(
             observation=signed_observation.model_dump(mode="json"),
         )
     )
-    with pytest.raises(QualificationError, match="current signed receipt"):
+    # The retained report binds the signed observation now, so the refusal
+    # comes from the case itself: no approved input or scope binds this run.
+    with pytest.raises(QualificationError, match="does not bind this exact input and run"):
         record_local_qualification_result(
             bundle,
             workflow_id="wf-1",

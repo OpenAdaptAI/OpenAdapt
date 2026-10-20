@@ -1,0 +1,50 @@
+{
+  "authorized_by": "the founder (Richard Abrich), typed in this Claude Code session: 'Yes: run r3 to r6 on the qual10 certified bundle against the local OpenEMR test fixture under the standard profile, seal them with the demo key, and record me as the authorizing person.' Path A: Standard run gate on the bundle certified in qual10 (clinical-write, with the real-duplicate check).",
+  "bundle_content_digest": "ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+  "runs": [
+    {
+      "n": 1,
+      "ref": "r3-ines-carvalho",
+      "expected": "VERIFIED",
+      "execution_outcome": "VERIFIED",
+      "transaction_outcome": "VERIFIED",
+      "new_charts": 1,
+      "changed_charts": 0,
+      "seal_key_id": "seal-ed25519-ca08dd7f42a4be01",
+      "report_sha256": "ad349a68cc2d60b7c4f36ac1558f6cc39439f69b952c883bd5a4cd14d229a2b1"
+    },
+    {
+      "n": 2,
+      "ref": "r4-theo-lindqvist",
+      "expected": "VERIFIED",
+      "execution_outcome": "VERIFIED",
+      "transaction_outcome": "VERIFIED",
+      "new_charts": 1,
+      "changed_charts": 0,
+      "seal_key_id": "seal-ed25519-ca08dd7f42a4be01",
+      "report_sha256": "391522a4414eb9db29a0f9e5d06746ea02d7ba71d9dcd8685c2f2066aa7b384a"
+    },
+    {
+      "n": 3,
+      "ref": "r5-grace-adeyemi",
+      "expected": "VERIFIED",
+      "execution_outcome": "VERIFIED",
+      "transaction_outcome": "VERIFIED",
+      "new_charts": 1,
+      "changed_charts": 0,
+      "seal_key_id": "seal-ed25519-ca08dd7f42a4be01",
+      "report_sha256": "c77e8d47fab15a16286f7c06b05e3c29353e853448695bb68c8d9bd5031dfaa0"
+    },
+    {
+      "n": 4,
+      "ref": "r6-rosa-delgado",
+      "expected": "HALTED_BEFORE_EFFECT",
+      "execution_outcome": "HALTED",
+      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "new_charts": 0,
+      "changed_charts": 0,
+      "seal_key_id": "seal-ed25519-ca08dd7f42a4be01",
+      "report_sha256": "3a1e2eecbf3a2af4628524c206db469de4d20bf310cae93dc79307f7b3d861a4"
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "existing_charts_changed": 0,
+  "field_check": [
+    {
+      "field": "title",
+      "match": true
+    },
+    {
+      "field": "fname",
+      "match": true
+    },
+    {
+      "field": "lname",
+      "match": true
+    },
+    {
+      "field": "DOB",
+      "match": true
+    },
+    {
+      "field": "sex",
+      "match": true
+    },
+    {
+      "field": "street",
+      "match": true
+    },
+    {
+      "field": "city",
+      "match": true
+    },
+    {
+      "field": "postal_code",
+      "match": true
+    },
+    {
+      "field": "phone_home",
+      "match": true
+    },
+    {
+      "field": "email",
+      "match": true
+    },
+    {
+      "field": "country_code",
+      "match": true
+    },
+    {
+      "field": "state",
+      "match": true
+    }
+  ],
+  "fields_expected": 12,
+  "fields_matched": 12,
+  "new_charts": 1,
+  "observed": "exact_record",
+  "oracle_kind": "exact_record",
+  "passed": true,
+  "patients_after": 1,
+  "patients_before": 0,
+  "read_path": "direct SQL on openemr.patient_data",
+  "schema_version": "openadapt.openemr-qualification-oracle/v1",
+  "silent_incorrect_success": false
+}

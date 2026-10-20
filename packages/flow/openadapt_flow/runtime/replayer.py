@@ -2681,6 +2681,13 @@ class Replayer:
                 )
             elif not binding.admitted():
                 reason = "the API step is not admitted (openadapt-flow api admit)"
+            elif binding.web_form.other_writes_seen:
+                # Proposed before such spans were refused: the steps it would
+                # replace also wrote, and one request can't stand in for them.
+                reason = (
+                    "the steps the API step would replace also sent other writes "
+                    f"({', '.join(binding.web_form.other_writes_seen)})"
+                )
             elif save.identity_armed and not binding.identity:
                 # The GUI save checks the right record on screen. The API step
                 # must check it too, so it needs a right-record contract.
@@ -2697,12 +2704,13 @@ class Replayer:
             elif ids != list(binding.web_form.replaces_steps):
                 reason = "the program's steps no longer match the API step"
             elif (
-                folded_checks_digest(workflow.steps[step_index:end_index])
+                folded_checks_digest(workflow.steps[step_index : end_index + 1])
                 != binding.web_form.folded_checks_digest
             ):
                 reason = (
-                    "an on-screen check of the GUI steps changed after the API "
-                    "step was proposed, and the API step would skip it "
+                    "the steps the API step replaces changed after it was "
+                    "proposed (an action, value, target, check, guard or record "
+                    "check), so the API step no longer stands for them "
                     "(openadapt-flow api propose)"
                 )
             elif self.governed_authorization is not None and (
@@ -5552,6 +5560,16 @@ class Replayer:
     ) -> None:
         """Re-evaluate an exact retained postcondition contract or refuse."""
 
+        # A local-edit check is relative to its step's start (focus, URL,
+        # title, page count) and can't be re-run after a restart. These steps
+        # had no postcondition at all before they were classified, so leaving
+        # the check out of resume revalidation keeps it exactly as strict.
+        conditions = [
+            condition
+            for condition in conditions
+            if condition.kind
+            not in {PostconditionKind.LOCAL_EDIT, PostconditionKind.FIELD_VALUE}
+        ]
         if not conditions:
             return
         non_replayable = [
@@ -10266,9 +10284,13 @@ class Replayer:
                     observed="exact local pixel evidence could not be retained",
                 )
         result.identity = check
-        governed = (
-            self.governed_authorization is not None
-            and self.governed_authorization.requires_verified_identity(step.id)
+        # Under a governed run, an armed step needs a verified identity before
+        # it acts, whether or not the authorization lists it: the durable
+        # checkpoint demands the same (step.identity_armed), and it only runs
+        # after the click. An unreadable or abstained identity halts here.
+        governed = self.governed_authorization is not None and (
+            self.governed_authorization.requires_verified_identity(step.id)
+            or step.identity_armed
         )
         signal_quorum = check.mode == "signal_quorum"
         if signal_quorum and check.status == "mismatch":
@@ -12198,11 +12220,15 @@ class Replayer:
         if isinstance(prepared, ApiActuationResult):
             return prepared.reason or "the API step is unavailable"
         effects = self._resolve_effects(list(binding.effects), params)
-        record = [
-            (key, str(expr))
-            for effect in effects
-            for key, expr in sorted(effect.match.items())
-        ]
+        # Several record checks usually select the same record (one per
+        # field): the person reads, and the digest binds, each pair once.
+        record = list(
+            dict.fromkeys(
+                (key, str(expr))
+                for effect in effects
+                for key, expr in sorted(effect.match.items())
+            )
+        )
         digest = operation_digest(
             prepared,
             record_check=[effect.contract_hash() for effect in effects],
@@ -13773,13 +13799,36 @@ class Replayer:
                 # A run has one configured observer. A surface whose boundary
                 # names another observer uses that observer's own route below.
                 configured_observer = None
-        if configured_observer is None:
-            from openadapt_flow.qualification_web_session import (
-                SIGNED_IN_WEB_SESSION_OBSERVER_ID,
-                SignedInWebSessionObserver,
-            )
+        from openadapt_flow.qualification_web_session import (
+            SIGNED_IN_WEB_SESSION_OBSERVER_ID,
+            SignedInWebSessionObserver,
+        )
+        from openadapt_flow.qualify.environment import (
+            WEB_OBSERVER_ID,
+            WebEnvironmentObserver,
+        )
 
-            if boundary.environment_observer_id == SIGNED_IN_WEB_SESSION_OBSERVER_ID:
+        if isinstance(
+            configured_observer, BackendQualificationEnvironmentObserver
+        ) and boundary.environment_observer_id in (
+            SIGNED_IN_WEB_SESSION_OBSERVER_ID,
+            WEB_OBSERVER_ID,
+        ):
+            # The deployment's default is the backend's own marker observer.
+            # A project bound to a page-owned web observer uses that observer
+            # instead; its id, contract and environment digest below still
+            # have to match the project exactly.
+            configured_observer = None
+        if configured_observer is None:
+            if boundary.environment_observer_id == WEB_OBSERVER_ID:
+                # A web app with neither OpenAdapt markers nor a session
+                # cookie: its origin, browser, viewport, platform, runtime
+                # and the version the operator confirmed (qualify's observer).
+                configured_observer = WebEnvironmentObserver(
+                    application_version=boundary.application_version,
+                    headless=bool(getattr(self.backend, "headless", True)),
+                )
+            elif boundary.environment_observer_id == SIGNED_IN_WEB_SESSION_OBSERVER_ID:
                 # Real web apps carry no OpenAdapt markers: identify them by
                 # origin and signed-in session, with the version the operator
                 # confirmed in Check it. The contract and environment digests
@@ -16852,7 +16901,13 @@ class Replayer:
         if self._governed_asset_mutation is not None:
             return self._governed_asset_mutation
         if holds:
-            return None  # target already in view; nothing to scroll
+            # Target already in view; nothing to scroll and no input sent.
+            # Record why, only for the next-target readiness check, so the
+            # outcome classifier can tell a correctly skipped scroll from an
+            # undelivered action (execution_profiles.classify_execution_outcome).
+            if implicit_target_readiness and result.delivery_attempted is not True:
+                result.scroll_target_ready_before = True
+            return None
 
         increment = math.hypot(dx, dy)
         budget = SCROLL_BUDGET_FACTOR * increment
@@ -17226,10 +17281,67 @@ class Replayer:
             return "the content recorded in the highlighted region is present"
         return None
 
+    def _local_edit_held(self, pc: Any, start_state: dict[str, Any]) -> bool:
+        """A compiler-classified local edit stayed local (fail closed).
+
+        URL, title and page count must be observable and unchanged from the
+        step's start, and focus must still be in ``pc.field_selector`` when
+        one is set. Anything unobservable fails the check: the classification
+        rests on this evidence (docs/design/LOCAL_EDIT_CLASSIFICATION.md).
+        """
+
+        for key in ("url", "page_title", "page_count"):
+            if self._structural_changed(key, start_state) is not False:
+                return False
+        if pc.field_selector:
+            reader = getattr(self.backend, "focused_element_matches", None)
+            if not callable(reader):
+                return False
+            try:
+                return reader(pc.field_selector) is True
+            except Exception:  # noqa: BLE001 - unobservable is a failure
+                return False
+        return True
+
+    def _field_value_shown(self, pc: Any) -> bool:
+        """The focused field shows this run's value of ``pc.param``.
+
+        A dropdown's selected label matches up to spacing and case; a text
+        field's value must match exactly. Unobservable is a failure.
+        """
+
+        params = getattr(self, "_current_params", None) or {}
+        if not pc.param or pc.param not in params:
+            return False
+        expected = runtime_param_text(params[pc.param])
+
+        def read(name: str) -> Optional[str]:
+            reader = getattr(self.backend, name, None)
+            if not callable(reader):
+                return None
+            try:
+                value = reader()
+            except Exception:  # noqa: BLE001 - unobservable is a failure
+                return None
+            return value if isinstance(value, str) else None
+
+        def squash(value: str) -> str:
+            return " ".join(value.split()).casefold()
+
+        label = read("focused_select_label")
+        if label is not None:
+            return squash(label) == squash(expected)
+        value = read("focused_text_value")
+        return value is not None and value == expected
+
     @staticmethod
     def _describe_postcondition(pc: Any) -> str:
         """Human-readable one-liner for a postcondition (for error messages)."""
         kind = pc.kind.value if hasattr(pc.kind, "value") else pc.kind
+        if kind == "local_edit":
+            return "local_edit (URL, title, page count and focus unchanged)"
+        if kind == "field_value":
+            return f"field_value (the focused field shows {{{pc.param}}})"
         if kind in ("text_present", "text_absent"):
             return f"{kind} {pc.text!r}"
         if kind in ("url_changed", "title_changed", "new_tab_opened"):
@@ -17276,6 +17388,10 @@ class Replayer:
     ) -> bool:
         """Evaluate a single postcondition against a frame."""
         kind = pc.kind.value if hasattr(pc.kind, "value") else pc.kind
+        if kind == "local_edit":
+            return self._local_edit_held(pc, start_state or {})
+        if kind == "field_value":
+            return self._field_value_shown(pc)
         if kind in ("url_changed", "title_changed", "new_tab_opened"):
             key = {
                 "url_changed": "url",

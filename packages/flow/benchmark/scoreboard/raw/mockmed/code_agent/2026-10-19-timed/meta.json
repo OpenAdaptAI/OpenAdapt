@@ -1,0 +1,48 @@
+{
+  "protocol_version": "2026-10-18.1",
+  "written_at": "2026-10-19T14:26:49-0400",
+  "machine": "arm64 Darwin 24.6.0",
+  "cpu_count": 12,
+  "python": "3.12.13",
+  "engine": {
+    "path": "/Users/abrichr/oa/worktrees/scoreboard-arm7/packages/flow/openadapt_flow",
+    "git_head": "a5627748b9c9334fc2401c5636c57e7c858101d5"
+  },
+  "benchmark_git_head": "a5627748b9c9334fc2401c5636c57e7c858101d5",
+  "task": "mockmed",
+  "arm": "code_agent",
+  "model": "claude-sonnet-5-5",
+  "n": 5,
+  "vision": "code",
+  "effort": "medium",
+  "max_cost_per_item": 0.3,
+  "on_screen": [
+    "Jane Sample",
+    "MRN P1"
+  ],
+  "sessions": [
+    {
+      "protocol_version": "2026-10-18.1",
+      "written_at": "2026-10-19T14:27:24-0400",
+      "machine": "arm64 Darwin 24.6.0",
+      "cpu_count": 12,
+      "python": "3.12.13",
+      "engine": {
+        "path": "/Users/abrichr/oa/worktrees/scoreboard-arm7/packages/flow/openadapt_flow",
+        "git_head": "a5627748b9c9334fc2401c5636c57e7c858101d5"
+      },
+      "benchmark_git_head": "a5627748b9c9334fc2401c5636c57e7c858101d5",
+      "task": "mockmed",
+      "arm": "code_agent",
+      "model": "claude-sonnet-5-5",
+      "n": 5,
+      "vision": "code",
+      "effort": "medium",
+      "max_cost_per_item": 0.3,
+      "on_screen": [
+        "Jane Sample",
+        "MRN P1"
+      ]
+    }
+  ]
+}
