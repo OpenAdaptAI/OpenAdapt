@@ -56,7 +56,16 @@ def test_top_level_help_prints_the_launcher_agent_command():
 
 
 def test_quickstart_prints_the_launcher_agent_command(monkeypatch, supported_python):
-    monkeypatch.setattr("openadapt.cli._invoke_flow", lambda _argv: 0)
+    from openadapt.quickstart.story import Outcome
+
+    printed = []
+
+    def fake(root, *, steps, **kwargs):
+        printed.append(steps(Outcome(root=root)).agent)
+        return Outcome(root=root)
+
+    monkeypatch.setattr("openadapt.cli._flow_runs_quickstart", lambda: True)
+    monkeypatch.setattr("openadapt.quickstart.run_quickstart", fake)
     monkeypatch.setattr("openadapt.cli._agent_serves_tutorial", lambda: True)
 
     runner = CliRunner()
@@ -64,8 +73,8 @@ def test_quickstart_prints_the_launcher_agent_command(monkeypatch, supported_pyt
         result = runner.invoke(cli_main, ["quickstart", "--out", "qs"])
 
     assert result.exit_code == 0, result.output
-    assert "openadapt agent serve --allow-run" in result.output
-    assert not _ENGINE_AGENT_COMMAND.search(result.output), result.output
+    assert printed == ["openadapt agent serve --allow-run"]
+    assert not _ENGINE_AGENT_COMMAND.search(printed[0])
 
 
 def test_agent_forwards_every_argument_and_the_exit_code(fake_agent, supported_python):

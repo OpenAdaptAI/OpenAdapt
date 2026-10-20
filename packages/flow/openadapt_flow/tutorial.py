@@ -472,6 +472,7 @@ def run_tutorial_workflow(
     headed: bool = False,
     entry_query: Optional[str] = None,
     presentation_delay_s: float = 0.0,
+    params: Optional[dict[str, str]] = None,
 ) -> Any:
     """Admit and execute the tutorial under the ``standard`` profile.
 
@@ -479,6 +480,10 @@ def run_tutorial_workflow(
     ``--break-it`` rerun passes :data:`TUTORIAL_BREAK_ENTRY_QUERY` instead.
     Nothing else differs between the two runs: same bundle, same policy, same
     gate, same verifier.
+
+    ``params`` supplies this run's inputs (the note); by default the run
+    replays the demonstrated values. The run authorization binds them, and
+    the bundle on disk is unchanged.
     """
 
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
@@ -521,7 +526,8 @@ def run_tutorial_workflow(
             f"executed:\n{gate.render()}"
         )
     replay_params = {
-        "note": str(getattr(workflow, "params", {}).get("note", TUTORIAL_NOTE))
+        "note": str(getattr(workflow, "params", {}).get("note", TUTORIAL_NOTE)),
+        **(params or {}),
     }
     authorization = build_runtime_authorization(
         workflow,

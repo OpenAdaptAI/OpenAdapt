@@ -7,13 +7,14 @@ version / PEP 668 remedy.
 
 from __future__ import annotations
 
-import shlex
+import os
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
 from openadapt.cli import main as cli_main
+from openadapt.quickstart.story import Outcome
 
 
 @pytest.fixture()
@@ -26,7 +27,21 @@ def engine_calls(monkeypatch):
     return calls
 
 
-def test_default_output_auto_suffixes_the_first_taken_name(engine_calls):
+@pytest.fixture()
+def story_calls(monkeypatch):
+    """Stand in for the three-act quickstart; record what it was asked to do."""
+    calls = []
+
+    def fake(root, **kwargs):
+        calls.append({"root": root, **kwargs})
+        return Outcome(root=root)
+
+    monkeypatch.setattr("openadapt.cli._flow_runs_quickstart", lambda: True)
+    monkeypatch.setattr("openadapt.quickstart.run_quickstart", fake)
+    return calls
+
+
+def test_default_output_auto_suffixes_the_first_taken_name(story_calls):
     runner = CliRunner()
     with runner.isolated_filesystem():
         Path("openadapt-quickstart").mkdir()
@@ -34,12 +49,11 @@ def test_default_output_auto_suffixes_the_first_taken_name(engine_calls):
         expected = Path("openadapt-quickstart-2").resolve()
 
     assert result.exit_code == 0, result.output
-    assert len(engine_calls) == 1
-    assert engine_calls[0][2] == str(expected)
-    assert "openadapt-quickstart-2" in result.output
+    assert len(story_calls) == 1
+    assert story_calls[0]["root"] == expected
 
 
-def test_default_output_keeps_counting_past_repeated_runs(engine_calls):
+def test_default_output_keeps_counting_past_repeated_runs(story_calls):
     runner = CliRunner()
     with runner.isolated_filesystem():
         Path("openadapt-quickstart").mkdir()
@@ -49,10 +63,10 @@ def test_default_output_keeps_counting_past_repeated_runs(engine_calls):
         expected = Path("openadapt-quickstart-4").resolve()
 
     assert result.exit_code == 0, result.output
-    assert engine_calls[0][2] == str(expected)
+    assert story_calls[0]["root"] == expected
 
 
-def test_explicit_out_is_honored_verbatim(engine_calls):
+def test_explicit_out_is_honored_verbatim(story_calls):
     runner = CliRunner()
     with runner.isolated_filesystem():
         Path("openadapt-quickstart").mkdir()
@@ -60,7 +74,99 @@ def test_explicit_out_is_honored_verbatim(engine_calls):
         expected = Path("my-dir").resolve()
 
     assert result.exit_code == 0, result.output
-    assert engine_calls[0][2] == str(expected)
+    assert story_calls[0]["root"] == expected
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        ([], {"break_it": True, "verbose": False}),
+        (["--no-break"], {"break_it": False}),
+        (["--verbose"], {"verbose": True}),
+        (["--break-it"], {"break_it": True}),
+    ],
+)
+def test_quickstart_options_reach_the_story(story_calls, monkeypatch, argv, expected):
+    monkeypatch.setattr("openadapt.quickstart.engine.display_available", lambda: False)
+    with CliRunner().isolated_filesystem():
+        result = CliRunner().invoke(cli_main, ["quickstart", *argv, "--out", "qs"])
+    assert result.exit_code == 0, result.output
+    for key, value in expected.items():
+        assert story_calls[0][key] == value
+
+
+@pytest.mark.parametrize(
+    ("argv", "display", "visible"),
+    [
+        ([], True, True),
+        ([], False, False),
+        (["--headless"], True, False),
+        (["--headed"], False, True),
+    ],
+)
+def test_the_browser_shows_when_a_display_is_available(
+    story_calls, monkeypatch, argv, display, visible
+):
+    monkeypatch.setattr(
+        "openadapt.quickstart.engine.display_available", lambda: display
+    )
+    with CliRunner().isolated_filesystem():
+        result = CliRunner().invoke(cli_main, ["quickstart", *argv, "--out", "qs"])
+    assert result.exit_code == 0, result.output
+    assert story_calls[0]["visible"] is visible
+
+
+def test_an_older_flow_runs_its_own_tutorial(monkeypatch, engine_calls):
+    monkeypatch.setattr("openadapt.cli._flow_runs_quickstart", lambda: False)
+    with CliRunner().isolated_filesystem():
+        result = CliRunner().invoke(cli_main, ["quickstart", "--out", "qs"])
+    assert result.exit_code == 0, result.output
+    assert engine_calls[0][:1] == ["tutorial"]
+
+
+@pytest.mark.parametrize(
+    ("installed", "runs"),
+    [("2.1.0", False), ("2.2.0", True), ("2.10.1", True)],
+)
+def test_the_three_act_quickstart_needs_flow_2_2(monkeypatch, installed, runs):
+    from openadapt import cli
+
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: installed)
+    assert cli._flow_runs_quickstart() is runs
+
+
+def test_quickstart_restores_the_operator_scrub_setting(monkeypatch, story_calls):
+    seen = []
+    monkeypatch.setenv("OPENADAPT_FLOW_SCRUB", "auto")
+    monkeypatch.setattr(
+        "openadapt.quickstart.run_quickstart",
+        lambda root, **kw: (
+            seen.append(os.environ["OPENADAPT_FLOW_SCRUB"]) or Outcome(root=root)
+        ),
+    )
+    with CliRunner().isolated_filesystem():
+        result = CliRunner().invoke(cli_main, ["quickstart", "--out", "qs"])
+    assert result.exit_code == 0, result.output
+    assert seen == ["off"]
+    assert os.environ["OPENADAPT_FLOW_SCRUB"] == "auto"
+
+
+def test_a_stopped_stage_names_where_its_files_are(monkeypatch, story_calls):
+    class TutorialError(RuntimeError):
+        pass
+
+    def stop(root, **kwargs):
+        root.mkdir(parents=True)
+        (root / "partial.json").write_text("{}")
+        raise TutorialError("the compiler emitted a placeholder")
+
+    monkeypatch.setattr("openadapt.quickstart.run_quickstart", stop)
+    with CliRunner().isolated_filesystem():
+        result = CliRunner().invoke(cli_main, ["quickstart", "--out", "qs"])
+        assert Path("qs/partial.json").is_file()
+    assert result.exit_code == 1
+    assert "The quickstart stopped: the compiler emitted a placeholder" in result.output
+    assert "Anything it wrote is in" in result.output
 
 
 @pytest.mark.parametrize("version_info", [(3, 13), (3, 14)])
@@ -84,14 +190,14 @@ def test_unsupported_python_preflight_prints_remedy_before_delegation(
     assert engine_calls == []
 
 
-def test_pep668_error_prints_the_same_remedy(monkeypatch):
-    def raise_externally_managed(_argv):
+def test_pep668_error_prints_the_same_remedy(monkeypatch, story_calls):
+    def raise_externally_managed(*_args, **_kwargs):
         raise RuntimeError(
             "error: externally-managed-environment\n\n"
             "This environment is externally managed"
         )
 
-    monkeypatch.setattr("openadapt.cli._invoke_flow", raise_externally_managed)
+    monkeypatch.setattr("openadapt.quickstart.run_quickstart", raise_externally_managed)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -129,50 +235,3 @@ def test_unknown_flags_pass_through_to_engine_verbatim(
     argv = engine_calls[0]
     assert argv[0] == "tutorial"
     assert argv[-len(extra) :] == extra
-
-
-def _printed_commands(output: str) -> list[list[str]]:
-    commands = []
-    for line in output.splitlines():
-        _, found, rest = line.partition("openadapt flow ")
-        if found:
-            commands.append(shlex.split(rest))
-    return commands
-
-
-def _option(argv: list[str], name: str) -> str:
-    return argv[argv.index(name) + 1]
-
-
-def test_drift_hint_replays_a_bundle_recorded_on_plain_mockmed(engine_calls):
-    """The tutorial bundle is recorded against MockMed's fault server.
-
-    `flow replay --drift` serves plain MockMed, which opens at the login
-    screen, so replaying the tutorial bundle halts at step_000 with or
-    without drift. The drift hint must record and compile its own demo on
-    plain MockMed and replay that bundle.
-    """
-    runner = CliRunner()
-    with runner.isolated_filesystem():
-        result = runner.invoke(cli_main, ["quickstart", "--out", "qs"])
-        root = Path("qs").resolve()
-
-    assert result.exit_code == 0, result.output
-    assert "fail-safe" not in result.output
-    commands = _printed_commands(result.output)
-    drift_replays = [
-        argv for argv in commands if argv[0] == "replay" and "--drift" in argv
-    ]
-    assert len(drift_replays) == 1, result.output
-    replay = drift_replays[0]
-    assert Path(replay[1]) != root / "bundle"
-
-    (record,) = [argv for argv in commands if argv[0] == "demo-record"]
-    (compile_,) = [argv for argv in commands if argv[0] == "compile"]
-    assert compile_[1] == _option(record, "--out")
-    assert replay[1] == _option(compile_, "--out")
-    assert (
-        result.output.index("flow demo-record")
-        < result.output.index("flow compile")
-        < result.output.index("--drift")
-    )

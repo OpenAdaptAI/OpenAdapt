@@ -144,12 +144,22 @@ def _install_browser_system_dependencies(
     )
 
 
-def _inspect_quickstart(root: Path) -> dict[str, object]:
-    run = root / "run"
+def _quickstart_runs(root: Path) -> list[Path]:
+    """The quickstart's checked runs: run-1, run-2, ... (or the older run/)."""
+    numbered = sorted(
+        (path for path in root.glob("run-*") if path.name[4:].isdigit()),
+        key=lambda path: int(path.name[4:]),
+    )
+    return numbered or [root / "run"]
+
+
+def _inspect_run(run: Path) -> int:
+    """Check one run is VERIFIED under Standard with its receipt; return effects."""
     report = _load_object(run / "report.json")
     if report.get("execution_outcome") != "VERIFIED":
         raise AssertionError(
-            f"quickstart outcome is {report.get('execution_outcome')!r}, not VERIFIED"
+            f"quickstart {run.name} outcome is "
+            f"{report.get('execution_outcome')!r}, not VERIFIED"
         )
     if report.get("execution_profile") != "standard":
         raise AssertionError(
@@ -174,12 +184,30 @@ def _inspect_quickstart(root: Path) -> dict[str, object]:
     for path in (run / "REPORT.md", run / "receipt.png", run / "receipt.md"):
         if not path.is_file():
             raise AssertionError(f"quickstart is missing {path.name}")
+    return passed
+
+
+def _inspect_quickstart(root: Path) -> dict[str, object]:
+    runs = _quickstart_runs(root)
+    effects = [_inspect_run(run) for run in runs]
+    broken = root / "run-broken" / "report.json"
+    stopped = None
+    if broken.is_file():
+        report = _load_object(broken)
+        if report.get("execution_outcome") != "HALTED":
+            raise AssertionError(
+                "the save that failed silently was not caught: the rerun ended "
+                f"{report.get('execution_outcome')!r}, not HALTED"
+            )
+        stopped = True
 
     return {
         "outcome": "VERIFIED",
         "profile": "standard",
         "transaction_outcome": "VERIFIED",
-        "effect_contracts": passed,
+        "effect_contracts": min(effects),
+        "verified_runs": len(runs),
+        "silent_failure_stopped": stopped,
         "model_calls": 0,
         "receipt_emitted": True,
     }

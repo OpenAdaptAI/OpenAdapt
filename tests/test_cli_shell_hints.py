@@ -33,26 +33,15 @@ def supported_python(monkeypatch):
     monkeypatch.setattr("openadapt.cli._python_minor", lambda: cli._SUPPORTED_PYTHON[1])
 
 
-def _quickstart_output(monkeypatch, out: Path) -> str:
-    monkeypatch.setattr("openadapt.cli._invoke_flow", lambda _argv: 0)
-    monkeypatch.setattr(
-        "openadapt.cli._flow_tutorial_options", lambda: frozenset(), raising=False
-    )
-    result = CliRunner().invoke(cli_main, ["quickstart", "--out", str(out)])
-    assert result.exit_code == 0, result.output
-    return result.output
+def _commands(root: Path) -> list[str]:
+    """The quickstart's printed commands that carry its output path."""
+    from openadapt.quickstart import next_steps
+    from openadapt.quickstart.engine import SealFacts
+    from openadapt.quickstart.story import Outcome
 
-
-def _commands(output: str, tmp_path: Path) -> list[str]:
-    """Return each printed `openadapt ...` command that carries a path."""
-    commands = []
-    for line in output.splitlines():
-        start = line.find("openadapt ")
-        if start >= 0 and str(tmp_path) in line:
-            commands.append(line[start:])
-    # lint, quickstart --break-it, demo-record, compile, replay.
-    assert len(commands) == 5, output
-    return commands
+    outcome = Outcome(root=root, seal=SealFacts("seal-ed25519-0", 5))
+    steps = next_steps(cli._hint, cli._shell_quote, False)(outcome)
+    return [steps.verify, steps.agent]
 
 
 def test_posix_quickstart_hints_keep_a_spaced_path_in_one_argument(
@@ -61,18 +50,10 @@ def test_posix_quickstart_hints_keep_a_spaced_path_in_one_argument(
     monkeypatch.setattr("sys.platform", "darwin")
     root = tmp_path / "dir with space" / "qs"
 
-    output = _quickstart_output(monkeypatch, root)
+    verify, agent = _commands(root)
 
-    commands = _commands(output, tmp_path)
-    lint = next(c for c in commands if " lint " in c)
-    assert shlex.split(lint)[-1] == str(root / "bundle")
-    break_it = next(c for c in commands if "--break-it" in c)
-    assert shlex.split(break_it)[-1] == f"{root}-break-it"
-    for command in commands:
-        argv = shlex.split(command)
-        paths = [arg for arg in argv if arg.startswith(str(tmp_path))]
-        assert paths, command
-        assert all("dir with space" in arg for arg in paths), command
+    assert shlex.split(verify)[-1] == str(root)
+    assert shlex.split(agent)[-1] == str(root / "bundle")
 
 
 def test_windows_quickstart_hints_double_quote_a_spaced_path(
@@ -81,9 +62,7 @@ def test_windows_quickstart_hints_double_quote_a_spaced_path(
     monkeypatch.setattr("sys.platform", "win32")
     root = tmp_path / "dir with space" / "qs"
 
-    output = _quickstart_output(monkeypatch, root)
-
-    for command in _commands(output, tmp_path):
+    for command in _commands(root):
         assert "'" not in command, command
         tokens = shlex.split(command, posix=False)
         paths = [t for t in tokens if str(tmp_path) in t]

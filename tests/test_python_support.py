@@ -353,6 +353,9 @@ def test_tutorial_next_step_prints_the_launcher_form(monkeypatch, supported_pyth
 
 
 def test_quickstart_next_step_prints_the_launcher_form(monkeypatch, supported_python):
+    # The engine's own tutorial (older Flow, or engine-only flags) prints its
+    # next steps; the launcher respells them.
+    monkeypatch.setattr("openadapt.cli._flow_runs_quickstart", lambda: False)
     _fake_flow(monkeypatch, "  openadapt-flow record --backend web --url <your app>")
 
     runner = CliRunner()
@@ -403,7 +406,16 @@ def test_agent_tutorial_serve_is_not_offered_without_the_agent(monkeypatch):
 def test_quickstart_offers_the_agent_command_only_when_it_works(
     monkeypatch, supported_python, serves
 ):
-    monkeypatch.setattr("openadapt.cli._invoke_flow", lambda _argv: 0)
+    from openadapt.quickstart.story import Outcome
+
+    printed = []
+
+    def fake(root, *, steps, **kwargs):
+        printed.append(steps(Outcome(root=root)).agent)
+        return Outcome(root=root)
+
+    monkeypatch.setattr("openadapt.cli._flow_runs_quickstart", lambda: True)
+    monkeypatch.setattr("openadapt.quickstart.run_quickstart", fake)
     monkeypatch.setattr("openadapt.cli._agent_serves_tutorial", lambda: serves)
 
     runner = CliRunner()
@@ -411,4 +423,6 @@ def test_quickstart_offers_the_agent_command_only_when_it_works(
         result = runner.invoke(cli_main, ["quickstart", "--out", "qs"])
 
     assert result.exit_code == 0, result.output
-    assert ("openadapt agent serve --allow-run" in result.output) is serves
+    assert (printed == ["openadapt agent serve --allow-run"]) is serves
+    if not serves:
+        assert printed == ["openadapt agent serve --bundles qs/bundle"]

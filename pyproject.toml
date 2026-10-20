@@ -56,6 +56,9 @@ classifiers = [
 # tests/test_python_support.py keeps these in step.
 dependencies = [
     "click>=8.0.0",
+    # The quickstart's terminal view (MIT). Pure Python; the engine doesn't
+    # depend on it. Gated like the engine: without it the quickstart can't run.
+    "rich>=13.0.0; python_version < '3.13'",
     # Every Flow floor is 1.35.0: Flow 1.33 and 1.34 probe four X11 libraries in
     # the wrong case and refuse Chromium on Linux hosts that have them
     # (tests/test_flow_floor.py).

@@ -23,3 +23,36 @@ def _import_torch_before_find_spec_is_stubbed():
     if importlib.util.find_spec("torch") is not None:
         import torch  # noqa: F401
     yield
+
+
+@pytest.fixture(autouse=True)
+def _no_real_quickstart_runs(request, monkeypatch):
+    """Keep unit tests from starting a real browser run by accident.
+
+    The three-act quickstart drives a browser for about 30 seconds. Tests that
+    mean to run it are marked ``real_quickstart``; everything else gets a
+    clear failure instead of a silent half-minute run.
+    """
+    if request.node.get_closest_marker("real_quickstart"):
+        yield
+        return
+    try:
+        from openadapt.quickstart import engine
+    except ImportError:
+        yield
+        return
+
+    def refuse(self):
+        raise AssertionError(
+            "this test started a real quickstart run; stub "
+            "openadapt.quickstart.run_quickstart or mark it real_quickstart"
+        )
+
+    monkeypatch.setattr(engine.FlowEngine, "__enter__", refuse)
+    yield
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "real_quickstart: runs the real quickstart in a browser"
+    )

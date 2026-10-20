@@ -1,0 +1,40 @@
+OpenAdapt quickstart: show a task once, run it, then watch it catch a save that didn't happen.
+Synthetic data only. Files go to openadapt-quickstart
+
+1  Show it once · a demonstration in a synthetic clinic app, in a hidden browser
+   ✓ Click Open                               0.4s
+   ✓ Click New Encounter                      0.7s
+   ✓ Click Triage                             0.9s
+   ✓ Click Note                               1.1s
+   ✓ Type "Synthetic follow-up in two weeks"  1.3s
+   ✓ Click Save Encounter                     1.6s
+   Compiled into a program: 6 steps. 0.5s
+
+2  Run it · the program, on 5 new notes
+   1/5  Follow-up in two weeks             ✓ checked in the database  2.6s
+   2/5  Recheck blood pressure next month  ✓ checked in the database  2.7s
+   3/5  Refer to physical therapy          ✓ checked in the database  2.8s
+   4/5  Repeat labs before next visit      ✓ checked in the database  2.9s
+   5/5  No change to the care plan         ✓ checked in the database  3.0s
+   5 of 5 saved and checked · 0 AI calls · $0.00 · 0.5s
+
+3  Break it · the next save fails silently
+   The app will show its saved message. The database will reject the save.
+   What the screen showed:    "Encounter saved — Synthetic follow-up in two weeks"
+   What the database showed:  0 new records
+   A screen-trusting bot:     ✓ Done
+   OpenAdapt:                 ■ Stopped before reporting success  7.7s
+   Why: OpenAdapt reads the record back from the database after each save. It found nothing, so it stopped.
+
+The screen said "Encounter saved". The database had nothing. A bot that trusts the screen reports Done. OpenAdapt stopped.
+
+Receipt
+  Program    local-quickstart · 6 steps
+  Runs       5 of 5 saved and checked in the database
+  AI calls   0 · $0.00
+  Seal       seal-ed25519-0123456789abcdef · 5 reports signed
+  Time       2.5s in all
+Check it: openadapt seal verify openadapt-quickstart
+Details: openadapt-quickstart, one REPORT.md per run; side-by-side page openadapt-quickstart/index.html
+Try it on your own app: openadapt flow record --backend web --url https://your-app.example --out my-task
+Give your agent this as a tool: openadapt agent serve --allow-run
