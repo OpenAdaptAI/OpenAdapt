@@ -1678,6 +1678,28 @@ class PlaywrightBackend:
 
         return self._focused_element_eval(_EDITABLE_VALUE_JS)
 
+    def focused_element_matches(self, selector: str) -> Optional[bool]:
+        """Whether the focused element (through frames) matches ``selector``.
+
+        None when it can't be read. Used by the ``local_edit`` postcondition.
+        """
+
+        result = self._focused_element_call(
+            "(el, sel) => { try { return el.matches(sel); } catch (e) { return null; } }",
+            arg=selector,
+            with_arg=True,
+        )
+        return result if isinstance(result, bool) else None
+
+    def focused_select_label(self) -> Optional[str]:
+        """The focused ``<select>``'s selected option label, or None."""
+
+        return self._focused_element_eval(
+            "(el) => { if (!el || el.tagName !== 'SELECT') return null; "
+            "const opt = el.selectedOptions && el.selectedOptions[0]; "
+            "return opt ? (opt.label || opt.textContent || '') : null; }"
+        )
+
     def focused_field_label(self) -> Optional[str]:
         """Return the focused field's best available human label, or None.
 

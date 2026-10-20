@@ -63,6 +63,49 @@ _EVIDENCE_RE = re.compile(r"^[a-z0-9][a-z0-9_.:-]{0,127}$")
 _RULE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
 
 
+#: ``risk_explanation`` prefix of a local edit the compiler classified from
+#: recorded evidence (openadapt_flow.compiler.local_edit).
+LOCAL_EDIT_PREFIX = "local edit:"
+
+
+def is_local_edit(step: Step) -> bool:
+    """A step the compiler classified as a local edit, with its check sealed.
+
+    Both halves are part of the sealed bundle: the explanation, and the
+    ``local_edit`` postcondition the runtime checks after the action.
+    """
+
+    return bool(
+        (step.risk_explanation or "").startswith(LOCAL_EDIT_PREFIX)
+        and any(p.kind is PostconditionKind.LOCAL_EDIT for p in step.expect)
+    )
+
+
+#: The dismiss of an informational dialog. Its label may carry the one pair
+#: of write words ("continue", "next") a dismiss commonly uses; any other
+#: write word keeps the step irreversible.
+DISMISS_PREFIX = LOCAL_EDIT_PREFIX + " dismisses an informational dialog"
+_WEAK_WRITE_RE = re.compile(r"^(?:continue(?:s|d|ing)?|next)$", re.IGNORECASE)
+
+
+def only_weak_write_words(text: str) -> bool:
+    """Every write word in ``text`` is "continue" or "next" (or there is none)."""
+
+    return all(_WEAK_WRITE_RE.match(m.group(0)) for m in _WRITE_RE.finditer(text))
+
+
+def is_sealed_dismiss(step: Step) -> bool:
+    """A local-edit dismiss whose checks (page unchanged, label gone) are sealed."""
+
+    return bool(
+        is_local_edit(step)
+        and (step.risk_explanation or "").startswith(DISMISS_PREFIX)
+        and any(p.kind is PostconditionKind.TEXT_ABSENT and p.text for p in step.expect)
+        and only_weak_write_words(step_text(step))
+        and _matched_token(_FILE_WRITE_RE, step_text(step)) is None
+    )
+
+
 @dataclass(frozen=True)
 class RiskInference:
     """Compile-time classification plus its qualification disposition."""
@@ -702,6 +745,12 @@ def infer_step_risk(
                 "submission/deletion key has retained consequential-write context",
                 (action_evidence, f"write_keyword:{write_keyword}"),
             )
+        if is_local_edit(step):
+            return RiskInference(
+                "reversible",
+                (step.risk_explanation or LOCAL_EDIT_PREFIX)[:512],
+                (action_evidence, "pattern:local_edit"),
+            )
         configured = _application_rule_inference(step, rules)
         if configured is not None:
             return configured
@@ -727,6 +776,16 @@ def infer_step_risk(
             ),
             requires_review=True,
         )
+    if (
+        write_keyword is not None
+        and step.action is ActionKind.CLICK
+        and is_sealed_dismiss(step)
+    ):
+        return RiskInference(
+            "reversible",
+            (step.risk_explanation or LOCAL_EDIT_PREFIX)[:512],
+            (action_evidence, "pattern:local_edit"),
+        )
     if write_keyword is not None and step.action in {
         ActionKind.CLICK,
         ActionKind.DOUBLE_CLICK,
@@ -736,6 +795,12 @@ def infer_step_risk(
             "irreversible",
             "retained action context names a consequential state change",
             (action_evidence, f"write_keyword:{write_keyword}"),
+        )
+    if is_local_edit(step) and step.action is ActionKind.CLICK:
+        return RiskInference(
+            "reversible",
+            (step.risk_explanation or LOCAL_EDIT_PREFIX)[:512],
+            (action_evidence, "pattern:local_edit"),
         )
     configured = _application_rule_inference(step, rules)
     if configured is not None:

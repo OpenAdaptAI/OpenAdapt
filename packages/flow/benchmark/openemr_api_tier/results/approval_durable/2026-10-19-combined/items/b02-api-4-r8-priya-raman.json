@@ -1,0 +1,94 @@
+{
+ "arm": "api",
+ "ref": "r8-priya-raman",
+ "mismatch": false,
+ "error": null,
+ "engine_success": true,
+ "transaction_outcome": "COMPLETED_UNVERIFIED",
+ "actuation": "api",
+ "api_fallback": null,
+ "step_errors": [],
+ "new_charts": 1,
+ "readback": "12/12",
+ "correct": true,
+ "field_check": [
+  {
+   "field": "title",
+   "want": "Ms.",
+   "got": "Ms.",
+   "match": true
+  },
+  {
+   "field": "fname",
+   "want": "Priya",
+   "got": "Priya",
+   "match": true
+  },
+  {
+   "field": "lname",
+   "want": "Raman",
+   "got": "Raman",
+   "match": true
+  },
+  {
+   "field": "DOB",
+   "want": "1975-10-14",
+   "got": "1975-10-14",
+   "match": true
+  },
+  {
+   "field": "sex",
+   "want": "Female",
+   "got": "Female",
+   "match": true
+  },
+  {
+   "field": "street",
+   "want": "15 STATION AVENUE",
+   "got": "15 STATION AVENUE",
+   "match": true
+  },
+  {
+   "field": "city",
+   "want": "EXAMPLETON",
+   "got": "EXAMPLETON",
+   "match": true
+  },
+  {
+   "field": "state",
+   "want": "MA",
+   "got": "MA",
+   "match": true
+  },
+  {
+   "field": "postal_code",
+   "want": "02139",
+   "got": "02139",
+   "match": true
+  },
+  {
+   "field": "phone_home",
+   "want": "555-0167",
+   "got": "555-0167",
+   "match": true
+  },
+  {
+   "field": "email",
+   "want": "priya.raman@example.invalid",
+   "got": "priya.raman@example.invalid",
+   "match": true
+  },
+  {
+   "field": "country_code",
+   "want": "USA",
+   "got": "USA",
+   "match": true
+  }
+ ],
+ "approvals": 1,
+ "approval_kinds": "api_request",
+ "approval_wait_s": 0.025,
+ "engine_s": 1.152,
+ "wall_s": 3.842,
+ "checkpoints": 41
+}

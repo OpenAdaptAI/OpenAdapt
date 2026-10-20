@@ -2984,6 +2984,30 @@ def _compile_recording(
             f"confirms the dialog opened by {opener_id}; this click saves"
         )
 
+    # Local edits the recording proves stayed local (select-all before
+    # typing, Enter on a typed dropdown option, an in-form tab): classified
+    # without a person, each with an outcome check that halts the run if the
+    # action does anything else at run time. Missing or mixed evidence leaves
+    # the step for a person. Explicit risk_overrides below still win.
+    # docs/design/LOCAL_EDIT_CLASSIFICATION.md
+    from openadapt_flow.compiler.local_edit import local_edits
+    from openadapt_flow.network_capture import NETWORK_FILE
+
+    network_lines = None
+    if (recording / NETWORK_FILE).is_file():
+        from openadapt_flow import network_capture as _nc
+
+        try:
+            network_lines = _nc.load(recording)
+        except Exception:  # noqa: BLE001 - unreadable capture proves nothing
+            network_lines = None
+    for edit in local_edits(steps, events, network_lines):
+        edited = by_step_id[edit.step_id]
+        edited.risk = "reversible"
+        edited.risk_explanation = edit.explanation
+        edited.risk_review_required = False
+        edited.expect = list(edited.expect) + list(edit.postconditions)
+
     if risk_overrides:
         by_id = {step.id: step for step in steps}
         resolved_overrides: dict[str, tuple[str, str]] = {}
