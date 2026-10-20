@@ -250,8 +250,9 @@ holds:
 openadapt-flow local-seal authorize create --out auth/ --bundle-digest <digest> \
     --item r3,r4,r5,r6 --profile standard --authorizer github:<user>
 
-# 2. The person signs it with their own GitHub SSH key (create prints this line).
-ssh-keygen -Y sign -n openadapt-run-authorization -f ~/.ssh/id_ed25519 auth/run-authorization.json
+# 2. The person reviews what it allows, then signs with their own GitHub SSH key.
+openadapt-flow local-seal authorize sign auth/run-authorization.json \
+    --key ~/.ssh/id_ed25519 --bundle path/to/bundle
 
 # 3. Seal each run under it, naming its item.
 openadapt-flow local-seal run runs/r3 --authorization auth/ --item r3
@@ -259,6 +260,27 @@ openadapt-flow local-seal run runs/r3 --authorization auth/ --item r3
 # 4. Optional: anchor the authorization in the transparency log, as a Seal.
 openadapt-flow local-seal authorize anchor auth/
 ```
+
+`authorize sign` prints a plain-text summary of about 30 lines, then asks
+`Sign this authorization? [y/N]`. Only a "y" answer runs
+`ssh-keygen -Y sign -n openadapt-run-authorization`. The summary shows:
+
+- who is signing, the key's fingerprint, and whether the GitHub snapshot
+  lists that key (✓ or ✗);
+- the program: its name, app, short bundle digest, step count, and the
+  qualification result from a `QUALIFICATION.md` next to the bundle;
+- an outline, one line per section (compiled sections, or else one per
+  field the steps fill), the consequential write and its record read-backs,
+  and the stop rules;
+- the scope, and what the authorization does not allow;
+- the statement's SHA-256 and path.
+
+The program is read from the bundle given with `--bundle` (default: a
+`bundle/` folder next to the statement). Its content digest is recomputed
+from its files, and a bundle that doesn't match `bundle_content_digest` is
+refused before anything is shown. For a key the snapshot doesn't list,
+`sign` warns and asks you to type "yes". `--dry-run` prints the summary
+and signs nothing. Running `ssh-keygen -Y sign` yourself also works.
 
 `authorize create` reads `https://github.com/<user>.keys` once and stores the
 Ed25519 keys it lists in `run-authorization.allowed_signers`, in the format

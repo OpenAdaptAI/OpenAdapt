@@ -276,6 +276,17 @@ def _cmd_authorize_create(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_authorize_sign(args: argparse.Namespace) -> int:
+    from openadapt_flow.authorization_summary import sign
+
+    return sign(
+        Path(args.statement),
+        Path(args.key_file).expanduser(),
+        [Path(b).expanduser() for b in args.bundle],
+        dry_run=args.dry_run,
+    )
+
+
 def _cmd_authorize_verify(args: argparse.Namespace) -> int:
     try:
         registry = _registry(args) if args.require_anchor else []
@@ -682,6 +693,25 @@ def register(sub: Any) -> None:
         help="Seal key allowed to seal under it (default: the configured key)",
     )
     zc.set_defaults(func=_cmd_authorize_create)
+    zg = zs.add_parser(
+        "sign",
+        help="Show what the authorization allows, ask, then sign with ssh-keygen",
+    )
+    zg.add_argument("statement", help="run-authorization.json (or its folder)")
+    zg.add_argument(
+        "--key",
+        dest="key_file",
+        required=True,
+        help="Your SSH private key, the one GitHub lists (e.g. ~/.ssh/id_ed25519)",
+    )
+    zg.add_argument(
+        "--bundle",
+        action="append",
+        default=[],
+        help="The program bundle the statement names (default: ./bundle next to it)",
+    )
+    zg.add_argument("--dry-run", action="store_true", help="Print the summary only")
+    zg.set_defaults(func=_cmd_authorize_sign)
     zv = zs.add_parser("verify", help="Verify a signed run authorization")
     zv.add_argument("authorization")
     zv.add_argument("--allowed-signers", default=None)
