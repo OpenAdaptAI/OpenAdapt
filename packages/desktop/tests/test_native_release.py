@@ -110,14 +110,19 @@ def test_native_workflows_are_pinned_and_preserve_candidate_boundary() -> None:
     assert all(re.fullmatch(r"[^@]+@[0-9a-f]{40}", use) for use in uses)
 
     trigger = release[True]
-    assert set(trigger) == {"push", "workflow_dispatch"}
-    assert trigger["push"] == {
+    assert set(trigger) == {"workflow_run", "workflow_dispatch"}
+    assert trigger["workflow_run"] == {
+        "workflows": ["Packages"],
+        "types": ["completed"],
         "branches": ["main"],
-        "paths": ["packages/desktop/pyproject.toml"],
     }
     assert release["permissions"] == {"contents": "read"}
     assert release["defaults"] == {"run": {"working-directory": "packages/desktop"}}
-    assert release["concurrency"] == {"group": "desktop-release", "cancel-in-progress": False}
+    assert release["concurrency"] == {
+        "group": "desktop-release",
+        "cancel-in-progress": False,
+        "queue": "max",
+    }
 
     jobs = release["jobs"]
     assert set(jobs) == {
@@ -131,7 +136,7 @@ def test_native_workflows_are_pinned_and_preserve_candidate_boundary() -> None:
         "publish-pypi",
         "publish",
     }
-    assert jobs["gate"]["if"] == "github.ref == 'refs/heads/main'"
+    assert jobs["gate"]["if"].startswith("github.ref == 'refs/heads/main' && (")
     for name in ("build-python", "build-macos", "build-windows", "build-linux"):
         assert jobs[name]["needs"] == "gate"
         assert jobs[name]["if"] == "needs.gate.outputs.release == 'true'"

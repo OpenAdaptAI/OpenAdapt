@@ -1,0 +1,308 @@
+# Publish @openadapt/program-graph (packages/program-graph) to npm.
+#
+# The same rules as release-package.yml, which publishes the Python packages:
+#
+# - Manual dispatch only, from the current tip of main, for the version in
+#   packages/program-graph/package.json, which CHANGELOG.md must open with
+#   and npm must not already have.
+# - The package is built and tested once, packed into one tarball, and that
+#   exact tarball is published and attached to the GitHub Release.
+# - The publish job alone holds id-token: write and runs in the
+#   `npm-program-graph` environment, whose protection rules gate the upload.
+#   npm trusted publishing exchanges the job's OIDC token for a one-time
+#   publish credential, so there is no npm token secret, and
+#   `npm publish --provenance` records a signed SLSA provenance statement
+#   tying the tarball to this workflow run and commit.
+# - After the upload, the openadapt-release App tags the commit
+#   openadapt-program-graph-v<version> and publishes an immutable GitHub
+#   Release with the tarball.
+#
+# One-time setup before the first run (see packages/program-graph/RELEASING.md):
+# the @openadapt scope on npm, a trusted publisher for this repository and
+# workflow file, the `npm-program-graph` environment, and the tag ruleset for
+# openadapt-program-graph-v*.
+name: Release program graph
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish; must equal packages/program-graph/package.json"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-program-graph
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build @openadapt/program-graph ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+    defaults:
+      run:
+        working-directory: packages/program-graph
+    steps:
+      - name: Require the tip of main
+        working-directory: .
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "Releases run only from refs/heads/main, not $REF." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/program-graph/package-lock.json
+      - name: Check the dispatched commit, version, changelog and npm state
+        id: check
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse refs/remotes/origin/main)" ]; then
+            echo "main moved after dispatch; re-run on the current tip." >&2
+            exit 1
+          fi
+          name="$(node -p 'require("./package.json").name')"
+          version="$(node -p 'require("./package.json").version')"
+          test "$name" = "@openadapt/program-graph"
+          if [ "$version" != "$VERSION" ]; then
+            echo "input version $VERSION != package.json version $version" >&2
+            exit 1
+          fi
+          first="$(grep -m1 -E '^## v[^ ]+ \([0-9]{4}-[0-9]{2}-[0-9]{2}\)$' CHANGELOG.md || true)"
+          if [ "$first" = "${first#"## v$VERSION ("}" ]; then
+            echo "CHANGELOG.md must start with v$VERSION; found: ${first:-nothing}" >&2
+            exit 1
+          fi
+          if npm view "$name@$VERSION" version >/dev/null 2>&1; then
+            echo "$name $VERSION is already on npm" >&2
+            exit 1
+          fi
+          tag="openadapt-program-graph-v$VERSION"
+          status=0
+          git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null || status=$?
+          if [ "$status" -eq 0 ]; then
+            echo "Tag $tag already exists." >&2
+            exit 1
+          elif [ "$status" -ne 2 ]; then
+            echo "Could not check whether tag $tag exists (git exit $status)." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+      - name: Test, typecheck and build
+        run: npm test && npm run typecheck && npm run build
+      - name: Pack the exact tarball to publish
+        id: pack
+        run: |
+          set -euo pipefail
+          mkdir -p ../../dist-npm
+          tarball="$(npm pack --pack-destination ../../dist-npm --json | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8"))[0].filename')"
+          tar -tzf "../../dist-npm/$tarball" | sort
+          # The tarball carries the build, schemas, fixtures and docs only.
+          if tar -tzf "../../dist-npm/$tarball" | grep -Ev '^package/(dist/|schema/|fixtures/|LICENSE$|README\.md$|CHANGELOG\.md$|package\.json$)'; then
+            echo "unexpected files in the tarball" >&2
+            exit 1
+          fi
+          (cd ../../dist-npm && sha256sum "$tarball" | tee SHA256SUMS)
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist-program-graph
+          path: dist-npm/
+          if-no-files-found: error
+
+  preflight-github:
+    name: check release hosting for ${{ needs.build.outputs.tag }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release-identity
+    permissions:
+      contents: read
+    steps:
+      - name: Create a repository-scoped release App token
+        id: release-app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-administration: read
+          permission-metadata: read
+      - name: Require the exact release App identity
+        env:
+          ACTUAL_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+          EXPECTED_APP_SLUG: openadapt-release
+        run: |
+          set -euo pipefail
+          if [ "$ACTUAL_APP_SLUG" != "$EXPECTED_APP_SLUG" ]; then
+            echo "Release hosting checks require the $EXPECTED_APP_SLUG App, not $ACTUAL_APP_SLUG." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Require immutable releases and closed rules for the package tag
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REPOSITORY" != "OpenAdaptAI/OpenAdapt" ]; then
+            echo "Releases require OpenAdaptAI/OpenAdapt." >&2
+            exit 1
+          fi
+          python scripts/verify_release_hosting.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG"
+
+  publish:
+    name: publish @openadapt/program-graph ${{ inputs.version }}
+    needs: [build, preflight-github]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: npm-program-graph
+      url: https://www.npmjs.com/package/@openadapt/program-graph/v/${{ inputs.version }}
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist-program-graph
+          path: dist-npm/
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+      - name: Use an npm that supports trusted publishing
+        run: npm install --global npm@11.6.2 && npm --version
+      - name: Publish the exact tarball with provenance (trusted publishing)
+        env:
+          TARBALL: ${{ needs.build.outputs.tarball }}
+        run: |
+          set -euo pipefail
+          cd dist-npm
+          sha256sum --check --strict SHA256SUMS
+          npm publish "./$TARBALL" --access public --provenance
+
+  publish-github:
+    name: tag and release ${{ needs.build.outputs.tag }}
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release-identity
+    permissions:
+      contents: read
+    steps:
+      - name: Create a repository-scoped release App token
+        id: release-app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-administration: read
+          permission-contents: write
+          permission-metadata: read
+      - name: Require the exact release App identity
+        env:
+          ACTUAL_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+          EXPECTED_APP_SLUG: openadapt-release
+        run: |
+          set -euo pipefail
+          if [ "$ACTUAL_APP_SLUG" != "$EXPECTED_APP_SLUG" ]; then
+            echo "Tagging and GitHub publication require the $EXPECTED_APP_SLUG App, not $ACTUAL_APP_SLUG." >&2
+            exit 1
+          fi
+      - name: Checkout the exact published commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          token: ${{ steps.release-app.outputs.token }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist-program-graph
+          path: dist-npm/
+      - name: Create the annotated tag at the published commit
+        env:
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+        run: |
+          set -euo pipefail
+          python scripts/verify_release_hosting.py --repository "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG"
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "The published commit $GITHUB_SHA is not on main." >&2
+            exit 1
+          fi
+          git fetch --force --tags origin
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            if [ "$(git rev-list -n 1 "refs/tags/$RELEASE_TAG")" != "$GITHUB_SHA" ]; then
+              echo "Tag $RELEASE_TAG names another commit." >&2
+              exit 1
+            fi
+            exit 0
+          fi
+          git -c user.name="openadapt-release[bot]" \
+            -c user.email="openadapt-release[bot]@users.noreply.github.com" \
+            tag -a "$RELEASE_TAG" "$GITHUB_SHA" -m "@openadapt/program-graph ${RELEASE_TAG##*-v}"
+          git push origin "refs/tags/$RELEASE_TAG"
+      - name: Publish the immutable GitHub Release with the exact tarball
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          python - "$VERSION" > /tmp/release-notes.md <<'PY'
+          import re, sys
+          from pathlib import Path
+          version = sys.argv[1]
+          text = Path("packages/program-graph/CHANGELOG.md").read_text(encoding="utf-8")
+          match = re.search(
+              rf"^## v{re.escape(version)} \(\d{{4}}-\d{{2}}-\d{{2}}\)\n(?P<body>.*?)(?=^## v|\Z)",
+              text, re.MULTILINE | re.DOTALL,
+          )
+          if match is None:
+              raise SystemExit(f"CHANGELOG.md has no notes for v{version}.")
+          print(match.group("body").strip())
+          PY
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" dist-npm/*.tgz dist-npm/SHA256SUMS \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --latest=false \
+              --title "@openadapt/program-graph $VERSION" \
+              --notes-file /tmp/release-notes.md
+          fi
+          echo "Published https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
