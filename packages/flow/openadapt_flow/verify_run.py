@@ -407,11 +407,25 @@ def judge_run_frame(
         after = None
     routed = getattr(verifier, "verifiers", None)
     slices: dict[str, tuple[EffectState, Optional[list[dict[str, Any]]]]] = {}
-    routes: Optional[dict[str, str]] = None
+    routes: Optional[dict[str, list[str]]] = None
     if isinstance(routed, dict) and routed:
-        routes = {
-            str(i): surface_of(effect) or "" for i, effect in enumerate(bound_effects)
-        }
+        # Surfaces that differ only in dropped fields (a content twin) are
+        # views of one read: a record an effect declares in one is declared
+        # in each.
+        def read_of(name: str) -> str:
+            sub = cfg.verifier.surfaces.get(name)
+            if sub is None:
+                return name
+            shape = sub.model_dump(mode="json", exclude={"records_drop_fields"})
+            return json.dumps(shape, sort_keys=True, default=str)
+
+        views: dict[str, list[str]] = {}
+        for name in routed:
+            views.setdefault(read_of(name), []).append(name)
+        routes = {}
+        for i, effect in enumerate(bound_effects):
+            own = surface_of(effect) or ""
+            routes[str(i)] = views.get(read_of(own), [own]) if own in routed else [own]
         for name in routed:
             sub = before.detail.get(name, {}) if isinstance(before.detail, dict) else {}
             post = (

@@ -287,7 +287,7 @@ def judge_frame(
     slices: Mapping[str, tuple[EffectState, Optional[list[dict[str, Any]]]]],
     *,
     params: Mapping[str, object] = {},
-    routes: Optional[Mapping[str, str]] = None,
+    routes: Optional[Mapping[str, Sequence[str]]] = None,
     audit_before: Optional[list[dict[str, Any]]] = None,
     audit_after: Optional[list[dict[str, Any]]] = None,
 ) -> FrameVerdict:
@@ -299,8 +299,9 @@ def judge_frame(
         slices: Surface name -> (baseline, records read after the save, or
             ``None`` when unreadable). One verifier is one slice named ``""``.
         params: Run params, to resolve the bot's own ids.
-        routes: Effect index (as ``str``) -> surface name. Unset: every effect
-            belongs to every slice.
+        routes: Effect index (as ``str``) -> the surface names it declares
+            records in (its own surface and any view of the same read). Unset:
+            every effect belongs to every slice.
         audit_before: ``audit_read`` entries read with the baseline.
         audit_after: ``audit_read`` entries read after the save.
     """
@@ -402,7 +403,7 @@ def judge_frame(
         mine = [
             effect
             for index, effect in enumerate(effects)
-            if routes is None or routes.get(str(index), name) == name
+            if routes is None or name in routes.get(str(index), (name,))
         ]
         selectors = [s for effect in mine for s in declared_selectors(effect)]
 

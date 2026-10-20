@@ -509,3 +509,81 @@ def test_countersign_states_every_part() -> None:
     line = checked_line({"delta": "held", "frame": "refuted", "source": "instruction"})
     assert "frame (nothing else in the slice changed): refuted" in line
     assert "the inputs were the authorized instruction" in line
+
+
+def test_a_content_twin_is_a_view_of_the_same_read(tmp_path: Path) -> None:
+    """scaffold-verifier reads each table twice: by id, and by content
+    (``records_drop_fields: [id]``). The saved row is declared in both."""
+
+    db = tmp_path / "app.sqlite"
+    con = sqlite3.connect(db)
+    con.executescript(
+        "CREATE TABLE enc (id INTEGER PRIMARY KEY, patient_id TEXT, note TEXT);"
+        "INSERT INTO enc VALUES (1, 'p2', 'an older note');"
+    )
+    con.commit()
+    read = {"kind": "sql", "sqlite_database": str(db), "sql_query": "SELECT * FROM enc"}
+    match = {"patient_id": {"param": "patient_id"}, "note": {"param": "note"}}
+    cfg = parse_verify_config(
+        {
+            "schema_version": "openadapt.verify/v1",
+            "verifier": {
+                "kind": "surfaces",
+                "surfaces": {
+                    "enc": read,
+                    "enc.content": {**read, "records_drop_fields": ["id"]},
+                },
+            },
+            "effects": [
+                {
+                    "kind": "record_written",
+                    "match": match,
+                    "count_new_only": True,
+                    "probe": "surface=enc|the saved row",
+                    "timeout_s": 0.2,
+                },
+                {
+                    "kind": "record_written",
+                    "match": {"_none": "-"},
+                    "expected_count": 0,
+                    "count_new_only": True,
+                    "probe": "surface=enc.content|no row changes",
+                    "timeout_s": 0.2,
+                },
+            ],
+        }
+    )
+    params = {"patient_id": "p1", "note": "Follow-up"}
+    baseline = tmp_path / "b.json"
+    capture_baseline(cfg, params, baseline)
+    con.execute("INSERT INTO enc (patient_id, note) VALUES ('p1', 'Follow-up')")
+    con.commit()
+    result = verify_run(
+        cfg,
+        params=params,
+        run_record={"executor_kind": "script"},
+        authorization_ref="ticket-0000-twin",
+        baseline_path=baseline,
+        private_dir=tmp_path / "out",
+    )
+    assert result["receipt"]["outcome"] == "verified", result["evidence"]["frame"]
+    con.execute("UPDATE enc SET note = 'edited' WHERE id = 1")
+    con.commit()
+    baseline2 = tmp_path / "b2.json"
+    con.execute("DELETE FROM enc WHERE id > 1")
+    con.execute("UPDATE enc SET note = 'an older note' WHERE id = 1")
+    con.commit()
+    capture_baseline(cfg, params, baseline2)
+    con.execute("INSERT INTO enc (patient_id, note) VALUES ('p1', 'Follow-up')")
+    con.execute("UPDATE enc SET note = 'edited' WHERE id = 1")
+    con.commit()
+    edited = verify_run(
+        cfg,
+        params=params,
+        run_record={"executor_kind": "script"},
+        authorization_ref="ticket-0000-twin",
+        baseline_path=baseline2,
+        private_dir=tmp_path / "out2",
+    )
+    assert edited["receipt"]["checked"]["frame"] == "refuted"
+    con.close()
