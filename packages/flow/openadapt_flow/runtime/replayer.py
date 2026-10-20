@@ -45,6 +45,7 @@ import math
 import os
 import re
 import struct
+import threading
 import time
 import uuid
 from copy import deepcopy
@@ -231,6 +232,10 @@ _PIXEL_RECHECK_LEVEL = 24
 _PIXEL_RECHECK_MIN_PIXELS = 4
 # How long a step that raises a browser dialog waits for it to open.
 _DIALOG_WAIT_S = 5.0
+
+# How long past its step's timeout a held record check may run under an
+# approval mode before the held report decides the item (a person).
+READBACK_DEADLINE_MARGIN_S = 120.0
 # Private module capability.  The public ``run`` API cannot mint a durable
 # continuation.  ``runtime.durable.resume`` imports this object only after it
 # has validated the pause, approval, bundle, checkpoint, and live state.
@@ -3116,12 +3121,22 @@ class Replayer:
             report.variant_route = variant_route
         self._stamp_execution_outcome(report, workflow, run_dir)
         hold = getattr(self.approval_gate, "hold_for_readback", None)
+        held = False
+        deadline_s = 0.0
         if handed_off and callable(hold):
+            held = True
             # The item's approval decision waits for its record check: the
             # settled verdict decides it (_settle_pipelined_readback). Deciding
             # now, on the held report, would read a save still being checked
-            # as an uncertain result and switch problems_only off.
-            hold()
+            # as an uncertain result and switch problems_only off. The wait
+            # is bounded: past the deadline the held report decides it.
+            assert pending is not None
+            step = next((s for s in workflow.steps if s.id == pending.step_id), None)
+            deadline_s = (
+                float(getattr(step, "timeout_s", 0.0) or 0.0)
+                + READBACK_DEADLINE_MARGIN_S
+            )
+            hold(deadline_s)
         else:
             self._stamp_approval(report)
         if persist:
@@ -3155,10 +3170,44 @@ class Replayer:
             assert pending is not None and self.readback_pipeline is not None
             self._pipelined_readback = None
             entry = pending
+            decided = threading.Lock()
+            first: list[str] = []
+
+            def _claim(by: str) -> bool:
+                """Whether ``by`` is first to decide the item's approval."""
+
+                with decided:
+                    if not first:
+                        first.append(by)
+                    return first[0] == by
+
+            timer: Optional[threading.Timer] = None
+            if held:
+
+                def _expire() -> None:
+                    if not _claim("deadline"):
+                        return
+                    # The record check outlived its deadline. The held report
+                    # still says unsuccessful, so deciding it now sends the
+                    # item to a person, turns problems_only off and releases
+                    # the hold.
+                    self._stamp_approval(report)
+                    report.save(run_dir)
+
+                timer = threading.Timer(deadline_s, _expire)
+                timer.daemon = True
+                timer.start()
 
             def _settle(error: Optional[str]) -> RunReport:
+                if timer is not None:
+                    timer.cancel()
                 return self._settle_pipelined_readback(
-                    report, workflow, run_dir, entry, error
+                    report,
+                    workflow,
+                    run_dir,
+                    entry,
+                    error,
+                    decide_approval=_claim("settle"),
                 )
 
             self.readback_pipeline.hand_off(entry, _settle)
@@ -3324,8 +3373,14 @@ class Replayer:
         run_dir: Path,
         entry: "PipelinedReadback",
         error: Optional[str],
+        *,
+        decide_approval: bool = True,
     ) -> RunReport:
-        """Apply a finished deferred read-back to the saved item report."""
+        """Apply a finished deferred read-back to the saved item report.
+
+        ``decide_approval`` is False when the read-back's deadline already
+        decided the item's approval; a late verdict doesn't change it.
+        """
 
         try:
             self._copy_pipelined_evidence(entry, error)
@@ -3343,7 +3398,8 @@ class Replayer:
             # The held approval decision is always made, even when settling
             # fails: the report then still says unsuccessful, so the item goes
             # to a person, and it never stays held open for the next item.
-            self._stamp_approval(report)
+            if decide_approval:
+                self._stamp_approval(report)
         report.save(run_dir)
         return report
 
