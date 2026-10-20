@@ -20,6 +20,10 @@ Definitions:
   stops, questions, reconciliations, items done by hand).
 - *Maintenance*: after a UI change. Model dollars spent repairing or
   re-authoring, and people's minutes reviewing the repair.
+- *Silent-wrong cleanup*: each silent wrong is charged, as a lower bound,
+  the people time to find and fix it later (one reconcile plus one manual
+  entry, plus the interrupt charge each). Its clinical or business harm is
+  not priced; the silent-wrong rate is reported beside every total.
 - Projection to 1,000 verified items: setup once, per-item costs scaled by
   1,000 / verified, maintenance per UI change times the assumed changes per
   1,000 items (``prices.json`` drift rate).
@@ -114,6 +118,9 @@ def arm_economics(rows: list[dict[str, Any]], arm: str, cm: dict[str, Any], labo
     model_calls = sum(int(r.get("model_calls", 0) or 0) for r in items)
 
     op_rate = labor["operator_usd_per_hour"] / 3600.0
+    sw = outcomes.get("silent_wrong", 0)
+    cleanup_s = sw * (float(cm.get("reconcile_s", 0.0)) + float(cm.get("manual_entry_s", 0.0))
+                      + 2 * float(cm.get("interrupt_s", 0.0)))
     v = len(verified)
     per_v = (1000.0 / v) if v else float("nan")
     items_per_1000v = n * per_v
@@ -133,10 +140,14 @@ def arm_economics(rows: list[dict[str, Any]], arm: str, cm: dict[str, Any], labo
         "maintenance_events": proj_events,
         "maintenance_usd": maint_per_event_usd * proj_events,
         "maintenance_min": maint_per_event_min * proj_events,
+        "silent_wrong": sw * per_v,
+        "cleanup_min": cleanup_s / 60.0 * per_v,
+        "cleanup_usd": cleanup_s * op_rate * per_v,
     }
     proj["total_usd"] = (proj["setup_usd"] + proj["item_model_usd"] + proj["compute_usd"]
-                         + proj["operator_usd"] + proj["maintenance_usd"])
-    proj["total_human_min"] = proj["setup_human_min"] + proj["operator_min"] + proj["maintenance_min"]
+                         + proj["operator_usd"] + proj["maintenance_usd"] + proj["cleanup_usd"])
+    proj["total_human_min"] = (proj["setup_human_min"] + proj["operator_min"] + proj["maintenance_min"]
+                               + proj["cleanup_min"])
     walls = sorted(float(r["wall_s"]) for r in automated)
     return {
         "arm": arm,
@@ -200,8 +211,11 @@ def winners(arms: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not vals:
             continue
         best = min(v for _, v in vals) if lower else max(v for _, v in vals)
-        out.append({"axis": label, "best": [k for k, v in vals if v == best], "value": best,
-                    "all": dict(vals)})
+        best_arms = [k for k, v in vals if v == best]
+        sw = {a["arm"]: a["silent_wrong"] for a in arms}
+        caveat = [k for k in best_arms if sw.get(k)] if path[-1] != "silent_wrong_rate" else []
+        out.append({"axis": label, "best": best_arms, "value": best, "all": dict(vals),
+                    "best_has_silent_wrong": caveat})
     return out
 
 
@@ -252,7 +266,8 @@ def render(result: dict[str, Any]) -> str:
         )
     lines += ["", "| Axis | Best | Value |", "|---|---|---|"]
     for w in result["winners"]:
-        lines.append(f"| {w['axis']} | {', '.join(w['best'])} | {_fmt(w['value'], 3)} |")
+        flag = " (has silent wrongs)" if w.get("best_has_silent_wrong") else ""
+        lines.append(f"| {w['axis']} | {', '.join(w['best'])}{flag} | {_fmt(w['value'], 3)} |")
     return "\n".join(lines) + "\n"
 
 

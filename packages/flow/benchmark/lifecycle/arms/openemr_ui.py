@@ -8,8 +8,8 @@ signs in again before handing the page over. This is the runner's job in a
 deployment of any of these arms, so it is the same for all of them and is not
 charged to the arm's model budget. It is recorded per item (``signed_in_again``).
 
-The REST read is the clerk's own API access (the fixture's ``actor`` OAuth
-client), the same access OpenAdapt's record check uses. No arm ever sees the
+The REST read is read-only (the harness's ``rest_read_session``, scope
+``user/patient.rs``), the same REST read-back OpenAdapt's record check uses. No arm ever sees the
 harness's oracle.
 """
 

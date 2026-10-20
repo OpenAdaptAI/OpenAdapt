@@ -35,8 +35,8 @@ def _components(result: dict[str, Any]) -> list[str]:
 
 def _projection(result: dict[str, Any]) -> list[str]:
     rows = [
-        "| Arm | Setup $ | Model $ | Compute $ | Operator min | Operator $ | Maint. changes | Maint. $ | Total $ | Total people min | Total $ at labor x0.5 / x2 |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "| Arm | Setup $ | Model $ | Compute $ | Operator min | Operator $ | Maint. changes | Maint. $ | Silent wrongs | Cleanup $ (lower bound) | Total $ | Total people min | Total $ at labor x0.5 / x2 |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for a in result["arms"]:
         p = a["per_1000_verified"]
@@ -45,7 +45,7 @@ def _projection(result: dict[str, Any]) -> list[str]:
         rows.append(
             f"| {a['arm']} | {_fmt(p['setup_usd'])} | {_fmt(p['item_model_usd'])} | {_fmt(p['compute_usd'])} | "
             f"{_fmt(p['operator_min'], 0)} | {_fmt(p['operator_usd'])} | {_fmt(p['maintenance_events'], 1)} | "
-            f"{_fmt(p['maintenance_usd'])} | **{_fmt(p['total_usd'], 0)}** | {_fmt(p['total_human_min'], 0)} | "
+            f"{_fmt(p['maintenance_usd'])} | {_fmt(p['silent_wrong'], 0)} | {_fmt(p['cleanup_usd'])} | **{_fmt(p['total_usd'], 0)}** | {_fmt(p['total_human_min'], 0)} | "
             f"{_fmt(lo, 0)} / {_fmt(hi, 0)} |"
         )
     return rows
@@ -105,7 +105,7 @@ def render(result: dict[str, Any], out: Path, plan: dict[str, Any]) -> str:
         "| Axis | Best | Value | All arms |",
         "|---|---|---|---|",
         *[
-            f"| {w['axis']} | {', '.join(w['best'])} | {_fmt(w['value'], 3)} | "
+            f"| {w['axis']} | {', '.join(w['best'])}{' (has silent wrongs)' if w.get('best_has_silent_wrong') else ''} | {_fmt(w['value'], 3)} | "
             + ", ".join(f"{k} {_fmt(v, 3)}" for k, v in w["all"].items())
             + " |"
             for w in result["winners"]
