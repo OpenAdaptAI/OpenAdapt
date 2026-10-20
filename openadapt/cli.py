@@ -72,11 +72,31 @@ class _FlowFirstGroup(click.Group):
                 f"No such command '{name}'. Did you mean 'openadapt flow {name}'?",
                 ctx,
             )
+        if not ctx.resilient_parsing and self.get_command(ctx, name) is None:
+            # A command this launcher doesn't know may be one a newer
+            # openadapt elsewhere on PATH has.
+            _warn_about_launcher_conflicts()
         return super().resolve_command(ctx, args)
 
 
+def _print_version(ctx: click.Context, _param, value: bool) -> None:
+    """``--version``, then any other ``openadapt`` on PATH that would shadow it."""
+    if not value or ctx.resilient_parsing:
+        return
+    click.echo(f"openadapt, version {__version__}")
+    _warn_about_launcher_conflicts()
+    ctx.exit()
+
+
 @click.group(cls=_FlowFirstGroup)
-@click.version_option(version=__version__, prog_name="openadapt")
+@click.option(
+    "--version",
+    is_flag=True,
+    expose_value=False,
+    is_eager=True,
+    callback=_print_version,
+    help="Show the version and exit.",
+)
 def main():
     """OpenAdapt launcher for the openadapt-flow compiler.
 
@@ -692,6 +712,21 @@ def _keep_command() -> Optional[str]:
     return f"uv tool install --python {major}.{minor} openadapt"
 
 
+def _launcher_version(path: str, run=None) -> Optional[str]:
+    """Ask the ``openadapt`` at ``path`` for its version; None when it can't say."""
+    import subprocess
+
+    try:
+        result = (run or subprocess.run)(
+            [path, "--version"], capture_output=True, text=True, timeout=15
+        )
+        text = f"{result.stdout} {result.stderr}"
+    except Exception:  # noqa: BLE001 - an unrunnable openadapt has no version
+        return None
+    match = re.search(r"\b(\d+\.\d+\.\d+\S*)", text)
+    return match.group(1) if match else None
+
+
 def _shadowing_openadapt(which=None, run=None) -> Optional[str]:
     """Warn when the shell's ``openadapt`` is another version than this one.
 
@@ -701,20 +736,11 @@ def _shadowing_openadapt(which=None, run=None) -> Optional[str]:
     A copy of this same version is fine and gets no warning.
     """
     import shutil
-    import subprocess
 
     found = (which or shutil.which)("openadapt")
     if not found:
         return None
-    try:
-        result = (run or subprocess.run)(
-            [found, "--version"], capture_output=True, text=True, timeout=15
-        )
-        text = f"{result.stdout} {result.stderr}"
-    except Exception:  # noqa: BLE001 - an unrunnable openadapt is still a shadow
-        text = ""
-    match = re.search(r"\b(\d+\.\d+\.\d+\S*)", text)
-    version = match.group(1) if match else None
+    version = _launcher_version(found, run)
     if version == __version__:
         return None
     named = f"is {version}" if version else "is an unknown version"
@@ -722,6 +748,89 @@ def _shadowing_openadapt(which=None, run=None) -> Optional[str]:
         f"Your shell's openadapt {named} at {found}; the commands above use "
         "uvx so they run this version."
     )
+
+
+def _path_launchers(environ=None) -> list[Path]:
+    """Every ``openadapt`` executable on PATH, in PATH order (``which -a``)."""
+    env = os.environ if environ is None else environ
+    names = ["openadapt.exe", "openadapt"] if os.name == "nt" else ["openadapt"]
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for folder in env.get("PATH", "").split(os.pathsep):
+        for name in names:
+            candidate = Path(folder or ".") / name
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                real = candidate.resolve()
+                if real not in seen:
+                    seen.add(real)
+                    found.append(candidate)
+    return found
+
+
+def _this_launcher_dir() -> Path:
+    return (Path(sys.prefix) / ("Scripts" if os.name == "nt" else "bin")).resolve()
+
+
+def _uninstall_fix(path: Path) -> str:
+    """How to remove the ``openadapt`` at ``path`` from its own environment."""
+    folder = path.parent
+    for name in ("python", "python3", "python.exe"):
+        python = folder / name
+        if python.is_file():
+            return (
+                f"{_shell_quote(python)} -m pip uninstall openadapt openadapt-flow, "
+                "then run: hash -r"
+            )
+    return (
+        f"pip uninstall openadapt openadapt-flow from {folder.parent}, "
+        "then run: hash -r"
+    )
+
+
+def _launcher_conflicts(launchers=None, run=None) -> list[str]:
+    """Plain warnings when PATH holds another ``openadapt`` that matters.
+
+    Two cases: the first ``openadapt`` on PATH is another version than this
+    one (so typing ``openadapt`` runs that one), or a newer ``openadapt`` is
+    on PATH than the one running. Each names the paths and versions; the first
+    also says how to remove the other install. Copies of this same version
+    are fine.
+    """
+    here = _this_launcher_dir()
+    others = [
+        path
+        for path in (_path_launchers() if launchers is None else launchers)
+        if path.parent.resolve() != here
+    ]
+    if not others:
+        return []
+    versions = {path: _launcher_version(str(path), run) for path in others}
+    lines = []
+    first = (_path_launchers() if launchers is None else launchers)[0]
+    if first in versions and versions[first] != __version__:
+        named = versions[first] or "an unknown version"
+        lines.append(
+            f"Your shell runs openadapt {named} at {first} before this one "
+            f"({__version__}). To remove it: {_uninstall_fix(first)}"
+        )
+    mine = _release_tuple(__version__)
+    for path, version in versions.items():
+        theirs = _release_tuple(version or "")
+        if mine is not None and theirs is not None and theirs > mine:
+            lines.append(
+                f"A newer openadapt, {version}, is at {path}; this one is "
+                f"{__version__}."
+            )
+    return lines
+
+
+def _warn_about_launcher_conflicts() -> None:
+    try:
+        lines = _launcher_conflicts()
+    except Exception:  # noqa: BLE001 - a PATH check must never break a command
+        return
+    for line in lines:
+        click.echo(line, err=True)
 
 
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
