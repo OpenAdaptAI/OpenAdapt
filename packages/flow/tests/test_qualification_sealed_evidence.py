@@ -46,9 +46,9 @@ def test_a_sealed_file_is_evidence_by_its_plaintext(sealed: Path) -> None:
     # qualify binds the same file the same way.
     path = sealed / "sealed" / "param_hygiene.json"
     assert _evidence_bytes(path) == PLAIN
-    assert _evidence_ref(sealed, path, "other").sha256 == hashlib.sha256(
-        PLAIN
-    ).hexdigest()
+    assert (
+        _evidence_ref(sealed, path, "other").sha256 == hashlib.sha256(PLAIN).hexdigest()
+    )
 
 
 def test_a_wrong_digest_or_a_missing_file_is_not_evidence(sealed: Path) -> None:
