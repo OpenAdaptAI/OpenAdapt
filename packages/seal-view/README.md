@@ -58,7 +58,7 @@ slot that `openadapt seal view RUN_DIR` fills with the run's files. Its
 Content-Security-Policy allows no requests, so it works from `file://` with
 the network off and uploads nothing.
 
-Size, measured on 2026-10-20: 202,139 bytes (65,614 gzipped). The budget is
+Size, measured on 2026-10-20: 202,270 bytes (65,703 gzipped). The budget is
 262,144 bytes (`VIEWER_BUDGET` in `scripts/build.mjs`, and
 `tests/snapshots/seal_viewer_size.json` at the repository root);
 `node scripts/build.mjs --check` fails over it or when the launcher's copy is
