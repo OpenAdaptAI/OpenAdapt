@@ -754,30 +754,37 @@ def phase_batch(ctx: dict[str, Any], keys: tuple[str, ...], name: str) -> list[A
     return results
 
 
-class _SlowCheck:
-    """The record check, made slow, so the kill lands inside its window."""
+def _slow_check(verifier: Any, marker: Path) -> Any:
+    """The same record check, made slow, so the kill lands inside its window.
 
-    def __init__(self, verifier: Any, marker: Path) -> None:
-        self._v = verifier
-        self._marker = marker
+    The verifier object itself is kept: a wrapper would change its identity,
+    and the problems-only gate refuses a record check that isn't the one its
+    switch record names.
+    """
 
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._v, name)
+    check = verifier.verify
 
-    def verify(self, *args: Any, **kwargs: Any) -> Any:
-        self._marker.write_text(str(time.time()))
+    def verify(*args: Any, **kwargs: Any) -> Any:
+        marker.write_text(str(time.time()))
         time.sleep(120)
-        return self._v.verify(*args, **kwargs)
+        return check(*args, **kwargs)
+
+    verifier.verify = verify
+    return verifier
 
 
 def phase_crash(ctx: dict[str, Any], keys_dir: Path) -> dict[str, Any]:
     """Run one item in a child process and kill it inside the read-back."""
 
     out, ledger = ctx["out"], ctx["ledger"]
-    run_dir = out / "crash" / CRASH
-    marker = out / "crash" / "readback-started"
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.unlink(missing_ok=True)
+    # A durable run path is claimed once, so a second attempt needs its own.
+    base, attempt = out / "crash", 1
+    while base.exists():
+        attempt += 1
+        base = out / f"crash-{attempt}"
+    run_dir = base / CRASH
+    marker = base / "readback-started"
+    marker.parent.mkdir(parents=True)
     child = subprocess.Popen(
         [
             sys.executable,
@@ -790,7 +797,7 @@ def phase_crash(ctx: dict[str, Any], keys_dir: Path) -> dict[str, Any]:
             str(keys_dir),
         ],
         cwd=str(FLOW),
-        env=dict(os.environ),
+        env={**os.environ, "LIFECYCLE_PROOF_CRASH_DIR": str(base)},
     )
     deadline = time.time() + 900
     while not marker.exists() and child.poll() is None and time.time() < deadline:
@@ -867,15 +874,15 @@ def _load(bundle: Path) -> Any:
 def _crash_child(ctx: dict[str, Any]) -> None:
     from openadapt_flow.runtime.readback_pipeline import ReadbackPipeline
 
-    out = ctx["out"]
-    marker = out / "crash" / "readback-started"
+    base = Path(os.environ["LIFECYCLE_PROOF_CRASH_DIR"])
+    marker = base / "readback-started"
     pipeline = ReadbackPipeline()
     item = Item(
         ctx,
         CRASH,
-        out / "crash" / CRASH,
+        base / CRASH,
         pipeline=pipeline,
-        verifier_wrapper=lambda v: _SlowCheck(v, marker),
+        verifier_wrapper=lambda v: _slow_check(v, marker),
     )
     item.run(ctx["bundle"])
     time.sleep(600)  # the parent kills this process inside the check
