@@ -1,0 +1,42 @@
+{
+  "id": "nb-device-add",
+  "app": "netbox",
+  "intent": "Add a device with its name, site, role, device type and serial number.",
+  "shape": "single",
+  "batch_run": false,
+  "inputs": [
+    "name",
+    "site",
+    "role",
+    "device_type",
+    "serial"
+  ],
+  "keys": [],
+  "policy": "permissive",
+  "second_installation": "the user's dark color mode (user preference ui.colormode = dark)",
+  "second_kind": "theme",
+  "viewport": {
+    "first": [
+      1280,
+      900
+    ],
+    "second": [
+      1280,
+      900
+    ]
+  },
+  "device_scale": {
+    "first": 1.0,
+    "second": 1.0
+  },
+  "verify_yaml": {
+    "first": "schema_version: openadapt.verify/v1\napp:\n  name: NetBox (local test copy)\n  url: http://127.0.0.1:9486/dcim/devices/add/\n  version: netbox@4.1.11\n  session: benchmark.onboarding_effort.hooks:open_session\n  reset:\n    python: benchmark.onboarding_effort.hooks:reset\nverifier:\n  kind: sql\n  sql_driver: pg8000.dbapi\n  sql_connect_args: {host: 127.0.0.1, port: 9489, user: nb_reader, database: netbox}\n  sql_password_env: NB_READER_PASSWORD\n  sql_query: \"SELECT d.name, s.name AS site, r.name AS role, t.model AS device_type, d.serial FROM dcim_device d JOIN dcim_site s ON s.id=d.site_id JOIN dcim_devicerole r ON r.id=d.role_id JOIN dcim_devicetype t ON t.id=d.device_type_id\"\nrecord:\n  name: device\n  match: [name]\n  duplicate_key: name\n  fields:\n    name: name\n    site: site\n    role: role\n    device_type: device_type\n    serial: serial\nsave_step: auto\ninputs:\n  source: recorded\ncampaign:\n  id: onboarding-nb-device-add-first\n  trials: 3\n  policy: permissive\n",
+    "second": "schema_version: openadapt.verify/v1\napp:\n  name: NetBox (local test copy)\n  url: http://127.0.0.1:9486/dcim/devices/add/\n  version: netbox@4.1.11\n  session: benchmark.onboarding_effort.hooks:open_session\n  reset:\n    python: benchmark.onboarding_effort.hooks:reset\nverifier:\n  kind: sql\n  sql_driver: pg8000.dbapi\n  sql_connect_args: {host: 127.0.0.1, port: 9489, user: nb_reader, database: netbox}\n  sql_password_env: NB_READER_PASSWORD\n  sql_query: \"SELECT d.name, s.name AS site, r.name AS role, t.model AS device_type, d.serial FROM dcim_device d JOIN dcim_site s ON s.id=d.site_id JOIN dcim_devicerole r ON r.id=d.role_id JOIN dcim_devicetype t ON t.id=d.device_type_id\"\nrecord:\n  name: device\n  match: [name]\n  duplicate_key: name\n  fields:\n    name: name\n    site: site\n    role: role\n    device_type: device_type\n    serial: serial\nsave_step: auto\ninputs:\n  source: recorded\ncampaign:\n  id: onboarding-nb-device-add-second\n  trials: 3\n  policy: permissive\n"
+  },
+  "oracle_source_sha256": "53b05d9ccf0d2b44ea671db600ae253cf09ba79c9c649d7e756fae16ddd17178",
+  "heldout_items_sha256": {
+    "first": "6728bcad8509fbee821263248ea573e328176d2a4be2651411d2a32ed72d46c4",
+    "second": "850e6915d31b8f65f5770a77b2dbe82240517f4eb9948d8833258bdac4cbeefc"
+  },
+  "heldout_n": 25
+}

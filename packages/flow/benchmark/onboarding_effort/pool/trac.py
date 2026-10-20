@@ -50,6 +50,7 @@ class TracBase(Workflow):
 
     def reset(self, installation: str) -> None:
         T.reset()
+        _baseline_config()  # trac.ini is not in the database
         self.apply_installation(installation)
 
     def entry_url(self, installation: str) -> str:
@@ -110,7 +111,7 @@ class TracNewTicket(TracBase):
         choose(page, rec, "#field-type", item["type"], "type")
         choose(page, rec, "#field-priority", item["priority"], "priority")
         choose(page, rec, "#field-component", item["component"], "component")
-        click(page, rec, "input[name=submit][value='Create ticket']")
+        click(page, rec, "#propertyform input[name=submit]")
         page.wait_for_url("**/ticket/*")
 
     def verify_yaml(self, installation: str) -> str:
@@ -186,19 +187,19 @@ class TracResolve(TracBase):
     def prepare_items(self, items: list[dict[str, str]], installation: str) -> None:
         anchor = _create_ticket("Original report kept open for duplicates", "intake")
         for item in items:
-            item["ticket"] = str(_create_ticket(item["_summary"], "intake"))
+            item["ticket"] = f"#{_create_ticket(item['_summary'], 'intake')}"
             if item["resolution"] == "duplicate":
-                item["duplicate_of"] = str(anchor)
+                item["duplicate_of"] = f"#{anchor}"
 
     def demonstrate(self, rec: Any, page: Any, item: dict[str, str]) -> None:
-        fill(page, rec, "#proj-search", "#" + item["ticket"], "ticket")
+        fill(page, rec, "#proj-search", item["ticket"], "ticket")
         rec.press("Enter")
-        page.wait_for_url(f"**/ticket/{item['ticket']}")
+        page.wait_for_url(f"**/ticket/{item['ticket'][1:]}")
         open_modify(page, rec)
         click(page, rec, "#action_resolve")
         choose(page, rec, "#action_resolve_resolve_resolution", item["resolution"], "resolution")
         if item["resolution"] == "duplicate":
-            fill(page, rec, "#comment", "Duplicate of #" + item["duplicate_of"], "duplicate_of")
+            fill(page, rec, "#comment", "Duplicate of " + item["duplicate_of"], "duplicate_of")
         click(page, rec, "#propertyform input[name=submit]")
         page.wait_for_selector(".trac-status:has-text('closed'), span.status:has-text('closed')")
 
@@ -211,7 +212,7 @@ app:
   session: benchmark.onboarding_effort.hooks:open_session
   reset:
     python: benchmark.onboarding_effort.hooks:reset
-{self._sql_verifier("SELECT CAST(id AS TEXT) AS ticket, status, resolution FROM ticket")}effects:
+{self._sql_verifier("SELECT '#' || id AS ticket, status, resolution FROM ticket")}effects:
   - kind: field_equals
     match: {{ticket: {{param: ticket}}}}
     field: resolution
@@ -230,7 +231,7 @@ campaign:
 """
 
     def judge(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
-        tid = int(item["ticket"])
+        tid = int(item["ticket"].lstrip("#"))
         t0, t1 = before["tickets"].get(tid), after["tickets"].get(tid)
         if t1 is None:
             return Verdict("WRONG", {"reason": "ticket gone"})
@@ -240,7 +241,7 @@ campaign:
         comments = [c for c in after["changes"] if c["ticket"] == tid and c["field"] == "comment"
                     and c not in before["changes"]]
         text = " ".join(c["newvalue"] or "" for c in comments)
-        dup_ok = (f"#{item['duplicate_of']}" in text) if item["resolution"] == "duplicate" else ("Duplicate of" not in text)
+        dup_ok = (item["duplicate_of"] in text) if item["resolution"] == "duplicate" else ("Duplicate of" not in text)
         ok = t1["status"] == "closed" and t1["resolution"] == item["resolution"] and dup_ok and not others
         return Verdict("VERIFIED" if ok else "WRONG", {"status": t1["status"], "resolution": t1["resolution"],
                                                        "comment": text[:120], "others": others})
@@ -273,7 +274,7 @@ class TracTriageLoop(TracBase):
         # Decoys the loop must leave alone: other components, other statuses.
         _create_ticket("Billing export is late [decoy]", "billing")
         for item in items:
-            item["ticket"] = str(_create_ticket(item["_summary"], "intake"))
+            item["ticket"] = f"#{_create_ticket(item['_summary'], 'intake')}"
 
     def demonstrate(self, rec: Any, page: Any, item: dict[str, str]) -> None:
         # One iteration on the first row; the loop is what the product must infer.
@@ -297,7 +298,7 @@ class TracTriageLoop(TracBase):
 
     def demonstrate_keyed(self, rec: Any, page: Any, item: dict[str, str]) -> None:
         """One ticket by number (the body ``for-each`` repeats)."""
-        fill(page, rec, "#proj-search", "#" + item["ticket"], "ticket")
+        fill(page, rec, "#proj-search", item["ticket"], "ticket")
         rec.press("Enter")
         page.wait_for_selector("#ticket")
         open_modify(page, rec)
@@ -315,7 +316,7 @@ app:
   session: benchmark.onboarding_effort.hooks:open_session
   reset:
     python: benchmark.onboarding_effort.hooks:reset
-{self._sql_verifier("SELECT CAST(id AS TEXT) AS ticket, milestone, component FROM ticket")}effects:
+{self._sql_verifier("SELECT '#' || id AS ticket, milestone, component FROM ticket")}effects:
   - kind: field_equals
     match: {{ticket: {{param: ticket}}}}
     field: milestone
@@ -330,7 +331,7 @@ campaign:
 """
 
     def judge(self, item: dict[str, str], before: Any, after: Any) -> Verdict:
-        tid = int(item["ticket"])
+        tid = int(item["ticket"].lstrip("#"))
         t1 = after["tickets"].get(tid)
         if t1 is None:
             return Verdict("WRONG", {"reason": "ticket gone"})
@@ -346,6 +347,14 @@ campaign:
     def judge_batch_collateral(self, before: Any, after: Any, item_ids: set[int]) -> list[int]:
         return [k for k, t in before["tickets"].items()
                 if k not in item_ids and after["tickets"].get(k) != t]
+
+
+def _baseline_config() -> None:
+    """Undo every second-installation setting that lives in trac.ini."""
+    T.admin("config", "set", "trac", "default_language", "")
+    for opt in ("site", "site.label", "site.options", "site.value"):
+        T.admin_quiet("config", "remove", "ticket-custom", opt)
+    T.admin_quiet("permission", "remove", "triager", "TICKET_MODIFY", "TICKET_VIEW")
 
 
 def open_modify(page: Any, rec: Any) -> None:

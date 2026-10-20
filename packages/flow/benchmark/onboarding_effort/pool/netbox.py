@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import random
+import zlib
 from typing import Any
 
 from benchmark.onboarding_effort.apps import netbox_app as N
@@ -27,9 +28,10 @@ def tomselect(page: Any, rec: Any, field: str, label: str, param: str | None) ->
     """A NetBox dynamic dropdown: open it, type to search, pick with Enter."""
     rec.click(*center(page, rec, f"#id_{field} ~ .ts-wrapper .ts-control"))
     rec.type_text(label, param=param)
-    page.wait_for_selector(f".ts-dropdown .option:has-text('{label}')", timeout=30_000)
+    option = page.locator(f"#id_{field}-ts-dropdown .option", has_text=label).first
+    option.wait_for(state="visible", timeout=30_000)
     page.wait_for_timeout(300)
-    rec.press("Enter")
+    rec.click(*center(page, rec, option))
 
 
 class NetBoxBase(Workflow):
@@ -154,7 +156,7 @@ class NetBoxIpPaginated(NetBoxBase):
     shape = "paginated"
     batch_run = True
     inputs = ("description",)
-    keys = ("address",)
+    keys = ("host",)
     intent = (
         "Go through every IP address tagged onb-audit, ten to a page: open each one, set "
         "its description to the audit note, save, and return to the list; then the next page."
@@ -172,8 +174,8 @@ class NetBoxIpPaginated(NetBoxBase):
         return N.BASE + "/ipam/ip-addresses/?tag=onb-audit&per_page=10&ordering=address"
 
     def make_item(self, rng: random.Random, n: int, split: str) -> dict[str, str]:
-        third = 1 + (abs(hash(split)) % 200)
-        return {"address": f"198.51.{third}.{10 + n}/24",
+        third = 1 + (zlib.crc32(split.encode()) % 200)
+        return {"address": f"198.51.{third}.{10 + n}/24", "host": f"198.51.{third}.{10 + n}",
                 "description": "Audited 2026-10" if not split.startswith("demo") else f"Audited demo {n}"}
 
     def batch_params(self, items: list[dict[str, str]]) -> dict[str, str]:
@@ -191,34 +193,42 @@ class NetBoxIpPaginated(NetBoxBase):
         )
 
     def demonstrate(self, rec: Any, page: Any, item: dict[str, str]) -> None:
-        # One iteration: open the first address still without a description.
-        row = page.locator("table tbody tr", has_not_text="Audited").first
-        click(page, rec, row.locator("td a").first)
-        page.wait_for_url("**/ipam/ip-addresses/*/")
-        click(page, rec, "a:has-text('Edit')")
+        # One iteration: edit the first address on this page still without the
+        # note (the row's own edit button returns to this page); when the page
+        # is done, go to the next one.
+        page.wait_for_selector("table tbody tr")
+        pending = page.locator("table tbody tr", has_not_text=item["description"])
+        while pending.count() == 0:
+            click(page, rec, "ul.pagination a.page-link:text-matches('Next|»|›')")
+            page.wait_for_load_state("load")
+            pending = page.locator("table tbody tr", has_not_text=item["description"])
+        click(page, rec, pending.first.locator("a[href*='/edit/']").first)
         page.wait_for_selector("#id_description")
         fill(page, rec, "#id_description", item["description"], "description")
-        click(page, rec, "button[name=_update], button:has-text('Save')")
-        page.wait_for_url("**/ipam/ip-addresses/*/")
-        rec.press("Alt+ArrowLeft")
-        rec.press("Alt+ArrowLeft")
+        with page.expect_navigation():
+            click(page, rec, "button[name=_update], button[type=submit]:has-text('Save')")
+        page.wait_for_load_state("load")
         page.wait_for_selector("table tbody tr")
 
     def demonstrate_keyed(self, rec: Any, page: Any, item: dict[str, str]) -> None:
-        fill(page, rec, "input[name=q]", item["address"].split("/")[0], "address")
-        rec.press("Enter")
-        page.wait_for_selector("table tbody tr")
-        click(page, rec, page.locator("table tbody tr td a", has_text=item["address"].split("/")[0]).first)
-        click(page, rec, "a:has-text('Edit')")
+        """One address by the list's quick search (the body ``for-each`` repeats)."""
+        host = item["host"]
+        fill(page, rec, "#quicksearch", host, "host")
+        row = page.locator("table tbody tr", has_text=host + "/")
+        row.first.wait_for(state="visible", timeout=30_000)
+        page.wait_for_function("n => document.querySelectorAll('table tbody tr').length <= n", arg=2)
+        click(page, rec, row.first.locator("a[href*='/edit/']").first)
+        page.wait_for_selector("#id_description")
         fill(page, rec, "#id_description", item["description"], "description")
-        click(page, rec, "button[name=_update], button:has-text('Save')")
-        page.wait_for_url("**/ipam/ip-addresses/*/")
+        with page.expect_navigation():
+            click(page, rec, "button[name=_update], button[type=submit]:has-text('Save')")
+        page.wait_for_load_state("load")
 
     def verify_yaml(self, installation: str) -> str:
-        q = "SELECT host(address) || '/' || masklen(address) AS address, description FROM ipam_ipaddress"
+        q = "SELECT host(address) AS host, description FROM ipam_ipaddress"
         effects = """effects:
   - kind: field_equals
-    match: {address: {param: address}}
+    match: {host: {param: host}}
     field: description
     value: {param: description}
 """
@@ -245,9 +255,11 @@ class NetBoxIpPaginated(NetBoxBase):
 class NetBoxVlanConditional(NetBoxBase):
     id = "nb-vlan-conditional"
     shape = "conditional"
-    inputs = ("vid", "name", "group")
+    inputs = ("vid", "name", "group", "cost_center")
     intent = "Add a VLAN with its ID and name; when the request names a VLAN group, assign that group."
-    second_installation = "a required custom field 'Cost center' on VLANs"
+    second_installation = (
+        "a required custom field 'Cost center' on VLANs; requests now carry a cost center"
+    )
     second_kind = "required_field"
 
     def apply_installation(self, installation: str) -> None:
@@ -269,8 +281,11 @@ class NetBoxVlanConditional(NetBoxBase):
     def make_item(self, rng: random.Random, n: int, split: str) -> dict[str, str]:
         base = {"demo-first": 100, "heldout-first": 300, "qual-first": 500,
                 "demo-second": 700, "heldout-second": 900, "qual-second": 1100}.get(split, 1300)
-        return {"vid": str(base + n), "name": f"onb-{split}-{n:02d}",
+        item = {"vid": str(base + n), "name": f"onb-{split}-{n:02d}",
                 "group": rng.choice(("", "", "Campus", "Datacenter"))}
+        if split.endswith("second"):
+            item["cost_center"] = f"CC-{rng.randrange(100, 999)}"
+        return item
 
     def branch_key(self, item: dict[str, str]) -> str:
         return "group" if item["group"] else "none"
@@ -280,11 +295,14 @@ class NetBoxVlanConditional(NetBoxBase):
         fill(page, rec, "#id_name", item["name"], "name")
         if item["group"]:
             tomselect(page, rec, "group", item["group"], "group")
+        if item.get("cost_center"):
+            fill(page, rec, "#id_cf_cost_center", item["cost_center"], "cost_center")
         click(page, rec, "button[name=_create]")
         page.wait_for_url("**/ipam/vlans/*/")
 
     def verify_yaml(self, installation: str) -> str:
-        q = ("SELECT v.vid::text AS vid, v.name, COALESCE(g.name, '') AS group FROM ipam_vlan v "
+        q = ("SELECT v.vid::text AS vid, v.name, COALESCE(g.name, '') AS vlan_group, "
+             "COALESCE(v.custom_field_data->>'cost_center', '') AS cost_center FROM ipam_vlan v "
              "LEFT JOIN ipam_vlangroup g ON g.id=v.group_id")
         record = """record:
   name: vlan
@@ -293,12 +311,15 @@ class NetBoxVlanConditional(NetBoxBase):
   fields:
     vid: vid
     name: name
-    group: group
+    vlan_group: group
 """
+        if installation != FIRST:
+            record += "    cost_center: cost_center\n"
         return self._yaml(installation, self._verifier(q), record)
 
     def snapshot(self) -> Any:
-        rows = N.nbsql("SELECT v.id, v.vid::text AS vid, v.name, COALESCE(g.name, '') AS grp "
+        rows = N.nbsql("SELECT v.id, v.vid::text AS vid, v.name, COALESCE(g.name, '') AS grp, "
+                       "COALESCE(v.custom_field_data->>'cost_center', '') AS cost_center "
                        "FROM ipam_vlan v LEFT JOIN ipam_vlangroup g ON g.id=v.group_id")
         return {r["id"]: r for r in rows}
 
@@ -308,5 +329,6 @@ class NetBoxVlanConditional(NetBoxBase):
         if not mine:
             return Verdict("MISSING", {"new": len(new)})
         r = mine[0]
-        ok = len(new) == 1 and r["vid"] == item["vid"] and r["grp"] == item["group"]
+        ok = (len(new) == 1 and r["vid"] == item["vid"] and r["grp"] == item["group"]
+              and r["cost_center"] == item.get("cost_center", ""))
         return Verdict("VERIFIED" if ok else "WRONG", {"got": r, "want_group": item["group"]})

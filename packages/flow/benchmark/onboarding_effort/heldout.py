@@ -188,7 +188,7 @@ def _run_one_batch(wf, installation, workflow, certified, config, hooks, setup, 
     after = wf.snapshot()
     hooks.reset = reset
     engine = _engine_outcome(summary) if summary else "REFUSED"
-    ids = {int(i["ticket"]) for i in items if str(i.get("ticket", "")).isdigit()}
+    ids = {int(str(i["ticket"]).lstrip("#")) for i in items if str(i.get("ticket", "")).lstrip("#").isdigit()}
     collateral = wf.judge_batch_collateral(before, after, ids) if hasattr(wf, "judge_batch_collateral") else []
     rows = []
     for n, item in enumerate(items, start=1):

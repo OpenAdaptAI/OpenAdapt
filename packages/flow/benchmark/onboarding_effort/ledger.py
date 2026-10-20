@@ -65,6 +65,7 @@ class Row:
     model_usd: float = 0.0
     ok: Optional[bool] = None
     detail: dict[str, Any] = field(default_factory=dict)
+    run: str = ""
     ts: float = field(default_factory=time.time)
     load1: float = field(default_factory=host_load)
     protocol: str = PROTOCOL_VERSION

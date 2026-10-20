@@ -129,6 +129,8 @@ def reset() -> None:
 
 def login(page: Any, user: str = "admin") -> None:
     page.goto(BASE + "/login/")
+    if page.locator("#id_username").count() == 0:
+        return  # this browser context is already signed in
     page.fill("#id_username", user)
     page.fill("#id_password", USERS[user])
     page.click("button[type=submit]")

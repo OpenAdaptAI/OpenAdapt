@@ -24,7 +24,7 @@ from benchmark.onboarding_effort.registry import get  # noqa: E402
 
 def validate(wf_id: str, installation: str = FIRST, shot_dir: Path | None = None) -> dict:
     wf = get(wf_id)
-    items = wf.items("qual", 3 if wf.batch_run else 1, installation)
+    items = wf.items("qual", (12 if wf.shape == "paginated" else 3) if wf.batch_run else 1, installation)
     if wf.shape == "conditional":
         seen: dict = {}
         for it in wf.items("qual", 20, installation):
@@ -61,8 +61,27 @@ def validate(wf_id: str, installation: str = FIRST, shot_dir: Path | None = None
     time.sleep(0.5)
     after = wf.snapshot()
     done = per_item if not wf.batch_run and err is None else [wf.judge(i, before, after) for i in items]
+    keyed = None
+    if hasattr(wf, "demonstrate_keyed"):
+        kitems = wf.items("qual", 2, installation)[1:]
+        wf.reset(installation)
+        wf.prepare_items(kitems, installation)
+        kb = wf.snapshot()
+        page, close = open_page(wf, installation)
+        try:
+            wf.start(page, installation)
+            from benchmark.onboarding_effort.pool.base import _PlainRecorder
+
+            wf.demonstrate_keyed(_PlainRecorder(page), page, kitems[0])
+            time.sleep(0.5)
+            keyed = wf.judge(kitems[0], kb, wf.snapshot()).verdict
+        except Exception as exc:  # noqa: BLE001
+            keyed = f"error: {type(exc).__name__}: {exc}"[:300]
+        finally:
+            close()
     out = {
         "workflow": wf_id,
+        "keyed": keyed,
         "installation": installation,
         "idle": idle,
         "performed": [v.verdict for v in done],
@@ -70,7 +89,8 @@ def validate(wf_id: str, installation: str = FIRST, shot_dir: Path | None = None
         "error": err,
         "seconds": round(time.time() - t0, 1),
         "ok": err is None and all(v == "MISSING" for v in idle)
-        and all(v.verdict == "VERIFIED" for v in done),
+        and all(v.verdict == "VERIFIED" for v in done)
+        and keyed in (None, "VERIFIED"),
     }
     return out
 

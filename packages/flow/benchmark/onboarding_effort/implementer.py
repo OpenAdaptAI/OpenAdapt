@@ -94,7 +94,8 @@ class Implementer:
 
     # -- ledger helpers ------------------------------------------------------
     def log(self, phase: str, action: str, **kw: Any) -> Row:
-        row = Row(workflow=self.wf.id, installation=self.inst, phase=phase, action=action, **kw)
+        row = Row(workflow=self.wf.id, installation=self.inst, phase=phase, action=action,
+                  run=self.out.name, **kw)
         self.s.machine_s += row.machine_s
         self.s.model_usd += row.model_usd
         self.ledger.add(row)
@@ -217,10 +218,16 @@ class Implementer:
         _, text = self.cli("lint", "lint", ["lint", str(bundle)], log_name=f"lint-{tag}")
         return text
 
-    def write_verify(self) -> Path:
+    def write_verify(self, previous: Optional[Path] = None) -> Path:
+        """Write verify.yaml; on a second installation count only changed lines."""
+        import difflib
+
         path = self.out / "verify.yaml"
         text = self.wf.verify_yaml(self.inst)
         lines = sum(1 for ln in text.splitlines() if ln.strip() and not ln.strip().startswith("#"))
+        if previous is not None and previous.exists():
+            diff = difflib.ndiff(previous.read_text().splitlines(), text.splitlines())
+            lines = sum(1 for d in diff if d.startswith("+ ") and d[2:].strip())
         first_on_app = not any(
             r["phase"] == "config" and r["detail"].get("hooks_for_app") == self.wf.app
             for r in self.ledger.rows()
@@ -396,8 +403,8 @@ class Implementer:
             self.s.outcome = "failed: no first-installation bundle"
             self.log("end", "no first bundle", ok=False)
             return self.s.outcome
-        self.wf.apply_installation(self.inst)
-        self.write_verify()
+        self.wf.reset(self.inst)  # brings the app up on the new installation
+        self.write_verify(previous=first_dir / "verify.yaml")
         ok, text, certified = self.qualify(src, "zero-touch")
         if ok:
             result = self.heldout(certified, "zero-touch")
