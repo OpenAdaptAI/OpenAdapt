@@ -21,15 +21,11 @@ jobs:
 
     strategy:
       matrix:
-        # Pull requests use the three Linux versions plus one representative
-        # macOS lane. Exact main retains the complete two-OS matrix.
+        # PR tier: one lane, the required run-ci (ubuntu-latest, 3.12). The
+        # merge queue and main run every supported Python on Linux and macOS,
+        # so nothing reaches main untested on them.
         os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest"]') }}
-        python-version: ['3.10', '3.11', '3.12']
-        include:
-          # On pull requests, add the one representative macOS lane. On main
-          # this matches an existing full-matrix entry rather than adding one.
-          - os: macos-latest
-            python-version: '3.12'
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
 
     steps:
       - name: Checkout code
@@ -118,6 +114,8 @@ jobs:
   # unsupported interpreters, that the built wheel installs without the engine
   # and that each engine command prints the Python 3.12 install fix.
   unsupported-python-guard:
+    # Merge queue and main only (PR tier runs one lane).
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read

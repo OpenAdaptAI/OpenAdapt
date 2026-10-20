@@ -160,11 +160,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # PRs prove the frozen-engine contract on Linux and macOS (macOS freezes
-        # the PyObjC wheels, whose license notices the build must find). Main
-        # repeats the complete matrix for dependency, toolchain, packaging, and
-        # native changes. Immutable native release tags rebuild every supported OS.
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04", "macos-14"]' || '["ubuntu-22.04", "macos-14", "windows-latest"]') }}
+        # PRs prove the frozen-engine contract on Linux. The merge queue and
+        # main add macOS (which freezes the PyObjC wheels, whose license
+        # notices the build must find) and Windows. Immutable native release
+        # tags rebuild every supported OS.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04"]' || '["ubuntu-22.04", "macos-14", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
