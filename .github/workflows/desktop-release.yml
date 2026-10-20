@@ -1051,7 +1051,7 @@ jobs:
             python scripts/release_publication.py state --repository "${GITHUB_REPOSITORY}" --tag "${TAG}" --cli "${GH_CLI}" --metadata "${RUNNER_TEMP}/release.json"
           fi
           verify() {
-            python ../../scripts/verify_github_release.py \
+            python ../../scripts/verify_github_release.py --artifact-set any \
               --metadata "${RUNNER_TEMP}/release.json" \
               --tag "${TAG}" \
               --author "${EXPECTED_AUTHOR}" \
@@ -1174,7 +1174,7 @@ jobs:
         run: |
           set -euo pipefail
           verify() {
-            python ../../scripts/verify_github_release.py \
+            python ../../scripts/verify_github_release.py --artifact-set any \
               --metadata "${RUNNER_TEMP}/release.json" \
               --tag "${TAG}" \
               --author "${EXPECTED_AUTHOR}" \
