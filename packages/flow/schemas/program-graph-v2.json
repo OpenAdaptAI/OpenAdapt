@@ -493,6 +493,18 @@
           "title": "Badges",
           "type": "array"
         },
+        "media": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NodeMedia"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "References to recorded pictures of the step; never image data"
+        },
         "surface": {
           "anyOf": [
             {
@@ -572,6 +584,39 @@
       "title": "IdentityInfo",
       "type": "object"
     },
+    "MediaRef": {
+      "description": "References to pictures of a step, never the pictures themselves.\n\nEach value is an opaque reference (a bundle-relative path, an asset id)\nthat the surface showing the graph resolves to a URL it has decided is\nsafe to show. The spec never embeds image data.",
+      "properties": {
+        "crop": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Reference to a crop of the step's target",
+          "title": "Crop"
+        },
+        "frame": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Reference to the full screen at the step",
+          "title": "Frame"
+        }
+      },
+      "title": "MediaRef",
+      "type": "object"
+    },
     "NodeKind": {
       "description": "Kind of graph node.\n\nPhase-2 program states project 1:1 onto the matching kind. A linear bundle\nis all ``action`` nodes plus a trailing ``terminal``. A composition parent\nuses ``child_bundle`` (one node per child) rather than pretending each\nchild is an ``action`` or a ``subflow_call``.",
       "enum": [
@@ -585,6 +630,30 @@
       ],
       "title": "NodeKind",
       "type": "string"
+    },
+    "NodeMedia": {
+      "description": "Pictures of a step from its recording. Operator-local: the public\nprojection drops it, because a recorded picture can show recorded data.",
+      "properties": {
+        "recorded": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MediaRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "alt": {
+          "default": "",
+          "description": "Text alternative for the pictures",
+          "title": "Alt",
+          "type": "string"
+        }
+      },
+      "title": "NodeMedia",
+      "type": "object"
     },
     "ParamInfo": {
       "description": "A typed workflow parameter (the run's inputs).",

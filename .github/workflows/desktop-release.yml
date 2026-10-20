@@ -5,16 +5,26 @@
 # A Desktop pull request that should ship bumps the version and the changelog
 # itself (packages/desktop/scripts/prepare_release.py); the desktop
 # release-intent check in packages.yml fails a feat or fix that does not. There
-# is no bot version commit. When main changes packages/desktop/pyproject.toml:
+# is no bot version commit.
 #
-#   gate         stops quietly if this version is already released; waits for
-#                the commit's Packages run and requires its desktop test and
-#                build jobs to have passed; refuses if packages/desktop changed
-#                on main since.
+# A release starts when Packages finishes successfully for a push to main
+# (workflow_run), so time spent queued behind other CI cannot fail it. That
+# Packages commit is the subject: its checks decide the release. GitHub runs
+# this workflow, and signs its attestations, at main's tip (github.sha), so the
+# release builds and tags that tip and requires its packages/desktop tree to
+# equal the subject's. A manual dispatch does the same with the newest
+# first-parent commit that changed Desktop as the subject, and waits for that
+# commit's Packages run.
+#
+#   gate         stops quietly when the subject does not change
+#                packages/desktop, when a newer Desktop change on main will
+#                release itself, or when this version is already released;
+#                requires the subject's Packages run to have passed with its
+#                desktop test and build jobs; refuses if packages/desktop
+#                changed on main since a dispatched subject.
 #   build-*      the Python distributions and every native installer, smoke-
 #                tested. The macOS and Windows jobs run in the native-release
-#                environment (its reviewer approves the release; it holds the
-#                signing secrets).
+#                environment, which holds the signing secrets.
 #   attest       checksums, SBOM, provenance, and this release's channel (v3,
 #                naming the previous release's channel by hash), all attested.
 #   stage        the openadapt-release App creates the tag and a draft with
@@ -26,7 +36,11 @@
 #
 # If any build fails, nothing is published. If a later job fails, re-run the
 # failed jobs of the same run: it reuses the attested bytes. A new run refuses a
-# version that is half-published instead of rebuilding it.
+# version that is half-published instead of rebuilding it, with one exception:
+# when PyPI already serves the version and its GitHub release is a draft, a
+# dispatch resumes. It builds nothing; the publish job downloads the draft,
+# reverifies every byte against its attestations and the tag's commit, requires
+# PyPI to serve the attested wheel and sdist, and publishes the draft.
 #
 # Signing: macOS DMGs are ad-hoc signed unless Developer ID credentials exist.
 # Windows goes through SignPath when the four SIGNPATH_* secrets are set (one
@@ -35,13 +49,19 @@
 # attestation. File names, the website manifest, the channel, and the release
 # notes state each platform's mode. The result is an unadmitted release
 # candidate; it creates no Production state.
+#
+# No caches. Release builds restore no npm, uv, pip or Rust cache: a cache
+# written by any earlier run (including a pull request's) could otherwise put
+# unreviewed bytes into a signed installer. Every job here installs from the
+# lockfiles on a clean runner, which costs minutes per release and is the
+# point. desktop-build.yml (pull requests and main) is where caching lives.
 name: Desktop release
 
 on:
-  push:
+  workflow_run:
+    workflows: [Packages]
+    types: [completed]
     branches: [main]
-    paths:
-      - packages/desktop/pyproject.toml
   workflow_dispatch:
 
 permissions:
@@ -53,22 +73,44 @@ defaults:
 
 concurrency:
   # One transaction owns the tag and the release. Never run two at once.
+  # Every Packages run on main starts a run here, most of them no-ops; without
+  # a queue, each new pending run would cancel the release waiting before it.
   group: desktop-release
   cancel-in-progress: false
+  queue: max
 
 jobs:
   gate:
     name: Decide whether this commit releases a new Desktop version
-    if: github.ref == 'refs/heads/main'
+    # workflow_run fires for every Packages run whose head branch is main,
+    # including a fork's pull request from a branch named main. Only a
+    # successful push run on this repository's main can release.
+    if: >-
+      github.ref == 'refs/heads/main' && (
+        github.event_name == 'workflow_dispatch' || (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'main' &&
+          github.event.workflow_run.head_repository.full_name == github.repository
+        )
+      )
     runs-on: ubuntu-22.04
-    timeout-minutes: 75
+    # A dispatch may wait four hours for a queued Packages run, then 60 minutes
+    # for it to finish.
+    timeout-minutes: 320
     permissions:
       actions: read
       contents: read
     env:
       GH_TOKEN: ${{ github.token }}
+      EVENT_NAME: ${{ github.event_name }}
+      PACKAGES_RUN_ID: ${{ github.event.workflow_run.id }}
+      PACKAGES_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
     outputs:
-      release: ${{ steps.state.outputs.release }}
+      release: ${{ steps.fresh.outputs.release }}
+      resume: ${{ steps.state.outputs.resume }}
+      resume-commit: ${{ steps.state.outputs.resume-commit }}
       version: ${{ steps.state.outputs.version }}
       tag: ${{ steps.state.outputs.tag }}
       sbom: ${{ steps.state.outputs.sbom }}
@@ -82,7 +124,44 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Choose the commit whose checks decide the release
+        id: subject
+        run: |
+          set -euo pipefail
+          if [ "${EVENT_NAME}" = workflow_run ]; then
+            # The Packages commit, never main's tip: its checks are the ones
+            # that finished.
+            subject="${PACKAGES_HEAD_SHA}"
+            if ! [[ "${subject}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Packages head commit '${subject}' is not a commit id." >&2
+              exit 1
+            fi
+            git merge-base --is-ancestor "${subject}" "${GITHUB_SHA}"
+            echo "sha=${subject}" >> "${GITHUB_OUTPUT}"
+            if git diff --quiet "${subject}^1" "${subject}" -- .; then
+              echo "No release: ${subject} does not change packages/desktop."
+              echo "candidate=false" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            if ! git diff --quiet "${subject}" "${GITHUB_SHA}" -- .; then
+              newer="$(git log -1 --first-parent --format=%H "${GITHUB_SHA}" -- .)"
+              echo "No release: main changed packages/desktop again at ${newer}; that commit's Packages run starts its own release."
+              echo "candidate=false" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+          else
+            # A dispatch builds the tip; its checks are those of the newest
+            # commit on main's own history (first parent) that changed
+            # Desktop, whose tree the tip must equal. A commit from inside a
+            # merged branch never had a Packages push run on main.
+            subject="$(git log -1 --first-parent --format=%H "${GITHUB_SHA}" -- .)"
+            echo "sha=${subject}" >> "${GITHUB_OUTPUT}"
+          fi
+          echo "Release checks follow ${subject}; the release builds ${GITHUB_SHA}."
+          echo "candidate=true" >> "${GITHUB_OUTPUT}"
+
       - name: Read the version and the state of its release
+        if: steps.subject.outputs.candidate == 'true'
         id: state
         run: |
           set -euo pipefail
@@ -109,6 +188,30 @@ jobs:
           elif [ "${pypi}" = 404 ] && [ "${release}" = none ] && \
                ! git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
             echo "release=true" >> "${GITHUB_OUTPUT}"
+          elif [ "${pypi}" = 200 ] && [ "${release}" != false ] && \
+               git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
+            # PyPI took the wheel and sdist, the tag exists, and no published
+            # release does: the staged draft was never published. (This token
+            # cannot see drafts, so the tags endpoint reports none; the publish
+            # job requires the draft with the release App's token.) Only a
+            # dispatch resumes; any other run builds nothing and says so.
+            if [ "${EVENT_NAME}" != workflow_dispatch ]; then
+              echo "::warning::${tag} is on PyPI and tagged, but its release is not published. Dispatch this workflow on main to resume it; this run builds nothing."
+              echo "release=false" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            # Resume with the bytes already attested and staged; build nothing.
+            git fetch --no-tags origin \
+              "+refs/tags/${tag}:refs/tags/${tag}" \
+              +refs/heads/main:refs/remotes/origin/main
+            commit="$(git rev-list -n 1 "refs/tags/${tag}")"
+            git merge-base --is-ancestor "${commit}" refs/remotes/origin/main
+            echo "${tag} is on PyPI and tagged at ${commit} with no published release; resuming its publication."
+            {
+              echo "release=false"
+              echo "resume=true"
+              echo "resume-commit=${commit}"
+            } >> "${GITHUB_OUTPUT}"
           elif [ "${pypi}" = 200 ] || [ "${pypi}" = 404 ]; then
             echo "${tag} is partly published (PyPI ${pypi}, GitHub ${release})." >&2
             echo "Re-run the failed jobs of the run that started it; do not rebuild." >&2
@@ -139,33 +242,57 @@ jobs:
             --candidate-tag "${TAG}" \
             --tags remote-tags.txt
 
-      - name: Choose the commit whose checks decide the release
-        if: steps.state.outputs.release == 'true'
-        id: subject
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          set -euo pipefail
-          if [ "${EVENT_NAME}" = push ]; then
-            subject="${GITHUB_SHA}"
-          else
-            # A dispatch builds the tip; its checks are those of the newest
-            # commit on main's own history (first parent) that changed
-            # Desktop, whose tree the tip must equal. A commit from inside a
-            # merged branch never had a Packages push run on main.
-            subject="$(git log -1 --first-parent --format=%H "${GITHUB_SHA}" -- .)"
-          fi
-          echo "Release checks follow ${subject}."
-          echo "sha=${subject}" >> "${GITHUB_OUTPUT}"
-
-      - name: Wait for that commit's Packages run and its desktop jobs
+      - name: Require that commit's Packages run and its desktop jobs to have passed
         if: steps.state.outputs.release == 'true'
         env:
           SUBJECT: ${{ steps.subject.outputs.sha }}
         run: |
           set -euo pipefail
-          deadline=$((SECONDS + 3600))
-          while [ "${SECONDS}" -lt "${deadline}" ]; do
+          packages_workflow="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/packages.yml" --jq .id)"
+          require_desktop_jobs() {
+            # A green run with the desktop jobs skipped proves nothing about
+            # Desktop. Require that both desktop workflows ran and passed.
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/$1/jobs?per_page=100" \
+              --jq '.jobs[] | "\(.conclusion)\t\(.name)"' > "${RUNNER_TEMP}/jobs.tsv"
+            for prefix in "desktop test / " "desktop build / "; do
+              if ! grep -q $'^success\t'"${prefix}" "${RUNNER_TEMP}/jobs.tsv"; then
+                echo "Refusing to release: no successful '${prefix}' job in run $1." >&2
+                exit 1
+              fi
+            done
+            if grep -E $'^(failure|cancelled|timed_out)\tdesktop (test|build) / ' "${RUNNER_TEMP}/jobs.tsv"; then
+              echo "Refusing to release: a desktop job did not pass." >&2
+              exit 1
+            fi
+          }
+
+          if [ "${EVENT_NAME}" = workflow_run ]; then
+            # The Packages run that started this one has finished. Read it back
+            # instead of trusting the event: it must be this repository's push
+            # run on main for the subject, and it must have succeeded.
+            run="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${PACKAGES_RUN_ID}" \
+              --jq '"\(.workflow_id) \(.head_sha) \(.event) \(.head_branch) \(.head_repository.full_name) \(.status) \(.conclusion)"')"
+            echo "Packages run ${PACKAGES_RUN_ID}: ${run}"
+            read -r workflow_id head_sha event branch repository status conclusion <<<"${run}"
+            if [ "${workflow_id}" != "${packages_workflow}" ] || [ "${head_sha}" != "${SUBJECT}" ] || \
+               [ "${event}" != push ] || [ "${branch}" != main ] || [ "${repository}" != "${GITHUB_REPOSITORY}" ]; then
+              echo "Refusing to release: run ${PACKAGES_RUN_ID} is not the Packages push run for ${SUBJECT} on main." >&2
+              exit 1
+            fi
+            if [ "${status}" != completed ] || [ "${conclusion}" != success ]; then
+              echo "Refusing to release: Packages is ${status}/${conclusion}." >&2
+              exit 1
+            fi
+            require_desktop_jobs "${PACKAGES_RUN_ID}"
+            exit 0
+          fi
+
+          # A dispatch waits for the subject's Packages push run: up to four
+          # hours while it is queued, then up to 60 minutes once it runs.
+          # Congested CI can hold a run queued for over an hour.
+          queued_deadline=$((SECONDS + 4 * 3600))
+          running_deadline=
+          while :; do
             run="$(gh api --method GET \
               "repos/${GITHUB_REPOSITORY}/actions/workflows/packages.yml/runs" \
               --raw-field head_sha="${SUBJECT}" \
@@ -176,34 +303,35 @@ jobs:
                     | "\(.id // 0) \(.status // "missing") \(.conclusion // "pending")"')"
             echo "Packages for ${SUBJECT}: ${run}"
             read -r run_id status conclusion <<<"${run}"
-            if [ "${status}" = completed ]; then
-              if [ "${conclusion}" != success ]; then
-                echo "Refusing to release: Packages concluded ${conclusion}." >&2
-                exit 1
-              fi
-              # A green run with the desktop jobs skipped proves nothing about
-              # Desktop. Require that both desktop workflows ran and passed.
-              gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100" \
-                --jq '.jobs[] | "\(.conclusion)\t\(.name)"' > "${RUNNER_TEMP}/jobs.tsv"
-              for prefix in "desktop test / " "desktop build / "; do
-                if ! grep -q $'^success\t'"${prefix}" "${RUNNER_TEMP}/jobs.tsv"; then
-                  echo "Refusing to release: no successful '${prefix}' job in run ${run_id}." >&2
+            case "${status}" in
+              completed)
+                if [ "${conclusion}" != success ]; then
+                  echo "Refusing to release: Packages concluded ${conclusion}." >&2
                   exit 1
                 fi
-              done
-              if grep -E $'^(failure|cancelled|timed_out)\tdesktop (test|build) / ' "${RUNNER_TEMP}/jobs.tsv"; then
-                echo "Refusing to release: a desktop job did not pass." >&2
-                exit 1
-              fi
-              exit 0
-            fi
-            sleep 20
+                require_desktop_jobs "${run_id}"
+                exit 0
+                ;;
+              in_progress)
+                running_deadline="${running_deadline:-$((SECONDS + 3600))}"
+                if [ "${SECONDS}" -ge "${running_deadline}" ]; then
+                  echo "Refusing to release: Packages did not finish within 60 minutes of starting." >&2
+                  exit 1
+                fi
+                ;;
+              *)
+                if [ "${SECONDS}" -ge "${queued_deadline}" ]; then
+                  echo "Refusing to release: Packages is still ${status} after four hours." >&2
+                  exit 1
+                fi
+                ;;
+            esac
+            sleep 30
           done
-          echo "Refusing to release: Packages did not succeed within 60 minutes." >&2
-          exit 1
 
       - name: Require that main has not changed Desktop since that commit
         if: steps.state.outputs.release == 'true'
+        id: fresh
         env:
           SUBJECT: ${{ steps.subject.outputs.sha }}
         run: |
@@ -213,11 +341,18 @@ jobs:
           git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main
           for later in refs/remotes/origin/main "${GITHUB_SHA}"; do
             if ! git diff --quiet "${SUBJECT}" "${later}" -- .; then
+              if [ "${EVENT_NAME}" = workflow_run ]; then
+                # The newer commit's own Packages run starts its release.
+                echo "No release: packages/desktop changed on main after ${SUBJECT}; the newer change releases itself."
+                echo "release=false" >> "${GITHUB_OUTPUT}"
+                exit 0
+              fi
               echo "packages/desktop changed on main after ${SUBJECT}." >&2
-              echo "The newer change releases itself; dispatch this workflow once its checks pass." >&2
+              echo "The newer change releases itself once its Packages run passes." >&2
               exit 1
             fi
           done
+          echo "release=true" >> "${GITHUB_OUTPUT}"
 
   build-python:
     name: Python distributions
@@ -237,6 +372,9 @@ jobs:
           python-version: "3.12"
 
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          # Release builds restore no cache; see the note at the top.
+          enable-cache: false
 
       - name: Build and check the wheel and sdist
         run: |
@@ -291,8 +429,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: packages/desktop/package-lock.json
+          # Release builds restore no cache; see the note at the top.
+          package-manager-cache: false
 
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
@@ -442,8 +580,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: packages/desktop/package-lock.json
+          # Release builds restore no cache; see the note at the top.
+          package-manager-cache: false
 
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
@@ -509,7 +647,7 @@ jobs:
 
       - name: Sign the installers with SignPath
         if: steps.signing.outputs.method == 'signpath'
-        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
@@ -639,8 +777,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: packages/desktop/package-lock.json
+          # Release builds restore no cache; see the note at the top.
+          package-manager-cache: false
 
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
@@ -1051,7 +1189,7 @@ jobs:
             python scripts/release_publication.py state --repository "${GITHUB_REPOSITORY}" --tag "${TAG}" --cli "${GH_CLI}" --metadata "${RUNNER_TEMP}/release.json"
           fi
           verify() {
-            python ../../scripts/verify_github_release.py \
+            python ../../scripts/verify_github_release.py --artifact-set any \
               --metadata "${RUNNER_TEMP}/release.json" \
               --tag "${TAG}" \
               --author "${EXPECTED_AUTHOR}" \
@@ -1112,18 +1250,29 @@ jobs:
           VERSION: ${{ needs.gate.outputs.version }}
         run: |
           python scripts/release_publication.py verify-pypi \
-            --directory pypi-dist --version "${VERSION}" --wait-seconds 300
+            --directory pypi-dist --checksums release-assets/SHA256SUMS \
+            --version "${VERSION}" --wait-seconds 300
 
   publish:
     name: Publish the immutable release
     needs: [gate, stage, publish-pypi]
+    # A release publishes after PyPI. A resume (stage and publish-pypi
+    # skipped) publishes the draft an earlier run staged and PyPI already
+    # serves.
+    if: >-
+      !cancelled() && needs.gate.result == 'success' && (
+        (needs.gate.outputs.release == 'true' && needs.publish-pypi.result == 'success') ||
+        needs.gate.outputs.resume == 'true'
+      )
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     environment: release-identity
     permissions:
+      attestations: read
       contents: read
     env:
       TAG: ${{ needs.gate.outputs.tag }}
+      VERSION: ${{ needs.gate.outputs.version }}
       EXPECTED_AUTHOR: openadapt-release[bot]
     steps:
       - name: Create a repository-scoped release App token
@@ -1136,6 +1285,17 @@ jobs:
           repositories: ${{ github.event.repository.name }}
           permission-contents: write
           permission-metadata: read
+
+      - name: Require the exact release App identity
+        env:
+          ACTUAL_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+        # Runs before the checkout below, so packages/desktop doesn't exist yet.
+        working-directory: ${{ github.workspace }}
+        run: |
+          if [ "${ACTUAL_APP_SLUG}" != openadapt-release ]; then
+            echo "Publishing requires the openadapt-release App, not ${ACTUAL_APP_SLUG}." >&2
+            exit 1
+          fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1162,10 +1322,42 @@ jobs:
           echo "path=${cli}" >> "${GITHUB_OUTPUT}"
 
       - name: Download the exact attested release set
+        if: needs.gate.outputs.resume != 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: desktop-release-${{ needs.gate.outputs.tag }}
           path: packages/desktop/upload
+
+      - name: Resume from the staged draft, reverified, and the PyPI files
+        if: needs.gate.outputs.resume == 'true'
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          GH_CLI: ${{ steps.release-cli.outputs.path }}
+          ATTESTATION_TOKEN: ${{ github.token }}
+          RESUME_COMMIT: ${{ needs.gate.outputs.resume-commit }}
+        run: |
+          set -euo pipefail
+          state="$(python scripts/release_publication.py state --repository "${GITHUB_REPOSITORY}" --tag "${TAG}" --cli "${GH_CLI}" --metadata "${RUNNER_TEMP}/release.json")"
+          if [ "${state}" != draft ]; then
+            echo "Refusing to resume: ${TAG} is ${state}, not a draft." >&2
+            exit 1
+          fi
+          mkdir "${RUNNER_TEMP}/staged"
+          "${GH_CLI}" release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --dir "${RUNNER_TEMP}/staged"
+          # The same checks the stage job ran before it uploaded these files:
+          # SHA256SUMS names exactly this set, and every attestation names
+          # this workflow on main and the tag's commit.
+          GH_TOKEN="${ATTESTATION_TOKEN}" python scripts/release_publication.py reverify \
+            --directory "${RUNNER_TEMP}/staged" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${TAG}" \
+            --source-commit "${RESUME_COMMIT}" \
+            --upload upload
+          python scripts/release_publication.py python-dist \
+            --directory upload --version "${VERSION}" --output pypi-dist
+          python scripts/release_publication.py verify-pypi \
+            --directory pypi-dist --checksums upload/SHA256SUMS \
+            --version "${VERSION}" --wait-seconds 0
 
       - name: Publish the verified draft once, then verify the immutable release
         env:
@@ -1174,7 +1366,7 @@ jobs:
         run: |
           set -euo pipefail
           verify() {
-            python ../../scripts/verify_github_release.py \
+            python ../../scripts/verify_github_release.py --artifact-set any \
               --metadata "${RUNNER_TEMP}/release.json" \
               --tag "${TAG}" \
               --author "${EXPECTED_AUTHOR}" \

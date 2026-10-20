@@ -691,6 +691,10 @@ def record(fixture: OpenEMRFixture, out_dir: Path, *, headed: bool) -> Path:
         # The pinned comprehensive form keeps every contact control inside a
         # collapsed, real UI accordion. Record opening it; never type into the
         # duplicate hidden inputs that exist while the section is collapsed.
+        # Scroll first, so the Contact tab is not on the viewport's bottom
+        # edge: its identity check crops the tab, and a crop that touches the
+        # frame edge falls off it at replay.
+        recorder.scroll(0, 300)
         recorder.click(*_center(form.get_by_text("Contact", exact=True)))
         # Scrolling is part of the demonstrated program. A hidden helper scroll
         # would leave replay at the top of the page with off-viewport click
@@ -705,10 +709,9 @@ def record(fixture: OpenEMRFixture, out_dir: Path, *, headed: bool) -> Path:
         text_field("phone_home", spec.phone_home, param="phone_home")
         text_field("email", spec.email, param="email")
         select_by_label("country_code", "USA", param="country_code")
-        # Expanding Contact increases the document height after the first
-        # recorded scroll. Move the governed save control into the middle of
-        # the clipped application iframe before capturing its physical click.
-        recorder.scroll(0, 600)
+        # After the scrolls above, #create is already inside the viewport. A
+        # further scroll would be a no-op at replay (its target is already on
+        # screen), which a Standard run cannot count as delivered.
         recorder.click(*_center(form.locator("#create")))
         # The first Save click only opens the pinned duplicate-check iframe.
         # #confirmCreate invokes srcConfirmSave() in the parent and performs
@@ -833,10 +836,7 @@ def compile_recording(recording_dir: Path, bundle_dir: Path) -> None:
         or open_step.anchor.structural.selector != "#create"
     ):
         raise FixtureError("confirmation click is not preceded by exact #create")
-    # Opening the duplicate-check dialog intentionally changes the full frame.
-    # Generic recorder mining can emit a flaky region-stable expectation for
-    # this transition. Bind the semantic state we actually require instead.
-    open_step.expect = [_duplicate_dialog_postcondition()]
+    apply_referral_rules(open_step, save_steps[0])
     save_steps[0].effects = patient_effects()
     # #confirmCreate is the click that creates the chart: declare it the
     # consequential write it is, so the irreversible-step safeguards stay
@@ -894,12 +894,54 @@ def _is_sha256(value: Any) -> bool:
     )
 
 
-def _duplicate_dialog_postcondition() -> Postcondition:
+#: OpenEMR's duplicate check shows this only when no existing patient matches.
+NO_MATCH_TEXT = "No matches were found."
+#: The new patient's chart, opened after the save, whatever the patient.
+SAVED_CHART_TEXT = "Medical Record Dashboard"
+
+
+def _duplicate_dialog_postconditions() -> list[Postcondition]:
+    """The dialog opened, and OpenEMR found no existing patient.
+
+    The second check is the referral's business rule: confirm a new chart only
+    when the duplicate check finds no match. Without it, the program confirms
+    a possible duplicate (the dialog shows "Confirm Create New Patient" either
+    way).
+    """
+
+    return [
+        Postcondition(
+            kind=PostconditionKind.TEXT_PRESENT,
+            text="Confirm Create New Patient",
+            timeout_s=10.0,
+        ),
+        Postcondition(
+            kind=PostconditionKind.TEXT_PRESENT, text=NO_MATCH_TEXT, timeout_s=10.0
+        ),
+    ]
+
+
+def _saved_chart_postcondition() -> Postcondition:
     return Postcondition(
-        kind=PostconditionKind.TEXT_PRESENT,
-        text="Confirm Create New Patient",
-        timeout_s=10.0,
+        kind=PostconditionKind.TEXT_PRESENT, text=SAVED_CHART_TEXT, timeout_s=10.0
     )
+
+
+def apply_referral_rules(open_step: Any, save_step: Any) -> None:
+    """The referral's checks on #create and #confirmCreate, for every compile.
+
+    ``open_step`` (#create) must show the duplicate-check dialog with no match
+    (generic mining emits a flaky region check for this full-frame change).
+    On ``save_step`` (#confirmCreate) the text the recorder mined from the
+    post-save frame is the tab strip, which changes when OpenEMR opens the new
+    patient's tab; it is replaced by the chart heading every saved patient
+    gets. The save itself is confirmed by its record check (effects).
+    """
+
+    open_step.expect = _duplicate_dialog_postconditions()
+    save_step.expect = [
+        p for p in save_step.expect if p.kind is not PostconditionKind.TEXT_PRESENT
+    ] + [_saved_chart_postcondition()]
 
 
 def _validate_benchmark_bundle(bundle_dir: Path) -> Any:
@@ -936,7 +978,7 @@ def _validate_benchmark_bundle(bundle_dir: Path) -> Any:
         or [effect.model_dump(mode="json") for effect in effect_steps[0].effects]
         != effects_payload
         or len(dialog_steps) != 1
-        or dialog_steps[0].expect != [_duplicate_dialog_postcondition()]
+        or dialog_steps[0].expect != _duplicate_dialog_postconditions()
         or workflow.steps.index(dialog_steps[0]) + 1
         != workflow.steps.index(effect_steps[0])
     ):

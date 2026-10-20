@@ -1,0 +1,59 @@
+{
+  "effect_verdict": "CONFIRMED",
+  "existing_records_changed": 0,
+  "field_check": [
+    {
+      "field": "title",
+      "match": true
+    },
+    {
+      "field": "fname",
+      "match": true
+    },
+    {
+      "field": "DOB",
+      "match": true
+    },
+    {
+      "field": "sex",
+      "match": true
+    },
+    {
+      "field": "street",
+      "match": true
+    },
+    {
+      "field": "city",
+      "match": true
+    },
+    {
+      "field": "state",
+      "match": true
+    },
+    {
+      "field": "postal_code",
+      "match": true
+    },
+    {
+      "field": "phone_home",
+      "match": true
+    },
+    {
+      "field": "country_code",
+      "match": true
+    }
+  ],
+  "fields_expected": 10,
+  "fields_matched": 10,
+  "independent": true,
+  "landed": "exact",
+  "matching_records": 1,
+  "observed": "exact_record",
+  "oracle_kind": "exact_record",
+  "passed": true,
+  "read_path": "system_of_record verifier records read",
+  "records_after": 1,
+  "records_before": 0,
+  "schema_version": "openadapt.qualify-readback/v1",
+  "silent_incorrect_success": false
+}

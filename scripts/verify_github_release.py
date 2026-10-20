@@ -18,7 +18,9 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _artifact_files(directory: Path, *, allow_empty: bool = False) -> dict[str, Path]:
+def _artifact_files(
+    directory: Path, *, allow_empty: bool = False, artifact_set: str = "python"
+) -> dict[str, Path]:
     if directory.is_symlink() or not directory.is_dir():
         raise ValueError(f"artifact directory does not exist: {directory}")
 
@@ -30,6 +32,15 @@ def _artifact_files(directory: Path, *, allow_empty: bool = False) -> dict[str, 
         raise ValueError(
             f"artifact directory contains invalid entries: {', '.join(invalid)}"
         )
+    if artifact_set == "any":
+        # A release whose exact asset set is its candidate directory (Desktop:
+        # installers, checksums, manifests). Every regular file is an asset.
+        files = {path.name: path for path in entries}
+        if not files and not allow_empty:
+            raise ValueError(f"artifact directory is empty: {directory}")
+        return files
+    if artifact_set != "python":
+        raise ValueError(f"unknown artifact set: {artifact_set}")
     files = {
         path.name: path
         for path in entries
@@ -62,6 +73,7 @@ def verify_release(
     downloaded_dir: Path | None = None,
     allow_missing: bool = False,
     expected_state: str = "published",
+    artifact_set: str = "python",
 ) -> list[str]:
     if document.get("tag_name") != expected_tag:
         raise ValueError(
@@ -94,7 +106,7 @@ def verify_release(
             f"found {actual_author!r}"
         )
 
-    expected = _artifact_files(expected_dir)
+    expected = _artifact_files(expected_dir, artifact_set=artifact_set)
     raw_assets = document.get("assets")
     if not isinstance(raw_assets, list):
         raise ValueError("release assets are missing or invalid")
@@ -142,7 +154,9 @@ def verify_release(
     if downloaded_dir is None:
         return missing
 
-    downloaded = _artifact_files(downloaded_dir, allow_empty=allow_missing)
+    downloaded = _artifact_files(
+        downloaded_dir, allow_empty=allow_missing, artifact_set=artifact_set
+    )
     required_downloads = actual_names if allow_missing else expected_names
     if set(downloaded) != required_downloads:
         raise ValueError("downloaded release asset set does not match the candidate")
@@ -164,6 +178,12 @@ def main() -> int:
     parser.add_argument("--allow-missing", action="store_true")
     parser.add_argument("--missing-output", type=Path)
     parser.add_argument("--state", choices=("draft", "published"), default="published")
+    parser.add_argument(
+        "--artifact-set",
+        choices=("python", "any"),
+        default="python",
+        help="python: exactly one wheel and one sdist; any: every file in the candidate directory",
+    )
     args = parser.parse_args()
 
     try:
@@ -178,6 +198,7 @@ def main() -> int:
             downloaded_dir=args.downloaded_dir,
             allow_missing=args.allow_missing,
             expected_state=args.state,
+            artifact_set=args.artifact_set,
         )
         if args.missing_output is not None:
             args.missing_output.write_text(

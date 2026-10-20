@@ -1,0 +1,20 @@
+{
+  "new_charts": 1,
+  "changed_charts": 0,
+  "new_chart_fields": {
+    "id": "2",
+    "pid": "2",
+    "title": "Mrs.",
+    "fname": "Ines",
+    "lname": "Carvalho",
+    "DOB": "1949-12-11",
+    "sex": "Female",
+    "street": "9 LANTERN COURT",
+    "city": "EXAMPLETON",
+    "state": "MA",
+    "postal_code": "02139",
+    "phone_home": "555-0131",
+    "email": "ines.carvalho@example.invalid",
+    "country_code": "USA"
+  }
+}

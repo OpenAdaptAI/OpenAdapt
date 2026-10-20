@@ -64,8 +64,30 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+
+      # PR tier: a change confined to packages/flow, agent, types or desktop
+      # can't change the platform manifest, so this job skips its checks. The
+      # scheduled run still catches published-artifact drift daily, and the
+      # merge queue and main always run everything.
+      - name: Scope (skip for package-only pull requests)
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != pull_request ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # The checkout is the PR merge commit; its first parent is the base tip.
+          changed="$(git diff --name-only HEAD^1 HEAD)"
+          outside="$(grep -vE '^packages/(flow|agent|types|desktop)/' <<<"$changed" || true)"
+          if [ -n "$outside" ]; then run=true; else run=false; fi
+          echo "run=$run" | tee -a "$GITHUB_OUTPUT"
 
       - name: Set up Python
+        if: steps.scope.outputs.run == 'true'
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
@@ -73,10 +95,12 @@ jobs:
       # Cheapest decisive check first: structure, signature honesty, and
       # repo agreement need no network and cannot be flaky.
       - name: Validate platform manifest structure (offline)
+        if: steps.scope.outputs.run == 'true'
         run: python scripts/validate_platform_manifest.py --offline
 
       # Standard library only: no dependency install, no lockfile, no cache.
       - name: Validate platform manifest against published artifacts
+        if: steps.scope.outputs.run == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/validate_platform_manifest.py
@@ -85,7 +109,7 @@ jobs:
         # The daily/dispatched production check is intentionally stdlib-only.
         # This characterization suite belongs on source changes, not every
         # remote drift probe, so scheduled checks stay fast and network-light.
-        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        if: steps.scope.outputs.run == 'true' && (github.event_name == 'pull_request' || github.event_name == 'push')
         run: |
           python -m pip install --quiet 'pytest>=8.0.0'
           python -m pytest \
