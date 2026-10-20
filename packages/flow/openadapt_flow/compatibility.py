@@ -433,7 +433,7 @@ CELLS: tuple[Cell, ...] = (
         "multi_surface",
         "default",
         "works",
-        note="an API step inside it runs on the GUI (below)",
+        note="an API step inside it runs on its surface (below)",
         evidence=(
             "tests/test_multi_surface_governed.py::test_governed_durable_multi_surface_run_reaches_verified",
         ),
@@ -484,7 +484,6 @@ CELLS: tuple[Cell, ...] = (
 )
 
 #: The API step combined with the other features, in one run.
-API_MULTI_SURFACE = "a run across several windows or tabs uses the GUI steps"
 API_REPAIR_PROBE = (
     "self-repair's probes and resumed run exercise the repaired GUI step, and "
     "the person approved that step, so its API step doesn't run"
@@ -532,10 +531,12 @@ COMBINATIONS: tuple[Cell, ...] = (
     Cell(
         "api_step",
         "multi_surface",
-        "refused",
-        reason=API_MULTI_SURFACE,
+        "works",
+        note="the steps it replaces stay on one browser surface, on its origin",
         evidence=(
-            "tests/test_compatibility_matrix.py::test_api_step_refuses_in_a_multi_surface_run",
+            "tests/test_api_step_multi_surface.py::test_the_api_step_runs_on_its_surface_in_a_governed_multi_surface_run",
+            "tests/test_api_step_multi_surface.py::test_the_session_must_be_on_the_surfaces_origin",
+            "tests/test_api_step_multi_surface.py::test_a_span_that_leaves_its_surface_runs_on_the_gui",
         ),
     ),
 )
