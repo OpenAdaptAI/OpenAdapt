@@ -250,13 +250,24 @@ API step the bundle itself doesn't admit. Each send still needs Cloud's
 per-delivery permit before anything is sent. An API step that Cloud's
 authorization doesn't name runs on the GUI and says why.
 
-Not yet covered, so the GUI steps run with that reason:
+Under qualification:
 
-- **Qualification cases.** Qualification needs representative and fault
-  cases on the API path for an admitted API step, and a case run doesn't
-  run API steps yet. So a bundle with an admitted API step can't complete
-  qualification today, and a run under a production qualification admission
-  uses the GUI steps.
+- **A qualification case runs the path its contract names.** When the case
+  names the API path for the save, the API step runs, and the steps it
+  replaces are folded. The fault-case check counts a folded step as covered
+  by that save's API result, and only on that path. A case that names the GUI
+  path runs the GUI steps.
+- **A production qualification admission uses the path it qualified.** The
+  signed admission binds the bundle digest, which seals the API step's
+  binding. It also binds the qualified effect contract, which names each path
+  the campaign qualified. The API step runs only when that contract names the
+  save's API path. A campaign qualified on the GUI alone keeps the qualified
+  GUI path, and the run says why.
+- **`openadapt-flow qualify` sets up GUI cases only.** Qualifying an API path
+  needs its own representative, weak-effect and missing-effect cases, and a
+  signal-quorum identity policy bound to the request. These are set up through
+  the qualification project API. The `qualify` command doesn't write them yet,
+  so a bundle it certifies runs the qualified GUI path.
 
 ## With parallel workers, pipelined read-back and self-repair
 
@@ -279,8 +290,8 @@ steps run instead, when:
 
 - an approval mode is on and the API actuator can't prepare the request
   before sending it (a deployment's own actuator without `prepare`);
-- the run's authorization didn't admit that API step, or it is a
-  qualification case, or a run under a production qualification admission
+- the run's authorization didn't admit that API step, or a qualification case
+  or production qualification admission names only the GUI path for the save
   (see [Under governance](#under-governance));
 - the step isn't admitted, or the program's steps, on-screen checks or the
   save's record check changed since it was proposed or admitted;

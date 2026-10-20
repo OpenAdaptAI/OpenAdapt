@@ -201,10 +201,12 @@ def test_the_published_page_is_current_and_linked():
 
 
 @pytest.mark.parametrize(
-    "profile", [p for p in _cells("api_step", "works") if p != "managed"]
+    "profile",
+    [p for p in _cells("api_step", "works") if p not in {"managed", "qualified"}],
 )
 def test_api_step_runs_where_the_matrix_says(tmp_path, profile):
     # Managed: tests/test_api_step_managed.py runs a real dispatch binding.
+    # Qualified: tests/test_api_step_qualified.py binds the qualified API path.
     run = Run(tmp_path, profile)
     report = run.run()
 

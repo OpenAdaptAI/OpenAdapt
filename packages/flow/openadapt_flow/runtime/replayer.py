@@ -2731,24 +2731,27 @@ class Replayer:
 
         The run's authorization must have admitted this exact API step. For a
         managed (Cloud) dispatch that is Cloud's authorization, whose
-        ``api_steps`` are inside the dispatch binding digest Cloud signs. A
-        qualification case runs the path it names, and a production
-        qualification admission doesn't cover API steps yet, so those run the
-        GUI steps.
+        ``api_steps`` are inside the dispatch binding digest Cloud signs.
+
+        A qualification case runs the path its contract names for the save:
+        the API step when that path is ``api``, the GUI steps otherwise. A run
+        under a production qualification admission uses the API step only
+        when the qualified effect contract, which the signed admission binds,
+        names the save's API path; that contract exists only when the
+        qualification campaign ran the API path's cases.
         """
 
         authorization = self.governed_authorization
         assert authorization is not None
         if authorization.qualification_case_id is not None:
-            return (
-                "a qualification case runs the GUI path it names; qualifying "
-                "an API step's path is not supported yet"
-            )
-        if authorization.production_qualification_admission_id is not None:
-            return (
-                "a production qualification admission doesn't cover API steps "
-                "yet, so the qualified GUI path runs"
-            )
+            if authorization.qualification_case_action_paths.get(save.id) != "api":
+                return "a qualification case runs the GUI path it names"
+        elif authorization.production_qualification_admission_id is not None:
+            if not authorization.effect_requirements(save.id, "api"):
+                return (
+                    "the production qualification admission didn't qualify this "
+                    "API step's path, so the qualified GUI path runs"
+                )
         return authorization.admitted_api_step(save, workflow)
 
     def _resume_inside_web_form_span(
