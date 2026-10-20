@@ -242,6 +242,14 @@ under these rules:
   check at the profile's evidence tier, with exact identity evidence. A run
   like that reads `VERIFIED`.
 
+A managed (Cloud) dispatch carries Cloud's run authorization. The API step runs
+when that authorization names it in `api_steps`. Those rows are inside the
+dispatch binding digest that Cloud signs, and the runner checks them against the
+bundle, as it does for a local run. The runner refuses a dispatch that names an
+API step the bundle itself doesn't admit. Each send still needs Cloud's
+per-delivery permit before anything is sent. An API step that Cloud's
+authorization doesn't name runs on the GUI and says why.
+
 Not yet covered, so the GUI steps run with that reason:
 
 - **Qualification cases.** Qualification needs representative and fault
@@ -249,8 +257,6 @@ Not yet covered, so the GUI steps run with that reason:
   run API steps yet. So a bundle with an admitted API step can't complete
   qualification today, and a run under a production qualification admission
   uses the GUI steps.
-- **Managed (Cloud) dispatch.** Cloud's run authorization doesn't list API
-  steps yet.
 
 ## With parallel workers, pipelined read-back and self-repair
 
@@ -274,8 +280,8 @@ steps run instead, when:
 - an approval mode is on and the API actuator can't prepare the request
   before sending it (a deployment's own actuator without `prepare`);
 - the run's authorization didn't admit that API step, or it is a
-  qualification case, a managed (Cloud) dispatch, or a run under a
-  production qualification admission (see [Under governance](#under-governance));
+  qualification case, or a run under a production qualification admission
+  (see [Under governance](#under-governance));
 - the step isn't admitted, or the program's steps, on-screen checks or the
   save's record check changed since it was proposed or admitted;
 - the save checks the right record on screen and the API step names no
