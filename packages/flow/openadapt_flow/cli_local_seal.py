@@ -87,6 +87,7 @@ def _cmd_file(args: argparse.Namespace) -> int:
 def _cmd_verify(args: argparse.Namespace) -> int:
     from openadapt_flow.offline_seal import (
         LocalSealError,
+        loads_strict,
         verify_local_seal,
         verify_run,
     )
@@ -96,19 +97,31 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     except LocalSealError as exc:
         print(f"not valid: {exc}", file=sys.stderr)
         return 1
+    except (OSError, ValueError) as exc:
+        print(f"not valid: unusable key registry ({exc})", file=sys.stderr)
+        return 1
     target = Path(args.target)
     if target.is_dir():
-        result = verify_run(target, registry)
+        result = verify_run(target, registry, strict=args.strict)
     else:
         if not args.seal:
             print("verify FILE needs --seal FILE.seal.json", file=sys.stderr)
             return 2
-        seal = json.loads(Path(args.seal).read_text(encoding="utf-8"))
+        try:
+            seal = loads_strict(Path(args.seal).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            print("not valid: malformed", file=sys.stderr)
+            return 1
         digest = hashlib.sha256(target.read_bytes()).hexdigest()
         result = verify_local_seal(seal, digest, registry)
     if result.ok:
-        where = f" over {result.subject_file}" if result.subject_file else ""
-        print(f"valid offline Seal{where}, key {result.key_id}")
+        where = target / result.subject_file if result.subject_file else target
+        print(f"valid offline Seal over {where}, key {result.key_id}")
+        if result.subject_file == "report.pre-seal.json":
+            print(
+                "note: report.json differs from what was sealed; the Seal covers "
+                "report.pre-seal.json, the copy attach-seal kept (--strict refuses this)"
+            )
         return 0
     print(f"not valid: {result.reason}", file=sys.stderr)
     return 1
@@ -144,12 +157,12 @@ def _cmd_key_create(args: argparse.Namespace) -> int:
 
 
 def _read_registry_file(path: Path) -> list[dict[str, Any]]:
-    from openadapt_flow.offline_seal import load_registry
+    from openadapt_flow.offline_seal import load_registry, loads_strict
 
     if not path.exists():
         return []
     load_registry(path)  # refuse to edit a registry that does not parse
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = loads_strict(path.read_text(encoding="utf-8"))
     entries = data.get("keys") if isinstance(data, dict) else data
     return [dict(e) for e in entries or []]
 
@@ -170,7 +183,11 @@ def _cmd_key_pin(args: argparse.Namespace) -> int:
         print(f"no key: {exc}", file=sys.stderr)
         return 1
     path = Path(args.registry)
-    entries = _read_registry_file(path)
+    try:
+        entries = _read_registry_file(path)
+    except ValueError as exc:
+        print(f"not pinned: {exc}", file=sys.stderr)
+        return 1
     if any(e.get("key_id") == entry["key_id"] for e in entries):
         print(f"already pinned: {entry['key_id']}")
         return 0
@@ -183,7 +200,11 @@ def _cmd_key_revoke(args: argparse.Namespace) -> int:
     from datetime import datetime, timezone
 
     path = Path(args.registry)
-    entries = _read_registry_file(path)
+    try:
+        entries = _read_registry_file(path)
+    except ValueError as exc:
+        print(f"not revoked: {exc}", file=sys.stderr)
+        return 1
     at = args.at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     found = False
     for entry in entries:
@@ -198,7 +219,10 @@ def _cmd_key_revoke(args: argparse.Namespace) -> int:
     except ValueError as exc:
         print(f"not revoked: {exc}", file=sys.stderr)
         return 1
-    print(f"revoked {args.key_id} from {at}; Seals issued before then still verify")
+    print(
+        f"revoked {args.key_id} at {at}; every Seal it signed is now refused, "
+        "because a Seal's own issued_at can't prove it came first"
+    )
     return 0
 
 
@@ -286,6 +310,11 @@ def register(sub: Any) -> None:
     v.add_argument("target")
     v.add_argument("--seal", default=None)
     v.add_argument("--keys", default=None, help="Pinned key registry JSON")
+    v.add_argument(
+        "--strict",
+        action="store_true",
+        help="Require the Seal to match report.json itself, not report.pre-seal.json",
+    )
     v.set_defaults(func=_cmd_verify)
 
     k = s.add_parser("key", help="Print the Seal key's public half for pinning")

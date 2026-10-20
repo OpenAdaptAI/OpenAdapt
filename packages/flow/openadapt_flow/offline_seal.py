@@ -26,7 +26,10 @@ For a third-party time and signature, add batched timestamps later with
 Verification is fail closed and uses pinned keys only. The public key inside
 a Seal is informational; trust comes from the key registry the verifier
 pinned, in the same JSON shape as the Cloud Seal key registry
-(``key_id``, ``public_key``, ``status``, ``revoked_at``).
+(``key_id``, ``public_key``, ``status``, ``revoked_at``). A revoked key's
+Seals are refused whatever their ``issued_at`` says: the holder of a revoked
+key can write any ``issued_at``, so only an independent time (a transparency
+log anchor) can show a Seal predates the revocation.
 
 By default, signing uses the local Ed25519 key of
 :mod:`openadapt_flow.execute.keys` (PKCS#8 PEM, mode 0600, under
@@ -83,6 +86,7 @@ LocalSealRefusal = Literal[
     "revoked_key",
     "key_mismatch",
     "bad_signature",
+    "ambiguous_key",
 ]
 
 
@@ -182,6 +186,24 @@ def signing_payload(seal: Mapping[str, Any]) -> bytes:
 def seal_sha256(seal: Mapping[str, Any]) -> str:
     """Digest of a whole Seal (signature included); the batch leaf value."""
     return hashlib.sha256(canonical_json(dict(seal)).encode("utf-8")).hexdigest()
+
+
+def _no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in out:
+            raise ValueError(f"duplicate JSON key {key!r}")
+        out[key] = value
+    return out
+
+
+def loads_strict(text: str | bytes) -> Any:
+    """``json.loads`` that refuses an object with a repeated key.
+
+    ``{"outcome": "FAILED", "outcome": "VERIFIED"}`` means different things
+    to different parsers, so a Seal or registry written that way is malformed.
+    """
+    return json.loads(text, object_pairs_hook=_no_duplicate_keys)
 
 
 def _utc_seconds(now: Optional[datetime]) -> str:
@@ -303,7 +325,7 @@ def seal_run(
     if seal_path.exists():
         try:
             existing = LocalSealV1.model_validate(
-                json.loads(seal_path.read_text(encoding="utf-8"))
+                loads_strict(seal_path.read_text(encoding="utf-8"))
             )
         except Exception as exc:
             raise LocalSealError("existing_seal_unreadable", str(seal_path)) from exc
@@ -353,12 +375,20 @@ def seal_after_run(
 
 
 def load_registry(path: Path) -> list[SealPublicKey]:
-    """Load pinned keys: a JSON list, or an object with a ``keys`` list."""
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    """Load pinned keys: a JSON list, or an object with a ``keys`` list.
+
+    Refuses a registry that lists one key ID twice, so "active" in one entry
+    can't outvote "revoked" in another.
+    """
+    data = loads_strict(Path(path).read_text(encoding="utf-8"))
     entries = data.get("keys") if isinstance(data, dict) else data
     if not isinstance(entries, list):
         raise ValueError('a key registry is a list of keys or {"keys": [...]}')
-    return parse_key_registry(entries)
+    keys = parse_key_registry(entries)
+    ids = [k.key_id for k in keys]
+    if len(set(ids)) != len(ids):
+        raise ValueError("a key registry lists the same key_id more than once")
+    return keys
 
 
 def verify_local_seal(
@@ -375,12 +405,14 @@ def verify_local_seal(
         return LocalSealVerification(False, reason="malformed")
     if parsed.subject_sha256 != subject_sha256:
         return LocalSealVerification(False, reason="subject_mismatch")
-    key = next((k for k in registry if k.key_id == parsed.key_id), None)
-    if key is None:
+    matches = [k for k in registry if k.key_id == parsed.key_id]
+    if not matches:
         return LocalSealVerification(False, reason="unknown_key")
-    if key.status == "revoked" and (
-        key.revoked_at is None or parsed.issued_at >= key.revoked_at
-    ):
+    if len(matches) > 1:
+        return LocalSealVerification(False, reason="ambiguous_key")
+    key = matches[0]
+    if key.status == "revoked":
+        # issued_at is the signer's own claim; a revoked key can backdate it.
         return LocalSealVerification(False, reason="revoked_key")
     if parsed.public_key != key.public_key:
         return LocalSealVerification(False, reason="key_mismatch")
@@ -397,23 +429,26 @@ def verify_local_seal(
 
 
 def verify_run(
-    run_dir: Path, registry: Sequence[SealPublicKey]
+    run_dir: Path, registry: Sequence[SealPublicKey], *, strict: bool = False
 ) -> LocalSealVerification:
     """Verify ``run_dir/seal.json`` against the run's report.
 
     The Seal must match ``report.json``, or ``report.pre-seal.json`` when a
     Cloud receipt was attached afterwards (``attach-seal`` keeps the report
-    as it was before attaching).
+    as it was before attaching). ``subject_file`` names the file that
+    matched. With ``strict``, only ``report.json`` counts: a run whose
+    ``report.json`` changed after sealing is refused even if a
+    ``report.pre-seal.json`` matches.
     """
     run_dir = Path(run_dir)
     try:
-        seal = json.loads((run_dir / SEAL_FILE).read_text(encoding="utf-8"))
+        seal = loads_strict((run_dir / SEAL_FILE).read_text(encoding="utf-8"))
     except FileNotFoundError:
         return LocalSealVerification(False, reason="unsigned")
     except (OSError, ValueError):
         return LocalSealVerification(False, reason="malformed")
     result = LocalSealVerification(False, reason="subject_mismatch")
-    for name in ("report.json", "report.pre-seal.json"):
+    for name in ("report.json",) if strict else ("report.json", "report.pre-seal.json"):
         path = run_dir / name
         if not path.is_file():
             continue

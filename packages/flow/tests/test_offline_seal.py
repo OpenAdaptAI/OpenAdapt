@@ -8,9 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from openadapt_types.seal import parse_key_registry
 
 from openadapt_flow import offline_seal
-from openadapt_types.seal import parse_key_registry
 from openadapt_flow.offline_seal import (
     LocalSealError,
     public_key_entry,
@@ -109,16 +109,44 @@ def test_bad_signature_is_refused(tmp_path):
     assert verify_run(run, _pinned(home)).reason == "bad_signature"
 
 
-def test_revoked_key_refuses_seals_issued_after_revocation(tmp_path):
+def test_revoked_key_refuses_every_seal_even_backdated(tmp_path):
     home = tmp_path / "home"
     run = _run(tmp_path)
-    seal_run(run, home=home, now=NOW)
+    # The key's holder backdates the Seal to before the revocation.
+    seal_run(run, home=home, now=datetime(2020, 1, 1, tzinfo=timezone.utc))
     entry = dict(
         public_key_entry(home), status="revoked", revoked_at="2026-10-01T00:00:00Z"
     )
     assert verify_run(run, parse_key_registry([entry])).reason == "revoked_key"
-    entry["revoked_at"] = "2026-11-01T00:00:00Z"
-    assert verify_run(run, parse_key_registry([entry])).ok
+
+
+def test_repeated_json_keys_in_a_seal_are_malformed(tmp_path):
+    home = tmp_path / "home"
+    run = _run(tmp_path, outcome="FAILED")
+    seal_run(run, home=home, now=NOW)
+    text = (run / "seal.json").read_text()
+    assert '"outcome": "FAILED"' in text
+    (run / "seal.json").write_text(
+        text.replace(
+            '"outcome": "FAILED",', '"outcome": "FAILED", "outcome": "VERIFIED",'
+        )
+    )
+    assert verify_run(run, _pinned(home)).reason == "malformed"
+
+
+def test_registry_listing_a_key_twice_is_refused(tmp_path):
+    home = tmp_path / "home"
+    run = _run(tmp_path)
+    seal_run(run, home=home, now=NOW)
+    entry = public_key_entry(home)
+    revoked = dict(entry, status="revoked", revoked_at="2026-10-01T00:00:00Z")
+    path = tmp_path / "keys.json"
+    path.write_text(json.dumps({"keys": [entry, revoked]}))
+    with pytest.raises(ValueError):
+        offline_seal.load_registry(path)
+    # Even a registry built in code can't let "active" outvote "revoked".
+    both = parse_key_registry([entry, revoked])
+    assert verify_run(run, both).reason == "ambiguous_key"
 
 
 def test_malformed_and_missing_seal(tmp_path):
@@ -139,6 +167,21 @@ def test_cloud_receipt_attached_later_still_verifies(tmp_path):
     attach_receipt(run, {"execution_id": "exe_1", "outcome": "verified"}, "exe_1")
     result = verify_run(run, _pinned(home))
     assert result.ok and result.subject_file == "report.pre-seal.json"
+    # --strict accepts only report.json itself.
+    assert verify_run(run, _pinned(home), strict=True).reason == "subject_mismatch"
+
+
+def test_edited_report_with_original_kept_aside_is_named_and_strict_refuses(tmp_path):
+    home = tmp_path / "home"
+    run = _run(tmp_path, outcome="FAILED")
+    seal_run(run, home=home, now=NOW)
+    (run / "report.json").rename(run / "report.pre-seal.json")
+    (run / "report.json").write_text(
+        '{"run_id": "run-1", "execution_outcome": "VERIFIED"}'
+    )
+    loose = verify_run(run, _pinned(home))
+    assert loose.ok and loose.subject_file == "report.pre-seal.json"
+    assert verify_run(run, _pinned(home), strict=True).reason == "subject_mismatch"
 
 
 def test_cli_hook_is_default_on_and_can_be_turned_off(tmp_path):
