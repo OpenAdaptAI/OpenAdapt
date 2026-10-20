@@ -113,7 +113,6 @@ Evidence:
 - **Real app**: run against a real third-party application, such as a local
   OpenEMR or openIMIS.
 - **Synthetic**: run against OpenAdapt's own test apps (MockMed and fixtures).
-- **Untested**: no run yet.
 
 All patient and claim data in every test and benchmark is synthetic.
 
@@ -201,6 +200,7 @@ improvising or retrying when something is off.
 | Approve an API step's exact request under per-item approval: one digest binds the request bytes, the record and the record check, and a changed request is not sent | On main ([#1355](https://github.com/OpenAdaptAI/OpenAdapt/pull/1355)) | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#under-an-approval-mode) |
 | Run an API step in a durable run: checkpoint the span after the save is sent, never resend or redo a save that may have landed, and reconcile it by reading the record back | On main ([#1358](https://github.com/OpenAdaptAI/OpenAdapt/pull/1358)) | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#in-a-durable-run) |
 | Run an admitted API step under a governed run authorization and the Standard or Regulated profile: the authorization names the API step by digest, the person who admits it names the right-record parameter, and the outcome reads `VERIFIED` | On main ([#1361](https://github.com/OpenAdaptAI/OpenAdapt/pull/1361)) | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#under-governance) |
+| Run an admitted API step under a managed (Cloud) dispatch whose authorization names it: the API step rows are inside the dispatch digest Cloud signs, and each send still needs Cloud's delivery permit | On main | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#under-governance) |
 | Defer an API save's read-back with pipelined read-back, as for a GUI save, and keep self-repair's probes and resumed run on the repaired GUI step | On main ([#1362](https://github.com/OpenAdaptAI/OpenAdapt/pull/1362)) | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#with-parallel-workers-pipelined-read-back-and-self-repair) |
 | Say, for every feature under every run profile, whether it works or is refused and why, checked against the runtime in CI | On main ([#1364](https://github.com/OpenAdaptAI/OpenAdapt/pull/1364)) | Synthetic | [COMPATIBILITY.md](packages/flow/docs/COMPATIBILITY.md) |
 | Run a worklist on several workers at once, one signed-in session each, each item claimed once, with a stop on any worker stopping all | On main ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic patients on a local OpenEMR test copy | `--workers`, [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md) |
@@ -422,16 +422,19 @@ A test fails when a command has no file or this list is out of date.
   each), reported all 30 bad saves as done. `verify-run` flagged all 30 and
   confirmed all 10 clean saves, with no false alarms. The app shows "saved"
   before the server answers, so this measures what the screen can't show, not
-  the agent's care. Not yet run on OpenEMR:
+  the agent's care:
   [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back).
 
 ## Limits
 
-- No commercial EMR, claims system or real Citrix session has been tested.
-- Repair by default has resumed items only on MockMed. On the recorded
-  OpenEMR stops none reached repair (each came after "Create New Patient",
-  which counts as a save). On openIMIS, with #1337 and a risk review, the
-  relabelled Save reached repair 3 of 3, but no fix passed the probe.
+- Published results use synthetic records on open-source systems and
+  OpenAdapt's own test apps. Each workflow is qualified on the customer's own
+  system before it touches a real record.
+- Repair by default resumed 6 of 21 eligible stops on MockMed. On the
+  recorded OpenEMR and openIMIS stops it stopped safely for a person instead:
+  OpenEMR's came after "Create New Patient", which counts as a save, and on
+  openIMIS the relabelled Save reached repair 3 of 3 with no fix passing the
+  probe.
 - Windows installers are unsigned, and macOS builds are ad-hoc signed.
-- Several capabilities have run only on OpenAdapt's synthetic apps. The
-  Evidence column says which.
+- The Evidence column says which capabilities ran on a real app and which on
+  OpenAdapt's synthetic apps.

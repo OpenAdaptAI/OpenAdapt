@@ -266,3 +266,35 @@ def test_cli_reports_config_errors(tmp_path):
     )  # fmt: skip
     assert result.returncode == 2
     assert "verifier" in result.stderr
+
+
+def test_a_qualified_bundle_can_be_qualified_again():
+    # A sealed or repaired copy of a qualified bundle carries its project.
+    # Qualifying it again replaces the project with its next revision.
+    from openadapt_flow.qualify.campaign import configure_project
+
+    workflow = _workflow()
+    config = _config()
+    save, _notes = apply_verify_config(workflow, config)
+    kwargs = dict(
+        save=save,
+        params=dict(workflow.params),
+        environment={"app": "demo"},
+        campaign_id="first",
+        minimum_effect_tier=VerificationTier.INDEPENDENT_SYSTEM,
+    )
+    configure_project(workflow, config, **kwargs)
+    first = workflow.qualification
+    assert first is not None
+    first_digest = first.revision_digest()
+
+    configure_project(workflow, config, **{**kwargs, "campaign_id": "again"})
+
+    again = workflow.qualification
+    assert again is not None and again is not first
+    assert again.project_id == first.project_id
+    # The revision continues past the prior project's (every edit counts).
+    assert again.revision > first.revision
+    assert again.revision_digest() != first_digest
+    assert again.last_certification is None
+    assert sorted(c.id for c in again.cases) == sorted(c.id for c in first.cases)

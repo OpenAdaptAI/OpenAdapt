@@ -81,8 +81,23 @@ class QualifyError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 
+def _evidence_bytes(path: Path) -> bytes:
+    """A file's bytes; a file inside a sealed run directory is decrypted.
+
+    Runs of a sealed bundle write a sealed run directory, whose report is
+    ``report.json`` only by its logical name. Its evidence digest is over the
+    plaintext; the sealed set authenticates the ciphertext on disk.
+    """
+
+    if path.is_file():
+        return path.read_bytes()
+    from openadapt_flow import sealed_set
+
+    return sealed_set.read_bytes(path)
+
+
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(_evidence_bytes(path)).hexdigest()
 
 
 def write_json(path: Path, value: Any) -> Path:
@@ -372,9 +387,21 @@ def configure_project(
         runtime_version=FLOW_VERSION,
         required_capabilities=capabilities,
     )
+    # Re-qualifying a bundle that already has a project (a sealed copy, a
+    # repaired copy, or one certified before) replaces the project with a new
+    # revision of it: the same project id, revision + 1, linked to the prior
+    # revision's digest. Every case runs again; nothing carries over.
+    prior = workflow.qualification
     project = init_project(
-        workflow, environment=boundary, minimum_effect_tier=minimum_effect_tier
+        workflow,
+        environment=boundary,
+        minimum_effect_tier=minimum_effect_tier,
+        replace=prior is not None,
     )
+    if prior is not None:
+        project.project_id = prior.project_id
+        project.revision = prior.revision + 1
+        project.previous_revision_sha256 = prior.revision_digest()
     record = config.record.name
     for step in workflow.steps:
         irreversible = step.risk == "irreversible"
@@ -695,6 +722,12 @@ def _run(
                 for s in workflow.steps
             ),
         )
+        if workflow.encrypted:
+            # An encrypted bundle's runs keep their durable checkpoints under
+            # the same key (Standard and Regulated require them encrypted).
+            from openadapt_flow import crypto
+
+            kwargs["checkpoint_key"] = crypto.resolve_key(None)
         if hooks.replayer_kwargs is not None:
             kwargs.update(hooks.replayer_kwargs(ctx))
         # The signed lookup settings win over any hook, so a hook can't turn
@@ -788,10 +821,19 @@ def case_result(
     if project is None:
         raise QualifyError("the workflow's qualification project disappeared")
     run_dir = trial_dir / "run"
+    from openadapt_flow import sealed_set
+
+    # A sealed bundle's run directory is a sealed set: its files are bound by
+    # their logical names and plaintext digests, as the run report names them.
+    run_files = (
+        sealed_set.list_files(run_dir)
+        if sealed_set.is_sealed_path(run_dir)
+        else [path for path in run_dir.rglob("*") if path.is_file()]
+    )
     run_artifacts = [
         _evidence_ref(root, path, "other")
-        for path in sorted(run_dir.rglob("*"))
-        if path.is_file() and path.name != "report.json"
+        for path in sorted(run_files)
+        if path.name != "report.json"
     ]
     faults = (
         [
