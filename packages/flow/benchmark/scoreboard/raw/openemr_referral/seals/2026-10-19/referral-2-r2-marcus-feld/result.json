@@ -1,0 +1,94 @@
+{
+ "arm": "browser",
+ "ref": "r2-marcus-feld",
+ "mismatch": false,
+ "error": null,
+ "engine_success": true,
+ "outcome": "COMPLETED_UNVERIFIED",
+ "transaction_outcome": "COMPLETED_UNVERIFIED",
+ "actuation": "dom",
+ "api_fallback": "API steps are off for this run",
+ "steps": 41,
+ "step_errors": [],
+ "new_charts": 1,
+ "readback": "12/12",
+ "correct": true,
+ "field_check": [
+  {
+   "field": "title",
+   "want": "Mr.",
+   "got": "Mr.",
+   "match": true
+  },
+  {
+   "field": "fname",
+   "want": "Marcus",
+   "got": "Marcus",
+   "match": true
+  },
+  {
+   "field": "lname",
+   "want": "Feld",
+   "got": "Feld",
+   "match": true
+  },
+  {
+   "field": "DOB",
+   "want": "1958-09-02",
+   "got": "1958-09-02",
+   "match": true
+  },
+  {
+   "field": "sex",
+   "want": "Male",
+   "got": "Male",
+   "match": true
+  },
+  {
+   "field": "street",
+   "want": "114 QUARRY HILL DRIVE",
+   "got": "114 QUARRY HILL DRIVE",
+   "match": true
+  },
+  {
+   "field": "city",
+   "want": "EXAMPLETON",
+   "got": "EXAMPLETON",
+   "match": true
+  },
+  {
+   "field": "state",
+   "want": "MA",
+   "got": "MA",
+   "match": true
+  },
+  {
+   "field": "postal_code",
+   "want": "02139",
+   "got": "02139",
+   "match": true
+  },
+  {
+   "field": "phone_home",
+   "want": "555-0124",
+   "got": "555-0124",
+   "match": true
+  },
+  {
+   "field": "email",
+   "want": "marcus.feld@example.invalid",
+   "got": "marcus.feld@example.invalid",
+   "match": true
+  },
+  {
+   "field": "country_code",
+   "want": "USA",
+   "got": "USA",
+   "match": true
+  }
+ ],
+ "wall_s": 25.903,
+ "setup_s": 1.483,
+ "engine_s": 22.93,
+ "readback_s": 1.49
+}

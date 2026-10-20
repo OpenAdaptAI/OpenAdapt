@@ -1,0 +1,69 @@
+{
+  "note": "offline Seal, signed by this machine's key; no named execution profile; record check: OpenEMR REST read-back",
+  "engine_git_head": "93c32e9f41f7cd48cd12561a0f25ef4579de1a7b",
+  "bundle": "/Users/abrichr/oa/scratch/api-spike/feature-final/bundle",
+  "seed": {
+    "baseline": "359322296c24ca08859a70a9ba29efb673fbf6b43d96879c981b811e1276e1d0",
+    "seed_status": 201,
+    "reset_seed_s": 4.33
+  },
+  "verify": "openadapt-flow local-seal verify <run_dir> --keys seal-key.json",
+  "runs": [
+    {
+      "referral": 1,
+      "ref": "r1-nadia-brennan",
+      "run_dir": "referral-1-r1-nadia-brennan/engine",
+      "outcome": "COMPLETED_UNVERIFIED",
+      "transaction_outcome": "COMPLETED_UNVERIFIED",
+      "engine_success": true,
+      "readback": "12/12",
+      "new_charts": 1,
+      "mismatch_case": false,
+      "error": null,
+      "seal_subject_sha256": "be376829e0e3e8276423a8a7f6f151a45f85aab12476226c70faabe73067cf8d",
+      "seal_key_id": "seal-ed25519-accd03a9246d29bb"
+    },
+    {
+      "referral": 2,
+      "ref": "r2-marcus-feld",
+      "run_dir": "referral-2-r2-marcus-feld/engine",
+      "outcome": "COMPLETED_UNVERIFIED",
+      "transaction_outcome": "COMPLETED_UNVERIFIED",
+      "engine_success": true,
+      "readback": "12/12",
+      "new_charts": 1,
+      "mismatch_case": false,
+      "error": null,
+      "seal_subject_sha256": "fa5f6201e7617681e313cc71b0ac5b3f0910ca37ea0541a8d176fb1befbb988d",
+      "seal_key_id": "seal-ed25519-accd03a9246d29bb"
+    },
+    {
+      "referral": 3,
+      "ref": "r3-ines-carvalho",
+      "run_dir": "referral-3-r3-ines-carvalho/engine",
+      "outcome": "COMPLETED_UNVERIFIED",
+      "transaction_outcome": "COMPLETED_UNVERIFIED",
+      "engine_success": true,
+      "readback": "12/12",
+      "new_charts": 1,
+      "mismatch_case": false,
+      "error": null,
+      "seal_subject_sha256": "76fbb17e728521813a854a29f493241a5901b5ef03bea6d3d8f1efac7b5307ef",
+      "seal_key_id": "seal-ed25519-accd03a9246d29bb"
+    },
+    {
+      "referral": 4,
+      "ref": "r6-rosa-delgado",
+      "run_dir": "referral-4-r6-rosa-delgado/engine",
+      "outcome": "HALTED",
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "engine_success": false,
+      "readback": "0/12",
+      "new_charts": 0,
+      "mismatch_case": true,
+      "error": null,
+      "seal_subject_sha256": "19f3d816f82b73983d0a36751700e770f843390fe3132dc7674ee5db6a7de4cf",
+      "seal_key_id": "seal-ed25519-accd03a9246d29bb"
+    }
+  ]
+}
