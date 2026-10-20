@@ -15,6 +15,8 @@ For each key it states:
 * the apps and programs the runs used, the first and last time the
   transparency log recorded one of its Seals, and the log indexes, so anyone
   can look each one up.
+* ``run_list``: one line per counted Seal (its SHA-256, scope item, outcome
+  codes, app, program, issue time and log entry), so a reader can recount.
 * ``linked_identity``, only when a run authorization signed by the person's
   GitHub key verifies, names this Seal key in its scope, and the key's Seals
   reference it.
@@ -77,6 +79,14 @@ def app_name(report: dict[str, Any]) -> Optional[str]:
     return program.split("-", 1)[0] if program else None
 
 
+def _code(value: Any) -> Optional[str]:
+    return (
+        value
+        if isinstance(value, str) and re.match(r"^[A-Z][A-Z_]{0,31}$", value)
+        else None
+    )
+
+
 def _iso(seconds: int) -> str:
     return datetime.fromtimestamp(seconds, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -90,7 +100,13 @@ def build_profile(
     now: Optional[datetime] = None,
 ) -> dict[str, Any]:
     """Count anchored, verified Seals per Seal key. See the module docstring."""
-    from openadapt_flow.offline_seal import SEAL_FILE, loads_strict, verify_run
+    from openadapt_flow.offline_seal import (
+        SEAL_FILE,
+        LocalSealV1,
+        loads_strict,
+        seal_sha256,
+        verify_run,
+    )
     from openadapt_flow.run_authorization import check_run
 
     operators: dict[str, dict[str, Any]] = {}
@@ -111,7 +127,9 @@ def build_profile(
             raw = base64.b64decode(pinned.public_key)
             op = operators[key_id] = {
                 "seal_key_id": key_id,
+                "public_key": pinned.public_key,
                 "public_key_sha256": hashlib.sha256(raw).hexdigest(),
+                "run_list": [],
                 "outcomes": {name: 0 for name in HEADLINE},
                 "other_outcomes": {},
                 "runs": 0,
@@ -134,6 +152,23 @@ def build_profile(
         ):
             if value:
                 op[bucket].add(value)
+        op["run_list"].append(
+            {
+                "seal_sha256": seal_sha256(LocalSealV1.model_validate(seal).wire()),
+                "scope_item": seal.get("scope_item"),
+                "outcome": category,
+                "execution_outcome": _code(report.get("execution_outcome")),
+                "transaction_outcome": _code(report.get("transaction_outcome")),
+                "app": app_name(report),
+                "program": _clean_name(report.get("workflow_name")),
+                "issued_at": seal.get("issued_at"),
+                "anchor": {
+                    "uuid": result.anchor.uuid,
+                    "log_index": result.anchor.log_index,
+                    "integrated_time": result.anchor.integrated_time,
+                },
+            }
+        )
         op["anchored"].append(
             (int(result.anchor.integrated_time or 0), int(result.anchor.log_index or 0))
         )
@@ -150,8 +185,12 @@ def build_profile(
         times = sorted(t for t, _ in op["anchored"])
         entry: dict[str, Any] = {
             "seal_key_id": key_id,
+            "public_key": op["public_key"],
             "public_key_sha256": op["public_key_sha256"],
             "runs": op["runs"],
+            "run_list": sorted(
+                op["run_list"], key=lambda r: r["anchor"]["integrated_time"] or 0
+            ),
             "outcomes": op["outcomes"],
             "other_outcomes": dict(sorted(op["other_outcomes"].items())),
             "apps": sorted(op["apps"]),
@@ -164,6 +203,7 @@ def build_profile(
             entry["linked_identity"] = [
                 {
                     "handle": handle,
+                    "provider": auth.statement.provider,
                     "ssh_key_fingerprint": auth.signer_fingerprint,
                     "run_authorization_sha256": auth.sha256,
                     "checked_against": auth.signers_source,

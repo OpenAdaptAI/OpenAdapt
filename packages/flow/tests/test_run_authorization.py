@@ -104,6 +104,7 @@ def _run(
         "transaction_outcome": transaction,
         "bundle_content_digest": bundle,
         "run_id_sha256": "c" * 64,
+        "started_at": "2026-10-19T12:00:00+00:00",
         "params": {"fname": "Synthia", "lname": "Example", "record_id": "MRN-0042"},
     }
     (run / "report.json").write_text(json.dumps(report), encoding="utf-8")
@@ -433,14 +434,19 @@ def test_verify_checks_reference_scope_and_bundle(
     assert verify_run(run, registry, authorization=auth).reason == reason
 
 
-def test_authorization_anchored_after_the_seal_is_refused(tmp_path, rekor, monkeypatch):
+@pytest.mark.parametrize(
+    ("shift", "timing"), [(-3600, "before_seal"), (3600, "after_seal")]
+)
+def test_verifier_reports_what_the_log_proves_about_timing(
+    tmp_path, rekor, monkeypatch, shift, timing
+):
     person = Person()
     _, signer, _, registry, run, _ = _authorized_run(tmp_path, person, rekor)
     real = time.time
     anchor_seal(
         run / SEAL_FILE, signer, log_keys=[rekor.log], submit=rekor.submit, env={}
     )
-    monkeypatch.setattr(time, "time", lambda: real() + 3600)
+    monkeypatch.setattr(time, "time", lambda: real() + shift)
     anchor(tmp_path / "auth", signer, log_keys=[rekor.log], submit=rekor.submit, env={})
     monkeypatch.setattr(time, "time", real)
     auth = verify(
@@ -450,7 +456,13 @@ def test_authorization_anchored_after_the_seal_is_refused(tmp_path, rekor, monke
     result = verify_run(
         run, registry, require_anchor=True, log_keys=[rekor.log], authorization=auth
     )
-    assert result.reason == "auth_anchored_after_seal"
+    # Signed after the runs is still valid; the verifier says which it was.
+    assert result.ok and result.authorization_timing == timing
+    # The run's own started_at (2026-10-19 in _run) is the runner's claim.
+    assert result.authorization_vs_run_start == "after_run_start"
+    # Without anchors nothing independent is known about the order.
+    plain = verify_run(run, registry, authorization=verify(tmp_path / "auth"))
+    assert plain.ok and plain.authorization_timing == "not_anchored"
 
 
 def test_authorization_anchor_must_be_by_a_pinned_key(tmp_path, rekor):
@@ -574,6 +586,19 @@ def test_profile_counts_only_anchored_seals_and_shows_every_outcome(tmp_path, re
     assert op["other_outcomes"] == {"RECONCILIATION_REQUIRED": 1}
     assert op["apps"] == ["openemr"] and op["programs"] == ["openemr-referral-intake"]
     assert len(op["rekor_log_indexes"]) == 4
+    # One line per counted Seal, so a reader can recount; nothing private.
+    assert [r["scope_item"] for r in op["run_list"]] == ["r3", "r4", "r5", "r6"]
+    assert {r["outcome"] for r in op["run_list"]} == {
+        "verified",
+        "stopped_before_effect",
+        "completed_unverified",
+        "RECONCILIATION_REQUIRED",
+    }
+    assert all(r["anchor"]["uuid"] and r["seal_sha256"] for r in op["run_list"])
+    assert (
+        sorted(r["anchor"]["log_index"] for r in op["run_list"])
+        == op["rekor_log_indexes"]
+    )
     assert op["first_anchored_at"] <= op["last_anchored_at"]
     assert "linked_identity" not in op  # no authorization passed: pseudonymous
 
@@ -583,6 +608,7 @@ def test_profile_counts_only_anchored_seals_and_shows_every_outcome(tmp_path, re
     assert op["linked_identity"] == [
         {
             "handle": f"github:{USER}",
+            "provider": "ssh-github",
             "ssh_key_fingerprint": ssh_sig.fingerprint(person.raw),
             "run_authorization_sha256": auth.sha256,
             "checked_against": "the stored GitHub snapshot",

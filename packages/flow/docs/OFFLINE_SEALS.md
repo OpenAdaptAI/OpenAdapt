@@ -229,8 +229,9 @@ Cloud Seals are unchanged and remain the hosted option.
 ## Run authorizations: who authorized the runs
 
 A Seal names the machine key that sealed a run. A run authorization names
-the person who authorized it, by the SSH key they publish on GitHub. Ed25519
-SSH keys only.
+the person who authorized it. The scheme of the `authorizer` handle names
+the identity provider. The provider built so far is `ssh-github`
+(`github:<user>`): an Ed25519 SSH key the person publishes on GitHub.
 
 The statement (`openadapt.run-authorization/v1`, `run-authorization.json`)
 holds:
@@ -288,8 +289,21 @@ The verifier checks offline:
   snapshot, or in your own file passed with `--allowed-signers`;
 - that the Seal names this authorization and an item in its scope;
 - that the run's profile, bundle digest and Seal key match the scope;
-- with `--require-anchor`, the authorization's anchor, and that the log
-  recorded the authorization before the Seal.
+- with `--require-anchor`, the authorization's anchor.
+
+The person can sign before the runs or after them. Either way the
+authorization is valid, and the verifier states what the transparency log
+proves about the order:
+
+- `before_seal`: the log recorded the authorization before this run's Seal
+  ("authorized before these runs were sealed");
+- `after_seal`: the log recorded it after the Seal ("authorization confirmed
+  on <date>"). It confirms the run; it did not come first.
+- `not_anchored`: one of the two isn't anchored, so nothing independent is
+  known about the order.
+
+It also compares the authorization's log time with the run's own
+`started_at`. That time is the runner's claim, not independent evidence.
 
 `--live` also re-reads `https://github.com/<user>.keys` and refuses a key
 GitHub no longer lists (`auth_not_on_github`). The host is always
@@ -310,8 +324,7 @@ matters.
 Refusal reasons: `auth_missing`, `auth_malformed` (including a repeated JSON
 key), `auth_unsigned`, `auth_bad_signature`, `auth_unknown_signer`,
 `auth_not_on_github`, `auth_live_unavailable`, `auth_not_referenced`,
-`auth_reference_mismatch`, `auth_scope_mismatch`, `auth_bundle_mismatch`,
-`auth_anchored_after_seal`.
+`auth_reference_mismatch`, `auth_scope_mismatch`, `auth_bundle_mismatch`.
 
 ## Operator profile
 
@@ -329,9 +342,13 @@ keyed by Seal key ID. For each key it lists:
   of the program name;
 - the first and last time the log recorded one of the key's Seals, and each
   Rekor log index;
+- `run_list`: one line per counted Seal, so a reader can recount. Each line
+  holds the Seal's SHA-256, its scope item, the outcome codes, app, program,
+  issue time and Rekor entry.
 - `linked_identity`, only when an authorization signed with the person's
   GitHub key verifies, names this Seal key in its scope, and the Seals
-  reference it.
+  reference it. It names the handle, the identity provider (`ssh-github`)
+  and the SSH key fingerprint.
 
 Only Seals that verify against the pinned keys and have a valid anchor are
 counted. The rest are counted under `excluded` as `unanchored` or

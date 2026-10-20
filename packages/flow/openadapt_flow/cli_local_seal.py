@@ -190,6 +190,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
             )
         if auth is not None and auth.statement is not None:
             print(_authorized_line(auth))
+            print(_timing_line(result, auth))
         return 0
     print(f"not valid: {result.reason}", file=sys.stderr)
     return 1
@@ -217,6 +218,24 @@ def _verify_authorization(
         require_anchor=args.require_anchor,
         log_keys=log_keys,
     )
+
+
+_TIMING = {
+    "before_seal": "the log recorded the authorization before this run's Seal",
+    "after_seal": "the log recorded the authorization after this run's Seal: "
+    "it confirms the run, it did not precede it",
+    "not_anchored": "no transparency-log times to compare (pass --require-anchor "
+    "with both anchored)",
+}
+
+
+def _timing_line(result: Any, auth: Any) -> str:
+    line = "timing: " + _TIMING.get(str(result.authorization_timing), "unknown")
+    if result.authorization_vs_run_start == "before_run_start":
+        line += "; logged before the run's own started_at (the runner's claim)"
+    elif result.authorization_vs_run_start == "after_run_start":
+        line += "; logged after the run's own started_at (the runner's claim)"
+    return line
 
 
 def _authorized_line(auth: Any) -> str:

@@ -27,6 +27,12 @@ one the person authorized. The authorization can be anchored in the
 transparency log like a Seal (:mod:`openadapt_flow.seal_anchor`), signed by
 the runner's Seal key: one entry over the statement's and signature's digests.
 
+Identity providers. The authorizer handle's scheme names how the signature
+is checked; the statement format is the same for each. ``github:<user>``
+is the ``ssh-github`` provider (an Ed25519 SSH key published on GitHub), the
+one built here. Other providers (a passkey operator key; Sigstore keyless
+sign-in through Google, Microsoft or GitHub) plug in under their own scheme.
+
 Ed25519 SSH keys only.
 """
 
@@ -51,6 +57,8 @@ STATEMENT_FILE = "run-authorization.json"
 SIGNATURE_FILE = STATEMENT_FILE + ".sig"
 SIGNERS_FILE = "run-authorization.allowed_signers"
 ANCHOR_FILE = "run-authorization.anchor.json"
+# Handle scheme -> identity provider. Only ssh-github is built so far.
+PROVIDERS: Final = {"github": "ssh-github"}
 _HEX64 = r"^[a-f0-9]{64}$"
 _ITEM = r"^[A-Za-z0-9._-]{1,64}$"
 _KEY_ID = r"^seal-ed25519-[a-f0-9]{16}$"
@@ -70,7 +78,6 @@ AuthorizationRefusal = Literal[
     "auth_reference_mismatch",
     "auth_scope_mismatch",
     "auth_bundle_mismatch",
-    "auth_anchored_after_seal",
 ]
 
 
@@ -122,6 +129,10 @@ class RunAuthorizationV1(BaseModel):
 
     def github_user(self) -> str:
         return self.authorizer.split(":", 1)[1]
+
+    @property
+    def provider(self) -> str:
+        return PROVIDERS[self.authorizer.split(":", 1)[0]]
 
 
 @dataclass(frozen=True)

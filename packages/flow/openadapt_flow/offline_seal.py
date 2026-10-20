@@ -115,7 +115,6 @@ LocalSealRefusal = Literal[
     "auth_reference_mismatch",
     "auth_scope_mismatch",
     "auth_bundle_mismatch",
-    "auth_anchored_after_seal",
 ]
 
 
@@ -168,6 +167,14 @@ class LocalSealVerification:
     anchor: Optional["AnchorVerification"] = None
     # Set with reason="revoked_key" once the signature itself has verified.
     revoked_at: Optional[str] = None
+    # With an authorization: what the transparency log proves about timing.
+    # "before_seal" / "after_seal": the log recorded the authorization before
+    # or after this run's Seal. "not_anchored": one of the two has no anchor
+    # checked, so nothing independent is known about the order.
+    authorization_timing: Optional[str] = None
+    # The authorization's log time vs the run's own started_at (the runner's
+    # claim, not independent): "before_run_start" / "after_run_start".
+    authorization_vs_run_start: Optional[str] = None
 
 
 def mode_enabled(env: Optional[Mapping[str, str]] = None) -> bool:
@@ -573,13 +580,32 @@ def _check_authorization(
     except (OSError, ValueError):
         return dataclasses.replace(found, ok=False, reason="malformed")
     problem = check_run(LocalSealV1.model_validate(seal).wire(), report, auth)
-    if problem is None and found.anchor is not None and auth.anchor is not None:
-        # Both anchored: the log must have recorded the authorization first.
-        if (auth.anchor.integrated_time or 0) > (found.anchor.integrated_time or 0):
-            problem = "auth_anchored_after_seal"
     if problem:
         return dataclasses.replace(found, ok=False, reason=problem)  # type: ignore[arg-type]
-    return found
+    timing, vs_start = "not_anchored", None
+    auth_time = getattr(auth.anchor, "integrated_time", None) if auth.anchor else None
+    if auth_time is not None and found.anchor is not None:
+        seal_time = found.anchor.integrated_time or 0
+        timing = "before_seal" if auth_time <= seal_time else "after_seal"
+    if auth_time is not None:
+        started = _started_epoch(report.get("started_at"))
+        if started is not None:
+            vs_start = "before_run_start" if auth_time <= started else "after_run_start"
+    return dataclasses.replace(
+        found, authorization_timing=timing, authorization_vs_run_start=vs_start
+    )
+
+
+def _started_epoch(value: Any) -> Optional[int]:
+    if not isinstance(value, str):
+        return None
+    try:
+        when = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if when.tzinfo is None:
+        return None
+    return int(when.timestamp())
 
 
 def verify_run(
