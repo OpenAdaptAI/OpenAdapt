@@ -14,7 +14,6 @@ import os
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
@@ -435,32 +434,38 @@ def test_verify_checks_reference_scope_and_bundle(
 
 
 @pytest.mark.parametrize(
-    ("shift", "timing"), [(-3600, "before_seal"), (3600, "after_seal")]
+    ("started_at", "timing"),
+    [
+        ("2026-10-19T12:00:00+00:00", "after_run"),  # signed after the run
+        ("2999-01-01T00:00:00+00:00", "before_run"),  # signed before the run
+    ],
 )
-def test_verifier_reports_what_the_log_proves_about_timing(
-    tmp_path, rekor, monkeypatch, shift, timing
+def test_timing_is_judged_against_the_runs_own_start(
+    tmp_path, rekor, started_at, timing
 ):
     person = Person()
-    _, signer, _, registry, run, _ = _authorized_run(tmp_path, person, rekor)
-    real = time.time
+    home, signer, statement, registry = _setup(tmp_path, person)
+    person.sign(statement)
+    # Authorization logged first, then the run sealed under it and logged.
+    anchor(tmp_path / "auth", signer, log_keys=[rekor.log], submit=rekor.submit, env={})
+    run = _run(tmp_path, "r3")
+    report = json.loads((run / "report.json").read_text())
+    report["started_at"] = started_at
+    (run / "report.json").write_text(json.dumps(report))
+    seal_authorized(run, tmp_path / "auth", "r3", signer, home=home)
     anchor_seal(
         run / SEAL_FILE, signer, log_keys=[rekor.log], submit=rekor.submit, env={}
     )
-    monkeypatch.setattr(time, "time", lambda: real() + shift)
-    anchor(tmp_path / "auth", signer, log_keys=[rekor.log], submit=rekor.submit, env={})
-    monkeypatch.setattr(time, "time", real)
     auth = verify(
         tmp_path / "auth", registry=registry, require_anchor=True, log_keys=[rekor.log]
     )
-    assert auth.ok
     result = verify_run(
         run, registry, require_anchor=True, log_keys=[rekor.log], authorization=auth
     )
-    # Signed after the runs is still valid; the verifier says which it was.
+    # Valid either way; re-sealing after signing never turns "after" into "before".
     assert result.ok and result.authorization_timing == timing
-    # The run's own started_at (2026-10-19 in _run) is the runner's claim.
-    assert result.authorization_vs_run_start == "after_run_start"
-    # Without anchors nothing independent is known about the order.
+    assert result.authorization_vs_seal == "before_seal"
+    # Without the authorization's anchor nothing independent is known.
     plain = verify_run(run, registry, authorization=verify(tmp_path / "auth"))
     assert plain.ok and plain.authorization_timing == "not_anchored"
 

@@ -220,22 +220,20 @@ def _verify_authorization(
     )
 
 
-_TIMING = {
-    "before_seal": "the log recorded the authorization before this run's Seal",
-    "after_seal": "the log recorded the authorization after this run's Seal: "
-    "it confirms the run, it did not precede it",
-    "not_anchored": "no transparency-log times to compare (pass --require-anchor "
-    "with both anchored)",
-}
-
-
 def _timing_line(result: Any, auth: Any) -> str:
-    line = "timing: " + _TIMING.get(str(result.authorization_timing), "unknown")
-    if result.authorization_vs_run_start == "before_run_start":
-        line += "; logged before the run's own started_at (the runner's claim)"
-    elif result.authorization_vs_run_start == "after_run_start":
-        line += "; logged after the run's own started_at (the runner's claim)"
-    return line
+    who = auth.statement.authorizer if auth.statement else "the authorizer"
+    when = _utc(auth.anchor.integrated_time) if auth.anchor is not None else None
+    if result.authorization_timing == "before_run":
+        return (
+            f"timing: authorized by {who} before this run (logged {when}; the run's "
+            "start time is its own report's claim)"
+        )
+    if result.authorization_timing == "after_run":
+        return f"timing: authorization signed by {who} on {when}, after this run"
+    return (
+        "timing: no transparency-log time to compare with the run (anchor the "
+        "authorization and pass --require-anchor)"
+    )
 
 
 def _authorized_line(auth: Any) -> str:

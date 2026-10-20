@@ -314,18 +314,21 @@ The verifier checks offline:
 - with `--require-anchor`, the authorization's anchor.
 
 The person can sign before the runs or after them. Either way the
-authorization is valid, and the verifier states what the transparency log
-proves about the order:
+authorization is valid, and the verifier states which it was, comparing the
+time the transparency log recorded the authorization with the run's own
+`started_at`:
 
-- `before_seal`: the log recorded the authorization before this run's Seal
-  ("authorized before these runs were sealed");
-- `after_seal`: the log recorded it after the Seal ("authorization confirmed
-  on <date>"). It confirms the run; it did not come first.
-- `not_anchored`: one of the two isn't anchored, so nothing independent is
-  known about the order.
+- `before_run`: "Authorized by @user before this run".
+- `after_run`: "Authorization signed by @user on <date>, after this run".
+- `not_anchored`: the authorization has no anchor (or the run states no
+  start time), so nothing is said about order.
 
-It also compares the authorization's log time with the run's own
-`started_at`. That time is the runner's claim, not independent evidence.
+Re-sealing a run under an authorization signed later does not change this:
+the run's own start time decides, never the time of the new Seal.
+`started_at` is in the sealed report, so it can't change after sealing, but
+it is the runner's own record. The Seal's log time is an upper bound on it.
+The verifier also reports the authorization's log time against the Seal's
+(`before_seal` / `after_seal`).
 
 `--live` also re-reads `https://github.com/<user>.keys` and refuses a key
 GitHub no longer lists (`auth_not_on_github`). The host is always

@@ -167,14 +167,15 @@ class LocalSealVerification:
     anchor: Optional["AnchorVerification"] = None
     # Set with reason="revoked_key" once the signature itself has verified.
     revoked_at: Optional[str] = None
-    # With an authorization: what the transparency log proves about timing.
-    # "before_seal" / "after_seal": the log recorded the authorization before
-    # or after this run's Seal. "not_anchored": one of the two has no anchor
-    # checked, so nothing independent is known about the order.
+    # With an authorization: when the log recorded it, against the run's own
+    # started_at. "before_run" / "after_run"; "not_anchored" when the
+    # authorization has no checked anchor or the run states no start time.
+    # Re-sealing a run under an authorization signed later never makes it
+    # "before_run": the run's own time decides.
     authorization_timing: Optional[str] = None
-    # The authorization's log time vs the run's own started_at (the runner's
-    # claim, not independent): "before_run_start" / "after_run_start".
-    authorization_vs_run_start: Optional[str] = None
+    # Secondary: the authorization's log time against this Seal's log time,
+    # "before_seal" / "after_seal" (None without both anchors).
+    authorization_vs_seal: Optional[str] = None
 
 
 def mode_enabled(env: Optional[Mapping[str, str]] = None) -> bool:
@@ -582,17 +583,17 @@ def _check_authorization(
     problem = check_run(LocalSealV1.model_validate(seal).wire(), report, auth)
     if problem:
         return dataclasses.replace(found, ok=False, reason=problem)  # type: ignore[arg-type]
-    timing, vs_start = "not_anchored", None
+    timing, vs_seal = "not_anchored", None
     auth_time = getattr(auth.anchor, "integrated_time", None) if auth.anchor else None
-    if auth_time is not None and found.anchor is not None:
-        seal_time = found.anchor.integrated_time or 0
-        timing = "before_seal" if auth_time <= seal_time else "after_seal"
     if auth_time is not None:
         started = _started_epoch(report.get("started_at"))
         if started is not None:
-            vs_start = "before_run_start" if auth_time <= started else "after_run_start"
+            timing = "before_run" if auth_time < started else "after_run"
+        if found.anchor is not None:
+            seal_time = found.anchor.integrated_time or 0
+            vs_seal = "before_seal" if auth_time <= seal_time else "after_seal"
     return dataclasses.replace(
-        found, authorization_timing=timing, authorization_vs_run_start=vs_start
+        found, authorization_timing=timing, authorization_vs_seal=vs_seal
     )
 
 
