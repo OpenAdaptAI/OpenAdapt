@@ -32,6 +32,11 @@
 # on 3.12, and lint plus the release contract (changelog matches the version,
 # `uv build`, archive boundary).
 #
+# @openadapt/program-graph (packages/program-graph), the program map Desktop,
+# Cloud and the website render, runs its unit and DOM snapshot tests, the
+# typecheck, the ESM build (which refuses any runtime import beyond React) and
+# a vendored copy's checksum verification.
+#
 # OpenAdapt Desktop (packages/desktop) runs two reusable workflows:
 # desktop-test.yml (the Python engine on Linux for a PR, plus macOS and Windows
 # on main, and the bundled-Flow qualification contract) and desktop-build.yml
@@ -71,6 +76,7 @@ jobs:
       capture: ${{ steps.classify.outputs.capture }}
       privacy: ${{ steps.classify.outputs.privacy }}
       desktop: ${{ steps.classify.outputs.desktop }}
+      program_graph: ${{ steps.classify.outputs.program_graph }}
       weight: ${{ steps.classify.outputs.weight }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -86,7 +92,7 @@ jobs:
         run: |
           set -euo pipefail
           all() {
-            for pkg in flow types agent capture privacy desktop weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
+            for pkg in flow types agent capture privacy desktop program_graph weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
             exit 0
           }
           case "$EVENT_NAME" in
@@ -123,6 +129,8 @@ jobs:
           capture="$(hit "^packages/capture/|$wf")"
           privacy="$(hit "^packages/privacy/|$wf")"
           desktop="$(hit "^packages/desktop/|^\.github/workflows/desktop-[a-z-]+\.yml$|$wf")"
+          # The program map checks its schema against Flow's copy.
+          program_graph="$(hit "^packages/program-graph/|^packages/flow/schemas/program-graph-v2\.json$|^\.github/workflows/release-program-graph\.yml$|$wf")"
           # Any package's metadata, or the launcher's, can change what an
           # install pulls in.
           weight="$(hit "^packages/|^pyproject\.toml$|^openadapt/|^hatch_build\.py$|^scripts/install_weight/|$wf")"
@@ -133,6 +141,7 @@ jobs:
             echo "capture=$capture"
             echo "privacy=$privacy"
             echo "desktop=$desktop"
+            echo "program_graph=$program_graph"
             echo "weight=$weight"
           } | tee -a "$GITHUB_OUTPUT"
 
@@ -145,7 +154,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12"]
+        # PR tier: one Python; the merge queue and main add the oldest.
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.10", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/types
@@ -188,7 +198,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12"]
+        # PR tier: one Python; the merge queue and main add the oldest.
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.10", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/agent
@@ -440,7 +451,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        # PR tier: one Python; the merge queue and main run all three.
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/capture
@@ -500,7 +512,8 @@ jobs:
   capture-macos:
     name: capture (macos, py3.12)
     needs: scope
-    if: needs.scope.outputs.capture == 'true'
+    # Merge queue and main only; the PR tier runs capture on Linux.
+    if: needs.scope.outputs.capture == 'true' && github.event_name != 'pull_request'
     runs-on: macos-latest
     timeout-minutes: 30
     defaults:
@@ -529,7 +542,8 @@ jobs:
   capture-windows:
     name: capture (windows, py3.12)
     needs: scope
-    if: needs.scope.outputs.capture == 'true'
+    # Merge queue and main only; the PR tier runs capture on Linux.
+    if: needs.scope.outputs.capture == 'true' && github.event_name != 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 45
     defaults:
@@ -597,7 +611,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        # PR tier: one Python; the merge queue and main run all three.
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/privacy
@@ -675,6 +690,36 @@ jobs:
     needs: scope
     if: needs.scope.outputs.desktop == 'true'
     uses: ./.github/workflows/desktop-build.yml
+
+  program-graph:
+    name: program-graph (test, build, vendor)
+    needs: scope
+    if: needs.scope.outputs.program_graph == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: packages/program-graph
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/program-graph/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+      - name: Unit and DOM snapshot tests
+        run: npm test
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build and verify a vendored copy
+        run: |
+          set -euo pipefail
+          node scripts/vendor.mjs --out "$RUNNER_TEMP/program-graph"
+          node "$RUNNER_TEMP/program-graph/check.mjs"
 
   install-weight:
     # Each package is published on its own and must stay cheap to install:
@@ -771,6 +816,7 @@ jobs:
       - privacy-contract
       - desktop-test
       - desktop-build
+      - program-graph
       - install-weight
       - capture-core-record
       - desktop-release-intent

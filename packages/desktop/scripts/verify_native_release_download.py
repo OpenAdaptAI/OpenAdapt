@@ -28,7 +28,7 @@ DEFAULT_REPOSITORY = "OpenAdaptAI/OpenAdapt"
 # installers, and the channel.
 NATIVE_TAG_PREFIX = "openadapt-desktop-v"
 NATIVE_RELEASE_WORKFLOW = ".github/workflows/desktop-release.yml"
-RELEASE_EVENTS = frozenset({"push", "workflow_dispatch"})
+RELEASE_EVENTS = frozenset({"push", "workflow_dispatch", "workflow_run"})
 GITHUB_OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 CHANNEL_NAME = "openadapt-desktop-channel.json"
 CHANNEL_SCHEMA = "openadapt.desktop-release-channel/v3"

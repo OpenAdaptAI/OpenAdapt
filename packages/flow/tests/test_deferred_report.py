@@ -355,7 +355,7 @@ def test_a_matching_report_row_settles_the_run(tmp_path: Path) -> None:
     entry = _add(ledger, "CLM-1001")
     report = _report(_save([_evidence(deferred_check=entry.id)]))
     report.transaction_outcome = classify_transaction_outcome(report).value
-    assert settled_outcome(report, ledger) == "SAVED_AWAITING_CHECK"
+    assert settled_outcome(report, ledger, now=T0) == "SAVED_AWAITING_CHECK"
     ledger.settle(ACK_277CA, FMT_277, now=SETTLE_AT)
     assert settled_outcome(report, ledger, now=SETTLE_AT) == "VERIFIED"
 
@@ -366,7 +366,7 @@ def test_a_rejected_or_overdue_report_needs_reconciliation(tmp_path: Path) -> No
     report = _report(_save([_evidence(deferred_check=rejected.id)]))
     report.transaction_outcome = "SAVED_AWAITING_CHECK"
     ledger.settle(ACK_277CA, FMT_277, now=SETTLE_AT)
-    assert settled_outcome(report, ledger) == "RECONCILIATION_REQUIRED"
+    assert settled_outcome(report, ledger, now=SETTLE_AT) == "RECONCILIATION_REQUIRED"
     late = _add(ledger, "CLM-7777", hours=1)
     report = _report(_save([_evidence(deferred_check=late.id)]))
     report.transaction_outcome = "SAVED_AWAITING_CHECK"
