@@ -22,7 +22,10 @@ PUBLIC = [
 NEVER = re.compile(
     r"\bbeing built\b|\bnot (?:yet )?released\b|\bnot released yet\b"
     r"|\bcoming soon\b|\bin review\b|\bin progress\b|\bbeing merged\b"
-    r"|\bbeing added\b|\bwhen it ships\b|\bnot done yet\b|\bon (?:our|the) roadmap\b",
+    r"|\bbeing added\b|\bwhen it ships\b|\bnot done yet\b|\bon (?:our|the) roadmap\b"
+    # Oversharing: public copy states what was measured, not what wasn't.
+    r"|\bnot (?:yet )?(?:been )?tested\b|\buntested\b|\bnot yet run\b"
+    r"|\bno commercial\b|\blab only\b|\bno partnership\b",
     re.IGNORECASE,
 )
 
