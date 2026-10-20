@@ -24,10 +24,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from . import budget, economics, report
 
@@ -57,6 +58,56 @@ LOCAL_ARMS = [
      {"name": "agent_script_local", "model": "ollama:llama3.1:8b", "max_turns": 20}),
     ("human_script", "lifecycle.arms.human_script:factory", {}),
 ]
+
+
+MIN_FREE_GIB = float(__import__("os").environ.get("LIFECYCLE_MIN_FREE_GIB", "10"))
+
+
+class DiskLow(BaseException):
+    """Free disk fell under the shared machine's floor; stop between items."""
+
+
+def free_gib() -> float:
+    return shutil.disk_usage("/System/Volumes/Data").free / 2**30
+
+
+class Guarded:
+    """Any arm, checked for free disk before every item.
+
+    The check runs between items, never inside the harness's app reset, so a
+    stop leaves the fixture whole. DiskLow is a BaseException so the runner's
+    ``except Exception`` cannot turn it into an item result.
+    """
+
+    def __init__(self, options: dict[str, Any]) -> None:
+        from ..arm import load_arm
+
+        inner_opts = dict(options)
+        spec = inner_opts.pop("_inner")
+        self.inner = load_arm(spec, inner_opts)
+        self.name = self.inner.name
+
+    def describe(self) -> dict[str, Any]:
+        return self.inner.describe()
+
+    def setup(self, env: Any, operator: Any) -> list[dict[str, Any]]:
+        return self.inner.setup(env, operator)
+
+    def run_item(self, item: Any, env: Any, operator: Any) -> Any:
+        free = free_gib()
+        if free < MIN_FREE_GIB:
+            raise DiskLow(f"{free:.1f} GiB free, under {MIN_FREE_GIB:.0f} GiB; stopped before {item.item_id}")
+        return self.inner.run_item(item, env, operator)
+
+    def after_drift(self, event: dict[str, Any], env: Any, operator: Any) -> list[dict[str, Any]]:
+        return self.inner.after_drift(event, env, operator)
+
+    def close(self) -> None:
+        self.inner.close()
+
+
+def guarded(options: dict[str, Any]) -> Guarded:
+    return Guarded(options)
 
 
 def _complete(ledger: Path) -> bool:
@@ -147,7 +198,10 @@ def main(argv: Optional[list[str]] = None) -> int:
             })
             t0 = time.time()
             try:
-                run_arm(arm_spec=spec, arm_options=options, app=app, workload=workload,
+                if free_gib() < MIN_FREE_GIB:
+                    raise DiskLow(f"{free_gib():.1f} GiB free before {name}")
+                run_arm(arm_spec="lifecycle.arms.compare:guarded",
+                        arm_options={**options, "_inner": spec}, app=app, workload=workload,
                         ledger=ledger, out=d, cost_name=V1.version,
                         stop_after=options.get("stop_after"))
                 ledger.write({"type": "run_end", "wall_s": round(time.time() - t0, 1),
@@ -157,6 +211,15 @@ def main(argv: Optional[list[str]] = None) -> int:
                 ledger.close()
                 print(f"[{name}] stopped: {exc}\nResume with the same command once the cap is raised.")
                 return 3
+            except BaseException as exc:
+                # Matched by name: the guarded arm is loaded through the
+                # module path, so its DiskLow is not this __main__'s class.
+                if type(exc).__name__ != "DiskLow":
+                    raise
+                ledger.write({"type": "stopped", "why": "disk_low", "detail": str(exc)})
+                ledger.close()
+                print(f"[{name}] stopped: {exc}\nResume with the same command when there is room.")
+                return 4
             finally:
                 ledger.close()
 
