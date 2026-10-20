@@ -276,15 +276,24 @@ def trace(spec: dict, runs: Path, digest: str) -> dict:
 
 
 def main() -> int:
+    global BUNDLE, OUT
     ap = argparse.ArgumentParser()
-    ap.add_argument("--runs", type=Path, required=True, help="the study's block-02 run directory")
+    ap.add_argument("--runs", type=Path, help="the study's block-02 run directory; without it, no trace is written")
+    ap.add_argument("--bundle", type=Path, default=BUNDLE, help="the compiled referral bundle the runs used")
+    ap.add_argument("--out", type=Path, default=OUT, help="fixture directory (default: fixtures/openemr-referral)")
     args = ap.parse_args()
+    BUNDLE = args.bundle.expanduser().resolve()
+    out = args.out.expanduser().resolve()
+    if out != OUT and not (out / "worklist.csv").exists():
+        out.mkdir(parents=True, exist_ok=True)
+        shutil.copy(OUT / "worklist.csv", out / "worklist.csv")
+    OUT = out
     manifest = json.loads((BUNDLE / "manifest.json").read_text())
     OUT.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         loop_dir = Path(tmp) / "loop"
         flow(
-            "for-each", str(BUNDLE.relative_to(FLOW)),
+            "for-each", str(BUNDLE),
             "--records", str(OUT / "worklist.csv"),
             "--out", str(loop_dir),
             "--loop-var", "referral",
@@ -297,7 +306,7 @@ def main() -> int:
         folds = fold(json.loads(local.read_text()))
     (OUT / "spec.json").write_text(json.dumps(spec, indent=2) + "\n")
     folds["source"] = {
-        "body_bundle": str(BUNDLE.relative_to(REPO)),
+        "body_bundle": str(BUNDLE.relative_to(REPO)) if BUNDLE.is_relative_to(REPO) else BUNDLE.name,
         "body_content_digest": manifest["content_digest"],
         "source_recording_sha256": manifest["provenance"]["source_recording_sha256"],
         "loop": "openadapt-flow for-each --records fixtures/openemr-referral/worklist.csv",
@@ -306,8 +315,9 @@ def main() -> int:
     (OUT / "folds.json").write_text(json.dumps(folds, indent=2) + "\n")
     shutil.rmtree(OUT / "media", ignore_errors=True)
     (OUT / "media.json").write_text(json.dumps(recorded_media(spec), indent=2) + "\n")
-    (OUT / "trace.json").write_text(json.dumps(trace(spec, args.runs.expanduser(), manifest["content_digest"]), indent=2) + "\n")
-    print(f"Wrote {OUT.relative_to(REPO)}/{{spec,folds,trace,media}}.json and media/")
+    if args.runs:
+        (OUT / "trace.json").write_text(json.dumps(trace(spec, args.runs.expanduser(), manifest["content_digest"]), indent=2) + "\n")
+    print(f"Wrote {OUT}: spec, folds, media{', trace' if args.runs else ''}")
     return 0
 
 
