@@ -1,5 +1,15 @@
 # openadapt-tray Package Design
 
+> **Status:** historical. This is the design written before the tray was
+> built. The tray ships as `openadapt-tray` from
+> [`packages/tray`](../../packages/tray) in this repository, and its
+> [README](../../packages/tray/README.md) and
+> [PROTOCOL.md](../../packages/tray/docs/PROTOCOL.md) describe what it does
+> today. The shipped tray differs from this design: it controls recording in
+> OpenAdapt Desktop over Desktop's loopback socket instead of running the CLI,
+> shows how many cloud runs need a person, has no training or replay
+> controls, and doesn't start at login.
+
 ## Overview
 
 `openadapt-tray` is a cross-platform system tray application that provides a graphical interface for the OpenAdapt ecosystem. It serves as a thin orchestration layer, allowing users to control recording, monitor training, view captures, and access settings without using the command line.
@@ -59,7 +69,7 @@ The legacy implementation uses **PySide6/Qt** for cross-platform system tray fun
 ### Package Structure
 
 ```
-openadapt-tray/
+packages/tray/
 ├── src/openadapt_tray/
 │   ├── __init__.py           # Package exports, version
 │   ├── __main__.py           # Entry point: python -m openadapt_tray
@@ -1060,7 +1070,7 @@ openadapt-tray-gui = "openadapt_tray.app:main"
 [project.urls]
 Homepage = "https://openadapt.ai"
 Documentation = "https://docs.openadapt.ai"
-Repository = "https://github.com/OpenAdaptAI/openadapt-tray"
+Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/tray"
 
 [build-system]
 requires = ["hatchling"]
