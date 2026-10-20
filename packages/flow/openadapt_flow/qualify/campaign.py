@@ -81,8 +81,23 @@ class QualifyError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 
+def _evidence_bytes(path: Path) -> bytes:
+    """A file's bytes; a file inside a sealed run directory is decrypted.
+
+    Runs of a sealed bundle write a sealed run directory, whose report is
+    ``report.json`` only by its logical name. Its evidence digest is over the
+    plaintext; the sealed set authenticates the ciphertext on disk.
+    """
+
+    if path.is_file():
+        return path.read_bytes()
+    from openadapt_flow import sealed_set
+
+    return sealed_set.read_bytes(path)
+
+
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(_evidence_bytes(path)).hexdigest()
 
 
 def write_json(path: Path, value: Any) -> Path:
