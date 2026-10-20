@@ -735,7 +735,6 @@ A test fails when a command has no file or this list is out of date.
 - `attach-seal`
 - `countersign`
 - `local-seal`: Offline Seals: customer-held keys, pinned verification, Rekor anchoring, run authorizations, operator profiles.
-- `local-seal`: Offline Seals: customer-held keys, pinned verification, optional Rekor anchoring.
 - `redact-report`: Strip session tokens from an existing run's report so it can be sealed again; the original stays local
 - `seal`
 
