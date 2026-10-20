@@ -137,6 +137,9 @@ def verify_yaml(db_port: int, bot_id: int, *, frame: bool) -> str:
             "    kind: record_field\n"
             "    actor_field: audit_user\n"
             "    version_field: validity_from\n"
+            # openIMIS sets both on the server from the signed-in user; the
+            # claim form has no field for either.
+            "    server_set: [audit_user, validity_from]\n"
             f"    self: ['{bot_id}']\n"
         )
     return doc
