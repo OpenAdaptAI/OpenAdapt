@@ -259,14 +259,7 @@ def test_verify_run_signs_the_coverage_it_was_admitted_with(
 # -- scaffold-verifier on the gate ------------------------------------------------
 
 
-def test_scaffold_verifier_gate_finds_the_scoped_read_blind_spot(
-    tmp_path: Path,
-) -> None:
-    """The synthesized read is scoped to the patient; another patient's row
-    edited in the same table is invisible to it. The recorded-state test
-    can't see that; the gate on a database copy can."""
-
-    from openadapt_flow.record_check_synthesis import synthesize
+def _scoped_db(tmp_path: Path):
     from tests._record_check_fixtures import NOTE, write_recording
 
     db = tmp_path / "app.db"
@@ -280,19 +273,45 @@ def test_scaffold_verifier_gate_finds_the_scoped_read_blind_spot(
     con.execute("INSERT INTO billing VALUES (1, 'p2', '10.00')")
     con.commit()
     con.close()
-    rec = write_recording(tmp_path / "rec", {"patient_id": "p1", "note": NOTE})
+    return db, write_recording(tmp_path / "rec", {"patient_id": "p1", "note": NOTE})
 
-    recorded = synthesize(rec, db_path=db)
-    assert recorded.coverage is not None
-    assert recorded.coverage.test_copy == "recorded_states"
-    assert not recorded.coverage.complete  # wrong_value and delayed untested
 
+def test_the_gate_finds_a_read_scoped_to_the_patient(tmp_path: Path) -> None:
+    """A read scoped to the patient can't see another patient's row in the
+    same table. The recorded-state test can't show that; the gate on a
+    database copy can."""
+
+    from openadapt_flow import record_check_synthesis as rcs
+
+    db, rec = _scoped_db(tmp_path)
+    proposal = rcs.synthesize(rec, db_path=db)
+    # Only the patient-scoped read, as synthesis built it before it learned
+    # to read the target table whole.
+    proposal.search.surfaces = [
+        s for s in proposal.search.surfaces if "every row" not in s.source
+    ]
+    proposal.effects = rcs.effects_for(proposal.search.surfaces)
+    proposal.verifier = rcs.verifier_section(proposal.search.surfaces)
+    cov = rcs.gate_on_database(proposal, db, rcs.gate_config(proposal))
+    assert cov is not None and cov.clean_pass
+    survived = {c["fault"] for c in cov.cases if c["result"] == "SURVIVED"}
+    assert survived == {"unrelated_edit"}
+
+    recorded = rcs.coverage_from_recorded(proposal.faults, rcs.gate_config(proposal))
+    assert recorded.test_copy == "recorded_states"
+    assert not recorded.complete  # wrong_value and delayed untested
+
+
+def test_scaffold_verifier_on_the_gate_reads_the_target_table_whole(
+    tmp_path: Path,
+) -> None:
+    from openadapt_flow.record_check_synthesis import synthesize
+
+    db, rec = _scoped_db(tmp_path)
     gated = synthesize(rec, db_path=db, fault_gate=True)
+    assert any("every row" in s.source for s in gated.search.surfaces)
     cov = gated.coverage
     assert cov is not None and cov.test_copy == "sqlite"
-    assert cov.clean_pass
-    survived = {c["fault"] for c in cov.cases if c["result"] == "SURVIVED"}
-    assert "unrelated_edit" in survived
-    assert not gated.working
-    assert any(m.startswith("fault gate unrelated_edit") for m in gated.misses)
+    assert cov.complete, [c for c in cov.cases if c["result"] != "killed"]
+    assert gated.working, gated.misses
     assert gated.proof()["coverage"]["test_copy"] == "sqlite"
