@@ -77,9 +77,10 @@ _ISO_SECONDS = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
 _B64 = r"^[A-Za-z0-9+/]+={0,2}$"
 _OUTCOME = r"^[A-Z][A-Z_]{0,31}$"
 _RUN_ID = re.compile(r"[^A-Za-z0-9._:-]")
-# A short label (a lower-case prefix and a number, "r3"); never free text such
+# A short label (one or two lower-case letters and up to three digits, "r3");
+# never free text such
 # as a record number. The authorization lists which labels are allowed.
-_SCOPE_ITEM = r"^[a-z]{1,8}[0-9]{1,6}$"
+_SCOPE_ITEM = r"^[a-z]{1,2}[0-9]{1,3}$"
 _OPTIONAL_FIELDS = ("authorization_sha256", "scope_item")
 
 SubjectKind = Literal["run-report", "record", "export", "file"]

@@ -23,8 +23,10 @@ For each key it states:
   key's Seals reference it. A handle checked only against the copy stored
   with the authorization is self-asserted and never linked.
 
-The same Seal or Rekor entry given twice counts once. An item used by two
-Seals under a single-use authorization counts once, for the first Seal.
+The same Seal, the same Rekor entry, or the same report re-sealed and
+anchored again counts once, for the Seal the log recorded first. An item
+used by two Seals under a single-use authorization counts once, for the
+first Seal. Reuse is seen only among the runs given to one ``profile`` call.
 
 Only Seals that verify against the pinned keys *and* carry a valid
 transparency-log anchor count. Everything else is counted under
@@ -115,9 +117,7 @@ def build_profile(
 
     operators: dict[str, dict[str, Any]] = {}
     excluded = {"unanchored": 0, "not_valid": 0, "duplicate": 0, "item_reused": 0}
-    valid: list[tuple[Any, dict[str, Any], dict[str, Any], str]] = []
-    seen_seals: set[str] = set()
-    seen_entries: set[str] = set()
+    candidates: list[tuple[Any, dict[str, Any], dict[str, Any], str]] = []
     for run_dir in run_dirs:
         run_dir = Path(run_dir)
         result = verify_run(run_dir, registry, require_anchor=True, log_keys=log_keys)
@@ -128,15 +128,24 @@ def build_profile(
         seal = LocalSealV1.model_validate(
             loads_strict((run_dir / SEAL_FILE).read_text(encoding="utf-8"))
         ).wire()
-        digest = seal_sha256(seal)
-        uuid = str(result.anchor.uuid)
-        # The same Seal (or the same log entry) counted twice is one run.
-        if digest in seen_seals or uuid in seen_entries:
+        report = loads_strict((run_dir / "report.json").read_bytes())
+        candidates.append((result, seal, report, seal_sha256(seal)))
+    # One run is one report: the same Seal, the same log entry, or the same
+    # report re-sealed (a new issued_at, anchored again) counts once, for the
+    # Seal the log recorded first.
+    candidates.sort(key=lambda c: (c[0].anchor.integrated_time or 0, c[3]))
+    valid: list[tuple[Any, dict[str, Any], dict[str, Any], str]] = []
+    seen: set[str] = set()
+    for result, seal, report, digest in candidates:
+        marks = {
+            "seal:" + digest,
+            "entry:" + str(result.anchor.uuid),
+            "report:" + str(seal["subject_sha256"]),
+        }
+        if marks & seen:
             excluded["duplicate"] += 1
             continue
-        seen_seals.add(digest)
-        seen_entries.add(uuid)
-        report = loads_strict((run_dir / "report.json").read_bytes())
+        seen |= marks
         valid.append((result, seal, report, digest))
     reused: set[str] = set()
     for auth in authorizations:

@@ -247,7 +247,7 @@ holds:
 | Field | Meaning |
 |---|---|
 | `bundle_content_digest` | The compiled program the person authorizes |
-| `scope.items` | The work items: short labels, a lower-case prefix and a number (`r3`, `r4`), never names or record numbers |
+| `scope.items` | The work items, a closed list of short labels: one or two lower-case letters and up to three digits (`r3`, `r4`). Never names or record numbers: `mrn12345` is refused. A Seal's `scope_item` must be one of them |
 | `scope.profile` | The execution profile the runs must use, for example `standard` |
 | `scope.seal_key_ids` | The Seal keys allowed to seal runs under it, and to anchor it |
 | `scope.reusable` | `false` (the default): one run per item. `true`: many |
@@ -338,7 +338,9 @@ The verifier checks:
 - that the Seal names this authorization and an item in its scope;
 - that the run's profile, bundle digest and Seal key match the scope;
 - for a single-use authorization, that no item is sealed twice among the
-  runs given (`auth_item_reused`);
+  runs given (`auth_item_reused`). Reuse is seen only among Seals verified
+  together, in one `verify` or `profile` call. A Seal for the same item
+  verified on its own, in a separate call, isn't detected;
 - with `--require-anchor`, the authorization's anchor, made by a Seal key
   in its scope.
 

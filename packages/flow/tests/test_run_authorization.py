@@ -703,7 +703,7 @@ def test_profile_counts_only_anchored_seals_and_shows_every_outcome(tmp_path, re
     assert op["apps"] == ["openemr"] and op["programs"] == ["openemr-referral-intake"]
     assert len(op["rekor_log_indexes"]) == 4
     # One line per counted Seal, so a reader can recount; nothing private.
-    assert [r["scope_item"] for r in op["run_list"]] == ["r3", "r4", "r5", "r6"]
+    assert sorted(r["scope_item"] for r in op["run_list"]) == ["r3", "r4", "r5", "r6"]
     assert {r["outcome"] for r in op["run_list"]} == {
         "verified",
         "stopped_before_effect",
@@ -941,6 +941,9 @@ def test_a_reusable_authorization_allows_many_runs_per_item(tmp_path, rekor):
     runs = []
     for name in ("a", "b"):
         run = _run(tmp_path, name)
+        report = json.loads((run / "report.json").read_text())
+        report["run_id_sha256"] = name * 64  # two different runs of item r3
+        (run / "report.json").write_text(json.dumps(report))
         seal_authorized(run, tmp_path / "auth", "r3", signer, home=home)
         anchor_seal(
             run / SEAL_FILE, signer, log_keys=[rekor.log], submit=rekor.submit, env={}
@@ -952,7 +955,10 @@ def test_a_reusable_authorization_allows_many_runs_per_item(tmp_path, rekor):
     assert profile["operators"][signer.key_id]["runs"] == 2
 
 
-@pytest.mark.parametrize("item", ["MRN0042", "r3 ", "patient-smith", "r", "3", "r3-x"])
+@pytest.mark.parametrize(
+    "item",
+    ["MRN0042", "mrn12345", "item1", "r1234", "r3 ", "patient-smith", "r", "3", "r3-x"],
+)
 def test_scope_items_are_short_labels_never_free_text(tmp_path, item):
     with pytest.raises(Exception):
         _setup(tmp_path, Person(), items=[item])
@@ -1033,3 +1039,35 @@ def test_github_fetch_refuses_redirects_proxies_and_other_hosts(monkeypatch):
         ssh_sig._NoRedirect().redirect_request(
             None, None, 302, "Found", {}, "https://x"
         )
+
+
+def test_the_same_report_resealed_and_anchored_again_counts_once(tmp_path, rekor):
+    person = Person()
+    home, signer, statement, registry = _setup(tmp_path, person, reusable=True)
+    person.sign(statement)
+    run = _run(tmp_path, "r3")
+    seal_authorized(run, tmp_path / "auth", "r3", signer, home=home)
+    anchor_seal(
+        run / SEAL_FILE, signer, log_keys=[rekor.log], submit=rekor.submit, env={}
+    )
+    import shutil as _shutil
+    from datetime import datetime, timezone
+
+    again = tmp_path / "runs" / "again"
+    again.mkdir()
+    _shutil.copy(run / "report.json", again / "report.json")  # the same report bytes
+    seal_authorized(
+        again,
+        tmp_path / "auth",
+        "r3",
+        signer,
+        home=home,
+        now=datetime(2030, 1, 1, tzinfo=timezone.utc),
+    )  # a new issued_at
+    anchor_seal(
+        again / SEAL_FILE, signer, log_keys=[rekor.log], submit=rekor.submit, env={}
+    )
+    assert (again / SEAL_FILE).read_bytes() != (run / SEAL_FILE).read_bytes()
+    profile = build_profile([run, again], registry, log_keys=[rekor.log])
+    assert profile["operators"][signer.key_id]["runs"] == 1
+    assert profile["excluded"]["duplicate"] == 1
