@@ -47,8 +47,8 @@ self-repair are still refused, each with its reason below.
 | --- | --- | --- | --- | --- | --- | --- |
 | API step | Works | Works | Works | Works | Refused | Refused |
 | Pipelined read-back | Works | Refused | Refused | Works | Refused | Refused |
-| Self-repair | Works | Works | Works | Refused | Refused | Refused |
-| Standard changes | Works | Works | Works | Refused | Refused | Refused |
+| Self-repair | Works | Works | Works | Works | Refused | Refused |
+| Standard changes | Works | Works | Works | Works | Refused | Refused |
 | Parallel workers | Works | Works | Works | Works | Works | Refused |
 | Multi-surface | Works | Works | Works | Works | Works | Works |
 
@@ -86,9 +86,9 @@ refuses says it in those words.
 | Default (gated) | Works |
 | Durable | Works: self-repair always runs durable |
 | Governed | Works: Standard contract through the Python API |
-| Pinned | Refused: --pin-digest pins the original bundle |
-| Qualified | Refused: a signed qualification admission binds the original bundle; the approved bundle needs its own admission |
-| Managed | Refused: a managed dispatch binds the original bundle |
+| Pinned | Works: needs repair.requalify: the fix is re-qualified on a test copy and re-admitted with signed lineage, and the pin accepts that new version |
+| Qualified | Refused: a production qualification admission is signed by the qualification authority, so a repaired bundle waits for that authority's signature |
+| Managed | Refused: a managed dispatch is Cloud's authorization for one bundle, so a repaired bundle runs only on a new dispatch from Cloud |
 
 ### Standard changes
 
@@ -97,9 +97,9 @@ refuses says it in those words.
 | Default (gated) | Works: needs a signed repair policy |
 | Durable | Works: needs a signed repair policy |
 | Governed | Works: needs a signed repair policy |
-| Pinned | Refused: --pin-digest pins the original bundle |
-| Qualified | Refused: a signed qualification admission binds the original bundle; the approved bundle needs its own admission |
-| Managed | Refused: a managed dispatch binds the original bundle |
+| Pinned | Works: needs repair.requalify, as self-repair |
+| Qualified | Refused: a production qualification admission is signed by the qualification authority, so a repaired bundle waits for that authority's signature |
+| Managed | Refused: a managed dispatch is Cloud's authorization for one bundle, so a repaired bundle runs only on a new dispatch from Cloud |
 
 ### Parallel workers
 
@@ -152,13 +152,13 @@ Each cell names the tests that show it. They run in CI.
 - Self-repair / Default (gated): `tests/test_self_repair_cli.py::test_run_self_repair_cli_resumes_after_one_phone_tap`, `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
 - Self-repair / Durable: `tests/test_self_repair.py::test_renamed_button_is_repaired_approved_on_the_phone_and_verified`
 - Self-repair / Governed: `tests/test_self_repair.py::test_renamed_button_is_repaired_approved_on_the_phone_and_verified`
-- Self-repair / Pinned: `tests/test_self_repair_cli.py::test_run_self_repair_refuses_a_pinned_bundle`, `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
+- Self-repair / Pinned: `tests/test_self_repair_cli.py::test_run_self_repair_refuses_a_pinned_bundle`, `tests/test_repair_readmission.py::test_a_repair_is_requalified_and_readmitted_with_lineage`, `tests/test_repair_readmission.py::test_a_pin_accepts_only_a_verified_descendant`, `tests/test_repair_readmission.py::test_a_repair_that_fails_requalification_is_refused`, `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
 - Self-repair / Qualified: `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
 - Self-repair / Managed: `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
 - Standard changes / Default (gated): `tests/test_standard_change.py::test_relabelled_link_is_repaired_without_a_person`
 - Standard changes / Durable: `tests/test_standard_change.py::test_relabelled_link_is_repaired_without_a_person`
 - Standard changes / Governed: `tests/test_standard_change.py::test_relabelled_link_is_repaired_without_a_person`
-- Standard changes / Pinned: `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
+- Standard changes / Pinned: `tests/test_repair_readmission.py::test_a_repair_is_requalified_and_readmitted_with_lineage`, `tests/test_repair_readmission.py::test_a_pin_accepts_only_a_verified_descendant`, `tests/test_repair_readmission.py::test_a_repair_that_fails_requalification_is_refused`, `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
 - Standard changes / Qualified: `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
 - Standard changes / Managed: `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
 - Parallel workers / Default (gated): `tests/test_cli_worklist_pool.py::test_two_workers_split_the_items_one_row_each`, `tests/test_compatibility_matrix.py::test_the_worklist_pool_where_the_matrix_says`

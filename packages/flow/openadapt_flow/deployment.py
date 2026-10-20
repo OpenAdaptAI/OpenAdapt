@@ -1020,6 +1020,12 @@ class RepairSection(BaseModel):
     approval_wait_s: float = Field(default=900.0, ge=0.0)
     model_provider: Optional[Literal["anthropic", "openai"]] = None
     model_key_file: Optional[str] = None
+    #: The running bundle's verify.yaml. Set, every fix is re-qualified on the
+    #: test copy it names before anyone is asked, and the certified copy is
+    #: re-admitted with signed lineage, so ``--pin-digest`` to the running
+    #: bundle accepts it (openadapt_flow/repair/readmission.py).
+    requalify: Optional[str] = None
+    requalify_trials: int = Field(default=1, ge=1, le=10)
 
 
 class DeploymentConfig(BaseModel):

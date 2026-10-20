@@ -2840,6 +2840,12 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     )
 
 
+def _pinned_lineage(args: argparse.Namespace, cfg: Any) -> Any:
+    from openadapt_flow.cli_self_repair import pinned_lineage
+
+    return pinned_lineage(args, cfg)
+
+
 def _replay_worklist_pool(
     args: argparse.Namespace,
     cfg,
@@ -3591,6 +3597,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         require_encryption=not bool(getattr(args, "allow_unencrypted", False)),
         pinned_content_digest=getattr(args, "pin_digest", None),
         pinned_compiler_version=getattr(args, "pin_version", None),
+        pinned_lineage=_pinned_lineage(args, cfg),
         profile_contract=profile,
         effective_durable=effective_durable if profile is not None else None,
         effective_require_settled=(

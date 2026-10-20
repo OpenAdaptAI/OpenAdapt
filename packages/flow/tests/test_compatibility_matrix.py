@@ -361,6 +361,7 @@ def _repair_args(profile: str) -> argparse.Namespace:
         record_video=False,
         repair_agent="mod:factory",
         repair_screen_access_by="reviewer",
+        repair_requalify="verify.yaml" if profile == "pinned" else None,
         durable=profile == "durable",
     )
 
