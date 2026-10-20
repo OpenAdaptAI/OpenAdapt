@@ -18,21 +18,24 @@
       "at_ms": 0,
       "duration_ms": 548,
       "rung": "structural",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-201/step_000.webp"
     },
     {
       "node": "for_each::s::step_001",
       "status": "ok",
       "iteration": 1,
       "at_ms": 548,
-      "duration_ms": 636
+      "duration_ms": 636,
+      "frame": "run/item-201/step_001.webp"
     },
     {
       "node": "for_each::s::step_002",
       "status": "ok",
       "iteration": 1,
       "at_ms": 1184,
-      "duration_ms": 219
+      "duration_ms": 219,
+      "frame": "run/item-201/step_002.webp"
     },
     {
       "node": "for_each::s::step_003",
@@ -42,21 +45,24 @@
       "duration_ms": 1757,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-201/step_003.webp"
     },
     {
       "node": "for_each::s::step_004",
       "status": "ok",
       "iteration": 1,
       "at_ms": 3160,
-      "duration_ms": 272
+      "duration_ms": 272,
+      "frame": "run/item-201/step_004.webp"
     },
     {
       "node": "for_each::s::step_005",
       "status": "ok",
       "iteration": 1,
       "at_ms": 3432,
-      "duration_ms": 579
+      "duration_ms": 579,
+      "frame": "run/item-201/step_005.webp"
     },
     {
       "node": "for_each::s::step_006",
@@ -66,21 +72,24 @@
       "duration_ms": 1429,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-201/step_006.webp"
     },
     {
       "node": "for_each::s::step_007",
       "status": "ok",
       "iteration": 1,
       "at_ms": 5440,
-      "duration_ms": 243
+      "duration_ms": 243,
+      "frame": "run/item-201/step_007.webp"
     },
     {
       "node": "for_each::s::step_008",
       "status": "ok",
       "iteration": 1,
       "at_ms": 5683,
-      "duration_ms": 489
+      "duration_ms": 489,
+      "frame": "run/item-201/step_008.webp"
     },
     {
       "node": "for_each::s::step_009",
@@ -90,21 +99,24 @@
       "duration_ms": 2701,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-201/step_009.webp"
     },
     {
       "node": "for_each::s::step_010",
       "status": "ok",
       "iteration": 1,
       "at_ms": 8873,
-      "duration_ms": 275
+      "duration_ms": 275,
+      "frame": "run/item-201/step_010.webp"
     },
     {
       "node": "for_each::s::step_011",
       "status": "ok",
       "iteration": 1,
       "at_ms": 9148,
-      "duration_ms": 515
+      "duration_ms": 515,
+      "frame": "run/item-201/step_011.webp"
     },
     {
       "node": "for_each::s::step_012",
@@ -114,21 +126,24 @@
       "duration_ms": 1665,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-201/step_012.webp"
     },
     {
       "node": "for_each::s::step_013",
       "status": "ok",
       "iteration": 1,
       "at_ms": 11328,
-      "duration_ms": 706
+      "duration_ms": 706,
+      "frame": "run/item-201/step_013.webp"
     },
     {
       "node": "for_each::s::step_014",
       "status": "ok",
       "iteration": 1,
       "at_ms": 12034,
-      "duration_ms": 235
+      "duration_ms": 235,
+      "frame": "run/item-201/step_014.webp"
     },
     {
       "node": "for_each::s::step_015",
@@ -137,14 +152,16 @@
       "at_ms": 12269,
       "duration_ms": 623,
       "rung": "structural",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-201/step_015.webp"
     },
     {
       "node": "for_each::s::step_016",
       "status": "ok",
       "iteration": 1,
       "at_ms": 12892,
-      "duration_ms": 2134
+      "duration_ms": 2134,
+      "frame": "run/item-201/step_016.webp"
     },
     {
       "node": "for_each::s::step_017",
@@ -154,21 +171,24 @@
       "duration_ms": 615,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-201/step_017.webp"
     },
     {
       "node": "for_each::s::step_018",
       "status": "ok",
       "iteration": 1,
       "at_ms": 15641,
-      "duration_ms": 223
+      "duration_ms": 223,
+      "frame": "run/item-201/step_018.webp"
     },
     {
       "node": "for_each::s::step_019",
       "status": "ok",
       "iteration": 1,
       "at_ms": 15864,
-      "duration_ms": 439
+      "duration_ms": 439,
+      "frame": "run/item-201/step_019.webp"
     },
     {
       "node": "for_each::s::step_020",
@@ -178,21 +198,24 @@
       "duration_ms": 1215,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-201/step_020.webp"
     },
     {
       "node": "for_each::s::step_021",
       "status": "ok",
       "iteration": 1,
       "at_ms": 17518,
-      "duration_ms": 230
+      "duration_ms": 230,
+      "frame": "run/item-201/step_021.webp"
     },
     {
       "node": "for_each::s::step_022",
       "status": "ok",
       "iteration": 1,
       "at_ms": 17748,
-      "duration_ms": 441
+      "duration_ms": 441,
+      "frame": "run/item-201/step_022.webp"
     },
     {
       "node": "for_each::s::step_023",
@@ -202,21 +225,24 @@
       "duration_ms": 1016,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-201/step_023.webp"
     },
     {
       "node": "for_each::s::step_024",
       "status": "ok",
       "iteration": 1,
       "at_ms": 19205,
-      "duration_ms": 805
+      "duration_ms": 805,
+      "frame": "run/item-201/step_024.webp"
     },
     {
       "node": "for_each::s::step_025",
       "status": "ok",
       "iteration": 1,
       "at_ms": 20010,
-      "duration_ms": 216
+      "duration_ms": 216,
+      "frame": "run/item-201/step_025.webp"
     },
     {
       "node": "for_each::s::step_026",
@@ -225,21 +251,24 @@
       "at_ms": 20226,
       "duration_ms": 1066,
       "rung": "structural",
-      "identity": "verified"
+      "identity": "verified",
+      "frame": "run/item-201/step_026.webp"
     },
     {
       "node": "for_each::s::step_027",
       "status": "ok",
       "iteration": 1,
       "at_ms": 21292,
-      "duration_ms": 230
+      "duration_ms": 230,
+      "frame": "run/item-201/step_027.webp"
     },
     {
       "node": "for_each::s::step_028",
       "status": "ok",
       "iteration": 1,
       "at_ms": 21522,
-      "duration_ms": 428
+      "duration_ms": 428,
+      "frame": "run/item-201/step_028.webp"
     },
     {
       "node": "for_each::s::step_029",
@@ -249,21 +278,24 @@
       "duration_ms": 981,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-201/step_029.webp"
     },
     {
       "node": "for_each::s::step_030",
       "status": "ok",
       "iteration": 1,
       "at_ms": 22931,
-      "duration_ms": 236
+      "duration_ms": 236,
+      "frame": "run/item-201/step_030.webp"
     },
     {
       "node": "for_each::s::step_031",
       "status": "ok",
       "iteration": 1,
       "at_ms": 23167,
-      "duration_ms": 410
+      "duration_ms": 410,
+      "frame": "run/item-201/step_031.webp"
     },
     {
       "node": "for_each::s::step_032",
@@ -273,21 +305,24 @@
       "duration_ms": 1267,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-201/step_032.webp"
     },
     {
       "node": "for_each::s::step_033",
       "status": "ok",
       "iteration": 1,
       "at_ms": 24844,
-      "duration_ms": 215
+      "duration_ms": 215,
+      "frame": "run/item-201/step_033.webp"
     },
     {
       "node": "for_each::s::step_034",
       "status": "ok",
       "iteration": 1,
       "at_ms": 25059,
-      "duration_ms": 429
+      "duration_ms": 429,
+      "frame": "run/item-201/step_034.webp"
     },
     {
       "node": "for_each::s::step_035",
@@ -296,28 +331,32 @@
       "at_ms": 25488,
       "duration_ms": 1730,
       "rung": "structural",
-      "identity": "not_verified"
+      "identity": "not_verified",
+      "frame": "run/item-201/step_035.webp"
     },
     {
       "node": "for_each::s::step_036",
       "status": "ok",
       "iteration": 1,
       "at_ms": 27218,
-      "duration_ms": 427
+      "duration_ms": 427,
+      "frame": "run/item-201/step_036.webp"
     },
     {
       "node": "for_each::s::step_037",
       "status": "ok",
       "iteration": 1,
       "at_ms": 27645,
-      "duration_ms": 218
+      "duration_ms": 218,
+      "frame": "run/item-201/step_037.webp"
     },
     {
       "node": "for_each::s::step_038",
       "status": "ok",
       "iteration": 1,
       "at_ms": 27863,
-      "duration_ms": 1233
+      "duration_ms": 1233,
+      "frame": "run/item-201/step_038.webp"
     },
     {
       "node": "for_each::s::step_039",
@@ -326,7 +365,8 @@
       "at_ms": 29096,
       "duration_ms": 1465,
       "rung": "structural",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-201/step_039.webp"
     },
     {
       "node": "for_each::s::step_040",
@@ -341,7 +381,8 @@
       "effect_checks": {
         "confirmed": 11,
         "total": 11
-      }
+      },
+      "frame": "run/item-201/step_040.webp"
     },
     {
       "node": "for_each",
@@ -1035,21 +1076,24 @@
       "at_ms": 98766,
       "duration_ms": 538,
       "rung": "structural",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-204/step_000.webp"
     },
     {
       "node": "for_each::s::step_001",
       "status": "ok",
       "iteration": 4,
       "at_ms": 99304,
-      "duration_ms": 625
+      "duration_ms": 625,
+      "frame": "run/item-204/step_001.webp"
     },
     {
       "node": "for_each::s::step_002",
       "status": "ok",
       "iteration": 4,
       "at_ms": 99929,
-      "duration_ms": 257
+      "duration_ms": 257,
+      "frame": "run/item-204/step_002.webp"
     },
     {
       "node": "for_each::s::step_003",
@@ -1059,21 +1103,24 @@
       "duration_ms": 1525,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-204/step_003.webp"
     },
     {
       "node": "for_each::s::step_004",
       "status": "ok",
       "iteration": 4,
       "at_ms": 101711,
-      "duration_ms": 214
+      "duration_ms": 214,
+      "frame": "run/item-204/step_004.webp"
     },
     {
       "node": "for_each::s::step_005",
       "status": "ok",
       "iteration": 4,
       "at_ms": 101925,
-      "duration_ms": 411
+      "duration_ms": 411,
+      "frame": "run/item-204/step_005.webp"
     },
     {
       "node": "for_each::s::step_006",
@@ -1083,21 +1130,24 @@
       "duration_ms": 1484,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-204/step_006.webp"
     },
     {
       "node": "for_each::s::step_007",
       "status": "ok",
       "iteration": 4,
       "at_ms": 103820,
-      "duration_ms": 222
+      "duration_ms": 222,
+      "frame": "run/item-204/step_007.webp"
     },
     {
       "node": "for_each::s::step_008",
       "status": "ok",
       "iteration": 4,
       "at_ms": 104042,
-      "duration_ms": 410
+      "duration_ms": 410,
+      "frame": "run/item-204/step_008.webp"
     },
     {
       "node": "for_each::s::step_009",
@@ -1107,21 +1157,24 @@
       "duration_ms": 2844,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-204/step_009.webp"
     },
     {
       "node": "for_each::s::step_010",
       "status": "ok",
       "iteration": 4,
       "at_ms": 107296,
-      "duration_ms": 255
+      "duration_ms": 255,
+      "frame": "run/item-204/step_010.webp"
     },
     {
       "node": "for_each::s::step_011",
       "status": "ok",
       "iteration": 4,
       "at_ms": 107551,
-      "duration_ms": 431
+      "duration_ms": 431,
+      "frame": "run/item-204/step_011.webp"
     },
     {
       "node": "for_each::s::step_012",
@@ -1131,21 +1184,24 @@
       "duration_ms": 1590,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-204/step_012.webp"
     },
     {
       "node": "for_each::s::step_013",
       "status": "ok",
       "iteration": 4,
       "at_ms": 109572,
-      "duration_ms": 585
+      "duration_ms": 585,
+      "frame": "run/item-204/step_013.webp"
     },
     {
       "node": "for_each::s::step_014",
       "status": "ok",
       "iteration": 4,
       "at_ms": 110157,
-      "duration_ms": 237
+      "duration_ms": 237,
+      "frame": "run/item-204/step_014.webp"
     },
     {
       "node": "for_each::s::step_015",
@@ -1154,14 +1210,16 @@
       "at_ms": 110394,
       "duration_ms": 562,
       "rung": "structural",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-204/step_015.webp"
     },
     {
       "node": "for_each::s::step_016",
       "status": "ok",
       "iteration": 4,
       "at_ms": 110956,
-      "duration_ms": 2070
+      "duration_ms": 2070,
+      "frame": "run/item-204/step_016.webp"
     },
     {
       "node": "for_each::s::step_017",
@@ -1171,21 +1229,24 @@
       "duration_ms": 542,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-204/step_017.webp"
     },
     {
       "node": "for_each::s::step_018",
       "status": "ok",
       "iteration": 4,
       "at_ms": 113568,
-      "duration_ms": 213
+      "duration_ms": 213,
+      "frame": "run/item-204/step_018.webp"
     },
     {
       "node": "for_each::s::step_019",
       "status": "ok",
       "iteration": 4,
       "at_ms": 113781,
-      "duration_ms": 425
+      "duration_ms": 425,
+      "frame": "run/item-204/step_019.webp"
     },
     {
       "node": "for_each::s::step_020",
@@ -1195,21 +1256,24 @@
       "duration_ms": 1081,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-204/step_020.webp"
     },
     {
       "node": "for_each::s::step_021",
       "status": "ok",
       "iteration": 4,
       "at_ms": 115287,
-      "duration_ms": 224
+      "duration_ms": 224,
+      "frame": "run/item-204/step_021.webp"
     },
     {
       "node": "for_each::s::step_022",
       "status": "ok",
       "iteration": 4,
       "at_ms": 115511,
-      "duration_ms": 435
+      "duration_ms": 435,
+      "frame": "run/item-204/step_022.webp"
     },
     {
       "node": "for_each::s::step_023",
@@ -1219,21 +1283,24 @@
       "duration_ms": 1258,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-204/step_023.webp"
     },
     {
       "node": "for_each::s::step_024",
       "status": "ok",
       "iteration": 4,
       "at_ms": 117204,
-      "duration_ms": 694
+      "duration_ms": 694,
+      "frame": "run/item-204/step_024.webp"
     },
     {
       "node": "for_each::s::step_025",
       "status": "ok",
       "iteration": 4,
       "at_ms": 117898,
-      "duration_ms": 227
+      "duration_ms": 227,
+      "frame": "run/item-204/step_025.webp"
     },
     {
       "node": "for_each::s::step_026",
@@ -1242,21 +1309,24 @@
       "at_ms": 118125,
       "duration_ms": 1284,
       "rung": "structural",
-      "identity": "verified"
+      "identity": "verified",
+      "frame": "run/item-204/step_026.webp"
     },
     {
       "node": "for_each::s::step_027",
       "status": "ok",
       "iteration": 4,
       "at_ms": 119409,
-      "duration_ms": 233
+      "duration_ms": 233,
+      "frame": "run/item-204/step_027.webp"
     },
     {
       "node": "for_each::s::step_028",
       "status": "ok",
       "iteration": 4,
       "at_ms": 119642,
-      "duration_ms": 419
+      "duration_ms": 419,
+      "frame": "run/item-204/step_028.webp"
     },
     {
       "node": "for_each::s::step_029",
@@ -1266,21 +1336,24 @@
       "duration_ms": 1124,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-204/step_029.webp"
     },
     {
       "node": "for_each::s::step_030",
       "status": "ok",
       "iteration": 4,
       "at_ms": 121185,
-      "duration_ms": 224
+      "duration_ms": 224,
+      "frame": "run/item-204/step_030.webp"
     },
     {
       "node": "for_each::s::step_031",
       "status": "ok",
       "iteration": 4,
       "at_ms": 121409,
-      "duration_ms": 418
+      "duration_ms": 418,
+      "frame": "run/item-204/step_031.webp"
     },
     {
       "node": "for_each::s::step_032",
@@ -1290,21 +1363,24 @@
       "duration_ms": 1165,
       "rung": "structural",
       "identity": "verified",
-      "screen_check": "passed"
+      "screen_check": "passed",
+      "frame": "run/item-204/step_032.webp"
     },
     {
       "node": "for_each::s::step_033",
       "status": "ok",
       "iteration": 4,
       "at_ms": 122992,
-      "duration_ms": 223
+      "duration_ms": 223,
+      "frame": "run/item-204/step_033.webp"
     },
     {
       "node": "for_each::s::step_034",
       "status": "ok",
       "iteration": 4,
       "at_ms": 123215,
-      "duration_ms": 440
+      "duration_ms": 440,
+      "frame": "run/item-204/step_034.webp"
     },
     {
       "node": "for_each::s::step_035",
@@ -1313,28 +1389,32 @@
       "at_ms": 123655,
       "duration_ms": 1582,
       "rung": "structural",
-      "identity": "not_verified"
+      "identity": "not_verified",
+      "frame": "run/item-204/step_035.webp"
     },
     {
       "node": "for_each::s::step_036",
       "status": "ok",
       "iteration": 4,
       "at_ms": 125237,
-      "duration_ms": 413
+      "duration_ms": 413,
+      "frame": "run/item-204/step_036.webp"
     },
     {
       "node": "for_each::s::step_037",
       "status": "ok",
       "iteration": 4,
       "at_ms": 125650,
-      "duration_ms": 210
+      "duration_ms": 210,
+      "frame": "run/item-204/step_037.webp"
     },
     {
       "node": "for_each::s::step_038",
       "status": "ok",
       "iteration": 4,
       "at_ms": 125860,
-      "duration_ms": 1306
+      "duration_ms": 1306,
+      "frame": "run/item-204/step_038.webp"
     },
     {
       "node": "for_each::s::step_039",
@@ -1344,9 +1424,17 @@
       "duration_ms": 11670,
       "rung": "structural",
       "screen_check": "failed",
+      "frame": "run/item-204/step_039.webp",
       "reason": "The screen check after this step failed: OpenEMR found a matching chart instead of showing that no match exists. The run stopped before it confirmed a new chart, so it created no duplicate."
     }
   ],
+  "receipt": {
+    "kind": "record",
+    "status": "stopped",
+    "label": "Run record",
+    "summary": "Referrals 1 to 3 saved and read back all 11 fields. Referral 4 stopped before it confirmed a new chart, and the engine asked a person to check the record. The test setup's own read of OpenEMR found no new chart for it.",
+    "href": "https://github.com/OpenAdaptAI/OpenAdapt/blob/7304357be6376ac106d26fbb9142b9fd1955398a/packages/flow/benchmark/scoreboard/raw/openemr_referral/program/study-main-0c642bc0/items.csv"
+  },
   "source": {
     "scoreboard": "packages/flow/benchmark/scoreboard/raw/openemr_referral/program/study-main-0c642bc0/items.csv",
     "block": 2,

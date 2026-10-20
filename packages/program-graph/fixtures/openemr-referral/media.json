@@ -1,0 +1,107 @@
+{
+  "for_each::s::step_000": {
+    "recorded": {
+      "crop": "recorded/step_000.webp",
+      "frame": null
+    },
+    "alt": "The step's target as recorded, cropped from the synthetic recording"
+  },
+  "for_each::s::step_003": {
+    "recorded": {
+      "crop": "recorded/step_003.webp",
+      "frame": null
+    },
+    "alt": "The step's target as recorded, cropped from the synthetic recording"
+  },
+  "for_each::s::step_006": {
+    "recorded": {
+      "crop": "recorded/step_006.webp",
+      "frame": null
+    },
+    "alt": "The step's target as recorded, cropped from the synthetic recording"
+  },
+  "for_each::s::step_009": {
+    "recorded": {
+      "crop": "recorded/step_009.webp",
+      "frame": null
+    },
+    "alt": "The step's target as recorded, cropped from the synthetic recording"
+  },
+  "for_each::s::step_012": {
+    "recorded": {
+      "crop": "recorded/step_012.webp",
+      "frame": null
+    },
+    "alt": "The step's target as recorded, cropped from the synthetic recording"
+  },
+  "for_each::s::step_015": {
+    "recorded": {
+      "crop": "recorded/step_015.webp",
+      "frame": null
+    },
+    "alt": "The step's target as recorded, cropped from the synthetic recording"
+  },
+  "for_each::s::step_017": {
+    "recorded": {
+      "crop": "recorded/step_017.webp",
+      "frame": null
+    },
+    "alt": "The step's target as recorded, cropped from the synthetic recording"
+  },
+  "for_each::s::step_020": {
+    "recorded": {
+      "crop": "recorded/step_020.webp",
+      "frame": null
+    },
+    "alt": "The step's target as recorded, cropped from the synthetic recording"
+  },
+  "for_each::s::step_023": {
+    "recorded": {
+      "crop": "recorded/step_023.webp",
+      "frame": null
+    },
+    "alt": "The step's target as recorded, cropped from the synthetic recording"
+  },
+  "for_each::s::step_026": {
+    "recorded": {
+      "crop": "recorded/step_026.webp",
+      "frame": null
+    },
+    "alt": "The step's target as recorded, cropped from the synthetic recording"
+  },
+  "for_each::s::step_029": {
+    "recorded": {
+      "crop": "recorded/step_029.webp",
+      "frame": null
+    },
+    "alt": "The step's target as recorded, cropped from the synthetic recording"
+  },
+  "for_each::s::step_032": {
+    "recorded": {
+      "crop": "recorded/step_032.webp",
+      "frame": null
+    },
+    "alt": "The step's target as recorded, cropped from the synthetic recording"
+  },
+  "for_each::s::step_035": {
+    "recorded": {
+      "crop": "recorded/step_035.webp",
+      "frame": null
+    },
+    "alt": "The step's target as recorded, cropped from the synthetic recording"
+  },
+  "for_each::s::step_039": {
+    "recorded": {
+      "crop": "recorded/step_039.webp",
+      "frame": null
+    },
+    "alt": "The step's target as recorded, cropped from the synthetic recording"
+  },
+  "for_each::s::step_040": {
+    "recorded": {
+      "crop": "recorded/step_040.webp",
+      "frame": null
+    },
+    "alt": "The step's target as recorded, cropped from the synthetic recording"
+  }
+}

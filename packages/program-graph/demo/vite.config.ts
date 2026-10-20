@@ -7,5 +7,7 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
   plugins: [react()],
+  // The fixture's synthetic pictures, served at /recorded/... and /run/...
+  publicDir: fileURLToPath(new URL("../fixtures/openemr-referral/media", import.meta.url)),
   server: { port: 4517, strictPort: true, host: "127.0.0.1" },
 });

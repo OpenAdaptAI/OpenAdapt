@@ -29,6 +29,20 @@ export interface TraceEvent {
   effect_checks?: { confirmed: number; total: number } | null;
   /** Why the run stopped or skipped here, in plain words. */
   reason?: string | null;
+  /** Reference to the screen during this run at this step; resolved by the host. */
+  frame?: string | null;
+}
+
+/** What the run ended with: a Seal, or the record of a stopped run. */
+export interface RunReceipt {
+  /** "seal": a signed receipt; "record": a run record that is not a Seal. */
+  kind: "seal" | "record";
+  /** verified, stopped, or the engine's own outcome word. */
+  status: string;
+  /** Card heading, such as "Seal" or "Run record". */
+  label?: string;
+  summary: string;
+  href?: string | null;
 }
 
 export interface RunTrace {
@@ -39,6 +53,8 @@ export interface RunTrace {
   label?: string;
   total_ms?: number | null;
   events: TraceEvent[];
+  /** Shown when playback reaches the end. */
+  receipt?: RunReceipt | null;
   /** Where the trace came from: files, commits, checksums. Free-form. */
   source?: Record<string, unknown>;
 }

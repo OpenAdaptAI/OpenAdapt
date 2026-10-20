@@ -190,6 +190,7 @@ _NODE_LOCAL: Final = frozenset(
         "guard",  # free-text predicate summary
         "wait_until",  # free-text predicate summary
         "reason",  # free-text terminal reason
+        "media",  # references to recorded pictures, which can show recorded data
     }
 )
 

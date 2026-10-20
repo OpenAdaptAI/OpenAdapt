@@ -2,7 +2,8 @@ import type { ProgramGraphSpec } from "../src/index.js";
 import referralSpec from "../fixtures/openemr-referral/spec.json";
 import referralFolds from "../fixtures/openemr-referral/folds.json";
 import referralTrace from "../fixtures/openemr-referral/trace.json";
-import type { FoldSpec, RunTrace, StopExit } from "../src/index.js";
+import referralMedia from "../fixtures/openemr-referral/media.json";
+import type { FoldSpec, NodeMedia, RunTrace, StopExit } from "../src/index.js";
 
 // Desktop's program-workbench preview graph: a loop over records with an
 // identity-checked write and a branch back to the loop.
@@ -157,4 +158,5 @@ export const referral = {
   spec: referralSpec as ProgramGraphSpec,
   folds: referralFolds as FoldSpec & { stops: StopExit[] },
   trace: referralTrace as RunTrace,
+  media: referralMedia as Record<string, NodeMedia>,
 };

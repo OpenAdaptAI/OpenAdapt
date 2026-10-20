@@ -20,12 +20,14 @@
     "./fixtures/openemr-referral/spec.json": "./fixtures/openemr-referral/spec.json",
     "./fixtures/openemr-referral/folds.json": "./fixtures/openemr-referral/folds.json",
     "./fixtures/openemr-referral/trace.json": "./fixtures/openemr-referral/trace.json",
+    "./fixtures/openemr-referral/media.json": "./fixtures/openemr-referral/media.json",
     "./package.json": "./package.json"
   },
   "files": [
     "dist",
     "schema",
-    "fixtures",
+    "fixtures/openemr-referral/*.json",
+    "fixtures/openemr-referral/worklist.csv",
     "LICENSE",
     "README.md",
     "CHANGELOG.md"

@@ -35,6 +35,9 @@ const COPIED = [
   ["fixtures/openemr-referral/spec.json", "fixtures/openemr-referral/spec.json"],
   ["fixtures/openemr-referral/folds.json", "fixtures/openemr-referral/folds.json"],
   ["fixtures/openemr-referral/trace.json", "fixtures/openemr-referral/trace.json"],
+  ["fixtures/openemr-referral/media.json", "fixtures/openemr-referral/media.json"],
+  // Synthetic pictures for the demo; not in the npm package.
+  ["fixtures/openemr-referral/media", "fixtures/openemr-referral/media"],
   ["LICENSE", "LICENSE"],
   ["README.md", "README.md"],
 ];

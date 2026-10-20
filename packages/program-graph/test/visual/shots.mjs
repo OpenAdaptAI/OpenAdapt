@@ -31,6 +31,9 @@ export const SHOTS = [
   { id: "records-evidence", query: "?case=records&view=evidence" },
   { id: "records-phone", query: "?case=records", viewport: { width: 375, height: 812 } },
   { id: "referral-phone", query: "?cursor=end", viewport: { width: 372, height: 812 } },
+  { id: "referral-compact-media", query: "?cursor=end&compact=1&media=1" },
+  { id: "referral-compact-phone", query: "?cursor=end&compact=1&media=1", viewport: { width: 372, height: 812 } },
+  { id: "referral-tour", query: "?tour=1&compact=1&media=1" },
 ];
 
 fs.mkdirSync(outDir, { recursive: true });
@@ -46,6 +49,7 @@ for (const shot of SHOTS) {
   await page.goto(base + shot.query, { waitUntil: "networkidle" });
   await page.addStyleTag({ content: "*{transition:none!important;animation:none!important;caret-color:transparent!important}" });
   await page.evaluate(() => document.fonts?.ready);
+  await page.evaluate(() => Promise.all([...document.images].map((img) => { img.loading = "eager"; return img.decode().catch(() => {}); })));
   const file = path.join(outDir, `${shot.id}.png`);
   await page.locator(".opg-root").screenshot({ path: file });
   await context.close();

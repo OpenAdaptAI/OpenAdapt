@@ -72,6 +72,21 @@ export interface EffectInfo {
   needs_operator_confirmation?: boolean;
 }
 
+/**
+ * References to pictures of a step, never the pictures. The host resolves
+ * each reference to a URL it has decided is safe to show (resolveMedia).
+ */
+export interface MediaRef {
+  crop?: string | null;
+  frame?: string | null;
+}
+
+/** Pictures of a step from its recording. The public projection drops it. */
+export interface NodeMedia {
+  recorded?: MediaRef | null;
+  alt?: string;
+}
+
 export interface ParamInfo {
   name: string;
   type?: string;
@@ -141,6 +156,7 @@ export interface GraphNode {
   halts?: string[];
   badges?: string[];
   surface?: string | null;
+  media?: NodeMedia | null;
 }
 
 export interface GraphEdge {
@@ -180,3 +196,15 @@ export const nodeEffects = (node: GraphNode): EffectInfo[] => node.effects ?? []
 export const nodePostconditions = (node: GraphNode): string[] => node.postconditions ?? [];
 export const specNodes = (spec: ProgramGraphSpec): GraphNode[] => spec.nodes ?? [];
 export const specEdges = (spec: ProgramGraphSpec): GraphEdge[] => spec.edges ?? [];
+
+/**
+ * Add step media the host supplies separately, by node id. The public
+ * projection never carries media, so a page that shows synthetic pictures
+ * adds them here, on purpose.
+ */
+export function withMedia(spec: ProgramGraphSpec, media: Record<string, NodeMedia>): ProgramGraphSpec {
+  return {
+    ...spec,
+    nodes: specNodes(spec).map((node) => (media[node.id] ? { ...node, media: media[node.id] } : node)),
+  };
+}

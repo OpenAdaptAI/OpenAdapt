@@ -9,9 +9,11 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { deriveDisplayGraph, STOP_NODE_ID, type DisplayGraph, type FoldInfo, type FoldSpec, type StopExit } from "./fold.js";
+import { defaultTourStops, type TourStop } from "./tour.js";
+import { deriveDisplayGraph, foldSequences, STOP_NODE_ID, type DisplayGraph, type FoldInfo, type FoldSpec, type StopExit } from "./fold.js";
 import { layoutProgramGraph, type EdgeLayout, type LayoutOptions } from "./layout.js";
 import {
   displayTitle,
@@ -35,11 +37,25 @@ import {
   traceStateFromPlayhead,
   type NodeRunState,
   type Playhead,
+  type RunReceipt,
   type RunTrace,
   type TraceState,
 } from "./trace.js";
 
 export type ProgramView = "program" | "evidence" | "stops";
+
+/** What a media reference is for, so the host can decide whether and how to show it. */
+export interface MediaContext {
+  node: string;
+  kind: "recorded-crop" | "recorded-frame" | "live";
+  iteration?: number | null;
+}
+
+/**
+ * Turn a media reference into a URL the host has decided is safe to show, or
+ * null to show nothing. The package never fetches or embeds pictures.
+ */
+export type MediaResolver = (ref: string, context: MediaContext) => string | null | undefined;
 
 export interface ProgramWorkbenchProps {
   /** The program-graph spec, as `openadapt-flow visualize --format json` emits it. */
@@ -88,6 +104,20 @@ export interface ProgramWorkbenchProps {
   plainStopRules?: boolean;
   /** "index" (default): number every node; "actions": number only the actions, 1 to N. */
   numbering?: Numbering;
+  /**
+   * A fixed-height stage with pan and zoom, an inspector the viewer can close,
+   * and straight runs of steps folded when no folds are given. "Expand" shows
+   * the full height.
+   */
+  compact?: boolean;
+  /** Resolve step media references to URLs. Without it, no pictures show. */
+  resolveMedia?: MediaResolver;
+  /** A guided tour: true for the default stops, or your own. */
+  tour?: boolean | TourStop[];
+  /** The viewer has seen the tour: it does not open by itself. */
+  tourSeen?: boolean;
+  /** The tour ended, finished or skipped. Store it as the seen flag. */
+  onTourEnd?: (how: "done" | "skipped") => void;
   /** Override a node's display title (for example, a public projection). */
   titleFor?: (node: GraphNode) => string;
   /** Override the notes under the map and the evidence table; null hides one. */
@@ -177,6 +207,55 @@ function RunFacts({ state }: { state: NodeRunState }) {
   );
 }
 
+function MediaFigures({
+  node,
+  fold,
+  run,
+  resolveMedia,
+  title,
+}: {
+  node: GraphNode;
+  fold?: FoldInfo;
+  run?: NodeRunState;
+  resolveMedia?: MediaResolver;
+  title: string;
+}) {
+  if (!resolveMedia) return null;
+  const source = fold ? fold.members.find((member) => member.media?.recorded) : node;
+  const recorded = source?.media?.recorded;
+  const recordedRef = recorded?.crop ?? recorded?.frame ?? null;
+  const recordedSrc =
+    source && recordedRef
+      ? resolveMedia(recordedRef, { node: source.id, kind: recorded?.crop ? "recorded-crop" : "recorded-frame" })
+      : null;
+  const live = run ? [...run.events].reverse().find((event) => event.frame) : undefined;
+  const liveSrc = live?.frame ? resolveMedia(live.frame, { node: live.node, kind: "live", iteration: live.iteration }) : null;
+  if (!recordedSrc && !liveSrc) return null;
+  return (
+    <div className="opg-media">
+      <span>Pictures</span>
+      <div className="opg-media-pair">
+        {recordedSrc && (
+          <figure>
+            <a href={recordedSrc} target="_blank" rel="noopener noreferrer">
+              <img src={recordedSrc} alt={source?.media?.alt || `The recorded target of ${title}`} loading="lazy" decoding="async" />
+            </a>
+            <figcaption>Recorded</figcaption>
+          </figure>
+        )}
+        {liveSrc && (
+          <figure>
+            <a href={liveSrc} target="_blank" rel="noopener noreferrer">
+              <img src={liveSrc} alt={`The screen in this run at ${title}`} loading="lazy" decoding="async" />
+            </a>
+            <figcaption>This run{live?.iteration != null ? `, iteration ${live.iteration}` : ""}</figcaption>
+          </figure>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function NodeInspector({
   node,
   fold,
@@ -187,8 +266,12 @@ function NodeInspector({
   onRefold,
   onPickMember,
   plainStopRules,
+  resolveMedia,
+  onClose,
 }: {
   plainStopRules?: boolean;
+  resolveMedia?: MediaResolver;
+  onClose?: () => void;
   node: GraphNode;
   fold?: FoldInfo;
   partOf?: { id: string; title: string };
@@ -207,6 +290,11 @@ function NodeInspector({
       <div className="opg-inspector-head">
         <span>{fold ? "Selected steps" : "Selected step"}</span>
         <code>{chipFor(node, fold, numberOf)}</code>
+        {onClose && (
+          <button type="button" className="opg-icon-button" onClick={onClose} aria-label="Close the step details">
+            <Icon d="M3 3l8 8M11 3l-8 8" />
+          </button>
+        )}
       </div>
       <h3>{titleFor(node)}</h3>
       <p className="opg-mono">{fold ? (fold.subtitle ?? `${fold.members.length} steps`) : isStop ? "Where a stop rule ends the run" : node.id}</p>
@@ -322,6 +410,8 @@ function NodeInspector({
           </div>
         ))}
 
+      <MediaFigures node={node} fold={fold} run={run} resolveMedia={resolveMedia} title={titleFor(node)} />
+
       {run && run.status !== "pending" && <RunFacts state={run} />}
     </aside>
   );
@@ -349,9 +439,17 @@ function MapPanel({
   layoutOptions,
   showInspector = true,
   plainStopRules,
+  compact = false,
+  resolveMedia,
+  inspectorOpen,
+  setInspectorOpen,
 }: {
   showInspector?: boolean;
   plainStopRules?: boolean;
+  compact?: boolean;
+  resolveMedia?: MediaResolver;
+  inspectorOpen: boolean;
+  setInspectorOpen: (open: boolean) => void;
   display: DisplayGraph;
   fullSpec: ProgramGraphSpec;
   folds?: FoldSpec | null;
@@ -376,6 +474,12 @@ function MapPanel({
   const shownSelected = display.ownerOf.get(selectedId) ?? (byId.has(selectedId) ? selectedId : nodes[0]?.id);
   const selected = byId.get(shownSelected ?? "") ?? nodes[0];
 
+  // Zoom (compact stage) and the full-height toggle.
+  const [scale, setScaleRaw] = useState(1);
+  const setScale = useCallback((next: number) => setScaleRaw(Math.round(Math.max(0.4, Math.min(1.6, next)) * 100) / 100), []);
+  const [fullHeight, setFullHeight] = useState(false);
+  const staged = compact && !fullHeight;
+
   // Keep the card the run is at in view while the trace plays or steps.
   const viewport = useRef<HTMLDivElement>(null);
   const currentCard = traceState?.current ? display.ownerOf.get(traceState.current.node) : undefined;
@@ -384,20 +488,67 @@ function MapPanel({
     const point = layout.nodes.find((node) => node.id === currentCard);
     if (!box || !point) return;
     // The canvas is centred in the viewport when it is narrower than it.
-    const canvas = box.firstElementChild as HTMLElement | null;
-    const offsetX = canvas?.offsetLeft ?? 0;
-    const left = point.x + offsetX;
-    const inY = point.y >= box.scrollTop && point.y + point.height <= box.scrollTop + box.clientHeight;
-    const inX = left >= box.scrollLeft && left + point.width <= box.scrollLeft + box.clientWidth;
+    const sizer = box.firstElementChild as HTMLElement | null;
+    const offsetX = sizer?.offsetLeft ?? 0;
+    const left = point.x * scale + offsetX;
+    const y = point.y * scale;
+    const w = point.width * scale;
+    const h = point.height * scale;
+    const inY = y >= box.scrollTop && y + h <= box.scrollTop + box.clientHeight;
+    const inX = left >= box.scrollLeft && left + w <= box.scrollLeft + box.clientWidth;
     if (inY && inX) return;
-    const top = inY ? box.scrollTop : Math.max(0, point.y - (box.clientHeight - point.height) / 2);
-    const leftTarget = inX ? box.scrollLeft : Math.max(0, left - (box.clientWidth - point.width) / 2);
+    const top = inY ? box.scrollTop : Math.max(0, y - (box.clientHeight - h) / 2);
+    const leftTarget = inX ? box.scrollLeft : Math.max(0, left - (box.clientWidth - w) / 2);
     if (typeof box.scrollTo === "function") box.scrollTo({ top, left: leftTarget });
     else {
       box.scrollTop = top;
       box.scrollLeft = leftTarget;
     }
-  }, [currentCard, traceState?.cursor, layout]);
+  }, [currentCard, traceState?.cursor, layout, scale]);
+
+  // Ctrl or Cmd with the wheel (and a trackpad pinch) zooms the stage.
+  useEffect(() => {
+    const box = viewport.current;
+    if (!box || !compact) return;
+    const wheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      setScaleRaw((current) => Math.round(Math.max(0.4, Math.min(1.6, current * (event.deltaY > 0 ? 0.9 : 1.1))) * 100) / 100);
+    };
+    box.addEventListener("wheel", wheel, { passive: false });
+    return () => box.removeEventListener("wheel", wheel);
+  }, [compact]);
+
+  // Drag the background to pan.
+  const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  const panHandlers = compact
+    ? {
+        onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => {
+          if ((event.target as HTMLElement).closest("button") || event.button !== 0) return;
+          const box = viewport.current!;
+          drag.current = { x: event.clientX, y: event.clientY, left: box.scrollLeft, top: box.scrollTop };
+          box.setPointerCapture?.(event.pointerId);
+        },
+        onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => {
+          const start = drag.current;
+          const box = viewport.current;
+          if (!start || !box) return;
+          box.scrollLeft = start.left - (event.clientX - start.x);
+          box.scrollTop = start.top - (event.clientY - start.y);
+        },
+        onPointerUp: () => {
+          drag.current = null;
+        },
+        onPointerCancel: () => {
+          drag.current = null;
+        },
+      }
+    : {};
+  const fit = () => {
+    const box = viewport.current;
+    if (!box) return;
+    setScale(Math.min(1, (box.clientWidth - 16) / layout.width, (box.clientHeight - 16) / layout.height));
+  };
 
   useEffect(() => {
     const id = focusAfterRender.current;
@@ -418,6 +569,8 @@ function MapPanel({
       run={traceState?.nodes.get(selected.id)}
       titleFor={titleFor}
       plainStopRules={plainStopRules}
+      resolveMedia={resolveMedia}
+      onClose={compact ? () => setInspectorOpen(false) : undefined}
       onUnfold={(id) => {
         const group = display.folds.get(id);
         setExpanded(new Set([...expanded, id]));
@@ -486,7 +639,7 @@ function MapPanel({
   };
 
   return (
-    <div className="opg-grid" data-inspector={showInspector || undefined}>
+    <div className="opg-grid" data-inspector={(showInspector && inspectorOpen) || undefined} data-staged={staged || undefined}>
       <div className="opg-canvas-shell">
         <div className="opg-canvas-head">
           <span>Compiled topology</span>
@@ -495,8 +648,42 @@ function MapPanel({
             {display.folds.size > 0 && ` · ${cardCount} cards`}
           </span>
         </div>
-        <div className="opg-canvas-viewport" ref={viewport}>
-          <div className="opg-canvas" style={{ width: layout.width, height: layout.height }}>
+        {compact && (
+          <div className="opg-stage-tools" role="toolbar" aria-label="Map view">
+            <button type="button" onClick={() => setScale(scale - 0.1)} aria-label="Zoom out" disabled={scale <= 0.4}>
+              <Icon d="M3 7h8" />
+            </button>
+            <span aria-live="polite">{Math.round(scale * 100)}%</span>
+            <button type="button" onClick={() => setScale(scale + 0.1)} aria-label="Zoom in" disabled={scale >= 1.6}>
+              <Icon d="M3 7h8M7 3v8" />
+            </button>
+            <button type="button" onClick={fit}>Fit</button>
+            <button type="button" onClick={() => setFullHeight(!fullHeight)} aria-pressed={fullHeight}>
+              {fullHeight ? "Collapse" : "Expand"}
+            </button>
+            {showInspector && !inspectorOpen && (
+              <button type="button" onClick={() => setInspectorOpen(true)}>
+                Show step details
+              </button>
+            )}
+          </div>
+        )}
+        <div
+          className="opg-canvas-viewport"
+          ref={viewport}
+          data-stage={staged || undefined}
+          data-pan={compact || undefined}
+          {...panHandlers}
+        >
+          <div className="opg-canvas-sizer" style={{ width: layout.width * scale, height: layout.height * scale }}>
+          <div
+            className="opg-canvas"
+            style={{
+              width: layout.width,
+              height: layout.height,
+              transform: scale === 1 ? undefined : `scale(${scale})`,
+            }}
+          >
             <svg
               className="opg-edges"
               viewBox={`0 0 ${layout.width} ${layout.height}`}
@@ -563,7 +750,10 @@ function MapPanel({
                       : `${nodeDescription(node, title, numberOf)}${runWords}`
                   }
                   tabIndex={isSelected ? 0 : -1}
-                  onClick={() => setSelectedId(node.id)}
+                  onClick={() => {
+                    setSelectedId(node.id);
+                    if (!inspectorOpen) setInspectorOpen(true);
+                  }}
                   onDoubleClick={() => {
                     if (nodeFold) {
                       setExpanded(new Set([...expanded, nodeFold.id]));
@@ -588,6 +778,7 @@ function MapPanel({
               );
             })}
           </div>
+          </div>
         </div>
         <ul className="opg-sr-only" aria-label="Program edges">
           {layout.edges.map((edge) => (
@@ -600,7 +791,7 @@ function MapPanel({
         </ul>
         {canvasNote && <p className="opg-canvas-note">{canvasNote}</p>}
       </div>
-      {showInspector && inspector}
+      {showInspector && inspectorOpen && inspector}
     </div>
   );
 }
@@ -706,7 +897,9 @@ function TracePlayer({
   setPlaying,
   setCursor,
   iterationNoun,
+  liveFrame,
 }: {
+  liveFrame?: string | null;
   trace: RunTrace;
   state: TraceState;
   playing: boolean;
@@ -763,6 +956,7 @@ function TracePlayer({
         aria-valuetext={`${where}, event ${state.cursor} of ${total}`}
       />
       <span className="opg-player-where">{where}</span>
+      {liveFrame && <img className="opg-player-frame" src={liveFrame} alt="The screen in this run now" decoding="async" />}
       <span className="opg-sr-only" aria-live="polite">
         {announce}
       </span>
@@ -787,6 +981,82 @@ function TraceChip({ trace, state, playing }: { trace?: RunTrace | null; state: 
   );
 }
 
+
+function ReceiptCard({ receipt }: { receipt: RunReceipt }) {
+  const label = receipt.label ?? (receipt.kind === "seal" ? "Seal" : "Run record");
+  return (
+    <section className="opg-receipt" data-kind={receipt.kind} data-status={receipt.status.toLowerCase()} aria-label={label}>
+      <div>
+        <span className="opg-kicker">{label}</span>
+        <strong>{receipt.status}</strong>
+      </div>
+      <p>{receipt.summary}</p>
+      {receipt.href && (
+        <a href={receipt.href} target="_blank" rel="noopener noreferrer">
+          {receipt.kind === "seal" ? "Open the Seal" : "Open the run record"}
+        </a>
+      )}
+    </section>
+  );
+}
+
+function TourCard({
+  stop,
+  at,
+  count,
+  focus,
+  onBack,
+  onNext,
+  onSkip,
+}: {
+  stop: TourStop;
+  at: number;
+  count: number;
+  focus: { current: boolean };
+  onBack: () => void;
+  onNext: () => void;
+  onSkip: () => void;
+}) {
+  const headingId = `opg-tour-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const heading = useRef<HTMLHeadingElement>(null);
+  // Focus moves to the tour only when the viewer started it, never on load.
+  useEffect(() => {
+    if (focus.current) heading.current?.focus();
+  }, [at, focus]);
+  return (
+    <section
+      className="opg-tour"
+      role="region"
+      aria-labelledby={headingId}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") onSkip();
+        else if (event.key === "ArrowRight" && !(event.target instanceof HTMLInputElement)) onNext();
+        else if (event.key === "ArrowLeft" && at > 0) onBack();
+        else return;
+        event.preventDefault();
+      }}
+    >
+      <span className="opg-kicker">
+        Tour · {at + 1} of {count}
+      </span>
+      <h3 id={headingId} ref={heading} tabIndex={-1} aria-live="polite">
+        {stop.title}
+      </h3>
+      <p>{stop.body}</p>
+      <div className="opg-tour-actions">
+        <button type="button" onClick={onBack} disabled={at === 0}>
+          Back
+        </button>
+        <button type="button" className="opg-tour-next" onClick={onNext}>
+          {at + 1 === count ? "Done" : "Next"}
+        </button>
+        <button type="button" className="opg-tour-skip" onClick={onSkip}>
+          Skip the tour
+        </button>
+      </div>
+    </section>
+  );
+}
 
 /** Selection, folds and trace position, each either owned here or by the host. */
 function useWorkbenchState(props: ProgramWorkbenchProps) {
@@ -871,6 +1141,9 @@ function useWorkbenchState(props: ProgramWorkbenchProps) {
   // When the run moves, select the step it reached, so the inspector shows
   // what happened there. A viewer's own selection stands until the next move.
   const followed = useRef<string | null>(null);
+  const suppressFollow = useCallback((next: number) => {
+    followed.current = `c${next}`;
+  }, []);
   const moveKey = trace ? `c${cursor}` : playhead ? `p${playhead.node}:${playhead.iteration ?? ""}:${playhead.status}` : null;
   useEffect(() => {
     if (!traceState?.current || moveKey === null || followed.current === moveKey) return;
@@ -879,7 +1152,7 @@ function useWorkbenchState(props: ProgramWorkbenchProps) {
     if (!first) setSelectedId(traceState.current.node);
   }, [traceState, moveKey, cursor, trace, setSelectedId]);
 
-  return { selectedId, setSelectedId, expanded, setExpanded, cursor, setCursor, playing, setPlaying, display, traceState, numberOf };
+  return { selectedId, setSelectedId, expanded, setExpanded, cursor, setCursor, playing, setPlaying, display, traceState, numberOf, suppressFollow };
 }
 
 /**
@@ -906,10 +1179,69 @@ export function ProgramWorkbench(props: ProgramWorkbenchProps) {
     showPlayer = true,
     showInspector = true,
     plainStopRules = false,
+    compact = false,
+    resolveMedia,
+    tour,
+    tourSeen = false,
+    onTourEnd,
   } = props;
-  const state = useWorkbenchState(props);
-  const { traceState } = state;
+  // A compact stage folds straight runs of steps when no folds are given.
+  const effectiveFolds = useMemo(
+    () => (props.folds !== undefined ? props.folds : compact ? foldSequences(spec) : null),
+    [props.folds, compact, spec],
+  );
+  const state = useWorkbenchState({ ...props, folds: effectiveFolds });
   const [view, setView] = useState<ProgramView>(initialView ?? views[0] ?? "program");
+  const { traceState } = state;
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+
+  // The tour.
+  const tourStops = useMemo(
+    () => (tour === true ? defaultTourStops(spec, { trace, title: titleFor }) : Array.isArray(tour) ? tour : []),
+    [tour, spec, trace, titleFor],
+  );
+  const [tourAt, setTourAt] = useState<number | null>(() => (tourStops.length && !tourSeen ? 0 : null));
+  const tourFocus = useRef(false);
+  useEffect(() => {
+    if (tourAt === null) return;
+    const stop = tourStops[tourAt];
+    if (!stop) return;
+    state.setPlaying(false);
+    if (stop.view) setView(stop.view);
+    if (stop.cursor != null && trace) {
+      state.suppressFollow(stop.cursor);
+      state.setCursor(stop.cursor);
+    }
+    if (stop.select) state.setSelectedId(stop.select);
+    setInspectorOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourAt, tourStops]);
+  const endTour = (how: "done" | "skipped") => {
+    setTourAt(null);
+    onTourEnd?.(how);
+  };
+  const tourLauncher =
+    tourStops.length > 0 && tourAt === null ? (
+      <button
+        type="button"
+        className="opg-tour-launch"
+        onClick={() => {
+          tourFocus.current = true;
+          setTourAt(0);
+        }}
+      >
+        Take the tour
+      </button>
+    ) : null;
+  const receipt = trace?.receipt && traceState?.finished ? trace.receipt : null;
+  const liveFrame =
+    resolveMedia && traceState?.current?.frame
+      ? resolveMedia(traceState.current.frame, {
+          node: traceState.current.node,
+          kind: "live",
+          iteration: traceState.current.iteration,
+        })
+      : null;
   const baseId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const tabs = useRef(new Map<ProgramView, HTMLButtonElement>());
   const tabbed = views.length > 1;
@@ -945,16 +1277,25 @@ export function ProgramWorkbench(props: ProgramWorkbenchProps) {
 
   return (
     <NumberOf.Provider value={state.numberOf}>
-    <div className={`opg-root${className ? ` ${className}` : ""}`} data-theme={theme} style={style}>
+    <div
+      className={`opg-root${className ? ` ${className}` : ""}`}
+      data-theme={theme}
+      data-compact={compact || undefined}
+      style={style}
+    >
       {showHeader && (
         <div className="opg-topbar">
           <div>
             <span className="opg-kicker">{kicker}</span>
             <strong>{title ?? spec.bundle.name}</strong>
           </div>
-          <TraceChip trace={trace} state={trace ? traceState : null} playing={state.playing} />
+          <div className="opg-topbar-end">
+            {tourLauncher}
+            <TraceChip trace={trace} state={trace ? traceState : null} playing={state.playing} />
+          </div>
         </div>
       )}
+      {!showHeader && tourLauncher && <div className="opg-tour-bar">{tourLauncher}</div>}
       {showPlayer && trace && traceState && (
         <TracePlayer
           trace={trace}
@@ -963,8 +1304,21 @@ export function ProgramWorkbench(props: ProgramWorkbenchProps) {
           setPlaying={state.setPlaying}
           setCursor={state.setCursor}
           iterationNoun={iterationNoun}
+          liveFrame={liveFrame}
         />
       )}
+      {tourAt !== null && tourStops[tourAt] && (
+        <TourCard
+          stop={tourStops[tourAt]}
+          at={tourAt}
+          count={tourStops.length}
+          focus={tourFocus}
+          onBack={() => setTourAt(Math.max(0, tourAt - 1))}
+          onNext={() => (tourAt + 1 < tourStops.length ? setTourAt(tourAt + 1) : endTour("done"))}
+          onSkip={() => endTour("skipped")}
+        />
+      )}
+      {receipt && <ReceiptCard receipt={receipt} />}
       {tabbed && (
         <div className="opg-tabs" role="tablist" aria-label="Program workbench views">
           {views.map((id) => (
@@ -1004,6 +1358,10 @@ export function ProgramWorkbench(props: ProgramWorkbenchProps) {
             layoutOptions={layout}
             showInspector={showInspector}
             plainStopRules={plainStopRules}
+            compact={compact}
+            resolveMedia={resolveMedia}
+            inspectorOpen={inspectorOpen}
+            setInspectorOpen={setInspectorOpen}
           />,
         )}
       {views.includes("evidence") &&

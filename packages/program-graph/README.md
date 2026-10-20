@@ -71,6 +71,9 @@ import "@openadapt/program-graph/styles.css";
 | `showHeader`, `showPlayer`, `showInspector` | Hide the title bar, the player or the inspector. |
 | `plainStopRules` | Show stop rules in plain words (`stopRuleWords`), not Flow's rule names. Use it with the public projection, which names rules only "declared stop rule N". |
 | `numbering` | `index` (default) numbers every node, so a loop counts as a step. `actions` numbers only the actions, 1 to N, and shows the loop as "LOOP". |
+| `compact` | A fixed-height stage (500 px; 380 px below 520 px of width) with zoom, fit, drag to pan and Ctrl or Cmd with the wheel to zoom; an inspector the viewer can close; straight runs of steps folded when `folds` is not given (`null` turns folding off); and an "Expand" control for the full height. |
+| `resolveMedia` | `(ref, { node, kind, iteration }) => url \| null`. Turns step media references into URLs. Without it, no pictures show. |
+| `tour`, `tourSeen`, `onTourEnd` | A guided tour (`true` for the default stops, or your own `TourStop[]`). It opens unless `tourSeen`; `onTourEnd("done" \| "skipped")` lets the host store the seen flag. |
 | `titleFor` | Replaces a node's displayed title. |
 | `notes` | Replaces or hides (`null`) the note under the map and under the evidence table. |
 | `theme` | `dark` (default) or `light`. The workbench keeps its own colours whatever the host page's theme. |
@@ -88,6 +91,43 @@ The package also exports the pieces: `layoutProgramGraph`, `rankNodes`,
 `deriveDisplayGraph`, `foldSequences` (folds for a program that has none),
 `validateFolds`, `traceStateAt`, `traceStateFromPlayhead`, `stopRuleWords`,
 and the spec and trace types.
+
+### Step media
+
+A node can carry `media: { recorded: { crop, frame }, alt }`, and a trace
+event can carry `frame`. Both hold references (a bundle-relative path, an
+asset id), never image data. The inspector shows the recorded picture and
+this run's frame side by side, and the player shows the frame of the step the
+run is at. Every reference goes through the host's `resolveMedia`, which
+returns a URL or `null`; the package never fetches, embeds or guesses a URL.
+Pictures load lazily.
+
+The host decides what is safe to show:
+
+- **Desktop** may show local frames from the machine's own recordings and
+  runs.
+- **Cloud** shows only scrubbed or approved derivatives, never a raw frame.
+- **The public site** shows only pictures of synthetic data.
+
+Flow's public projection removes `media`. To show pictures with a public
+spec, add them on purpose with `withMedia(spec, media)`.
+
+### Receipt
+
+A trace can end with `receipt: { kind: "seal" | "record", status, label,
+summary, href }`. When playback reaches the end, a card shows it, with a link
+to the Seal or to the run record. Use `kind: "seal"` only for a signed Seal.
+
+### Guided tour
+
+`tour` adds a tour of up to six stops, each built from the spec and the trace:
+the recording, one step and how it finds its target, the loop, the
+right-record check, a stop, and the receipt. A stop the program or the run
+cannot show is left out. Each stop selects its step and moves the trace to the
+moment that shows it. Back, Next and Skip are buttons; the arrow keys move and
+Escape skips. Focus moves to the tour only when the viewer starts it.
+`defaultTourStops(spec, { trace })` returns the stops for a host that wants to
+change the words.
 
 ### Theme
 
@@ -133,12 +173,20 @@ compiled program and a real recorded run, both on synthetic data:
   carries no recorded text or values.
 - `folds.json`: the five form sections the steps fill, and the save
   section's stop rules.
+- `media.json` and `media/`: the bundle's recorded target crop for each click
+  step, and the screen after each step of the first and the fourth referral,
+  640 px wide. Synthetic data only. `media/` is in the vendored copy, not in
+  the npm package. With `withMedia(spec, media)` and a `resolveMedia` that maps
+  each reference to where the host serves `media/`, the inspector and the
+  player show them.
 - `trace.json`: four referrals from block 2 of the benchmark scoreboard's
   OpenEMR referral study, played in recorded order. The first three save and
   read back all 11 fields. On the fourth, OpenEMR finds a matching chart, the
   screen check after "Create New Patient" fails, and the run stops before it
   confirms a new chart. `source` names the scoreboard rows and the sha256 of
-  each engine report.
+  each engine report. The trace ends with a run record that links the
+  scoreboard rows; these runs used Flow's demo profile, which does not mint
+  a Seal.
 
 [`scripts/build_openemr_fixture.py`](scripts/build_openemr_fixture.py)
 regenerates all three from the bundle and the run reports.
