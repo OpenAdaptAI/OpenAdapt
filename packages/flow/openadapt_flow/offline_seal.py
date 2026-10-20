@@ -297,6 +297,24 @@ def enqueue_for_batch(seal: LocalSealV1, home: Optional[Path] = None) -> Path:
     return path
 
 
+def _refuse_unredacted(report: Mapping[str, Any]) -> None:
+    from openadapt_flow import report_redaction
+
+    try:
+        policy = report_redaction.load_policy()
+    except report_redaction.RedactionPolicyError as exc:
+        raise LocalSealError("redaction_policy_unreadable", str(exc)) from exc
+    found = report_redaction.find_unredacted(report, policy)
+    if found:
+        raise LocalSealError(
+            "unredacted",
+            f"report.json still holds {len(found)} session token or credential "
+            f"value(s): {report_redaction.describe(found)}. Run "
+            "`openadapt-flow redact-report RUN_DIR` and seal again, or pass "
+            "--allow-unredacted to seal the report as it is",
+        )
+
+
 def seal_run(
     run_dir: Path,
     *,
@@ -304,12 +322,17 @@ def seal_run(
     now: Optional[datetime] = None,
     enqueue: bool = True,
     signer: Optional["SealSigner"] = None,
+    allow_unredacted: bool = False,
 ) -> LocalSealV1:
     """Write ``run_dir/seal.json`` over the exact bytes of ``report.json``.
 
     Idempotent for an unchanged report. Refuses to overwrite a Seal that
     covers different bytes: a report that changed after it was sealed is a
     question for a person, not something to re-sign silently.
+
+    Refuses (``unredacted``) a report that still holds a session token or
+    credential (:mod:`openadapt_flow.report_redaction`), unless
+    ``allow_unredacted``: a Seal makes a report shareable.
     """
     run_dir = Path(run_dir)
     report_path = run_dir / "report.json"
@@ -320,6 +343,8 @@ def seal_run(
         raise LocalSealError("report_unreadable", str(report_path)) from exc
     if not isinstance(report, dict):
         raise LocalSealError("report_unreadable", "report.json is not an object")
+    if not allow_unredacted:
+        _refuse_unredacted(report)
     digest = hashlib.sha256(raw).hexdigest()
     seal_path = run_dir / SEAL_FILE
     if seal_path.exists():
@@ -374,6 +399,8 @@ def seal_after_run(
         home = seal_home(env)
         seal = seal_run(Path(run_dir), home=home, signer=signer_for(home, env=env))
     except LocalSealError as exc:
+        if exc.code == "unredacted":
+            return f"offline seal not written: {exc}"
         return f"offline seal not written: {exc.code}"
     except Exception as exc:  # a Seal failure must never change the run's result
         return f"offline seal not written: {type(exc).__name__}"

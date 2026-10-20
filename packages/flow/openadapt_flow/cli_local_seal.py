@@ -55,7 +55,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from openadapt_flow.offline_seal import LocalSealError, seal_run
 
     try:
-        seal = seal_run(Path(args.run_dir), home=_home(args), signer=_signer(args))
+        seal = seal_run(
+            Path(args.run_dir),
+            home=_home(args),
+            signer=_signer(args),
+            allow_unredacted=args.allow_unredacted,
+        )
     except LocalSealError as exc:
         return _refused(exc)
     print(json.dumps(seal.wire(), indent=2, sort_keys=True))
@@ -297,6 +302,14 @@ def register(sub: Any) -> None:
 
     r = s.add_parser("run", help="Seal a run directory's report.json")
     r.add_argument("run_dir")
+    r.add_argument(
+        "--allow-unredacted",
+        action="store_true",
+        help=(
+            "Seal a report that still holds a session token or credential "
+            "(default: refuse; run redact-report first)"
+        ),
+    )
     r.set_defaults(func=_cmd_run)
 
     f = s.add_parser("file", help="Seal any file: a record, an export, an audit report")
