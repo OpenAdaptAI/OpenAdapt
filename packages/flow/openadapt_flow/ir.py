@@ -465,6 +465,14 @@ class PostconditionKind(str, Enum):
     URL_CHANGED = "url_changed"  # page URL differs from the step's start
     TITLE_CHANGED = "title_changed"  # page title differs from the step's start
     NEW_TAB_OPENED = "new_tab_opened"  # browser page count increased
+    # A compiler-classified local edit (docs/design/LOCAL_EDIT_CLASSIFICATION.md):
+    # URL, title and page count are unchanged from the step's start and, when
+    # ``field_selector`` is set, focus is still in that field. Unlike the
+    # *_changed kinds, an unobservable property fails the check.
+    LOCAL_EDIT = "local_edit"
+    # The focused dropdown shows the run's value of ``param`` (its selected
+    # option's label, whitespace-squashed and case-insensitive).
+    FIELD_VALUE = "field_value"
 
 
 class Postcondition(BaseModel):
@@ -482,6 +490,24 @@ class Postcondition(BaseModel):
             " near, not exactly at, the recorded region)"
         ),
     )
+    #: LOCAL_EDIT: the structural selector of the field focus must stay in.
+    field_selector: Optional[str] = None
+    #: FIELD_VALUE: the run parameter whose value the field must show.
+    param: Optional[str] = Field(
+        default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+    )
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Leave the local-edit fields out when unset, so every existing
+        postcondition (and bundle digest) serializes exactly as before."""
+
+        data: dict[str, Any] = handler(self)
+        if self.field_selector is None:
+            data.pop("field_selector", None)
+        if self.param is None:
+            data.pop("param", None)
+        return data
 
 
 IdentitySignalKeyValue = Literal[
@@ -605,15 +631,19 @@ class WebFormSpec(BaseModel):
     success_pattern: Optional[str] = None
     #: GUI steps the API step stands in for, in order. The last one is the save.
     replaces_steps: list[str] = Field(min_length=1)
-    #: Other non-GET requests seen while the recorded steps ran. They are not
-    #: repeated; they are listed so the person admitting the step can judge.
+    #: Other non-GET requests seen while the recorded steps ran. A proposal
+    #: with any is refused, and so are its admission and its run (a binding
+    #: proposed before that rule existed may still list some).
     other_writes_seen: list[str] = Field(default_factory=list)
     #: On-screen checks of folded steps that caused no request (screen-only,
     #: not repeated), listed for the person admitting the step.
     screen_only_checks: list[str] = Field(default_factory=list)
-    #: Digest of the folded steps' on-screen checks when this was proposed.
-    #: If a check is added or changed later, the API step does not run (it
-    #: would skip that check) until it is proposed again.
+    #: Digest of the complete definition of every replaced step, the save
+    #: included (minus its API binding), when this was proposed
+    #: (``folded_checks_digest`` in runtime.actuators.web_form). Any change to
+    #: those steps keeps the API step from running until it is proposed and
+    #: admitted again. Bindings proposed before it covered more than the
+    #: on-screen checks need proposing again.
     folded_checks_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
 
@@ -899,6 +929,27 @@ class Guard(BaseModel):
 
 
 Predicate.model_rebuild()  # resolve the self-referential `operands`
+
+
+class GuardSource(BaseModel):
+    """Why a guard is in the program, when spoken narration suggested it.
+
+    Written by induction (``compiler.narration_rules``) for a guard that
+    started as a narrated proposal and was then certified. The sentence is
+    scrubbed narration. It explains the guard to a reviewer; the runtime never
+    reads it.
+    """
+
+    sentence: str = Field(description="The scrubbed sentence that suggested it")
+    rule: str = Field(default="", description="The guard in plain words")
+    certified_by: Literal["recordings_agree", "probe", "person"]
+    accepted_by: Optional[str] = Field(
+        default=None, description="Who accepted it, when a person certified it"
+    )
+    recording: Optional[int] = Field(
+        default=None, description="Index of the recording the sentence came from"
+    )
+    source: Literal["narration", "narration+model"] = "narration"
 
 
 def predicate_contract_sha256(predicate: Optional[Predicate]) -> str:
@@ -1501,6 +1552,37 @@ class DialogResponse(BaseModel):
         return self
 
 
+class HoverEvidence(BaseModel):
+    """What the recording saw when the pointer rested on a click target.
+
+    See :mod:`openadapt_flow.runtime.hover_evidence`. Captured for click steps
+    whose target carries no record identity (an icon-only control) on a
+    pixel surface. Replay moves the pointer onto the resolved target, waits
+    ``dwell_ms`` and compares its response with this one before clicking.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    response: bool = Field(
+        description="Whether anything near the target changed under the pointer"
+    )
+    region: Optional[Region] = Field(
+        default=None,
+        description=(
+            "The changed box, as an offset from the recorded click point"
+            " (dx, dy, w, h). Set iff ``response``."
+        ),
+    )
+    crop: Optional[str] = Field(
+        default=None,
+        description=(
+            "Bundle-relative PNG of the response pixels (templates/hover/),"
+            " sealed with the other image crops. Set iff ``response``."
+        ),
+    )
+    dwell_ms: int = Field(default=800, ge=0, le=5000)
+
+
 class Step(BaseModel):
     id: str
     intent: str = Field(description="Human-readable purpose of the step")
@@ -1810,6 +1892,15 @@ class Step(BaseModel):
             " band tier (docs/LIMITS.md)."
         ),
     )
+    hover: Optional[HoverEvidence] = Field(
+        default=None,
+        description=(
+            "Pointer-hover response captured at record time for a click whose"
+            " target carries no record identity (runtime.hover_evidence)."
+            " None when the recorder could not hover or the step has other"
+            " identity evidence, and on bundles compiled before this field."
+        ),
+    )
     submit_binding: Optional[SubmitBinding] = Field(
         default=None,
         description=(
@@ -1843,6 +1934,84 @@ class Step(BaseModel):
 # effect/risk machinery), a transition's guard IS a Phase-1 ``Predicate``, and a
 # branch reuses the SAME model-free predicate evaluation. BACKWARD-COMPATIBLE:
 UNDO_ID_PATTERN: Final[str] = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+UNDO_PARAM_PATTERN: Final[str] = r"^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+
+
+class UndoLocate(BaseModel):
+    """How an undo finds the record the save created.
+
+    Before the save runs, the replayer keeps the ids of the records that
+    already match :attr:`match` (``<run-dir>/undo/prior/<step>.json``). At undo
+    time, the one matching record whose id is not in that list is the record
+    the save created; its id is bound to the run parameter :attr:`param`.
+    Zero or several such records refuse the undo. See docs/AFTER_A_STOP.md.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The save's own effect selector (serialized ``ValueExpr`` values).
+    match: dict[str, Any] = Field(min_length=1)
+    #: The record field that holds the record's id.
+    field: str = Field(default="id", min_length=1, max_length=128)
+    #: The run parameter the id is bound to.
+    param: str = Field(default="undo_record_id", pattern=UNDO_PARAM_PATTERN)
+
+
+class UndoRestore(BaseModel):
+    """Which values to keep before a field edit so its undo can restore them.
+
+    Before the save runs, the replayer reads the one record matching
+    :attr:`match` and keeps each named field's value. At undo time each value
+    is bound to its run parameter, and the undo writes it back.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    match: dict[str, Any] = Field(min_length=1)
+    #: Record field -> the run parameter the undo reads its old value from.
+    fields: dict[str, str] = Field(min_length=1)
+
+    @field_validator("fields")
+    @classmethod
+    def _param_names(cls, value: dict[str, str]) -> dict[str, str]:
+        for name in value.values():
+            if not re.match(UNDO_PARAM_PATTERN, name):
+                raise ValueError(f"{name!r} is not a valid undo parameter name")
+        return value
+
+
+class UndoProposal(BaseModel):
+    """A compiler-proposed undo that passed verification on a test copy.
+
+    Flow offers it after a stop only once a person has approved it
+    (:attr:`approved_by`), and every run of it still needs that person's
+    approval at the time it runs. ``evidence_sha256`` binds the verification
+    record kept in the bundle (``evidence_path``).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Where the candidate came from: ``recording`` (another recording),
+    #: ``network`` (captured network traffic) or ``field_restore`` (the
+    #: value read back before the change).
+    candidate_source: Literal["recording", "network", "field_restore"]
+    #: Plain words on why it was proposed; never record values.
+    basis: str = Field(min_length=1, max_length=1024)
+    test_copy: str = Field(min_length=1, max_length=256)
+    verified_at: str
+    evidence_path: str = Field(min_length=1, max_length=512)
+    evidence_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    approved_by: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    approved_at: Optional[str] = None
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.approved_by is None:
+            data.pop("approved_by", None)
+        if self.approved_at is None:
+            data.pop("approved_at", None)
+        return data
 
 
 class UndoStep(BaseModel):
@@ -1865,11 +2034,33 @@ class UndoStep(BaseModel):
     #: Plain words a person reads before approving.
     intent: str = Field(min_length=1, max_length=512)
     #: ``demonstration``: compiled from a recording of a person doing the
-    #: undo. ``hand_written``: written by an author.
-    source: Literal["demonstration", "hand_written"]
+    #: undo. ``hand_written``: written by an author. ``synthesized``: built by
+    #: ``undo propose`` from captured traffic or a field's old value.
+    source: Literal["demonstration", "hand_written", "synthesized"]
     #: The compensating actions, run in order by the normal runtime (identity
     #: checks, risk gate and effect verification all apply).
     steps: list[Step] = Field(min_length=1)
+    #: Find the record the save created (binds its id to a run parameter).
+    locate: Optional[UndoLocate] = None
+    #: Keep a field's old value before the save so the undo can restore it.
+    restore: Optional[UndoRestore] = None
+    #: Set by ``undo propose``: verified on a test copy, waiting for (or
+    #: holding) a person's one-time approval. None for a declared undo.
+    proposal: Optional[UndoProposal] = None
+
+    @property
+    def awaiting_approval(self) -> bool:
+        """True for a proposed undo no person has approved yet."""
+        return self.proposal is not None and self.proposal.approved_by is None
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Keep declared undos byte-identical (the bundle digest covers them)."""
+        data: dict[str, Any] = handler(self)
+        for name in ("locate", "restore", "proposal"):
+            if getattr(self, name) is None:
+                data.pop(name, None)
+        return data
 
     @model_validator(mode="after")
     def _requires_a_checkable_result(self) -> "UndoStep":
@@ -2680,6 +2871,11 @@ class Workflow(BaseModel):
     # review, canary or admission pins. None for every other bundle, and
     # omitted from its serialized bytes.
     origin: Optional[Literal["agent_run"]] = None
+    # Narration that suggested a certified guard, keyed by the program state
+    # (or step) id the guard sits on. Explanation only: the runtime never reads
+    # it. Empty for every bundle without narrated guards, and then omitted
+    # from its serialized bytes.
+    guard_sources: dict[str, GuardSource] = Field(default_factory=dict)
     # Declared compensating actions, offered to a person after a stop and
     # never run automatically (``openadapt_flow.after_stop``). Part of the
     # content digest when present; omitted from the serialized bytes when
@@ -2729,6 +2925,8 @@ class Workflow(BaseModel):
             data.pop("surfaces", None)
         if self.origin is None:
             data.pop("origin", None)
+        if not self.guard_sources:
+            data.pop("guard_sources", None)
         if not self.undo_steps:
             data.pop("undo_steps", None)
         return data
@@ -2821,6 +3019,13 @@ class Workflow(BaseModel):
         """
         do_encrypt = encrypt or key is not None
         bundle = Path(bundle_dir)
+        from openadapt_flow import sealed_set as _sealed
+
+        if _sealed.active_writer(bundle) is not None or _sealed.is_sealed(bundle):
+            # A sealed bundle stays sealed whatever ``encrypt`` says: many
+            # commands re-save a bundle with a bare ``save(bundle)``, and that
+            # must never turn a sealed bundle back into plaintext.
+            return self._save_sealed_set(bundle, key, seal_manifest=seal_manifest)
         bundle.mkdir(parents=True, exist_ok=True)
         (bundle / "templates").mkdir(exist_ok=True)
         # Restore any in-memory crops (from a prior encrypted load/save) to disk
@@ -2867,6 +3072,48 @@ class Workflow(BaseModel):
             )
         return path
 
+    def _save_sealed_set(
+        self, bundle: Path, key: Optional[str], *, seal_manifest: bool
+    ) -> Path:
+        """Save into a sealed bundle (see :mod:`openadapt_flow.sealed_set`).
+
+        Every asset, ``workflow.json`` and the manifest go through the set's
+        writer, so no plaintext of this workflow touches the disk. Assets come
+        from the in-memory crop map and from crops already sealed in the set.
+        """
+        from openadapt_flow import sealed_set as _sealed
+
+        writer = _sealed.active_writer(bundle)
+        owned = writer is None
+        if writer is None:
+            passphrase = _sealed.passphrase_for("bundle", key)
+            if not passphrase:
+                raise _sealed.SealedSetKeyError(
+                    _sealed.missing_key_message(bundle, "bundle")
+                )
+            writer = _sealed.SealedSetWriter(bundle, "bundle", passphrase, resume=True)
+        assets = {rel: writer.read_bytes(rel) for rel in writer.files("templates/")}
+        for rel, data in self._decrypted_templates.items():
+            if assets.get(rel) != data:
+                writer.write(rel, data)
+            assets[rel] = data
+        if self.schema_version < SCHEMA_VERSION:
+            self.schema_version = SCHEMA_VERSION
+        self.encrypted = True
+        if seal_manifest:
+            from openadapt_flow import bundle_validation as _bv
+
+            self.manifest = _bv.build_manifest(self, bundle, assets=assets)
+        writer.write("workflow.json", self.model_dump_json(indent=2).encode("utf-8"))
+        if self.manifest is not None:
+            writer.write(
+                "manifest.json", self.manifest.model_dump_json(indent=2).encode("utf-8")
+            )
+        self._decrypted_templates = dict(assets)
+        if owned:
+            writer.finalize()
+        return bundle / ("workflow.json" + _sealed.SEALED_SUFFIX)
+
     @classmethod
     def load(
         cls,
@@ -2905,11 +3152,22 @@ class Workflow(BaseModel):
         """
         bundle = Path(bundle_dir)
         from openadapt_flow import bundle_validation as _bv
+        from openadapt_flow import sealed_set as _sealed
 
         encrypted_path = bundle / "workflow.json.enc"
         plaintext_path = bundle / "workflow.json"
+        sealed_assets: Optional[dict[str, bytes]] = None
         bundle_encrypted = encrypted_path.is_file()
-        if bundle_encrypted:
+        if _sealed.active_writer(bundle) is not None or _sealed.is_sealed(bundle):
+            # A sealed set: verify the whole file set, then decrypt the
+            # workflow and every crop in memory.
+            reader: Any = _sealed.active_writer(bundle) or _sealed.open_set(bundle, key)
+            bundle_encrypted = True
+            raw = json.loads(reader.read_bytes("workflow.json"))
+            sealed_assets = {
+                rel: reader.read_bytes(rel) for rel in reader.files("templates/")
+            }
+        elif bundle_encrypted:
             from openadapt_flow import crypto as _crypto
 
             decrypted = _crypto.decrypt_bytes(
@@ -2930,7 +3188,9 @@ class Workflow(BaseModel):
                 wf.manifest = BundleManifest.model_validate_json(sidecar.read_text())
                 persisted = wf.manifest
 
-        if bundle_encrypted:
+        if sealed_assets is not None:
+            wf._decrypted_templates = sealed_assets
+        elif bundle_encrypted:
             # Decrypt the sealed image crops IN MEMORY (fail-loud on wrong key /
             # tamper, exactly as the workflow.json above). The resolver reads
             # them via ``decrypted_template``; nothing cleartext lands on disk.
@@ -3293,6 +3553,39 @@ class KnownIdEvidence(BaseModel):
     export_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
+class IdentityLook(BaseModel):
+    """One extra look taken before stopping on a look-alike identifier.
+
+    See :mod:`openadapt_flow.runtime.identity_looks`. Holds no identifier
+    values: only what kind of look it was, what it concluded, and the
+    SHA-256 of the frame it read when it read one.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["frame", "magnified", "known_ids", "clipboard"]
+    #: ``agrees``: consistent with the first read, settles nothing alone.
+    #: ``resolves``: names exactly one record, the expected one.
+    #: ``contradicts``: names another record; the step stops.
+    #: ``unavailable``: the look could not be taken or read nothing usable.
+    outcome: Literal["agrees", "resolves", "contradicts", "unavailable"]
+    reason: Optional[str] = Field(default=None, max_length=80)
+    frame_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class HoverLook(BaseModel):
+    """The live hover response compared with the recorded one.
+
+    Holds no pixels: the verdict, why, and the SHA-256 of the hover frame.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    verdict: Literal["verified", "mismatch", "unexpected", "absent", "unverifiable"]
+    reason: str = Field(max_length=80)
+    frame_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
 class IdentityCheck(BaseModel):
     """Outcome of the pre-click target-identity check (runtime.identity).
 
@@ -3336,6 +3629,7 @@ class IdentityCheck(BaseModel):
         "pixel",
         "vlm",
         "signal_quorum",
+        "hover",
     ] = "context"
     coverage: float = 0.0
     expected: str = ""
@@ -3375,6 +3669,27 @@ class IdentityCheck(BaseModel):
             "Set when the known-ID list was needed but may not be used: no "
             "admission confirmation, the export changed since it was "
             "confirmed, or it is older than the configured age. The step halts."
+        ),
+    )
+    hover: Optional[HoverLook] = Field(
+        default=None,
+        description=(
+            "Set for mode ``hover``: the live pointer-hover response compared "
+            "with the recorded one (runtime.hover_evidence)."
+        ),
+    )
+    looks: list[IdentityLook] = Field(
+        default_factory=list,
+        description=(
+            "Extra looks taken because the first read abstained only on a "
+            "look-alike identifier (runtime.identity_looks), in order."
+        ),
+    )
+    look_halt: Optional[Literal["identity_look_changed_screen"]] = Field(
+        default=None,
+        description=(
+            "Set when an extra look changed the screen outside the "
+            "identifier it read. The step halts."
         ),
     )
 
@@ -3810,6 +4125,45 @@ class EffectFieldCheck(BaseModel):
     verification_tier: Optional[int] = None
 
 
+class ServerResponseEvidence(BaseModel):
+    """The application server's answer to a save request, as the browser saw it.
+
+    Kept on the step as evidence at check level ``same_screen``: it comes from
+    the same transaction as the save, so on its own it never confirms an
+    effect and never makes a run VERIFIED. It holds the method, the status and
+    the media type only: no URL, path, body, or digest of one (a digest of a
+    short path or body can be guessed).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    method: Literal["POST", "PUT", "PATCH", "DELETE"]
+    status: int = Field(ge=100, le=599)
+    #: The response's media type (``application/json``), without parameters.
+    content_type: Optional[str] = Field(default=None, max_length=100)
+    #: Where this evidence ranks (:mod:`openadapt_flow.check_level`).
+    check_level: Literal["same_screen"] = "same_screen"
+
+    @property
+    def ok(self) -> bool:
+        """Not an error: 2xx, or a 3xx redirect after a form post."""
+        return self.status < 400
+
+
+class CheckToClickRecheck(BaseModel):
+    """The screen changed between a pixel step's check and its click.
+
+    Records which checked regions changed on the fresh frame taken just
+    before the click, and what the runtime did: re-observed the target and
+    its identity on that frame, or refused the click. No pixels.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    changed: list[Literal["target", "identity", "hover", "frame_size"]]
+    outcome: Literal["reobserved", "aborted"]
+
+
 class StepResult(BaseModel):
     step_id: str
     intent: str
@@ -3864,6 +4218,10 @@ class StepResult(BaseModel):
     safety_halt: bool = False
     effect_results: list[str] = Field(default_factory=list)
     effect_evidence: list[EffectVerificationEvidence] = Field(default_factory=list)
+    #: The server's answers to this step's write requests, when the browser
+    #: saw them. Evidence at check level ``same_screen``; never a check on its
+    #: own. Empty (and omitted when serialized) on every other backend.
+    server_responses: list[ServerResponseEvidence] = Field(default_factory=list)
     #: Field-by-field read-back comparisons; omitted from the report when empty.
     effect_field_checks: list[EffectFieldCheck] = Field(default_factory=list)
     #: Machine-readable terminal category. ``report.halt`` remains useful
@@ -3926,6 +4284,11 @@ class StepResult(BaseModel):
     # (recorded for audit; empty unless an appliance is configured).
     postcondition_drift_rescues: list[str] = Field(default_factory=list)
     drift_oracle_calls: int = 0  # VLM state-verifier calls this step
+    #: The uniform page scale (for example 1.25 under 125% zoom) at which a
+    #: ``region_stable`` check found its recorded content, when it was found
+    #: only there. Set only when this step's own click showed the same scale.
+    #: Deterministic: no model is asked. ``None`` otherwise.
+    postcondition_page_scale: Optional[float] = None
     #: READ steps only: the value read, with its channels, grade and region.
     field_read: Optional[FieldRead] = None
     # The first identity check on this step mismatched WHILE the screen was
@@ -3938,6 +4301,10 @@ class StepResult(BaseModel):
     identity_reobserved: bool = False
     identity_first_read: Optional[IdentityCheck] = None
     identity_first_frame_png: Optional[str] = None
+    #: Pixel clicks only: each time the target, identity or hover region
+    #: changed between the step's check and its click (see
+    #: ``Replayer._pixel_recheck``). Empty, and omitted, when nothing changed.
+    check_to_click: list[CheckToClickRecheck] = Field(default_factory=list)
     heal: Optional[HealEvent] = None
     error: Optional[str] = None
     before_png: Optional[str] = None  # run-dir-relative paths
@@ -3954,6 +4321,12 @@ class StepResult(BaseModel):
     #: active; for a refused switch, the surface the run stayed on). None on
     #: every single-surface run, and then omitted from the serialized result.
     surface: Optional[str] = None
+    #: SCROLL steps only: True when the closed-loop scroll sent no input
+    #: because its readiness check already found the next step's target on
+    #: the before-frame (nothing to scroll). Set by ``Replayer._act_scroll``
+    #: on that path alone; None otherwise, and then omitted from the
+    #: serialized result.
+    scroll_target_ready_before: Optional[bool] = None
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -3966,6 +4339,12 @@ class StepResult(BaseModel):
             data.pop("timings", None)
         if isinstance(data, dict) and not self.effect_field_checks:
             data.pop("effect_field_checks", None)
+        if isinstance(data, dict) and not self.server_responses:
+            data.pop("server_responses", None)
+        if isinstance(data, dict) and not self.check_to_click:
+            data.pop("check_to_click", None)
+        if isinstance(data, dict) and self.scroll_target_ready_before is None:
+            data.pop("scroll_target_ready_before", None)
         return data
 
 
@@ -5245,6 +5624,12 @@ class RunReport(BaseModel):
             raise ValueError("report filename must be one local file name")
         path = run / filename
         payload = self.model_dump_json(indent=2).encode("utf-8")
+        from openadapt_flow import sealed_set as _sealed
+
+        if _sealed.is_sealed_path(path):
+            # The run of a sealed bundle: the report is encrypted in memory.
+            _sealed.write_bytes(path, payload)
+            return path
         temporary = run / (f".{filename}.{os.getpid()}.{secrets.token_hex(8)}.tmp")
         descriptor = os.open(
             temporary,

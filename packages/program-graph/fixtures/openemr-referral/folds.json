@@ -1,0 +1,81 @@
+{
+  "groups": [
+    {
+      "id": "name",
+      "title": "Name",
+      "subtitle": "6 steps \u00b7 3 fields",
+      "nodes": [
+        "for_each::s::step_000",
+        "for_each::s::step_001",
+        "for_each::s::step_003",
+        "for_each::s::step_005",
+        "for_each::s::step_006",
+        "for_each::s::step_008"
+      ]
+    },
+    {
+      "id": "birth",
+      "title": "Date of birth and sex",
+      "subtitle": "4 steps \u00b7 2 fields",
+      "nodes": [
+        "for_each::s::step_009",
+        "for_each::s::step_011",
+        "for_each::s::step_012",
+        "for_each::s::step_013"
+      ]
+    },
+    {
+      "id": "address",
+      "title": "Address",
+      "subtitle": "11 steps \u00b7 4 fields",
+      "nodes": [
+        "for_each::s::step_015",
+        "for_each::s::step_016",
+        "for_each::s::step_017",
+        "for_each::s::step_018",
+        "for_each::s::step_020",
+        "for_each::s::step_021",
+        "for_each::s::step_023",
+        "for_each::s::step_024",
+        "for_each::s::step_025",
+        "for_each::s::step_027",
+        "for_each::s::step_029"
+      ]
+    },
+    {
+      "id": "contact",
+      "title": "Phone, email and country",
+      "subtitle": "6 steps \u00b7 3 fields",
+      "nodes": [
+        "for_each::s::step_030",
+        "for_each::s::step_032",
+        "for_each::s::step_033",
+        "for_each::s::step_035",
+        "for_each::s::step_036",
+        "for_each::s::step_037"
+      ]
+    },
+    {
+      "id": "save",
+      "title": "Create the chart",
+      "subtitle": "2 steps \u00b7 reads the chart back",
+      "nodes": [
+        "for_each::s::step_039",
+        "for_each::s::step_040"
+      ]
+    }
+  ],
+  "stops": [
+    {
+      "node": "for_each::s::step_040",
+      "label": "not confirmed"
+    }
+  ],
+  "source": {
+    "body_bundle": "openemr/new-referral, certified for clinical-write",
+    "body_content_digest": "ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+    "source_recording_sha256": "243fb7853b228a2e0fd93c51c1d43e7b84fff567f1aac917bdcd91a54d044894",
+    "loop": "openadapt-flow for-each --records fixtures/openemr-referral/worklist.csv",
+    "spec": "openadapt-flow visualize --format json --profile public-synthetic"
+  }
+}

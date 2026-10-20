@@ -189,6 +189,8 @@ def _pre_frame_path_content(wf: Workflow, shape: str) -> dict:
         assert step.pop("drag_end_anchor") is None
         assert step.pop("selection_commit_key") is None
         assert step.pop("selection_region") is None
+        # Reviewed v2 omission: hover evidence postdates these seals.
+        assert step.pop("hover") is None
         # Reviewed v2 omission: submit-binding evidence postdates these seals.
         assert step.pop("submit_binding") is None
         assert step.pop("submit_binding_unbound_reason") is None
@@ -208,6 +210,9 @@ def _pre_frame_path_content(wf: Workflow, shape: str) -> dict:
         # key name -- see the note above.
         assert effect.pop("new_records") == []
         assert effect.pop("identity_field") == "id"
+        # Reviewed v2 omission: the collateral-change check postdates these
+        # seals (#1375). Effect no longer serializes its False default at all.
+        assert "forbid_collateral_change" not in effect
     return content
 
 
@@ -254,6 +259,7 @@ def _write_synthetic_pre_field_bundle(
         assert step.pop("field_label") is None
         assert step.pop("selection_commit_key") is None
         assert step.pop("selection_region") is None
+        assert step.pop("hover") is None
         assert step.pop("submit_binding") is None
         assert step.pop("submit_binding_unbound_reason") is None
         assert step.pop("surface") is None
@@ -601,6 +607,36 @@ def test_a_recorded_submit_binding_is_sealed_content(tmp_path):
         bare_digest,
         bound_digest,
     )
+
+
+def test_recorded_hover_evidence_is_sealed_content(tmp_path):
+    """Only an absent hover field is omitted; a recorded response is sealed."""
+
+    from openadapt_flow.ir import ActionKind, Anchor, HoverEvidence, Step
+
+    b = _write_bundle_dir(tmp_path)
+
+    def _bundle(hover=None):
+        step = Step(
+            id="save",
+            intent="click recorded visual target",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="templates/btn.png", region=(0, 0, 10, 10), click_point=(5, 5)
+            ),
+            hover=hover,
+        )
+        return Workflow(name="sealed-hover", steps=[step])
+
+    bare = _bundle()
+    file_hashes = bv.compute_file_hashes(bare, b)
+    bare_digest = bv.compute_content_digest(bare, file_hashes)
+    assert "hover" not in _step_payloads(bv._workflow_content(bare), "linear")[0]
+    ev = HoverEvidence(response=True, region=(-5, -5, 60, 40), crop="templates/h.png")
+    hovered = bv.compute_content_digest(_bundle(ev), file_hashes)
+    assert hovered != bare_digest
+    moved = ev.model_copy(update={"region": (-5, -5, 60, 41)})
+    assert bv.compute_content_digest(_bundle(moved), file_hashes) != hovered
 
 
 def test_sealed_empty_defaults_do_not_implicitly_cross_schema_versions():

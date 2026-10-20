@@ -180,3 +180,81 @@ def test_release_asset_directories_and_symlinks_fail_closed(release_candidate):
     (downloaded / name).symlink_to(expected / name)
     with pytest.raises(ValueError, match="invalid entries"):
         _verify(expected, downloaded, metadata)
+
+
+def _desktop_release(tmp_path: Path) -> tuple[Path, dict]:
+    expected = tmp_path / "desktop"
+    expected.mkdir()
+    for name, data in (
+        ("OpenAdapt-Desktop-v0.21.1-macos-arm64.dmg", b"dmg"),
+        ("OpenAdapt-Desktop-v0.21.1-windows-x86_64.msi", b"msi"),
+        ("SHA256SUMS", b"sums"),
+    ):
+        (expected / name).write_bytes(data)
+    metadata = {
+        "tag_name": "openadapt-desktop-v0.21.1",
+        "draft": True,
+        "prerelease": False,
+        "immutable": False,
+        "published_at": None,
+        "author": {"login": "openadapt-release[bot]"},
+        "assets": [
+            {
+                "name": path.name,
+                "size": path.stat().st_size,
+                "digest": f"sha256:{_sha256(path)}",
+                "uploader": {"login": "openadapt-release[bot]"},
+            }
+            for path in sorted(expected.iterdir())
+        ],
+    }
+    return expected, metadata
+
+
+def test_desktop_artifact_set_accepts_installers_and_manifests(tmp_path: Path) -> None:
+    expected, metadata = _desktop_release(tmp_path)
+    missing = MODULE.verify_release(
+        metadata,
+        expected_tag="openadapt-desktop-v0.21.1",
+        expected_author="openadapt-release[bot]",
+        expected_dir=expected,
+        expected_state="draft",
+        artifact_set="any",
+    )
+    assert missing == []
+
+
+def test_python_artifact_set_still_refuses_installers(tmp_path: Path) -> None:
+    expected, metadata = _desktop_release(tmp_path)
+    with pytest.raises(ValueError, match="no wheel or sdist|unexpected files"):
+        MODULE.verify_release(
+            metadata,
+            expected_tag="openadapt-desktop-v0.21.1",
+            expected_author="openadapt-release[bot]",
+            expected_dir=expected,
+            expected_state="draft",
+        )
+
+
+def test_desktop_artifact_set_still_checks_every_digest(tmp_path: Path) -> None:
+    expected, metadata = _desktop_release(tmp_path)
+    metadata["assets"][0]["digest"] = "sha256:" + "0" * 64
+    with pytest.raises(ValueError, match="digest mismatch"):
+        MODULE.verify_release(
+            metadata,
+            expected_tag="openadapt-desktop-v0.21.1",
+            expected_author="openadapt-release[bot]",
+            expected_dir=expected,
+            expected_state="draft",
+            artifact_set="any",
+        )
+
+
+def test_desktop_release_workflow_uses_the_any_artifact_set() -> None:
+    workflow = (ROOT / ".github/workflows/desktop-release.yml").read_text(
+        encoding="utf-8"
+    )
+    calls = [
+        line for line in workflow.splitlines() if "verify_github_release.py" in line
+    ]
+    assert calls and all("--artifact-set any" in line for line in calls)

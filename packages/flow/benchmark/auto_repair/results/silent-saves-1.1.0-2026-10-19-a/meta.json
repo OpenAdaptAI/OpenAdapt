@@ -1,0 +1,25 @@
+{
+  "written_at": "2026-10-19T17:36:44-0400",
+  "engine_git_head": "4e770401a669d4f36b207003dae280c720e03f96",
+  "benchmark": "silent-saves 1.1.0 (#1380), UI-change blocks only",
+  "blocks": {
+    "zoom": [
+      26,
+      35
+    ],
+    "notice": [
+      46,
+      55
+    ],
+    "relink": [
+      76,
+      85
+    ]
+  },
+  "program": "~/.cache/silent-saves/program-2026-10-18-a/mockmed.add_note-48f60d6be84e/program/bundle",
+  "loop": "AutoRepair over SelfRepair (bridge up to 3); target as arm 3r",
+  "agent": "agent:anthropic:claude-sonnet-5-5:auto-repair-benchmark",
+  "approver": "benchmark:scripted-approver (stands in for a person; approves all)",
+  "fault_probe": "missing (Jane Sample's referral removed)",
+  "engine_note": "Engine: this PR's branch plus #1380's benchmark/silent_saves merged locally (measure/silent-saves-repair), with the carried JIT repair admission and the page-scale region_stable check applied. #1380's arms 3 and 3r ran the same program and items on an earlier engine."
+}

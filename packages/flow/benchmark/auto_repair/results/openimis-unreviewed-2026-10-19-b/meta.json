@@ -1,0 +1,17 @@
+{
+  "written_at": "2026-10-19T13:48:47-0400",
+  "engine_git_head": "4c4c158cb7c2859a1f8c712ccbb7320a552b9462",
+  "app": "openIMIS reference stack (pinned), synthetic data",
+  "program": "launch-4 claim-entry bundle (demo/cua_to_program)",
+  "bundle_label": "unreviewed",
+  "risk_review": "none",
+  "ui_change": "icon-only Save relabelled 'Save claim' (#1331)",
+  "loop": "AutoRepair over SelfRepair; no fault probe; no policy",
+  "agent": "agent:anthropic:claude-sonnet-5-5:auto-repair-benchmark",
+  "approver": "benchmark:scripted-approver (stands in for a person; approves all)",
+  "items": {
+    "healthy": 0,
+    "changed": 2
+  },
+  "engine_note": "Engine: as openimis-reviewed-2026-10-19-b. The bundle as compiled, no risk review."
+}

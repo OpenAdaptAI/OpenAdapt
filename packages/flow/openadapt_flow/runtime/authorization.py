@@ -15,7 +15,7 @@ import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, Mapping, TypeAlias, Union, cast
+from typing import Any, Literal, Mapping, Optional, TypeAlias, Union, cast
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
@@ -339,6 +339,55 @@ class UnverifiedWriteApproval(BaseModel):
     effect_contract_hashes: tuple[str, ...] = Field(min_length=1)
 
 
+class AdmittedApiStep(BaseModel):
+    """One API step (``web_form`` binding) admitted into a governed run.
+
+    Binds the exact binding a person admitted (``admission_digest``), the
+    complete definition of the GUI steps it stands for (``folded_checks_digest``)
+    and its record check (``effect_contract_hashes``). The runtime runs an API
+    step under a governed authorization only when all three still match.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    step_id: str
+    admission_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    folded_checks_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    effect_contract_hashes: tuple[str, ...] = Field(min_length=1)
+
+
+def admitted_api_steps(workflow: Any) -> tuple[AdmittedApiStep, ...]:
+    """The admitted ``web_form`` API steps of ``workflow``, as run bindings.
+
+    Only a binding a person admitted, whose record check is still the save
+    step's own, is listed.
+    """
+
+    rows: list[AdmittedApiStep] = []
+    for step in workflow.steps:
+        binding = step.api_binding
+        if (
+            binding is None
+            or binding.kind != "web_form"
+            or binding.web_form is None
+            or not binding.admitted()
+            or not binding.effects
+            or list(binding.effects) != list(step.effects)
+        ):
+            continue
+        rows.append(
+            AdmittedApiStep(
+                step_id=step.id,
+                admission_digest=binding.admission_digest(),
+                folded_checks_digest=binding.web_form.folded_checks_digest,
+                effect_contract_hashes=tuple(
+                    effect.contract_hash() for effect in binding.effects
+                ),
+            )
+        )
+    return tuple(rows)
+
+
 class GovernedRunAuthorization(BaseModel):
     """Ephemeral capability carrying admission decisions into replay.
 
@@ -459,6 +508,12 @@ class GovernedRunAuthorization(BaseModel):
     #: the runtime then gates like ``each_item``. It is a runner-local field:
     #: it is not part of the Cloud dispatch binding digest.
     approval_mode: Literal["each_item", "problems_only", "not_gated"] | None = None
+    #: API steps admitted into this run (docs/API_TIER.md). An API step not
+    #: listed here, or whose binding, folded checks or record check changed,
+    #: runs on the GUI. Cloud's dispatch never carries any yet, so a managed
+    #: run stays on the GUI. Left out when empty, so other authorizations
+    #: (and the dispatch binding digest) serialize exactly as before.
+    api_steps: tuple[AdmittedApiStep, ...] = Field(default_factory=tuple)
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -467,7 +522,38 @@ class GovernedRunAuthorization(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.approval_mode is None:
             data.pop("approval_mode", None)
+        if not self.api_steps:
+            data.pop("api_steps", None)
         return data
+
+    def admitted_api_step(self, step: Any, workflow: Any) -> Optional[str]:
+        """Why ``step``'s API step can't run under this authorization, or None."""
+
+        from openadapt_flow.runtime.actuators.web_form import folded_checks_digest
+
+        binding = step.api_binding
+        row = next((item for item in self.api_steps if item.step_id == step.id), None)
+        if row is None or binding is None or binding.web_form is None:
+            return "this run's authorization admitted no API step for this save"
+        ids = [s.id for s in workflow.steps]
+        try:
+            start = ids.index(binding.web_form.replaces_steps[0])
+            end = ids.index(step.id)
+        except ValueError:
+            return "the program's steps no longer match the admitted API step"
+        if (
+            row.admission_digest != binding.admission_digest()
+            or row.folded_checks_digest != binding.web_form.folded_checks_digest
+            or row.folded_checks_digest
+            != folded_checks_digest(workflow.steps[start : end + 1])
+            or list(row.effect_contract_hashes)
+            != [effect.contract_hash() for effect in step.effects]
+        ):
+            return (
+                "the API step, its folded checks or its record check differ from "
+                "the ones this run's authorization admitted"
+            )
+        return None
 
     @model_validator(mode="after")
     def _qualification_binding_is_complete(self) -> "GovernedRunAuthorization":

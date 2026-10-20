@@ -85,6 +85,7 @@ from openadapt_flow.ir import (
     Step,
     Workflow,
 )
+from openadapt_flow.jit.lifecycle import STANDARD_CHANGE_APPROVER
 from openadapt_flow.repair.candidate import (
     Actor,
     CampaignCaseResult,
@@ -194,6 +195,11 @@ class RepairRequest:
     expected_png: Optional[bytes] = None
     #: The item's parameters a bridge may type, by name. Secrets are left out.
     param_values: Mapping[str, str] = field(default_factory=dict, repr=False)
+    #: The program's record check: each saving step's effect contracts, with
+    #: literal values masked, and a digest of its record identity contract
+    #: (:func:`openadapt_flow.jit.signature.record_check_of`). A fix never
+    #: changes it; the probe and the resume check it again.
+    record_check: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
 
 @dataclass(frozen=True)
@@ -204,7 +210,8 @@ class RepairProposal:
     ``{"action": "left_click", "coordinate": [846, 457]}`` for ``anthropic``
     or ``{"kind": "click", "x": 846, "y": 457}`` for ``generic``).
     ``actions`` is a bridge of up to ``request.max_actions`` such actions,
-    in order; give one or the other. Clicks may name a point or, where the
+    in order; give one or the other. Give neither to give up while still
+    reporting the model calls and cost it took to decide that. Clicks may name a point or, where the
     dialect allows, a CSS selector. A bridge may type only a parameter's
     value or text the screen shows at that moment. The agent reports the
     model calls it made and their cost; Flow records them and can't measure
@@ -278,7 +285,9 @@ class SelfRepairTarget(Protocol):
     fault name opens a session that presents that fault (for the fault
     probes). ``execute`` admits ``workflow`` through the run gate and runs it
     with a fresh authorization; it must raise :class:`SelfRepairRefused` when
-    the gate refuses.
+    the gate refuses. ``gui_only`` (and any ``approval_gate``, which only
+    probes and resumed runs pass) runs the GUI steps only
+    (:func:`keep_gui_for_repair`).
     """
 
     def open(self, fault: Optional[str] = None) -> AppSession: ...
@@ -291,6 +300,7 @@ class SelfRepairTarget(Protocol):
         run_dir: Path,
         *,
         approval_gate: Optional[ApprovalGate] = None,
+        gui_only: bool = False,
     ) -> RunReport: ...
 
 
@@ -350,6 +360,7 @@ class ReplayTarget:
         run_dir: Path,
         *,
         approval_gate: Optional[ApprovalGate] = None,
+        gui_only: bool = False,
     ) -> RunReport:
         from openadapt_flow.deployment import DeploymentConfig, PolicySection
         from openadapt_flow.execution_profiles import (
@@ -393,6 +404,8 @@ class ReplayTarget:
             approval_gate=approval_gate,
             **self.replayer_kwargs,
         )
+        if approval_gate is not None or gui_only:
+            keep_gui_for_repair(replayer)
         return replayer.run(
             workflow.model_copy(deep=True),
             params=self.params,
@@ -403,6 +416,25 @@ class ReplayTarget:
             execution_origin=self.execution_origin,
             execution_entry_url=self.entry_url,
         )
+
+
+#: Why a probe or the resumed run of a repaired bundle doesn't use API steps.
+REPAIR_GUI_ONLY = (
+    "self-repair's probes and resumed run exercise the repaired GUI step, and "
+    "the person approved that step, so its API step doesn't run"
+)
+
+
+def keep_gui_for_repair(replayer: Any) -> None:
+    """Run a repaired bundle's probe or resumed run on the GUI steps only.
+
+    The repair, the fault probes and the person's approval are all about the
+    GUI step. An API step in its place would save without exercising the
+    repair, so the canary would prove nothing about it.
+    """
+
+    replayer.api_steps = False
+    replayer.api_steps_off_reason = REPAIR_GUI_ONLY
 
 
 # -- the probe gate --------------------------------------------------------------
@@ -461,6 +493,9 @@ class _ProbeGate(ApprovalGate):
         super().__init__("not_gated")
         self._checks = checks
         self._resume_form_state = resume_form_state
+        #: In probe mode no save runs: the run gate admits a repaired copy
+        #: whose admission is only a repair probe (``jit.lifecycle``).
+        self.stops_before_first_save = resume_form_state is None
         self.outcome: Optional[ProbeOutcome] = None
         self._approved_result: Optional[int] = None
 
@@ -558,6 +593,8 @@ class _Patch:
     checked_step_ids: tuple[str, ...] = ()
     #: One line for the person: what the patch adds and changes.
     summary: str = ""
+    #: The agent's own account of its proposal, shown to the approver as such.
+    proposal_note: str = ""
 
 
 # -- the loop ------------------------------------------------------------------
@@ -697,8 +734,7 @@ class SelfRepair:
             if report.transaction_outcome not in (None, "HALTED_BEFORE_EFFECT"):
                 return self._finish(
                     "not_repairable",
-                    f"the run ended {report.transaction_outcome}; self-repair "
-                    "handles only a halt before any effect",
+                    _not_before_effect(report),
                     evidence,
                     report,
                     run_dir,
@@ -826,6 +862,9 @@ class SelfRepair:
         if expected_png is not None:
             expected_png = self._shown(expected_png)[0]
         assert step.anchor is not None  # _repairable checked it
+        from openadapt_flow.jit.signature import record_check_of
+
+        record_check = record_check_of(workflow, literals=False)
         refusals: list[str] = []
         current: Optional[AppSession] = session
         try:
@@ -863,6 +902,7 @@ class SelfRepair:
                     ),
                     expected_png=expected_png if mode == "after" else None,
                     param_values=_typable_params(workflow, self._params()),
+                    record_check=record_check,
                 )
                 evidence.attempts = attempt
                 try:
@@ -874,6 +914,14 @@ class SelfRepair:
                     detail = "the agent gave up" if proposal is None else ""
                 calls = max(int(getattr(proposal, "model_calls", 0) or 0), 0)
                 cost = max(float(getattr(proposal, "cost_usd", 0.0) or 0.0), 0.0)
+                if (
+                    proposal is not None
+                    and proposal.action is None
+                    and not proposal.actions
+                ):
+                    # A proposal with no action gives up but still reports
+                    # the model calls it took, so the ledger counts them.
+                    proposal, detail = None, "the agent gave up"
                 evidence.model_calls += calls
                 evidence.est_model_cost_usd = round(
                     evidence.est_model_cost_usd + cost, 6
@@ -1125,6 +1173,15 @@ class SelfRepair:
                 screen = self._settled(session)
                 continue
             point = self._point_for(op, session, screen)
+            # Page text can steer the agent toward a control that leaves the
+            # app (a link dressed as a save). A repair never clicks or points
+            # a step there.
+            offsite = _offsite_target(session.backend, point)
+            if offsite is not None:
+                raise SelfRepairRefused(
+                    f"the proposed control leads to {offsite}, outside the app; "
+                    "a repair may not point a step at another origin"
+                )
             locate = getattr(session.backend, "structural_locator_at", None)
             structural = None
             if callable(locate):
@@ -1287,6 +1344,9 @@ class SelfRepair:
         checked = tuple(s.id for s in new_steps if s.anchor is not None) + (
             (step.id,) if mode == "replace" else ()
         )
+        _carry_admission(
+            bundle_dir, bundle_out, candidate.candidate_id, probe_only=True
+        )
         return _Patch(
             attempt=attempt,
             step=shown_step,
@@ -1297,6 +1357,7 @@ class SelfRepair:
             target_region=target_region,  # type: ignore[arg-type]
             checked_step_ids=checked,
             summary=summary,
+            proposal_note=str(proposal.note or ""),
         )
 
     def _retarget(
@@ -1347,7 +1408,7 @@ class SelfRepair:
         anchor = event.new_anchor.model_copy(
             update={
                 "template": f"templates/{step.id}_repair.png",
-                "structural": structural,
+                "structural": _patched_structural(step, structural),
                 "ocr_text": read,
                 "landmarks": landmarks,
             }
@@ -1622,6 +1683,15 @@ class SelfRepair:
                 evidence=evidence,
             )
             if standard is not None:
+                change = evidence.standard_change
+                _carry_admission(
+                    bundle_dir,
+                    patch.bundle_dir,
+                    standard.candidate_id,
+                    approved_by=STANDARD_CHANGE_APPROVER
+                    + (change.policy_id if change is not None else "unknown"),
+                    route="standard_change",
+                )
                 return self._resume(
                     patch, probe, standard, halted_report, run_dir, work, evidence, None
                 )
@@ -1702,6 +1772,13 @@ class SelfRepair:
             )
         assert candidate.approval is not None
         evidence.approved_by = candidate.approval.approved_by
+        _carry_admission(
+            bundle_dir,
+            patch.bundle_dir,
+            candidate.candidate_id,
+            approved_by=candidate.approval.approved_by,
+            route=route,
+        )
         evidence.steps.append(
             SelfRepairStepRecord(
                 stage="approval",
@@ -1977,6 +2054,15 @@ class SelfRepair:
                 probe.frame_png, probe.resolved_region or patch.target_region
             ),
             form_state=probe.form_state,
+            provenance={
+                "actor": f"agent:{self.agent.agent_id}"[:128],
+                "reason": patch.proposal_note[:512] or None,
+                "task_scope": (
+                    f"{', '.join(patch.checked_step_ids or (patch.step.id,))} "
+                    "only; the record check and identity evidence are the "
+                    "recorded ones"
+                )[:512],
+            },
         )
         if self.on_approval_request is not None:
             try:
@@ -2142,6 +2228,61 @@ def _outline(png: bytes, region: tuple[int, int, int, int]) -> bytes:
     return out.getvalue()
 
 
+def _carry_admission(
+    prior: Path,
+    repaired: Path,
+    candidate_id: str,
+    *,
+    approved_by: Optional[str] = None,
+    route: Optional[str] = None,
+    probe_only: bool = False,
+) -> None:
+    """Carry an agent-compiled program's admission to its repaired copy.
+
+    A program compiled from an agent run (``openadapt_flow.jit``) runs only
+    under its admission, which pins its digest; every patch changes the
+    digest. The repair keeps the record check, so the admission carries over:
+    first for the probe only, then, once a person (or a signed standard
+    change) approved the fix, for the resumed run and later items. Any other
+    program has nothing to carry.
+    """
+
+    from openadapt_flow.jit import lifecycle
+
+    if not lifecycle.is_jit_bundle(prior):
+        return
+    try:
+        lifecycle.admit_repair(
+            prior,
+            repaired,
+            candidate_id=candidate_id,
+            approved_by=approved_by,
+            route=route,
+            probe_only=probe_only,
+        )
+    except lifecycle.AdmissionError as exc:
+        raise SelfRepairRefused(
+            "the program was compiled from an agent run and admitted, and its "
+            f"admission can't carry to this repair: {exc}"
+        ) from None
+
+
+def _patched_structural(step: Step, structural: Any) -> Any:
+    """The structural locator a re-targeted step's anchor keeps.
+
+    A step with a ``submit_binding`` was recorded on the visual path: the
+    binding stands in for a record identity there, and a step may not carry
+    both it and a usable locator. Self-repair keeps that contract as it was
+    recorded, so the step stays visual (a new template crop) and keeps its
+    binding, which the save checks again at run time. Any other step takes
+    the locator found under the new point.
+    """
+
+    if step.submit_binding is not None:
+        return step.anchor.structural if step.anchor is not None else None
+    return structural
+
+
 def _recorded_crop(workflow: Workflow, bundle_dir: Path, step: Step) -> Optional[bytes]:
     if step.anchor is None:
         return None
@@ -2150,6 +2291,31 @@ def _recorded_crop(workflow: Workflow, bundle_dir: Path, step: Step) -> Optional
         return crop
     path = bundle_dir / step.anchor.template
     return path.read_bytes() if path.is_file() else None
+
+
+def _not_before_effect(report: RunReport) -> str:
+    """Why a halt that may have left an effect is not repaired, and by whom."""
+
+    from openadapt_flow.transaction import steps_requiring_reconciliation
+
+    reason = (
+        f"the run ended {report.transaction_outcome}; self-repair handles only "
+        "a halt before any effect"
+    )
+    unsettled = steps_requiring_reconciliation(report)
+    if not unsettled:
+        return reason
+    reason += f" (effect not settled at {', '.join(unsettled[:8])})"
+    unreviewed = {r.step_id for r in report.results if r.risk_review_required}
+    if unreviewed.issuperset(unsettled):
+        # Only steps nobody classified keep this run from an absence claim.
+        # A person reviews them once; the rule itself stays fail-closed.
+        reason += (
+            "; each acted with a risk nobody reviewed, so a write cannot be "
+            "ruled out. A person can classify them with `openadapt-flow "
+            "qualify set-risk`"
+        )
+    return reason[:1024]
 
 
 def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, str, Any] | str":
@@ -2337,6 +2503,27 @@ def _shows(backend: Any, vision: Any, screen: bytes, text: str) -> bool:
             return True
     words = _screen_words(vision, screen)
     return words is not None and set(_words(text)) <= words
+
+
+def _offsite_target(backend: Any, point: tuple[int, int]) -> Optional[str]:
+    """The other origin a link or form at ``point`` leads to, if any."""
+
+    from openadapt_flow.teach_scope import link_target_at, origin_of
+
+    page = getattr(backend, "page", None)
+    if page is None:
+        return None
+    target = link_target_at(page, point[0], point[1])
+    if not target:
+        return None
+    there = origin_of(target.get("url"))
+    if there is None:
+        return None
+    try:
+        here = origin_of(str(page.url))
+    except Exception:  # noqa: BLE001 - a page we can't read is not "here"
+        here = None
+    return None if there == here else there
 
 
 def _typed_values(workflow: Workflow, params: Mapping[str, Any]) -> dict[str, str]:

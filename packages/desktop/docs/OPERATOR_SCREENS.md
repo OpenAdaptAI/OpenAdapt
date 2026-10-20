@@ -12,7 +12,7 @@ calls, the safety rules it keeps, and what the engine can't do for it yet.
 | Sample | Watches Flow's built-in tutorial run twice on a synthetic clinic app: once normally, once with a backend that drops the save after the screen says "saved". No account and no operating-system permission. | `run_sample` |
 | Tasks | Sees one card per recorded task with one status (Not checked, Checking, Ready, Needs you, Needs a fix, Check the record) and one next step: Check it, Run it, Show it, or Open Needs you. Versions of a task are grouped by recording. | `get_workflows`, `get_results_summary` |
 | Show it | Records a task in its app. The app type is checked just in time, so browser tasks need no native permission. | `start_recording`, `stop_recording`, `compile_recording` |
-| Check it | Confirms what the task changes, the right-record check, and the record check; runs one practice item; runs the safety drills; approves and locks the version. | `get_qualification`, `propose_qualification_from_demo`, `initialize_qualification`, `set_qualification_risk`, `arm_qualification_identity`, `bind_qualification_effect`, `add_qualification_case`, `run_qualification_case`, `certify_qualification`, `seal_qualification_workflow` |
+| Check it | Answers three questions: is this the right record check, which values change per item, and approve. Everything else the recording shows is filled in and shown once, folded. A person's agent can answer the first two (see [SETUP_INPUTS.md](SETUP_INPUTS.md)). Without a record check learned from the recording, or after Change, it asks the parts: what the task changes, the right-record check, and the record check. | `get_check_setup`, `answer_check_setup`, `get_qualification`, `propose_qualification_from_demo`, `initialize_qualification`, `set_qualification_risk`, `arm_qualification_identity`, `bind_qualification_effect`, `seal_qualification_workflow`, `add_qualification_case`, `run_qualification_case`, `certify_qualification` |
 | Run it | Pastes a list, opens a CSV, or types one item, then watches per-item progress. | `get_task_inputs`, `run_item` |
 | Needs you | Answers each stopped item: the question, what was prevented, the stopped screen with the point ringed, and only the choices the engine allows. | `list_attention_items`, `get_attention_screenshot`, `resolve_attention_item` |
 | Results | Sees items done and checked, items that needed a person, wrong-record saves prevented, and a time-saved estimate whose per-item baseline is shown and editable. | `get_results_summary`, `get_workflows` |
@@ -77,11 +77,14 @@ Each gap below is stated precisely so the next change can close it.
    `run_qualification_case` with a fault target. Where the installed Flow has
    no fault driver for the target type, the drill reports the engine's
    refusal and the exact checks page is the fallback.
-4. **The record check needs a connected system of record.** When the
-   recording shows no system-of-record change, Check it asks plain questions
-   that become an effect binding. Reading the record back still needs a
-   verifier in the deployment settings (REST, FHIR, SQL, file, or document
-   hash), which IT configures once.
+4. **The record check needs a read the recording holds, or a person.** When
+   the recording's network capture holds the read the app made after the
+   save, Check it proposes the record check from it, and a yes writes that
+   read as the record-check settings every run uses. Desktop's recorder
+   doesn't keep network traffic yet, and Desktop binds only REST reads, so
+   otherwise Check it asks plain questions that become an effect binding,
+   and reading the record back needs a verifier in the deployment settings
+   (REST, FHIR, SQL, file, or document hash), which IT configures once.
 5. **The time baseline is the recording length.** Desktop doesn't measure
    how long the task takes by hand. Results use the person's recording as the
    default minutes per item and let the reader type their own number. The
@@ -110,8 +113,8 @@ runs under Standard); a drill never asks.
 | --- | --- | --- |
 | Any screen, while a run waits | A dialog: the item's own values next to Flow's screenshot of the filled form, the step it's about to take, and when the run stops waiting (10 minutes after it asks). Approve and save, or Don't save with one of three reasons (wrong values, wrong record, something wrong on the screen). Approve isn't offered when the screenshot is missing or doesn't match the digest in Flow's request. | `get_item_approval`, `answer_item_approval`; event `item_approval` |
 | Run it | The list stops at an item nobody approved in time. A declined item goes to Needs you with the reason the person gave. | `run_item` |
-| Check it, part 4 | The practice item stops before its save for the same approval. A practice save nobody approved, or one the person declined, records no result. The deployment settings file for the record check goes under Change where it runs. | `run_qualification_case` |
-| Check it, part 5 | Each drill runs with the practice item's values. Flow changes one thing right before the save; the drill passes only when Flow's own check refuses it before saving. | `run_qualification_case` |
+| Check it, question 2 | Desktop seals the version first, so the cases bind the version that runs. The practice item then stops before its save for the same approval. A practice save nobody approved, or one the person declined, records no result. A deployment settings file from IT, which replaces the learned record check, goes under Change the test values or where it runs. | `seal_qualification_workflow`, `run_qualification_case` |
+| Check it, question 2 (drills) | After the practice item passes, the drills run on their own with its values. Flow changes one thing right before the save; the drill passes only when Flow's own check refuses it before saving. | `run_qualification_case` |
 
 How it works:
 

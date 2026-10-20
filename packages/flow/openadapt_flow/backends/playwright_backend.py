@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 from urllib.parse import urlsplit
 
 from openadapt_flow.backends._page_quiescence import PageQuiescence
+from openadapt_flow.backends._server_responses import ServerResponseLog
 from openadapt_flow.runtime.step_timing import timed_span
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -1173,6 +1174,18 @@ class PlaywrightBackend:
         # openadapt_flow.backends._page_quiescence). Armed at construction:
         # network requests issued before this point are not tracked.
         self._quiescence = PageQuiescence(page)
+        # The server's answers to write requests, kept as save evidence (see
+        # openadapt_flow.backends._server_responses). Never a check.
+        self._server_responses = ServerResponseLog(page)
+
+    def server_response_mark(self) -> int:
+        """Where the log of server answers to write requests stands now."""
+        return self._server_responses.mark()
+
+    def server_responses_since(self, mark: int) -> list[Any]:
+        """Server answers to the page's own write requests sent after
+        ``mark``; never blocks on a response body."""
+        return self._server_responses.since(mark)
 
     @property
     def viewport(self) -> tuple[int, int]:
@@ -1664,6 +1677,28 @@ class PlaywrightBackend:
         """Return the exact value of the currently focused editable control."""
 
         return self._focused_element_eval(_EDITABLE_VALUE_JS)
+
+    def focused_element_matches(self, selector: str) -> Optional[bool]:
+        """Whether the focused element (through frames) matches ``selector``.
+
+        None when it can't be read. Used by the ``local_edit`` postcondition.
+        """
+
+        result = self._focused_element_call(
+            "(el, sel) => { try { return el.matches(sel); } catch (e) { return null; } }",
+            arg=selector,
+            with_arg=True,
+        )
+        return result if isinstance(result, bool) else None
+
+    def focused_select_label(self) -> Optional[str]:
+        """The focused ``<select>``'s selected option label, or None."""
+
+        return self._focused_element_eval(
+            "(el) => { if (!el || el.tagName !== 'SELECT') return null; "
+            "const opt = el.selectedOptions && el.selectedOptions[0]; "
+            "return opt ? (opt.label || opt.textContent || '') : null; }"
+        )
 
     def focused_field_label(self) -> Optional[str]:
         """Return the focused field's best available human label, or None.
@@ -3335,6 +3370,12 @@ class PlaywrightBackend:
                 cause_type=type(exc).__name__,
             ) from exc
 
+    def hover(self, x: int, y: int) -> None:
+        """Rest the mouse on pixel coordinates without pressing a button."""
+
+        self._assert_qualification_environment_current()
+        self.page.mouse.move(x, y)
+
     def drag(self, x: int, y: int, end_x: int, end_y: int) -> None:
         """Drag between two independently resolved points."""
 
@@ -3487,6 +3528,7 @@ class PlaywrightBackend:
         headless: bool = True,
         *,
         record_video_dir: Optional[str] = None,
+        before_goto: Optional[Callable[[Any], None]] = None,
     ) -> tuple["PlaywrightBackend", Callable[[], None]]:
         """Start Playwright + chromium, open ``url``, and return a backend.
 
@@ -3500,6 +3542,9 @@ class PlaywrightBackend:
                 the page is created directly on the browser as before. The
                 finished video is only flushed to disk after ``close()`` (which
                 closes the context); read its path from ``backend.page.video``.
+            before_goto: Called with the new page before it opens ``url``, so
+                a request filter (a teach scope's egress guard) sees the first
+                load too.
         Returns:
             ``(backend, close)`` where ``close()`` shuts down the browser and
             the Playwright driver (flushing the video first, when recording).
@@ -3524,8 +3569,6 @@ class PlaywrightBackend:
             page = context.new_page()
         else:
             page = browser.new_page(viewport=viewport, device_scale_factor=1)
-        page.goto(url)
-        backend = cls(page)
 
         def close() -> None:
             if shared is not None:
@@ -3543,6 +3586,17 @@ class PlaywrightBackend:
             finally:
                 pw.stop()
 
+        if before_goto is not None:
+            try:
+                before_goto(page)
+            except BaseException:
+                close()
+                raise
+        page.goto(url)
+        backend = cls(page)
+        # Read by the generic web environment observer: the environment
+        # digest of a headless and a headed browser differ.
+        backend.headless = headless
         return backend, close
 
 

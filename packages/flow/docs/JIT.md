@@ -99,6 +99,7 @@ same tunnel port share it, so use a separate cache directory per environment.
 | A program is admitted | Checks the signed admission, runs the program under the standard profile, and reads the save back | `VERIFIED`, or `HALTED` and others |
 | The admitted bundle or its manifest changed | Nothing | `refused` |
 | The policy, the app's origin, or the verifier differs from what was admitted | Nothing | `refused` |
+| The record check or the app environment differs from what was admitted, or from what the task pins | Nothing | `refused` |
 | The replay called a model | Sends the run to the inbox | `needs_review` |
 
 A run that does not end `VERIFIED` is written to the exception inbox
@@ -111,6 +112,32 @@ opens the run in the Needs Attention queue (see
 The cache key is the task id plus the parameter names and types. The
 instruction text is not part of it, and nothing is matched fuzzily. Changing
 the schema makes a new task, which starts with a new demonstration.
+
+Reuse is also bound to what the program checks and where it runs:
+
+- **The record check.** The admission records a digest of the program's
+  record check: the effect contracts and the record identity contract of every
+  step that saves (`openadapt_flow.jit.signature.record_check_digest`).
+  Anchors are left out, so a repair that re-anchors a step keeps it. A run
+  whose program checks something else is refused.
+- **The app environment.** The canary records the app's environment: its
+  origin, plus `#<id>` when you pass `environment_id` to `WebApp` or
+  `SurfaceApp`. Pass the app's version or build (`"7.0.2"`), or a function
+  that reads it before each run. A program admitted under `7.0.2` is refused
+  under `7.0.3` at the same origin, and the inbox entry says why; run a
+  canary on the new version. A function that fails is a refusal too.
+- **Repairs keep the admission.** A self-repair (`openadapt_flow.repair`)
+  changes the bundle, and so its digest, but never its record check. The
+  repaired copy gets an admission that embeds the prior one
+  (`lifecycle.admit_repair`): first a `repair_probe` admission, which lets it
+  run only as a probe that stops before the save, then, once a person (or a
+  signed standard change) approved the fix, a `repair` admission for every
+  run. A copy whose record check or parameters changed gets neither.
+- **Pins in the key.** `TaskSignature(..., record_check=<digest>,
+  environment=<app.environment>)` puts both in the cache key and refuses a
+  program that doesn't match them. Without pins the key is the same as before,
+  so existing caches keep working. Admissions made before these checks carry
+  no record-check digest or environment; for them only your pins apply.
 
 ## The agent
 
@@ -255,6 +282,32 @@ parameter that the mined record check already selects the saved record by.
 That check then counts the records that carry the run's value and refuses
 more than one. Name it only when the app keeps that value unique, such as a
 claim number. `status()` lists the keys the program carries.
+
+## A declared scope for the agent's run
+
+The agent reads the live app, and the app's content can be written to steer
+it. Pass `teach_scope=` to `compile_agent` to fix what the recording run may
+do before the agent reads a page: the app origins, the record, the fields and
+exact values the save may write, and any other text it may type.
+
+```python
+from openadapt_flow.mockmed.teach_scope import encounter_scope
+
+jit = compile_agent(
+    agent, task=task, app=app, verifier=verifier, policy="clinical-write",
+    teach_scope=lambda params: encounter_scope(
+        base_url, patient_id="p1", note=params["note"]
+    ),
+)
+```
+
+Typed text must be a declared value, links and requests to other origins are
+refused, an app write adapter (`TeachScope(write_adapter=...)`) checks each
+write before it is sent, and the system of record is read back after the run.
+A violation ends the capture as `scope_refused` or `readback_refused` with no
+draft. The scope must declare every task input, and a look-up typed by the
+agent must use a declared value (the record id is one). See
+[THREAT_MODEL.md](THREAT_MODEL.md) for what it stops and what it does not.
 
 ## A look-up the agent made
 

@@ -587,12 +587,12 @@ def quickstart(
         click.echo(f"Caught-fault evidence: {root / 'run-broken' / 'REPORT.md'}")
         click.echo(_halted_rerun_result(root / "run-broken"))
     click.echo(
-        f"Inspect qualification gaps: openadapt flow lint {_shell_quote(root / 'bundle')}"
+        f"Inspect qualification gaps: {_hint('flow lint ' + _shell_quote(root / 'bundle'))}"
     )
     if not break_it:
         click.echo(
-            "Watch it catch a save that didn't land: openadapt quickstart --break-it --out "
-            f"{_shell_quote(f'{root}-break-it')}"
+            "Watch it catch a save that didn't land: "
+            + _hint(f"quickstart --break-it --out {_shell_quote(f'{root}-break-it')}")
         )
     # The tutorial bundle is recorded against MockMed's fault server, and
     # `replay --drift` serves plain MockMed, so replaying that bundle halts at
@@ -600,15 +600,17 @@ def quickstart(
     drift = Path(f"{root}-drift")
     rec, bundle = (_shell_quote(drift / name) for name in ("rec", "bundle"))
     click.echo("See it stop when the screen changes (a separate MockMed demo):")
-    click.echo(f"  openadapt flow demo-record --out {rec}")
-    click.echo(f"  openadapt flow compile {rec} --out {bundle} --name drift-demo")
+    click.echo(f"  {_hint(f'flow demo-record --out {rec}')}")
+    click.echo(f"  {_hint(f'flow compile {rec} --out {bundle} --name drift-demo')}")
     click.echo(
-        f"  openadapt flow replay {bundle} --drift modal --run-dir "
-        f"{_shell_quote(drift / 'run')}"
+        "  "
+        + _hint(
+            f"flow replay {bundle} --drift modal --run-dir {_shell_quote(drift / 'run')}"
+        )
     )
     if _agent_serves_tutorial():
         click.echo("Give a local agent the run tool (synthetic MockMed, no frames):")
-        click.echo("  openadapt agent serve --allow-run")
+        click.echo(f"  {_hint('agent serve --allow-run')}")
         click.echo(
             "A client sends authorized work and gets a receipt. Frames stay here."
         )
@@ -617,6 +619,21 @@ def quickstart(
         "https://app.openadapt.ai/dashboard/settings/ingest"
     )
     click.echo("Qualify a consequential workflow: https://openadapt.ai/qualify")
+
+
+def _hint(rest: str) -> str:
+    """Spell an ``openadapt`` command the way it reaches this same version.
+
+    Under ``uvx`` this process runs from a throwaway environment in uv's cache,
+    so the shell may have no ``openadapt`` or an older one that lacks the verb.
+    Repeat the ``uvx`` form there; otherwise keep the plain command.
+    """
+
+    prefix = sys.prefix.replace("\\", "/")
+    if "/uv/archive-v" in prefix:
+        major, minor = sys.version_info[:2]
+        return f"uvx --python {major}.{minor} openadapt {rest}"
+    return f"openadapt {rest}"
 
 
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")

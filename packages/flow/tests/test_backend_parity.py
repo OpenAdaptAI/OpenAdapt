@@ -27,6 +27,7 @@ SERVICE_URL_FLAGS = frozenset(
         "--cloud-url",
         "--control-plane-url",
         "--effects-base-url",
+        "--log-url",  # a transparency log (local-seal anchor/verify)
         "--execute-url",
         "--tsa-url",
     }

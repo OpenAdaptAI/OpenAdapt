@@ -12,6 +12,11 @@ per interpretation:
 * ``incidental``: the step is noise. Every recording runs without it.
 * ``conditional``: the step is a required branch. Every recording runs it,
   guarded to skip when its target (or its dialog) is not on screen.
+* ``narrated`` (only when narration proposed a guard there and no recording
+  contradicts it): every recording runs the step guarded by the narrated
+  condition (:mod:`openadapt_flow.compiler.narration_rules`). It is confirmed
+  when it produces the recorded effect in every context and ``incidental``
+  conclusively fails in at least one.
 
 Each run is scored by reading the system of record back through the reward
 contract's oracle and judging it with
@@ -46,6 +51,7 @@ from typing import Any, Optional, Protocol, Union, runtime_checkable
 
 from openadapt_flow.compiler.induction import (
     InductionResult,
+    NarratedGuard,
     OptionalPoint,
     ProbeRun,
     ProbeVerdict,
@@ -55,9 +61,10 @@ from openadapt_flow.compiler.induction import (
     optional_guard,
     optional_points,
 )
-from openadapt_flow.ir import Step, Workflow
+from openadapt_flow.ir import Guard, Step, Workflow
 
 INTERPRETATIONS: tuple[str, ...] = ("incidental", "conditional")
+NARRATED = "narrated"
 
 #: Runtime signals the serve-reward judge accepts.
 RUNTIME_SIGNALS = frozenset(
@@ -180,14 +187,18 @@ def require_test_copy(cfg: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _guarded_copy(step: Step) -> Step:
+def _guarded_copy(step: Step, guard: Optional[Guard] = None) -> Step:
     copy = step.model_copy(deep=True)
-    copy.guard = optional_guard(step)
+    copy.guard = guard if guard is not None else optional_guard(step)
     return copy
 
 
 def interpretation_workflow(
-    traces: list[ProbeTrace], point: OptionalPoint, t: int, interpretation: str
+    traces: list[ProbeTrace],
+    point: OptionalPoint,
+    t: int,
+    interpretation: str,
+    narrated: Optional[NarratedGuard] = None,
 ) -> tuple[Workflow, Optional[int]]:
     """Recording ``t`` replayed under ``interpretation`` of ``point``.
 
@@ -203,13 +214,18 @@ def interpretation_workflow(
     if interpretation == "incidental":
         if t in point.index_in_trace:
             del steps[point.index_in_trace[t]]
-    elif interpretation == "conditional":
+    elif interpretation in ("conditional", NARRATED):
+        guard = None
+        if interpretation == NARRATED:
+            if narrated is None:
+                raise ValueError("the narrated interpretation needs a narrated guard")
+            guard = Guard(predicate=narrated.guard, on_unmet="skip")
         if t in point.index_in_trace:
             k = point.index_in_trace[t]
-            steps[k] = _guarded_copy(wf.steps[k])
+            steps[k] = _guarded_copy(wf.steps[k], guard)
         else:
             inserted = point.insert_at[t]
-            steps.insert(inserted, _guarded_copy(point.step))
+            steps.insert(inserted, _guarded_copy(point.step, guard))
     else:
         raise ValueError(f"unknown interpretation {interpretation!r}")
     out = wf.model_copy(update={"steps": steps, "program": None})
@@ -310,9 +326,17 @@ def _probe_once(
     interpretation: str,
     identity: dict[str, str],
     work_dir: Path,
+    narrated: Optional[NarratedGuard] = None,
 ) -> ProbeRun:
     slug = f"{point.location}-{interpretation}-{t}"
-    workflow, inserted = interpretation_workflow(traces, point, t, interpretation)
+    workflow, inserted = interpretation_workflow(
+        traces, point, t, interpretation, narrated
+    )
+    params = _params(traces[t])
+    if interpretation == NARRATED and narrated is not None:
+        # A guard on a recorded field compares the run parameter induction
+        # names; give each run its recording's value for it.
+        params.update(narrated.trace_params.get(t, {}))
     base: dict[str, Any] = {
         "location": point.location,
         "interpretation": interpretation,
@@ -338,7 +362,7 @@ def _probe_once(
             workflow,
             bundle_dir=work_dir / "bundles" / slug,
             run_dir=work_dir / "runs" / slug,
-            params=_params(traces[t]),
+            params=params,
         )
     except Exception as exc:  # noqa: BLE001 - a crashed replay is a platform failure
         signal = RunSignal("failed_platform", detail=f"replay raised: {exc}")
@@ -373,9 +397,11 @@ def _probe_point(
     point: OptionalPoint,
     work_dir: Path,
     runs: list[ProbeRun],
+    narrated: Optional[NarratedGuard] = None,
 ) -> ProbeVerdict:
     status: dict[str, str] = {}
-    for interpretation in INTERPRETATIONS:
+    readings = INTERPRETATIONS + ((NARRATED,) if narrated is not None else ())
+    for interpretation in readings:
         state = "passed"
         for t in range(len(traces)):
             run = _probe_once(
@@ -387,6 +413,7 @@ def _probe_point(
                 interpretation=interpretation,
                 identity=identities[t],
                 work_dir=work_dir,
+                narrated=narrated,
             )
             runs.append(run)
             if run.produced_recorded_effect:
@@ -396,8 +423,22 @@ def _probe_point(
                 break  # one conclusive miss rules this interpretation out
             state = "inconclusive"  # keep looking for a conclusive miss
         status[interpretation] = state
-    passed = [k for k, v in status.items() if v == "passed"]
-    others_failed = all(v == "failed" for k, v in status.items() if k not in passed)
+    if narrated is not None:
+        if status[NARRATED] == "passed" and status["incidental"] == "failed":
+            return ProbeVerdict(
+                location=point.location,
+                kind=point.kind,
+                interpretations=status,
+                certified=NARRATED,
+                detail=(
+                    f"the narrated guard ({narrated.rule}) produced the recorded "
+                    f"effect in all {len(traces)} recording contexts and dropping "
+                    "the step did not"
+                ),
+            )
+    base = {k: v for k, v in status.items() if k in INTERPRETATIONS}
+    passed = [k for k, v in base.items() if v == "passed"]
+    others_failed = all(v == "failed" for k, v in base.items() if k not in passed)
     if len(passed) == 1 and others_failed:
         return ProbeVerdict(
             location=point.location,
@@ -411,7 +452,7 @@ def _probe_point(
         )
     if len(passed) > 1:
         detail = "more than one interpretation produced the recorded effect"
-    elif not passed and all(v == "failed" for v in status.values()):
+    elif not passed and all(v == "failed" for v in base.values()):
         detail = "no interpretation produced the recorded effect"
     else:
         detail = "a read-back could not decide"
@@ -430,8 +471,16 @@ def probe_and_induce(
     reward_contract: Union[Any, str, Path],
     work_dir: Path,
     propose: Optional[Proposer] = None,
+    narration: Optional[list[Any]] = None,
+    screen_texts: Any = None,
+    interpreter: Any = None,
+    accepted_narration: Optional[dict[str, str]] = None,
 ) -> InductionResult:
     """Induce, then probe each refused optional point on ``target``.
+
+    ``narration`` (one per trace) and the other narration arguments are passed
+    to :func:`induce_program`. Where narration proposed a guard that no
+    recording contradicts, the ``narrated`` reading is probed as well.
 
     ``target`` must already have passed :func:`require_test_copy` (the CLI
     does this from the deployment file). ``reward_contract`` is a
@@ -453,10 +502,18 @@ def probe_and_induce(
     workflows: list[TraceInput] = [tr.workflow for tr in traces]
     # The proposer is advisory and never decides a probe, so the first pass
     # runs without it; it is consulted once, in the pass whose result returns.
-    first = induce_program(workflows)
+    spoken: dict[str, Any] = {
+        "narration": narration if narration is not None else [None] * len(traces),
+        "screen_texts": screen_texts,
+        "interpreter": interpreter,
+        "accepted_narration": accepted_narration,
+    }
+    first = induce_program(workflows, **spoken)
     name = str(getattr(target, "name", "test copy"))
     if not first.uncertainties:
-        result = induce_program(workflows, propose=propose) if propose else first
+        result = (
+            induce_program(workflows, propose=propose, **spoken) if propose else first
+        )
         result.probe_target = name
         return result
 
@@ -481,6 +538,9 @@ def probe_and_induce(
     if identities:
         scorer = _Scorer(bundle)
         points = optional_points(workflows)
+        narrated = {
+            ng.location: ng for ng in first.narrated_guards if ng.status == "proposed"
+        }
         for u in first.uncertainties:
             point = points.get(u.location)
             if point is None or point.kind != u.kind:
@@ -503,9 +563,15 @@ def probe_and_induce(
                 point=point,
                 work_dir=Path(work_dir),
                 runs=runs,
+                narrated=narrated.get(point.location),
             )
             verdicts.append(verdict)
-            if verdict.certified:
+            if verdict.certified == NARRATED:
+                # Pin the exact guard that was probed; a later pass that
+                # proposes a different one is not certified by this probe.
+                ng = narrated[point.location]
+                resolutions[point.location] = f"{NARRATED}@{ng.guard_id}"
+            elif verdict.certified:
                 resolutions[point.location] = verdict.certified
         try:
             target.reset()  # leave the copy at its baseline
@@ -513,7 +579,7 @@ def probe_and_induce(
             pass
 
     result = induce_program(
-        workflows, propose=propose, probe_resolutions=resolutions or None
+        workflows, propose=propose, probe_resolutions=resolutions or None, **spoken
     )
     result.probe_target = name
     result.probe_runs = runs

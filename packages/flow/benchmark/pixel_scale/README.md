@@ -63,6 +63,30 @@ the old code found step 0's target by OCR and then stopped there: on the
 step's postcondition, which compares the recorded crop at the recorded size
 (canvas kiosk), or on the identity check (both appointment kiosks).
 
+## Re-run with the extra identity looks and hover evidence (2026-10-19)
+
+The same sweep, re-run on origin/main (`426d08f2d`) and on the branch with the
+extra identity looks and the hover look (`283336358`):
+[`results_before_identity_looks.json`](results_before_identity_looks.json),
+[`results_after_identity_looks.json`](results_after_identity_looks.json).
+
+| | Before | After |
+|---|---|---|
+| Healthy runs that finished | 17 of 24 | 17 of 24 |
+| Wrong-record runs that stopped with nothing saved | 24 of 24 | 24 of 24 |
+| Font-only controls that stopped | 6 of 6 | 6 of 6 |
+| Wrong writes, false completions, crashes | 0 | 0 |
+| Click steps with identity evidence (canvas, RDP, RDP unambiguous IDs) | 1/3, 5/5, 5/5 | 1/3, 5/5, 5/5 |
+
+Nothing changed, as expected. The `MRN A1001` kiosk still stops at every
+render but the recorded one: its workflow always opens the recorded record,
+the recording read the ID as `MRN Alo01`, and the kiosk has no selectable text
+and no known-ID list, so no extra look can settle it. The copy look settles a
+look-alike ID only when the ID is a run parameter; see
+[`benchmark/identity_looks`](../identity_looks/IDENTITY_LOOKS.md). This sweep
+records without hover frames, so the hover look adds nothing here; see
+[`benchmark/hover_identity`](../hover_identity/README.md).
+
 ## What changed
 
 1. **One scale estimate per run.** The compiler now stores, for each click

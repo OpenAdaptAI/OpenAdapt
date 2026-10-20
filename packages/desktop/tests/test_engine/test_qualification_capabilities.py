@@ -436,3 +436,79 @@ def test_untyped_step_evidence_cannot_mint_capabilities() -> None:
             report_sha256=_sha(),
             action_kinds={"submit": "click"},
         )
+
+
+def test_current_receipt_is_bound_by_the_retained_report(tmp_path: Path) -> None:
+    """``retain_run_evidence`` keeps the exact report.json, not a receipt.
+
+    The observation is current only while that report's digest is the one the
+    observation signed; Desktop never wrote run-report-receipt.json after it
+    started retaining the report, so every practice and drill was refused.
+    """
+
+    private = Ed25519PrivateKey.generate()
+    private_raw = private.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    public_key = b64encode(
+        private.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+    ).decode("ascii")
+    environment = SimpleNamespace(
+        environment_digest="4" * 64,
+        runtime_version="1.24.0",
+        target_kind="web",
+        required_capabilities=[],
+        contract_sha256=lambda: "3" * 64,
+    )
+    project = SimpleNamespace(
+        project_id="project-1",
+        revision=1,
+        environment=environment,
+        trusted_runner_keys={"desktop-local-v1": public_key},
+        contract_sha256=lambda: "1" * 64,
+    )
+    observation = collect_qualification_capabilities(
+        _report(results=[]),
+        expected_target_kind="web",
+        runtime_version="1.24.0",
+        report_sha256=_sha(),
+        action_kinds={},
+    )
+    signed = sign_qualification_capability_observation(
+        observation,
+        project_id="project-1",
+        project_revision=1,
+        project_contract_sha256="1" * 64,
+        workflow_contract_sha256="2" * 64,
+        environment_contract_sha256="3" * 64,
+        environment_digest="4" * 64,
+        case_id="representative",
+        run_id="run-1",
+        attestation_key_id="desktop-local-v1",
+        private_key=private_raw,
+    )
+    reference = retain_capability_observation(
+        tmp_path,
+        case_id="representative",
+        run_id="run-1",
+        observation=signed.model_dump(mode="json"),
+    )
+    report = (tmp_path / "qualification-evidence" / reference["relative_path"]).with_name(
+        "report.json"
+    )
+
+    def current() -> dict:
+        return current_signed_capability_observations(
+            tmp_path, workflow_contract_sha256="2" * 64, project=project
+        )
+
+    assert current() == {}  # no report retained: nothing is current
+    report.write_bytes(b"exact run report")
+    assert current() == {"representative": signed}
+    report.write_bytes(b"another run report")
+    assert current() == {}

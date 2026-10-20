@@ -130,6 +130,28 @@ _FLOW_VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:-(?:a|b|rc)[0-9]+)?$")
 _HOUR_UTC_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:00:00Z$")
 
 
+class ReceiptServerResponses(BaseModel):
+    """Counts of the server's answers to the run's save requests.
+
+    Supporting evidence at check level ``same_screen``: the answers come from
+    the same transaction as the saves, so they never stand in for a read-back.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    observed: ReceiptCount
+    #: Answers that were not errors (status below 400; a form save often
+    #: answers with a redirect).
+    ok: ReceiptCount
+    check_level: Literal["same_screen"] = "same_screen"
+
+    @model_validator(mode="after")
+    def _ok_within_observed(self) -> "ReceiptServerResponses":
+        if self.ok > self.observed:
+            raise ValueError("server_responses.ok exceeds observed")
+        return self
+
+
 class ReceiptError(ValueError):
     """A receipt could not be built or written."""
 
@@ -196,6 +218,9 @@ class RunReceipt(BaseModel):
     #: :attr:`effect_tier_reached`. Optional so receipts written before it
     #: existed still validate (``exclude_none`` keeps their digest).
     effect_assurance: Optional[ReceiptAssurance] = None
+    #: The server's answers to the save requests, when the browser saw them.
+    #: Omitted when there were none, so older receipts keep their bytes.
+    server_responses: Optional[ReceiptServerResponses] = None
     authorization_required: ReceiptCount
     authorization_confirmed: ReceiptCount
     identity_required: ReceiptCount
@@ -307,6 +332,8 @@ class RunReceipt(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.effect_assurance is None:
             data.pop("effect_assurance", None)
+        if self.server_responses is None:
+            data.pop("server_responses", None)
         if self.standard_change is None:
             data.pop("standard_change", None)
         if self.variant is None:
@@ -908,6 +935,17 @@ def _build_receipt(
             bundle_digest=bundle_digest,
             generated_at=_hour_utc(getattr(report, "started_at", None)),
         )
+        answers = [
+            response
+            for result in report.results
+            for response in getattr(result, "server_responses", None) or []
+        ]
+        if answers:
+            payload["server_responses"] = {
+                "observed": len(answers),
+                "ok": sum(1 for answer in answers if answer.ok),
+                "check_level": "same_screen",
+            }
         from openadapt_flow.repair.standard_change import receipt_fields
 
         standard_change = receipt_fields(report)
@@ -1056,6 +1094,18 @@ def _receipt_rows(receipt: RunReceipt) -> list[tuple[str, str]]:
         *(
             [("read-back assurance", receipt.effect_assurance)]
             if receipt.effect_assurance
+            else []
+        ),
+        *(
+            [
+                (
+                    "server answers",
+                    f"{receipt.server_responses.ok} of "
+                    f"{receipt.server_responses.observed} ok (same transaction; "
+                    "not a check)",
+                )
+            ]
+            if receipt.server_responses
             else []
         ),
         (

@@ -96,9 +96,9 @@ what protects it.
 
 | # | Where (file:symbol) | PHI written | Control |
 |---|---|---|---|
-| 1 | `recorder.py` recording dir | `frames/*.png` (full screenshots), `events.jsonl` (literal typed `text` incl. param values, `structured_identity` DOM text), `meta.json` (`params` example values) | **Documented boundary** — raw capture, operator's machine. Not scrubbed (the recording is the training/compile input; scrubbing it would corrupt the demo). Filesystem controls + retention policy. |
-| 2 | `compiler/compile.py` → `ir.Workflow.save` → `workflow.json` | `anchor.ocr_text`, `anchor.context_text`, `anchor.structured_identity` (identity band = name/DOB/MRN), `step.text` (literal TYPE), `params`, `step.intent`; plus `templates/*.png` and `identifier_crop` PNGs (rendered PHI) | **Documented boundary** — the compiled bundle *must* carry the recorded identity evidence to verify identity on replay; scrubbing it would defeat the wrong-patient safety check. Filesystem controls + retention policy. |
-| 3 | `runtime/replayer.py` → `RunReport.save` → `report.json` | `params`, `workflow_name`, per-step `intent`, `error`, `IdentityCheck.expected`/`observed` (recorded vs live band text — raw PHI), `UnarmedStep.*` | **Documented boundary** — machine artifact and identity **audit trail**; the literal expected/observed text is what lets an operator prove a wrong-patient halt fired. Filesystem controls + retention policy. The shareable derivative (`REPORT.md`) IS scrubbed — see below. |
+| 1 | `recorder.py` recording dir | `frames/*.png` (full screenshots), `events.jsonl` (literal typed `text` incl. param values, `structured_identity` DOM text), `meta.json` (`params` example values), `network.jsonl` | **Encrypted at rest with a key** — with `OPENADAPT_RECORDING_KEY` (or `OPENADAPT_BUNDLE_KEY`) the web recorder writes only AES-256-GCM ciphertext from the first frame ([phi_at_rest.md](phi_at_rest.md)). Not scrubbed (the recording is the compile input; scrubbing it would corrupt the demo). Without a key, and for desktop recordings: filesystem controls + retention policy. |
+| 2 | `compiler/compile.py` → `ir.Workflow.save` → `workflow.json` | `anchor.ocr_text`, `anchor.context_text`, `anchor.structured_identity` (identity band = name/DOB/MRN), `step.text` (literal TYPE), `params`, `step.intent`; plus `templates/*.png` and `identifier_crop` PNGs (rendered PHI) and the compiler sidecars | **Encrypted at rest when sealed** — `seal`, or `compile` of an encrypted recording, encrypts every bundle file that can hold patient data under one sealed index ([phi_at_rest.md](phi_at_rest.md)). Not scrubbed: the bundle *must* carry the recorded identity evidence to verify identity on replay. An unsealed bundle: filesystem controls + retention policy. |
+| 3 | `runtime/replayer.py` → `RunReport.save` → `report.json` | `params`, `workflow_name`, per-step `intent`, `error`, `IdentityCheck.expected`/`observed` (recorded vs live band text — raw PHI), `UnarmedStep.*` | **Encrypted at rest for a sealed bundle** — the run directory of a sealed bundle is itself sealed: report, frames, crops, checkpoints and approvals. Otherwise a documented boundary: the machine artifact and identity audit trail, under filesystem controls + retention policy. The shareable derivative (`REPORT.md`) IS scrubbed — see below. |
 | 4 | `runtime/replayer.py:_save_step_png` → `steps/*.png` | full before/after frames | **Scrubbed** — routed through `scrub_image_bytes`; redacted when `OPENADAPT_FLOW_SCRUB_IMAGES=1` (opt-in under `auto`) **or implied under `SCRUB=on`** (a pinned run redacts frames without the extra flag). |
 | 5 | `runtime/heal.py:persist_heal` → `heals/<step>/{template,screen}.png`, `heal.json` | heal crop, full frame, Anchor text | **Scrubbed** for the PNGs (same gate as #4); `heal.json` text is a documented boundary (audit trail, same as #3). |
 | 6 | `report.py:render_run_report` → **`REPORT.md`** | `workflow_name`, `params` values, per-step `intent`, `error`, `UnarmedStep.intent`/`reason` | **Scrubbed** — every free-text field passes through `_md_phi` (scrub → escape). This is the artifact that gets committed to repos / shared with stakeholders, so it is scrubbed by default (auto) whenever the capability is present; when it is **not** present, a one-time `PlaintextPHIWarning` fires (see above). Embedded frames follow #4. |
@@ -156,9 +156,11 @@ through. The control is therefore a **data-flow boundary**, stated in full in
 
 - **Bundle / recording / `report.json` text is not scrubbed.** By design: the
   recorded identity evidence and the audit trail require the literal
-  identifiers. These artifacts are PHI-at-rest protected by filesystem controls
-  and the operator's retention policy, not by scrubbing. Do not commit real
-  bundles or run dirs to a public repo.
+  identifiers. With a key they are encrypted at rest instead (sealed bundles,
+  encrypted web recordings, and the run directories of sealed bundles; see
+  [phi_at_rest.md](phi_at_rest.md) for what stays readable). Without one they
+  are protected only by filesystem controls and the operator's retention
+  policy. Do not commit real bundles or run dirs to a public repo.
 - **Image redaction is best-effort.** Presidio image redaction is OCR+NER over
   the frame; it can miss non-textual PHI or unusual layouts. It is opt-in under
   `auto` (off by default) and implied under `SCRUB=on`. Treat persisted frames

@@ -2,9 +2,10 @@
 #
 # Called from packages.yml when a change touches packages/desktop, so its jobs
 # feed the required packages-gate. Pull requests run the Linux lane on Python
-# 3.11 and 3.12. A push to main repeats the same contract on macOS and Windows,
-# so a release always rests on the complete cross-platform matrix. Ported from
-# openadapt-desktop's test.yml.
+# 3.11 and 3.12 and one Windows lane, because Windows checks files out with CRLF
+# and has its own paths. A push to main repeats the same contract on macOS and
+# Windows, so a release always rests on the complete cross-platform matrix.
+# Ported from openadapt-desktop's test.yml.
 name: Desktop test
 
 on:
@@ -23,8 +24,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest", "windows-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
         python-version: ["3.11", "3.12"]
+        exclude: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"windows-latest","python-version":"3.11"}]' || '[]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:

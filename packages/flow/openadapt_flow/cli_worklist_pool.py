@@ -60,6 +60,21 @@ def requested_pool(args: Any, cfg: Any) -> Optional[PoolPolicy]:
     )
 
 
+def pool_profile_refusal(*, managed: bool, qualification_case: bool) -> Optional[str]:
+    """Why ``--workers`` / ``--readback-window`` can't run here, or None.
+
+    Workers and a read-back window are for local runs. A managed dispatch and
+    a qualification case each bind one exact run.
+    """
+
+    if managed or qualification_case:
+        return (
+            "--workers and --readback-window apply to local runs, not a managed "
+            "dispatch or a qualification case"
+        )
+    return None
+
+
 def loop_relation(workflow: Any) -> str:
     """The relation of a single-LOOP program (the ``for-each`` shape).
 

@@ -1,0 +1,2 @@
+item,fault,claimed_success,ground_truth,verify_effect_verdict,verify_outcome,verify_exit,fault_applied,model_calls,cost_usd,host_load_1m,final_text,verify_stderr
+901,ok,True,correct,CONFIRMED,verified,0,,9,0.076462,12.0,"I created and saved the patient Barnaby ScoreboardR901 (DOB 1951-02-11). OpenEMR found no matching patients before saving, and it opened the new patient's dashboard afterward.",

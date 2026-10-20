@@ -576,6 +576,12 @@ class AuthoringSession:
 
         self._nodes[node_id] = _pixels_from_mapping(backend_pixels)
 
+    def node_center(self, node_id: str) -> Optional[tuple[int, int]]:
+        """The backend-pixel center of an observed node, or None if unknown."""
+
+        target = self._nodes.get(node_id)
+        return target.center if target is not None else None
+
     def observe(self) -> dict[str, Any]:
         """Return a PHI-safe authoring tree of the pinned window.
 
@@ -639,6 +645,9 @@ class AuthoringSession:
             settle_stable_frames=self._settle_stable_frames,
             settle_timeout_s=self._settle_timeout_s,
             system_of_record_reader=self._system_of_record_reader,
+            # Remote sessions are screen-only: keep each click target's hover
+            # response as identity evidence (runtime.hover_evidence).
+            capture_hover=self._kind in ("rdp", "citrix"),
         )
         self._actors = {}
 

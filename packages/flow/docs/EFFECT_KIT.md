@@ -362,7 +362,9 @@ The command looks for a read that returns a record holding them:
   a recorded value (bound as `{param: NAME}`, so each run is checked against
   its own values) and on fields the save sent with a fixed value under the
   same name (`type: Triage`). `forbid_collateral_loss` stops the run if a
-  record that was there before is gone.
+  record that was there before is gone. `forbid_collateral_change` (off by
+  default in a run, on in `verify-run`) also stops it if such a record is
+  still there but changed.
 - Recorded values in the read's URL become placeholders (`path_params`,
   FHIR `search_param_exprs`), so the read is scoped to the run's record. A
   path segment that looks like one record's id (an MRN, a number, a UUID)
@@ -896,6 +898,30 @@ Citrix session.
   not read by this check yet.
 - Citrix is a separate Workspace window named in `session`. Opening a new
   Citrix session for each check is the operator's launcher, not Flow's.
+
+## The server's own answer (kept, labelled `same_screen`)
+
+In a browser, a save usually sends a write request (POST, PUT, PATCH,
+DELETE) and the server answers it. Flow keeps that answer on the save step
+(`StepResult.server_responses`) and counts it on the receipt
+(`server_responses`: observed, not errors, `check_level: same_screen`). It
+keeps the method, the status and the media type. It never keeps a URL, a path,
+a header, a body, or a digest of any of them (a digest of a short path or body
+can be guessed), and it never reads a response body, so a streaming answer
+can't hold up the run.
+
+Only the page's own write requests count: `fetch`, XHR and form submissions
+to the page's origin, sent after the save began. A beacon, a request to
+another origin (analytics, a widget), a request already in flight, and an
+answer from a service worker are left out. "Not an error" means a status
+below 400, because a form save often answers with a redirect.
+
+The answer comes from the same transaction as the save. A server can say
+`201 Created` and store the wrong value, or store it under another record, or
+roll it back afterwards. So the answer is evidence at check level
+`same_screen`, never a check: on its own it never confirms an effect and
+never makes a run `VERIFIED`. The configured verifier still decides. Only the
+browser backend sees answers; desktop, RDP and Citrix runs have none.
 
 ## Checked later (`deferred_report`)
 

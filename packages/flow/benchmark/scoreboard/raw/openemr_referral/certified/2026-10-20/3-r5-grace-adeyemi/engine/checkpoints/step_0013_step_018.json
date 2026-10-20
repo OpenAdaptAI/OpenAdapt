@@ -1,0 +1,122 @@
+{
+  "schema_version": 2,
+  "run_id": "openemr-referral-r5-grace-adeyemi-1792465453",
+  "workflow_name": "openemr-create-synthetic-patient",
+  "bundle_version": "sha256:ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+  "step_index": 13,
+  "step_id": "step_018",
+  "intent": "click recorded visual target",
+  "state_id": null,
+  "next_step_index": 14,
+  "params": {
+    "title": "Ms.",
+    "fname": "Grace",
+    "lname": "Adeyemi",
+    "DOB": "1990-02-08",
+    "sex": "Female",
+    "street": "402 CEDAR ROW",
+    "city": "EXAMPLETON",
+    "state_label": "Massachusetts",
+    "postal_code": "02139",
+    "phone_home": "555-0145",
+    "email": "grace.adeyemi@example.invalid",
+    "country_code": "USA"
+  },
+  "effect_verified": null,
+  "effect_approved_unverified": false,
+  "effect_contract_hashes": [],
+  "effect_evidence": [],
+  "identity": {
+    "status": "verified",
+    "mode": "structured",
+    "coverage": 1.0,
+    "expected": "<structured identity template>",
+    "observed": "{\"form_path\":\"/interface/new/new_comprehensive.php\",\"target_id\":\"street\",\"target_kind\":\"field\"}",
+    "param": null,
+    "signal_evidence": [],
+    "quorum_required": null,
+    "quorum_verified": null,
+    "pixel_evidence": null,
+    "abstain_reason": null,
+    "known_id_evidence": null,
+    "known_id_halt": null,
+    "hover": null,
+    "looks": [],
+    "look_halt": null
+  },
+  "input_verified": null,
+  "starting_state_settled": true,
+  "delivery_attempted": true,
+  "delivery_receipt": {
+    "status": "delivered",
+    "receipt_id": "playwright-2dbee7599ec64e96af23a508c1969dee",
+    "operation": "dom_click",
+    "native": false,
+    "target_fingerprint": "13739e173a2d1a8cf6ee5cdf2e4b64fb715763b74291f7ba259ce68e8c1495bb",
+    "delivered_at": "2026-10-20T03:04:26.288361+00:00",
+    "outcome_verified": false
+  },
+  "drag_end_resolution": null,
+  "fresh_actuation_events": [],
+  "before_png": "steps/step_018_before.png",
+  "governed_authorization_id": "625efdeb6e924901b533c6789854a3fe",
+  "governed_approval_source": "local-cli-explicit-flag",
+  "postconditions_ok": true,
+  "expected_postconditions": [
+    {
+      "kind": "region_stable",
+      "text": null,
+      "region": [
+        346,
+        115,
+        267,
+        95
+      ],
+      "phash": "c8ccc8c0b43eaf3e",
+      "phash_tolerance": 16,
+      "timeout_s": 5.0,
+      "template": "templates/step_018_expect.png"
+    }
+  ],
+  "skipped": false,
+  "actuation": "dom",
+  "delivery_uncertainty": null,
+  "resolution": {
+    "rung": "structural",
+    "point": [
+      480,
+      160
+    ],
+    "confidence": 1.0,
+    "elapsed_ms": 65.65762497484684,
+    "structural_handle": {
+      "point": [
+        480,
+        160
+      ],
+      "confidence": 1.0,
+      "region": [
+        380,
+        145,
+        199,
+        31
+      ],
+      "target_fingerprint": "13739e173a2d1a8cf6ee5cdf2e4b64fb715763b74291f7ba259ce68e8c1495bb",
+      "candidate_count": 1,
+      "supported_operations": [
+        "dom_click",
+        "dom_double_click",
+        "dom_drag"
+      ]
+    }
+  },
+  "drift_oracle_calls": 0,
+  "heal": null,
+  "attended_capability_digest": null,
+  "attended_reconciliation_request_digest": null,
+  "attended_reconciliation_expected_transition_digest": null,
+  "attended_reconciliation_delivery_state": null,
+  "attended_reconciliation_effect_contract_hashes": [],
+  "attended_reconciliation_at": null,
+  "created_at": "2026-10-20T03:04:26.500425+00:00"
+}

@@ -1,0 +1,122 @@
+{
+  "schema_version": 2,
+  "run_id": "openemr-referral-r6-rosa-delgado-1792465480",
+  "workflow_name": "openemr-create-synthetic-patient",
+  "bundle_version": "sha256:ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+  "step_index": 19,
+  "step_id": "step_027",
+  "intent": "click recorded visual target",
+  "state_id": null,
+  "next_step_index": 20,
+  "params": {
+    "title": "Mrs.",
+    "fname": "Rosa",
+    "lname": "Delgado",
+    "DOB": "1958-03-22",
+    "sex": "Female",
+    "street": "7 MILL ROAD",
+    "city": "EXAMPLETON",
+    "state_label": "Massachusetts",
+    "postal_code": "02139",
+    "phone_home": "555-0188",
+    "email": "rosa.delgado@example.invalid",
+    "country_code": "USA"
+  },
+  "effect_verified": null,
+  "effect_approved_unverified": false,
+  "effect_contract_hashes": [],
+  "effect_evidence": [],
+  "identity": {
+    "status": "verified",
+    "mode": "structured",
+    "coverage": 1.0,
+    "expected": "<structured identity template>",
+    "observed": "{\"form_path\":\"/interface/new/new_comprehensive.php\",\"target_id\":\"postal_code\",\"target_kind\":\"field\"}",
+    "param": null,
+    "signal_evidence": [],
+    "quorum_required": null,
+    "quorum_verified": null,
+    "pixel_evidence": null,
+    "abstain_reason": null,
+    "known_id_evidence": null,
+    "known_id_halt": null,
+    "hover": null,
+    "looks": [],
+    "look_halt": null
+  },
+  "input_verified": null,
+  "starting_state_settled": true,
+  "delivery_attempted": true,
+  "delivery_receipt": {
+    "status": "delivered",
+    "receipt_id": "playwright-192605ab94974718a9689988f7348de7",
+    "operation": "dom_click",
+    "native": false,
+    "target_fingerprint": "81823dc37a87fbdf06a68626172448525c5a0c4b4a3633322ea5c48d7353f54c",
+    "delivered_at": "2026-10-20T03:04:56.078404+00:00",
+    "outcome_verified": false
+  },
+  "drag_end_resolution": null,
+  "fresh_actuation_events": [],
+  "before_png": "steps/step_027_before.png",
+  "governed_authorization_id": "4acf24f7a2e84061815abc51b0a487a6",
+  "governed_approval_source": "local-cli-explicit-flag",
+  "postconditions_ok": true,
+  "expected_postconditions": [
+    {
+      "kind": "region_stable",
+      "text": null,
+      "region": [
+        340,
+        207,
+        160,
+        59
+      ],
+      "phash": "87968f8ea58de0a5",
+      "phash_tolerance": 8,
+      "timeout_s": 5.0,
+      "template": "templates/step_027_expect.png"
+    }
+  ],
+  "skipped": false,
+  "actuation": "dom",
+  "delivery_uncertainty": null,
+  "resolution": {
+    "rung": "structural",
+    "point": [
+      420,
+      236
+    ],
+    "confidence": 1.0,
+    "elapsed_ms": 50.9335002861917,
+    "structural_handle": {
+      "point": [
+        420,
+        236
+      ],
+      "confidence": 1.0,
+      "region": [
+        380,
+        221,
+        80,
+        31
+      ],
+      "target_fingerprint": "81823dc37a87fbdf06a68626172448525c5a0c4b4a3633322ea5c48d7353f54c",
+      "candidate_count": 1,
+      "supported_operations": [
+        "dom_click",
+        "dom_double_click",
+        "dom_drag"
+      ]
+    }
+  },
+  "drift_oracle_calls": 0,
+  "heal": null,
+  "attended_capability_digest": null,
+  "attended_reconciliation_request_digest": null,
+  "attended_reconciliation_expected_transition_digest": null,
+  "attended_reconciliation_delivery_state": null,
+  "attended_reconciliation_effect_contract_hashes": [],
+  "attended_reconciliation_at": null,
+  "created_at": "2026-10-20T03:04:56.256394+00:00"
+}

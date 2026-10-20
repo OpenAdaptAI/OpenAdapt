@@ -59,6 +59,7 @@ from typing import Any, Callable, Optional
 
 from PIL import Image, ImageDraw
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.backend import (
     Backend,
     PageCloseExpectationBackend,
@@ -74,6 +75,11 @@ from openadapt_flow.ir import (
 
 #: Bound on waiting for a newly opened page's first navigation.
 _NEW_PAGE_LOAD_TIMEOUT_S = 10.0
+
+# Mirrors openadapt_flow.runtime.hover_evidence.HOVER_DWELL_MS. Not imported:
+# the recorder must not pull in the runtime's vision dependencies.
+HOVER_DWELL_MS = 800
+
 # How long a recorded action that raises a browser dialog waits for it.
 _DIALOG_WAIT_S = 5.0
 
@@ -140,7 +146,15 @@ class Recorder:
         surface_id: str = PRIMARY_SURFACE_ID,
         surface_kind: Optional[str] = None,
         page_backend_factory: Optional[Callable[[Any], Backend]] = None,
+        encryption_key: Optional[str] = None,
+        finalize_on_finish: bool = True,
+        capture_hover: bool = False,
     ) -> None:
+        # Pixel surfaces: before each click, rest the pointer on the target
+        # and keep that frame (frames/{i}_hover.png) so the compiler can store
+        # the hover response as identity evidence (runtime.hover_evidence).
+        # Needs a backend with ``hover(x, y)``; ignored otherwise.
+        self._capture_hover = capture_hover
         # ``_backend`` is always the ACTIVE surface's backend; on a
         # single-surface recording it never changes.
         self._backend = backend
@@ -166,10 +180,22 @@ class Recorder:
         self._known_pages: list[Any] = []
         self._remember_pages(backend)
         self._dir = Path(out_dir)
+        # Encrypted recording (docs/phi_at_rest.md): with a key, every frame,
+        # event line and the metadata are sealed in memory and only
+        # ciphertext is written, from the first frame on. The directory is a
+        # sealed set that is finalized (indexed) when the recording finishes.
+        self._sealed_writer: Optional[_sealed.SealedSetWriter] = None
+        self._finalize_on_finish = finalize_on_finish
+        if encryption_key:
+            self._sealed_writer = _sealed.SealedSetWriter(
+                self._dir, "recording", encryption_key
+            )
+            _sealed.register_writer(self._sealed_writer)
         self._frames_dir = self._dir / "frames"
         self._frames_dir.mkdir(parents=True, exist_ok=True)
         self._events_path = self._dir / "events.jsonl"
-        self._events_path.write_text("")  # truncate any stale file
+        # Truncate any stale file.
+        _sealed.write_bytes(self._events_path, b"")
         self._app_url = app_url
         # This observer belongs to recording, not the execution backend. A GUI
         # backend must never advertise an authoritative business-effect oracle
@@ -179,7 +205,8 @@ class Recorder:
         self._settle_stable_frames = settle_stable_frames
         self._settle_timeout_s = settle_timeout_s
         self._params: dict[str, str] = {}
-        self._secret_params: set[str] = set()
+        # Names of parameters declared secret (never their values).
+        self._withheld_param_names: set[str] = set()
         self._i = 0
         self._t0 = time.monotonic()
 
@@ -325,7 +352,7 @@ class Recorder:
             "coordinate_space": "page",
             "app_url": self._app_url,
             "params": dict(self._params),
-            "secret_params": sorted(self._secret_params),
+            "secret_params": sorted(self._withheld_param_names),
         }
         if self._network_capture is not None:
             from openadapt_flow.network_capture import NETWORK_FILE
@@ -344,8 +371,35 @@ class Recorder:
                 },
                 *self._surface_meta,
             ]
-        (self._dir / "meta.json").write_text(json.dumps(meta, indent=2))
+        _sealed.write_text(self._dir / "meta.json", json.dumps(meta, indent=2))
+        if self._finalize_on_finish:
+            self.finalize_encryption()
         return self._dir
+
+    @property
+    def encrypted(self) -> bool:
+        return self._sealed_writer is not None
+
+    def finalize_encryption(self) -> Optional[str]:
+        """Index and seal an encrypted recording; returns its set digest.
+
+        A no-op for a plaintext recording. Callers that still need to amend
+        ``meta.json`` construct the recorder with ``finalize_on_finish=False``
+        and call this once they are done.
+        """
+        writer, self._sealed_writer = self._sealed_writer, None
+        if writer is None:
+            return None
+        try:
+            return writer.finalize()
+        finally:
+            _sealed.unregister_writer(writer)
+
+    def abandon_encryption(self) -> None:
+        """Stop routing writes for an aborted encrypted recording."""
+        writer, self._sealed_writer = self._sealed_writer, None
+        if writer is not None:
+            _sealed.unregister_writer(writer)
 
     # -- multi-surface (docs/MULTI_SURFACE.md) ---------------------------------
 
@@ -665,6 +719,9 @@ class Recorder:
         )
         if page_backend is not None:
             page_backend.expect_page_close()
+        hover_png = self._hover_frame(event)
+        if hover_png is not None:
+            event = {**event, "hover_dwell_ms": HOVER_DWELL_MS}
         try:
             act()
         finally:
@@ -692,7 +749,30 @@ class Recorder:
         # click that closes it.
         if self._closed_its_page(event):
             event = {**event, "closes_surface": True}
+        if hover_png is not None:
+            _sealed.write_bytes(
+                self._frames_dir / f"{self._i:04d}_hover.png", hover_png
+            )
         self._commit(event, before, after, structural_before)
+
+    def _hover_frame(self, event: dict[str, Any]) -> Optional[bytes]:
+        """Rest the pointer on a click target and capture the settled frame.
+
+        Only with ``capture_hover`` and a backend that can hover, and only for
+        click events. The pointer stays there for the click that follows.
+        """
+        if not self._capture_hover or event.get("kind") not in (
+            "click",
+            "double_click",
+            "right_click",
+        ):
+            return None
+        hover = getattr(self._backend, "hover", None)
+        if not callable(hover):
+            return None
+        hover(int(event["x"]), int(event["y"]))
+        time.sleep(HOVER_DWELL_MS / 1000.0)
+        return self._wait_settled()
 
     def record_observed(
         self,
@@ -754,7 +834,7 @@ class Recorder:
             if secret:
                 event["secret"] = True
                 event.pop("text", None)
-                self._secret_params.add(param)
+                self._withheld_param_names.add(param)
             else:
                 self._params[param] = str(event.get("text", ""))
         # A caller that already captured the settled after-frame at the right
@@ -802,8 +882,8 @@ class Recorder:
         if redact_region is not None:
             before_png = self._redact(before_png, redact_region)
             after_png = self._redact(after_png, redact_region)
-        (self._frames_dir / f"{i:04d}_before.png").write_bytes(before_png)
-        (self._frames_dir / f"{i:04d}_after.png").write_bytes(after_png)
+        _sealed.write_bytes(self._frames_dir / f"{i:04d}_before.png", before_png)
+        _sealed.write_bytes(self._frames_dir / f"{i:04d}_after.png", after_png)
         with Image.open(io.BytesIO(before_png)) as before_image:
             before_viewport = [int(before_image.width), int(before_image.height)]
         with Image.open(io.BytesIO(after_png)) as after_image:
@@ -823,8 +903,7 @@ class Recorder:
         for key, value in structural_after.items():
             line[f"{key}_after"] = value
         line["t"] = round(time.monotonic() - self._t0, 3)
-        with self._events_path.open("a") as f:
-            f.write(json.dumps(line) + "\n")
+        _sealed.append_line(self._events_path, json.dumps(line))
         self._i += 1
 
     def _structural_locator_at(self, x: int, y: int) -> Optional[StructuralLocator]:

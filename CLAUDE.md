@@ -11,9 +11,9 @@ under `packages/flow`, next to `packages/agent`, `packages/types` and
 `packages/capture`. The standalone openadapt-flow, openadapt-agent and
 openadapt-types repositories are frozen; changes go here.
 [CAPABILITIES.md](CAPABILITIES.md) is the map of what exists and how proven
-it is; update it in the same pull request as any capability change, and list
-any new `openadapt-flow` command under "Every command, by capability" (a test
-enforces it). Refresh the review brief with `python scripts/build_llms_full.py` when you
+it is; update it in the same pull request as any capability change. For a
+new `openadapt-flow` command, add `packages/flow/docs/commands/<group>/<verb>.md`
+and run `python scripts/build_command_map.py` (a test enforces it). Refresh the review brief with `python scripts/build_llms_full.py` when you
 change README.md, CAPABILITIES.md, SURFACES.md, LIMITS.md or the flow
 CHANGELOG, and always before a release.
 
@@ -34,8 +34,9 @@ retrieval, and general computer-use agents are separate research surfaces.
 
 - `openadapt/`: launcher package and unified CLI
 - `packages/`: the product packages, each folded in with its history
-  (`flow`, `agent`, `types`, `capture`, `privacy`, `desktop`, `tray`); see
-  `docs/monorepo/`
+  (`flow`, `agent`, `types`, `capture`, `privacy`, `desktop`, `tray`; see
+  `docs/monorepo/`), and `program-graph`, the program map Desktop, Cloud and
+  the website share
 - `tests/`: launcher, integration-seam, and release-artifact tests
 - `legacy/`: frozen pre-1.0 monolith
 - `docs/`: noncanonical historical repository documentation;

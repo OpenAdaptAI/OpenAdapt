@@ -1,0 +1,797 @@
+{
+  "overall": {
+    "stops": 30,
+    "to_repair": 21,
+    "to_reconciliation": 0,
+    "to_person": 9,
+    "auto_repair_off": 0,
+    "repair_runs": 21,
+    "repairs_proposed": 12,
+    "proposals": 18,
+    "probe_passed": 6,
+    "approved": 6,
+    "approved_by_person": 6,
+    "approved_by_standard_change": 0,
+    "resumed_items": 6,
+    "resumed_not_verified": 0,
+    "repair_success_rate": 0.2857,
+    "person_decisions": 6,
+    "person_wait_s_total": 0.022,
+    "model_calls": 18,
+    "est_model_cost_usd": 0.244284,
+    "repair_status_counts": {
+      "no_fix": 15,
+      "resumed": 6
+    }
+  },
+  "trials": 66,
+  "readback": {
+    "correct": 42,
+    "safe_stop": 24,
+    "wrong": 0
+  },
+  "by_mode": {
+    "none": {
+      "trials": 3,
+      "stopped": 0,
+      "readback": {
+        "correct": 3,
+        "safe_stop": 0,
+        "wrong": 0
+      },
+      "repair_status": [
+        "not_needed"
+      ],
+      "funnel": {
+        "stops": 0,
+        "to_repair": 0,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 0,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": null,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0,
+        "repair_status_counts": {}
+      }
+    },
+    "theme": {
+      "trials": 3,
+      "stopped": 0,
+      "readback": {
+        "correct": 3,
+        "safe_stop": 0,
+        "wrong": 0
+      },
+      "repair_status": [
+        "not_needed"
+      ],
+      "funnel": {
+        "stops": 0,
+        "to_repair": 0,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 0,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": null,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0,
+        "repair_status_counts": {}
+      }
+    },
+    "move": {
+      "trials": 3,
+      "stopped": 0,
+      "readback": {
+        "correct": 3,
+        "safe_stop": 0,
+        "wrong": 0
+      },
+      "repair_status": [
+        "not_needed"
+      ],
+      "funnel": {
+        "stops": 0,
+        "to_repair": 0,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 0,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": null,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0,
+        "repair_status_counts": {}
+      }
+    },
+    "font": {
+      "trials": 3,
+      "stopped": 3,
+      "readback": {
+        "correct": 0,
+        "safe_stop": 3,
+        "wrong": 0
+      },
+      "repair_status": [
+        "no_fix"
+      ],
+      "funnel": {
+        "stops": 3,
+        "to_repair": 3,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 3,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": 0.0,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0.0,
+        "repair_status_counts": {
+          "no_fix": 3
+        }
+      }
+    },
+    "zoom": {
+      "trials": 3,
+      "stopped": 3,
+      "readback": {
+        "correct": 0,
+        "safe_stop": 3,
+        "wrong": 0
+      },
+      "repair_status": [
+        "no_fix"
+      ],
+      "funnel": {
+        "stops": 3,
+        "to_repair": 3,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 3,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": 0.0,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0.0,
+        "repair_status_counts": {
+          "no_fix": 3
+        }
+      }
+    },
+    "slow": {
+      "trials": 3,
+      "stopped": 0,
+      "readback": {
+        "correct": 3,
+        "safe_stop": 0,
+        "wrong": 0
+      },
+      "repair_status": [
+        "not_needed"
+      ],
+      "funnel": {
+        "stops": 0,
+        "to_repair": 0,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 0,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": null,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0,
+        "repair_status_counts": {}
+      }
+    },
+    "grow": {
+      "trials": 3,
+      "stopped": 0,
+      "readback": {
+        "correct": 3,
+        "safe_stop": 0,
+        "wrong": 0
+      },
+      "repair_status": [
+        "not_needed"
+      ],
+      "funnel": {
+        "stops": 0,
+        "to_repair": 0,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 0,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": null,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0,
+        "repair_status_counts": {}
+      }
+    },
+    "sort": {
+      "trials": 3,
+      "stopped": 0,
+      "readback": {
+        "correct": 3,
+        "safe_stop": 0,
+        "wrong": 0
+      },
+      "repair_status": [
+        "not_needed"
+      ],
+      "funnel": {
+        "stops": 0,
+        "to_repair": 0,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 0,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": null,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0,
+        "repair_status_counts": {}
+      }
+    },
+    "rename": {
+      "trials": 3,
+      "stopped": 0,
+      "readback": {
+        "correct": 3,
+        "safe_stop": 0,
+        "wrong": 0
+      },
+      "repair_status": [
+        "not_needed"
+      ],
+      "funnel": {
+        "stops": 0,
+        "to_repair": 0,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 0,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": null,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0,
+        "repair_status_counts": {}
+      }
+    },
+    "relink": {
+      "trials": 3,
+      "stopped": 3,
+      "readback": {
+        "correct": 3,
+        "safe_stop": 0,
+        "wrong": 0
+      },
+      "repair_status": [
+        "resumed"
+      ],
+      "funnel": {
+        "stops": 3,
+        "to_repair": 3,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 3,
+        "repairs_proposed": 3,
+        "proposals": 3,
+        "probe_passed": 3,
+        "approved": 3,
+        "approved_by_person": 3,
+        "approved_by_standard_change": 0,
+        "resumed_items": 3,
+        "resumed_not_verified": 0,
+        "repair_success_rate": 1.0,
+        "person_decisions": 3,
+        "person_wait_s_total": 0.011,
+        "model_calls": 3,
+        "est_model_cost_usd": 0.038698,
+        "repair_status_counts": {
+          "resumed": 3
+        }
+      }
+    },
+    "redesign": {
+      "trials": 3,
+      "stopped": 3,
+      "readback": {
+        "correct": 3,
+        "safe_stop": 0,
+        "wrong": 0
+      },
+      "repair_status": [
+        "resumed"
+      ],
+      "funnel": {
+        "stops": 3,
+        "to_repair": 3,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 3,
+        "repairs_proposed": 3,
+        "proposals": 3,
+        "probe_passed": 3,
+        "approved": 3,
+        "approved_by_person": 3,
+        "approved_by_standard_change": 0,
+        "resumed_items": 3,
+        "resumed_not_verified": 0,
+        "repair_success_rate": 1.0,
+        "person_decisions": 3,
+        "person_wait_s_total": 0.011,
+        "model_calls": 3,
+        "est_model_cost_usd": 0.042366,
+        "repair_status_counts": {
+          "resumed": 3
+        }
+      }
+    },
+    "typelabel": {
+      "trials": 3,
+      "stopped": 0,
+      "readback": {
+        "correct": 3,
+        "safe_stop": 0,
+        "wrong": 0
+      },
+      "repair_status": [
+        "not_needed"
+      ],
+      "funnel": {
+        "stops": 0,
+        "to_repair": 0,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 0,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": null,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0,
+        "repair_status_counts": {}
+      }
+    },
+    "menu": {
+      "trials": 3,
+      "stopped": 3,
+      "readback": {
+        "correct": 0,
+        "safe_stop": 3,
+        "wrong": 0
+      },
+      "repair_status": [
+        "no_fix"
+      ],
+      "funnel": {
+        "stops": 3,
+        "to_repair": 3,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 3,
+        "repairs_proposed": 3,
+        "proposals": 9,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": 0.0,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 9,
+        "est_model_cost_usd": 0.124594,
+        "repair_status_counts": {
+          "no_fix": 3
+        }
+      }
+    },
+    "provider": {
+      "trials": 3,
+      "stopped": 3,
+      "readback": {
+        "correct": 0,
+        "safe_stop": 3,
+        "wrong": 0
+      },
+      "repair_status": [
+        "no_fix"
+      ],
+      "funnel": {
+        "stops": 3,
+        "to_repair": 3,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 3,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": 0.0,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0.0,
+        "repair_status_counts": {
+          "no_fix": 3
+        }
+      }
+    },
+    "reqfield": {
+      "trials": 3,
+      "stopped": 0,
+      "readback": {
+        "correct": 3,
+        "safe_stop": 0,
+        "wrong": 0
+      },
+      "repair_status": [
+        "not_needed"
+      ],
+      "funnel": {
+        "stops": 0,
+        "to_repair": 0,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 0,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": null,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0,
+        "repair_status_counts": {}
+      }
+    },
+    "notice": {
+      "trials": 3,
+      "stopped": 3,
+      "readback": {
+        "correct": 0,
+        "safe_stop": 3,
+        "wrong": 0
+      },
+      "repair_status": [
+        "no_fix"
+      ],
+      "funnel": {
+        "stops": 3,
+        "to_repair": 3,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 3,
+        "repairs_proposed": 3,
+        "proposals": 3,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": 0.0,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 3,
+        "est_model_cost_usd": 0.038626,
+        "repair_status_counts": {
+          "no_fix": 3
+        }
+      }
+    },
+    "modal-once": {
+      "trials": 3,
+      "stopped": 0,
+      "readback": {
+        "correct": 3,
+        "safe_stop": 0,
+        "wrong": 0
+      },
+      "repair_status": [
+        "not_needed"
+      ],
+      "funnel": {
+        "stops": 0,
+        "to_repair": 0,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 0,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": null,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0,
+        "repair_status_counts": {}
+      }
+    },
+    "modal": {
+      "trials": 3,
+      "stopped": 0,
+      "readback": {
+        "correct": 3,
+        "safe_stop": 0,
+        "wrong": 0
+      },
+      "repair_status": [
+        "not_needed"
+      ],
+      "funnel": {
+        "stops": 0,
+        "to_repair": 0,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 0,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": null,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0,
+        "repair_status_counts": {}
+      }
+    },
+    "lookalike": {
+      "trials": 3,
+      "stopped": 0,
+      "readback": {
+        "correct": 3,
+        "safe_stop": 0,
+        "wrong": 0
+      },
+      "repair_status": [
+        "not_needed"
+      ],
+      "funnel": {
+        "stops": 0,
+        "to_repair": 0,
+        "to_reconciliation": 0,
+        "to_person": 0,
+        "auto_repair_off": 0,
+        "repair_runs": 0,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": null,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0,
+        "repair_status_counts": {}
+      }
+    },
+    "ambiguous": {
+      "trials": 3,
+      "stopped": 3,
+      "readback": {
+        "correct": 0,
+        "safe_stop": 3,
+        "wrong": 0
+      },
+      "repair_status": [
+        "not_repairable"
+      ],
+      "funnel": {
+        "stops": 3,
+        "to_repair": 0,
+        "to_reconciliation": 0,
+        "to_person": 3,
+        "auto_repair_off": 0,
+        "repair_runs": 0,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": null,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0.0,
+        "repair_status_counts": {}
+      }
+    },
+    "missing": {
+      "trials": 3,
+      "stopped": 3,
+      "readback": {
+        "correct": 0,
+        "safe_stop": 3,
+        "wrong": 0
+      },
+      "repair_status": [
+        "not_repairable"
+      ],
+      "funnel": {
+        "stops": 3,
+        "to_repair": 0,
+        "to_reconciliation": 0,
+        "to_person": 3,
+        "auto_repair_off": 0,
+        "repair_runs": 0,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": null,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0.0,
+        "repair_status_counts": {}
+      }
+    },
+    "empty": {
+      "trials": 3,
+      "stopped": 3,
+      "readback": {
+        "correct": 0,
+        "safe_stop": 3,
+        "wrong": 0
+      },
+      "repair_status": [
+        "not_repairable"
+      ],
+      "funnel": {
+        "stops": 3,
+        "to_repair": 0,
+        "to_reconciliation": 0,
+        "to_person": 3,
+        "auto_repair_off": 0,
+        "repair_runs": 0,
+        "repairs_proposed": 0,
+        "proposals": 0,
+        "probe_passed": 0,
+        "approved": 0,
+        "approved_by_person": 0,
+        "approved_by_standard_change": 0,
+        "resumed_items": 0,
+        "resumed_not_verified": 0,
+        "repair_success_rate": null,
+        "person_decisions": 0,
+        "person_wait_s_total": 0,
+        "model_calls": 0,
+        "est_model_cost_usd": 0.0,
+        "repair_status_counts": {}
+      }
+    }
+  }
+}

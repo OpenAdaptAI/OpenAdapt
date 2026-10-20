@@ -13,6 +13,15 @@ def test_pull_request_keeps_one_representative_sidecar() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "path", ["src-tauri/Cargo.lock", "src-tauri/src/main.rs", "package.json", "package-lock.json"]
+)
+def test_pull_request_that_changes_the_native_shell_builds_an_installer(path: str) -> None:
+    scope = classify_build_scope("pull_request", ["src/App.tsx", path])
+    assert scope.run_sidecar and scope.run_native
+    assert path in scope.reason
+
+
 def test_explicit_release_candidate_keeps_the_complete_matrix() -> None:
     assert classify_build_scope("workflow_dispatch", []) == BuildScope(
         run_sidecar=True,

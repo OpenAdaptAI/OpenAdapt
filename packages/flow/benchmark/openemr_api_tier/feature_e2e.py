@@ -143,20 +143,20 @@ def cmd_compile(a: argparse.Namespace) -> None:
         describe_api_step,
         propose_api_step,
     )
-    from openadapt_flow.ir import Postcondition, PostconditionKind, Workflow
+    from openadapt_flow.ir import Workflow
 
     demo = load_demo()
     rec, bundle = Path(a.recording), Path(a.out)
     demo.compile_recording(rec, bundle)
     first = json.loads((bundle / "api_proposal.json").read_text())
     wf = Workflow.load(bundle)
-    # The referral's business rule (as in the published bundle): confirm a new
-    # chart only when OpenEMR's duplicate check finds no existing patient.
+    # The referral's business rule (confirm a new chart only when OpenEMR's
+    # duplicate check finds no existing patient) is part of the demo compile
+    # (openemr_local_demo.apply_referral_rules), so every bundle carries it.
     dialog = [s for s in wf.steps if s.anchor is not None and s.anchor.structural is not None
               and s.anchor.structural.selector == "#create"]
     assert len(dialog) == 1
-    dialog[0].expect = list(dialog[0].expect) + [
-        Postcondition(kind=PostconditionKind.TEXT_PRESENT, text=NO_MATCH_TEXT, timeout_s=10.0)]
+    assert any(p.text == NO_MATCH_TEXT for p in dialog[0].expect)
     wf, step, reasons = propose_api_step(wf, rec, replace=True)
     if step is None:
         raise SystemExit(f"no API step: {reasons}")

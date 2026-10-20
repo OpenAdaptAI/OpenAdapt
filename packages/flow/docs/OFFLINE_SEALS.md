@@ -25,14 +25,75 @@ changes the run's exit code and calls no model.
 | `key_id`, `public_key` | The local key that signed it |
 | `signature` | Ed25519 over the domain-separated canonical statement |
 
-The key is created on first use under `$OPENADAPT_SEAL_HOME/keys`
-(default `~/.openadapt/seal`), mode 0600. Set `OPENADAPT_LOCAL_SEAL=off` to
-turn sealing off.
+Unless you name a key (see [Customer-held keys](#customer-held-keys)), the
+runner creates one on first use under `$OPENADAPT_SEAL_HOME/keys` (default
+`~/.openadapt/seal`), mode 0600. Set `OPENADAPT_LOCAL_SEAL=off` to turn
+sealing off.
 
 An offline Seal is weaker evidence than one from an independent party: the
 machine that ran the work also signed the statement. It shows the report has
 not changed since it was sealed. It does not grade the run and grants no
 authority.
+
+## Customer-held keys
+
+In production, sign with a key you control instead of the key the runner
+generates. Name it with `OPENADAPT_SEAL_KEY` (or `--key` on any
+`local-seal` command):
+
+| Source | Setting | Install |
+|---|---|---|
+| Key file you provide | `file:/etc/openadapt/seal-key.pem`, or `OPENADAPT_SEAL_KEY_FILE=/etc/openadapt/seal-key.pem` | Base package |
+| OS keychain | `keychain:NAME` | `pip install 'openadapt-flow[keychain]'` |
+| PKCS#11 token or HSM | `pkcs11:token=TOKEN;object=LABEL?module-path=/path/to/module.so` | `pip install 'openadapt-flow[pkcs11]'` |
+
+- **Key file.** A PKCS#8 PEM Ed25519 private key. Only its owner may have
+  access: mode 0600 or 0400. A file open to its group or to other users
+  (0640, 0644) is refused. When you mount it as a Kubernetes secret, set
+  `defaultMode: 0400`. An encrypted PEM opens
+  with `OPENADAPT_SEAL_KEY_PASSPHRASE`.
+- **OS keychain.** The key is stored through the `keyring` library: the
+  macOS Keychain, the Windows Credential Manager (encrypted with DPAPI), or
+  the Linux Secret Service. The key is read into memory to sign.
+  `openadapt-flow local-seal key create --key keychain:NAME` creates a key
+  there without writing it to disk.
+- **PKCS#11.** The key stays on the token, which must support CKM_EDDSA
+  (Ed25519). The module can also come from `OPENADAPT_SEAL_PKCS11_MODULE`.
+  The PIN comes from `OPENADAPT_SEAL_PKCS11_PIN`, or from another variable
+  named with `pin-source=env:VAR`. A PIN written in the URI is refused.
+  Create the key with the token's own tools.
+
+When a key is configured and can't be used (missing file, wrong passphrase,
+locked keychain, wrong PIN, token unplugged), nothing is signed. The run
+still finishes with its own exit code and prints `offline seal not written:
+key_unavailable`. OpenAdapt never falls back to a generated key.
+
+Every Seal records the signing key's `key_id`.
+
+### Pinning and rotation
+
+```bash
+# Pin the configured key in the registry the verifier uses.
+openadapt-flow local-seal key pin site-keys.json
+
+# Rotate: create the new key, pin it, and sign with it from now on.
+openadapt-flow local-seal key create --key file:/etc/openadapt/seal-key-2027.pem
+openadapt-flow local-seal --key file:/etc/openadapt/seal-key-2027.pem key pin site-keys.json
+
+# Revoke a key that may be compromised.
+openadapt-flow local-seal key revoke site-keys.json seal-ed25519-0123456789abcdef
+```
+
+To rotate, leave the old key pinned and active, and stop signing with it.
+Seals from both keys keep verifying.
+
+Revoke a key only when it may be compromised. After `revoke`, every Seal
+that key signed is refused with `revoked_key`, including Seals whose
+`issued_at` is earlier than the revocation. `issued_at` is written by
+whoever holds the key, so someone with a stolen key can backdate it. The
+exception is a Seal with a transparency-log anchor that the log recorded
+before `revoked_at` (see [Verify an anchor](#verify-an-anchor)). A
+registry that lists one key ID twice is refused.
 
 ## Seal records and exports
 
@@ -45,6 +106,7 @@ openadapt-flow local-seal file record.json --kind record
 
 Verification trusts pinned keys only. The `public_key` inside a Seal is never
 trusted on its own.
+Without `--keys`, `verify` trusts only the configured Seal key and says so.
 
 ```bash
 # On the site machine: print the public key for an auditor to pin.
@@ -58,10 +120,111 @@ openadapt-flow local-seal verify export.csv --seal export.csv.seal.json --keys s
 `site-keys.json` has the same shape as the Cloud Seal key registry, so a key
 can be marked `revoked` with a `revoked_at` time. Refusal reasons are closed:
 `unsigned`, `malformed`, `subject_mismatch`, `unknown_key`, `revoked_key`,
-`key_mismatch`, `bad_signature`.
+`key_mismatch`, `bad_signature`, `ambiguous_key`.
 
 If `attach-seal` later adds a Cloud receipt to `report.json`, the offline
 Seal still verifies against `report.pre-seal.json`, which `attach-seal` keeps.
+`verify` names the file the Seal matched, and adds a note when the match is
+`report.pre-seal.json`: in that case `report.json` itself is not what was
+sealed. `--strict` accepts only `report.json`.
+
+A Seal file with a repeated JSON key (for example two `outcome` fields) is
+`malformed`. Different JSON parsers would read it differently.
+
+## Optional: anchor a Seal in a public transparency log
+
+An offline Seal is signed on the machine that ran the work, so on its own it
+is the site's statement about itself. Anchoring records the Seal in
+[Sigstore Rekor](https://docs.sigstore.dev/logging/overview/), a public,
+append-only transparency log that OpenAdapt does not run. Anyone can then
+check that this exact Seal existed when the log recorded it and has not
+changed since, without trusting the site's key or OpenAdapt.
+
+Anchoring is off by default and runs only when a person asks for it:
+
+```bash
+openadapt-flow local-seal anchor runs/job-0007          # a run directory
+openadapt-flow local-seal anchor export.csv.seal.json   # any Seal file
+```
+
+### What becomes public
+
+Each anchor adds one `hashedrekord` entry to the public log. It holds:
+
+- the SHA-512 digest of a short anchor statement: the Seal's SHA-256 and a
+  random 32-byte nonce;
+- the Seal key's public key;
+- an Ed25519ph signature over that digest by the Seal's key;
+- the time the log recorded it.
+
+Nothing else is sent: no report, no field values, no screenshots, no run id,
+no outcome. The nonce is generated for each Seal and kept only in the local
+anchor file, so nobody can confirm a guessed report by hashing the guess and
+looking it up. Anyone can see that one key anchored several Seals, and when,
+because they share a public key. Log entries can't be deleted.
+
+A deployment that handles health data turns anchoring on deliberately, after
+deciding that a public record of "this key sealed something at this time" is
+acceptable. Under strict no-outbound mode, `anchor` refuses with
+`held_no_outbound` and sends nothing.
+
+### The anchor file
+
+`anchor` writes `seal.anchor.json` next to `seal.json` (or
+`NAME.seal.anchor.json` next to `NAME.seal.json`). It holds the nonce and
+the log's full answer: the entry UUID, the entry, the signed entry timestamp
+and the inclusion proof with the log's signed checkpoint. `anchor` checks
+that answer before writing the file. Running it again on an anchored Seal
+changes nothing. If the connection drops before the answer arrives, run it
+again: it re-sends the same digest and picks up the existing entry.
+
+The Seal key signs the anchor. With a PKCS#11 key, the token signs with
+CKM_EDDSA and the prehash flag. With a key file or keychain key, OpenAdapt
+computes the Ed25519ph signature itself in pure Python, because the
+`cryptography` library has no Ed25519ph. That code isn't constant time:
+someone who can time many signatures closely on the same machine might learn
+something about the key. Anchoring makes one signature per Seal, on demand.
+Where that matters, use a PKCS#11 key.
+
+### Verify an anchor
+
+```bash
+openadapt-flow local-seal verify runs/job-0007 --keys site-keys.json --require-anchor
+```
+
+`--require-anchor` checks, offline, from the stored file:
+
+1. the Seal itself, against the pinned keys, and against `report.json` only
+   (`--require-anchor` implies `--strict`);
+2. that the anchored digest is the digest of this Seal with the stored nonce;
+3. that the entry is signed by the same pinned key that verified the Seal;
+4. the log's signed entry timestamp, against the log's public key;
+5. the inclusion proof, from the entry up to the root in the log's signed
+   checkpoint;
+6. that the checkpoint's origin line and signature line name the pinned log,
+   and that the entry ID starts with the checkpoint's tree ID.
+
+A Seal from a revoked key passes only when the log recorded it before the
+key's `revoked_at`. That uses the log's time, which the key's holder can't
+change.
+
+The log key for the public Sigstore instance is built in (log ID
+`c0d23d6a…801d`, origin `rekor.sigstore.dev`). To pin another log, pass
+`--log-key PEM`, `--log-url URL` and, when its checkpoints name another
+origin than the URL's host, `--log-origin NAME`.
+
+`--live` also fetches the entry from the log and compares it. It is optional
+and needs network access. It fetches from `--log-url` (default the public
+Rekor), never from a URL written in the anchor file. Offline verification
+works in strict no-outbound mode.
+
+Refusal reasons are closed: `anchor_missing`, `anchor_malformed`,
+`anchor_mismatch`, `anchor_key_mismatch`, `anchor_bad_signature`,
+`anchor_unknown_log`, `anchor_bad_timestamp`, `anchor_bad_inclusion`,
+`anchor_bad_checkpoint`, `anchor_live_mismatch`, `anchor_live_unavailable`.
+An anchor file in the wrong shape, at any field, is `anchor_malformed`.
+
+Cloud Seals are unchanged and remain the hosted option.
 
 ## Optional: batched timestamps
 
@@ -141,6 +304,7 @@ ranges, and a bad allow list stops startup.
 In this mode:
 
 - `attach-seal` returns `no_outbound` without contacting Cloud.
+- `local-seal anchor` refuses with `held_no_outbound` and sends nothing.
 - `local-seal submit` holds each batch as `held_no_outbound` unless the
   timestamp authority declares itself local (`MAY_EGRESS = False`).
 - Offline Seals and batches work as usual.

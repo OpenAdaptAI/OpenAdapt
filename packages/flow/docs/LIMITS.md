@@ -21,7 +21,7 @@ For the current evidence behind each capability claim, see
 | Browser record, compile, and replay | **Required CI and counted attach trials** | The launched-browser path runs end to end in automated and clean-environment tests. The attached-browser path reuses the same recorder and passes 3 real Chromium record-and-compile trials with secret exclusion and external-browser survival checks. A live resize case also compiles actions from two viewport and device-scale baselines. | It is not evidence for every site, browser extension, authentication flow, or long-running production workload. Attach mode requires a loopback CDP endpoint and one same-origin Chromium tab. An action that overlaps a resize is refused because its pre-action coordinate evidence is not exact. The custom Capture extension remains a prototype and is not a direct replay path. |
 | Healthy replay with zero model calls | **Required CI** | A run that resolves from retained evidence can execute without a language or vision model; the run report counts model calls. | Zero model calls does not mean zero network traffic. The target application, hosted control plane, remote backend, or effect verifier may still use the network. |
 | Deterministic re-resolution | **Required CI** | Bounded visual or structural drift can be resolved through non-model evidence and recorded as a reviewable change. | It is not general adaptation to a redesigned workflow, changed business rules, or missing evidence. |
-| AI-assisted repair | **Required CI contracts; deployment evidence required** | An explicitly enabled model can propose a target or interpret a changed screen. Existing runtime checks still apply. | A model proposal is not authorization, proof of identity, or proof that a business transaction succeeded. |
+| AI-assisted repair | **Required CI contracts; measured on synthetic apps; deployment evidence required** | An explicitly enabled model can propose a target or interpret a changed screen. Existing runtime checks still apply. Once a deployment names a repair agent, every stop that wrote nothing goes to it by default, and a person approves each fix unless a signed policy pre-approves its class. On MockMed's 22 drift modes, 6 of 21 stops that reached repair resumed and verified, with 0 wrong saves in 66 trials ([benchmark/auto_repair](../benchmark/auto_repair/README.md)). | A model proposal is not authorization, proof of identity, or proof that a business transaction succeeded. A stop after a possible write is never repaired automatically. The measured rate is for one agent on one synthetic app; it is not a field repair rate. |
 | Human teaching and resume | **Required CI contracts; field evidence required** | A halt can produce evidence for an operator correction, guarded promotion, and durable resume. | Field recovery time, broad authoring UX, enterprise identity integration, and non-repudiation are not established. |
 | Windows UI Automation | **Counted task acceptance** | The native UIA backend completed 3/3 exact WinForms effects and 3/3 refusals for both stale and ambiguous targets. | Acceptance is bound to the tested workflow and Windows environment; each application retains its own identity, effect, and version qualification. |
 | Native macOS automation | **Counted task acceptance** | The AX/AppKit backend completed 3/3 exact TextEdit file effects and refused an ambiguous two-window target; structural record/locate/refuse behavior is covered separately. Known AX-only ` - Google Chrome` and ` - Google Chrome for Testing` window-title suffixes are accepted only for the corresponding exact CoreGraphics application owner; PID, unique-candidate, focused/main, and topmost-window checks remain mandatory. | Acceptance is bound to the tested host and application. Accessibility exposure and supported native actions vary by application. |
@@ -129,6 +129,26 @@ Target repair does not infer changed business intent. Adding a required step,
 removing a business state, changing a transaction's meaning, or introducing a
 new authorization rule requires a new or reviewed program.
 
+Automatic repair is bounded the same way. It takes only a stop that wrote
+nothing (`HALTED_BEFORE_EFFECT`). A stop after a step the run gate counts as a
+save has acted is `RECONCILIATION_REQUIRED`, even when the app saved nothing,
+and goes to reconciliation and a person. On the recorded OpenEMR referral
+stops of 2026-10-19 that was every stop (8 of 8): the "Create New Patient"
+click before the duplicate-check dialog counts as a save. Measured on MockMed,
+the default loop repaired a renamed or moved control (6 of 6 stops) and did
+not repair a control moved into a closed menu, a new interstitial, a new
+required choice, or a pixel postcondition that failed after a font change
+(0 of 15). On openIMIS's relabelled Save, once a person reviewed the two
+steps whose risk was unclassified, the stop reached repair 3 of 3, but no fix
+passed the probe: the replay sees the Save disabled where the fix was cropped
+from the enabled one. On silent-saves 1.1.0's UI-change blocks (#1380), 18
+of the 28 items that stopped every time now end correctly: a page zoom no
+longer fails a correct screen's check, and a repaired agent-compiled program
+keeps its admission. A What's New screen dismissed by "Continue to tasks" still
+stops every item: "Continue" can submit, so a person must classify that
+control first. A compiled program is also reused only for the record check and
+app environment it was admitted under ([JIT.md](JIT.md)).
+
 ## The main incorrect-success risks
 
 OpenAdapt is designed to halt on many ambiguous conditions. The following
@@ -188,6 +208,37 @@ halts with a named reason when the confirmation is missing
 before and after numbers are in
 [`benchmark/known_ids/KNOWN_IDS.md`](../benchmark/known_ids/KNOWN_IDS.md).
 
+Before a step stops on a look-alike identifier, the replayer takes extra looks
+that change nothing
+([`openadapt_flow/runtime/identity_looks.py`](../openadapt_flow/runtime/identity_looks.py)):
+the same read on two fresh screenshots, the 2x re-read, the known-ID list when
+one is configured, and, where the surface allows it, a select-and-copy of the
+identifier's text box (`runtime.identity_copy_look`). OCR looks can't settle
+the record on their own, because a look-alike twin can read the same on every
+frame and at every size. Only two looks can: the known-ID list, and a copied
+identifier that equals a run parameter in the identity band. A look that names
+another record stops the run. Each look is recorded on the step's identity
+check.
+
+The copy look has limits. It needs a surface where selecting the identifier
+and copying it changes nothing, and a clipboard that reaches the machine Flow
+runs on (RDP or Citrix clipboard redirection). It drags across only the one
+text box that holds the identifier, and the run stops if the screen changes
+anywhere else during the look. A canvas with no selectable text has no copy
+look. A recording's own identifier is OCR text and can be a misread (the RDP
+kiosk recorded `A1001` as `Alo01`), so in a workflow that always opens the
+recorded record, the copy can stop a run but never confirm one. It confirms
+only a record chosen by a run parameter. Governed and qualification runs never
+take it. The check just before the click takes no input; it reuses the copy
+only when the identifier's pixels are unchanged since the look. On a rendered
+dense record list with the ID as a run parameter, false stops on the correct
+row went from 232 to 24 of 288 with the copy look, and wrong-record accepts
+stayed 0 of 288
+([`benchmark/identity_looks/IDENTITY_LOOKS.md`](../benchmark/identity_looks/IDENTITY_LOOKS.md)).
+When the recording itself read the ID with a look-alike glyph, the band is not
+linked to the run parameter and the copy cannot confirm the record; 22 of the
+24 remaining stops were that case.
+
 Permissive `replay` may proceed on an unreadable reversible target and reports
 that condition. Governed `run` requires an affirmative live verdict for every
 identity-required admitted step; mismatch, unreadable, or abstain halts before
@@ -215,6 +266,42 @@ click after the last entry is presumed to commit that record: it compiles
 irreversible, and qualification requires its record check. An icon-only click
 that only navigates after data entry is therefore over-classified until an
 operator reclassifies it.
+
+On a pixel surface an icon-only click carries no text that names its control.
+When the recorder can move the pointer without clicking
+(`Recorder(capture_hover=True)` on a backend with `hover`), it rests the
+pointer on each click target first and keeps that frame. For a click with no
+other identity evidence, the compiler stores what changed near the target, such
+as the control's highlight or tooltip, as the step's hover evidence
+([`openadapt_flow/runtime/hover_evidence.py`](../openadapt_flow/runtime/hover_evidence.py)).
+At replay, on the pixel rungs, the runtime rests the pointer on the resolved
+target, waits the same 0.8 s, and compares. A different response, or a
+response where the recording saw none, stops the run before the click. A
+missing response, or one that can't be compared (another render with no
+readable text), is recorded on the step and changes nothing. A tooltip that
+opens later than the wait looks like a different response and stops the run.
+Controls that don't answer the pointer, such as most text fields, get no
+evidence this way. The browser, remote-display (Citrix and RDP client window)
+and FreeRDP backends can hover. The Aardwolf RDP transport and the native
+Windows, macOS and Linux backends can't move the pointer without a button
+yet, so they take no hover look. On an in-process kiosk with two identical
+icons that differ only by tooltip, swapped between recording and replay, the
+look-alike icon was clicked in 2 of 3 runs before and 0 of 3 after
+([`benchmark/hover_identity`](../benchmark/hover_identity/README.md)).
+
+A pixel step is checked on one frame and clicked a moment later. Consequential
+identity-gated clicks were already bound to the exact checked frame. Every
+other pixel click now gets a check-to-click guard (`Replayer._pixel_recheck`):
+right before the click, the runtime takes a fresh frame and compares the
+target region, the identity region and the hover response with the frame the
+step was checked on. If one changed (a dialog opened, the list re-sorted), it
+doesn't click. It re-resolves the target and re-runs the identity check on
+the fresh frame, with no input, and clicks only when the next frame matches
+that one. After two re-observations that still see a change, or when the
+target or its identity can't be confirmed again, it refuses the click. Each
+change is recorded on the step (`StepResult.check_to_click`). A change smaller
+than 4 pixels, or under 24 levels per channel, doesn't count. Structured
+targets are bound by element tokens instead and aren't rechecked.
 
 A consequential click must be tied to a record before Flow delivers it. Inside
 a table row, the row is that record. An icon-only Save that floats beside a
@@ -293,7 +380,9 @@ OCR tier then decides, and an identifier OCR cannot confirm, such as one with
 1/l or 0/O, still halts. In the display-scaling sweep
 ([`benchmark/pixel_scale`](../benchmark/pixel_scale/README.md)) the RDP
 fixture's own IDs (`MRN A1001`) halted at the identity check at every render
-other than the recorded one.
+other than the recorded one, before and after the extra identity looks: that
+workflow always opens the recorded record, whose ID the recording read as
+`MRN Alo01`, and the kiosk has no selectable text.
 
 ### 2. A postcondition verifies only what it observes
 
@@ -532,12 +621,32 @@ What it does provide ([`AFTER_A_STOP.md`](AFTER_A_STOP.md)):
   to a person, runs only after that person approves it, runs at most once,
   and counts as done only when an independent read of the system of record
   confirms its own declared effects.
+- `undo propose` finds candidate undo steps for each saving step (another
+  recording, captured traffic, or the field's old value) and tries each one
+  on a declared test copy. It writes a candidate into the bundle, as a
+  proposal, only when every record afterwards matches the read-back from
+  before the save. A person approves a proposal once (`undo accept`), and
+  each run still needs approval after the stop.
 
 The limits of that:
 
 - A step with no declared effect is `unknown` in the ledger. Flow can't say
   whether it changed anything.
-- An undo exists only where someone declared it. Flow doesn't infer one.
+- An undo exists only where someone declared it or approved a verified
+  proposal. Flow never uses an undo no person approved.
+- A proposal is verified once, on a test copy, with the bundle's parameters.
+  It is evidence that the inverse path works on that copy, not a proof for
+  every record in production.
+- A proposal must restore every record exactly. An app that cancels by
+  changing a status, or writes an audit row when a record is deleted, fails
+  verification unless a person names those fields with `--ignore-field`.
+- Flow builds API undo steps only from JSON requests. A browser form post, or
+  a Delete control on the saved record's page, needs a recording of a person
+  doing the undo.
+- A proposal that finds its record (`locate`) or restores old values
+  (`restore`) needs values the replayer keeps just before the save. They exist
+  only for runs whose bundle already held the proposal, and only when the
+  save's record check read the system of record before the save.
 - An undo can fail or be refused. Then a person must repair the record by
   hand.
 - No undo is offered for a workflow with a loop: the undo can't be bound to
@@ -551,6 +660,49 @@ Before resuming or teaching a halted consequential workflow, reconcile prior
 effects, confirm the current entity and application state, and ensure the bundle
 and approval still match the paused run. A report that accurately names the
 halt does not prove earlier actions were harmless.
+
+### 6. An agent that reads the app can be steered by it
+
+When an agent does a task once so it can be compiled (teach), or proposes a
+repair, it reads the live app. A record note, a banner, a tooltip, an image's
+alt text or a server response can hold text written to steer it. Published
+work on computer-use agents shows such text often works. OpenAdapt does not
+rely on the agent ignoring it. The full analysis is in
+[`THREAT_MODEL.md`](THREAT_MODEL.md).
+
+What is enforced:
+
+- With a declared teach scope (`compile_agent(..., teach_scope=...)`), the
+  agent can type only declared values, can't follow a link or submit a form to
+  an undeclared origin, and can't make the browser reach an undeclared origin.
+  With a write adapter for the app, a write to another record, an undeclared
+  field or an undeclared value is aborted before it is sent. After the run,
+  Flow reads the system of record and refuses the draft unless it shows
+  exactly the declared write. On MockMed, every injected instruction in the
+  test suite (5 places by 4 goals) is blocked or caught this way, with a
+  scripted agent that obeys all of them.
+- Self-repair refuses a proposed control that leads to another origin.
+- A save approval shows who asked, the agent's own reason (as a quote), the
+  screen text it saw, and any of that text that reads like an instruction to
+  an agent.
+
+What is not:
+
+- The scope is wired into `openadapt_flow.jit` only. `compile-agent` from a
+  prompt (on main) does not pass one yet; teach over MCP and the airbag guard
+  are separate pull requests that must pass a scope when they land.
+- A self-repair bridge may type text that the screen shows, so injected text
+  can become a typed value in a proposed repair. The person approving sees it.
+- A steered agent can still read other records in the same app and send what
+  it read to its model provider (scrubbed where scrubbing is on).
+- Without a write adapter, and on every surface other than the web, a wrong
+  write lands first and is caught by the read-back afterwards; it then needs
+  reconciliation.
+- Values chosen by clicking (not typing), drag and drop, and WebSocket
+  traffic are checked only by the write adapter or the read-back, if at all.
+- The instruction detector on approval forms is a heuristic display aid.
+- No live model has been run against these fixtures yet; the live-model test
+  is off by default because it costs money.
 
 ## Interaction and environment limits
 
@@ -628,8 +780,13 @@ host hardening, storage encryption, backups, retention, access control,
 monitoring, effect-verifier integration, update validation, and disaster
 recovery.
 
-The repository supplies integrity manifests, optional bundle encryption,
-destination policy, local egress checks, and audit primitives. A content digest
+The repository supplies integrity manifests, optional encryption at rest for
+bundles, web recordings and the run directories of sealed bundles, destination
+policy, local egress checks, and audit primitives. Encryption at rest does not
+cover data in process memory, the target application's own storage, file names
+and sizes, desktop recordings, or commands outside the list in
+[`phi_at_rest.md`](phi_at_rest.md), which refuse sealed input; the key is a
+passphrase in the environment, not a KMS. A content digest
 proves byte identity, not publisher identity. A local hash chain is tamper
 evident against ordinary changes, not tamper proof against an administrator who
 can rewrite it. Local approvals record provenance but are not enterprise-IdP
