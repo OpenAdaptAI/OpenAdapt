@@ -67,7 +67,7 @@ import json
 import secrets
 import shutil
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional, Protocol, Sequence
 
@@ -149,6 +149,30 @@ class SelfRepairRefused(RuntimeError):
     """Self-repair can't start or a proposal was refused. Nothing was written."""
 
 
+class _KindMismatch(SelfRepairRefused):
+    """The proposed control is not the kind the halted step acts on."""
+
+
+@dataclass(frozen=True)
+class _SoFar:
+    """A bridge clicked on the live screen so far, waiting for the next look."""
+
+    new_steps: tuple["Step", ...]
+    crops: dict[str, bytes]
+    described: tuple[str, ...]
+    learned: tuple[Any, ...]
+    screen: bytes
+    used: int
+
+
+class _LookAgain(Exception):
+    """A bridge click opened a new screen; ask the agent again from it."""
+
+    def __init__(self, so_far: _SoFar) -> None:
+        super().__init__("look again")
+        self.so_far = so_far
+
+
 # -- what the agent sees and returns -------------------------------------------
 
 
@@ -200,6 +224,10 @@ class RepairRequest:
     #: (:func:`openadapt_flow.jit.signature.record_check_of`). A fix never
     #: changes it; the probe and the resume check it again.
     record_check: Mapping[str, Any] = field(default_factory=dict, repr=False)
+    #: Clicks already made on the live screen for this proposal, oldest first
+    #: ("clicks 'Actions'"). When set, ``live_png`` is the screen they opened,
+    #: and the proposal continues from it; ``max_actions`` is what is left.
+    bridge_so_far: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -626,6 +654,9 @@ class SelfRepair:
         standard_changes: A signed repair policy
             (:class:`~openadapt_flow.repair.standard_change.StandardChanges`).
             A fix it allows applies without a person; any other goes to one.
+        dismissal_evidence: Recordings made with ``record --capture-network``.
+            A dismiss control labelled "Continue" or "Next" is learned only
+            when one of them shows a person clicking it without a write.
     """
 
     def __init__(
@@ -644,6 +675,7 @@ class SelfRepair:
         canary_runs: int = 5,
         on_approval_request: Optional[Callable[[Path, str, str], None]] = None,
         standard_changes: Any = None,
+        dismissal_evidence: Sequence[Path | str] = (),
         vision: Any = None,
         sleep: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
@@ -688,6 +720,9 @@ class SelfRepair:
         self.canary_runs = int(canary_runs)
         self.on_approval_request = on_approval_request
         self.standard_changes = standard_changes
+        #: Recordings made with network capture, read for evidence that a
+        #: dismiss control writes nothing (``repair.learned_dismissal``).
+        self.dismissal_evidence = tuple(Path(p) for p in dismissal_evidence)
         #: Added to the approval request, e.g. how many queued items it releases.
         self.approval_note = ""
         if vision is None:
@@ -956,20 +991,32 @@ class SelfRepair:
                 )
                 touched = [False]
                 try:
-                    patch = self._patch(
-                        workflow,
-                        bundle_dir,
-                        step,
-                        mode,
-                        proposal,
-                        current,
-                        live_png,
-                        attempt,
-                        attempt_dir,
-                        scrub_evidence,
-                        touched,
-                        _before_frame(work.parent, halted),
-                    )
+                    so_far: Optional[_SoFar] = None
+                    while True:
+                        try:
+                            patch = self._patch(
+                                workflow,
+                                bundle_dir,
+                                step,
+                                mode,
+                                proposal,
+                                current,
+                                live_png,
+                                attempt,
+                                attempt_dir,
+                                scrub_evidence,
+                                touched,
+                                _before_frame(work.parent, halted),
+                                so_far=so_far,
+                            )
+                            break
+                        except _LookAgain as more:
+                            # A bridge click opened a new screen (a menu):
+                            # the agent continues from what it shows now.
+                            so_far = more.so_far
+                            proposal = self._look_again(
+                                request, so_far, evidence, attempt
+                            )
                 except Exception as exc:  # noqa: BLE001 - a bad proposal is a refusal
                     detail = (
                         str(exc)
@@ -1029,6 +1076,62 @@ class SelfRepair:
         finally:
             if current is not session:
                 _close(current)
+
+    def _look_again(
+        self,
+        request: RepairRequest,
+        so_far: _SoFar,
+        evidence: SelfRepairEvidence,
+        attempt: int,
+    ) -> RepairProposal:
+        """Ask the agent to continue the bridge from the screen it opened."""
+
+        evidence.steps.append(
+            SelfRepairStepRecord(
+                stage="patch",
+                passed=True,
+                detail=("; ".join(so_far.described) + "; looking again")[:1024],
+                attempt=attempt,
+            )
+        )
+        follow_up = replace(
+            request,
+            live_png=self._shown(so_far.screen)[0],
+            viewport=_png_size(so_far.screen),
+            bridge_so_far=so_far.described,
+            max_actions=self.max_bridge - so_far.used,
+        )
+        try:
+            proposal = self.agent.propose(follow_up)
+        except Exception as exc:  # noqa: BLE001 - an agent failure is a refusal
+            raise SelfRepairRefused(
+                f"the agent raised {type(exc).__name__} after "
+                + "; ".join(so_far.described)
+            ) from exc
+        calls = max(int(getattr(proposal, "model_calls", 0) or 0), 0)
+        cost = max(float(getattr(proposal, "cost_usd", 0.0) or 0.0), 0.0)
+        evidence.model_calls += calls
+        evidence.est_model_cost_usd = round(evidence.est_model_cost_usd + cost, 6)
+        actions = proposal.bridge() if proposal is not None else []
+        evidence.steps.append(
+            SelfRepairStepRecord(
+                stage="propose",
+                passed=bool(actions),
+                detail=(
+                    json.dumps([dict(a) for a in actions], sort_keys=True)
+                    if actions
+                    else "the agent gave up"
+                )[:500],
+                attempt=attempt,
+                model_calls=calls,
+                est_model_cost_usd=cost,
+            )
+        )
+        if proposal is None or not actions:
+            raise SelfRepairRefused(
+                "the agent gave up after " + "; ".join(so_far.described)
+            )
+        return proposal
 
     def _reproduce_halt(
         self, workflow: Workflow, bundle_dir: Path, step: Step, run_dir: Path
@@ -1092,6 +1195,7 @@ class SelfRepair:
         scrub_evidence: Optional[ScreenScrubEvidence],
         touched: list[bool],
         halted_before: Optional[bytes] = None,
+        so_far: Optional["_SoFar"] = None,
     ) -> _Patch:
         """Build the patched bundle from the proposal, on the halted page.
 
@@ -1101,9 +1205,21 @@ class SelfRepair:
         new step may never save, and may type only a parameter's value or
         text the screen shows. In ``replace`` mode the last action is never
         performed; it becomes the halted step's new target.
+
+        Two kinds of action are handled differently:
+
+        - a control labelled as a dismiss ("Continue to tasks", "Next",
+          "OK"), whose label reads as a write, is learned as a write-fenced
+          :class:`~openadapt_flow.ir.Interstitial` only on evidence
+          (:mod:`openadapt_flow.repair.learned_dismissal`), and is not a step;
+        - in ``replace`` mode, a last action that can't be the halted step's
+          target (a menu for a save) but passes every bridge-click check is
+          clicked as a bridge step, and :class:`_LookAgain` asks the agent
+          again from the screen it opened. ``so_far`` carries that bridge.
         """
 
         from openadapt_flow.compiler.compile import _postconditions
+        from openadapt_flow.repair.learned_dismissal import is_dismiss_label
         from openadapt_flow.repair.registration import build_candidate
         from openadapt_flow.run_gate import is_consequential
         from openadapt_flow.runtime.heal import persist_heal
@@ -1112,13 +1228,14 @@ class SelfRepair:
         natives = proposal.bridge()
         if not natives:
             raise SelfRepairRefused("the proposal has no action")
-        if len(natives) > self.max_bridge:
+        used = so_far.used if so_far is not None else 0
+        if used + len(natives) > self.max_bridge:
             raise SelfRepairRefused(
                 f"a bridge is at most {self.max_bridge} action(s); this one has "
-                f"{len(natives)}"
+                f"{used + len(natives)}"
             )
         ops = [self._one_op(native) for native in natives]
-        if len(ops) > 1 or mode == "after":
+        if len(ops) > 1 or mode == "after" or used:
             if workflow.program is not None or workflow.subflows:
                 raise SelfRepairRefused(
                     "a bridge can only be added to a linear workflow for now"
@@ -1138,14 +1255,15 @@ class SelfRepair:
             and s.anchor.structural.selector
         }
         evidence_dir = attempt_dir / "evidence"
-        new_steps: list[Step] = []
-        crops: dict[str, bytes] = {}
-        described: list[str] = []
-        screen = live_png
+        new_steps: list[Step] = list(so_far.new_steps) if so_far else []
+        crops: dict[str, bytes] = dict(so_far.crops) if so_far else {}
+        described: list[str] = list(so_far.described) if so_far else []
+        learned: list[Any] = list(so_far.learned) if so_far else []
+        screen = so_far.screen if so_far else live_png
         replaced: Optional[Step] = None
         target_region = tuple(step.anchor.region)
-        for index, op in enumerate(ops):
-            is_target = mode == "replace" and index == len(ops) - 1
+        for index, op in enumerate(ops, start=used):
+            is_target = mode == "replace" and index == used + len(ops) - 1
             if op.kind == "type":
                 text = op.text or ""
                 param = next((n for n, v in params.items() if v == text and v), None)
@@ -1156,7 +1274,7 @@ class SelfRepair:
                         f"the bridge types {text!r}, which is neither a parameter's "
                         "value nor text on the screen; refusing an invented value"
                     )
-                new_id = f"{step.id}_bridge_{index + 1}"
+                new_id = f"{step.id}_bridge_{len(new_steps) + 1}"
                 new_steps.append(
                     Step(
                         id=new_id,
@@ -1194,16 +1312,37 @@ class SelfRepair:
                     f"the proposed control is the one {others[structural.selector]} "
                     "already uses; refusing a patch that reuses another step's target"
                 )
-            if is_target:
-                replaced, crop, region, label, event = self._retarget(
-                    workflow, step, point, structural, screen
+            if structural is not None and is_dismiss_label(structural.name):
+                touched[0] = True
+                found = self._learn_dismissal(
+                    step, len(learned), point, structural, screen, session
                 )
-                crops[step.id] = crop
-                target_region = region
-                described.append(f"{step.id} now uses {label!r}")
-                persist_heal(event, crop, screen, evidence_dir)
+                learned.append(found)
+                described.append(
+                    f"dismisses {structural.name!r} when it is shown "
+                    f"(write-fenced; recorded evidence {found.evidence})"
+                )
+                screen = found.after
                 continue
-            new_id = f"{step.id}_bridge_{index + 1}"
+            if is_target:
+                try:
+                    replaced, crop, region, label, event = self._retarget(
+                        workflow, step, point, structural, screen
+                    )
+                except _KindMismatch:
+                    if index + 1 >= self.max_bridge:
+                        raise
+                    # Not the step's target, but maybe the way to it (a menu
+                    # that holds the save): click it as a bridge step, if it
+                    # passes every bridge check, and look again.
+                    is_target = False
+                else:
+                    crops[step.id] = crop
+                    target_region = region
+                    described.append(f"{step.id} now uses {label!r}")
+                    persist_heal(event, crop, screen, evidence_dir)
+                    continue
+            new_id = f"{step.id}_bridge_{len(new_steps) + 1}"
             new_step, crop, label = self._new_click(
                 workflow,
                 new_id,
@@ -1238,12 +1377,32 @@ class SelfRepair:
             )
             new_steps.append(new_step)
             screen = after
+            if mode == "replace" and index == used + len(ops) - 1:
+                raise _LookAgain(
+                    _SoFar(
+                        new_steps=tuple(new_steps),
+                        crops=dict(crops),
+                        described=tuple(described),
+                        learned=tuple(learned),
+                        screen=screen,
+                        used=index + 1,
+                    )
+                )
 
         patched = workflow.model_copy(deep=True)
         steps = list(patched.steps)
         at = next(i for i, s in enumerate(steps) if s.id == step.id)
+        if mode == "after" and learned and not new_steps:
+            raise SelfRepairRefused(
+                "a dismissal that appears after a step's own click is not learned "
+                "yet; only one that hides a step's target is"
+            )
         if mode == "replace":
-            assert replaced is not None
+            if replaced is None:
+                # The bridge ended on a learned dismissal: the halted step
+                # keeps its recorded target, now reachable again.
+                assert learned
+                replaced = step
             steps[at] = replaced
             steps[at:at] = new_steps
             shown_step = replaced
@@ -1284,6 +1443,10 @@ class SelfRepair:
                 "the recorded save"
             )
         patched.steps = steps
+        patched.interstitials = [
+            *patched.interstitials,
+            *(found.interstitial for found in learned),
+        ]
         bundle_out = attempt_dir / "bundle"
         if bundle_out.exists():
             shutil.rmtree(bundle_out)
@@ -1302,6 +1465,10 @@ class SelfRepair:
             path = bundle_out / target.anchor.template
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(crop)
+        for found in learned:
+            path = bundle_out / found.template
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(found.crop)
         patched.save(bundle_out, encrypt=bool(workflow.encrypted))
         run_dir = attempt_dir.parent.parent
         halted_report = run_dir / "report.json"
@@ -1394,13 +1561,13 @@ class SelfRepair:
         label = (structural.name if structural is not None else None) or read
         if is_consequential(step, workflow):
             if not is_meaningful_label(label) or not is_write_shaped(label or ""):
-                raise SelfRepairRefused(
+                raise _KindMismatch(
                     f"{step.id} saves, but the proposed control "
                     f"{label!r} does not read as a save; refusing a patch that "
                     "would point a save at another kind of control"
                 )
         elif label and is_write_shaped(label):
-            raise SelfRepairRefused(
+            raise _KindMismatch(
                 f"{step.id} does not save, but the proposed control {label!r} "
                 "reads as a save; a patch may not turn a read step into a write"
             )
@@ -1415,6 +1582,48 @@ class SelfRepair:
         )
         event.new_anchor = anchor
         return step.model_copy(update={"anchor": anchor}), crop, region, label, event
+
+    def _learn_dismissal(
+        self,
+        step: Step,
+        n: int,
+        point: tuple[int, int],
+        structural: Any,
+        screen: bytes,
+        session: AppSession,
+    ) -> Any:
+        """Learn the dismiss control at ``point`` (see ``learned_dismissal``)."""
+
+        from openadapt_flow.repair.learned_dismissal import (
+            DismissalRefused,
+            learn_dismissal,
+        )
+        from openadapt_flow.runtime.heal import _crop_png, _reocr_text
+
+        assert step.anchor is not None
+        region = _centered_region(
+            point, (step.anchor.region[2], step.anchor.region[3]), _png_size(screen)
+        )
+        label = str(structural.name).strip()
+        try:
+            return learn_dismissal(
+                name=f"{step.id} repair: {label}",
+                template=f"templates/{step.id}_dismiss_{n + 1}.png",
+                label=label,
+                structural=structural,
+                point=(int(point[0]), int(point[1])),
+                region=region,
+                crop=_crop_png(screen, region),
+                ocr_text=_reocr_text(self.vision, screen, region, click_y=point[1]),
+                backend=session.backend,
+                recordings=self.dismissal_evidence,
+                settle=lambda: self._settled(session),
+                shows=lambda frame, text: _shows(
+                    session.backend, self.vision, frame, text
+                ),
+            )
+        except DismissalRefused as exc:
+            raise SelfRepairRefused(str(exc)) from exc
 
     def _new_click(
         self,

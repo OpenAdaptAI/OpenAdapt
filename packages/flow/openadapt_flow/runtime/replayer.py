@@ -47,6 +47,7 @@ import re
 import struct
 import time
 import uuid
+from contextlib import ExitStack
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -14025,6 +14026,34 @@ class Replayer:
             )
         return frame, None
 
+    def _interstitial_fence(
+        self, stack: ExitStack, name: str
+    ) -> tuple[Any, Optional[str]]:
+        """Raise the backend's write fence for a learned dismissal, or why not."""
+
+        opener = getattr(self.backend, "write_fence", None)
+        if not callable(opener):
+            return None, (
+                f"Interstitial '{name}' must be dismissed behind a write fence, "
+                "and this backend cannot block requests - refusing to act; run "
+                "aborted."
+            )
+        try:
+            report = stack.enter_context(opener())
+        except Exception as exc:  # noqa: BLE001 - no fence, no dismissal
+            stack.close()
+            return None, (
+                f"Interstitial '{name}': the write fence failed to go up "
+                f"({type(exc).__name__}) - refusing to act; run aborted."
+            )
+        if report.refusal is not None:
+            stack.close()
+            return None, (
+                f"Interstitial '{name}': the write fence could not go up "
+                f"({report.refusal}) - refusing to act; run aborted."
+            )
+        return report, None
+
     @timed_span("postcondition")
     def _handle_interstitials(
         self,
@@ -14237,76 +14266,97 @@ class Replayer:
                         f"durable continuation was preempted before delivery: {exc}"
                     )
                     return before_png, event.error
-            try:
-                if it.dismiss_key is not None:
-                    self._require_qualification_environment_current()
-                    self._deliver_backend_call(
-                        result, lambda: self.backend.press(it.dismiss_key or "Escape")
-                    )
-                else:
-                    assert resolution is not None
-                    assert it.dismiss_anchor is not None
-                    if resolution.rung == "structural":
-                        native_act = getattr(self.backend, "act_structural", None)
-                        structural_anchor = it.dismiss_anchor.structural
-                        if (
-                            not callable(native_act)
-                            or resolution.structural_handle is None
-                            or structural_anchor is None
-                        ):
-                            raise StructuralResolutionRefused(
-                                "structural dismissal cannot be delivered "
-                                "natively without a stable element handle"
-                            )
+            fence_stack = ExitStack()
+            fence = None
+            if it.write_fence:
+                # A learned dismissal is non-consequential only because a
+                # fence proved it wrote nothing; it runs under one every time.
+                fence, refusal = self._interstitial_fence(fence_stack, it.name)
+                if refusal is not None:
+                    event.error = refusal
+                    return before_png, refusal
+            with fence_stack:
+                try:
+                    if it.dismiss_key is not None:
                         self._require_qualification_environment_current()
                         self._deliver_backend_call(
                             result,
-                            lambda: native_act(
-                                structural_anchor,
-                                resolution.structural_handle,
-                            ),
+                            lambda: self.backend.press(it.dismiss_key or "Escape"),
                         )
                     else:
-                        self._require_qualification_environment_current()
-                        self._deliver_backend_call(
-                            result,
-                            lambda: self.backend.click(
-                                int(resolution.point[0]), int(resolution.point[1])
-                            ),
-                        )
-                event.delivered = True
-            except Exception as exc:
-                if not isinstance(
-                    exc, (FreshActuationRequired, StructuralResolutionRefused)
-                ):
-                    target_fingerprint = None
-                    if (
-                        resolution is not None
-                        and resolution.structural_handle is not None
+                        assert resolution is not None
+                        assert it.dismiss_anchor is not None
+                        if resolution.rung == "structural":
+                            native_act = getattr(self.backend, "act_structural", None)
+                            structural_anchor = it.dismiss_anchor.structural
+                            if (
+                                not callable(native_act)
+                                or resolution.structural_handle is None
+                                or structural_anchor is None
+                            ):
+                                raise StructuralResolutionRefused(
+                                    "structural dismissal cannot be delivered "
+                                    "natively without a stable element handle"
+                                )
+                            self._require_qualification_environment_current()
+                            self._deliver_backend_call(
+                                result,
+                                lambda: native_act(
+                                    structural_anchor,
+                                    resolution.structural_handle,
+                                ),
+                            )
+                        else:
+                            self._require_qualification_environment_current()
+                            self._deliver_backend_call(
+                                result,
+                                lambda: self.backend.click(
+                                    int(resolution.point[0]), int(resolution.point[1])
+                                ),
+                            )
+                    event.delivered = True
+                except Exception as exc:
+                    if not isinstance(
+                        exc, (FreshActuationRequired, StructuralResolutionRefused)
                     ):
-                        target_fingerprint = (
-                            resolution.structural_handle.target_fingerprint
+                        target_fingerprint = None
+                        if (
+                            resolution is not None
+                            and resolution.structural_handle is not None
+                        ):
+                            target_fingerprint = (
+                                resolution.structural_handle.target_fingerprint
+                            )
+                        result.delivery_uncertainty = ActionDeliveryUncertainty(
+                            operation="interstitial_dismiss",
+                            native=(
+                                resolution is not None
+                                and resolution.rung == "structural"
+                            ),
+                            target_fingerprint=target_fingerprint,
+                            observed_at=datetime.now(timezone.utc).isoformat(),
+                            cause_type=type(exc).__name__,
                         )
-                    result.delivery_uncertainty = ActionDeliveryUncertainty(
-                        operation="interstitial_dismiss",
-                        native=(
-                            resolution is not None and resolution.rung == "structural"
-                        ),
-                        target_fingerprint=target_fingerprint,
-                        observed_at=datetime.now(timezone.utc).isoformat(),
-                        cause_type=type(exc).__name__,
+                    event.error = (
+                        "dismissal delivery failed "
+                        f"({type(exc).__name__}); outcome is unknown"
                     )
-                event.error = (
-                    "dismissal delivery failed "
-                    f"({type(exc).__name__}); outcome is unknown"
-                )
-                return before_png, (
-                    f"Interstitial '{it.name}' dismissal delivery failed "
-                    f"({type(exc).__name__}) - refusing to act beneath it; run "
-                    "aborted."
-                )
+                    return before_png, (
+                        f"Interstitial '{it.name}' dismissal delivery failed "
+                        f"({type(exc).__name__}) - refusing to act beneath it; run "
+                        "aborted."
+                    )
 
-            before_png, settle_error = self._resettle_after_interstitial(before_png)
+                before_png, settle_error = self._resettle_after_interstitial(before_png)
+            if fence is not None and fence.attempts:
+                blocked = ", ".join(sorted(set(fence.attempts)))
+                event.error = f"the dismissal tried to write ({blocked}); blocked"
+                return before_png, (
+                    f"Interstitial '{it.name}' dismissal tried to write "
+                    f"({blocked}); the browser blocked it, so nothing reached the "
+                    "server, but the dismissal is not the one the repair learned "
+                    "- run aborted."
+                )
             event.after_frame_sha256 = hashlib.sha256(before_png).hexdigest()
             if settle_error is not None:
                 event.error = settle_error
