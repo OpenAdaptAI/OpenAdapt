@@ -1,0 +1,122 @@
+{
+  "schema_version": 2,
+  "run_id": "openemr-referral-r4-theo-lindqvist-1792465427",
+  "workflow_name": "openemr-create-synthetic-patient",
+  "bundle_version": "sha256:ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+  "step_index": 21,
+  "step_id": "step_030",
+  "intent": "click recorded visual target",
+  "state_id": null,
+  "next_step_index": 22,
+  "params": {
+    "title": "Mr.",
+    "fname": "Theo",
+    "lname": "Lindqvist",
+    "DOB": "1983-07-26",
+    "sex": "Male",
+    "street": "63 FERRY STREET",
+    "city": "EXAMPLETON",
+    "state_label": "Massachusetts",
+    "postal_code": "02139",
+    "phone_home": "555-0136",
+    "email": "theo.lindqvist@example.invalid",
+    "country_code": "USA"
+  },
+  "effect_verified": null,
+  "effect_approved_unverified": false,
+  "effect_contract_hashes": [],
+  "effect_evidence": [],
+  "identity": {
+    "status": "verified",
+    "mode": "structured",
+    "coverage": 1.0,
+    "expected": "<structured identity template>",
+    "observed": "{\"form_path\":\"/interface/new/new_comprehensive.php\",\"target_id\":\"phone_home\",\"target_kind\":\"field\"}",
+    "param": null,
+    "signal_evidence": [],
+    "quorum_required": null,
+    "quorum_verified": null,
+    "pixel_evidence": null,
+    "abstain_reason": null,
+    "known_id_evidence": null,
+    "known_id_halt": null,
+    "hover": null,
+    "looks": [],
+    "look_halt": null
+  },
+  "input_verified": null,
+  "starting_state_settled": true,
+  "delivery_attempted": true,
+  "delivery_receipt": {
+    "status": "delivered",
+    "receipt_id": "playwright-bb0646c9cd4d46e88098205950f56b07",
+    "operation": "dom_click",
+    "native": false,
+    "target_fingerprint": "1a6d9e3a4c52c0b28047d95b714a914054c8fe3806d7a8480263d1e3624f1aef",
+    "delivered_at": "2026-10-20T03:04:02.644612+00:00",
+    "outcome_verified": false
+  },
+  "drag_end_resolution": null,
+  "fresh_actuation_events": [],
+  "before_png": "steps/step_030_before.png",
+  "governed_authorization_id": "419016f539dc47cbbd1863bfd4089050",
+  "governed_approval_source": "local-cli-explicit-flag",
+  "postconditions_ok": true,
+  "expected_postconditions": [
+    {
+      "kind": "region_stable",
+      "text": null,
+      "region": [
+        346,
+        298,
+        232,
+        99
+      ],
+      "phash": "c04af8933fa5c66c",
+      "phash_tolerance": 16,
+      "timeout_s": 5.0,
+      "template": "templates/step_030_expect.png"
+    }
+  ],
+  "skipped": false,
+  "actuation": "dom",
+  "delivery_uncertainty": null,
+  "resolution": {
+    "rung": "structural",
+    "point": [
+      462,
+      349
+    ],
+    "confidence": 1.0,
+    "elapsed_ms": 48.98508405312896,
+    "structural_handle": {
+      "point": [
+        462,
+        349
+      ],
+      "confidence": 1.0,
+      "region": [
+        380,
+        334,
+        164,
+        31
+      ],
+      "target_fingerprint": "1a6d9e3a4c52c0b28047d95b714a914054c8fe3806d7a8480263d1e3624f1aef",
+      "candidate_count": 1,
+      "supported_operations": [
+        "dom_click",
+        "dom_double_click",
+        "dom_drag"
+      ]
+    }
+  },
+  "drift_oracle_calls": 0,
+  "heal": null,
+  "attended_capability_digest": null,
+  "attended_reconciliation_request_digest": null,
+  "attended_reconciliation_expected_transition_digest": null,
+  "attended_reconciliation_delivery_state": null,
+  "attended_reconciliation_effect_contract_hashes": [],
+  "attended_reconciliation_at": null,
+  "created_at": "2026-10-20T03:04:02.835810+00:00"
+}
