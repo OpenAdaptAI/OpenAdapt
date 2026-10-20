@@ -35,12 +35,19 @@ jobs:
         env:
           BEFORE_SHA: ${{ github.event.before }}
           EVENT_NAME: ${{ github.event_name }}
+          GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         shell: bash
         run: |
           set -euo pipefail
           changed_paths="${RUNNER_TEMP}/openadapt-desktop-changed-paths.txt"
           : > "${changed_paths}"
-          if [ "${EVENT_NAME}" = "push" ]; then
+          if [ "${EVENT_NAME}" = "merge_group" ]; then
+            # A queue group is scoped like a push to main: diff the group's
+            # head against the main commit it was built on.
+            BEFORE_SHA="${GROUP_BASE_SHA}"
+            git fetch --no-tags --depth=1 origin "${GROUP_BASE_SHA}" || true
+          fi
+          if [ "${EVENT_NAME}" = "push" ] || [ "${EVENT_NAME}" = "merge_group" ]; then
             before="${BEFORE_SHA}"
             if [ -z "${before}" ] || [ "${before}" = "0000000000000000000000000000000000000000" ]; then
               before="$(git rev-parse HEAD^)"

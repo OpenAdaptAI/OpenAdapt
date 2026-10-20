@@ -85,3 +85,10 @@ def test_empty_push_fails_toward_the_complete_matrix() -> None:
 def test_absolute_or_parent_path_is_refused() -> None:
     with pytest.raises(ValueError, match="repository-relative"):
         classify_build_scope("push", ["../outside"])
+
+
+def test_merge_queue_group_is_scoped_like_main() -> None:
+    assert classify_build_scope("merge_group", ["src/App.tsx"]) == classify_build_scope(
+        "push", ["src/App.tsx"]
+    )
+    assert classify_build_scope("merge_group", []).run_native is True

@@ -4,8 +4,9 @@ name: CodeQL
 on:
   push:
     branches: [main]
+  # Every pull request, whatever its base, plus each merge queue group.
   pull_request:
-    branches: [main]
+  merge_group:
   schedule:
     - cron: "23 5 * * 1"
 

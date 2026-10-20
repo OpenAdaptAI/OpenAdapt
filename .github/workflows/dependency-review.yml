@@ -2,8 +2,11 @@ name: Dependency Review
 
 # SOC 2: dependency-review (OA-C-24). Flags vulnerable/denied deps on PRs.
 on:
+  # Every pull request, whatever its base, so a stacked PR reaches main with
+  # this required check already reported.
   pull_request:
-    branches: [main]
+  # The merge queue tests each group before it lands on main.
+  merge_group:
 
 permissions:
   contents: read
@@ -22,6 +25,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Dependency Review
+        if: github.event_name != 'merge_group'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
+      # A queue group has no pull request in its payload: compare the group's
+      # head with the main commit it was built on.
+      - name: Dependency Review (merge queue group)
+        if: github.event_name == 'merge_group'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          base-ref: ${{ github.event.merge_group.base_sha }}
+          head-ref: ${{ github.event.merge_group.head_sha }}
