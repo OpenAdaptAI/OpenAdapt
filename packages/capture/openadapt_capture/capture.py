@@ -1322,6 +1322,16 @@ class CaptureSession:
             return config.get("capture_desktop")
         return None
 
+    def narration(self) -> list | None:
+        """Scrubbed spoken narration as timed sentences, or None.
+
+        Reads ``narration.json`` (see :mod:`openadapt_capture.narration`).
+        Times are on the recording clock, like action timestamps.
+        """
+        from openadapt_capture.narration import read_narration
+
+        return read_narration(self.capture_dir)
+
     @property
     def audio_start_time(self) -> float | None:
         """Start timestamp of the audio recording, or None if unavailable."""

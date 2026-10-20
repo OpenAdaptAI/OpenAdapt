@@ -194,7 +194,49 @@ later.verified, later.model_calls, later.receipt_outcome   # True, 0, "VERIFIED"
 
 `FirstRunCompiler` exposes the same steps one at a time (`record`,
 `confirm_checks`, `admit`, `emit`, `run`) for a flow where a person confirms
-later.
+later. A draft waiting for a person is admitted at a terminal with:
+
+```bash
+openadapt-flow compile-agent admit <task dir> --admit-as "Dana Reviewer" \
+    --canary-param note="Canary test note"
+```
+
+It shows the person the proposed checks (unless someone confirmed them
+already), the steps, and the canary result, and asks them to confirm each.
+`--admit-key` admits with a registered key instead, once the checks are
+confirmed.
+
+## An agent over MCP
+
+`openadapt-agent serve --teach verify.yaml` puts this pipeline behind MCP
+tools, so an agent connected to the server (Claude Code, Codex, any MCP
+client) teaches a task without leaving its conversation: `teach_start`,
+`teach_observe` and `teach_act` for run 1, `teach_finish` for the record check
+and the draft, `teach_confirm_checks` for a person to confirm the checks in the
+client's form, and `teach_admit` for the canaries and the admission. The agent
+is the inner agent here: `compile_agent.driven.DrivenRun` runs
+`FirstRunCompiler.record` on a thread of its own and hands each tool call's
+action to the harness. Admission follows [JIT_ADMISSION.md](JIT_ADMISSION.md):
+the server records as the registered agent whose key the operator gave it,
+so admitting is self-admission and needs a policy with
+`allow_self_admission`; without a key and policy, a person admits with the
+command above. An admitted program joins the server's `list_workflows` and
+gets a `taught_<name>` tool. See the
+[agent README](../../agent/README.md#teach-a-new-workflow-from-your-agent).
+
+The MCP tools also run on Windows, macOS, Linux, RDP and Citrix: pass
+`FirstRunCompiler(surface=<deployment backend section>)`. Off the web the
+harness is `SurfaceHarness`. It reads the authoring session's
+accessibility tree (no values, no window titles). It can't read which form or
+row a control is in, so it gates more than the web harness: every click except
+one, named by its ref, on a text field, a check box, a tab or a control whose
+label plainly navigates (Open, New, Cancel), and every click at x,y, Enter,
+typing outside a text field, single-letter keys and shortcuts. A person
+approves each gated action (the hold); without a hold, it is refused. Over MCP
+the approval is bound to the run, the exact action and the number of actions
+performed so far, so it covers only what the person was shown. On
+RDP and Citrix the canary is refused until pixel identity is qualified
+([BACKEND_PARITY.md](BACKEND_PARITY.md)).
 
 Any agent works if it has a `dialect` (an `openadapt_flow.jit` action format)
 and `drive(request, harness)`. `ScriptedAgent` follows a list of steps by
@@ -235,13 +277,12 @@ object with `messages.create`; the tests pass a fake.
 
 ## Limits
 
-- Web apps only so far. The JIT captures and runs through a Playwright
-  browser, and the harness reads the page's DOM. A Windows, macOS, Linux, RDP
-  or Citrix target (`--backend`, or a `--config` whose `backend.kind` names
-  one) and any URL that is not http(s) are refused before anything runs; there
-  is no fallback to a browser. Those surfaces need the JIT to drive the
-  backends `record --backend` uses and an observer over UI Automation,
-  Accessibility, AT-SPI or pixels.
+- The `compile-agent` command runs web apps only so far: its Claude agent
+  reads the page's DOM listing. A Windows, macOS, Linux, RDP or Citrix target
+  (`--backend`, or a `--config` whose `backend.kind` names one) and any URL
+  that is not http(s) are refused before anything runs; there is no fallback
+  to a browser. The MCP teach tools run the same pipeline on those surfaces
+  (above).
 - The save gate recognizes a click that commits by the control's label. An
   icon with no label, or a label that names no write ("OK"), is not gated in
   run 1; the record check after run 1 still refuses a wrong record, but only

@@ -1,4 +1,12 @@
-"""``openadapt-flow run --self-repair``: the CLI over :mod:`openadapt_flow.repair.self_repair`.
+"""``openadapt-flow run`` with repair on: the CLI over :mod:`openadapt_flow.repair.self_repair`.
+
+Repair is the default. When a repair agent is configured (``--repair-agent``
+or ``repair.agent`` in the deployment file), every run hands a stop that wrote
+nothing to it (:mod:`openadapt_flow.repair.auto_repair`), and each stop goes in
+the repair store's ``auto-repair/ledger.jsonl``. ``--no-auto-repair`` (or
+``repair.auto: false``) turns it off. ``--self-repair`` asks for it explicitly:
+then a run that can't be repaired is refused; in the automatic mode it runs
+plainly and says why repair is off for it.
 
 ``_cmd_run`` admits the bundle as usual and then hands the run here instead of
 to the plain replay. The first run is the ordinary run: the same
@@ -23,7 +31,12 @@ from typing import TYPE_CHECKING, Any, Callable, Optional
 if TYPE_CHECKING:
     from openadapt_flow.repair.self_repair import AppSession
 
-__all__ = ["add_self_repair_flags", "cmd_run_self_repair", "load_agent"]
+__all__ = [
+    "add_self_repair_flags",
+    "cmd_run_self_repair",
+    "load_agent",
+    "resolve_auto_repair",
+]
 
 
 def add_self_repair_flags(p: argparse.ArgumentParser) -> None:
@@ -33,12 +46,22 @@ def add_self_repair_flags(p: argparse.ArgumentParser) -> None:
         "self-repair",
         "When the run halts before any effect because a screen changed, a "
         "repair agent proposes a fix, Flow probes it up to the save, and one "
-        "person approves it before the run resumes. See docs/SELF_REPAIR.md.",
+        "person approves it before the run resumes. On by default whenever a "
+        "repair agent is configured (here or in the deployment file's repair "
+        "section). See docs/SELF_REPAIR.md.",
     )
     group.add_argument(
         "--self-repair",
         action="store_true",
-        help="Turn on self-repair for this run (web runs against --url).",
+        help=(
+            "Require self-repair for this run (web runs against --url): refuse "
+            "the run when it can't be repaired."
+        ),
+    )
+    group.add_argument(
+        "--no-auto-repair",
+        action="store_true",
+        help="Do not hand stops to the repair agent; a stop waits for a person.",
     )
     group.add_argument(
         "--repair-agent",
@@ -56,7 +79,7 @@ def add_self_repair_flags(p: argparse.ArgumentParser) -> None:
     group.add_argument(
         "--repair-screen-share-mode",
         choices=["scrubbed_only", "allow_unscrubbed"],
-        default="scrubbed_only",
+        default=None,
         help="Scrub screens before the agent sees them (default) or not.",
     )
     group.add_argument(
@@ -71,13 +94,13 @@ def add_self_repair_flags(p: argparse.ArgumentParser) -> None:
     )
     group.add_argument(
         "--repair-store",
-        default="repair-store",
+        default=None,
         help="The repair store the candidate enters (default repair-store/).",
     )
     group.add_argument(
         "--repair-attempts",
         type=int,
-        default=3,
+        default=None,
         help="Proposals tried for one halt (default 3).",
     )
     group.add_argument(
@@ -94,10 +117,50 @@ def add_self_repair_flags(p: argparse.ArgumentParser) -> None:
     group.add_argument(
         "--repair-approval-wait",
         type=float,
-        default=900.0,
+        default=None,
         metavar="SECONDS",
         help="How long to wait for a person's answer (default 900).",
     )
+
+
+def resolve_auto_repair(args: argparse.Namespace, cfg: Any) -> str:
+    """Fill the repair flags from the deployment and say how repair runs.
+
+    Returns ``explicit`` (``--self-repair``), ``auto`` (an agent is
+    configured and nothing turned it off) or ``off``. A flag on the command
+    line wins over the deployment's ``repair`` section.
+    """
+
+    section = getattr(cfg, "repair", None)
+    fill = {
+        "repair_agent": "agent",
+        "repair_screen_access_by": "screen_access_by",
+        "repair_screen_share_mode": "screen_share_mode",
+        "repair_store": "store",
+        "repair_attempts": "attempts",
+        "repair_approval_wait": "approval_wait_s",
+        "repair_model_provider": "model_provider",
+        "repair_model_key_file": "model_key_file",
+    }
+    defaults = {
+        "repair_screen_share_mode": "scrubbed_only",
+        "repair_store": "repair-store",
+        "repair_attempts": 3,
+        "repair_approval_wait": 900.0,
+    }
+    for flag, name in fill.items():
+        if getattr(args, flag, None) is None:
+            value = getattr(section, name, None) if section is not None else None
+            setattr(args, flag, value if value is not None else defaults.get(flag))
+    if not getattr(args, "repair_fault_url", None) and section is not None:
+        args.repair_fault_url = list(section.fault_urls)
+    if getattr(args, "self_repair", False):
+        return "explicit"
+    if getattr(args, "no_auto_repair", False):
+        return "off"
+    if section is not None and not section.auto:
+        return "off"
+    return "auto" if args.repair_agent else "off"
 
 
 def load_agent(spec: str) -> Any:
@@ -203,10 +266,14 @@ class CliTarget:
         run_dir: Path,
         *,
         approval_gate: Any = None,
+        gui_only: bool = False,
     ) -> Any:
         from urllib.parse import urlsplit
 
-        from openadapt_flow.repair.self_repair import SelfRepairRefused
+        from openadapt_flow.repair.self_repair import (
+            REPAIR_GUI_ONLY,
+            SelfRepairRefused,
+        )
         from openadapt_flow.run_gate import (
             build_runtime_authorization,
             evaluate_run_gate,
@@ -258,6 +325,11 @@ class CliTarget:
             execution_entry_url=page_url,
             approval_gate=gate,
             deployment_surface=self.backend_cfg.deployment_surface,
+            # A probe or the resumed run of a repaired bundle runs the GUI
+            # step the person approved (repair.self_repair.keep_gui_for_repair).
+            api_steps_off_reason=(
+                None if original and not gui_only else REPAIR_GUI_ONLY
+            ),
         )
 
 
@@ -280,10 +352,17 @@ def cmd_run_self_repair(
     finish: Callable[..., int],
     default_run_dir: Callable[[], Path],
     attest_pre_state: Optional[Callable[..., None]] = None,
-) -> int:
-    """Run the admitted bundle with self-repair on. Returns the exit code."""
+    mode: str = "explicit",
+) -> Optional[int]:
+    """Run the admitted bundle with self-repair on. Returns the exit code.
+
+    In ``auto`` mode a run that can't be repaired is not refused: this
+    prints why repair is off for it and returns ``None`` before anything
+    ran, and the caller runs it plainly.
+    """
 
     from openadapt_flow.cli_hints import command
+    from openadapt_flow.repair.auto_repair import AutoRepair
     from openadapt_flow.repair.self_repair import (
         ScreenAccess,
         SelfRepair,
@@ -292,7 +371,23 @@ def cmd_run_self_repair(
 
     url = args.url or cfg.backend.url
     refusal = _refusal(args, backend_cfg, url)
+    if refusal is None and (
+        worklists
+        or getattr(args, "workers", None)
+        or getattr(args, "readback_window", None)
+    ):
+        refusal = (
+            "a worklist run halts after earlier items saved; repair a worklist "
+            "with WorklistQueue (docs/SELF_REPAIR.md)"
+        )
     if refusal is not None:
+        if mode == "auto":
+            print(
+                f"Auto-repair is off for this run: {refusal}. A stop waits for a "
+                "person.",
+                flush=True,
+            )
+            return None
         print(f"run REFUSED: --self-repair: {refusal}. Nothing was executed.")
         return 2
     model_key = None
@@ -317,24 +412,25 @@ def cmd_run_self_repair(
                 flush=True,
             )
 
+        target = CliTarget(
+            args,
+            bundle=bundle,
+            url=url,
+            cfg=cfg,
+            backend_cfg=backend_cfg,
+            gate_kwargs=gate_kwargs,
+            params=params,
+            worklists=worklists,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+            durable=durable,
+            allow_egress=allow_egress,
+            run_replayer=run_replayer,
+            approval_gate_for_run=approval_gate_for_run,
+        )
         repair = SelfRepair(
             agent,
-            CliTarget(
-                args,
-                bundle=bundle,
-                url=url,
-                cfg=cfg,
-                backend_cfg=backend_cfg,
-                gate_kwargs=gate_kwargs,
-                params=params,
-                worklists=worklists,
-                effect_verifier=effect_verifier,
-                api_actuator=api_actuator,
-                durable=durable,
-                allow_egress=allow_egress,
-                run_replayer=run_replayer,
-                approval_gate_for_run=approval_gate_for_run,
-            ),
+            target,
             store=Path(args.repair_store),
             screen_access=ScreenAccess(
                 enabled_by=args.repair_screen_access_by,
@@ -347,14 +443,28 @@ def cmd_run_self_repair(
             on_approval_request=announce,
         )
     except (SelfRepairRefused, ImportError, AttributeError, ValueError) as exc:
+        if mode == "auto":
+            print(
+                f"Auto-repair is off for this run: {exc}. A stop waits for a person.",
+                flush=True,
+            )
+            return None
         print(f"run REFUSED: --self-repair: {exc}. Nothing was executed.")
         return 2
     run_dir = Path(args.run_dir) if args.run_dir else default_run_dir()
     if attest_pre_state is not None:
         # Same point as a plain run: admitted, nothing actuated yet.
         attest_pre_state(run_dir, args)
+    from openadapt_flow.backends._browser_process import shared_browser
+
+    auto = AutoRepair(repair)
     try:
-        result = repair.run(bundle, run_dir)
+        # The halted session stays open while each probe opens its own. Two
+        # Playwright drivers can't run on one thread, so every session of
+        # this run shares one browser process (each still gets a fresh
+        # context: no cookies or storage carry over).
+        with shared_browser(headless=not target.headed):
+            result = auto.run(bundle, run_dir)
     except SelfRepairRefused as exc:
         print(f"Self-repair stopped: {exc}. Nothing was saved by self-repair.")
         return 1
@@ -375,4 +485,6 @@ def cmd_run_self_repair(
             f"  candidate {result.candidate.candidate_id} [{result.candidate.state}] "
             f"in {args.repair_store}"
         )
+    if evidence.status != "not_needed":
+        print(f"  stop logged in {auto.ledger.path}")
     return finish(result.run_dir, result.report, args, backend_kind="web")

@@ -518,6 +518,11 @@ def _emit_graph(
                     ]
                 )
                 node.halts.append("halts until an authenticated answer is signed")
+        source = workflow.guard_sources.get(sid) if not prefix else None
+        if source is not None:
+            node.guard_reason = source.sentence
+            node.guard_certified_by = source.certified_by
+            node.badges.append("narrated rule")
         nodes.append(node)
         # exception handler edge
         if state.on_exception:
@@ -557,6 +562,8 @@ def _emit_graph(
                 tr.label or (guard_summary or ""),
                 guard=guard_summary,
             )
+            if source is not None and tr.guard is not None:
+                edges[-1].guard_reason = source.sentence
 
 
 def _ordered_state_ids(graph: "ProgramGraph") -> list[str]:

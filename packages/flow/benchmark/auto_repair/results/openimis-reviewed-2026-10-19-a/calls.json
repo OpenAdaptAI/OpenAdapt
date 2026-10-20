@@ -1,0 +1,91 @@
+{
+  "model": "claude-sonnet-5-5",
+  "cost_usd": 0.089414,
+  "calls": [
+    {
+      "turn": 1,
+      "started_s": 1792431229.755805,
+      "ended_s": 1792431236.859002,
+      "input_tokens": 6668,
+      "output_tokens": 201,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cost_usd": 0.015346,
+      "actions": [],
+      "request_id": "req_011CgBzp5MGfKRJWeMqgwwY4",
+      "stop_reason": "end_turn"
+    },
+    {
+      "turn": 1,
+      "started_s": 1792431284.658227,
+      "ended_s": 1792431290.4752781,
+      "input_tokens": 6521,
+      "output_tokens": 596,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cost_usd": 0.019002,
+      "actions": [],
+      "request_id": "req_011CgBzt7tRpRJEkZM5DxSVo",
+      "stop_reason": "end_turn"
+    },
+    {
+      "turn": 1,
+      "started_s": 1792431319.795273,
+      "ended_s": 1792431326.378529,
+      "input_tokens": 6521,
+      "output_tokens": 597,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cost_usd": 0.019012,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              1193,
+              752
+            ]
+          }
+        }
+      ],
+      "request_id": "req_011CgBzviLvGpKRcwBtbP9Ca",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 2,
+      "started_s": 1792431326.678208,
+      "ended_s": 1792431330.611611,
+      "input_tokens": 6548,
+      "output_tokens": 396,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cost_usd": 0.017056,
+      "actions": [
+        {
+          "name": "left_click",
+          "input": {
+            "coordinate": [
+              1193,
+              752
+            ]
+          }
+        }
+      ],
+      "request_id": "req_011CgBzwDh25KrwQ9HH2hYpU",
+      "stop_reason": "tool_use"
+    },
+    {
+      "turn": 3,
+      "started_s": 1792431330.642976,
+      "ended_s": 1792431336.287853,
+      "input_tokens": 6564,
+      "output_tokens": 587,
+      "cache_read_input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cost_usd": 0.018998,
+      "actions": [],
+      "request_id": "req_011CgBzwWVKAUrPTdK2Trzub",
+      "stop_reason": "end_turn"
+    }
+  ]
+}

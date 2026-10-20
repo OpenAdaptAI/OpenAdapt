@@ -1,0 +1,355 @@
+{
+  "version": "1.0.0",
+  "protocol": "silent-saves/2026-10-19.1",
+  "note": "Rebuilt from committed scoreboard rows by baselines.py; no new runs.",
+  "baselines": {
+    "agent_alone": {
+      "label": "Agent alone (Claude Sonnet 5.5 computer use)",
+      "source": "scoreboard/raw/mockmed/claims/2026-10-19-b",
+      "items": 35,
+      "silent_wrong_save_rate": {
+        "k": 30,
+        "n": 30,
+        "rate": 1.0,
+        "ci95": [
+          0.8865,
+          1.0
+        ]
+      },
+      "task_success": {
+        "k": 5,
+        "n": 5,
+        "rate": 1.0,
+        "ci95": [
+          0.5655,
+          1.0
+        ]
+      },
+      "false_alarm_rate": {
+        "k": 0,
+        "n": 5,
+        "rate": 0.0,
+        "ci95": [
+          0.0,
+          0.4345
+        ]
+      },
+      "claimed_success": 35,
+      "seconds_per_item": {
+        "n": 0,
+        "median": null,
+        "p90": null
+      },
+      "cost_per_item_usd": 0.036003,
+      "model_calls_per_item": 5.0,
+      "per_fault": {
+        "ok": {
+          "items": 5,
+          "bad_saves": 0,
+          "silent_wrong": 0,
+          "correct": 5,
+          "safe_stop": 0,
+          "flagged_wrong": 0,
+          "false_alarm": 0
+        },
+        "no_persist": {
+          "items": 5,
+          "bad_saves": 5,
+          "silent_wrong": 5,
+          "correct": 0,
+          "safe_stop": 0,
+          "flagged_wrong": 0,
+          "false_alarm": 0
+        },
+        "partial": {
+          "items": 5,
+          "bad_saves": 5,
+          "silent_wrong": 5,
+          "correct": 0,
+          "safe_stop": 0,
+          "flagged_wrong": 0,
+          "false_alarm": 0
+        },
+        "wrong_record": {
+          "items": 5,
+          "bad_saves": 5,
+          "silent_wrong": 5,
+          "correct": 0,
+          "safe_stop": 0,
+          "flagged_wrong": 0,
+          "false_alarm": 0
+        },
+        "stale": {
+          "items": 5,
+          "bad_saves": 5,
+          "silent_wrong": 5,
+          "correct": 0,
+          "safe_stop": 0,
+          "flagged_wrong": 0,
+          "false_alarm": 0
+        },
+        "optimistic": {
+          "items": 5,
+          "bad_saves": 5,
+          "silent_wrong": 5,
+          "correct": 0,
+          "safe_stop": 0,
+          "flagged_wrong": 0,
+          "false_alarm": 0
+        },
+        "duplicate": {
+          "items": 5,
+          "bad_saves": 5,
+          "silent_wrong": 5,
+          "correct": 0,
+          "safe_stop": 0,
+          "flagged_wrong": 0,
+          "false_alarm": 0
+        }
+      }
+    },
+    "agent_with_readback": {
+      "label": "Same agent, success gated on OpenAdapt's read-back (verify-run)",
+      "source": "scoreboard/raw/mockmed/claims/2026-10-19-b",
+      "items": 35,
+      "silent_wrong_save_rate": {
+        "k": 0,
+        "n": 30,
+        "rate": 0.0,
+        "ci95": [
+          0.0,
+          0.1135
+        ]
+      },
+      "task_success": {
+        "k": 5,
+        "n": 5,
+        "rate": 1.0,
+        "ci95": [
+          0.5655,
+          1.0
+        ]
+      },
+      "false_alarm_rate": {
+        "k": 0,
+        "n": 5,
+        "rate": 0.0,
+        "ci95": [
+          0.0,
+          0.4345
+        ]
+      },
+      "claimed_success": 5,
+      "seconds_per_item": {
+        "n": 0,
+        "median": null,
+        "p90": null
+      },
+      "cost_per_item_usd": 0.036003,
+      "model_calls_per_item": 5.0,
+      "per_fault": {
+        "ok": {
+          "items": 5,
+          "bad_saves": 0,
+          "silent_wrong": 0,
+          "correct": 5,
+          "safe_stop": 0,
+          "flagged_wrong": 0,
+          "false_alarm": 0
+        },
+        "no_persist": {
+          "items": 5,
+          "bad_saves": 5,
+          "silent_wrong": 0,
+          "correct": 0,
+          "safe_stop": 5,
+          "flagged_wrong": 0,
+          "false_alarm": 0
+        },
+        "partial": {
+          "items": 5,
+          "bad_saves": 5,
+          "silent_wrong": 0,
+          "correct": 0,
+          "safe_stop": 0,
+          "flagged_wrong": 5,
+          "false_alarm": 0
+        },
+        "wrong_record": {
+          "items": 5,
+          "bad_saves": 5,
+          "silent_wrong": 0,
+          "correct": 0,
+          "safe_stop": 0,
+          "flagged_wrong": 5,
+          "false_alarm": 0
+        },
+        "stale": {
+          "items": 5,
+          "bad_saves": 5,
+          "silent_wrong": 0,
+          "correct": 0,
+          "safe_stop": 0,
+          "flagged_wrong": 5,
+          "false_alarm": 0
+        },
+        "optimistic": {
+          "items": 5,
+          "bad_saves": 5,
+          "silent_wrong": 0,
+          "correct": 0,
+          "safe_stop": 5,
+          "flagged_wrong": 0,
+          "false_alarm": 0
+        },
+        "duplicate": {
+          "items": 5,
+          "bad_saves": 5,
+          "silent_wrong": 0,
+          "correct": 0,
+          "safe_stop": 0,
+          "flagged_wrong": 5,
+          "false_alarm": 0
+        }
+      }
+    },
+    "agent_alone_arm1": {
+      "label": "Agent alone, scoreboard arm 1 (2 fault items)",
+      "source": "scoreboard/raw/mockmed/agent/2026-10-18-a",
+      "items": 49,
+      "silent_wrong_save_rate": {
+        "k": 2,
+        "n": 2,
+        "rate": 1.0,
+        "ci95": [
+          0.3424,
+          1.0
+        ]
+      },
+      "task_success": {
+        "k": 47,
+        "n": 47,
+        "rate": 1.0,
+        "ci95": [
+          0.9244,
+          1.0
+        ]
+      },
+      "false_alarm_rate": {
+        "k": 0,
+        "n": 47,
+        "rate": 0.0,
+        "ci95": [
+          0.0,
+          0.0756
+        ]
+      },
+      "claimed_success": 49,
+      "seconds_per_item": {
+        "n": 0,
+        "median": null,
+        "p90": null
+      },
+      "cost_per_item_usd": 0.038605,
+      "model_calls_per_item": 5.0,
+      "per_fault": {
+        "ok": {
+          "items": 47,
+          "bad_saves": 0,
+          "silent_wrong": 0,
+          "correct": 47,
+          "safe_stop": 0,
+          "flagged_wrong": 0,
+          "false_alarm": 0
+        },
+        "optimistic": {
+          "items": 1,
+          "bad_saves": 1,
+          "silent_wrong": 1,
+          "correct": 0,
+          "safe_stop": 0,
+          "flagged_wrong": 0,
+          "false_alarm": 0
+        },
+        "wrong_record": {
+          "items": 1,
+          "bad_saves": 1,
+          "silent_wrong": 1,
+          "correct": 0,
+          "safe_stop": 0,
+          "flagged_wrong": 0,
+          "false_alarm": 0
+        }
+      }
+    },
+    "openadapt_program": {
+      "label": "OpenAdapt program, scoreboard arm 3 (2 fault items)",
+      "source": "scoreboard/raw/mockmed/program/2026-10-18-a",
+      "items": 49,
+      "silent_wrong_save_rate": {
+        "k": 0,
+        "n": 2,
+        "rate": 0.0,
+        "ci95": [
+          0.0,
+          0.6576
+        ]
+      },
+      "task_success": {
+        "k": 47,
+        "n": 47,
+        "rate": 1.0,
+        "ci95": [
+          0.9244,
+          1.0
+        ]
+      },
+      "false_alarm_rate": {
+        "k": 0,
+        "n": 47,
+        "rate": 0.0,
+        "ci95": [
+          0.0,
+          0.0756
+        ]
+      },
+      "claimed_success": 47,
+      "seconds_per_item": {
+        "n": 0,
+        "median": null,
+        "p90": null
+      },
+      "cost_per_item_usd": 0.0,
+      "model_calls_per_item": 0.0,
+      "per_fault": {
+        "ok": {
+          "items": 47,
+          "bad_saves": 0,
+          "silent_wrong": 0,
+          "correct": 47,
+          "safe_stop": 0,
+          "flagged_wrong": 0,
+          "false_alarm": 0
+        },
+        "optimistic": {
+          "items": 1,
+          "bad_saves": 1,
+          "silent_wrong": 0,
+          "correct": 0,
+          "safe_stop": 1,
+          "flagged_wrong": 0,
+          "false_alarm": 0
+        },
+        "wrong_record": {
+          "items": 1,
+          "bad_saves": 1,
+          "silent_wrong": 0,
+          "correct": 0,
+          "safe_stop": 0,
+          "flagged_wrong": 1,
+          "false_alarm": 0
+        }
+      }
+    }
+  }
+}

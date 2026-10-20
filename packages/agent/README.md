@@ -36,7 +36,7 @@ openadapt-agent emit-skill <bundle> --out ~/.claude/skills
 | Type the values and save | Staff, retyping your agent's output | OpenAdapt, in the same screens staff use |
 | Confirm the save | Staff, if they look again | OpenAdapt reads the record back before it reports done |
 | Something doesn't match | Staff notice while typing, or someone finds it later | OpenAdapt stops before saving, and the run waits for a person |
-| What staff handle | Every document | Runs that stopped and records to check. Nobody is notified, so someone checks the list of stopped runs. |
+| What staff handle | Every document | Runs that stopped and records to check. For work in a [task-ledger job](#track-a-long-job), each one is a question on their phone or desktop; otherwise someone checks the list of stopped runs. |
 
 For scale, two hospital time studies put keying one faxed referral into an electronic record at about 10 to 12 minutes ([UCSF, JAMIA Open 2020](https://pmc.ncbi.nlm.nih.gov/articles/PMC7660949/); [Calderdale and Huddersfield NHS Foundation Trust, HFMA 2024](https://www.hfma.org.uk/system/files/2024-04/Using%20digital%20technologies%20to%20process%20admin%20tasks%20Case%20Study%20v7.pdf)). We don't publish a time-saved number until a deployment measures one.
 
@@ -238,6 +238,8 @@ asyncio.run(main())
 
 The SDK starts the server with only a few environment variables. To pass others, such as `OPENADAPT_BUNDLE_KEY`, add `env=` to `StdioServerParameters`.
 
+To let your agent add workflows itself, see [Teach a new workflow from your agent](#teach-a-new-workflow-from-your-agent).
+
 [scripts/smoke_client.py](scripts/smoke_client.py) is a fuller example that runs every sandbox case. From a clone of this repository, run `pip install -e .`, then:
 
 ```bash
@@ -284,7 +286,7 @@ Flow's [execution profiles](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/p
 | `--timeout SECONDS` | How long one run may work (default 600). Time a person spends approving a save doesn't count. A run stopped at the limit is `not_sure_if_saved`. |
 | `--approval-mode MODE` | Whether each save waits for approval. Without it, Flow decides, and a run stops before each save until it's approved (`each_item`). `not_gated` turns that off for every run this server starts; each result records it under `technical.approval_mode`. |
 | `--delegate-approvals AGENT_ID` | Lets your agent answer a waiting save as `AGENT_ID` (an opaque id such as `agent:intake-bot`), with `list_approval_requests` and `answer_approval_request`. Flow accepts the answer only where the run's approver policy allows an agent for that step, and records the agent as the approver. By default only a person may answer. Needs openadapt-flow 2.2.0 or later. |
-| `--admissions DIR` | Adds `prepare_admission`, `list_admissions` and `decide_admission`, the same steps as `openadapt-flow admit`, over recordings in `DIR/recordings` and shadow candidates in `DIR/shadow-candidates`. A person decides in your client's form. With `--delegate-approvals` and `--approver-grant`, your agent decides as that approver instead, under a grant a person signed that names it. It never decides an admission it prepared or one prepared on a server without `--delegate-approvals`, and never under the `regulated` policy pack. Accepting sets the workflow's runs to `problems_only`. The record names who decided, and for your agent the grant and who signed it. Not released yet. |
+| `--admissions DIR` | Adds `prepare_admission`, `list_admissions` and `decide_admission`, the same steps as `openadapt-flow admit`, over recordings in `DIR/recordings` and shadow candidates in `DIR/shadow-candidates`. A person decides in your client's form. With `--delegate-approvals` and `--approver-grant`, your agent decides as that approver instead, under a grant a person signed that names it. It never decides an admission it prepared or one prepared on a server without `--delegate-approvals`, and never under the `regulated` policy pack. Accepting sets the workflow's runs to `problems_only`. The record names who decided, and for your agent the grant and who signed it. |
 | `--approver-grant FILE` | With `--admissions` and `--delegate-approvals`: the approver grant a person signed (`openadapt-flow approver-grant sign`) that lets your agent decide admissions. Flow checks it on every decision. Without it only a person decides. |
 | `--headed` | Shows the browser. A person needs it to continue or skip a stopped run in a web app. |
 | `--extra-run-arg ARG`, `--flow-cli CMD` | Change how Flow is called. Either one can relax Flow's checks, for example `--extra-run-arg=--allow-unencrypted`. |
@@ -304,7 +306,7 @@ With `--bundles`, the server also registers read-only tools for workflows and ru
 
 ### Decide stopped runs
 
-A run that stops for a person waits in Flow's Needs Attention list on that computer. Nobody is notified. `list_needs_attention` shows the list.
+A run that stops for a person waits in Flow's Needs Attention list on that computer. `list_needs_attention` shows the list. Nobody is notified, unless the run is part of a [task-ledger job](#track-a-long-job): then the ledger asks a person on their phone or desktop.
 
 With `--mode attended`, your agent can send a decision with `continue_attention`, `skip_attention`, `reject_attention`, `teach_attention`, or `escalate_attention`. The person at the computer confirms each decision in a form. Continue and skip also need `--config`. If the client can't show forms, the server refuses the decision, and the person uses Flow's console instead:
 
@@ -384,6 +386,120 @@ ChatGPT and Claude in a web browser can't start a server on your computer. To re
 
 It claims the job, polls openadapt.ai over outgoing HTTPS, and asks you in the terminal before a chat account may drive it. Don't confuse it with the launcher's `openadapt connect`, which pairs a computer with OpenAdapt Cloud. [docs/MAILBOX_CLI.md](docs/MAILBOX_CLI.md) has the details.
 
+### Guard an agent you already run
+
+If your agent already drives a Chromium (a Playwright script, Playwright MCP, browser-use, or a computer-use agent with a browser), you don't have to move it onto these tools. Start its browser with a DevTools port, which is the one line you add, and run the guard next to it for each task:
+
+```bash
+openadapt-flow guard --cdp http://127.0.0.1:9222 --config guard.yaml --task task.json --out runs/task-0001
+```
+
+The guard holds every save the agent's tab sends until the record on the screen is the one `task.json` names. When it isn't, the save is blocked and the agent's page says why. A save that goes through is read back from the system of record (`VERIFIED`, `REFUTED` or `RECONCILIATION_REQUIRED`). `--observe-only` never blocks and shows what the guard would have done.
+
+When a run reads back correctly, it becomes a draft in the teach dir that `guard.yaml` names, with a record check built from the app's own reads. A person confirms the check and admits the draft (`openadapt-flow compile-agent admit`); then `serve --teach verify.yaml --teach-dir <that dir>` serves it as a `taught_<name>` tool that makes no model calls. [GUARD_AN_AGENT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/GUARD_AN_AGENT.md) has the files, what counts as a save, and the measurements.
+
+### Teach a new workflow from your agent
+
+`serve --teach` lets your agent add a workflow it doesn't have yet, without leaving the conversation. It does the task once through OpenAdapt; OpenAdapt checks the record it saved, compiles the run, and once the run is admitted your agent calls it as a tool. Every later call runs the compiled program with no model calls and reads the save back.
+
+```bash
+claude mcp add --scope user openadapt-teach -- uvx --python 3.12 --from 'openadapt-agent[tutorial]' openadapt-agent serve --teach verify.yaml --url https://emr-test.example.org --runs-dir ~/.openadapt/runs
+```
+
+`verify.yaml` needs only a `verifier:` section that reads the app's records (`rest`, `sql`, `fhir`, `graphql` or `file`), the same file `openadapt-flow record --verify` uses. The first run makes a real entry in the app, so point `--url` at a test copy with test records.
+
+Your agent then:
+
+1. Calls `teach_start` with the task (`{note}` for each input), this run's `inputs`, the `record_fields` the saved record must have (such as its patient id), and `on_screen`, the record's identity as the screen shows it (a name and an MRN).
+2. Calls `teach_observe` and `teach_act` until the task is done. On the web, `teach_observe` lists the page as short lines with a ref for each control, and before every save OpenAdapt checks that the record's identity is shown next to the control. A save on the wrong record is refused and ends the run.
+3. Calls `teach_finish`. OpenAdapt compiles the run and reads the app's records: exactly one record must have appeared, with every `record_fields` value and every input. The result is the draft: its steps, its inputs, the proposed record check, and what still needs a person.
+4. Calls `teach_confirm_checks`. Your MCP client shows a person the proposed check, and only their answer there, with their name, confirms it. Your agent has no argument that confirms it.
+5. Calls `teach_admit` with `canary_inputs`, the values each canary saves. A canary is a real save on the same record, so use values that are safe there.
+
+`teach_admit` admits only under the rules in [JIT_ADMISSION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT_ADMISSION.md). The operator starts the server with `--teach-key agent.pem --teach-policy signed-policy.json`: the key of the agent registered with `openadapt-flow jit register --role agent`, and an admission policy a person signed with `openadapt-flow jit sign-policy`. The server records the run as that agent, so admitting it is self-admission, which the policy must allow (`allow_self_admission`). Without a key and a policy, `teach_admit` refuses and returns the command a person runs at a terminal instead:
+
+```bash
+openadapt-flow compile-agent admit <task dir> --admit-as "<your name>" --canary-param note="Canary test note"
+```
+
+Once the program is admitted, it is in `list_workflows` and `run_workflow` at once and has its own `taught_<name>` tool, and the server sends `notifications/tools/list_changed` to clients that support it. A server started later lists every program taught in its `--teach-dir`.
+
+It works on a web app (`--url`) and on the app a deployment file's `backend:` section names (`--config deploy.yaml`): a native Windows, macOS or Linux window, or a local RDP or Citrix client window. Off the web, OpenAdapt can't read which record a form shows, so a person approves, in your client's form, every action that might save: any click except on a text field, a check box, a tab or a control that plainly navigates (Open, New, Cancel), any click at x,y, Enter, typing outside a text field, and shortcuts. Each answer covers that one action on the screen as it was; if anything changes first, the action isn't done. A client without forms can't save. RDP and Citrix have no control tree, and the Windows, macOS and Linux backends don't list controls yet, so off the web your agent needs `--teach-screens scrubbed` to see the screen, and clicks x,y pixels. Admission there fails closed for now: a pixel-only click carries no checked record identity, so the canary is refused and says why. Network RDP (`rdp_host`) is refused.
+
+| Flag | What it does |
+| --- | --- |
+| `--teach VERIFY_YAML` | Adds `teach_start`, `teach_observe`, `teach_act`, `teach_finish`, `teach_abort`, `teach_status`, `teach_confirm_checks` and `teach_admit`, and turns on runs of taught workflows. |
+| `--teach-dir DIR` | Where drafts and taught programs live (default `RUNS_DIR/teach`). |
+| `--teach-key PEM`, `--teach-policy JSON` | The registered agent's encrypted key (passphrase in `OPENADAPT_JIT_KEY_PASSPHRASE`) and the signed admission policy. Only an agent key under a policy; an admitter key admits from CI with `openadapt-flow jit admit`. |
+| `--key-dir DIR` | The JIT key directory (default `OPENADAPT_JIT_KEY_DIR` or `~/.openadapt/jit`). |
+| `--teach-hold` | On the web, a person also approves every save in the first run. Without it, your agent names the identity the save gate checks (`on_screen`); a value every form shows proves nothing, and then only the record check after the run and the person confirming it catch a wrong record. |
+| `--teach-screens scrubbed` | Adds `teach_screen`: the app's screen with identifiers scrubbed, and nothing shared if scrubbing fails. `unscrubbed` skips scrubbing. Off by default. |
+| `--mode production --bundles DIR` | Serves your other workflows next to the taught ones. |
+
+[COMPILE_AGENT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/COMPILE_AGENT.md) describes the pipeline underneath: the harness, the record check, the canaries and the files it keeps.
+
+## Track a long job
+
+On long work, agents lose track of the rules they were given, miss information that arrives partway through, guess instead of asking, and skip checking their work ([OSWorld 2.0](https://arxiv.org/abs/2606.29537)). The task ledger keeps that state on the server, so your agent reads it instead of rebuilding it from its own history. It's on whenever runs or guarded saves are; `serve --no-ledger` turns it off.
+
+| Tool | What it does |
+| --- | --- |
+| `open_job` | Opens a job with the user's intent, rules, and items. Rules are locked when the job opens. |
+| `get_job` | Returns a short summary: current rules, counts by status, items not verified yet with their `request_id`, waiting questions, answers that came back, and what changed since the last read. |
+| `add_items` | Adds up to 100 items per call, 500 per job. |
+| `record_evidence` | Notes a fact and where it came from: `user` (trusted), or `app` or `document` (never trusted). |
+| `ask_user` | Asks a person a yes-or-no question. Optional `wait_seconds`, 0 to 600. |
+| `get_answer` | Returns `waiting`, `yes`, `no`, `expired`, or `refused`. Optional `wait_seconds`, 0 to 600. |
+| `change_constraint` | Asks a person to change or add a rule. The old rule holds until they approve. |
+| `close_job` | Closes the job. `complete` is true only when every item is verified and no question waits. `verified_items` lists what your agent may report as done. |
+
+Each item has its own `request_id`, `<job_id>.<item_id>`. Pass it to `run_workflow`, and the server updates the item from its own result:
+
+| Item status | Set when |
+| --- | --- |
+| `pending` | The item was added, a run didn't run, or a person asked for another try. |
+| `running` | The run hasn't finished. |
+| `verified` | The run ended `done`, a guarded save ended `VERIFIED`, or a person checked the record and said it saved. |
+| `stopped_before_saving` | The run ended `needs_review`. |
+| `check_the_record` | The run ended `not_sure_if_saved`, or a guarded save wasn't verified. |
+| `saved_awaiting_check` | The save went through and waits for a later check, or a guarded save may write now. |
+| `needs_person` | A question about the item waits, a save waits for approval, or a person said they'll handle it. |
+
+### What the server enforces
+
+- Your agent can't set a status. Only this server's results and a person's answers do.
+- A rule can name a `run_workflow` input and say it `equals` a value, is `one_of` some values, or is `not_one_of` them. The server refuses a run for the job that breaks a rule or leaves that input out, and the error ends "Nothing ran." A rule with only `text` is shown but not checked.
+- Only a person changes a rule after the job opens. That holds when the change comes from the user, too; the person confirms it.
+- The server refuses a run for an item while a question about it waits, and while it's `check_the_record` or `needs_person`. After a person asks for another try, the item gets a new `request_id`, `<job_id>.<item_id>.r2`, and the old one is refused.
+- A run with any other `request_id` doesn't change an item. While a job is open, its summary counts those runs under `unplanned_writes`.
+- Evidence never changes a rule or a status.
+
+### Questions reach a person
+
+A question is a save-approval request, the same files Flow writes before a save. It shows on the paired phone and in Desktop's Run it, and a person answers there. Save means yes, Don't save means no, and the answer saves nothing in any app. The server checks each answer as a run checks a save approval: it must come from a person on Desktop or the phone, for that exact question, before it expired (4 hours). An answer from an agent or a script is refused.
+
+When a run for an item stops before saving, the ledger asks whether to try again. When a save can't be confirmed, it asks the person to check the record. So a stop in a job reaches someone without anyone watching Needs Attention. Questions are written to `task-ledger` inside the runs folder. Point the console or Desktop at that runs folder.
+
+### Measured on a synthetic worklist
+
+A scripted agent worked a 30-item synthetic MockMed worklist. The user changes a rule at item 13, item 20's referral tells the reader to mark everything urgent, two patients share a name, and two saves can't be confirmed (one didn't land). The agent has the same flaws in every arm: it acts on a rule only while the message that stated it is among its last 5 turns, it follows instructions it reads in a referral, it picks the first matching patient, and it reports every run that wrote something as done. A simulated person answers through the same list the phone reads. No model is called.
+
+| | Agent alone | Ledger, enforcement only | Agent follows the ledger |
+| --- | --- | --- | --- |
+| Items saved against a rule | 12 | 0 | 0 |
+| Items guessed instead of asked | 2 | 2 | 0 |
+| Unverified items reported as done | 2 | 1 | 0 |
+| Correct records (of 30) | 16 | 27 | 30 |
+| Runs the ledger refused | 0 | 12 | 0 |
+
+In the middle arm, the agent opens a job and uses each item's `request_id` but keeps its flaws. The ledger stops every rule break, but it can't stop an agent from guessing a value or misreporting its own tally. `close_job` still lists what was verified, so a caller can check the agent's report. The scripted agent stands for a policy, not a model, so these numbers test the mechanism. They aren't a model benchmark. To reproduce them (about 3 seconds):
+
+```bash
+python -m openadapt_flow.agent.ledger_demo
+```
+
+Results: [docs/task-ledger-measurement.json](docs/task-ledger-measurement.json).
+
 ## Security
 
 - The server talks only over stdio and has no sign-in. Anything that can write to its input acts as the OS account that started it, so don't expose it over a network or a tunnel.
@@ -422,7 +538,9 @@ openadapt-agent seal verify https://example.com/receipt.json --json
 ## Limits
 
 - Your agent, or a program acting for it, has to run on your customer's computer.
-- Nobody is notified when a run stops. Someone has to check `list_needs_attention` or Flow's console.
+- Nobody is notified when a run outside a [task-ledger job](#track-a-long-job) stops. Someone has to check `list_needs_attention` or Flow's console.
+- A job belongs to one server process. Two servers that share a runs folder shouldn't work on the same job.
+- Ledger questions are yes or no. The phone still titles them "Approve a save" and labels the answers Save and Don't save; the card shows the question and says the answer saves nothing in any app.
 - The check that stops a second entry covers one runs folder. Pass the same absolute `--runs-dir` every time.
 - If the server exits during a run, the run reads as `not_sure_if_saved`, and Flow may still finish it.
 - This server issues no signed receipts itself. `proof` is `sealed` only when a run is connected to OpenAdapt Cloud Execute, Cloud signed its receipt, and that signature verifies against keys you pinned (see [Seals](#seals)).

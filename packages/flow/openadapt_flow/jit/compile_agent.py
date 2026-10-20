@@ -35,7 +35,16 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Mapping,
+    Optional,
+    Protocol,
+    Sequence,
+    Union,
+)
 from urllib.parse import urlsplit
 
 from openadapt_flow.jit import lifecycle
@@ -63,6 +72,18 @@ __all__ = [
 CANDIDATE_FILE = lifecycle.CANDIDATE_FILE
 ADMIT_FILE = lifecycle.ADMISSION_FILE
 NEEDS_HUMAN_ADMIT = "needs_human_admit"
+#: The agent went outside the task's declared teach scope; no draft.
+SCOPE_REFUSED = "scope_refused"
+#: The system of record did not show exactly the declared write; no draft.
+READBACK_REFUSED = "readback_refused"
+
+if TYPE_CHECKING:
+    # openadapt_flow.teach_scope imports this package's adapters, so it is
+    # imported where it is used, not at module load.
+    from openadapt_flow.teach_scope import TeachGuard, TeachScope
+
+#: A teach scope, or a function from the recording's inputs to one.
+TeachScopeSource = Union["TeachScope", Callable[[Mapping[str, Any]], "TeachScope"]]
 
 #: Printed to stderr before every recording starts, before the app opens.
 #: An ``on_warning`` callback gets it too; it can't replace the print.
@@ -72,6 +93,50 @@ RECORDING_WARNING = (
     "patient or customer records, names, and account numbers. Use a sandbox "
     "or test environment and test data when you can."
 )
+
+
+def _reuse_refusal(
+    record: Mapping[str, Any], workflow: Any, task: TaskSignature, app: Any
+) -> Optional[str]:
+    """Why an admitted program may not be reused for this task here, or None.
+
+    Reuse is bound to intent, not just to the task id and parameter schema:
+    the record check must be the one admitted (and the one the caller pinned,
+    if any), and the app environment must be the one the canary ran in (and
+    the one the caller pinned, if any). Admissions from before these pins
+    existed carry neither; then only the caller's pins are checked.
+    """
+
+    from openadapt_flow.jit.signature import record_check_digest
+
+    current = record_check_digest(workflow)
+    admitted = record.get("record_check_digest")
+    if admitted is not None and admitted != current:
+        return (
+            f"the program's record check ({current[:12]}) is not the one admitted "
+            f"({str(admitted)[:12]}); admit it again"
+        )
+    if task.record_check is not None and task.record_check != current:
+        return (
+            f"the task pins record check {task.record_check[:12]}, the admitted "
+            f"program checks {current[:12]}; a changed record check is a new task"
+        )
+    try:
+        environment = app.environment
+    except Exception as exc:  # noqa: BLE001 - an unknown environment never matches
+        return f"the app's environment could not be read ({type(exc).__name__})"
+    canary_env = (record.get("canary") or {}).get("environment")
+    if canary_env is not None and canary_env != environment:
+        return (
+            f"the program was admitted in environment {canary_env!r}, this run is "
+            f"in {environment!r}; run a canary in this environment"
+        )
+    if task.environment is not None and task.environment != environment:
+        return (
+            f"the task is pinned to environment {task.environment!r}, the app "
+            f"reports {environment!r}"
+        )
+    return None
 
 
 def _print_warning(text: str) -> None:
@@ -104,6 +169,11 @@ class WebApp:
             the compiler reads. ``None`` keeps the authoring default. Raise
             it for an app whose lookups take seconds, or the program
             inherits checks compiled from a still-loading screen.
+        environment_id: Optional. What identifies this app environment
+            beyond its origin, such as the app's version or build
+            (``"7.0.2"``), or a callable that reads it from the app before
+            each canary and run. A program admitted under one environment is
+            refused under another (see :attr:`environment`).
     """
 
     url: str
@@ -113,14 +183,24 @@ class WebApp:
     setup: Optional[Callable[[Any], None]] = None
     record_video_dir: Optional[str] = None
     capture_settle_timeout_s: Optional[float] = None
+    environment_id: Optional[str | Callable[[], str]] = None
 
-    def open(self) -> tuple[Any, Callable[[], None]]:
-        """Open the browser at ``url`` and run :attr:`setup`; returns ``(backend, close)``."""
+    def open(
+        self, *, before_goto: Optional[Callable[[Any], None]] = None
+    ) -> tuple[Any, Callable[[], None]]:
+        """Open the browser at ``url`` and run :attr:`setup`; returns ``(backend, close)``.
+
+        ``before_goto`` gets the page before it loads ``url`` (a teach
+        scope's request filter).
+        """
 
         from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 
         backend, close = PlaywrightBackend.launch(
-            self.url, headless=self.headless, record_video_dir=self.record_video_dir
+            self.url,
+            headless=self.headless,
+            record_video_dir=self.record_video_dir,
+            before_goto=before_goto,
         )
         if self.setup is not None:
             try:
@@ -138,6 +218,12 @@ class WebApp:
     @property
     def kind(self) -> str:
         return "web"
+
+    @property
+    def environment(self) -> str:
+        """The app environment's identity: the origin, plus ``#<id>``."""
+
+        return _environment(self.origin, self.environment_id)
 
     @property
     def entry_url(self) -> Optional[str]:
@@ -193,12 +279,14 @@ class SurfaceApp:
         open_backend: Builds the live backend from ``backend``. Defaults to
             :func:`openadapt_flow.backends.factory.build_backend`. Pass one to
             inject a client (for example a test fixture).
+        environment_id: As for :class:`WebApp`.
     """
 
     backend: Any
     record_reader: Optional[Callable[[], Optional[list[dict[str, Any]]]]] = None
     reset: Optional[Callable[[], None]] = None
     open_backend: Optional[Callable[[Any], Any]] = field(default=None, repr=False)
+    environment_id: Optional[str | Callable[[], str]] = None
 
     def __post_init__(self) -> None:
         from openadapt_flow.deployment import BackendConfig
@@ -273,6 +361,12 @@ class SurfaceApp:
         return origin
 
     @property
+    def environment(self) -> str:
+        """As for :attr:`WebApp.environment`."""
+
+        return _environment(self.origin, self.environment_id)
+
+    @property
     def backend_hints(self) -> Optional[dict[str, Any]]:
         if self.kind not in ("rdp", "citrix"):
             return None
@@ -316,6 +410,19 @@ class SurfaceApp:
 App = WebApp | SurfaceApp
 
 
+def _environment(origin: str, environment_id: Any) -> str:
+    """``origin`` or ``origin#id``. A callable id is read now; one that fails
+    or returns nothing raises, so an unknown environment never matches."""
+
+    value = environment_id() if callable(environment_id) else environment_id
+    if value is None:
+        return origin
+    text = str(value).strip()
+    if not text:
+        raise ValueError("the app's environment_id is empty")
+    return f"{origin}#{text}"
+
+
 @dataclass(frozen=True)
 class TaskRequest:
     """What the agent is asked to do on a cache miss."""
@@ -352,7 +459,10 @@ class JitResult:
     ``status`` is ``needs_human_admit`` (a candidate waits for a person), the
     run's execution outcome (``VERIFIED``, ``HALTED``, ...), ``refused`` (the
     run gate or the cache check refused; nothing ran), ``unsupported`` (the
-    agent used an action the recording can't hold), or ``capture_failed``.
+    agent used an action the recording can't hold), ``scope_refused`` (the
+    agent went outside the task's declared teach scope), ``readback_refused``
+    (after the agent's run, the system of record did not show exactly the
+    declared write), or ``capture_failed``.
     """
 
     status: str
@@ -400,6 +510,9 @@ class Recording:
         self.computer: Optional[CaptureComputer] = None
         self.request: Optional[TaskRequest] = None
         self.result: Optional[JitResult] = None
+        #: The teach scope's guard, when the task declared one.
+        self.guard: Optional["TeachGuard"] = None
+        self._baseline: Optional[list[dict[str, Any]]] = None
 
     def __enter__(self) -> "Recording":
         from openadapt_flow.authoring import AuthoringSession
@@ -424,14 +537,24 @@ class Recording:
             inputs=dict(self._params),
             model_key=owner.model_key,
         )
+        scope = owner._teach_scope(self._params)
+        if scope is not None:
+            from openadapt_flow.teach_scope import TeachGuard
+
+            self.guard = TeachGuard(scope)
         if owner.app.reset is not None:
             owner.app.reset()
         settle: dict[str, Any] = {}
         capture_settle = getattr(owner.app, "capture_settle_timeout_s", None)
         if capture_settle is not None:
             settle["settle_timeout_s"] = capture_settle
-        backend, self._close = owner.app.open()
+        if self.guard is not None and isinstance(owner.app, WebApp):
+            backend, self._close = owner.app.open(before_goto=self.guard.install)
+        else:
+            backend, self._close = owner.app.open()
         try:
+            if self.guard is not None and owner.app.record_reader is not None:
+                self._baseline = owner.app.record_reader()
             self._session = AuthoringSession(
                 backend,
                 program / "recording",
@@ -448,6 +571,7 @@ class Recording:
                 if owner.app.kind == "web"
                 else None,
                 sleep=owner._sleep,
+                guard=self.guard,
             )
             self._session.start_record()
         except BaseException:
@@ -470,9 +594,22 @@ class Recording:
 
     def _finish(self, exc: Optional[BaseException]) -> JitResult:
         from openadapt_flow.authoring import AuthoringError
+        from openadapt_flow.teach_scope import ScopeViolation
 
         owner, session, computer = self._owner, self._session, self.computer
         assert computer is not None
+        guard = self.guard
+        if guard is not None and exc is None:
+            # A request the page made after the agent's last action.
+            try:
+                guard.finish()
+            except ScopeViolation as late:
+                exc = late
+        if isinstance(exc, ScopeViolation):
+            session.halt()
+            return owner._capture_refused(
+                SCOPE_REFUSED, str(exc), computer, guard=guard
+            )
         if isinstance(exc, UnsupportedAction):
             session.halt()
             return owner._capture_refused("unsupported", str(exc), computer)
@@ -486,6 +623,33 @@ class Recording:
             return owner._capture_refused(
                 "capture_failed", "the agent performed no action", computer
             )
+        readback = None
+        if guard is not None:
+            # Flow's own read-back, independent of anything the agent said.
+            # A run the agent was told to "report as verified" is judged here.
+            after = (
+                owner.app.record_reader()
+                if owner.app.record_reader is not None
+                else None
+            )
+            readback = guard.check_delta(self._baseline, after)
+            if not readback.verified and (
+                owner.app.record_reader is not None or readback.status != "unreadable"
+            ):
+                session.halt()
+                return owner._capture_refused(
+                    READBACK_REFUSED,
+                    f"the record read-back after the agent's run is {readback.status}"
+                    + (
+                        f" ({', '.join(readback.problems)})"
+                        if readback.problems
+                        else ""
+                    )
+                    + "; the declared write is not what the system of record shows",
+                    computer,
+                    guard=guard,
+                    readback=readback,
+                )
         try:
             compiled = session.compile(
                 owner.bundle_dir,
@@ -509,7 +673,13 @@ class Recording:
                 if owner.on_warning is not None:
                     owner.on_warning(line)
         return owner._write_draft(
-            session, compiled, computer, self._values, self._dialect
+            session,
+            compiled,
+            computer,
+            self._values,
+            self._dialect,
+            guard=guard,
+            readback=readback,
         )
 
 
@@ -529,6 +699,7 @@ class CompiledAgent:
     key_dir: Optional[Path] = None
     on_warning: Optional[Callable[[str], None]] = None
     require_distinct_reviewer_and_admitter: bool = False
+    teach_scope: Optional[TeachScopeSource] = None
     _sleep: Callable[[float], None] = field(default=time.sleep, repr=False)
 
     # -- layout --------------------------------------------------------------
@@ -630,6 +801,43 @@ class CompiledAgent:
 
     # -- cache miss ----------------------------------------------------------
 
+    def _teach_scope(self, params: Mapping[str, Any]) -> Optional[TeachScope]:
+        """The scope this recording runs under, checked against the task."""
+
+        from openadapt_flow.teach_scope import TeachScope
+
+        source = self.teach_scope
+        if source is None:
+            return None
+        scope = source if isinstance(source, TeachScope) else source(dict(params))
+        if not isinstance(scope, TeachScope):
+            raise ValueError("teach_scope must be a TeachScope or return one")
+        if scope.task_id != self.task.task_id:
+            raise ValueError(
+                f"the teach scope is for task {scope.task_id!r}, not "
+                f"{self.task.task_id!r}"
+            )
+        # Every declared input is a value the scope declares, so the agent
+        # can type it and the save may write it. Nothing else is typed.
+        declared = set(scope.record.values()) | set(scope.fields.values())
+        missing = sorted(
+            name
+            for name, value in params.items()
+            if value is not None and str(value) not in declared
+        )
+        if missing:
+            raise ValueError(
+                "the teach scope does not declare the task's input(s) "
+                + ", ".join(missing)
+                + " as a record or field value"
+            )
+        if self.app.record_reader is None and scope.write_adapter is None:
+            raise ValueError(
+                "a scoped recording needs the app's record_reader (for the "
+                "read-back) or a write adapter (to check writes before they go)"
+            )
+        return scope
+
     def _check_model_key(self) -> None:
         from openadapt_flow.jit.keys import MissingModelKey
 
@@ -669,6 +877,9 @@ class CompiledAgent:
         computer: CaptureComputer,
         values: dict[str, str],
         dialect: str,
+        *,
+        guard: Optional[TeachGuard] = None,
+        readback: Any = None,
     ) -> JitResult:
         program = self.program_dir
         lifecycle.mark_draft(self.bundle_dir)
@@ -700,6 +911,13 @@ class CompiledAgent:
             "effects": _effect_summary(self.bundle_dir),
             "agent_actions": computer.actions,
         }
+        if guard is not None:
+            # What the agent was allowed to touch, what was blocked, and what
+            # the system of record showed. Names and digests only.
+            candidate["teach_scope"] = {
+                **guard.report(),
+                "readback": readback.to_dict() if readback is not None else None,
+            }
         # Who made the recording, signed with the bundle digest, so editing
         # candidate.json can't turn the recorder into someone else.
         candidate = lifecycle.sign_recorder(program, candidate, key_dir=self.key_dir)
@@ -715,13 +933,23 @@ class CompiledAgent:
         )
 
     def _capture_refused(
-        self, status: str, detail: str, computer: CaptureComputer
+        self,
+        status: str,
+        detail: str,
+        computer: CaptureComputer,
+        *,
+        guard: Optional[TeachGuard] = None,
+        readback: Any = None,
     ) -> JitResult:
         program = self.program_dir
         (program / "capture.json").write_text(json.dumps(computer.log, indent=2) + "\n")
-        (program / "refused.json").write_text(
-            json.dumps({"status": status, "detail": detail}, indent=2) + "\n"
-        )
+        refused: dict[str, Any] = {"status": status, "detail": detail}
+        if guard is not None:
+            refused["teach_scope"] = {
+                **guard.report(),
+                "readback": readback.to_dict() if readback is not None else None,
+            }
+        (program / "refused.json").write_text(json.dumps(refused, indent=2) + "\n")
         kept = self.task_dir / f"refused-{_stamp()}"
         program.rename(kept)
         return JitResult(
@@ -797,6 +1025,14 @@ class CompiledAgent:
         candidate = self.candidate()
         if candidate is None or self.admitted:
             raise AdmissionError("a canary runs a DRAFT; there is none")
+        if (
+            self.task.environment is not None
+            and self.task.environment != self.app.environment
+        ):
+            raise AdmissionError(
+                f"the task is pinned to environment {self.task.environment!r}; "
+                f"this app reports {self.app.environment!r}"
+            )
         _, principal = lifecycle.resolve_actor(
             principal_id, self.program_dir, key_dir=self.key_dir
         )
@@ -841,6 +1077,7 @@ class CompiledAgent:
                 report=report,
                 readback=readback,
                 target_origin=self.app.origin,
+                environment=self.app.environment,
                 run_dir=run_dir,
                 key_dir=self.key_dir,
             )
@@ -952,6 +1189,9 @@ class CompiledAgent:
                 f"the canary ran on {canary_origin}, not on {self.app.origin}; "
                 "admit a canary on this app"
             )
+        bound = _reuse_refusal(record, workflow, self.task, self.app)
+        if bound is not None:
+            return refused(bound)
         problems = lifecycle._readback_problems(
             lifecycle.readback_coverage(workflow, self.verifier)
         )
@@ -1134,6 +1374,7 @@ def compile_agent(
     key_dir: Optional[Path | str] = None,
     on_warning: Optional[Callable[[str], None]] = None,
     require_distinct_reviewer_and_admitter: bool = False,
+    teach_scope: Optional[TeachScopeSource] = None,
 ) -> CompiledAgent:
     """Wrap ``agent`` so a task is explored once and then run as a program.
 
@@ -1165,6 +1406,13 @@ def compile_agent(
             warning is printed to stderr either way.
         require_distinct_reviewer_and_admitter: Refuse an admission by the
             principal who reviewed the draft. Off by default.
+        teach_scope: What the recording run may do, declared before the agent
+            reads any page: a :class:`~openadapt_flow.teach_scope.TeachScope`,
+            or a function from the run's inputs to one. Typed text, links,
+            browser requests and writes are checked against it, and the
+            system of record is read back after the run. A violation ends the
+            capture as ``scope_refused`` or ``readback_refused`` with no
+            draft. See ``docs/THREAT_MODEL.md``.
     """
 
     if agent is not None:
@@ -1193,4 +1441,5 @@ def compile_agent(
         key_dir=Path(key_dir) if key_dir is not None else None,
         on_warning=on_warning,
         require_distinct_reviewer_and_admitter=require_distinct_reviewer_and_admitter,
+        teach_scope=teach_scope,
     )

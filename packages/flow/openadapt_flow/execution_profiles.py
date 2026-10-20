@@ -406,6 +406,11 @@ def _api_identity_evidence_is_exact(
     ):
         return False
 
+    from openadapt_flow.runtime.actuators.web_form import (
+        effect_selector_rows,
+        web_form_pointer_template,
+    )
+
     for identity in binding.identity:
         if identity.param not in text_params or text_params[identity.param] == "":
             return False
@@ -414,11 +419,18 @@ def _api_identity_evidence_is_exact(
             tuple(field.split(".")) == effect_path
             and expression.param == identity.param
             for effect in effects
-            for field, expression in effect.match.items()
+            for row in effect_selector_rows(effect)
+            for field, expression in row.items()
         ):
             return False
         token = "{" + identity.param + "}"
         for pointer in identity.request_pointers:
+            if binding.kind == "web_form":
+                # The form field sends the parameter the record check
+                # selects on (see web_form_pointer_template).
+                if web_form_pointer_template(binding, pointer) != token:
+                    return False
+                continue
             pointer_parts = [
                 item.replace("~1", "/").replace("~0", "~")
                 for item in pointer.lstrip("/").split("/")
@@ -1401,6 +1413,33 @@ def _program_action_trace(
     return actions
 
 
+def _scroll_skipped_with_target_in_view(step: Any, result: Any) -> bool:
+    """A SCROLL that sent no input because its target was already on screen.
+
+    The closed-loop scroll checks, on the before-frame, whether the next
+    step's target already resolves; if it does there is nothing to scroll and
+    no input is sent (``delivery_attempted`` stays False). That is the correct
+    behaviour, not an undelivered action, so it must not by itself make the
+    run unverified. Only this exact case qualifies: a SCROLL step, the
+    replayer's own ``scroll_target_ready_before`` marker, delivery explicitly
+    False, and no delivery receipt, uncertainty or actuation event. The next
+    step still resolves and checks its own target and identity before acting.
+    """
+
+    from openadapt_flow.ir import ActionKind
+
+    return (
+        step.action is ActionKind.SCROLL
+        and getattr(result, "scroll_target_ready_before", None) is True
+        and result.delivery_attempted is False
+        and getattr(result, "delivery_receipt", None) is None
+        and getattr(result, "delivery_uncertainty", None) is None
+        and not getattr(result, "fresh_actuation_events", None)
+        and result.ok is True
+        and not getattr(result, "skipped", False)
+    )
+
+
 def classify_execution_outcome(
     report: RunReport,
     workflow: Workflow,
@@ -1812,6 +1851,37 @@ def classify_execution_outcome(
             return None if value is None else not value
         return None
 
+    # GUI steps an admitted API step ran in place of (docs/API_TIER.md): each
+    # is a skip only when the API step's own save in this report ran on the
+    # API path and every step it covers was folded. The save itself is then
+    # classified like any other API action below.
+    api_folded_ids: set[str] = set()
+    if workflow.program is None:
+        results_by_id = {result.step_id: result for result, _step in paired_results}
+        for step in workflow.steps:
+            binding = step.api_binding
+            if (
+                binding is None
+                or binding.kind != "web_form"
+                or binding.web_form is None
+                or not binding.admitted()
+            ):
+                continue
+            save_result = results_by_id.get(step.id)
+            covered = list(binding.web_form.replaces_steps[:-1])
+            if (
+                save_result is not None
+                and save_result.ok
+                and save_result.actuation == "api"
+                and binding.web_form.replaces_steps[-1] == step.id
+                and all(
+                    results_by_id.get(step_id) is not None
+                    and results_by_id[step_id].actuation == "api_folded"
+                    for step_id in covered
+                )
+            ):
+                api_folded_ids.update(covered)
+
     for result, step in paired_results:
         if result.skipped or result.exception_handled:
             if (
@@ -1840,7 +1910,15 @@ def classify_execution_outcome(
                     workflow.program is not None
                     and result.actuation == "human_attended_skip"
                 )
-                if not (declared_guard_skip or authenticated_attended_skip):
+                folded_into_api_step = (
+                    result.actuation == "api_folded"
+                    and result.step_id in api_folded_ids
+                )
+                if not (
+                    declared_guard_skip
+                    or authenticated_attended_skip
+                    or folded_into_api_step
+                ):
                     return ExecutionOutcome.COMPLETED_UNVERIFIED
             continue
         if not result.ok:
@@ -1956,6 +2034,7 @@ def classify_execution_outcome(
             automated_gui
             and step.action is not ActionKind.WAIT
             and result.delivery_attempted is not True
+            and not _scroll_skipped_with_target_in_view(step, result)
         ):
             return ExecutionOutcome.COMPLETED_UNVERIFIED
         if api_actuation and result.delivery_attempted is not True:

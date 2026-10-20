@@ -1,0 +1,31 @@
+{
+  "funnel": {
+    "stops": 3,
+    "to_repair": 3,
+    "to_reconciliation": 0,
+    "to_person": 0,
+    "auto_repair_off": 0,
+    "repair_runs": 3,
+    "repairs_proposed": 1,
+    "proposals": 2,
+    "probe_passed": 0,
+    "approved": 0,
+    "approved_by_person": 0,
+    "approved_by_standard_change": 0,
+    "resumed_items": 0,
+    "resumed_not_verified": 0,
+    "repair_success_rate": 0.0,
+    "person_decisions": 0,
+    "person_wait_s_total": 0,
+    "model_calls": 2,
+    "est_model_cost_usd": 0.036068,
+    "repair_status_counts": {
+      "no_fix": 3
+    }
+  },
+  "readback": {
+    "correct": 2,
+    "missing": 3
+  },
+  "ui_change_off_after_run": true
+}

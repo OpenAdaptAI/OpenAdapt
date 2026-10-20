@@ -43,6 +43,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from openadapt_flow import sealed_set as _sealed
+
 BUNDLE_MARKERS = ("workflow.json", "workflow.json.enc")
 RECORDING_MARKER = "events.jsonl"
 
@@ -72,6 +74,8 @@ def classify_target(path: Path) -> str:
     """Return ``"bundle"`` or ``"recording"`` for an existing artifact path."""
     if not path.exists():
         raise ScaffoldRefused(f"scaffold-verifier: path not found: {path}")
+    if _sealed.is_sealed(path):
+        return _sealed.header_kind(path)
     if any((path / marker).is_file() for marker in BUNDLE_MARKERS):
         return "bundle"
     if (path / RECORDING_MARKER).is_file():
@@ -141,7 +145,7 @@ def _demonstrated_param_values(recording_dir: Path) -> tuple[str, ...]:
     import json
 
     try:
-        meta = json.loads((recording_dir / "meta.json").read_text(encoding="utf-8"))
+        meta = json.loads(_sealed.read_text(recording_dir / "meta.json"))
     except (OSError, json.JSONDecodeError):
         return ()
     params = meta.get("params")
@@ -199,7 +203,7 @@ def candidates_from_recording(recording_dir: Path) -> list[WriteCandidate]:
 
     events_path = recording_dir / RECORDING_MARKER
     try:
-        lines = events_path.read_text(encoding="utf-8").splitlines()
+        lines = _sealed.read_text(events_path).splitlines()
     except OSError as exc:
         raise ScaffoldRefused(
             f"scaffold-verifier: could not read {events_path}: {exc}"
@@ -452,7 +456,7 @@ def write_draft(source: Path, out_dir: Optional[Path] = None) -> tuple[Path, int
         import json
 
         try:
-            meta = json.loads((source / "meta.json").read_text(encoding="utf-8"))
+            meta = json.loads(_sealed.read_text(source / "meta.json"))
         except (OSError, json.JSONDecodeError):
             meta = {}
         workflow_name = str(meta.get("app_url") or source.name)
@@ -467,10 +471,25 @@ def write_draft(source: Path, out_dir: Optional[Path] = None) -> tuple[Path, int
         workflow_name=workflow_name,
         candidates=candidates,
     )
+    _refuse_plaintext_output(source, out_dir)
     destination = (out_dir or source) / CONTRACT_FILENAME
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(text, encoding="utf-8")
+    # Sealed in memory when the destination is an encrypted bundle/recording.
+    _sealed.write_text(destination, text)
     return destination, len(candidates)
+
+
+def _refuse_plaintext_output(source: Path, out_dir: Optional[Path]) -> None:
+    """An encrypted source keeps its drafts inside its own sealed set."""
+    if (
+        out_dir is not None
+        and _sealed.is_sealed_path(source)
+        and not _sealed.is_sealed_path(out_dir)
+    ):
+        raise ScaffoldRefused(
+            "scaffold-verifier: the source is encrypted, so its drafts are "
+            "written inside it, encrypted. Drop --out; nothing was written."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -517,6 +536,15 @@ def build_record_check(
     bundle_dir = source if kind == "bundle" else bundle
     if recording_dir is None:
         return None
+    for sealed_input in (recording_dir, bundle_dir):
+        if sealed_input is not None and _sealed.is_sealed_path(sealed_input):
+            _refuse_plaintext_output(sealed_input, out_dir)
+            if prove:
+                raise ScaffoldRefused(
+                    "scaffold-verifier --prove is not available for encrypted "
+                    "input yet (the live proof uses a temporary directory). "
+                    "Nothing was written."
+                )
     writes = (
         candidates_from_bundle(bundle_dir)
         if kind == "bundle" and bundle_dir is not None

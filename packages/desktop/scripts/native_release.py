@@ -271,7 +271,9 @@ def set_native_version(version: str, root: Path = ROOT) -> dict[str, str]:
     result with the Git blobs of the candidate tag. Text-mode I/O would break
     that: on Windows it rewrites every ``\\n`` as ``\\r\\n``, and an omitted
     encoding decodes with the locale default. All reads and writes below are
-    therefore explicit UTF-8 bytes with LF endings.
+    therefore explicit UTF-8 bytes with LF endings. The Cargo patterns also
+    accept CRLF, because Git on Windows checks files out with CRLF by default,
+    and they keep whatever ending each line already has.
     """
 
     if not VERSION_PATTERN.fullmatch(version):
@@ -301,7 +303,10 @@ def set_native_version(version: str, root: Path = ROOT) -> dict[str, str]:
 
     cargo_toml = root / "src-tauri" / "Cargo.toml"
     text, replaced = re.subn(
-        r'(?m)^version = "[^"]+"$', f'version = "{version}"', read_source(cargo_toml), count=1
+        r'(?m)^version = "[^"]+"(?=\r?$)',
+        f'version = "{version}"',
+        read_source(cargo_toml),
+        count=1,
     )
     if replaced != 1:
         raise ValueError(f"could not rewrite package version in {cargo_toml}")
@@ -309,7 +314,7 @@ def set_native_version(version: str, root: Path = ROOT) -> dict[str, str]:
 
     cargo_lock = root / "src-tauri" / "Cargo.lock"
     text, replaced = re.subn(
-        r'(name = "openadapt-desktop"\nversion = ")[^"]+(")',
+        r'(name = "openadapt-desktop"\r?\nversion = ")[^"]+(")',
         rf"\g<1>{version}\g<2>",
         read_source(cargo_lock),
         count=1,

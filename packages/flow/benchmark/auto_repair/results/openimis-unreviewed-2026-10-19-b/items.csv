@@ -1,0 +1,3 @@
+item,ui_change,repair_status,readback,cost_usd,wall_s,reason
+270,True,not_repairable,missing,0,29.0,"the run ended RECONCILIATION_REQUIRED; self-repair handles only a halt before any effect (effect not settled at step_002, step_012); each acted with a risk nobody reviewed, so a write cannot be ruled out. A person can classify them with `openadapt-flow qualify set-risk`"
+271,True,not_repairable,missing,0,27.7,"the run ended RECONCILIATION_REQUIRED; self-repair handles only a halt before any effect (effect not settled at step_002, step_012); each acted with a risk nobody reviewed, so a write cannot be ruled out. A person can classify them with `openadapt-flow qualify set-risk`"

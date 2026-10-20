@@ -1,0 +1,6 @@
+item,ui_change,repair_status,readback,cost_usd,wall_s,reason
+260,False,not_needed,correct,0,21.0,
+261,False,not_needed,correct,0,19.0,
+262,True,no_fix,missing,0.019772,36.3,the agent gave up
+263,True,no_fix,missing,0.057064,113.0,"the probe stopped before reaching the save at step_014: Step 'step_014' (scroll by (0, -600)): closed-loop scroll exhausted its budget (1200px of 1500px allowed, 2.5x the recorded distance) without the anchor of step 'step_015' (click recorded visual target) resolving — target never came into view; "
+264,True,no_fix,missing,0.049406,137.9,"the probe stopped before reaching the save at step_014: Step 'step_014' (scroll by (0, -600)): closed-loop scroll exhausted its budget (1200px of 1500px allowed, 2.5x the recorded distance) without the anchor of step 'step_015' (click recorded visual target) resolving — target never came into view; "

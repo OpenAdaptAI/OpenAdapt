@@ -20,6 +20,7 @@ import re
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.record_check_synthesis import param_lookup
 
 #: Accessibility roles whose accessible name is the record row itself; the
@@ -31,10 +32,10 @@ IDENTITY_PROPOSED_NAME = "identity.proposed.json"
 
 def _events(recording_dir: Path) -> list[dict[str, Any]]:
     path = Path(recording_dir) / "events.jsonl"
-    if not path.is_file():
+    if not _sealed.is_file(path):
         return []
     out: list[dict[str, Any]] = []
-    for line in path.read_text("utf-8").splitlines():
+    for line in _sealed.read_text(path).splitlines():
         try:
             out.append(json.loads(line) if line.strip() else {})
         except ValueError:
@@ -159,6 +160,21 @@ def write_identity_proposals(
     if not proposals:
         return None
     path = out_dir / IDENTITY_PROPOSED_NAME
+    if _sealed.is_sealed_path(path):
+        _sealed.write_text(
+            path,
+            json.dumps(
+                {
+                    "schema": "openadapt.identity-proposal/v1",
+                    "approved": False,
+                    "proposals": proposals,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+        )
+        return path
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump(

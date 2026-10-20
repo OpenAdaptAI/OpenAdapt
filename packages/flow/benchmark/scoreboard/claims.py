@@ -35,6 +35,7 @@ import argparse
 import csv
 import json
 import multiprocessing
+import shutil
 import subprocess
 import sys
 import time
@@ -110,9 +111,20 @@ def ground_truth(
     return mockmed.check(new, {"note": note})
 
 
-def _verify(*argv: str) -> subprocess.CompletedProcess[str]:
+def _verify(params: dict[str, str], *argv: str) -> subprocess.CompletedProcess[str]:
+    """Run verify-run with the task's params on stdin, never in a file."""
+
     return subprocess.run(
-        [sys.executable, "-m", "openadapt_flow", "verify-run", *argv],
+        [
+            sys.executable,
+            "-m",
+            "openadapt_flow",
+            "verify-run",
+            "--params",
+            "/dev/stdin",
+            *argv,
+        ],
+        input=json.dumps(params),
         capture_output=True,
         text=True,
         timeout=120,
@@ -171,17 +183,18 @@ def main() -> int:
             )
             before = server.records()
             item_dir = work / f"item-{i:03d}"
-            item_dir.mkdir(parents=True, exist_ok=True)
-            params = item_dir / "params.json"
-            params.write_text(json.dumps({"patient_id": "p1", "note": note}))
+            # A fresh directory per attempt: verify-run marks a baseline used
+            # (baseline.json.used), and an old receipt must never be re-read.
+            shutil.rmtree(item_dir, ignore_errors=True)
+            item_dir.mkdir(parents=True)
+            params = {"patient_id": "p1", "note": note}
             baseline = item_dir / "baseline.json"
             if baseline.exists():
                 baseline.unlink()
             cap = _verify(
+                params,
                 "--verify",
                 str(verify_yaml),
-                "--params",
-                str(params),
                 "--capture-baseline",
                 str(baseline),
             )
@@ -231,16 +244,17 @@ def main() -> int:
                             "agent": "scoreboard.agent.ClaudeComputerUseAgent"
                         },
                         "claimed_success": claimed,
-                        "final_text": view.final_text,
                     }
                 )
             )
             share = item_dir / "share"
+            # A receipt left by an earlier run of this item must never be read
+            # as this run's (verify-run refuses an existing --out).
+            shutil.rmtree(share, ignore_errors=True)
             ver = _verify(
+                params,
                 "--verify",
                 str(verify_yaml),
-                "--params",
-                str(params),
                 "--run-record",
                 str(record),
                 "--authorization-ref",
@@ -253,7 +267,7 @@ def main() -> int:
             receipt_file = share / "effect-receipt.json"
             receipt = (
                 json.loads(receipt_file.read_text())["receipt"]
-                if receipt_file.is_file()
+                if receipt_file.is_file() and ver.returncode in (0, 1)
                 else {}
             )
             row = {
@@ -283,6 +297,10 @@ def main() -> int:
             )
     finally:
         server.close()
+    # Every planned item has a row: the build shows this run from now on.
+    meta = json.loads((out / "meta.json").read_text())
+    meta["complete"] = True
+    (out / "meta.json").write_text(json.dumps(meta, indent=2, default=str) + "\n")
     return 0
 
 

@@ -2,7 +2,7 @@
 
 This is the authoritative map of the product surfaces, their accepted evidence,
 and the qualification boundary for a customer workflow.
-The machine-readable claim-to-evidence registry is [`claims.yaml`](../claims.yaml),
+The machine-readable claim-to-evidence registry is [`claims/`](../claims/),
 and its generated view is [`VERIFICATION.md`](VERIFICATION.md).
 
 ## Product release state
@@ -85,7 +85,7 @@ product lifecycle state.
 
 ## Evidence policy
 
-- CI-backed capability claims are registered in [`claims.yaml`](../claims.yaml).
+- CI-backed capability claims are registered in [`claims/`](../claims/).
 - Opt-in and field evidence cannot be promoted to a stronger tier merely because
   code exists.
 - Benchmarks describe their task, environment, run count, success oracle,

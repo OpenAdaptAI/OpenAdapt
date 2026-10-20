@@ -1,0 +1,13 @@
+schema_version: openadapt.verify/v1
+verifier:
+  kind: rest
+  base_url: http://127.0.0.1:59593
+  records_path: /api/db
+effects:
+  - kind: record_written
+    match:
+      patient_id: {param: patient_id}
+      type: {literal: Triage}
+      note: {param: note}
+    expected_count: 1
+    count_new_only: true

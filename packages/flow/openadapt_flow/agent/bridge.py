@@ -154,6 +154,11 @@ _GET_RUN_USAGE = (
 class AgentBridge:
     """Expose workflows as agent tools: operator bundles or the sandbox."""
 
+    #: The :class:`~openadapt_flow.agent.ledger.TaskLedger` ``serve`` attaches
+    #: when runs are allowed. ``mcp.build_server`` serves its job tools and
+    #: feeds it every run result.
+    ledger: Any = None
+
     def __init__(
         self,
         bundles_dir: Optional[Path],
@@ -236,6 +241,18 @@ class AgentBridge:
         self._entries_by_id = {
             entry.legacy_id: entry for entry in self.catalog.values() if entry.legacy_id
         }
+
+    def add_catalog_entry(self, entry: CatalogEntry) -> None:
+        """Add a workflow while the server runs (a program taught over MCP).
+
+        The run service sees it at once; ``list_workflows`` and the
+        ``run_workflow`` schema list it from the next call.
+        """
+        if entry.name in self.catalog:
+            raise BridgeError("a workflow with that name already exists")
+        self.catalog[entry.name] = entry
+        if self._service is not None:
+            self._service.catalog[entry.name] = entry
 
     @property
     def service(self) -> RunService:

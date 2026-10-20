@@ -22,6 +22,7 @@ For each refused point, probing tries two readings:
 |---|---|
 | `incidental` | The recording without the step. |
 | `conditional` | The recording with the step, set to run only when its target (or its dialog) is on screen and to skip otherwise. This is the guard plain `induce` would put on the step. |
+| `narrated` | Only when spoken narration proposed a guard here and no recording contradicts it: the recording with the step, set to run only when the narrated condition holds ([NARRATION.md](NARRATION.md)). |
 
 Each reading replays in every recording's context: that recording's own
 steps, values and subject, with only the point in question changed. Before
@@ -43,6 +44,11 @@ exactly as without probing:
 - Neither did.
 - A read-back couldn't decide (store unreachable, effect uncertain, replay
   crashed). Such a run is logged as inconclusive and never counts as a miss.
+
+The `narrated` reading has its own rule: it is certified when it produced the
+recorded effect in every context and `incidental` conclusively failed in at
+least one. The program then gets the narrated guard, and the sentence is kept
+beside it.
 
 Probing covers the points plain `induce` reports as `unconfirmed_optional`
 and `unconfirmed_branch`. Other refusals (contradicting paths, step order,
@@ -148,9 +154,10 @@ refused, 3 when the target is refused.
 
 - One point at a time. While a point is probed, every other point keeps what
   each recording did.
-- Only two readings per point. A step that should run under a condition other
-  than its own target being on screen (say, a field value) needs a recording,
-  as before.
+- Two readings per point, three with narration. A step that should run under
+  a condition other than its own target being on screen (say, a field value)
+  needs a narrated sentence that names the condition, or a recording, as
+  before.
 - The check is only as good as the reward contract. A contract with no
   forbidden effects can't tell a harmless extra write from a harmful one.
 - The CI tests drive the real replayer against a scripted MockMed screen. The

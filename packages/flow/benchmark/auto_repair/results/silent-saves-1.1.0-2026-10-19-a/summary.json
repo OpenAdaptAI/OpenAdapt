@@ -1,0 +1,59 @@
+{
+  "ok_items": 28,
+  "ok_items_correct": 18,
+  "by_block": {
+    "zoom": {
+      "items": 10,
+      "ok_items": 9,
+      "ok_items_correct": 9,
+      "outcomes": {
+        "correct": 9,
+        "flagged_wrong": 1
+      }
+    },
+    "notice": {
+      "items": 10,
+      "ok_items": 10,
+      "ok_items_correct": 0,
+      "outcomes": {
+        "safe_stop": 10
+      }
+    },
+    "relink": {
+      "items": 10,
+      "ok_items": 9,
+      "ok_items_correct": 9,
+      "outcomes": {
+        "correct": 9,
+        "safe_stop": 1
+      }
+    }
+  },
+  "funnel": {
+    "stops": 13,
+    "to_repair": 11,
+    "to_reconciliation": 2,
+    "to_person": 0,
+    "auto_repair_off": 0,
+    "repair_runs": 11,
+    "repairs_proposed": 11,
+    "proposals": 11,
+    "probe_passed": 1,
+    "approved": 1,
+    "approved_by_person": 1,
+    "approved_by_standard_change": 0,
+    "resumed_items": 1,
+    "resumed_not_verified": 0,
+    "repair_success_rate": 0.0909,
+    "person_decisions": 1,
+    "person_wait_s_total": 0.004,
+    "model_calls": 21,
+    "est_model_cost_usd": 0.311728,
+    "repair_status_counts": {
+      "no_fix": 10,
+      "resumed": 1
+    }
+  },
+  "agent_calls": 21,
+  "agent_cost_usd": 0.311728
+}

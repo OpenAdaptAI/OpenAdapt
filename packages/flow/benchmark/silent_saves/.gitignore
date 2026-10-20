@@ -1,0 +1,6 @@
+# Per-item work files (baselines, verify-run receipts, executor output).
+# items.csv, meta.json and summary.json are the committed record of a run.
+results/**/work/
+__pycache__/
+results/spend.lock
+results/spend.tmp

@@ -1,0 +1,76 @@
+{
+  "overall": {
+    "stops": 10,
+    "to_repair": 10,
+    "to_reconciliation": 0,
+    "to_person": 0,
+    "auto_repair_off": 0,
+    "repair_runs": 2,
+    "repairs_proposed": 2,
+    "proposals": 2,
+    "probe_passed": 2,
+    "approved": 2,
+    "approved_by_person": 2,
+    "approved_by_standard_change": 0,
+    "resumed_items": 10,
+    "resumed_not_verified": 0,
+    "repair_success_rate": 1.0,
+    "person_decisions": 2,
+    "person_wait_s_total": 0,
+    "model_calls": 2,
+    "est_model_cost_usd": 0.025158,
+    "repair_status_counts": {
+      "resumed": 2
+    }
+  },
+  "by_mode": {
+    "relink": {
+      "stops": 5,
+      "to_repair": 5,
+      "to_reconciliation": 0,
+      "to_person": 0,
+      "auto_repair_off": 0,
+      "repair_runs": 1,
+      "repairs_proposed": 1,
+      "proposals": 1,
+      "probe_passed": 1,
+      "approved": 1,
+      "approved_by_person": 1,
+      "approved_by_standard_change": 0,
+      "resumed_items": 5,
+      "resumed_not_verified": 0,
+      "repair_success_rate": 1.0,
+      "person_decisions": 1,
+      "person_wait_s_total": 0,
+      "model_calls": 1,
+      "est_model_cost_usd": 0.012926,
+      "repair_status_counts": {
+        "resumed": 1
+      }
+    },
+    "redesign": {
+      "stops": 5,
+      "to_repair": 5,
+      "to_reconciliation": 0,
+      "to_person": 0,
+      "auto_repair_off": 0,
+      "repair_runs": 1,
+      "repairs_proposed": 1,
+      "proposals": 1,
+      "probe_passed": 1,
+      "approved": 1,
+      "approved_by_person": 1,
+      "approved_by_standard_change": 0,
+      "resumed_items": 5,
+      "resumed_not_verified": 0,
+      "repair_success_rate": 1.0,
+      "person_decisions": 1,
+      "person_wait_s_total": 0,
+      "model_calls": 1,
+      "est_model_cost_usd": 0.012232,
+      "repair_status_counts": {
+        "resumed": 1
+      }
+    }
+  }
+}

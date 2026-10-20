@@ -122,6 +122,50 @@ async def _confirm_with_person(
         raise BridgeError(declined)
 
 
+async def _ask_person_name(context: Any, message: str) -> str:
+    """Ask the person for their name and a confirmation in the client's form."""
+    session = context.session
+    if not client_supports_form_elicitation(session):
+        raise BridgeError(
+            "confirming the record check needs a person in an MCP client with "
+            "form elicitation; nothing was confirmed. A person can also run "
+            "`openadapt-flow compile-agent admit TASK_DIR` at a terminal"
+        )
+    result = await session.elicit_form(
+        message,
+        {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "title": "Your name"},
+                "confirmed": {
+                    "type": "boolean",
+                    "title": "I am a person and I confirm this record check",
+                },
+            },
+            "required": ["name", "confirmed"],
+        },
+        related_request_id=context.request_id,
+    )
+    content = result.content or {}
+    name = content.get("name")
+    if (
+        result.action != "accept"
+        or content.get("confirmed") is not True
+        or not isinstance(name, str)
+        or not name.strip()
+    ):
+        raise BridgeError("the person declined or cancelled; nothing was confirmed")
+    return name.strip()
+
+
+async def _notify_tools_changed(context: Any) -> None:
+    """Tell a client that supports it that the tool list changed."""
+    try:
+        await context.session.send_tool_list_changed()
+    except Exception:  # noqa: BLE001 - the next tools/list shows it anyway
+        _LOG.debug("could not send tools/list_changed", exc_info=True)
+
+
 async def _confirm_attended_action(context: Any, name: str) -> None:
     """Require a second, protocol-native human confirmation before mutation."""
     await _confirm_with_person(
@@ -180,6 +224,8 @@ def _server_instructions(
     authoring: AuthoringBridge | None,
     bridge: AgentBridge | None = None,
     guard: Any = None,
+    ledger: Any = None,
+    teach: Any = None,
 ) -> str:
     text = ""
     if bridge is not None:
@@ -236,6 +282,20 @@ def _server_instructions(
         from openadapt_flow.agent.guard_tools import GUARD_INSTRUCTIONS
 
         text += " " + GUARD_INSTRUCTIONS
+    if teach is not None:
+        text += (
+            " To add a workflow, teach it: call teach_start with the task, then "
+            "teach_observe and teach_act until it is done, then teach_finish. "
+            "Run 1 makes a real entry in the app; use test records. A person "
+            "confirms the record check (teach_confirm_checks shows them a form) "
+            "and teach_admit admits it only under the operator's signed policy. "
+            "Once admitted, it is in list_workflows and has a taught_<name> tool "
+            "that runs with no model calls."
+        )
+    if ledger is not None:
+        from openadapt_flow.agent.ledger import LEDGER_INSTRUCTIONS
+
+        text += " " + LEDGER_INSTRUCTIONS
     return text.strip()
 
 
@@ -243,21 +303,32 @@ def build_server(
     bridge: AgentBridge | None = None,
     authoring: AuthoringBridge | None = None,
     guard: Any = None,
+    ledger: Any = None,
+    teach: Any = None,
 ) -> Server:
-    """Wrap workflow, authoring and/or guard bridges in an MCP Server (no I/O started).
+    """Wrap workflow, authoring, guard and/or teach bridges in an MCP Server
+    (no I/O started).
 
-    ``guard`` is a :class:`~openadapt_flow.agent.guard_tools.GuardBridge`.
+    ``guard`` is a :class:`~openadapt_flow.agent.guard_tools.GuardBridge`;
+    ``teach`` is a :class:`~openadapt_flow.agent.teach.TeachBridge`.
+    ``ledger`` is a :class:`~openadapt_flow.agent.ledger.TaskLedger`; it adds
+    the job tools and reads every run and guard result this server returns.
     """
-    if bridge is None and authoring is None and guard is None:
+    if bridge is None and authoring is None and guard is None and teach is None:
         raise ValueError(
             "MCP server requires a workflow, authoring or guarded-save bridge"
         )
+    if ledger is None:
+        # ``serve`` attaches the ledger to the bridge it serves.
+        ledger = getattr(bridge, "ledger", None) or getattr(guard, "ledger", None)
 
     def _tool_specs():
         return (
             *(bridge.list_tool_specs() if bridge is not None else ()),
             *(authoring.list_tool_specs() if authoring is not None else ()),
             *(guard.list_tool_specs() if guard is not None else ()),
+            *(teach.list_tool_specs() if teach is not None else ()),
+            *(ledger.list_tool_specs() if ledger is not None else ()),
         )
 
     async def _list_tools(context: Any = None) -> list[types.Tool]:
@@ -303,6 +374,9 @@ def build_server(
                     or "tool arguments do not match the input schema"
                 ) from None
             human_confirmed = False
+            teaching = teach is not None and teach.handles(name)
+            held_by_person: str | None = None
+            person: str | None = None
             admission_by_person = (
                 name == "decide_admission"
                 and bridge is not None
@@ -317,11 +391,56 @@ def build_server(
             elif name == "admit" and authoring is not None and authoring.handles(name):
                 await _confirm_admit(context, authoring)
                 human_confirmed = True
+            elif teaching and name == "teach_act":
+                hold = await anyio.to_thread.run_sync(
+                    teach.hold_needed, arguments or {}
+                )
+                if hold:
+                    await _confirm_with_person(
+                        context,
+                        teach.hold_message(hold),
+                        title="I am a person and I approve this save",
+                        unsupported=(
+                            "this save needs a person's approval in an MCP client "
+                            "with form elicitation; nothing was done"
+                        ),
+                        declined="the person did not approve the save; nothing was done",
+                    )
+                    held_by_person = hold["binding"]
+            elif teaching and name == "teach_confirm_checks":
+                message = await anyio.to_thread.run_sync(
+                    teach.confirm_checks_message, arguments or {}
+                )
+                person = await _ask_person_name(context, message)
 
             def call() -> dict[str, Any]:
                 payload = dict(arguments or {})
+                if ledger is None:
+                    return dispatch(payload)
+                if ledger.handles(name):
+                    return ledger.dispatch(name, payload)
+                # A taught workflow's own tool is a run_workflow call.
+                taught_run = teaching and name in teach.taught
+                if name == "run_workflow" or taught_run:
+                    ledger.check_run(payload)
+                result = dispatch(payload)
+                # Item status comes only from this server's own results. A
+                # ledger failure never hides a run's result from the caller.
+                try:
+                    ledger.observe(
+                        "run_workflow" if taught_run else name, payload, result
+                    )
+                except Exception:
+                    _LOG.exception("could not record a result in the task ledger")
+                return result
+
+            def dispatch(payload: dict[str, Any]) -> dict[str, Any]:
                 if guard is not None and guard.handles(name):
                     return guard.dispatch(name, payload)
+                if teaching:
+                    return teach.dispatch(
+                        name, payload, held_by_person=held_by_person, person=person
+                    )
                 if authoring is not None and authoring.handles(name):
                     if human_confirmed:
                         return authoring.dispatch(name, payload, human_confirmed=True)
@@ -338,6 +457,12 @@ def build_server(
             # actions synchronously submit to their own non-async backend-owner
             # thread, so every MCP call can leave the event loop responsive.
             result = await anyio.to_thread.run_sync(call)
+            if (
+                teaching
+                and name == "teach_admit"
+                and result.get("status") == "admitted"
+            ):
+                await _notify_tools_changed(context)
         except BridgeError as exc:
             return types.CallToolResult(
                 content=[
@@ -378,7 +503,9 @@ def build_server(
         server = Server(
             SERVER_NAME,
             version=__version__,
-            instructions=_server_instructions(authoring, bridge, guard),
+            instructions=_server_instructions(
+                authoring, bridge, guard, ledger=ledger, teach=teach
+            ),
         )
 
         async def _list_v1() -> list[types.Tool]:
@@ -403,10 +530,29 @@ def build_server(
         server = Server(
             SERVER_NAME,
             version=__version__,
-            instructions=_server_instructions(authoring, bridge, guard),
+            instructions=_server_instructions(
+                authoring, bridge, guard, ledger=ledger, teach=teach
+            ),
             on_list_tools=_list_v2,
             on_call_tool=_call_v2,
         )
+    if teach is not None:
+        # A taught workflow adds a tool while the server runs: say so in the
+        # capabilities, so clients listen for tools/list_changed.
+        from mcp.server.lowlevel.server import NotificationOptions
+
+        initialization_options = server.create_initialization_options
+
+        def _with_tools_changed(
+            notification_options: Any = None, *args: Any, **kwargs: Any
+        ):
+            return initialization_options(
+                notification_options or NotificationOptions(tools_changed=True),
+                *args,
+                **kwargs,
+            )
+
+        server.create_initialization_options = _with_tools_changed  # type: ignore[method-assign]
     return server
 
 
@@ -440,8 +586,9 @@ async def _run_stdio(
     bridge: AgentBridge | None,
     authoring: AuthoringBridge | None = None,
     guard: Any = None,
+    teach: Any = None,
 ) -> None:
-    server = build_server(bridge, authoring=authoring, guard=guard)
+    server = build_server(bridge, authoring=authoring, guard=guard, teach=teach)
     with _protected_stdout() as wire:
         kwargs = {"stdout": wire} if wire is not None else {}
         async with stdio_server(**kwargs) as (read_stream, write_stream):
@@ -454,8 +601,12 @@ def serve(
     bridge: AgentBridge | None = None,
     authoring: AuthoringBridge | None = None,
     guard: Any = None,
+    teach: Any = None,
 ) -> None:
     """Serve the bridge over stdio until the client disconnects."""
+    if teach is not None:
+        anyio.run(_run_stdio, bridge, authoring, guard, teach)
+        return
     if guard is None:
         anyio.run(_run_stdio, bridge, authoring)
         return
