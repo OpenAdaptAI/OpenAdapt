@@ -41,6 +41,8 @@ name: Packages
 
 on:
   pull_request:
+  # The merge queue tests each group before it lands on main.
+  merge_group:
   push:
     branches: [main]
   workflow_dispatch:
@@ -80,6 +82,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BEFORE_SHA: ${{ github.event.before }}
+          GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: |
           set -euo pipefail
           all() {
@@ -89,6 +92,13 @@ jobs:
           case "$EVENT_NAME" in
             workflow_dispatch) all ;;
             pull_request) base="HEAD^1" ;;  # the PR merge commit's first parent is the base tip
+            # A queue group runs the full matrix (the PR tier ran one lane)
+            # for every package the group's PRs touch, measured from the main
+            # commit the group was built on.
+            merge_group)
+              base="$GROUP_BASE_SHA"
+              git cat-file -e "$base^{commit}" 2>/dev/null || all
+              ;;
             *)
               if [ -z "${BEFORE_SHA:-}" ] || [ "$BEFORE_SHA" = 0000000000000000000000000000000000000000 ] \
                 || ! git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then
