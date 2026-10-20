@@ -147,6 +147,7 @@ def _record_field(**kw) -> FrameSpec:
             kind="record_field",
             actor_field="by",
             version_field="v",
+            server_set=["by", "v"],
             **{"self": ["bot"]},
             **kw,
         )
@@ -178,7 +179,10 @@ def test_a_change_without_a_new_version_is_unattributed() -> None:
 def test_self_ids_bind_to_run_params() -> None:
     spec = FrameSpec(
         attribution=FrameAttribution(
-            kind="record_field", actor_field="by", **{"self": [{"param": "bot_user"}]}
+            kind="record_field",
+            actor_field="by",
+            server_set=["by"],
+            **{"self": [{"param": "bot_user"}]},
         )
     )
     edited = {**OTHER, "phone_home": "555-0199", "by": "bot"}
@@ -587,3 +591,98 @@ def test_a_content_twin_is_a_view_of_the_same_read(tmp_path: Path) -> None:
     )
     assert edited["receipt"]["checked"]["frame"] == "refuted"
     con.close()
+
+
+# -- the safety review's conditions (#1443) ------------------------------------
+
+
+def test_record_field_attribution_must_declare_its_fields_server_set() -> None:
+    """(a) Only fields the app sets on the server, declared per app, count."""
+
+    with pytest.raises(ValueError, match="server-set"):
+        FrameAttribution(
+            kind="record_field",
+            actor_field="by",
+            version_field="v",
+            **{"self": ["bot"]},
+        )
+    with pytest.raises(ValueError, match="server-set"):
+        FrameAttribution(
+            kind="record_field",
+            actor_field="by",
+            version_field="v",
+            server_set=["by"],
+            **{"self": ["bot"]},
+        )
+
+
+def test_attribution_from_a_field_the_run_writes_is_refused() -> None:
+    """(a) A field a step typed into is no evidence of who changed a record."""
+
+    effect = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={"lname": TARGET["lname"], "by": "bot"},
+        count_new_only=True,
+    )
+    edited = {**OTHER, "phone_home": "555-0199", "by": "clinic3", "v": 4}
+    verdict = _judge(_state(OTHER), [edited, dict(TARGET)], [effect], _record_field())
+    assert verdict.attribution == "attribution_refused"
+    assert verdict.status == "refuted"
+    assert verdict.collateral[0].attribution == "unattributed"
+    # The same field named by a run parameter is refused too.
+    verdict = _judge(
+        _state(OTHER), [edited, dict(TARGET)], spec=_record_field(), params={"by": "x"}
+    )
+    assert verdict.attribution == "attribution_refused"
+
+
+def test_the_runs_own_executor_is_never_another_actor() -> None:
+    """(b) The named user must differ from the run's own identity."""
+
+    edited = {**OTHER, "phone_home": "555-0199", "by": "agent-7", "v": 4}
+    verdict = _judge(
+        _state(OTHER),
+        [edited, dict(TARGET)],
+        spec=_record_field(),
+        run_actors=["agent-7"],
+    )
+    assert verdict.status == "refuted"
+    assert verdict.collateral[0].attribution == "self"
+
+
+def test_another_users_change_to_the_saved_record_blocks() -> None:
+    """(c) The saved value may not stand: never excused, record_field."""
+
+    effect = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={"lname": OTHER["lname"], "phone_home": "555-0100"},
+    )
+    # The bot set phone_home; another user then wrote the same record.
+    saved = {**OTHER, "phone_home": "555-0100", "by": "clinic3", "v": 4}
+    verdict = _judge(_state(OTHER), [saved], [effect], _record_field())
+    assert verdict.status == "refuted"
+    assert verdict.collateral[0].other_on_target
+    assert "may not stand" in verdict.reason
+    # A record the bot itself wrote last is the delta's business.
+    own = {**OTHER, "phone_home": "555-0100", "by": "bot", "v": 4}
+    assert _judge(_state(OTHER), [own], [effect], _record_field()).status == "held"
+
+
+def test_an_audited_edit_of_the_saved_record_by_another_user_blocks() -> None:
+    """(c) Same rule through the audit log: an entry on the target by another
+    user blocks, while one on an undeclared record is a concurrent edit."""
+
+    entries = [
+        {"id": 101, "user": "bot", "record": 2},
+        {"id": 102, "user": "clinic3", "record": 2},
+    ]
+    verdict = _judge(
+        _state(OTHER),
+        [dict(OTHER), dict(TARGET)],
+        spec=_audit_spec(),
+        audit_before=[],
+        audit_after=entries,
+    )
+    assert verdict.status == "refuted"
+    assert verdict.collateral[0].other_on_target
+    assert verdict.evidence(_audit_spec())["target_changed_by_other"] == 1

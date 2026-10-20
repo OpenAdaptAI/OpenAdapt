@@ -100,7 +100,7 @@ frame:
   ignore_fields: [date]      # fields that change on their own
   target_fields: [phone_home]  # default: the fields the effects name
   attribution:               # optional
-    kind: audit_read         # or record_field
+    kind: audit_read         # or record_field, with server_set: [...]
     actor_field: user
     record_field: patient_id
     self: [{param: bot_user}]  # the bot's own user or session ids
@@ -118,6 +118,22 @@ save. A change by one of the bot's own ids, or one nothing explains, is
 collateral, and the outcome is `reconciliation_required`. With `audit_read`,
 a log entry by the bot for a record no effect names is collateral too, even
 when the read shows no change.
+
+Only evidence the bot can't write counts:
+
+- `audit_read` reads the app's own audit log or change feed.
+- `record_field` reads fields the app sets on the server. List them in
+  `server_set` (they must include `actor_field` and any `version_field`);
+  that list is the per-app statement that no user or API client can write
+  them. A field the run itself writes, or that a run parameter names, is
+  never evidence: attribution that uses one is refused, and every change
+  stays unattributed (`evidence.frame.attribution: attribution_refused`).
+- The run's own ids (`self`, and the executor's id from the run record) are
+  never "another user".
+- Another user's change to a record the save declares is never excused. The
+  saved value may no longer stand, so the outcome is
+  `reconciliation_required` (`evidence.frame.target_changed_by_other`). Only
+  changes outside the declared delta can be concurrent edits.
 
 Without `attribution`, every change outside the delta is collateral. A
 change is not proof that the executor made it: another user may have edited
