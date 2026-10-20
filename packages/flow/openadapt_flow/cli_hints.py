@@ -5,6 +5,11 @@ The OpenAdapt launcher runs this engine in-process (``openadapt flow <verb>``,
 ``openadapt-flow <verb>`` names a program the person never typed. Both
 spellings work when the launcher is installed, so this only picks the one
 that matches what the person used.
+
+Under ``uvx`` the engine runs from a throwaway environment in uv's cache, so
+the person's shell may have no ``openadapt`` at all, or an older install that
+lacks the verb. Hints then repeat the ``uvx`` form, which reaches this same
+version.
 """
 
 from __future__ import annotations
@@ -37,10 +42,48 @@ def command_prefix(argv: Optional[Sequence[str]] = None) -> str:
     return LAUNCHER_PREFIX if name == "openadapt" else ENGINE_PREFIX
 
 
-def command(verb_and_args: str, argv: Optional[Sequence[str]] = None) -> str:
-    """Return ``verb_and_args`` prefixed with :func:`command_prefix`."""
+def uvx_ephemeral(prefix: Optional[str] = None) -> bool:
+    """True when this interpreter is a ``uvx`` throwaway environment.
 
-    return f"{command_prefix(argv)} {verb_and_args}"
+    ``uvx`` (``uv tool run``) builds the environment under uv's cache, in an
+    ``archive-v<N>`` directory. ``uv tool install`` and ordinary virtualenvs
+    live elsewhere and put the command on PATH, so they keep the plain form.
+    """
+
+    path = (sys.prefix if prefix is None else prefix).replace("\\", "/")
+    return "/uv/archive-v" in path or "/uv/cache/archive-v" in path
 
 
-__all__ = ["ENGINE_PREFIX", "LAUNCHER_PREFIX", "command", "command_prefix"]
+def _uvx(prefix: Optional[str]) -> str:
+    major, minor = sys.version_info[:2]
+    return f"uvx --python {major}.{minor} " if uvx_ephemeral(prefix) else ""
+
+
+def command(
+    verb_and_args: str,
+    argv: Optional[Sequence[str]] = None,
+    prefix: Optional[str] = None,
+) -> str:
+    """Return ``verb_and_args`` prefixed with :func:`command_prefix`.
+
+    Under ``uvx`` the launcher form becomes ``uvx --python X.Y openadapt flow``
+    and the engine form ``uvx --python X.Y openadapt-flow``.
+    """
+
+    return f"{_uvx(prefix)}{command_prefix(argv)} {verb_and_args}"
+
+
+def launcher_command(rest: str, prefix: Optional[str] = None) -> str:
+    """Return a launcher command (``openadapt <rest>``), in ``uvx`` form if needed."""
+
+    return f"{_uvx(prefix)}{LAUNCHER_PREFIX.split()[0]} {rest}"
+
+
+__all__ = [
+    "ENGINE_PREFIX",
+    "LAUNCHER_PREFIX",
+    "command",
+    "command_prefix",
+    "launcher_command",
+    "uvx_ephemeral",
+]
