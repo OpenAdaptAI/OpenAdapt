@@ -1,0 +1,7 @@
+{
+  "proposed": false,
+  "step": null,
+  "reasons": [
+    "the page that serves the form is not in the capture; start recording before opening it"
+  ]
+}

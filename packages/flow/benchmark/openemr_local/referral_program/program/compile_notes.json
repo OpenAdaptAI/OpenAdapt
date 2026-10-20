@@ -1,0 +1,151 @@
+{
+  "schema": "openadapt.compile-notes/v1",
+  "note": "Changes the default compiler passes made to demonstrated gestures. Each replaces a gesture that asserted nothing with an equivalent one that carries its own check.",
+  "changes": [
+    {
+      "change": "drop_select_commit_enter",
+      "step": "step_002",
+      "evidence": "structural role combobox, then TYPE, then Enter",
+      "selector": "#form_title"
+    },
+    {
+      "change": "drop_select_commit_enter",
+      "step": "step_014",
+      "evidence": "structural role combobox, then TYPE, then Enter",
+      "selector": "#form_sex"
+    },
+    {
+      "change": "drop_select_commit_enter",
+      "step": "step_026",
+      "evidence": "structural role combobox, then TYPE, then Enter",
+      "selector": "#form_state"
+    },
+    {
+      "change": "drop_select_commit_enter",
+      "step": "step_038",
+      "evidence": "structural role combobox, then TYPE, then Enter",
+      "selector": "#form_country_code"
+    },
+    {
+      "change": "drop_select_all_on_empty_field",
+      "step": "step_004",
+      "evidence": "Ctrl+A changed no pixel in the clicked field box",
+      "region": [
+        364,
+        296,
+        160,
+        50
+      ]
+    },
+    {
+      "change": "drop_select_all_on_empty_field",
+      "step": "step_007",
+      "evidence": "Ctrl+A changed no pixel in the clicked field box",
+      "region": [
+        591,
+        285,
+        160,
+        61
+      ]
+    },
+    {
+      "change": "drop_select_all_on_empty_field",
+      "step": "step_010",
+      "evidence": "Ctrl+A changed no pixel in the clicked field box",
+      "region": [
+        347,
+        398,
+        160,
+        64
+      ]
+    },
+    {
+      "change": "drop_select_all_on_empty_field",
+      "step": "step_019",
+      "evidence": "Ctrl+A changed no pixel in the clicked field box",
+      "region": [
+        399,
+        128,
+        160,
+        64
+      ]
+    },
+    {
+      "change": "drop_select_all_on_empty_field",
+      "step": "step_022",
+      "evidence": "Ctrl+A changed no pixel in the clicked field box",
+      "region": [
+        364,
+        172,
+        160,
+        55
+      ]
+    },
+    {
+      "change": "drop_select_all_on_empty_field",
+      "step": "step_028",
+      "evidence": "Ctrl+A changed no pixel in the clicked field box",
+      "region": [
+        340,
+        207,
+        160,
+        59
+      ]
+    },
+    {
+      "change": "drop_select_all_on_empty_field",
+      "step": "step_031",
+      "evidence": "Ctrl+A changed no pixel in the clicked field box",
+      "region": [
+        382,
+        315,
+        160,
+        64
+      ]
+    },
+    {
+      "change": "drop_select_all_on_empty_field",
+      "step": "step_034",
+      "evidence": "Ctrl+A changed no pixel in the clicked field box",
+      "region": [
+        955,
+        350,
+        160,
+        64
+      ]
+    },
+    {
+      "change": "static_control_identifier_crop",
+      "step": "step_016",
+      "evidence": "structural role button with no identity evidence",
+      "region": [
+        554,
+        473,
+        160,
+        64
+      ]
+    },
+    {
+      "change": "focused_field_region_stable",
+      "step": "step_027",
+      "evidence": "structural field role",
+      "region": [
+        340,
+        207,
+        160,
+        59
+      ]
+    },
+    {
+      "change": "focused_field_region_stable",
+      "step": "step_036",
+      "evidence": "structural field role",
+      "region": [
+        937,
+        210,
+        160,
+        56
+      ]
+    }
+  ]
+}
