@@ -186,7 +186,82 @@ def retain_run_evidence(
             "sha256": input_digest,
             "relative_path": input_relative.as_posix(),
         },
+        *_retain_report_artifacts(
+            bundle_dir, report=report, run_dir=run_dir, case_id=case_id, run_id=run_id
+        ),
     ]
+
+
+#: The largest single frame or proof Desktop keeps with a case result, and
+#: the most it keeps for one run.
+_ARTIFACT_MAX_BYTES = 16 * 1024 * 1024
+_ARTIFACTS_MAX_TOTAL_BYTES = 256 * 1024 * 1024
+
+
+def _report_paths(node: object) -> set[str]:
+    """Every run-relative file path a run report names (frames, proofs)."""
+
+    found: set[str] = set()
+    if isinstance(node, dict):
+        for value in node.values():
+            found |= _report_paths(value)
+    elif isinstance(node, list):
+        for value in node:
+            found |= _report_paths(value)
+    elif (
+        isinstance(node, str)
+        and "/" in node
+        and "\\" not in node
+        and not node.startswith(("/", "http:", "https:", "sha256:"))
+        and node.rsplit(".", 1)[-1].lower() in {"png", "json"}
+    ):
+        found.add(node)
+    return found
+
+
+def _retain_report_artifacts(
+    bundle_dir: Path, *, report: dict, run_dir: Path, case_id: str, run_id: str
+) -> list[dict[str, str]]:
+    """Keep the step frames and proofs the report points at, hash-bound.
+
+    Flow's case check reads each action's pre-action frame and resolution
+    proof from the retained evidence, at the path the report names. Without
+    them a drill can't be credited. Only regular files inside the run folder
+    are kept; they stay inside the local qualification-evidence folder.
+    """
+
+    root = run_dir.resolve()
+    kept: list[dict[str, str]] = []
+    total = 0
+    for name in sorted(_report_paths(report.get("results") or [])):
+        relative = Path(name)
+        if relative.is_absolute() or ".." in relative.parts:
+            continue
+        source = run_dir / relative
+        try:
+            if source.is_symlink() or not source.is_file():
+                continue
+            if not source.resolve().is_relative_to(root):
+                continue
+            size = source.stat().st_size
+        except OSError:
+            continue
+        if size > _ARTIFACT_MAX_BYTES or total + size > _ARTIFACTS_MAX_TOTAL_BYTES:
+            continue
+        payload = source.read_bytes()
+        total += size
+        evidence_relative = Path(case_id) / run_id / relative
+        destination = bundle_dir / "qualification-evidence" / evidence_relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(payload)
+        kept.append(
+            {
+                "kind": "other",
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "relative_path": evidence_relative.as_posix(),
+            }
+        )
+    return kept
 
 
 #: The largest drill receipt or mutation record Desktop keeps.
