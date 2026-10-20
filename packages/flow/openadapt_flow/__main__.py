@@ -4829,6 +4829,7 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
         recording=optional_path("recording"),
         bundle=optional_path("bundle"),
         complete_read=bool(getattr(args, "complete_read", False)),
+        fault_gate=bool(getattr(args, "fault_gate", False)),
     )
     if built is not None:
         print(built.summary)
@@ -9408,6 +9409,15 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Declare that the reads return everything the save can change "
             "(one store, no other tables). Recorded as declared, not proven"
+        ),
+    )
+    p.add_argument(
+        "--fault-gate",
+        action="store_true",
+        help=(
+            "With --db: write each bad save to a copy of the database and let "
+            "the check read it through its own read (the fault gate). A fault "
+            "the read can't see keeps the check a draft"
         ),
     )
     p.add_argument(

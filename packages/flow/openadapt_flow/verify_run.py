@@ -61,9 +61,16 @@ from openadapt_types.approval import (
     CHECKED_HOW_VALUES,
     checked_how_for_flow_tier,
 )
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+from openadapt_flow.fault_gate import (
+    AdmissionPolicy,
+    CoverageRecord,
+    GateError,
+    check_digest,
+    load_coverage,
+)
 from openadapt_flow.qualify.result import verify_config_sha256
 from openadapt_flow.runtime.effects.adapter import verifier_identity
 from openadapt_flow.runtime.effects.effect import (
@@ -142,6 +149,8 @@ FRAME_AUDIT_DETAIL = "openadapt:frame_audit"
 #: ``checked`` (``docs/VERIFICATION_COVERAGE.md``): which parts of the claim
 #: behind ``verified`` were checked, and how each came out.
 CHECKED_PARTS: tuple[str, ...] = ("delta", "frame", "source")
+#: ``checked.coverage``, present only under an admission policy.
+COVERAGE_KEYS = frozenset({"killed", "applicable", "sha256", "policy"})
 CHECKED_VALUES = ("held", "refuted", "not_checked")
 SOURCE_VALUES = CHECKED_VALUES + ("instruction",)
 
@@ -203,6 +212,20 @@ class VerifyConfig(BaseModel):
     #: (``runtime/effects/frame.py``). Unset: the default frame (the whole
     #: read set, compared by ``id``, no attribution).
     frame: Optional[FrameSpec] = None
+    #: The check's admission policy: its fault-gate coverage record and the
+    #: minimum it must meet (``openadapt_flow/fault_gate.py``). Unset: no
+    #: coverage is required or stated.
+    admission: Optional[AdmissionPolicy] = None
+    #: Where ``admission.coverage`` resolves (the file's directory).
+    _base_dir: Optional[Path] = PrivateAttr(default=None)
+
+    def coverage_path(self) -> Optional[Path]:
+        if self.admission is None:
+            return None
+        path = Path(self.admission.coverage)
+        if not path.is_absolute() and self._base_dir is not None:
+            path = self._base_dir / path
+        return path
 
 
 def load_verify_config(path: str | Path) -> VerifyConfig:
@@ -215,7 +238,9 @@ def load_verify_config(path: str | Path) -> VerifyConfig:
         data = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as exc:
         raise VerifyRunError(f"cannot parse {source}: {exc}") from exc
-    return parse_verify_config(data, source=f"verify config {source}")
+    cfg = parse_verify_config(data, source=f"verify config {source}")
+    cfg._base_dir = source.resolve().parent
+    return cfg
 
 
 #: ``openadapt.verify/v1`` sections only qualify reads (RFC-0002, Qualify-only
@@ -806,6 +831,7 @@ def verify_run(
     remediates: Optional[str] = None,
     correlation_id: Optional[str] = None,
     write_attempted: bool = False,
+    coverage: Optional[CoverageRecord] = None,
 ) -> dict[str, Any]:
     """Read the system of record and return ``{"receipt", "evidence"}``.
 
@@ -1016,15 +1042,38 @@ def verify_run(
     )
     # Inputs come from whoever authorized the task (``--params``): the
     # instruction is their source.
-    checked = {
+    checked: dict[str, Any] = {
         "delta": _part(delta_verdict, read_proves_write),
         "frame": frame.status,
         "source": "instruction",
     }
+    admitted = True
+    if cfg.admission is not None:
+        # The check must have been shown to catch the faults it claims.
+        record = coverage
+        problem: Optional[str] = None
+        if record is None:
+            path = cfg.coverage_path()
+            try:
+                record = load_coverage(path) if path is not None else None
+            except GateError:
+                record = None
+        if record is None:
+            problem = "coverage_missing"
+        else:
+            problem = cfg.admission.problem(record, check_digest(cfg))
+        admitted = problem is None
+        checked["coverage"] = {
+            "killed": record.killed if record is not None else 0,
+            "applicable": record.applicable if record is not None else 0,
+            "sha256": record.digest() if record is not None else None,
+            "policy": "met" if admitted else str(problem),
+        }
     claim_holds = (
         read_proves_write
         and frame.held
         and checked["source"] in ("held", "instruction")
+        and admitted
     )
     if claim_holds and self_approved is True:
         # The write landed, but the executor approved its own write: no
@@ -1213,9 +1262,24 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
     # Optional: receipts issued before docs/VERIFICATION_COVERAGE.md lack it.
     if "checked" in receipt:
         parts = receipt["checked"]
+        cover = parts.get("coverage") if isinstance(parts, Mapping) else None
         if (
             not isinstance(parts, Mapping)
-            or set(parts) != set(CHECKED_PARTS)
+            or set(parts) - {"coverage"} != set(CHECKED_PARTS)
+            or (
+                "coverage" in parts
+                and (
+                    not isinstance(cover, Mapping)
+                    or set(cover) != COVERAGE_KEYS
+                    or not isinstance(cover.get("killed"), int)
+                    or not isinstance(cover.get("applicable"), int)
+                    or not isinstance(cover.get("policy"), str)
+                    or (
+                        cover.get("sha256") is not None
+                        and not _DIGEST.match(str(cover.get("sha256")))
+                    )
+                )
+            )
             or parts.get("delta") not in CHECKED_VALUES
             or parts.get("frame") not in CHECKED_VALUES
             or parts.get("source") not in SOURCE_VALUES
@@ -1225,6 +1289,7 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
             parts["delta"] != "held"
             or parts["frame"] != "held"
             or parts["source"] not in ("held", "instruction")
+            or (cover is not None and cover.get("policy") != "met")
         ):
             return "verified_without_every_part"
     if outcome in ("verified", "rolled_back_verified") and (

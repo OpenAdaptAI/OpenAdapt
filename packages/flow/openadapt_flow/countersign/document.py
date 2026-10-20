@@ -651,12 +651,20 @@ def verify_countersigned(
             report.problems.append("checked_how_mismatch")
     if schema == EFFECT_RECEIPT_SCHEMA and "checked" in receipt:
         parts = receipt.get("checked")
-        if not isinstance(parts, dict) or set(parts) != {"delta", "frame", "source"}:
+        if not isinstance(parts, dict) or set(parts) - {"coverage"} != {
+            "delta",
+            "frame",
+            "source",
+        }:
             report.problems.append("checked_malformed")
         elif receipt.get("outcome") in _SEALABLE and (
             parts.get("delta") != "held"
             or parts.get("frame") != "held"
             or parts.get("source") not in ("held", "instruction")
+            or (
+                "coverage" in parts
+                and (parts.get("coverage") or {}).get("policy") != "met"
+            )
         ):
             report.problems.append("verified_without_every_part")
     # Seal signature: openadapt_types.seal, unchanged.
