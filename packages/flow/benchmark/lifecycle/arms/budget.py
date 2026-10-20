@@ -47,12 +47,7 @@ def prices() -> dict[str, Any]:
     return json.loads(PRICES_PATH.read_text())
 
 
-LOCAL_PRICE = {"input": 0.0, "output": 0.0, "cache_read": 0.0, "cache_write": 0.0}
-
-
 def price(model: str) -> dict[str, float]:
-    if model.startswith("ollama:"):
-        return LOCAL_PRICE  # a local stand-in: no model fees; its time is compute
     table = prices()["models"]
     if model not in table:
         raise KeyError(f"{model} is not in {PRICES_PATH.name} (as of {prices()['as_of']})")
@@ -219,12 +214,6 @@ def ensure_key() -> None:
 
 
 def client(model: str = "") -> Any:
-    """The Anthropic SDK client, or the local Ollama stand-in for ``ollama:*``."""
-
-    if model.startswith("ollama:"):
-        from .local_model import LocalClient
-
-        return LocalClient()
     ensure_key()
     import anthropic
 

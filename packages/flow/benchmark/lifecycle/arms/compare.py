@@ -43,21 +43,6 @@ DEFAULT_ARMS = [
     ("human_script", "lifecycle.arms.human_script:factory", {}),
 ]
 
-#: Local Ollama stand-ins for the frontier agent, used while no key is
-#: available. Their names say so, and every row records the model. The
-#: screenshot stand-in runs only the first 10 items: an 8B vision model on this
-#: host takes about a minute a call and does not act reliably, so a full stream
-#: would hold the shared fixture for hours to show the same thing.
-LOCAL_ARMS = [
-    ("openadapt", "lifecycle.openadapt_arm:make", {}),
-    ("cua_local", "lifecycle.arms.cua:factory",
-     {"name": "cua_local", "model": "ollama:qwen3-vl:8b", "max_turns": 6, "stop_after": 10}),
-    ("agent_tools_local", "lifecycle.arms.agent_tools:factory",
-     {"name": "agent_tools_local", "model": "ollama:llama3.1:8b", "max_turns": 25}),
-    ("agent_script_local", "lifecycle.arms.agent_script:factory",
-     {"name": "agent_script_local", "model": "ollama:llama3.1:8b", "max_turns": 20}),
-    ("human_script", "lifecycle.arms.human_script:factory", {}),
-]
 
 
 MIN_FREE_GIB = float(__import__("os").environ.get("LIFECYCLE_MIN_FREE_GIB", "10"))
@@ -139,8 +124,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     p.add_argument("--existing", type=int, default=12)
     p.add_argument("--only", action="append", help="run only these arms (by name)")
     p.add_argument("--arms-json", type=Path, help="a JSON list of [name, module:factory, options]")
-    p.add_argument("--models", choices=("frontier", "local"), default="frontier",
-                   help="local: Ollama stand-ins for the agent arms (labelled *_local)")
     p.add_argument("--app", default="openemr")
     p.add_argument("--report-only", action="store_true")
     args = p.parse_args(argv)
@@ -151,8 +134,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
-    arms = (json.loads(args.arms_json.read_text()) if args.arms_json
-            else LOCAL_ARMS if args.models == "local" else DEFAULT_ARMS)
+    arms = json.loads(args.arms_json.read_text()) if args.arms_json else DEFAULT_ARMS
     if args.only:
         arms = [a for a in arms if a[0] in args.only]
 
