@@ -51,6 +51,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -2376,6 +2377,11 @@ class Replayer:
         else:
             span_skip_to = -1
             stop_run = False
+            # A durable run defers only the last step's record check: nothing
+            # in the item then waits on it, and its pause is the item's end.
+            self._linear_final_step_id = (
+                workflow.steps[-1].id if workflow.steps else None
+            )
             for step_index, step in enumerate(workflow.steps):
                 # Resume: never re-execute an already-verified step (no
                 # re-performed confirmed writes); its result was pre-loaded.
@@ -2617,6 +2623,40 @@ class Replayer:
                 router = self._surface_router
                 if router is not None and result.ok:
                     router.observe_active(step.id)
+                deferred = getattr(self, "_pipelined_readback", None)
+                if (
+                    deferred is not None
+                    and getattr(deferred, "result", None) is result
+                    and result.ok
+                ):
+                    # The save was sent and its record check runs alongside
+                    # the next item: the durable pause holds the check, so a
+                    # crash resumes the check and never resends the save.
+                    durable_run.record_deferred_readback(
+                        step_index,
+                        step,
+                        result,
+                        dict(params),
+                        actuation=deferred.actuation,
+                        before=deferred.before.model_dump(mode="json"),
+                        active_surface=(
+                            router.active_id if router is not None else None
+                        ),
+                        surface_observations=(
+                            router.observations if router is not None else None
+                        ),
+                    )
+                    deferred.durable_run = durable_run
+                    deferred.step_index = step_index
+                    deferred.params = dict(params)
+                    deferred.workflow = workflow
+                    deferred.active_surface = (
+                        router.active_id if router is not None else None
+                    )
+                    deferred.surface_observations = (
+                        router.observations if router is not None else None
+                    )
+                    return False
                 durable_run.record(
                     step_index,
                     step,
@@ -3059,9 +3099,9 @@ class Replayer:
             else:
                 # The run ended some other way: settle the read-back inline
                 # before the report is written.
-                self._apply_pipelined_verdict(
-                    report, self._join_pipelined_readback(keep=True)
-                )
+                error = self._join_pipelined_readback(keep=True)
+                error = self._settle_durable_readback(pending, error)
+                self._apply_pipelined_verdict(report, error)
                 self._pipelined_readback = None
         self._end_surfaces()
         if self._surface_environment_observations:
@@ -3118,15 +3158,37 @@ class Replayer:
 
     # -- pipelined read-back (runtime/readback_pipeline.py) ------------------
 
-    def _may_pipeline_readback(self, verifier: Any) -> bool:
-        """Whether this effect's read-back may run on the side thread."""
+    def _may_pipeline_readback(
+        self, verifier: Any, step: Optional[Step] = None
+    ) -> bool:
+        """Whether this effect's read-back may run on the side thread.
+
+        A durable run defers the record check only when the durable pause
+        can hold it (docs/THROUGHPUT.md): a linear run, an encrypted
+        checkpoint store, and the item's last step, so nothing else in the
+        item waits on the check.
+        """
 
         pipeline = getattr(self, "readback_pipeline", None)
         if pipeline is None:
             return False
         reason = None
-        if self.durable or getattr(self, "_program_durable", None) is not None:
-            reason = "durable runs verify inline"
+        if getattr(self, "_program_durable", None) is not None:
+            reason = "durable program runs verify inline"
+        elif self.durable and self._durable_continuation_guard is not None:
+            reason = "a resumed durable run verifies inline"
+        elif self.durable and not self.checkpoint_key:
+            reason = (
+                "a durable run without an encrypted checkpoint store verifies "
+                "inline (the deferred check keeps record rows)"
+            )
+        elif self.durable and (
+            step is None or step.id != getattr(self, "_linear_final_step_id", None)
+        ):
+            reason = (
+                "a durable run defers only its last step's record check; this "
+                "one verifies inline"
+            )
         elif getattr(self, "idempotency_ledger", None) is not None:
             reason = "idempotency-ledger runs verify inline"
         elif getattr(self, "_pipelined_readback", None) is not None:
@@ -3149,6 +3211,7 @@ class Replayer:
         *,
         effects: Optional[list["Effect"]],
         verifier: Any,
+        actuation: Literal["gui", "api"] = "gui",
     ) -> None:
         assert self.readback_pipeline is not None
         scratch = StepResult(step_id=step.id, intent=step.intent, ok=True)
@@ -3162,6 +3225,11 @@ class Replayer:
         entry.scratch = scratch  # type: ignore[attr-defined]
         entry.result = result  # type: ignore[attr-defined]
         entry.intent = step.intent  # type: ignore[attr-defined]
+        # What a durable pause needs to re-run this check after a crash.
+        entry.step = step  # type: ignore[attr-defined]
+        entry.before = before  # type: ignore[attr-defined]
+        entry.actuation = actuation  # type: ignore[attr-defined]
+        entry.durable_run = None  # type: ignore[attr-defined]
         result.effect_verified = None
         result.effect_results.append("[pipelined] system-of-record read-back pending")
         self._pipelined_readback = entry
@@ -3252,6 +3320,7 @@ class Replayer:
         """Apply a finished deferred read-back to the saved item report."""
 
         self._copy_pipelined_evidence(entry, error)
+        error = self._settle_durable_readback(entry, error)
         if error is not None:
             self._apply_pipelined_verdict(report, error, entry=entry)
         else:
@@ -3263,6 +3332,89 @@ class Replayer:
         self._stamp_approval(report)
         report.save(run_dir)
         return report
+
+    def recheck_deferred_readback(
+        self,
+        workflow: Workflow,
+        deferred: Any,
+        *,
+        params: Mapping[str, RuntimeParamScalar],
+        run_id: str,
+    ) -> StepResult:
+        """Re-run a durable pause's deferred record check; send nothing.
+
+        The check runs against the snapshot of the system of record taken
+        before the save, with this replayer's system-of-record verifier.
+        Returns the save's result with the verdict applied: ``ok`` when the
+        record check confirmed the save.
+        """
+
+        from openadapt_flow.policy import effects_for_actuation
+        from openadapt_flow.runtime.durable.approval import StateDiverged
+
+        step = workflow.steps[deferred.step_index]
+        if step.id != deferred.step_id:
+            raise StateDiverged(
+                "the deferred record check names a different step than the bundle"
+            )
+        verifier = self.effect_verifier
+        if verifier is None or not _pipeline_safe_verifier(verifier):
+            raise StateDiverged(
+                "re-running a deferred record check needs the run's REST, FHIR, "
+                "GraphQL or SQL record checker"
+            )
+        self._run_id = run_id
+        effects = self._resolve_effects(
+            list(effects_for_actuation(step, deferred.actuation)), params
+        )
+        before = EffectState.model_validate(deferred.before)
+        result = deferred.result.model_copy(deep=True)
+        scratch = StepResult(step_id=step.id, intent=step.intent, ok=True)
+        try:
+            error = self._verify_effects(
+                step, before, scratch, effects=effects, verifier=verifier
+            )
+        except Exception as exc:  # noqa: BLE001 - a raising verifier fails closed
+            error = f"read-back raised {type(exc).__name__}; reconciliation is required"
+        self._copy_pipelined_evidence(
+            SimpleNamespace(result=result, scratch=scratch), error
+        )
+        return result
+
+    def _settle_durable_readback(
+        self, entry: Any, error: Optional[str]
+    ) -> Optional[str]:
+        """Replace a durable run's deferred-check pause with its verdict.
+
+        Returns the error to report: the check's own, or why the durable
+        record of the verdict failed. The pause then stays, so a resume
+        re-runs the check; the save is never sent again either way.
+        """
+
+        durable_run = getattr(entry, "durable_run", None)
+        if durable_run is None:
+            return error
+        result: StepResult = entry.result
+        try:
+            durable_run.settle_deferred_readback(
+                entry.step_index,
+                entry.step,
+                result,
+                entry.params,
+                workflow=entry.workflow,
+                active_surface=entry.active_surface,
+                surface_observations=entry.surface_observations,
+            )
+        except Exception as exc:  # noqa: BLE001 - durable evidence boundary
+            reason = (
+                "the record check finished, but its durable record failed "
+                f"({type(exc).__name__}); resume re-runs the check"
+            )
+            result.ok = False
+            result.error = reason if error is None else f"{error}; {reason}"
+            result.safety_halt = True
+            return result.error
+        return error
 
     def _project_idempotency_outcome_after_persist(
         self,
@@ -8584,7 +8736,7 @@ class Replayer:
                 error is None
                 and not delivery_uncertain
                 and effect_pre_state is not None
-                and self._may_pipeline_readback(active_verifier)
+                and self._may_pipeline_readback(active_verifier, step)
             ):
                 # Pipelined read-back (runtime/readback_pipeline.py): the same
                 # check, run on the side thread. Any later step in this run
@@ -9394,12 +9546,17 @@ class Replayer:
             current_step=overlay_current,
             total_steps=overlay_total,
         )
-        if self._may_pipeline_readback(effect_verifier):
+        if self._may_pipeline_readback(effect_verifier, step):
             # Pipelined read-back (runtime/readback_pipeline.py), as for a GUI
             # save: the same record check on the side thread. The item's
             # report stays unsuccessful until it settles with the verdict.
             self._defer_readback(
-                step, before, result, effects=effects, verifier=effect_verifier
+                step,
+                before,
+                result,
+                effects=effects,
+                verifier=effect_verifier,
+                actuation="api",
             )
             result.ok = True
             result.error = None

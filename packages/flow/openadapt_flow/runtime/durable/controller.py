@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from openadapt_flow.bundle_validation import BundleIntegrityError
 from openadapt_flow.ir import (
+    ActionDeliveryUncertainty,
     BusinessDecisionEvidence,
     ProgramExceptionEvidence,
     ProgramTransitionEvidence,
@@ -50,6 +51,7 @@ from openadapt_flow.runtime.authorization import (
 from openadapt_flow.runtime.durable.approval import StateDiverged
 from openadapt_flow.runtime.durable.checkpoint import (
     CheckpointStore,
+    DeferredReadback,
     PendingEscalation,
     RunCheckpoint,
     RunManifest,
@@ -101,6 +103,106 @@ def looks_like_human_required(*texts: Optional[str]) -> bool:
         if _HUMAN_REQUIRED_TOKEN_RE.search(lowered):
             return True
     return False
+
+
+def verified_checkpoint(
+    *,
+    run_id: str,
+    workflow_name: str,
+    bundle_version: str,
+    step_index: int,
+    step: Step,
+    result: StepResult,
+    params: dict[str, RuntimeParamScalar],
+    governed_authorization: Optional[GovernedRunAuthorization],
+    active_surface: Optional[str] = None,
+    surface_observations: Optional[dict[str, Any]] = None,
+) -> RunCheckpoint:
+    """The checkpoint for one verified step, after its action evidence passed.
+
+    Raises :class:`StateDiverged` when the result's action evidence is not
+    complete enough to prove the step.
+    """
+
+    from openadapt_flow.action_evidence import action_evidence_error
+
+    profile = (
+        governed_authorization.execution_profile
+        if governed_authorization is not None
+        else None
+    )
+    identity_required = bool(
+        step.identity_armed
+        or (
+            governed_authorization is not None
+            and governed_authorization.requires_verified_identity(step.id)
+        )
+    )
+    evidence_error = action_evidence_error(
+        step,
+        result,
+        params=params,
+        identity_required=identity_required,
+        strict_production=(profile in {"standard", "regulated"} and identity_required),
+    )
+    if evidence_error is not None:
+        raise StateDiverged(
+            "refusing a durable checkpoint with invalid action evidence: "
+            f"{evidence_error}"
+        )
+    return RunCheckpoint(
+        run_id=run_id,
+        workflow_name=workflow_name,
+        bundle_version=bundle_version,
+        step_index=step_index,
+        step_id=step.id,
+        intent=step.intent,
+        next_step_index=step_index + 1,
+        params=dict(params),
+        effect_verified=result.effect_verified,
+        effect_approved_unverified=result.effect_approved_unverified,
+        effect_contract_hashes=list(result.effect_contract_hashes),
+        effect_evidence=list(result.effect_evidence),
+        identity=result.identity,
+        input_verified=result.input_verified,
+        starting_state_settled=result.starting_state_settled,
+        delivery_attempted=result.delivery_attempted,
+        delivery_receipt=result.delivery_receipt,
+        drag_end_resolution=result.drag_end_resolution,
+        fresh_actuation_events=list(result.fresh_actuation_events),
+        before_png=result.before_png,
+        governed_authorization_id=(
+            governed_authorization.authorization_id
+            if governed_authorization is not None
+            else None
+        ),
+        governed_approval_source=(
+            governed_authorization.approval_source
+            if governed_authorization is not None
+            else None
+        ),
+        postconditions_ok=result.postconditions_ok,
+        expected_postconditions=(
+            [condition.model_copy(deep=True) for condition in step.expect]
+            if not result.skipped
+            else []
+        ),
+        skipped=result.skipped,
+        actuation=result.actuation,
+        delivery_uncertainty=result.delivery_uncertainty,
+        resolution=result.resolution,
+        drift_oracle_calls=result.drift_oracle_calls,
+        heal=result.heal,
+        surface=result.surface,
+        active_surface=active_surface,
+        surface_observations=dict(surface_observations or {}),
+    )
+
+
+def _utc_now() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat()
 
 
 def classify_halt(step: Optional[Step], result: StepResult) -> tuple[str, list[str]]:
@@ -493,81 +595,18 @@ class DurableRun:
         duplicating it.
         """
         if result.ok:
-            from openadapt_flow.action_evidence import action_evidence_error
-
-            profile = (
-                self.governed_authorization.execution_profile
-                if self.governed_authorization is not None
-                else None
-            )
-            identity_required = bool(
-                step.identity_armed
-                or (
-                    self.governed_authorization is not None
-                    and self.governed_authorization.requires_verified_identity(step.id)
-                )
-            )
-            evidence_error = action_evidence_error(
-                step,
-                result,
-                params=params,
-                identity_required=identity_required,
-                strict_production=(
-                    profile in {"standard", "regulated"} and identity_required
-                ),
-            )
-            if evidence_error is not None:
-                raise StateDiverged(
-                    "refusing a durable checkpoint with invalid action evidence: "
-                    f"{evidence_error}"
-                )
             self.store.write_checkpoint(
-                RunCheckpoint(
+                verified_checkpoint(
                     run_id=self.run_id,
                     workflow_name=self.workflow_name,
                     bundle_version=self.bundle_version,
                     step_index=step_index,
-                    step_id=step.id,
-                    intent=step.intent,
-                    next_step_index=step_index + 1,
-                    params=dict(params),
-                    effect_verified=result.effect_verified,
-                    effect_approved_unverified=result.effect_approved_unverified,
-                    effect_contract_hashes=list(result.effect_contract_hashes),
-                    effect_evidence=list(result.effect_evidence),
-                    identity=result.identity,
-                    input_verified=result.input_verified,
-                    starting_state_settled=result.starting_state_settled,
-                    delivery_attempted=result.delivery_attempted,
-                    delivery_receipt=result.delivery_receipt,
-                    drag_end_resolution=result.drag_end_resolution,
-                    fresh_actuation_events=list(result.fresh_actuation_events),
-                    before_png=result.before_png,
-                    governed_authorization_id=(
-                        self.governed_authorization.authorization_id
-                        if self.governed_authorization is not None
-                        else None
-                    ),
-                    governed_approval_source=(
-                        self.governed_authorization.approval_source
-                        if self.governed_authorization is not None
-                        else None
-                    ),
-                    postconditions_ok=result.postconditions_ok,
-                    expected_postconditions=(
-                        [condition.model_copy(deep=True) for condition in step.expect]
-                        if not result.skipped
-                        else []
-                    ),
-                    skipped=result.skipped,
-                    actuation=result.actuation,
-                    delivery_uncertainty=result.delivery_uncertainty,
-                    resolution=result.resolution,
-                    drift_oracle_calls=result.drift_oracle_calls,
-                    heal=result.heal,
-                    surface=result.surface,
+                    step=step,
+                    result=result,
+                    params=params,
+                    governed_authorization=self.governed_authorization,
                     active_surface=active_surface,
-                    surface_observations=dict(surface_observations or {}),
+                    surface_observations=surface_observations,
                 )
             )
             self._sync_authority()
@@ -624,6 +663,118 @@ class DurableRun:
                 # do not mint new operator authority for the mutated bundle.
                 pass
         self._sync_authority()
+
+    # -- pipelined read-back (a deferred record check) -----------------------
+
+    def record_deferred_readback(
+        self,
+        step_index: int,
+        step: Step,
+        result: StepResult,
+        params: dict[str, RuntimeParamScalar],
+        *,
+        actuation: Literal["gui", "api"],
+        before: dict[str, Any],
+        active_surface: Optional[str] = None,
+        surface_observations: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """Persist a sent save whose record check runs alongside the next item.
+
+        The save was sent and its record check hasn't run yet, so this writes
+        a pause, not a checkpoint: the pause carries the deferred check and
+        ``delivery_uncertainty``. An ordinary resume can then never repeat the
+        save, and a resume re-runs only the check. :meth:`settle_deferred_readback`
+        replaces the pause with the verdict.
+        """
+
+        if self.store.key is None:
+            raise StateDiverged(
+                "a deferred record check holds record rows, so the durable "
+                "store must be encrypted"
+            )
+        last = self.store.last_checkpoint()
+        resume_from = last.next_step_index if last is not None else 0
+        if resume_from != step_index:
+            raise StateDiverged(
+                "a deferred record check must follow the last verified checkpoint"
+            )
+        uncertainty = result.delivery_uncertainty or ActionDeliveryUncertainty(
+            operation="deferred_readback",
+            native=False,
+            observed_at=_utc_now(),
+            cause_type="DeferredReadback",
+        )
+        pending = PendingEscalation(
+            run_id=self.run_id,
+            workflow_name=self.workflow_name,
+            step_index=step_index,
+            step_id=step.id,
+            intent=step.intent,
+            category="readback_pending",
+            reason=(
+                "the save was sent and its record check is running alongside "
+                "the next item; a resume re-runs only the check and never sends "
+                "the save again"
+            ),
+            detail=list(result.effect_results or []),
+            proposed_options=["resume (re-runs the record check only)"],
+            resume_from_index=resume_from,
+            resume_from_step_id=(last.step_id if last is not None else None),
+            params=dict(params),
+            delivery_uncertainty=uncertainty,
+            deferred_readback=DeferredReadback(
+                step_index=step_index,
+                step_id=step.id,
+                actuation=actuation,
+                before=dict(before),
+                result=result.model_copy(deep=True),
+                active_surface=active_surface,
+                surface_observations=dict(surface_observations or {}),
+            ),
+        )
+        self.store.cas_pending(self._active_pause_digest, pending)
+        self._active_pause_digest = self.store.model_digest(pending)
+        self._sync_authority()
+
+    def settle_deferred_readback(
+        self,
+        step_index: int,
+        step: Step,
+        result: StepResult,
+        params: dict[str, RuntimeParamScalar],
+        *,
+        workflow: Optional[Workflow] = None,
+        active_surface: Optional[str] = None,
+        surface_observations: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """Replace a deferred record check's pause with its verdict.
+
+        A confirmed check writes the save's checkpoint, then consumes the
+        pause. Any other verdict becomes an ordinary reconciliation pause that
+        keeps ``delivery_uncertainty``, so the save is still never repeated.
+        """
+
+        current = self.store.read_pending()
+        if (
+            current is None
+            or current.deferred_readback is None
+            or current.step_index != step_index
+            or self.store.model_digest(current) != self._active_pause_digest
+        ):
+            raise StateDiverged(
+                "the deferred record check's durable pause changed before it settled"
+            )
+        surfaces = dict(
+            active_surface=active_surface, surface_observations=surface_observations
+        )
+        if result.ok:
+            self.record(step_index, step, result, params, workflow=workflow, **surfaces)
+            self.complete()
+            self._sync_authority()
+            return
+        if result.delivery_uncertainty is None:
+            result.delivery_uncertainty = current.delivery_uncertainty
+        self.record(step_index, step, result, params, workflow=workflow, **surfaces)
 
     # -- Phase-2 program (state-machine) durability --------------------------
 

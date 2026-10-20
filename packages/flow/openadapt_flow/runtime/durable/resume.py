@@ -300,6 +300,126 @@ def _created_later(checkpoint_created_at: str, pause_created_at: str) -> bool:
         return False
 
 
+def _deferred_readback_settled(
+    checkpoints: list[RunCheckpoint], pending: PendingEscalation
+) -> bool:
+    """Whether a deferred record check confirmed the paused save.
+
+    The confirmed check writes the save's checkpoint after the pause (in the
+    original process, or by a resume that re-ran the check). That checkpoint
+    is then the pause's tail, as a human-attended completion is.
+    """
+
+    return (
+        pending.deferred_readback is not None
+        and not pending.program
+        and bool(checkpoints)
+        and checkpoints[-1].step_index == pending.step_index
+        and checkpoints[-1].step_id == pending.step_id
+        and checkpoints[-1].effect_verified is True
+        and _created_later(checkpoints[-1].created_at, pending.created_at)
+    )
+
+
+def _settle_deferred_readback_on_resume(
+    *,
+    run_dir: Path,
+    store: CheckpointStore,
+    pending: PendingEscalation,
+    manifest: RunManifest,
+    replayer: Any,
+    bundle_dir: Path,
+    key: Optional[str],
+) -> None:
+    """Re-run a pause's deferred record check; never send the save again.
+
+    A crash while a save's record check ran alongside the next item leaves
+    the pause that holds the check. This re-runs only that check, against the
+    snapshot taken before the save. A confirmed check writes the save's
+    checkpoint, and the ordinary resume then continues after the save. Any
+    other verdict leaves a reconciliation pause and refuses the resume.
+    """
+
+    deferred = pending.deferred_readback
+    assert deferred is not None
+    if _deferred_readback_settled(store.checkpoints(), pending):
+        return
+    from openadapt_flow.runtime.durable.controller import (
+        classify_halt,
+        verified_checkpoint,
+    )
+
+    workflow = Workflow.load(bundle_dir, key=key)
+    if workflow.program is not None or deferred.step_index >= len(workflow.steps):
+        raise StateDiverged("a deferred record check belongs to a linear run")
+    step = workflow.steps[deferred.step_index]
+    if manifest.governed_authorization is not None:
+        existing = getattr(replayer, "governed_authorization", None)
+        if existing is not None and existing != manifest.governed_authorization:
+            raise BundleMismatch(
+                "resume Replayer carries a different governed authorization "
+                "than the durable run manifest"
+            )
+        replayer.governed_authorization = manifest.governed_authorization
+    guard = getattr(replayer, "_durable_continuation_guard", None)
+    if guard is None:
+        raise StateDiverged(
+            "durable continuation lost its authority guard before the record check"
+        )
+    result = replayer.recheck_deferred_readback(
+        workflow, deferred, params=dict(manifest.params), run_id=manifest.run_id
+    )
+    if result.ok:
+        store.write_checkpoint(
+            verified_checkpoint(
+                run_id=manifest.run_id,
+                workflow_name=manifest.workflow_name,
+                bundle_version=bundle_version(manifest.bundle_dir),
+                step_index=deferred.step_index,
+                step=step,
+                result=result,
+                params=dict(manifest.params),
+                governed_authorization=manifest.governed_authorization,
+                active_surface=deferred.active_surface,
+                surface_observations=dict(deferred.surface_observations),
+            )
+        )
+        # Commit the save's checkpoint to the continuation authority before
+        # the ordinary resume admits the rest of the run.
+        guard.acknowledge_progress()
+        return
+    if result.delivery_uncertainty is None:
+        result.delivery_uncertainty = pending.delivery_uncertainty
+    category, options = classify_halt(step, result)
+    reconcile = pending.model_copy(
+        update={
+            "category": category,
+            "reason": result.error or "",
+            "detail": list(result.effect_results or []),
+            "proposed_options": options,
+            "delivery_uncertainty": result.delivery_uncertainty,
+            "deferred_readback": None,
+        }
+    )
+    store.cas_pending(store.model_digest(pending), reconcile)
+    from openadapt_flow.runtime.durable.attended import issue_attended_capability
+
+    issue_attended_capability(
+        run_dir,
+        store=store,
+        pending=reconcile,
+        workflow=workflow,
+        result=result,
+        transition_observation=None,
+    )
+    guard.acknowledge_progress(terminal=True)
+    raise ApprovalRequired(
+        "the record check re-run on resume did not confirm the save "
+        f"({result.error}); the save is never sent again. Reconcile it "
+        "through the attended completion path"
+    )
+
+
 def _linear_resume_checkpoint(
     *,
     run_dir: Path,
@@ -317,7 +437,7 @@ def _linear_resume_checkpoint(
         and checkpoints[-1].step_index == pending.step_index
         and checkpoints[-1].step_id == pending.step_id
         and checkpoints[-1].actuation in {"human_attended", "human_attended_skip"}
-    )
+    ) or _deferred_readback_settled(checkpoints, pending)
     expected_count = pending.resume_from_index + (1 if attended else 0)
     valid_count = (
         pending.resume_from_index <= len(checkpoints) <= len(workflow.steps)
@@ -907,20 +1027,35 @@ def _resume_under_lease(
         # before retained-state checks or resumed execution can call a model.
         continuation_guard.acknowledge_progress()
         manifest = updated_manifest
+    if pending.deferred_readback is not None and not pending.program:
+        _settle_deferred_readback_on_resume(
+            run_dir=run_dir,
+            store=store,
+            pending=pending,
+            manifest=manifest,
+            replayer=replayer,
+            bundle_dir=resolved_bundle,
+            key=key,
+        )
     if pending.delivery_uncertainty is not None:
         last_linear = store.last_checkpoint()
         last_program = store.last_program_checkpoint()
         reconciled_without_retry = (
-            not pending.program
-            and last_linear is not None
-            and last_linear.step_index == pending.step_index
-            and last_linear.next_step_index > pending.step_index
-            and last_linear.actuation in {"human_attended", "human_attended_skip"}
-        ) or (
-            pending.program
-            and last_program is not None
-            and last_program.verified_state_id == (pending.state_id or pending.step_id)
-            and last_program.attended_transition is not None
+            _deferred_readback_settled(store.checkpoints(), pending)
+            or (
+                not pending.program
+                and last_linear is not None
+                and last_linear.step_index == pending.step_index
+                and last_linear.next_step_index > pending.step_index
+                and last_linear.actuation in {"human_attended", "human_attended_skip"}
+            )
+            or (
+                pending.program
+                and last_program is not None
+                and last_program.verified_state_id
+                == (pending.state_id or pending.step_id)
+                and last_program.attended_transition is not None
+            )
         )
         if not reconciled_without_retry and not approved.authorize_uncertain_retry:
             raise ApprovalRequired(
@@ -1026,8 +1161,15 @@ def _resume_under_lease(
         manifest=manifest,
         workflow=workflow,
     )
-    for checkpoint in linear_checkpoints:
+    deferred_tail = _deferred_readback_settled(linear_checkpoints, pending)
+    for position, checkpoint in enumerate(linear_checkpoints):
         if checkpoint.effect_verified is not True:
+            continue
+        if deferred_tail and position == len(linear_checkpoints) - 1:
+            # The pause's deferred record check confirmed this save against
+            # the snapshot taken before it. It is the run's last step, so no
+            # later step depends on re-reading it, and a current-state read
+            # can't prove a check that needs that snapshot.
             continue
         step = workflow.steps[checkpoint.step_index]
         replayer.revalidate_retained_effects(

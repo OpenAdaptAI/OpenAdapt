@@ -17,8 +17,9 @@ A Regulated, durable, governed run with per-item approval, on parallel
 workers, using the API step for an admitted save, is the combination
 where the most work together: each worker's item sends one request a
 person approved, checks it with the system-of-record read-back, and
-reads `VERIFIED`. In that run the read-back runs inline (durable), and
-self-repair runs through the Python API under the Standard contract.
+reads `VERIFIED`. Its record check runs alongside the next item, held
+in the durable pause until it settles, and self-repair runs through
+the Python API under the Standard contract.
 Under a signed qualification admission (what `openadapt-flow run`
 requires for Standard and Regulated actuation) the API step and
 self-repair are still refused, each with its reason below.
@@ -46,7 +47,7 @@ self-repair are still refused, each with its reason below.
 | Feature | Default (gated) | Durable | Governed | Pinned | Qualified | Managed |
 | --- | --- | --- | --- | --- | --- | --- |
 | API step | Works | Works | Works | Works | Refused | Refused |
-| Pipelined read-back | Works | Refused | Refused | Works | Refused | Refused |
+| Pipelined read-back | Works | Works | Works | Works | Works | Refused |
 | Self-repair | Works | Works | Works | Refused | Refused | Refused |
 | Standard changes | Works | Works | Works | Refused | Refused | Refused |
 | Parallel workers | Works | Works | Works | Works | Works | Refused |
@@ -73,10 +74,10 @@ refuses says it in those words.
 | Profile | Result |
 | --- | --- |
 | Default (gated) | Works: GUI and API saves |
-| Durable | Refused: durable runs verify inline (the record check runs before the next item) |
-| Governed | Refused: durable runs verify inline (Standard and Regulated are durable) |
-| Pinned | Works: when the run isn't durable |
-| Qualified | Refused: durable runs verify inline (Standard and Regulated are durable) |
+| Durable | Works: the durable pause holds the deferred check, so a crash resumes the check and never resends |
+| Governed | Works: the last step's record check, with an encrypted checkpoint store |
+| Pinned | Works |
+| Qualified | Works: as governed |
 | Managed | Refused: --workers and --readback-window apply to local runs, not a managed dispatch or a qualification case |
 
 ### Self-repair
@@ -128,7 +129,7 @@ refuses says it in those words.
 | With | Result |
 | --- | --- |
 | Parallel workers | Works: each item runs its own API step |
-| Pipelined read-back | Works: when the run isn't durable |
+| Pipelined read-back | Works: durable runs too, where the API save is the last step |
 | Self-repair | Refused: self-repair's probes and resumed run exercise the repaired GUI step, and the person approved that step, so its API step doesn't run (the first, ordinary run can use the API step) |
 | Standard changes | Refused: self-repair's probes and resumed run exercise the repaired GUI step, and the person approved that step, so its API step doesn't run (the repaired bundle's test-record run is GUI-only too) |
 | Multi-surface | Refused: a run across several windows or tabs uses the GUI steps |
@@ -144,10 +145,10 @@ Each cell names the tests that show it. They run in CI.
 - API step / Qualified: `tests/test_compatibility_matrix.py::test_api_step_refuses_where_the_matrix_says`
 - API step / Managed: `tests/test_compatibility_matrix.py::test_api_step_refuses_where_the_matrix_says`
 - Pipelined read-back / Default (gated): `tests/test_readback_pipeline.py::test_confirmed_readback_settles_the_saved_report`, `tests/test_api_step_readback_repair.py::test_an_api_save_reads_back_while_the_next_item_runs`, `tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says`
-- Pipelined read-back / Durable: `tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says`
-- Pipelined read-back / Governed: `tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says`
+- Pipelined read-back / Durable: `tests/test_durable_pipelined_readback.py::test_a_durable_run_defers_its_last_record_check_and_settles_it`, `tests/test_durable_pipelined_readback.py::test_a_crash_mid_window_resumes_the_check_and_never_resends`, `tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says`
+- Pipelined read-back / Governed: `tests/test_durable_pipelined_readback.py::test_a_durable_run_defers_its_last_record_check_and_settles_it`, `tests/test_durable_pipelined_readback.py::test_a_crash_mid_window_resumes_the_check_and_never_resends`, `tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says`
 - Pipelined read-back / Pinned: `tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says`
-- Pipelined read-back / Qualified: `tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says`
+- Pipelined read-back / Qualified: `tests/test_durable_pipelined_readback.py::test_a_durable_run_defers_its_last_record_check_and_settles_it`, `tests/test_durable_pipelined_readback.py::test_a_crash_mid_window_resumes_the_check_and_never_resends`, `tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says`
 - Pipelined read-back / Managed: `tests/test_compatibility_matrix.py::test_the_worklist_pool_where_the_matrix_says`
 - Self-repair / Default (gated): `tests/test_self_repair_cli.py::test_run_self_repair_cli_resumes_after_one_phone_tap`, `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
 - Self-repair / Durable: `tests/test_self_repair.py::test_renamed_button_is_repaired_approved_on_the_phone_and_verified`
