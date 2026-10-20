@@ -45,6 +45,7 @@ import math
 import os
 import re
 import struct
+import threading
 import time
 import uuid
 from copy import deepcopy
@@ -2656,6 +2657,7 @@ class Replayer:
                     deferred.surface_observations = (
                         router.observations if router is not None else None
                     )
+                    deferred.start.set()
                     return False
                 durable_run.record(
                     step_index,
@@ -3218,6 +3220,7 @@ class Replayer:
                 )
 
             self.readback_pipeline.hand_off(entry, _settle)
+            entry.start.set()
         return report
 
     # -- pipelined read-back (runtime/readback_pipeline.py) ------------------
@@ -3279,13 +3282,21 @@ class Replayer:
     ) -> None:
         assert self.readback_pipeline is not None
         scratch = StepResult(step_id=step.id, intent=step.intent, ok=True)
+        # A durable run's check starts only once the durable pause holds it,
+        # so a crash in between can't leave a sent save without its pause.
+        # Whatever waits on the check also starts it.
+        start = threading.Event()
+        if not self.durable:
+            start.set()
 
         def verify() -> Optional[str]:
+            start.wait()
             return self._verify_effects(
                 step, before, scratch, effects=effects, verifier=verifier
             )
 
         entry = self.readback_pipeline.submit(step.id, verify)
+        entry.start = start  # type: ignore[attr-defined]
         entry.scratch = scratch  # type: ignore[attr-defined]
         entry.result = result  # type: ignore[attr-defined]
         entry.intent = step.intent  # type: ignore[attr-defined]
@@ -3304,6 +3315,9 @@ class Replayer:
         entry = getattr(self, "_pipelined_readback", None)
         if entry is None:
             return None
+        start = getattr(entry, "start", None)
+        if start is not None:
+            start.set()
         try:
             error = entry.verdict.result()
         except Exception as exc:  # noqa: BLE001 - a raising verifier fails closed
