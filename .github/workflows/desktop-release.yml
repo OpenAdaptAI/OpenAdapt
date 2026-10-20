@@ -150,8 +150,10 @@ jobs:
             subject="${GITHUB_SHA}"
           else
             # A dispatch builds the tip; its checks are those of the newest
-            # commit that changed Desktop, whose tree the tip must equal.
-            subject="$(git log -1 --format=%H "${GITHUB_SHA}" -- .)"
+            # commit on main's own history (first parent) that changed
+            # Desktop, whose tree the tip must equal. A commit from inside a
+            # merged branch never had a Packages push run on main.
+            subject="$(git log -1 --first-parent --format=%H "${GITHUB_SHA}" -- .)"
           fi
           echo "Release checks follow ${subject}."
           echo "sha=${subject}" >> "${GITHUB_OUTPUT}"
@@ -947,6 +949,8 @@ jobs:
       - name: Require the exact release App identity
         env:
           ACTUAL_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+        # Runs before the checkout below, so packages/desktop doesn't exist yet.
+        working-directory: ${{ github.workspace }}
         run: |
           if [ "${ACTUAL_APP_SLUG}" != openadapt-release ]; then
             echo "Tagging requires the openadapt-release App, not ${ACTUAL_APP_SLUG}." >&2
@@ -1047,7 +1051,7 @@ jobs:
             python scripts/release_publication.py state --repository "${GITHUB_REPOSITORY}" --tag "${TAG}" --cli "${GH_CLI}" --metadata "${RUNNER_TEMP}/release.json"
           fi
           verify() {
-            python ../../scripts/verify_github_release.py \
+            python ../../scripts/verify_github_release.py --artifact-set any \
               --metadata "${RUNNER_TEMP}/release.json" \
               --tag "${TAG}" \
               --author "${EXPECTED_AUTHOR}" \
@@ -1170,7 +1174,7 @@ jobs:
         run: |
           set -euo pipefail
           verify() {
-            python ../../scripts/verify_github_release.py \
+            python ../../scripts/verify_github_release.py --artifact-set any \
               --metadata "${RUNNER_TEMP}/release.json" \
               --tag "${TAG}" \
               --author "${EXPECTED_AUTHOR}" \

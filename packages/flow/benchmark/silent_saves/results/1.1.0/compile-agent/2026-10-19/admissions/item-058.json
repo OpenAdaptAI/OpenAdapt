@@ -1,0 +1,18 @@
+{
+  "steps": 6,
+  "canary_status": "refused",
+  "canary_detail": "the standard run gate refused; nothing ran:\nREFUSE: workflow 'mockmed.add_note_by_name' under 'standard' profile vs policy 'clinical-write'\n  [PASS] Execution profile: standard (production); durability required and enabled; settled-state detection required and enabled\n  [REFUSE] Certification: bundle is NOT certified under 'clinical-write': 2 policy violation(s) (e.g. require_reviewed_action_risk: write-shaped action risk has no current, bound operator classification \u2014 qualification must apply and certify an explicit risk override (navigation occurred but its business-side effect is not proven))\n         steps: step_000, step_001\n  [PASS] Identity coverage: 5/5 entity-sensitive/consequential action(s) identity-armed\n  [PASS] Effect coverage: 1/1 consequential write(s) declare the required postcondition and confirmed system-of-record effect contracts\n  [PASS] Approval fallback: a verifier satisfying the required evidence tier is configured; 1 declared write(s) are covered\n  [PASS] Interstitial admission: no automatic interstitial actions declared\n  [WARN] Encrypted bundle: workflow.json plaintext (not required); WARNING: 10 template/screenshot asset(s) are unsealed (plaintext at rest) -- protect via disk encryption or run with --strict-templates to refuse\n         steps: templates/layout_fingerprint.json, templates/step_000.png, templates/step_001.png, templates/step_002.png, templates/step_002_expect.png, templates/step_003.png, templates/step_003_expect.png, templates/step_004_expect.png, ... (+2 more)\n  [PASS] Sealed manifest + version pin: integrity-sealed manifest re-verified (digest 258f3f4481383b26..., compiler 2.2.0) (version pin matches)\n  -> RUN REFUSED (fail-closed): Certification. Nothing was executed.",
+  "canary_halt": null,
+  "admitted": false,
+  "params": {
+    "lifted": [
+      {
+        "field_label": "Note",
+        "masked_example": "Sy******************************************ys",
+        "name": "note",
+        "step_id": "step_004"
+      }
+    ],
+    "unlifted": {}
+  }
+}

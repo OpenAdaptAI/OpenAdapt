@@ -80,6 +80,9 @@ ALLOWED_FIELDS = {
     "evidence_classes",
     "effect_tier_reached",
     "effect_assurance",
+    # Counts of the server's answers to save requests (same transaction; never
+    # a check). Counts and a fixed label only.
+    "server_responses",
     "authorization_required",
     "authorization_confirmed",
     "identity_required",

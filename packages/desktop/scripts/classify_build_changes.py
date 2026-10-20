@@ -1,6 +1,8 @@
 """Classify whether a Desktop change needs full native artifact builds.
 
-Pull requests keep the representative Linux frozen-sidecar build. Release
+Pull requests keep the representative frozen-sidecar builds, and a pull
+request that changes the Tauri shell or its JavaScript locks also builds the
+Linux installer, so a native dependency bump compiles before it merges. Release
 candidates and explicit dispatches keep the complete platform matrix. A push
 to protected ``main`` repeats the expensive matrix only when a dependency,
 toolchain, packaging, or native-runtime input changed. The immutable native
@@ -50,6 +52,12 @@ FULL_ARTIFACT_SCRIPTS = {
     "scripts/sync_frozen_dependencies.py",
     "scripts/verify_build_artifact.py",
 }
+
+# A pull request that changes one of these also builds the Linux installer.
+# The Rust shell and its plugins compile per platform, and the npm and cargo
+# sides of each Tauri plugin must move together.
+NATIVE_PR_FILES = {"package-lock.json", "package.json"}
+NATIVE_PR_PREFIXES = ("src-tauri/",)
 
 # These paths get the normal PR checks and the exact-main frontend, Python
 # distribution, and cross-platform test jobs. They do not change the native
@@ -105,12 +113,19 @@ def classify_build_scope(event: str, changed_paths: Iterable[str]) -> BuildScope
 
     if event == "workflow_dispatch":
         return BuildScope(True, True, "explicit release-candidate build")
+    paths = tuple(path for raw in changed_paths if (path := _normalize(raw)))
     if event == "pull_request":
+        native = tuple(
+            path
+            for path in paths
+            if path in NATIVE_PR_FILES or path.startswith(NATIVE_PR_PREFIXES)
+        )
+        if native:
+            return BuildScope(True, True, f"pull request changes the native shell: {native[0]}")
         return BuildScope(True, False, "representative pull-request sidecar")
     if event != "push":
         return BuildScope(True, True, f"unknown event {event!r}; fail toward full evidence")
 
-    paths = tuple(path for raw in changed_paths if (path := _normalize(raw)))
     if not paths:
         return BuildScope(True, True, "no changed paths; fail toward full evidence")
 

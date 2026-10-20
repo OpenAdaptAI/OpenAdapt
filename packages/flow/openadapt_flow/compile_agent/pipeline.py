@@ -40,11 +40,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
-from openadapt_flow.compile_agent.harness import GateRequest, Harness, SaveGate
+from openadapt_flow.compile_agent.harness import (
+    GateRequest,
+    Harness,
+    SaveGate,
+    SurfaceHarness,
+)
 from openadapt_flow.jit import lifecycle
 from openadapt_flow.jit.compile_agent import (
     CompiledAgent,
     JitResult,
+    SurfaceApp,
     TaskRequest,
     WebApp,
     compile_agent,
@@ -130,6 +136,24 @@ def _write_json(path: Path, data: Any) -> Path:
 def _slug(text: str) -> str:
     words = re.findall(r"[a-z0-9]+", _PLACEHOLDER_RE.sub("", text.lower()))
     return "compile-agent." + ("-".join(words[:6]) or "task")
+
+
+#: The ``probe`` prefix that routes an effect to one named read
+#: (:func:`openadapt_flow.runtime.effects.surfaces.surface_probe`).
+_SURFACE_ROUTE = "surface="
+
+
+def _claims_new_record(
+    effect: Mapping[str, Any], *, count_new_only: bool = True
+) -> bool:
+    """Whether a proposed effect says the save adds a record (``record_written``
+    with ``expected_count`` above 0); ``expected_count: 0`` says it adds none."""
+
+    if effect.get("kind") != "record_written":
+        return False
+    if count_new_only and not effect.get("count_new_only"):
+        return False
+    return int(effect.get("expected_count", 1)) > 0
 
 
 # -- the run-1 record check ------------------------------------------------------
@@ -278,7 +302,7 @@ class _HarnessedAgent:
         self.keep = list(keep)
         self.evidence_dir = evidence_dir
         self.principal_id = principal_id
-        self.harness: Optional[Harness] = None
+        self.harness: Optional[Union[Harness, SurfaceHarness]] = None
         self.ledger: Any = None
         self.error: Optional[str] = None
 
@@ -287,7 +311,10 @@ class _HarnessedAgent:
         return bool(getattr(self.inner, "requires_model_key", True))
 
     def run(self, request: TaskRequest, computer: Any) -> None:
-        self.harness = Harness(
+        # A browser page gets the DOM harness; any other surface (a native
+        # window, an RDP or Citrix client window) gets the surface harness.
+        harness_type = Harness if computer.page is not None else SurfaceHarness
+        self.harness = harness_type(
             computer, self.gate, keep=self.keep, evidence_dir=self.evidence_dir
         )
         try:
@@ -314,7 +341,7 @@ class FirstRunCompiler:
         prompt: str,
         *,
         params: Sequence[str],
-        url: str,
+        url: Optional[str] = None,
         verify: Union[str, Path],
         expect: Mapping[str, Any],
         on_screen: Sequence[str],
@@ -327,10 +354,20 @@ class FirstRunCompiler:
         on_warning: Optional[Callable[[str], None]] = None,
         model_key: Optional[CustomerModelKey] = None,
         backend: str = "web",
+        surface: Optional[Mapping[str, Any]] = None,
+        open_backend: Optional[Callable[[Any], Any]] = None,
     ) -> None:
         from openadapt_flow.record_sor import load_observer
 
-        check_target(url, backend)
+        self.surface: Optional[Any] = None
+        if surface is not None:
+            # A deployment ``backend:`` section for a native or remote app.
+            # Only an agent that drives the surface harness can record it
+            # (record() checks); the program runs there like any JIT program.
+            self.surface = SurfaceApp(surface, open_backend=open_backend).backend
+            url = None
+        else:
+            check_target(url or "", backend)
 
         reserved = sorted(set(params) & {"reset", "task_dir"})
         if reserved:
@@ -356,6 +393,7 @@ class FirstRunCompiler:
             task_id or _slug(prompt), prompt, {name: str for name in params}
         )
         self.url = url
+        self.open_backend = open_backend
         self.verify_path = Path(verify).resolve()
         self.expect = {str(k): str(v) for k, v in expect.items()}
         self.on_screen = [str(s) for s in on_screen if str(s).strip()]
@@ -381,16 +419,34 @@ class FirstRunCompiler:
     def out_dir(self) -> Path:
         return self.dir / OUT_DIR
 
+    @property
+    def backend_kind(self) -> str:
+        """``web``, or the surface kind (``windows``, ``macos``, ``linux``,
+        ``rdp``, ``citrix``)."""
+
+        return SurfaceApp(self.surface).kind if self.surface is not None else "web"
+
+    def _app(self) -> Any:
+        if self.surface is not None:
+            return SurfaceApp(
+                self.surface,
+                record_reader=lambda: self.observer.system_of_record,
+                reset=self._on_reset,
+                open_backend=self.open_backend,
+            )
+        assert self.url is not None
+        return WebApp(
+            url=self.url,
+            record_reader=lambda: self.observer.system_of_record,
+            reset=self._on_reset,
+            headless=self.headless,
+        )
+
     def _jit(self, agent: Any = None) -> CompiledAgent:
         return compile_agent(
             agent,
             task=self.task,
-            app=WebApp(
-                url=self.url,
-                record_reader=lambda: self.observer.system_of_record,
-                reset=self._on_reset,
-                headless=self.headless,
-            ),
+            app=self._app(),
             verifier=self.observer.verifier,
             policy=self.policy,
             cache_dir=self.cache_dir,
@@ -427,6 +483,11 @@ class FirstRunCompiler:
                     "key": self.task.key,
                 },
                 "url": self.url,
+                "surface": (
+                    self.surface.model_dump(mode="json", exclude_none=True)
+                    if self.surface is not None
+                    else None
+                ),
                 "verify": str(self.verify_path),
                 "expect": self.expect,
                 "on_screen": self.on_screen,
@@ -439,7 +500,11 @@ class FirstRunCompiler:
 
     @classmethod
     def load(
-        cls, task_dir: Union[str, Path], *, reset: Optional[Callable[[], None]] = None
+        cls,
+        task_dir: Union[str, Path],
+        *,
+        reset: Optional[Callable[[], None]] = None,
+        open_backend: Optional[Callable[[Any], Any]] = None,
     ) -> "FirstRunCompiler":
         spec = json.loads((Path(task_dir) / SPEC_FILE).read_text())
         if spec.get("schema") != SPEC_SCHEMA:
@@ -448,7 +513,9 @@ class FirstRunCompiler:
         return cls(
             task["instruction"],
             params=task["params"],
-            url=spec["url"],
+            url=spec.get("url"),
+            surface=spec.get("surface"),
+            open_backend=open_backend,
             verify=spec["verify"],
             expect=spec["expect"],
             on_screen=spec["on_screen"],
@@ -477,6 +544,12 @@ class FirstRunCompiler:
         agent's own.
         """
 
+        if self.surface is not None and not getattr(agent, "drives_surfaces", False):
+            raise UnsupportedTarget(
+                f"this agent reads a web page's DOM; the {self.backend_kind!r} "
+                "app needs an agent that drives the surface harness (the MCP "
+                "teach tools do). Nothing ran."
+            )
         self.save_spec()
         jit = self._jit()
         values = self.task.validate(params)
@@ -650,8 +723,17 @@ class FirstRunCompiler:
 
         doc = yaml.safe_load((self.out_dir / PROPOSED_FILE).read_text())
         effects = doc.get("effects") or []
-        reads = self.out_dir / AGENT_READS_FILE
         extra: dict[str, Any] = {}
+        verifier = doc.get("verifier")
+        if isinstance(verifier, dict) and verifier != self.verifier_section:
+            # Built from other reads than the task's verifier: show them.
+            surfaces = verifier.get("surfaces")
+            extra["reads"] = (
+                sorted(surfaces)
+                if isinstance(surfaces, dict)
+                else [str(verifier.get("kind"))]
+            )
+        reads = self.out_dir / AGENT_READS_FILE
         if reads.is_file():
             # What a code-as-action agent read: the identity before the save,
             # and its inputs read back after it. Evidence for the person.
@@ -672,6 +754,11 @@ class FirstRunCompiler:
                         )
                         for k, v in (e.get("match") or {}).items()
                     },
+                    **(
+                        {"expected_count": e["expected_count"]}
+                        if "expected_count" in e
+                        else {}
+                    ),
                 }
                 for e in effects
             ],
@@ -717,8 +804,16 @@ class FirstRunCompiler:
                 for k, v in (effect.get("match") or {}).items()
                 if k not in drop_fields
             }
-            if effect.get("kind") == "record_written":
-                effect["probe"] = (
+            if _claims_new_record(effect, count_new_only=False):
+                # A check routed to one read (scaffold-verifier's
+                # ``surface=<name>|...``) keeps its route.
+                route = str(effect.get("probe") or "")
+                route = (
+                    route.split("|", 1)[0] + "|"
+                    if route.startswith(_SURFACE_ROUTE)
+                    else ""
+                )
+                effect["probe"] = route + (
                     "exactly one new record with "
                     + ", ".join(
                         f"{k}="
@@ -732,24 +827,40 @@ class FirstRunCompiler:
                     + f" (confirmed by {name})"
                 )
             effects.append(effect)
-        written = [
-            e
-            for e in effects
-            if e.get("kind") == "record_written" and e.get("count_new_only")
-        ]
-        if len(written) != 1:
+        # One effect claims the new record. A check built from several reads
+        # (scaffold-verifier's) claims it once per read, routed to that read;
+        # then every claim must pin the record and read back every input.
+        # Other effects may only say that nothing else was added, changed or
+        # removed (expected_count 0).
+        written = [e for e in effects if _claims_new_record(e)]
+        routes = [str(e.get("probe") or "").split("|", 1)[0] for e in written]
+        if not written or (
+            len(written) > 1
+            and (
+                len(set(routes)) != len(routes)
+                or not all(r.startswith(_SURFACE_ROUTE) for r in routes)
+            )
+        ):
             raise ValueError("the checks must claim exactly one new record")
-        match = written[0]["match"]
-        for key, wanted in self.expect.items():
-            if (match.get(key) or {}).get("literal") != wanted:
-                raise ValueError(f"the check does not pin {key!r} to {wanted!r}")
-        bound = {v.get("param") for v in match.values() if isinstance(v, dict)}
-        unbound = sorted(set(self.task.params) - bound)
-        if unbound:
-            raise ValueError(f"no check reads back input(s) {unbound}")
+        for claim in written:
+            if int(claim.get("expected_count", 1)) != 1:
+                raise ValueError("the checks must claim exactly one new record")
+            match = claim["match"]
+            for key, wanted in self.expect.items():
+                if (match.get(key) or {}).get("literal") != wanted:
+                    raise ValueError(f"the check does not pin {key!r} to {wanted!r}")
+            bound = {v.get("param") for v in match.values() if isinstance(v, dict)}
+            unbound = sorted(set(self.task.params) - bound)
+            if unbound:
+                raise ValueError(f"no check reads back input(s) {unbound}")
+        # A check built from other reads than the task's verifier (for
+        # example scaffold-verifier's) carries them; the person confirms both.
+        verifier = doc.get("verifier")
         config = {
             "schema_version": "openadapt.verify/v1",
-            "verifier": self.verifier_section,
+            "verifier": verifier
+            if isinstance(verifier, dict)
+            else self.verifier_section,
             "effects": effects,
         }
         parse_verify_config(config, source="confirmed checks")

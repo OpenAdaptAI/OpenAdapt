@@ -37,6 +37,22 @@ from openadapt_capture.audio import (
 PACKAGE_ROOT = Path(audio_mod.__file__).resolve().parent
 
 
+class _UpperScrubber:
+    """A stand-in scrubber: replaces the word 'patient' so tests can see it ran."""
+
+    def scrub_text(self, text: str, is_separated: bool = False) -> str:
+        return text.replace("patient", "<PERSON>")
+
+
+@pytest.fixture(autouse=True)
+def _scrubber():
+    from openadapt_capture import share_scrub
+
+    share_scrub.set_scrubber(_UpperScrubber())
+    yield
+    share_scrub.reset_scrubber()
+
+
 # ---------------------------------------------------------------------------
 # 1. On-device only: no network recognizer, and no silent fallback to one.
 # ---------------------------------------------------------------------------
@@ -191,8 +207,10 @@ def test_record_audio_preflight_precedes_stream_construction_in_source() -> None
 
     source = inspect.getsource(recorder_mod.record_audio)
     preflight = source.index("require_local_transcription_backend()")
+    scrubber = source.index("raise NarrationNotScrubbed()")
     stream = source.index("InputStream(")
     assert preflight < stream
+    assert scrubber < stream
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +324,9 @@ def test_waveform_is_discarded_by_default(monkeypatch) -> None:
     captured = _run_record_audio(monkeypatch, retain=False)
 
     assert captured["audio_data"] == b"", "waveform retained without opt-in"
-    assert captured["text"] == "patient name spoken aloud"
+    # The stored transcript is the scrubbed one; per-word text is withheld.
+    assert captured["text"] == "<PERSON> name spoken aloud"
+    assert captured["words"] == []
 
 
 def test_waveform_is_retained_only_on_explicit_opt_in(monkeypatch) -> None:

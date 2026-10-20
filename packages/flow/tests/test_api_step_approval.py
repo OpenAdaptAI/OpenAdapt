@@ -315,3 +315,30 @@ def test_operation_digest_binds_the_record_check():
     )
     assert base != operation_digest(changed, record_check=["h1"], record=[("id", "p1")])
     assert up.parse_qs(prepared.encoded()) == {"lname": ["Marsh"]}
+
+
+def test_the_record_rows_are_listed_once_per_field(tmp_path):
+    from openadapt_flow.runtime.effects import Effect, EffectKind, ValueExpr
+
+    wf = _workflow()
+    save = wf.steps[-1]
+    match = {"patient_id": ValueExpr(param="lname")}
+    effects = [
+        Effect(kind=EffectKind.RECORD_WRITTEN, match=match, expected_count=1),
+        Effect(
+            kind=EffectKind.FIELD_EQUALS,
+            match=match,
+            field="note",
+            value=ValueExpr(literal="Referred"),
+        ),
+    ]
+    binding = save.api_binding.model_copy(update={"effects": effects})
+    save = save.model_copy(update={"effects": effects, "api_binding": binding})
+    replayer = Replayer(
+        EnterWritesBackend("http://127.0.0.1:9"),
+        vision=FakeVision(),
+        web_form_actuator=WebFormActuator(SessionTransport("http://127.0.0.1:9")),
+    )
+    view = replayer._web_form_approval_view(save, PARAMS)
+    record_rows = [row for row in view.rows if row[0].startswith("Record check:")]
+    assert record_rows == [("Record check: patient_id", "Marsh")]
