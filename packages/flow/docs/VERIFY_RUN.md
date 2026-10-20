@@ -162,6 +162,13 @@ The receipt's `checked` field names each part of the claim behind
 - `source`: the inputs match their source. `instruction` means the inputs
   were the task's own parameters (`--params`), with no document behind them.
 
+With `--provenance params.provenance.json --source referral.pdf`, the source
+part is a round trip: for each value with a document source, a second,
+deterministic reading of the cited document must equal the field the store
+returned. A value misread before the save and saved faithfully passes the
+delta and fails here. `evidence.source` names the fields that differ and the
+extractors used, never the values.
+
 Each part is `held`, `refuted` or `not_checked`. `verified` requires `delta`
 and `frame` to be `held` and `source` to be `held` or `instruction`. The
 field is inside `receipt_sha256`, so a Seal signs it. `evidence.frame` holds
