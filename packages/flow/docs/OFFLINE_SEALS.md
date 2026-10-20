@@ -47,8 +47,10 @@ generates. Name it with `OPENADAPT_SEAL_KEY` (or `--key` on any
 | OS keychain | `keychain:NAME` | `pip install 'openadapt-flow[keychain]'` |
 | PKCS#11 token or HSM | `pkcs11:token=TOKEN;object=LABEL?module-path=/path/to/module.so` | `pip install 'openadapt-flow[pkcs11]'` |
 
-- **Key file.** A PKCS#8 PEM Ed25519 private key. The file must not be
-  readable by other users or writable by its group. An encrypted PEM opens
+- **Key file.** A PKCS#8 PEM Ed25519 private key. Only its owner may have
+  access: mode 0600 or 0400. A file open to its group or to other users
+  (0640, 0644) is refused. When you mount it as a Kubernetes secret, set
+  `defaultMode: 0400`. An encrypted PEM opens
   with `OPENADAPT_SEAL_KEY_PASSPHRASE`.
 - **OS keychain.** The key is stored through the `keyring` library: the
   macOS Keychain, the Windows Credential Manager (encrypted with DPAPI), or
@@ -74,15 +76,24 @@ Every Seal records the signing key's `key_id`.
 # Pin the configured key in the registry the verifier uses.
 openadapt-flow local-seal key pin site-keys.json
 
-# Rotate: create and configure the new key, pin it, then revoke the old one.
+# Rotate: create the new key, pin it, and sign with it from now on.
 openadapt-flow local-seal key create --key file:/etc/openadapt/seal-key-2027.pem
 openadapt-flow local-seal --key file:/etc/openadapt/seal-key-2027.pem key pin site-keys.json
+
+# Revoke a key that may be compromised.
 openadapt-flow local-seal key revoke site-keys.json seal-ed25519-0123456789abcdef
 ```
 
-`revoke` marks the old key revoked from now on, or from `--at TIME`. Seals
-the old key issued before that time still verify. Seals it issued after that
-time are refused with `revoked_key`.
+To rotate, leave the old key pinned and active, and stop signing with it.
+Seals from both keys keep verifying.
+
+Revoke a key only when it may be compromised. After `revoke`, every Seal
+that key signed is refused with `revoked_key`, including Seals whose
+`issued_at` is earlier than the revocation. `issued_at` is written by
+whoever holds the key, so someone with a stolen key can backdate it. A
+Seal from a revoked key verifies again only with a transparency-log
+anchor recorded before the revocation time. A registry that lists one key
+ID twice is refused.
 
 ## Seal records and exports
 
@@ -109,10 +120,16 @@ openadapt-flow local-seal verify export.csv --seal export.csv.seal.json --keys s
 `site-keys.json` has the same shape as the Cloud Seal key registry, so a key
 can be marked `revoked` with a `revoked_at` time. Refusal reasons are closed:
 `unsigned`, `malformed`, `subject_mismatch`, `unknown_key`, `revoked_key`,
-`key_mismatch`, `bad_signature`.
+`key_mismatch`, `bad_signature`, `ambiguous_key`.
 
 If `attach-seal` later adds a Cloud receipt to `report.json`, the offline
 Seal still verifies against `report.pre-seal.json`, which `attach-seal` keeps.
+`verify` names the file the Seal matched, and adds a note when the match is
+`report.pre-seal.json`: in that case `report.json` itself is not what was
+sealed. `--strict` accepts only `report.json`.
+
+A Seal file with a repeated JSON key (for example two `outcome` fields) is
+`malformed`. Different JSON parsers would read it differently.
 
 ## Optional: anchor a Seal in a public transparency log
 

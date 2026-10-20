@@ -26,11 +26,10 @@ from __future__ import annotations
 
 import base64
 import os
-import stat
 import sys
 from pathlib import Path
 from typing import Any, Literal, Mapping, Optional
-from urllib.parse import unquote
+from urllib.parse import unquote, unquote_to_bytes
 
 from openadapt_types.seal import seal_key_id
 
@@ -173,11 +172,10 @@ def resolve_signer(
 def _check_file_mode(path: Path) -> None:
     if sys.platform == "win32":
         return
-    mode = path.stat().st_mode
-    if mode & (stat.S_IROTH | stat.S_IWOTH | stat.S_IWGRP):
+    if path.stat().st_mode & 0o077:
         raise KeyUnavailable(
             "key_file_permissions",
-            f"{path} is readable by others or writable by its group; chmod 600 it",
+            f"{path} is open to its group or other users; chmod 600 (or 400) it",
         )
 
 
@@ -349,7 +347,7 @@ class Pkcs11Signer(SealSigner):
             module,
             token,
             label=unquote(attrs["object"]) if "object" in attrs else None,
-            key_id=unquote(raw_id).encode("latin-1") if raw_id else None,
+            key_id=unquote_to_bytes(raw_id) if raw_id else None,
             pin=pin,
         )
 

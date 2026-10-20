@@ -119,15 +119,18 @@ def test_missing_key_file_fails_closed_without_fallback(tmp_path, monkeypatch):
     assert not (run / "seal.json").exists()
 
 
-def test_key_file_readable_by_others_is_refused(tmp_path, monkeypatch):
+@pytest.mark.parametrize("mode", [0o644, 0o640, 0o604, 0o620, 0o610])
+def test_key_file_open_to_group_or_others_is_refused(tmp_path, monkeypatch, mode):
     if sys.platform == "win32":
         pytest.skip("POSIX file modes")
     key = _key_file(tmp_path)
-    key.chmod(0o644)
+    key.chmod(mode)
     monkeypatch.setenv(seal_keys.ENV_KEY_FILE, str(key))
     with pytest.raises(LocalSealError) as exc:
         signer_for(tmp_path / "home")
     assert exc.value.code == "key_file_permissions"
+    key.chmod(0o400)
+    assert signer_for(tmp_path / "home").source == "file"
 
 
 def test_non_ed25519_key_file_is_refused(tmp_path, monkeypatch):
@@ -175,7 +178,7 @@ def test_create_file_key_refuses_to_overwrite(tmp_path):
 # --- pinning and rotation --------------------------------------------------
 
 
-def test_wrong_key_is_refused_and_rotation_keeps_old_seals(tmp_path, monkeypatch):
+def test_wrong_key_rotation_and_revocation(tmp_path, monkeypatch):
     home = tmp_path / "home"
     old_key, new_key = _key_file(tmp_path), tmp_path / "new.pem"
     new_key.write_bytes(_pem(Ed25519PrivateKey.generate()))
@@ -195,35 +198,26 @@ def test_wrong_key_is_refused_and_rotation_keeps_old_seals(tmp_path, monkeypatch
     only_old.write_text(json.dumps({"keys": [old_entry]}))
     assert verify_run(new_run, load_registry(only_old)).reason == "unknown_key"
 
+    # Rotation: both keys stay pinned and active, so old and new Seals verify.
     both = tmp_path / "both.json"
-    both.write_text(
-        json.dumps(
-            {
-                "keys": [
-                    dict(
-                        old_entry, status="revoked", revoked_at="2999-01-01T00:00:00Z"
-                    ),
-                    new_entry,
-                ]
-            }
-        )
-    )
+    both.write_text(json.dumps({"keys": [old_entry, new_entry]}))
     assert verify_run(old_run, load_registry(both)).ok
     assert verify_run(new_run, load_registry(both)).key_id == new_entry["key_id"]
-    # Revoked before the old Seal was issued: refused.
-    both.write_text(
-        json.dumps(
-            {
-                "keys": [
-                    dict(
-                        old_entry, status="revoked", revoked_at="2000-01-01T00:00:00Z"
-                    ),
-                    new_entry,
-                ]
-            }
+    # Revocation (a compromised key): every Seal it signed is refused, whatever
+    # issued_at it claims, because its holder could write any issued_at.
+    for revoked_at in ("2000-01-01T00:00:00Z", "2999-01-01T00:00:00Z"):
+        both.write_text(
+            json.dumps(
+                {
+                    "keys": [
+                        dict(old_entry, status="revoked", revoked_at=revoked_at),
+                        new_entry,
+                    ]
+                }
+            )
         )
-    )
-    assert verify_run(old_run, load_registry(both)).reason == "revoked_key"
+        assert verify_run(old_run, load_registry(both)).reason == "revoked_key"
+        assert verify_run(new_run, load_registry(both)).ok
 
 
 def _cli(tmp_path: Path, *args: str, **env: str) -> subprocess.CompletedProcess:
@@ -263,11 +257,22 @@ def test_cli_pin_revoke_and_verify_with_keys(tmp_path):
     assert pinned.returncode == 0, pinned.stderr
     ok = _cli(tmp_path, "verify", str(run), "--keys", str(registry))
     assert ok.returncode == 0 and "valid offline Seal" in ok.stdout
+    assert str(run / "report.json") in ok.stdout
+    # The original kept aside and an edited report.json: named, and --strict refuses.
+    (run / "report.json").rename(run / "report.pre-seal.json")
+    (run / "report.json").write_text('{"edited": true}')
+    loose = _cli(tmp_path, "verify", str(run), "--keys", str(registry))
+    assert loose.returncode == 0 and "report.pre-seal.json" in loose.stdout
+    assert "report.json differs" in loose.stdout
+    strict = _cli(tmp_path, "verify", str(run), "--keys", str(registry), "--strict")
+    assert strict.returncode == 1 and "subject_mismatch" in strict.stderr
+    (run / "report.pre-seal.json").replace(run / "report.json")
     # Without --key the verifier's own generated key is not the customer's.
     assert _cli(tmp_path, "verify", str(run)).returncode == 1
     key_id = json.loads(registry.read_text())["keys"][0]["key_id"]
+    # Revoking at a future time still refuses now: issued_at is the signer's claim.
     revoked = _cli(
-        tmp_path, "key", "revoke", str(registry), key_id, "--at", "2000-01-01T00:00:00Z"
+        tmp_path, "key", "revoke", str(registry), key_id, "--at", "2999-01-01T00:00:00Z"
     )
     assert revoked.returncode == 0, revoked.stderr
     refused = _cli(tmp_path, "verify", str(run), "--keys", str(registry))
@@ -474,6 +479,13 @@ def test_pkcs11_unavailable_fails_closed(tmp_path, monkeypatch, case):
     assert exc.value.code == "key_unavailable"
     assert not (run / "seal.json").exists()
     assert not (tmp_path / "home" / "keys").exists()
+
+
+def test_pkcs11_binary_id_above_0x7f(tmp_path):
+    signer = Pkcs11Signer.from_uri(
+        "pkcs11:token=SealToken;id=%01%A2%FF?module-path=/opt/hsm/libsynthetic.so", {}
+    )
+    assert signer.object_id == b"\x01\xa2\xff"
 
 
 def test_pkcs11_uri_refuses_pin_in_uri_and_missing_module(tmp_path):
