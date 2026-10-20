@@ -21,6 +21,39 @@ each save, reads the save back from the system of record after it, and returns
 a plain outcome. When anything doesn't match, it stops and tells your agent
 instead of guessing.
 
+## Measured on OpenEMR
+
+One new-patient referral in a test copy of OpenEMR, timed from a fresh
+browser through sign-in, the entry and the saved record read back (median):
+
+| Who does the entry | Time per referral | Saved correctly | Model cost |
+|---|---|---|---|
+| Agent alone (Claude Sonnet 5.5 computer use) | `██████████████████` 36.5 s | 62 of 63 | about $0.08 |
+| OpenAdapt program, screen steps | `███████████` 22.5 s | 18 of 18 | $0 |
+| OpenAdapt program, API step | `██` 3.3 s | 18 of 18 | $0 |
+
+The API step replaces the program's 41 screen steps with the one form
+submission the app itself sends, then reads the record back. It covers single
+HTML form saves like this one; other apps and request types are not yet
+measured. In both program rows a
+possible-duplicate referral stopped without saving, as it should. Both program
+rows ran on 19 Oct on one copy of the app, interleaved, without the approval
+gate and without resumable runs; the API step was admitted by the benchmark
+harness, not by a person. The agent rows are the 14 to 15 Oct timing study, on
+its own copy of the app.
+[SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#openemr-agent-screen-program-and-api-step)
+has every run.
+
+A screen can't show a save that went wrong behind it. On a test copy of
+OpenEMR, with faults injected in its database (a field blanked, a value changed, a
+duplicate chart, a chart removed, another chart deleted or edited), the agent
+claimed success on all 30 bad saves. Reading the record back caught 25 of the
+30 and confirmed all 5 clean saves, with no false alarms. It missed the 5 where
+a different chart was edited. On MockMed, a test app
+that shows a save as done before its server answers, the agent also claimed
+all 30 bad saves, and the read-back caught all 30
+([details below](#why-the-read-back-matters)).
+
 ## One harness, three modes
 
 | Mode | What happens | Model calls |
@@ -45,6 +78,16 @@ Each check below was asked whether those 72 bad saves had succeeded:
 This is a coverage test over a small, hand-written set of faults, not a
 real-world error rate. [EFFECT_E2E.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)
 has the method and raw results.
+
+An agent working alone can't see these faults either. Claude Sonnet 5.5, using
+computer use, did a task on a test app whose server broke the save in 6 ways,
+5 times each. The agent reported all 30 bad saves as done. Given the agent's
+run, `openadapt-flow verify-run` read each record back: it flagged all 30 and
+confirmed all 10 clean saves, with no false alarms. The test app shows "saved"
+before the server answers, so the screen gave the agent nothing to notice. That
+gap is what the read-back closes.
+[SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back)
+has the method, the raw runs and the cost.
 
 ## Try it in one command
 
@@ -106,10 +149,8 @@ jit.run(note="Recheck knee in ten days")  # the program runs: 0 model calls, sav
 ```
 
 [Compile a computer-use agent's run](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT.md) has the full
-example. This path runs web apps today. On Windows, RDP and Citrix, an agent can
-already drive a recording through the MCP server's recording tools (on `main`,
-not yet released), and the same compile path for those surfaces is being
-built.
+example. The same path compiles an agent's run in web apps and in Windows,
+macOS, Linux, RDP and Citrix apps.
 
 ### Call programs from your agent
 
@@ -176,10 +217,9 @@ database read-back:
 
 Both were equally correct here, and the agent matched or beat OpenAdapt in
 three other tests. [Every result](https://openadapt.ai/compare/computer-use-agents)
-is published. The program was only about a fifth faster because it still drives
-every page, as the agent does; direct API steps compiled from the recording's
-network traffic are in review
-([#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269)). OpenAdapt isn't
+is published. That program was only about a fifth faster because it drove every
+page, as the agent does; the API step compiled from the recording's network
+traffic removes the page steps for single-form saves. OpenAdapt isn't
 affiliated with the OpenEMR project.
 
 ## Every backend
@@ -242,8 +282,7 @@ the right record is on screen, makes the entry, and reads the record back.
 - **Works as a safety layer under any agent**: MCP tools, a guarded save, Agent Skills and a CLI.
 - **Runs locally**: no model calls on healthy runs, patient data redacted, signed receipts.
 
-[CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) has the status, evidence and code for each,
-including the few still being merged.
+[CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) has the evidence and code for each.
 
 ## What your agent gets back
 

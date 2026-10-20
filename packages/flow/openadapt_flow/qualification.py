@@ -5695,11 +5695,14 @@ def save_qualified_workflow(
             raise QualificationError(
                 "governed authorization template changed the bundle content digest"
             )
+    from openadapt_flow import sealed_set
+
     workflow_py = Path(bundle_dir) / "workflow.py"
-    if workflow_py.is_file():
+    if sealed_set.is_file(workflow_py):
         from openadapt_flow.compiler.codegen import render_workflow_py
 
-        workflow_py.write_text(render_workflow_py(workflow), encoding="utf-8")
+        # Resealed in memory when the bundle is a sealed set.
+        sealed_set.write_text(workflow_py, render_workflow_py(workflow), key=key)
     return path
 
 

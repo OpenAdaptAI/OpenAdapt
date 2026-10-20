@@ -15,6 +15,15 @@ named, the run is compiled into a program that later runs with no model calls.
 
     openadapt-flow compile-agent run <task dir> --param note="Recheck in ten days"
 
+    openadapt-flow compile-agent admit <task dir> --admit-as "Dana Reviewer" \\
+        --canary-param note="Canary test note"
+
+``admit`` is for a draft that waits for a person, such as one an agent taught
+over MCP (``openadapt-agent serve --teach``): at an interactive terminal the
+person confirms the proposed record checks if nobody has yet, reviews the
+steps, attends the canary and admits. ``--admit-key`` admits with a
+registered key instead, after the checks are confirmed.
+
 The command is re-entrant. Run it again with the same arguments and it picks
 up where it stopped: the agent runs only when the task has no draft and no
 admitted program. Confirming the proposed record checks is a person's step at
@@ -56,9 +65,14 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     )
     p.add_argument(
         "prompt",
-        help='the task, with {name} for each --param; or "run" to run a compiled task',
+        help=(
+            'the task, with {name} for each --param; "run" to run a compiled '
+            'task; or "admit" to confirm and admit a waiting draft'
+        ),
     )
-    p.add_argument("task_dir", nargs="?", help="with run: the compiled task directory")
+    p.add_argument(
+        "task_dir", nargs="?", help="with run or admit: the compiled task directory"
+    )
     p.add_argument("--param", action="append", metavar="NAME=VALUE")
     p.add_argument(
         "--url",
@@ -277,6 +291,8 @@ def cmd_compile_agent(
     )
 
     params = _pairs(args.param, "--param")
+    if args.prompt == "admit":
+        return _cmd_admit(args, ask=ask, interactive=interactive)
     if args.prompt == "run":
         if not args.task_dir:
             raise SystemExit("compile-agent run needs the compiled task directory")
@@ -344,6 +360,60 @@ def cmd_compile_agent(
             "an interactive terminal"
         )
     _print(out, args.json)
+    return (
+        0
+        if result.admitted
+        else (3 if result.status in ("draft", "needs_person") else 1)
+    )
+
+
+def _cmd_admit(
+    args: argparse.Namespace,
+    *,
+    ask: Callable[[str], str],
+    interactive: Callable[[], bool],
+) -> int:
+    """A person (or a registered key) admits a draft that waits in TASK_DIR."""
+
+    from openadapt_flow.compile_agent.pipeline import CONFIRMED_FILE, FirstRunCompiler
+
+    if not args.task_dir:
+        raise SystemExit("compile-agent admit needs the compiled task directory")
+    compiler = FirstRunCompiler.load(args.task_dir)
+    jit = compiler._jit()
+    if jit.admitted:
+        _print({"status": "admitted", "detail": "already admitted"}, args.json)
+        return 0
+    if jit.candidate() is None:
+        raise SystemExit(f"{args.task_dir} has no draft waiting")
+    tty = interactive()
+    if not (compiler.out_dir / CONFIRMED_FILE).is_file():
+        if not tty:
+            raise SystemExit(
+                "a person confirms the proposed record checks at an interactive "
+                "terminal; there is none"
+            )
+        name = _terminal_confirm(ask)(compiler.proposed())
+        if name is None:
+            print("Not confirmed; nothing changed.")
+            return 3
+        compiler.confirm_checks(principal_id=name, drop_fields=args.drop_field)
+    admitter = _admitter(args)
+    if admitter is None and not args.admit_as:
+        raise SystemExit("pass --admit-as YOUR NAME, or --admit-key")
+    if admitter is None and not tty:
+        raise SystemExit("--admit-as needs an interactive terminal")
+    result = compiler.admit(
+        admitter=admitter,
+        person=None if admitter is not None else args.admit_as,
+        review=_terminal_review(ask) if admitter is None else None,
+        canary_params=(
+            [_pairs(args.canary_param, "--canary-param")] if args.canary_param else None
+        ),
+    )
+    if result.admitted:
+        result.emitted = compiler.emit()
+    _print(result.to_dict(), args.json)
     return (
         0
         if result.admitted

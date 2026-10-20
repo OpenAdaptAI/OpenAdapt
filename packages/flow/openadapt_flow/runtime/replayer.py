@@ -65,6 +65,7 @@ from typing import (
 )
 from urllib.parse import urlsplit
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.backend import (
     ActionDeliveryUncertain,
     Backend,
@@ -709,6 +710,10 @@ def better_identity_read(first: Any, retry: Any) -> Any:
     if (rank[retry.status], retry.coverage) > (rank[first.status], first.coverage):
         return retry
     return first
+
+
+#: Server answers kept per step (a save makes one or a few write requests).
+_MAX_SERVER_RESPONSES = 64
 
 
 @dataclass(frozen=True)
@@ -1524,6 +1529,130 @@ class Replayer:
     # -- public API ----------------------------------------------------------
 
     def run(
+        self,
+        workflow: Workflow,
+        *,
+        params: Optional[dict[str, RuntimeParamScalar]] = None,
+        worklists: Optional[dict[str, list[dict[str, str]]]] = None,
+        bundle_dir: Path,
+        run_dir: Path,
+        save_healed_to: Optional[Path] = None,
+        resume_from: Optional[int] = None,
+        resume_program: Optional[ProgramCheckpoint] = None,
+        run_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        execution_target_kind: Optional[ExecutionTargetKind] = None,
+        surface_override: bool = False,
+        execution_origin: Optional[str] = None,
+        execution_entry_url: Optional[str] = None,
+        execution_target_origin: Optional[str] = None,
+        prior_screenshots_may_leave_box: bool = False,
+        prior_model_calls: int = 0,
+        prior_external_network_calls: Literal[
+            "none", "observed", "unknown"
+        ] = "unknown",
+    ) -> RunReport:
+        """Execute the workflow and write a run directory.
+
+        See :meth:`_run_unsealed` for the run itself. When ``bundle_dir`` is a
+        sealed bundle (:mod:`openadapt_flow.sealed_set`), the run directory is
+        a sealed set too: the report, step screenshots, identity and
+        resolution crops and every other run artifact are encrypted in memory
+        before they are written, and durable checkpoints use the same key.
+        No plaintext of the bundle or of the live screen reaches the disk.
+        """
+        bundle_path = Path(bundle_dir)
+        if (
+            not (
+                _sealed.is_sealed(bundle_path)
+                or _sealed.active_writer(bundle_path) is not None
+            )
+            or _sealed.active_writer(Path(run_dir)) is not None
+        ):
+            return self._run_unsealed(
+                workflow,
+                params=params,
+                worklists=worklists,
+                bundle_dir=bundle_dir,
+                run_dir=run_dir,
+                save_healed_to=save_healed_to,
+                resume_from=resume_from,
+                resume_program=resume_program,
+                run_id=run_id,
+                idempotency_key=idempotency_key,
+                execution_target_kind=execution_target_kind,
+                surface_override=surface_override,
+                execution_origin=execution_origin,
+                execution_entry_url=execution_entry_url,
+                execution_target_origin=execution_target_origin,
+                prior_screenshots_may_leave_box=prior_screenshots_may_leave_box,
+                prior_model_calls=prior_model_calls,
+                prior_external_network_calls=prior_external_network_calls,
+            )
+        passphrase = _sealed.passphrase_for("bundle")
+        if not passphrase:
+            raise _sealed.SealedSetKeyError(
+                _sealed.missing_key_message(bundle_path, "bundle")
+            )
+        unsupported = self._sealed_run_unsupported(workflow)
+        if unsupported is not None:
+            # Refuse before anything is actuated or written: these stores
+            # keep their own plaintext state files in the run directory.
+            raise _sealed.SealedSetError(
+                f"a sealed bundle cannot run with {unsupported} yet, because "
+                "that state is written to the run directory in plaintext. "
+                "Nothing was executed."
+            )
+        if self.checkpoint_key is None:
+            # A sealed bundle's run keeps its durable state under the same key.
+            self.checkpoint_key = passphrase
+        run_path = Path(run_dir)
+        writer = _sealed.SealedSetWriter(
+            run_path, "run", passphrase, resume=_sealed.is_sealed(run_path)
+        )
+        _sealed.register_writer(writer)
+        try:
+            report = self._run_unsealed(
+                workflow,
+                params=params,
+                worklists=worklists,
+                bundle_dir=bundle_dir,
+                run_dir=run_dir,
+                save_healed_to=save_healed_to,
+                resume_from=resume_from,
+                resume_program=resume_program,
+                run_id=run_id,
+                idempotency_key=idempotency_key,
+                execution_target_kind=execution_target_kind,
+                surface_override=surface_override,
+                execution_origin=execution_origin,
+                execution_entry_url=execution_entry_url,
+                execution_target_origin=execution_target_origin,
+                prior_screenshots_may_leave_box=prior_screenshots_may_leave_box,
+                prior_model_calls=prior_model_calls,
+                prior_external_network_calls=prior_external_network_calls,
+            )
+        finally:
+            _sealed.unregister_writer(writer)
+        writer.finalize(adopt_external=True)
+        return report
+
+    def _sealed_run_unsupported(self, workflow: Workflow) -> Optional[str]:
+        """Name a run feature whose run-directory state is not sealed yet."""
+        if self.approval_gate is not None:
+            return "an approval gate (attended approvals)"
+        if self._attended_draft_by is not None:
+            return "an attended draft"
+        program = workflow.program
+        if program is not None:
+            graphs = [program, *(getattr(workflow, "subflows", None) or {}).values()]
+            for graph in graphs:
+                for state in getattr(graph, "states", {}).values():
+                    if getattr(state, "kind", None) == StateKind.BUSINESS_DECISION:
+                        return "a business-decision state"
+        return None
+
+    def _run_unsealed(
         self,
         workflow: Workflow,
         *,
@@ -2403,7 +2532,14 @@ class Replayer:
                     candidate
                 )
                 durable_run.complete()
-                os.replace(candidate, run_dir / "report.json")
+                if _sealed.is_sealed_path(candidate):
+                    # Encrypted run directory: the rename is a sealed rewrite.
+                    _sealed.write_bytes(
+                        run_dir / "report.json", _sealed.read_bytes(candidate)
+                    )
+                    _sealed.unlink(candidate)
+                else:
+                    os.replace(candidate, run_dir / "report.json")
                 from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
 
                 CheckpointStore._fsync_directory(run_dir)
@@ -4609,19 +4745,25 @@ class Replayer:
                 frame_path = root / frame_ref
                 if frame_path.is_symlink():
                     raise OSError("transition frame path is a symlink")
-                existing = frame_path.read_bytes() if frame_path.exists() else None
+                existing = (
+                    _sealed.read_bytes(frame_path)
+                    if _sealed.exists(frame_path)
+                    else None
+                )
                 if existing is not None and existing != frame:
                     raise OSError("transition frame digest path has other bytes")
-                frame_path.write_bytes(frame)
+                _sealed.write_bytes(frame_path, frame)
                 context_path = root / context_ref
                 if context_path.is_symlink():
                     raise OSError("transition context path is a symlink")
                 existing_context = (
-                    context_path.read_bytes() if context_path.exists() else None
+                    _sealed.read_bytes(context_path)
+                    if _sealed.exists(context_path)
+                    else None
                 )
                 if existing_context is not None and existing_context != context_payload:
                     raise OSError("transition context digest path has other bytes")
-                context_path.write_bytes(context_payload)
+                _sealed.write_bytes(context_path, context_payload)
             except OSError as exc:
                 raise _ProgramHalt(
                     "halt",
@@ -4672,12 +4814,14 @@ class Replayer:
                         path = root / inventory_ref
                         if path.is_symlink():
                             raise OSError("transition asset path is a symlink")
-                        existing = path.read_bytes() if path.exists() else None
+                        existing = (
+                            _sealed.read_bytes(path) if _sealed.exists(path) else None
+                        )
                         if existing is not None and existing != payload:
                             raise OSError(
                                 "transition asset digest path has other bytes"
                             )
-                        path.write_bytes(payload)
+                        _sealed.write_bytes(path, payload)
                     except OSError as exc:
                         raise _ProgramHalt(
                             "halt",
@@ -7315,6 +7459,8 @@ class Replayer:
         so a linear run is byte-for-byte unchanged.
         """
         t0 = time.monotonic()
+        # Where a locating or restoring undo keeps its pre-save values.
+        self._undo_prior_run_dir = run_dir
         evidence_step_id = self._new_step_evidence_key(run_dir, step.id)
         result = StepResult(
             step_id=step.id,
@@ -7541,6 +7687,9 @@ class Replayer:
         # System-of-record pre-state, snapshotted just before the action when
         # the step declares effects (see the block guarding self._act below).
         effect_pre_state: Optional[EffectState] = None
+        # Where the backend's log of server answers stood before the save, so
+        # the answers to this step's write requests can be kept as evidence.
+        server_mark: Optional[int] = None
         # The step's effect contracts with every ValueExpr bound to THIS run's
         # params (P0-3); resolved BEFORE the pre-state snapshot so verification
         # targets the record this run wrote, not the demonstration's.
@@ -8066,6 +8215,8 @@ class Replayer:
                                 else "safety_halt"
                             )
                             break
+                    if server_mark is None and effect_pre_state is not None:
+                        server_mark = self._server_response_mark()
                     try:
                         self._active_delivery_resolution = resolution
                         self._active_delivery_region = matched_region
@@ -8415,11 +8566,20 @@ class Replayer:
                         f"postcondition ({type(exc).__name__})"
                     )
 
+            if effect_pre_state is not None:
+                self._keep_undo_prior_state(
+                    workflow, step, effect_pre_state, resolved_effects, params
+                )
             # Independent system-of-record verification, AFTER the screen
             # postconditions passed: the screen oracle cannot see a partial
             # save, a phantom optimistic-UI success, a duplicate write, or a
             # lost update -- the EffectVerifier reads the REAL record and HALTs
             # on any non-CONFIRMED verdict (docs/design/EFFECT_VERIFIER.md).
+            if server_mark is not None:
+                # The server's own answer to the save: kept as evidence at a
+                # lower check level. It comes from the same transaction, so it
+                # never confirms an effect; the verifier below still decides.
+                self._collect_server_responses(result, server_mark)
             if (
                 error is None
                 and not delivery_uncertain
@@ -8989,6 +9149,7 @@ class Replayer:
                 "send the request — run aborted"
             )
             return True
+        self._keep_undo_prior_state(workflow, step, before, effects, params)
         refusal = self._profile_effect_tier_refusal(
             workflow,
             step,
@@ -9478,6 +9639,34 @@ class Replayer:
                 )
         return verifier.capture_pre_state()
 
+    def _keep_undo_prior_state(
+        self,
+        workflow: Workflow,
+        step: Step,
+        before: Any,
+        effects: Optional[list["Effect"]],
+        params: Mapping[str, Any],
+    ) -> None:
+        """Keep what a locating or restoring undo of ``step`` needs.
+
+        Reads only the pre-action baseline already captured; never raises and
+        never changes the step's result (``after_stop.keep_prior_state``).
+        """
+        run_dir = getattr(self, "_undo_prior_run_dir", None)
+        if run_dir is None or not workflow.undo_steps or not effects:
+            return
+        try:
+            state = self._effect_pre_state_for(before, effects[0])
+        except Exception:  # noqa: BLE001 - bookkeeping never stops a run
+            return
+        if getattr(state, "reachable", None) is not True:
+            return
+        from openadapt_flow.after_stop import keep_prior_state
+
+        keep_prior_state(
+            workflow, step, list(getattr(state, "records", []) or []), params, run_dir
+        )
+
     @staticmethod
     def _effect_pre_state_for(before: Any, effect: "Effect") -> Any:
         """Return one selected effect baseline, or a normal shared baseline."""
@@ -9700,6 +9889,28 @@ class Replayer:
             verifier = OnScreenReadbackVerifier(backend=self.backend)
             self._readback_verifier = verifier
         return verifier
+
+    def _server_response_mark(self) -> Optional[int]:
+        """Where the backend's server-answer log stands, or None when the
+        backend doesn't see server answers (every non-browser backend)."""
+
+        mark = getattr(self.backend, "server_response_mark", None)
+        if not callable(mark):
+            return None
+        try:
+            return int(mark())
+        except Exception:  # noqa: BLE001 - evidence only, never a failure
+            return None
+
+    def _collect_server_responses(self, result: StepResult, mark: int) -> None:
+        since = getattr(self.backend, "server_responses_since", None)
+        if not callable(since):
+            return
+        try:
+            responses = list(since(mark))
+        except Exception:  # noqa: BLE001 - evidence only, never a failure
+            return
+        result.server_responses = responses[:_MAX_SERVER_RESPONSES]
 
     @timed_span("readback")
     def _verify_effects(
@@ -10073,9 +10284,13 @@ class Replayer:
                     observed="exact local pixel evidence could not be retained",
                 )
         result.identity = check
-        governed = (
-            self.governed_authorization is not None
-            and self.governed_authorization.requires_verified_identity(step.id)
+        # Under a governed run, an armed step needs a verified identity before
+        # it acts, whether or not the authorization lists it: the durable
+        # checkpoint demands the same (step.identity_armed), and it only runs
+        # after the click. An unreadable or abstained identity halts here.
+        governed = self.governed_authorization is not None and (
+            self.governed_authorization.requires_verified_identity(step.id)
+            or step.identity_armed
         )
         signal_quorum = check.mode == "signal_quorum"
         if signal_quorum and check.status == "mismatch":
@@ -10212,10 +10427,10 @@ class Replayer:
                 path = inventory_dir / f"{digest}.png"
                 if path.is_symlink():
                     raise OSError("pixel evidence crop path is a symlink")
-                existing = path.read_bytes() if path.exists() else None
+                existing = _sealed.read_bytes(path) if _sealed.exists(path) else None
                 if existing is not None and existing != payload:
                     raise OSError("pixel evidence digest path has other bytes")
-                path.write_bytes(payload)
+                _sealed.write_bytes(path, payload)
         except OSError:
             raise
 
@@ -10284,10 +10499,10 @@ class Replayer:
             path = inventory_dir / f"{digest}.png"
             if path.is_symlink():
                 raise OSError("visual resolution input path is a symlink")
-            existing = path.read_bytes() if path.exists() else None
+            existing = _sealed.read_bytes(path) if _sealed.exists(path) else None
             if existing is not None and existing != payload:
                 raise OSError("visual resolution digest path has other bytes")
-            path.write_bytes(payload)
+            _sealed.write_bytes(path, payload)
 
         return resolution.model_copy(
             update={
@@ -11935,7 +12150,7 @@ class Replayer:
             if run_dir is None or not result.before_png:
                 return None
             try:
-                return (run_dir / result.before_png).read_bytes()
+                return _sealed.read_bytes(run_dir / result.before_png)
             except OSError:
                 return None
 
@@ -16663,7 +16878,13 @@ class Replayer:
         if self._governed_asset_mutation is not None:
             return self._governed_asset_mutation
         if holds:
-            return None  # target already in view; nothing to scroll
+            # Target already in view; nothing to scroll and no input sent.
+            # Record why, only for the next-target readiness check, so the
+            # outcome classifier can tell a correctly skipped scroll from an
+            # undelivered action (execution_profiles.classify_execution_outcome).
+            if implicit_target_readiness and result.delivery_attempted is not True:
+                result.scroll_target_ready_before = True
+            return None
 
         increment = math.hypot(dx, dy)
         budget = SCROLL_BUDGET_FACTOR * increment
@@ -17667,7 +17888,7 @@ class Replayer:
         candidate = safe
         occurrence = 1
         while any(
-            (steps_dir / f"{candidate}_{suffix}.png").exists()
+            _sealed.exists(steps_dir / f"{candidate}_{suffix}.png")
             for suffix in ("before", "after", "attended-before", "attended-after")
         ):
             occurrence += 1
@@ -17686,5 +17907,5 @@ class Replayer:
         (see openadapt_flow.privacy and docs/PRIVACY.md).
         """
         rel = f"steps/{step_id}_{suffix}.png"
-        (Path(run_dir) / rel).write_bytes(_scrub_png(png))
+        _sealed.write_bytes(Path(run_dir) / rel, _scrub_png(png))
         return rel

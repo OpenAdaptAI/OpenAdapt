@@ -251,6 +251,14 @@ class GraphNode(BaseModel):
     guard_on_unmet: Optional[str] = Field(
         default=None, description="halt|skip when guard unmet"
     )
+    guard_reason: Optional[str] = Field(
+        default=None,
+        description="The scrubbed spoken sentence that suggested this guard",
+    )
+    guard_certified_by: Optional[str] = Field(
+        default=None,
+        description="recordings_agree|probe|person: what certified a narrated guard",
+    )
     wait_until: Optional[str] = Field(
         default=None, description="Readiness predicate summary"
     )
@@ -281,6 +289,10 @@ class GraphEdge(BaseModel):
     label: str = ""
     guard: Optional[str] = Field(
         default=None, description="Guard summary for a branch edge"
+    )
+    guard_reason: Optional[str] = Field(
+        default=None,
+        description="The scrubbed spoken sentence that suggested this branch",
     )
 
 

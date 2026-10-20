@@ -94,7 +94,7 @@ def _reset(base_url: str) -> None:
     _http_json(f"{base_url}/api/reset", method="POST", body={})
 
 
-def _target(base_url: str, drift: Optional[str]) -> ReplayTarget:
+def _target(base_url: str, drift: Optional[str], init: str = "") -> ReplayTarget:
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.runtime.effects import RestRecordVerifier
     from openadapt_flow.tutorial import TUTORIAL_NOTE
@@ -104,7 +104,9 @@ def _target(base_url: str, drift: Optional[str]) -> ReplayTarget:
         return f"{base_url}/{QUERY}" + (f"&drift={drifts}" if drifts else "") + "#tasks"
 
     def open_session(fault: Optional[str]) -> AppSession:
-        backend, close = PlaywrightBackend.launch(url(fault), headless=True)
+        backend, close = PlaywrightBackend.launch(
+            url(fault), headless=True, before_goto=_init_script(init)
+        )
         return AppSession(backend=backend, close=close)
 
     return ReplayTarget(
@@ -123,13 +125,21 @@ def _target(base_url: str, drift: Optional[str]) -> ReplayTarget:
     )
 
 
-def _center_of(base_url: str, selector: str) -> tuple[int, int]:
+def _init_script(script: str):
+    """Run ``script`` in the page before MockMed loads (its inject fixtures)."""
+
+    return (lambda page: page.add_init_script(script)) if script else None
+
+
+def _center_of(base_url: str, selector: str, init: str = "") -> tuple[int, int]:
     """Where ``selector`` sits on the redesigned encounter screen."""
 
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 
     backend, close = PlaywrightBackend.launch(
-        f"{base_url}/{QUERY}&drift=redesign#encounter", headless=True
+        f"{base_url}/{QUERY}&drift=redesign#encounter",
+        headless=True,
+        before_goto=_init_script(init),
     )
     try:
         locator = backend.page.locator(selector)
@@ -165,6 +175,7 @@ class ScriptedAgent:
             action={"action": "left_click", "coordinate": [x, y]},
             model_calls=1,
             cost_usd=0.0125,
+            note="The save control moved; this one reads as the save.",
         )
 
 
@@ -207,12 +218,13 @@ def _self_repair(
     agent: ScriptedAgent,
     *,
     drift: Optional[str] = "redesign",
+    init: str = "",
     **kwargs,
 ) -> SelfRepair:
     kwargs.setdefault("fault_probes", ("missing",))
     return SelfRepair(
         agent,
-        _target(base_url, drift),
+        _target(base_url, drift, init),
         store=tmp_path / "repair-store",
         screen_access=ScreenAccess(enabled_by="ops-lead", mode="allow_unscrubbed"),
         **kwargs,
@@ -303,6 +315,12 @@ def test_renamed_button_is_repaired_approved_on_the_phone_and_verified(
     ]
     assert all(s.passed for s in evidence.steps)
     assert evidence.approved_by == "decision_portal:person"
+    # The person saw who asked and why, in the agent's own words.
+    asked = json.loads(
+        next((run_dir / "item-approval").glob("request-*.json")).read_text()
+    )
+    assert asked["provenance"]["actor"] == f"agent:{AGENT_ID}"
+    assert asked["provenance"]["reason"].startswith("The save control moved")
     on_disk = RunReport.model_validate_json(
         (result.run_dir / "report.json").read_text()
     )
@@ -370,6 +388,46 @@ def test_wrong_proposals_are_refused_and_nothing_is_written(mockmed, tmp_path) -
     # The second request told the agent why the first was refused.
     assert agent.requests[1].previous_refusals
     assert result.evidence.model_calls == 2
+    assert len(_records(base_url)) == 0
+    assert RepairStore(tmp_path / "repair-store").list_candidates() == []
+    assert not (tmp_path / "run" / "item-approval").exists()
+
+
+def test_a_proposal_steered_off_the_app_by_page_text_is_refused(
+    mockmed, tmp_path
+) -> None:
+    """Injected page text names a link dressed as a save; the agent obeys.
+
+    MockMed's ``aside:other_origin`` fixture puts a "Save to records portal"
+    link to another origin beside the redesigned form, with an instruction
+    aimed at an agent in its tooltip. The link reads as a save, so the label
+    check passes it; the origin check refuses it at the patch (before this
+    check, the probe's identity check stopped it later). Nothing is probed,
+    nothing is asked, nothing is written.
+    """
+
+    base_url, bundle = mockmed
+    _reset(base_url)
+    outside = "http://127.0.0.1:9"  # never contacted: the link is not clicked
+    # Set from an init script so the recorded URL stays the same.
+    init = (
+        "window.MOCKMED_INJECT = 'aside:other_origin';"
+        f"window.MOCKMED_INJECT_TARGET = '{outside}';"
+    )
+    with _browser():
+        link = _center_of(base_url, "#inject-link", init)
+        agent = ScriptedAgent(link)
+        result = _self_repair(base_url, tmp_path, agent, max_attempts=1, init=init).run(
+            bundle, tmp_path / "run"
+        )
+
+    assert result.status == "no_fix", (
+        result.evidence.reason,
+        result.halted_report.halt if result.halted_report else None,
+    )
+    patch = next(s for s in result.evidence.steps if s.stage == "patch")
+    assert not patch.passed
+    assert "leads to http://127.0.0.1:9, outside the app" in patch.detail
     assert len(_records(base_url)) == 0
     assert RepairStore(tmp_path / "repair-store").list_candidates() == []
     assert not (tmp_path / "run" / "item-approval").exists()

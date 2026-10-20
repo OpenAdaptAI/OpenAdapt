@@ -1413,6 +1413,33 @@ def _program_action_trace(
     return actions
 
 
+def _scroll_skipped_with_target_in_view(step: Any, result: Any) -> bool:
+    """A SCROLL that sent no input because its target was already on screen.
+
+    The closed-loop scroll checks, on the before-frame, whether the next
+    step's target already resolves; if it does there is nothing to scroll and
+    no input is sent (``delivery_attempted`` stays False). That is the correct
+    behaviour, not an undelivered action, so it must not by itself make the
+    run unverified. Only this exact case qualifies: a SCROLL step, the
+    replayer's own ``scroll_target_ready_before`` marker, delivery explicitly
+    False, and no delivery receipt, uncertainty or actuation event. The next
+    step still resolves and checks its own target and identity before acting.
+    """
+
+    from openadapt_flow.ir import ActionKind
+
+    return (
+        step.action is ActionKind.SCROLL
+        and getattr(result, "scroll_target_ready_before", None) is True
+        and result.delivery_attempted is False
+        and getattr(result, "delivery_receipt", None) is None
+        and getattr(result, "delivery_uncertainty", None) is None
+        and not getattr(result, "fresh_actuation_events", None)
+        and result.ok is True
+        and not getattr(result, "skipped", False)
+    )
+
+
 def classify_execution_outcome(
     report: RunReport,
     workflow: Workflow,
@@ -2007,6 +2034,7 @@ def classify_execution_outcome(
             automated_gui
             and step.action is not ActionKind.WAIT
             and result.delivery_attempted is not True
+            and not _scroll_skipped_with_target_in_view(step, result)
         ):
             return ExecutionOutcome.COMPLETED_UNVERIFIED
         if api_actuation and result.delivery_attempted is not True:

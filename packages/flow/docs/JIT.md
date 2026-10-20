@@ -283,6 +283,32 @@ That check then counts the records that carry the run's value and refuses
 more than one. Name it only when the app keeps that value unique, such as a
 claim number. `status()` lists the keys the program carries.
 
+## A declared scope for the agent's run
+
+The agent reads the live app, and the app's content can be written to steer
+it. Pass `teach_scope=` to `compile_agent` to fix what the recording run may
+do before the agent reads a page: the app origins, the record, the fields and
+exact values the save may write, and any other text it may type.
+
+```python
+from openadapt_flow.mockmed.teach_scope import encounter_scope
+
+jit = compile_agent(
+    agent, task=task, app=app, verifier=verifier, policy="clinical-write",
+    teach_scope=lambda params: encounter_scope(
+        base_url, patient_id="p1", note=params["note"]
+    ),
+)
+```
+
+Typed text must be a declared value, links and requests to other origins are
+refused, an app write adapter (`TeachScope(write_adapter=...)`) checks each
+write before it is sent, and the system of record is read back after the run.
+A violation ends the capture as `scope_refused` or `readback_refused` with no
+draft. The scope must declare every task input, and a look-up typed by the
+agent must use a declared value (the record id is one). See
+[THREAT_MODEL.md](THREAT_MODEL.md) for what it stops and what it does not.
+
 ## A look-up the agent made
 
 When the agent looks the record up after it saves (types the identifier into

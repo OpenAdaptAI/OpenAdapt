@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.runtime.effects.desktop_readback import save_like_words
 
 CHECK_PROPOSAL_FILE = "check.proposed.json"
@@ -175,10 +176,10 @@ class LookupProposal:
 
 def _events(recording: Path) -> list[dict[str, Any]]:
     path = recording / "events.jsonl"
-    if not path.is_file():
+    if not _sealed.is_file(path):
         return []
     events = []
-    for line in path.read_text().splitlines():
+    for line in _sealed.read_text(path).splitlines():
         line = line.strip()
         if line:
             events.append(json.loads(line))
@@ -187,14 +188,14 @@ def _events(recording: Path) -> list[dict[str, Any]]:
 
 def _meta(recording: Path) -> dict[str, Any]:
     path = recording / "meta.json"
-    if not path.is_file():
+    if not _sealed.is_file(path):
         return {}
-    return json.loads(path.read_text())
+    return json.loads(_sealed.read_text(path))
 
 
 def _frame(recording: Path, index: int, which: str) -> Optional[bytes]:
     path = recording / "frames" / f"{index:04d}_{which}.png"
-    return path.read_bytes() if path.is_file() else None
+    return _sealed.read_bytes(path) if _sealed.is_file(path) else None
 
 
 def _params(meta: Mapping[str, Any]) -> dict[str, str]:
@@ -757,7 +758,7 @@ def propose_from_recording(
     try:
         proposal = detect_lookup(recording, ocr=ocr, values=values)
         if proposal is None:
-            if (recording / CHECK_FILE).is_file():
+            if _sealed.is_file(recording / CHECK_FILE):
                 return None, [], []
             return None, [], [LOOKUP_GUIDANCE]
         written = write_proposals(recording, proposal, session_kind=session_kind)
@@ -782,12 +783,12 @@ def accept_check_proposal(recording: str | Path) -> Path:
     recording = Path(recording)
     source = recording / CHECK_PROPOSAL_FILE
     target = recording / CHECK_FILE
-    if not source.is_file():
+    if not _sealed.is_file(source):
         raise FileNotFoundError(f"no {CHECK_PROPOSAL_FILE} in {recording}")
-    if target.exists():
+    if _sealed.exists(target):
         raise FileExistsError(f"{target} exists; remove it first to replace it")
-    marks = CheckMarks.model_validate_json(source.read_text())
-    target.write_text(marks.model_dump_json(indent=2) + "\n")
+    marks = CheckMarks.model_validate_json(_sealed.read_text(source))
+    _sealed.write_text(target, marks.model_dump_json(indent=2) + "\n")
     return target
 
 

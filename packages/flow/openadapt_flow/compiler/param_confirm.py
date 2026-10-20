@@ -37,6 +37,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Optional
 
+from openadapt_flow import sealed_set as _sealed
+
 if TYPE_CHECKING:  # pragma: no cover
     from openadapt_flow.ir import Workflow
 
@@ -73,9 +75,9 @@ class ParamDecision:
 def load_proposals(bundle_dir: Path | str) -> list[ParamProposal]:
     """Read the flagged proposals sidecar; empty list when there is none."""
     path = Path(bundle_dir) / PROPOSALS_FILENAME
-    if not path.is_file():
+    if not _sealed.is_file(path):
         return []
-    raw = json.loads(path.read_text())
+    raw = json.loads(_sealed.read_text(path))
     proposals: list[ParamProposal] = []
     for entry in raw.get("proposals", []) or []:
         if not isinstance(entry, dict):

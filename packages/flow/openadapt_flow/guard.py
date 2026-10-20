@@ -396,13 +396,17 @@ class Guard:
         screenshot_png: Optional[bytes] = None,
         screen_text: Optional[str] = None,
         wait_s: float = 0.0,
+        reason: Optional[str] = None,
     ) -> CommitResult:
         """Allow the write, once, after approval when the mode asks for it.
 
         ``screen_text``, when given, re-checks the open record right before
         the write. ``screenshot_png`` is what a person approving sees; it is
         required under ``each_item``. ``wait_s`` is how long to wait for the
-        answer; call again with the same guard to keep waiting.
+        answer; call again with the same guard to keep waiting. ``reason``
+        is the agent's own account of why it is saving; the person sees it,
+        labelled as the agent's words, with the screen text it was given and
+        any of that text that reads like an instruction to an agent.
         """
 
         if self.state not in ("begun", "waiting_for_approval"):
@@ -421,7 +425,9 @@ class Guard:
                     + "; nothing may be written",
                 )
         if self.owner.approval == "each_item":
-            waiting = self._await_approval(screenshot_png, wait_s)
+            waiting = self._await_approval(
+                screenshot_png, wait_s, reason=reason, screen_text=screen_text
+            )
             if waiting is not None:
                 return waiting
         try:
@@ -440,7 +446,12 @@ class Guard:
         return CommitResult(status="go", guard_id=self.guard_id)
 
     def _await_approval(
-        self, screenshot_png: Optional[bytes], wait_s: float
+        self,
+        screenshot_png: Optional[bytes],
+        wait_s: float,
+        *,
+        reason: Optional[str] = None,
+        screen_text: Optional[str] = None,
     ) -> Optional[CommitResult]:
         from openadapt_flow.approval_mode.approver import DEFAULT_APPROVER_POLICY
         from openadapt_flow.approval_mode.item_approval import (
@@ -475,6 +486,7 @@ class Guard:
                     runtime_inputs_digest=_sha256_hex(self.task.params),
                     frame_png=screenshot_png,
                     form_state=("dom", "sha256:" + _sha256_hex(self.task.params)),
+                    provenance=self._provenance(reason, screen_text),
                 )
             except ItemApprovalRefused as exc:
                 self._save("refused_approval", reason=exc.code)
@@ -519,6 +531,23 @@ class Guard:
             "policy_ref": self._policy_ref,
         }
         return None
+
+    def _provenance(
+        self, reason: Optional[str], screen_text: Optional[str]
+    ) -> dict[str, Any]:
+        # Local only, like the screenshot; inside the request digest.
+        from openadapt_flow.teach_scope import provenance_for
+
+        prov = provenance_for(
+            actor=f"agent:{self.agent_id}",
+            reason=reason,
+            seen_text=screen_text,
+        )
+        prov["task_scope"] = (
+            f"record {', '.join(sorted(self.task.expected_record))}; "
+            f"fields {', '.join(sorted(self.task.intended_fields)) or 'none'}"
+        )[:512]
+        return prov
 
     # -- confirm ---------------------------------------------------------------
     def confirm(self) -> GuardResult:

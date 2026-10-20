@@ -219,6 +219,7 @@ repeats the text. Every declared input stays required unless
 | `--mode production --bundles DIR` (or `--allow-run`) | production | the above plus `run_workflow` and deprecated `run_<opaque-id>` |
 | `--mode attended --bundles DIR` (or `--allow-run --allow-attended-actions`) | attended | the above plus Reject, Teach, Escalate; Continue and Skip with a qualified `--config` |
 | `--bundles DIR --allow-attended-actions` (older flags, no runs) | attended, read-only | the read-only tools plus the same decisions on paused runs |
+| `--teach VERIFY_YAML` with `--url` or `--config` | production (taught programs) | the production tools plus `teach_start`, `teach_observe`, `teach_act`, `teach_finish`, `teach_abort`, `teach_status`, `teach_confirm_checks`, `teach_admit`, `teach_screen` (with `--teach-screens`), and `taught_<name>` for each admitted program |
 
 The read-only tools return PHI-safe projections: workflow cards, opaque
 ids, availability, status, and count or boolean metrics. They do not
@@ -226,6 +227,14 @@ return workflow labels, recorded values, step intents, report bodies,
 observed text, local paths, subprocess output, or exception text. The
 attention tools use the same boundary plus typed categories, artifact
 ids, and non-authorizing capability metadata.
+
+The teach tools are the exception. While the agent does run 1 of a task,
+`teach_observe` and `teach_act` return what it needs to find the right record:
+on the web, the page's text and controls, scrubbed by
+`openadapt_flow.privacy` except for the values the agent put in the task. Run
+1 makes a real entry, so the operator points it at a test copy. The draft
+report, the record check and the admission return the same kind of facts as
+the other tools, plus the proposed record check's field names and values.
 
 The deprecated per-workflow `run_<opaque-id>` tools keep their schemas and
 legacy `status` field and add the contract fields. They take no

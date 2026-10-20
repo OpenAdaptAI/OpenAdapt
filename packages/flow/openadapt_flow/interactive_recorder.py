@@ -86,6 +86,7 @@ from urllib.parse import urlsplit
 
 from PIL import Image
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.backends.playwright_backend import (
     GUARDED_ACTIONABLE_SELECTOR,
     PlaywrightBackend,
@@ -2209,9 +2210,14 @@ class InteractiveRecorder:
         stop_when: Optional[Callable[[], bool]] = None,
         surface: str = "web",
         capture_network: bool = False,
+        encryption_key: Optional[str] = None,
     ) -> None:
         self._url = url
         self._surface = surface
+        # Encrypted recording: with a key the recorder writes ciphertext only
+        # (openadapt_flow.sealed_set), and the published directory is a
+        # finalized sealed set.
+        self._encryption_key = encryption_key
         # ``record --capture-network``: keep the page's requests next to the
         # events (openadapt_flow.network_capture). Off by default.
         self._capture_network = capture_network
@@ -2464,6 +2470,8 @@ class InteractiveRecorder:
                 system_of_record_reader=self._system_of_record_reader,
                 network_capture=self._network,
                 page_backend_factory=self._surface_page_backend,
+                encryption_key=self._encryption_key,
+                finalize_on_finish=False,
                 **self._settle,
             )
             if self._owns_browser:
@@ -2711,7 +2719,7 @@ class InteractiveRecorder:
             if self._listener_error is not None:
                 raise self._listener_error
             meta_path = out / "meta.json"
-            meta = json.loads(meta_path.read_text())
+            meta = json.loads(_sealed.read_text(meta_path))
             meta["source"] = (
                 "openadapt-flow-playwright"
                 if self._owns_browser
@@ -2748,7 +2756,12 @@ class InteractiveRecorder:
                 meta["viewport"] = list(self._initial_attached_viewport)
                 meta["viewport_mode"] = "per-event"
                 meta["viewport_history"] = list(self._viewport_history)
-            meta_path.write_text(json.dumps(meta, indent=2))
+            _sealed.write_text(meta_path, json.dumps(meta, indent=2))
+            # A test double may stand in for the recorder; only the real one
+            # can hold an encrypted recording.
+            finalize = getattr(self.recorder, "finalize_encryption", None)
+            if callable(finalize):
+                finalize()
             if self._listener_error is not None:
                 raise self._listener_error
             self._assert_no_new_pages()
@@ -2765,6 +2778,10 @@ class InteractiveRecorder:
 
         self.done = True
         self._pyq.clear()
+        if self.recorder is not None:
+            abandon = getattr(self.recorder, "abandon_encryption", None)
+            if callable(abandon):
+                abandon()
         try:
             self._cleanup_page_listeners()
         finally:
