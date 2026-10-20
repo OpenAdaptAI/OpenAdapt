@@ -10,8 +10,12 @@ Everything here is compiled or recorded by OpenAdapt Flow, on synthetic data:
    emitted by ``openadapt-flow visualize --format json --profile
    public-synthetic``. The public projection carries no recorded text or
    values.
-2. folds.json: the field section each loop-body step fills, derived from the
-   operator-local spec by the parameter each step types. Parameter names only.
+2. folds.json: the loop body's named sections, as Flow compiles them for
+   every bundle (``openadapt-flow sections``): the save, the form structure,
+   the fields. With ``--ui-structure``, their titles come from a recording of
+   the same demonstration made with the form-structure capture (OpenEMR's
+   "Who" and "Contact" accordions), applied only to steps with the same
+   targets.
 3. trace.json: the four certified runs of that bundle (standard profile, no
    model calls), committed under ``CERTIFIED_PATH``, played in run order as
    loop iterations. Referrals 1-3 are VERIFIED; referral 4 stops
@@ -31,7 +35,8 @@ Run from the repository root with a Python that has openadapt-flow installed:
 
     python packages/program-graph/scripts/build_openemr_fixture.py \\
         --bundle ~/oa/scratch/qualify-referral/qual10/bundle \\
-        --runs ~/oa/scratch/qualify-referral/certified-referrals-qual10
+        --runs ~/oa/scratch/qualify-referral/certified-referrals-qual10 \\
+        --ui-structure RECORDING
 """
 
 from __future__ import annotations
@@ -57,16 +62,6 @@ CERTIFIED_COMMIT = "d23eeb6a6"
 CERTIFIED_URL = f"https://github.com/OpenAdaptAI/OpenAdapt/blob/{CERTIFIED_COMMIT}/{CERTIFIED_PATH}"
 FRAME_WIDTH = 640
 
-# Field sections, in the order the form asks for them. Keys are the bundle's
-# parameter names.
-SECTIONS = [
-    ("name", "Name", ["title", "fname", "lname"]),
-    ("birth", "Date of birth and sex", ["DOB", "sex"]),
-    ("address", "Address", ["street", "city", "state_label", "postal_code"]),
-    ("contact", "Phone, email and country", ["phone_home", "email", "country_code"]),
-]
-SAVE = ("save", "Create the chart")
-SECTION_OF = {p: sid for sid, _, params in SECTIONS for p in params}
 EFFECT_STOP = "halts if the system-of-record effect is not confirmed"
 
 
@@ -79,44 +74,24 @@ def sha256(path: Path) -> str:
 
 
 def fold(local: dict) -> dict:
-    """Assign each loop-body step to the field section it fills.
+    """The compiled sections of the loop body, as folds.
 
-    A step belongs to the section of the next step that types a parameter
-    (the click that focuses a field, Ctrl+A, the scroll that brings it into
-    view). A key press right after a typed value (the Enter that picks a
-    dropdown option) stays with that value. Steps after the last typed value
-    form the save section.
+    Flow computes them with every bundle (sections.json; see ``openadapt-flow
+    sections``) and the operator-local spec carries them with their interface
+    titles. The public projection replaces those titles with fixed phrases,
+    so the site's titles come from here. The save section's stop rules
+    become the map's exits.
     """
-    nodes = local["nodes"]
-    body = [n for n in nodes if n["kind"] == "action"]
-    assigned: list[str | None] = [None] * len(body)
-    for i, n in enumerate(body):
-        if n["action"] == "type" and n["param"]:
-            assigned[i] = SECTION_OF[n["param"]]
-        elif n["action"] == "key" and i and body[i - 1]["action"] == "type":
-            assigned[i] = SECTION_OF[body[i - 1]["param"]]
-    nxt = SAVE[0]
-    for i in range(len(body) - 1, -1, -1):
-        if assigned[i] is None:
-            assigned[i] = nxt
-        elif body[i]["action"] == "type":
-            nxt = assigned[i]
-    groups = []
-    for sid, title, _ in [*SECTIONS, (*SAVE, [])]:
-        members = [n for n, a in zip(body, assigned) if a == sid]
-        fields = [n["param"] for n in members if n["param"]]
-        checks = sum(len(n["effects"]) for n in members)
-        parts = [f"{len(members)} steps"]
-        if fields:
-            parts.append(f"{len(fields)} {'field' if len(fields) == 1 else 'fields'}")
-        if checks:
-            parts.append("reads the chart back")
-        groups.append(
-            {"id": sid, "title": title, "subtitle": " · ".join(parts), "nodes": [n["id"] for n in members]}
-        )
+    body = [n for n in local["nodes"] if n["kind"] == "action"]
+    sections = local["sections"]
+    groups = [
+        {"id": s["id"], "title": s["title"], "subtitle": s["subtitle"], "nodes": s["nodes"]}
+        for s in sections
+    ]
     flat = [i for g in groups for i in g["nodes"]]
-    assert flat == [n["id"] for n in body], "sections must be contiguous, in order"
-    save_ids = set(groups[-1]["nodes"])
+    assert flat == [n["id"] for n in body], "sections must cover the body, contiguous and in order"
+    save_ids = {i for s in sections if s["kind"] == "save" for i in s["nodes"]}
+    assert save_ids, "expected a save section"
     stops = [
         {"node": n["id"], "label": "not confirmed"}
         for n in body
@@ -124,6 +99,30 @@ def fold(local: dict) -> dict:
     ]
     assert any(EFFECT_STOP in n["halts"] for n in body if n["id"] in save_ids), "expected the save step's read-back stop"
     return {"groups": groups, "stops": stops}
+
+
+def ui_structure(recording: Path) -> Path:
+    """Keep what sections read from a recording: each event's index, kind,
+    target and captured form section. No typed values, URLs or frames.
+    Written to fixtures/openemr-referral/ui-structure/events.jsonl."""
+    out = OUT / "ui-structure"
+    out.mkdir(parents=True, exist_ok=True)
+    lines = []
+    for raw in (recording / "events.jsonl").read_text().splitlines():
+        if not raw.strip():
+            continue
+        event = json.loads(raw)
+        kept = {"i": event["i"], "kind": event["kind"]}
+        structural = event.get("structural") or {}
+        target = {k: structural[k] for k in ("selector", "role", "name") if structural.get(k)}
+        if target:
+            kept["structural"] = target
+        if event.get("section"):
+            kept["section"] = event["section"]
+        lines.append(json.dumps(kept))
+    assert any('"section"' in line for line in lines), f"{recording} has no captured form structure"
+    (out / "events.jsonl").write_text("\n".join(lines) + "\n")
+    return out
 
 
 def webp(src: Path, dst: Path, width: int | None = None) -> None:
@@ -292,6 +291,15 @@ def main() -> int:
     ap.add_argument("--runs", type=Path, help="the certified runs (summary.json and one directory per referral)")
     ap.add_argument("--bundle", type=Path, default=BUNDLE, help="the compiled referral bundle the runs used")
     ap.add_argument("--out", type=Path, default=OUT, help="fixture directory (default: fixtures/openemr-referral)")
+    ap.add_argument(
+        "--ui-structure",
+        type=Path,
+        default=None,
+        help=(
+            "a recording of the same demonstration made with the form-structure capture "
+            "(its events.jsonl); its sections' titles apply to the steps with the same targets"
+        ),
+    )
     args = ap.parse_args()
     BUNDLE = args.bundle.expanduser().resolve()
     out = args.out.expanduser().resolve()
@@ -302,9 +310,17 @@ def main() -> int:
     manifest = json.loads((BUNDLE / "manifest.json").read_text())
     OUT.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
+        body = BUNDLE
+        if args.ui_structure:
+            # Sections are outside the bundle digests, so a copy with them is
+            # the same certified bundle (the trace still checks the digest).
+            structure = ui_structure(args.ui_structure.expanduser().resolve())
+            body = Path(tmp) / "body"
+            shutil.copytree(BUNDLE, body)
+            flow("sections", str(body), "--recording", str(structure))
         loop_dir = Path(tmp) / "loop"
         flow(
-            "for-each", str(BUNDLE),
+            "for-each", str(body),
             "--records", str(OUT / "worklist.csv"),
             "--out", str(loop_dir),
             "--loop-var", "referral",
@@ -326,6 +342,10 @@ def main() -> int:
         ),
         "body_content_digest": manifest["content_digest"],
         "source_recording_sha256": manifest["provenance"]["source_recording_sha256"],
+        "sections": (
+            "compiled by Flow (openadapt-flow sections"
+            + (", titles from the form structure in ui-structure/events.jsonl)" if args.ui_structure else ")")
+        ),
         "loop": "openadapt-flow for-each --records fixtures/openemr-referral/worklist.csv",
         "spec": "openadapt-flow visualize --format json --profile public-synthetic",
     }

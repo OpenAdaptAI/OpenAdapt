@@ -93,7 +93,7 @@ of truth; a test keeps this table in step with them.
 | `templates/*` | Crops of the recorded screen (targets, expected regions, drag ends, identifier crops) and the layout fingerprint | Encrypted |
 | `manifest.json` | SHA-256 digests, compiler version, certification provenance | Plaintext (structural) |
 | `workflow.py` | A readable rendering of `workflow.json` | Encrypted |
-| `compile_notes.json`, `param_hygiene.json`, `param_proposals.json`, `annotations.json`, `api_proposal.json` | Compiler sidecars; they quote labels, masked or raw example values and screen text | Encrypted |
+| `compile_notes.json`, `param_hygiene.json`, `param_proposals.json`, `annotations.json`, `api_proposal.json`, `sections.json` | Compiler sidecars; they quote labels, masked or raw example values and screen text | Encrypted |
 | `effect_contract.yaml` | A scaffolded effect contract with observed values | Encrypted |
 | `undo-lineage.json`, `record-check-binding.json` | Prior digests; record-check coverage | Encrypted |
 | `qualification-proposal.json`, `qualification-proposal.draft.json`, `qualification-admission.local-dev.json`, `qualification/*` | Qualification pins, cases and reports | Encrypted |

@@ -151,7 +151,8 @@ jobs:
           agent="$(hit "^packages/(agent|flow|types)/|$wf")"
           capture="$(hit "^packages/capture/|$wf")"
           privacy="$(hit "^packages/privacy/|$wf")"
-          desktop="$(hit "^packages/desktop/|^\.github/workflows/desktop-[a-z-]+\.yml$|$wf")"
+          # Desktop bundles the program map from packages/program-graph.
+          desktop="$(hit "^packages/(desktop|program-graph)/|^\.github/workflows/desktop-[a-z-]+\.yml$|$wf")"
           # The program map checks its schema against Flow's copy.
           program_graph="$(hit "^packages/program-graph/|^packages/flow/schemas/program-graph-v2\.json$|^\.github/workflows/release-program-graph\.yml$|$wf")"
           # Any package's metadata, or the launcher's, can change what an

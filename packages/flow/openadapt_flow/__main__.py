@@ -2312,6 +2312,17 @@ def _cmd_for_each(args: argparse.Namespace) -> int:
     if src_templates.is_dir():
         shutil.copytree(src_templates, out / "templates", dirs_exist_ok=True)
     looped.save(out)
+    # The body's named sections (display metadata) follow it into the loop:
+    # its recorded form structure and review edits apply to the same steps.
+    from openadapt_flow import sections as program_sections
+
+    body_sections = program_sections.load(src, body)
+    program_sections.write(
+        out,
+        program_sections.build(
+            looped, context=body_sections.context, edits=body_sections.edits
+        ),
+    )
 
     relation = args.relation
     rel = looped.data_sources[relation]
@@ -4861,7 +4872,12 @@ def _cmd_visualize(args: argparse.Namespace) -> int:
         except CompositionError as exc:
             raise SystemExit(str(exc)) from exc
     else:
-        spec = build_program_graph(Workflow.load(path))
+        from openadapt_flow import sections as program_sections
+
+        workflow = Workflow.load(path)
+        spec = build_program_graph(
+            workflow, program_sections.load(path, workflow).sections
+        )
     spec = project_program_graph(spec, PresentationProfile(args.profile))
     fmt = args.format
     if fmt == "json":
@@ -9470,6 +9486,10 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.set_defaults(func=_cmd_visualize)
+
+    from openadapt_flow.cli_sections import add_parser as _add_sections_parser
+
+    _add_sections_parser(sub)
 
     p = sub.add_parser(
         "seal",

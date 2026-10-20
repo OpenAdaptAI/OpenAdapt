@@ -93,11 +93,11 @@ describe("layoutProgramGraph", () => {
     const layout = layoutProgramGraph(display.spec);
     expect(layout.nodes.map((n) => [n.id, n.rank])).toEqual([
       ["for_each", 0],
-      ["name", 1],
-      ["birth", 2],
-      ["address", 3],
-      ["contact", 4],
-      ["save", 5],
+      ["section:fields-step_000", 1],
+      ["section:fields-step_009", 2],
+      ["section:fields-step_015", 3],
+      ["section:fields-step_030", 4],
+      ["section:save-step_039", 5],
       ["__loop_done__", 6],
       ["__opg_stop__", 6],
     ]);

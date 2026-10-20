@@ -1,5 +1,6 @@
 // Shared frontend types mirroring the engine's IPC payloads (spec §3).
 
+import type { EdgeKind, NodeKind } from "@openadapt/program-graph";
 import type { PlainResultKey } from "./outcomes";
 
 export type DeploymentLane = "cloud" | "byoc";
@@ -626,7 +627,7 @@ export interface QualificationParameter {
 export interface QualificationNode {
   id: string;
   index: number;
-  kind: string;
+  kind: NodeKind;
   title: string;
   action?: string | null;
   resolution?: {
@@ -888,9 +889,12 @@ export interface QualificationProject {
     }[];
   };
   certification_current: boolean;
+  /** Flow's program-graph spec (`build_program_graph(...).model_dump()`). */
   graph: {
+    spec_version?: number;
     bundle: {
       name: string;
+      schema_version: number;
       action_count: number;
       irreversible_count: number;
       identity_armed_count: number;
@@ -902,7 +906,9 @@ export interface QualificationProject {
       };
     };
     nodes: QualificationNode[];
-    edges: { source: string; target: string; kind: string; label: string }[];
+    edges: { source: string; target: string; kind: EdgeKind; label: string }[];
+    /** The compiled named sections (the bundle's sections.json), when Flow has them. */
+    sections?: ProgramGraphSection[];
   };
   lint: {
     findings: QualificationFinding[];
@@ -934,6 +940,19 @@ export interface QualificationRefusal {
   ok: false;
   workflow_id: string;
   error: string;
+}
+
+/** One named section of the compiled program (Flow's GraphSection). */
+export interface ProgramGraphSection {
+  id: string;
+  title: string;
+  subtitle: string;
+  kind: "fields" | "save" | "steps";
+  title_source: "ui" | "narration" | "fields" | "person";
+  nodes: string[];
+  section: string;
+  steps: string[];
+  fields?: string[];
 }
 
 export type QualificationResponse =

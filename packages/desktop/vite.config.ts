@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -23,16 +24,35 @@ function fontLicences(): Plugin {
   };
 }
 
+// Desktop imports the shared program map from its source in the monorepo
+// (packages/program-graph). React resolves from Desktop's own node_modules, so
+// the app bundles one copy of it.
+export const PROGRAM_GRAPH_ALIAS = [
+  {
+    find: /^@openadapt\/program-graph\/styles\.css$/,
+    replacement: fileURLToPath(new URL("../program-graph/src/styles.css", import.meta.url)),
+  },
+  {
+    find: /^@openadapt\/program-graph$/,
+    replacement: fileURLToPath(new URL("../program-graph/src/index.ts", import.meta.url)),
+  },
+];
+
 // Vite config tuned for Tauri (see https://v2.tauri.app/start/frontend/vite/).
 // - fixed dev port so `devUrl` in tauri.conf.json can point at it
 // - don't clear the screen so Rust/cargo logs remain visible
 // - build output to ../dist (frontendDist in tauri.conf.json)
 export default defineConfig({
   plugins: [react(), fontLicences()],
+  resolve: {
+    alias: PROGRAM_GRAPH_ALIAS,
+    dedupe: ["react", "react-dom"],
+  },
   clearScreen: false,
   server: {
     port: 1420,
     strictPort: true,
+    fs: { allow: [".", "../program-graph"] },
   },
   build: {
     outDir: "dist",

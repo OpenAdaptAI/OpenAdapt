@@ -527,6 +527,72 @@
       "title": "GraphNode",
       "type": "object"
     },
+    "GraphSection": {
+      "description": "A named, contiguous group of action nodes, compiled with the bundle.\n\nDisplay metadata from the bundle's ``sections.json``: a surface may fold\na section into one card. Execution never reads it.",
+      "properties": {
+        "id": {
+          "description": "Section id; never equal to a node id",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "subtitle": {
+          "description": "One line such as '6 steps \u00b7 3 fields'",
+          "title": "Subtitle",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/SectionKind"
+        },
+        "title_source": {
+          "$ref": "#/$defs/SectionTitleSource"
+        },
+        "nodes": {
+          "description": "Member node ids, in program order",
+          "items": {
+            "type": "string"
+          },
+          "title": "Nodes",
+          "type": "array"
+        },
+        "section": {
+          "description": "The bundle's section id, for review edits",
+          "title": "Section",
+          "type": "string"
+        },
+        "steps": {
+          "description": "The members' step ids, parallel to nodes",
+          "items": {
+            "type": "string"
+          },
+          "title": "Steps",
+          "type": "array"
+        },
+        "fields": {
+          "description": "Readable names of the fields it fills",
+          "items": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "subtitle",
+        "kind",
+        "title_source",
+        "nodes",
+        "section",
+        "steps"
+      ],
+      "title": "GraphSection",
+      "type": "object"
+    },
     "IdentityInfo": {
       "description": "The pre-action identity gate for a click / anchored-type node -- the\nwrong-record guard's compile-time coverage.\n\n``armed`` is True when the gate will verify the target's identity band\nbefore acting, False when the step will act WITHOUT identity verification\n(``reason`` says why it compiled unarmed), and None when identity does not\napply to this node. ``phi_free`` is True when identity is carried as a\nsalted-hash template rather than a plaintext band.",
       "properties": {
@@ -839,6 +905,27 @@
       ],
       "title": "ResolutionRung",
       "type": "object"
+    },
+    "SectionKind": {
+      "description": "What a section holds: fields to fill, the save, or other steps.",
+      "enum": [
+        "fields",
+        "save",
+        "steps"
+      ],
+      "title": "SectionKind",
+      "type": "string"
+    },
+    "SectionTitleSource": {
+      "description": "Where a section's title came from (see :mod:`openadapt_flow.sections`).",
+      "enum": [
+        "ui",
+        "narration",
+        "fields",
+        "person"
+      ],
+      "title": "SectionTitleSource",
+      "type": "string"
     }
   },
   "description": "The complete, self-describing visualization spec for one compiled bundle.\n\nSerialize with ``spec.model_dump_json()`` (or ``model_dump()``); every\nsurface renders THIS, none re-parse the bundle. See the module docstring.",
@@ -863,6 +950,14 @@
         "$ref": "#/$defs/GraphEdge"
       },
       "title": "Edges",
+      "type": "array"
+    },
+    "sections": {
+      "description": "Named groups of action nodes from the bundle's sections.json",
+      "items": {
+        "$ref": "#/$defs/GraphSection"
+      },
+      "title": "Sections",
       "type": "array"
     }
   },
