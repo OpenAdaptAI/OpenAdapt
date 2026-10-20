@@ -4321,6 +4321,12 @@ class StepResult(BaseModel):
     #: active; for a refused switch, the surface the run stayed on). None on
     #: every single-surface run, and then omitted from the serialized result.
     surface: Optional[str] = None
+    #: SCROLL steps only: True when the closed-loop scroll sent no input
+    #: because its readiness check already found the next step's target on
+    #: the before-frame (nothing to scroll). Set by ``Replayer._act_scroll``
+    #: on that path alone; None otherwise, and then omitted from the
+    #: serialized result.
+    scroll_target_ready_before: Optional[bool] = None
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -4337,6 +4343,8 @@ class StepResult(BaseModel):
             data.pop("server_responses", None)
         if isinstance(data, dict) and not self.check_to_click:
             data.pop("check_to_click", None)
+        if isinstance(data, dict) and self.scroll_target_ready_before is None:
+            data.pop("scroll_target_ready_before", None)
         return data
 
 

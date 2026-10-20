@@ -16878,7 +16878,13 @@ class Replayer:
         if self._governed_asset_mutation is not None:
             return self._governed_asset_mutation
         if holds:
-            return None  # target already in view; nothing to scroll
+            # Target already in view; nothing to scroll and no input sent.
+            # Record why, only for the next-target readiness check, so the
+            # outcome classifier can tell a correctly skipped scroll from an
+            # undelivered action (execution_profiles.classify_execution_outcome).
+            if implicit_target_readiness and result.delivery_attempted is not True:
+                result.scroll_target_ready_before = True
+            return None
 
         increment = math.hypot(dx, dy)
         budget = SCROLL_BUDGET_FACTOR * increment

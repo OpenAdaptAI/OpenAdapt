@@ -3598,3 +3598,112 @@ def test_evidence_scope_is_omitted_when_unknown():
     )
     assert evidence.endpoint_scope == "unknown"
     assert "endpoint_scope" not in evidence.model_dump(mode="json")
+
+
+def _scroll_then_save(*, flag: bool | None) -> tuple[Workflow, RunReport]:
+    """A verified save preceded by a SCROLL that sent no input."""
+
+    save_workflow = _workflow()
+    workflow = Workflow(
+        name=save_workflow.name,
+        steps=[
+            Step(
+                id="scroll",
+                intent="scroll to the save button",
+                action=ActionKind.SCROLL,
+                scroll_dx=0,
+                scroll_dy=600,
+            ),
+            *save_workflow.steps,
+        ],
+    )
+    report = _verified_production_report(save_workflow)
+    report.results.insert(
+        0,
+        StepResult(
+            step_id="scroll",
+            intent="scroll to the save button",
+            ok=True,
+            starting_state_settled=True,
+            delivery_attempted=False,
+            scroll_target_ready_before=flag,
+        ),
+    )
+    return workflow, _bind_report_to_workflow(report, workflow)
+
+
+def test_scroll_skipped_because_next_target_was_in_view_can_verify():
+    workflow, report = _scroll_then_save(flag=True)
+    assert (
+        classify_execution_outcome(report, workflow, ExecutionProfile.STANDARD)
+        is ExecutionOutcome.VERIFIED
+    )
+
+
+def test_undelivered_scroll_without_readiness_marker_stays_unverified():
+    workflow, report = _scroll_then_save(flag=None)
+    assert (
+        classify_execution_outcome(report, workflow, ExecutionProfile.STANDARD)
+        is ExecutionOutcome.COMPLETED_UNVERIFIED
+    )
+
+
+def test_readiness_marker_does_not_excuse_any_sign_of_sent_input():
+    workflow, ready = _scroll_then_save(flag=True)
+    delivered = ready.model_copy(deep=True)
+    delivered.results[0].delivery_attempted = None
+    receipt = ready.model_copy(deep=True)
+    receipt.results[0].delivery_receipt = _coordinate_click_receipt()
+    uncertain = ready.model_copy(deep=True)
+    uncertain.results[0].delivery_uncertainty = ActionDeliveryUncertainty(
+        operation="scroll",
+        native=False,
+        observed_at="2026-07-28T00:00:01Z",
+        cause_type="ActionDeliveryUncertain",
+    )
+    actuated = ready.model_copy(deep=True)
+    actuated.results[0].fresh_actuation_events = [
+        FreshActuationEvent(
+            attempt=1,
+            operation="scroll",
+            changed_pixel_count=1,
+            changed_bbox=(0, 0, 1, 1),
+            frame_size=(10, 10),
+            retried=False,
+        )
+    ]
+    failed = ready.model_copy(deep=True)
+    failed.results[0].ok = False
+    for invalid in (delivered, receipt, uncertain, actuated, failed):
+        assert (
+            classify_execution_outcome(invalid, workflow, ExecutionProfile.STANDARD)
+            is not ExecutionOutcome.VERIFIED
+        )
+
+
+def test_readiness_marker_never_excuses_an_undelivered_click():
+    workflow = _workflow()
+    report = _verified_production_report(workflow)
+    report.results[0].delivery_attempted = False
+    report.results[0].delivery_receipt = None
+    report.results[0].scroll_target_ready_before = True
+    assert (
+        classify_execution_outcome(report, workflow, ExecutionProfile.STANDARD)
+        is ExecutionOutcome.COMPLETED_UNVERIFIED
+    )
+
+
+def test_unset_scroll_readiness_marker_is_not_serialized():
+    unset = StepResult(step_id="s", intent="i", ok=True)
+    assert "scroll_target_ready_before" not in unset.model_dump()
+    assert "scroll_target_ready_before" not in unset.model_dump_json()
+    marked = StepResult(
+        step_id="s", intent="i", ok=True, scroll_target_ready_before=True
+    )
+    assert marked.model_dump()["scroll_target_ready_before"] is True
+    assert (
+        StepResult.model_validate_json(
+            marked.model_dump_json()
+        ).scroll_target_ready_before
+        is True
+    )
