@@ -23,7 +23,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Sequence
 
 #: Synthetic notes for the five runs. None of them is clinical advice.
 RUN_NOTES = (
@@ -69,7 +69,6 @@ class RunFacts:
     #: The engine's plain-language result for this run ("Done and checked",
     #: "Stopped before saving", ...), from its transaction outcome.
     plain_label: str = ""
-    report: Any = field(default=None, repr=False)
 
     @property
     def report_md(self) -> Path:
@@ -219,6 +218,74 @@ def read_screen_text(screenshot: Path) -> Optional[str]:
     return next((line for line in lines if "saved" in line.lower()), None)
 
 
+def run_program(
+    *,
+    base_url: str,
+    workflow: Any,
+    bundle_dir: Path,
+    run_dir: Path,
+    index: int,
+    note: Optional[str],
+    visible: bool,
+) -> RunFacts:
+    """Run the compiled program once on a fresh copy of the clinic's database.
+
+    ``note`` is this run's input when the engine accepts run inputs; None
+    replays the demonstrated note. The facts come from the run's own report
+    and an out-of-band read of the database.
+    """
+
+    from openadapt_flow.plain_outcome import plain_result
+    from openadapt_flow.receipt import _build_tutorial_receipt, write_receipt
+    from openadapt_flow.report import render_run_report
+    from openadapt_flow.tutorial import TUTORIAL_NOTE, _records, run_tutorial_workflow
+
+    extra: dict[str, Any] = {}
+    if note is not None and _accepts(run_tutorial_workflow, "params"):
+        extra["params"] = {"note": note}
+    else:
+        note = str(workflow.params.get("note", TUTORIAL_NOTE))
+    started = time.monotonic()
+    report = run_tutorial_workflow(
+        base_url=base_url,
+        workflow=workflow,
+        bundle_dir=bundle_dir,
+        run_dir=run_dir,
+        headed=visible,
+        **extra,
+    )
+    records = _records(base_url)
+    seconds = time.monotonic() - started
+    render_run_report(run_dir)
+    required, confirmed = _effect_counts(report)
+    checked = (
+        report.execution_outcome == "VERIFIED"
+        and report.transaction_outcome == "VERIFIED"
+        and required > 0
+        and confirmed == required
+        and any(record.get("note") == note for record in records)
+    )
+    if report.execution_outcome == "VERIFIED":
+        write_receipt(_build_tutorial_receipt(report), run_dir)
+    return RunFacts(
+        index=index,
+        note=note,
+        run_dir=run_dir,
+        execution_outcome=str(report.execution_outcome),
+        transaction_outcome=report.transaction_outcome,
+        checked=checked,
+        records=len(records),
+        model_calls=int(report.model_calls),
+        cost_usd=float(getattr(report, "est_model_cost_usd", 0.0) or 0.0),
+        effects_required=required,
+        effects_confirmed=confirmed,
+        seconds=seconds,
+        plain_label=plain_result(
+            report.transaction_outcome, report.execution_outcome
+        ).label,
+    )
+
+
 class FlowEngine:
     """The bundled tutorial, one stage per call, inside one browser process."""
 
@@ -231,6 +298,7 @@ class FlowEngine:
         self.workflow: Any = None
         self._stack = contextlib.ExitStack()
         self._base_url: Optional[str] = None
+        self._pool: Any = None
 
     # -- lifetime ---------------------------------------------------------
 
@@ -307,65 +375,65 @@ class FlowEngine:
 
     # -- act 2 ------------------------------------------------------------
 
-    def run(self, index: int, note: Optional[str]) -> RunFacts:
-        """Run the program once on a fresh copy of the clinic's database."""
-
-        from openadapt_flow.plain_outcome import plain_result
-        from openadapt_flow.receipt import _build_tutorial_receipt, write_receipt
-        from openadapt_flow.report import render_run_report
-        from openadapt_flow.tutorial import (
-            TUTORIAL_NOTE,
-            _records,
-            run_tutorial_workflow,
-        )
+    def run(
+        self, index: int, note: Optional[str], folder: Optional[str] = None
+    ) -> RunFacts:
+        """Run the program once, in this process, on a fresh database."""
 
         assert self._base_url is not None and self.workflow is not None
-        run_dir = self.root / f"run-{index}"
-        extra: dict[str, Any] = {}
-        if note is not None and self.note_param():
-            extra["params"] = {"note": note}
-        else:
-            note = str(self.workflow.params.get("note", TUTORIAL_NOTE))
-        started = time.monotonic()
-        report = run_tutorial_workflow(
+        return run_program(
             base_url=self._base_url,
             workflow=self.workflow,
             bundle_dir=self.bundle_dir,
-            run_dir=run_dir,
-            headed=self.visible,
-            **extra,
-        )
-        records = _records(self._base_url)
-        seconds = time.monotonic() - started
-        render_run_report(run_dir)
-        required, confirmed = _effect_counts(report)
-        checked = (
-            report.execution_outcome == "VERIFIED"
-            and report.transaction_outcome == "VERIFIED"
-            and required > 0
-            and confirmed == required
-            and any(record.get("note") == note for record in records)
-        )
-        if report.execution_outcome == "VERIFIED":
-            write_receipt(_build_tutorial_receipt(report), run_dir)
-        return RunFacts(
+            run_dir=self.root / (folder or f"run-{index}"),
             index=index,
             note=note,
-            run_dir=run_dir,
-            execution_outcome=str(report.execution_outcome),
-            transaction_outcome=report.transaction_outcome,
-            checked=checked,
-            records=len(records),
-            model_calls=int(report.model_calls),
-            cost_usd=float(getattr(report, "est_model_cost_usd", 0.0) or 0.0),
-            effects_required=required,
-            effects_confirmed=confirmed,
-            seconds=seconds,
-            plain_label=plain_result(
-                report.transaction_outcome, report.execution_outcome
-            ).label,
-            report=report,
+            visible=self.visible,
         )
+
+    def start_workers(self) -> None:
+        """Start the worker processes for Act 2 while Act 1 is still running."""
+
+        from openadapt.quickstart.workers import WorkerPool, worker_count
+
+        count = worker_count()
+        if count > 1 and self._pool is None:
+            self._pool = WorkerPool(count, visible=self.visible)
+            self._stack.callback(self._pool.close)
+
+    @property
+    def parallel(self) -> int:
+        """How many runs can go at once: the workers that didn't give up."""
+
+        return max(1, self._pool.usable()) if self._pool is not None else 1
+
+    def run_all(
+        self, notes: Sequence[str], on_finish: Callable[[RunFacts], None]
+    ) -> None:
+        """Run the program once per note, in the worker processes when started.
+
+        Each run is a complete checked run in its own browser, against its own
+        copy of the clinic's database. A run a worker can't take (a worker
+        that failed to start, or one that stalled) runs here instead, so every
+        note still gets its own checked run.
+        """
+
+        assert self.workflow is not None
+        varied = self.note_param()
+        jobs = [
+            (index, note if varied else None, f"run-{index}")
+            for index, note in enumerate(notes, 1)
+        ]
+        leftover = jobs
+        if self._pool is not None:
+            leftover = self._pool.run(
+                jobs,
+                bundle_dir=self.bundle_dir,
+                root=self.root,
+                on_finish=on_finish,
+            )
+        for index, note, folder in leftover:
+            on_finish(self.run(index, note, folder))
 
     # -- act 3 ------------------------------------------------------------
 
@@ -446,7 +514,7 @@ class FlowEngine:
         from openadapt_flow import demo_proof
         from openadapt_flow.tutorial import TutorialResult
 
-        report = first.report
+        report = demo_proof._load_report(first.run_dir)
         tier: Optional[int] = None
         for step in getattr(report, "results", []) or []:
             for evidence in step.effect_evidence:

@@ -235,8 +235,11 @@ class PlainView:
     def compiled(self, outcome: Outcome) -> None:
         self._say(f"   {compiled_line(outcome)} {seconds(outcome.act1_seconds)}")
 
-    def running(self, index: int, total: int, checked: int):
+    def running(self, total: int, parallel: int):
         return self._quiet()
+
+    def progress(self, finished: int, total: int, checked: int) -> None:
+        pass
 
     def run_row(self, run: RunFacts, total: int) -> None:
         self._say(
@@ -355,10 +358,28 @@ class RichView:
             f"   [bold]{compiled_line(outcome)}[/] [dim]{seconds(outcome.act1_seconds)}[/]"
         )
 
-    def running(self, index: int, total: int, checked: int):
-        return self._status(
-            f"Running {index} of {total} {self.marks.dot} {checked} checked so far"
+    def running(self, total: int, parallel: int):
+        self._live = self._status(self._running_text(0, total, 0, parallel))
+        self._parallel = parallel
+        return self._live
+
+    def _running_text(
+        self, finished: int, total: int, checked: int, parallel: int
+    ) -> str:
+        how = "at once" if parallel >= total else f"{parallel} at a time"
+        if parallel <= 1:
+            how = "one after another"
+        return (
+            f"Running {total} {how} {self.marks.dot} {finished} done "
+            f"{self.marks.dot} {checked} checked in the database"
         )
+
+    def progress(self, finished: int, total: int, checked: int) -> None:
+        live = getattr(self, "_live", None)
+        if live is not None:
+            live.update(
+                f"[dim]{self._running_text(finished, total, checked, self._parallel)}[/]"
+            )
 
     def run_row(self, run: RunFacts, total: int) -> None:
         color = "green" if run.checked else "red"

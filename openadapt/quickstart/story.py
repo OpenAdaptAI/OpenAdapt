@@ -12,7 +12,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol, Sequence
 
 from openadapt.quickstart.engine import (
     RUN_NOTES,
@@ -58,7 +58,14 @@ class Engine(Protocol):
 
     def note_param(self) -> bool: ...
 
-    def run(self, index: int, note: Optional[str]) -> RunFacts: ...
+    def start_workers(self) -> None: ...
+
+    @property
+    def parallel(self) -> int: ...
+
+    def run_all(
+        self, notes: Sequence[str], on_finish: Callable[[RunFacts], None]
+    ) -> None: ...
 
     def before_prompt(self) -> None: ...
 
@@ -129,7 +136,9 @@ class View(Protocol):
 
     def compiled(self, outcome: Outcome) -> None: ...
 
-    def running(self, index: int, total: int, checked: int) -> Any: ...
+    def running(self, total: int, parallel: int) -> Any: ...
+
+    def progress(self, finished: int, total: int, checked: int) -> None: ...
 
     def run_row(self, run: RunFacts, total: int) -> None: ...
 
@@ -190,7 +199,8 @@ def run_story(
     with view.starting():
         engine.__enter__()
     try:
-        # Act 1: show it once.
+        # Act 1: show it once. Act 2's workers get ready meanwhile.
+        engine.start_workers()
         view.act(1, "Show it once", _act1_subtitle(engine.visible))
         act_start = clock()
         outcome.demo_steps = engine.record(view.demo_step)
@@ -210,20 +220,20 @@ def run_story(
 
         # Act 2: run it.
         total = len(RUN_NOTES)
-        if engine.note_param():
-            view.act(2, "Run it", f"the program, on {total} new notes")
-        else:
-            # An engine that can't give a run its own note replays the
-            # demonstrated one, and the header says so.
-            view.act(2, "Run it", f"the program, {total} times")
+        view.act(
+            2, "Run it", _act2_subtitle(total, engine.note_param(), engine.parallel)
+        )
         act_start = clock()
-        for index, note in enumerate(RUN_NOTES, start=1):
-            with view.running(index, total, outcome.checked):
-                run = engine.run(index, note)
+
+        def finished(run: RunFacts) -> None:
             outcome.runs.append(run)
             view.run_row(run, total)
             if verbose:
                 view.detail(_engine_detail_run(run))
+            view.progress(len(outcome.runs), total, outcome.checked)
+
+        with view.running(total, engine.parallel):
+            engine.run_all(RUN_NOTES, finished)
         outcome.act2_seconds = clock() - act_start
         view.runs_total(outcome)
 
@@ -252,6 +262,19 @@ def run_story(
     outcome.total_seconds = clock() - started - paused
     view.finale(outcome, next_steps(outcome))
     return outcome
+
+
+def _act2_subtitle(total: int, varied: bool, parallel: int) -> str:
+    # An engine that can't give a run its own note replays the demonstrated
+    # one, and the header says so.
+    what = (
+        f"the program on {total} new notes" if varied else f"the program {total} times"
+    )
+    if parallel >= total:
+        return f"{what}, all at once"
+    if parallel > 1:
+        return f"{what}, {parallel} at a time"
+    return what
 
 
 def _act1_subtitle(visible: bool) -> str:

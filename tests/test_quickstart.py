@@ -128,9 +128,11 @@ class FakeEngine:
         page: bool = True,
         demo=DEMO,
         note_param: bool = True,
+        parallel: int = 5,
         **_ignored,
     ) -> None:
         self._note_param = note_param
+        self._parallel = parallel
         self.root = root
         self.visible = visible
         self._runs = runs or {}
@@ -166,9 +168,17 @@ class FakeEngine:
     def note_param(self):
         return self._note_param
 
-    def run(self, index, note):
-        self.calls.append(f"run {index}")
-        return _run(self.root, index, **self._runs.get(index, {}))
+    def start_workers(self):
+        self.calls.append("start workers")
+
+    @property
+    def parallel(self):
+        return self._parallel
+
+    def run_all(self, notes, on_finish):
+        for index, _note in enumerate(notes, start=1):
+            self.calls.append(f"run {index}")
+            on_finish(_run(self.root, index, **self._runs.get(index, {})))
 
     def before_prompt(self):
         self.calls.append("before prompt")
@@ -239,6 +249,7 @@ def test_plain_output_runs_the_three_acts_in_order(root):
     output, _ = _plain(engine)
     assert engine.calls == [
         "enter",
+        "start workers",
         "record",
         "compile",
         *(f"run {index}" for index in range(1, 6)),
@@ -357,7 +368,16 @@ def test_the_aha_line_appears_only_when_the_run_showed_it(root):
 def test_an_engine_without_run_inputs_does_not_claim_new_notes(root):
     output, _ = _plain(FakeEngine(root, note_param=False))
     assert "new notes" not in output
-    assert "2  Run it · the program, 5 times" in output
+    assert "2  Run it · the program 5 times, all at once" in output
+
+
+@pytest.mark.parametrize(
+    ("parallel", "subtitle"),
+    [(5, "all at once"), (3, "3 at a time"), (1, "new notes\n")],
+)
+def test_act_two_says_how_many_run_at_once(root, parallel, subtitle):
+    output, _ = _plain(FakeEngine(root, parallel=parallel))
+    assert subtitle in output
 
 
 def test_no_seal_means_no_seal_line_and_no_verify_command(root):

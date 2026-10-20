@@ -10,7 +10,7 @@ Synthetic data only. Files go to openadapt-quickstart
    ✓ Click Save Encounter                     1.6s
    Compiled into a program: 6 steps. 0.5s
 
-2  Run it · the program, on 5 new notes
+2  Run it · the program on 5 new notes, all at once
    1/5  Follow-up in two weeks             ✓ checked in the database  2.6s
    2/5  Recheck blood pressure next month  ✓ checked in the database  2.7s
    3/5  Refer to physical therapy          ✓ checked in the database  2.8s
