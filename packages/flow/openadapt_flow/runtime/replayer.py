@@ -8663,6 +8663,10 @@ class Replayer:
                 and matched_region is not None
                 and resolution.rung not in ("template", "structural")
                 and step.anchor is not None
+                # A click rebound to the run's record (runtime.target_param)
+                # found another record's row; that row must never become the
+                # step's recorded anchor.
+                and not (step.target_param is not None and not step.anchor.template)
             ):
                 # Heal from the PRE-action frame: that is the frame the
                 # anchor was resolved against (the action may have navigated
@@ -10228,9 +10232,11 @@ class Replayer:
             if qualification is not None
             else None
         )
+        # A click that selects a record by a run value (Step.target_param)
+        # is judged by its identity band, never by hover evidence alone.
         hover_check = (
             self._hover_check(step, resolution, frame_png, workflow, bundle_dir)
-            if qualified_policy is None
+            if qualified_policy is None and step.target_param is None
             else None
         )
         if hover_check is None and (
@@ -10376,7 +10382,7 @@ class Replayer:
                 + " — refusing to act; run aborted"
             )
         elif check.status in ("unreadable", "abstain") and (
-            step.risk == "irreversible" or governed
+            step.risk == "irreversible" or governed or step.target_param is not None
         ):
             reason = (
                 "rests on a glyph-confusable identifier OCR may have "
@@ -10389,6 +10395,8 @@ class Replayer:
                 "requires verified identity under the governed run policy"
                 if governed
                 else "is irreversible"
+                if step.risk == "irreversible"
+                else "selects a record by a run value"
             )
             error = (
                 f"Step '{step.id}' ({step.intent}) {scope} and its target "
