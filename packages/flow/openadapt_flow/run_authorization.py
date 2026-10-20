@@ -72,9 +72,10 @@ ANCHOR_FILE = "run-authorization.anchor.json"
 # Handle scheme -> identity provider. Only ssh-github is built so far.
 PROVIDERS: Final = {"github": "ssh-github"}
 _HEX64 = r"^[a-f0-9]{64}$"
-# Item labels are short: a lower-case prefix and a number ("r3"), never free
+# Item labels are short: one or two lower-case letters and up to three digits
+# ("r3"), never free
 # text such as a record number or a name.
-_ITEM = r"^[a-z]{1,8}[0-9]{1,6}$"
+_ITEM = r"^[a-z]{1,2}[0-9]{1,3}$"
 _FINGERPRINT = r"^SHA256:[A-Za-z0-9+/]{43}$"
 _KEY_ID = r"^seal-ed25519-[a-f0-9]{16}$"
 _PROFILE = r"^[a-z][a-z0-9_-]{0,31}$"
@@ -120,7 +121,8 @@ class Scope(BaseModel):
 
         if len(set(value)) != len(value) or not all(re.match(_ITEM, v) for v in value):
             raise ValueError(
-                "items are unique short labels: a lower-case prefix and a number, e.g. r3"
+                "items are unique short labels: one or two lower-case letters and up "
+                "to three digits, e.g. r3"
             )
         return value
 
