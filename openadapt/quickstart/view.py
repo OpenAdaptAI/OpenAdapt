@@ -51,7 +51,8 @@ def compiled_line(outcome: Outcome) -> str:
 
 def run_status(run: RunFacts, marks: Marks) -> str:
     if run.checked:
-        return f"{marks.ok} checked in the database"
+        again = " (on a second try)" if run.repeated else ""
+        return f"{marks.ok} checked in the database{again}"
     return f"{marks.stop} {run.plain_label or run.execution_outcome}"
 
 

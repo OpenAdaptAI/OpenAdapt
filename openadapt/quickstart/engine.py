@@ -69,6 +69,9 @@ class RunFacts:
     #: The engine's plain-language result for this run ("Done and checked",
     #: "Stopped before saving", ...), from its transaction outcome.
     plain_label: str = ""
+    #: True when this run is a repeat: its first try, in a worker, stalled
+    #: and was stopped.
+    repeated: bool = False
 
     @property
     def report_md(self) -> Path:
@@ -509,7 +512,9 @@ class FlowEngine:
             # Act 2 is their only job: let them shut down during Act 3.
             pool.release()
         for index, note, folder in leftover:
-            on_finish(self.run(index, note, folder))
+            run = self.run(index, note, folder)
+            run.repeated = folder != f"run-{index}"
+            on_finish(run)
 
     # -- act 3 ------------------------------------------------------------
 

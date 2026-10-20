@@ -353,6 +353,12 @@ def test_numbers_follow_the_runs(root):
     assert outcome.checked == 4
 
 
+def test_a_repeated_run_says_so(root):
+    output, _ = _plain(FakeEngine(root, runs={3: {"repeated": True}}))
+    assert "✓ checked in the database (on a second try)" in output
+    assert output.count("second try") == 1
+
+
 def test_the_aha_line_appears_only_when_the_run_showed_it(root):
     shown, _ = _plain(FakeEngine(root))
     assert (
