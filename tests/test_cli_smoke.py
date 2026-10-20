@@ -77,7 +77,15 @@ def test_version_command():
     assert result.exit_code == 0
 
 
-def test_quickstart_runs_one_local_lifecycle_without_overwriting(monkeypatch):
+@pytest.fixture()
+def engine_tutorial(monkeypatch):
+    """Select the engine's own tutorial (the path for older Flow releases)."""
+    monkeypatch.setattr("openadapt.cli._flow_runs_quickstart", lambda: False)
+
+
+def test_quickstart_runs_one_local_lifecycle_without_overwriting(
+    engine_tutorial, monkeypatch
+):
     calls = []
     monkeypatch.setattr(
         "openadapt.cli._invoke_flow",
@@ -93,10 +101,10 @@ def test_quickstart_runs_one_local_lifecycle_without_overwriting(monkeypatch):
     assert calls[0][0] == "tutorial"
     assert calls[0][1] == "--out"
     assert calls[0][3:] == ["--name", "local-quickstart"]
-    assert "openadapt quickstart --break-it" in result.output
+    assert "Run evidence:" in result.output
 
 
-def test_quickstart_forwards_the_headed_tutorial_option(monkeypatch):
+def test_quickstart_forwards_the_headed_tutorial_option(engine_tutorial, monkeypatch):
     calls = []
     monkeypatch.setattr(
         "openadapt.cli._invoke_flow",
@@ -131,6 +139,7 @@ def _engine_writing_broken_report(calls, report_text):
 
 
 def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
+    engine_tutorial,
     monkeypatch,
 ):
     calls = []
@@ -155,7 +164,6 @@ def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
     assert calls[0][0] == "tutorial"
     assert calls[0][-1] == "--break-it"
     assert "run-broken" in result.output
-    assert "HALTED" in result.output
     # The halted rerun ends RECONCILIATION_REQUIRED. Nothing may claim the
     # store is unchanged or that a retry is safe.
     assert "unchanged" not in result.output
@@ -197,7 +205,7 @@ def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
     ],
 )
 def test_quickstart_derives_the_halted_rerun_result_from_its_report(
-    monkeypatch, report_text, expected
+    engine_tutorial, monkeypatch, report_text, expected
 ):
     calls = []
     monkeypatch.setattr(
@@ -218,7 +226,7 @@ def test_quickstart_derives_the_halted_rerun_result_from_its_report(
         assert "A save may have gone through" in result.output
 
 
-def test_quickstart_restores_the_operator_scrub_setting(monkeypatch):
+def test_quickstart_restores_the_operator_scrub_setting(engine_tutorial, monkeypatch):
     monkeypatch.setenv("OPENADAPT_FLOW_SCRUB", "auto")
     monkeypatch.setattr("openadapt.cli._invoke_flow", lambda _argv: 0)
 
@@ -230,7 +238,9 @@ def test_quickstart_restores_the_operator_scrub_setting(monkeypatch):
     assert os.environ["OPENADAPT_FLOW_SCRUB"] == "auto"
 
 
-def test_quickstart_retains_artifacts_when_the_engine_halts(monkeypatch):
+def test_quickstart_retains_artifacts_when_the_engine_halts(
+    engine_tutorial, monkeypatch
+):
     def halt_after_writing(argv):
         root = Path(argv[argv.index("--out") + 1])
         root.mkdir(parents=True)
@@ -806,8 +816,7 @@ def test_top_level_help_leads_with_flow():
     assert result.exit_code == 0
     # Quick Start headline and Commands listing both lead with flow.
     assert "openadapt flow demo-record" in result.output
-    assert "openadapt flow tutorial" in result.output
-    assert "openadapt quickstart --break-it" in result.output
+    assert "openadapt quickstart" in result.output
     # openadapt-agent 2.0.1 requires --bundles; the help names a command that
     # works with every released agent and every install method.
     assert "openadapt agent serve --bundles DIR --mode production" in result.output

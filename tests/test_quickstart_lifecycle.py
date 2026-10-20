@@ -22,8 +22,8 @@ def _module():
     return module
 
 
-def _write_verified_quickstart(root: Path) -> None:
-    run = root / "run"
+def _write_verified_quickstart(root: Path, name: str = "run-1") -> None:
+    run = root / name
     run.mkdir(parents=True)
     (run / "report.json").write_text(
         json.dumps(
@@ -53,16 +53,41 @@ def test_inspector_requires_a_verified_standard_effect(tmp_path):
     lifecycle = _module()
     _write_verified_quickstart(tmp_path)
 
+    _write_verified_quickstart(tmp_path, "run-2")
+
     summary = lifecycle._inspect_quickstart(tmp_path)
 
     assert summary["outcome"] == "VERIFIED"
     assert summary["effect_contracts"] == 2
+    assert summary["verified_runs"] == 2
 
-    report = tmp_path / "run" / "report.json"
+    report = tmp_path / "run-2" / "report.json"
     payload = json.loads(report.read_text(encoding="utf-8"))
     payload["transaction_outcome"] = "COMPLETED_UNVERIFIED"
     report.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(AssertionError, match="transaction outcome"):
+        lifecycle._inspect_quickstart(tmp_path)
+
+
+def test_inspector_reads_the_engine_tutorial_layout(tmp_path):
+    lifecycle = _module()
+    _write_verified_quickstart(tmp_path, "run")
+    assert lifecycle._inspect_quickstart(tmp_path)["verified_runs"] == 1
+
+
+def test_inspector_requires_the_silent_failure_to_stop(tmp_path):
+    lifecycle = _module()
+    _write_verified_quickstart(tmp_path)
+    broken = tmp_path / "run-broken"
+    broken.mkdir()
+    (broken / "report.json").write_text(
+        json.dumps({"execution_outcome": "HALTED"}), encoding="utf-8"
+    )
+    assert lifecycle._inspect_quickstart(tmp_path)["silent_failure_stopped"] is True
+    (broken / "report.json").write_text(
+        json.dumps({"execution_outcome": "VERIFIED"}), encoding="utf-8"
+    )
+    with pytest.raises(AssertionError, match="not caught"):
         lifecycle._inspect_quickstart(tmp_path)
 
 

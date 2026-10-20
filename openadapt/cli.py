@@ -29,6 +29,7 @@ import platform
 import re
 import shlex
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -71,11 +72,31 @@ class _FlowFirstGroup(click.Group):
                 f"No such command '{name}'. Did you mean 'openadapt flow {name}'?",
                 ctx,
             )
+        if not ctx.resilient_parsing and self.get_command(ctx, name) is None:
+            # A command this launcher doesn't know may be one a newer
+            # openadapt elsewhere on PATH has.
+            _warn_about_launcher_conflicts()
         return super().resolve_command(ctx, args)
 
 
+def _print_version(ctx: click.Context, _param, value: bool) -> None:
+    """``--version``, then any other ``openadapt`` on PATH that would shadow it."""
+    if not value or ctx.resilient_parsing:
+        return
+    click.echo(f"openadapt, version {__version__}")
+    _warn_about_launcher_conflicts()
+    ctx.exit()
+
+
 @click.group(cls=_FlowFirstGroup)
-@click.version_option(version=__version__, prog_name="openadapt")
+@click.option(
+    "--version",
+    is_flag=True,
+    expose_value=False,
+    is_eager=True,
+    callback=_print_version,
+    help="Show the version and exit.",
+)
 def main():
     """OpenAdapt launcher for the openadapt-flow compiler.
 
@@ -87,11 +108,7 @@ def main():
     \b
     Quick Start (Python 3.10-3.12):
         python -m pip install --upgrade openadapt
-        openadapt flow tutorial
-
-    \b
-    Halt demo:
-        openadapt quickstart --break-it
+        openadapt quickstart
 
     \b
     Manual Demo Lifecycle:
@@ -302,7 +319,7 @@ def _python_fix() -> str:
         "have it:\n"
         f"{installer}"
         "  uv tool install --python 3.12 openadapt\n"
-        f"Then run: openadapt quickstart --break-it{script}"
+        f"Then run: openadapt quickstart{script}"
     )
 
 
@@ -440,7 +457,17 @@ def _is_externally_managed_error(error: BaseException) -> bool:
 
 # Options quickstart parses itself. Click consumes them before passthrough,
 # so they only matter here as suggestions for a mistyped flag.
-_QUICKSTART_OPTIONS = frozenset({"--out", "--headed", "--break-it", "--help"})
+_QUICKSTART_OPTIONS = frozenset(
+    {
+        "--out",
+        "--headless",
+        "--no-break",
+        "--verbose",
+        "--headed",
+        "--break-it",
+        "--help",
+    }
+)
 
 
 def _refuse_unknown_tutorial_options(args: list[str]) -> None:
@@ -470,6 +497,41 @@ def _refuse_unknown_tutorial_options(args: list[str]) -> None:
         raise click.UsageError(message)
 
 
+@contextmanager
+def _synthetic_scrub_off():
+    """Keep an unconfigured privacy provider from blocking the synthetic app.
+
+    The bundled tutorial contains only fixed synthetic data. An operator's
+    explicit setting is left alone; the default is restored afterwards.
+    """
+    scrub = os.environ.get("OPENADAPT_FLOW_SCRUB")
+    if scrub in (None, "auto"):
+        os.environ["OPENADAPT_FLOW_SCRUB"] = "off"
+    try:
+        yield
+    finally:
+        if scrub is None:
+            os.environ.pop("OPENADAPT_FLOW_SCRUB", None)
+        elif scrub == "auto":
+            os.environ["OPENADAPT_FLOW_SCRUB"] = scrub
+
+
+def _quickstart_root(out: Optional[Path]) -> Path:
+    if out is None:
+        root = Path(_DEFAULT_QUICKSTART_DIR).resolve()
+        suffix = 2
+        while root.exists():
+            root = Path(f"{_DEFAULT_QUICKSTART_DIR}-{suffix}").resolve()
+            suffix += 1
+        return root
+    root = out.expanduser().resolve()
+    if root.exists():
+        raise click.UsageError(
+            f"Output already exists: {root}. Pass --out with a new directory."
+        )
+    return root
+
+
 @main.command(
     "quickstart",
     context_settings={
@@ -482,143 +544,145 @@ def _refuse_unknown_tutorial_options(args: list[str]) -> None:
     type=click.Path(path_type=Path),
     default=None,
     help=(
-        f"Directory for the recording, bundle, and run report. Default: "
+        f"Directory for the recording, program, and run reports. Default: "
         f"{_DEFAULT_QUICKSTART_DIR}, suffixed -2, -3, ... when taken."
     ),
 )
 @click.option(
-    "--headed", is_flag=True, help="Show the browser while the tutorial runs."
+    "--headless",
+    is_flag=True,
+    help="Hide the browser. It is shown by default when a display is available.",
 )
 @click.option(
-    "--break-it",
-    "break_it",
+    "--no-break",
+    "no_break",
     is_flag=True,
-    help=(
-        "After the verified run, rerun the same certified bundle against a "
-        "fault-injecting backend and watch the engine halt when the save "
-        "doesn't reach the record."
-    ),
+    help="Skip the last part, where one save fails silently.",
 )
+@click.option(
+    "--verbose",
+    is_flag=True,
+    help="Also print each run's engine detail and report path.",
+)
+@click.option("--headed", is_flag=True, hidden=True)
+@click.option("--break-it", "break_it", is_flag=True, hidden=True)
 @click.pass_context
 def quickstart(
-    command_ctx: click.Context, out: Optional[Path], headed: bool, break_it: bool
+    command_ctx: click.Context,
+    out: Optional[Path],
+    headless: bool,
+    no_break: bool,
+    verbose: bool,
+    headed: bool,
+    break_it: bool,
 ) -> None:
-    """Run a verified local tutorial against the bundled synthetic app.
+    """Show a task once, run it, then watch it catch a save that didn't happen.
 
-    This is the shortest path to a real OpenAdapt run. It uses the bundled
-    synthetic tutorial, verifies the write through an independent read-only
-    system-of-record interface, keeps every artifact on this computer, and
-    enables no model or Cloud call. The output directory is never overwritten.
-    Other flags that the engine tutorial accepts (for example --guided or
-    --interactive-record) pass through to it unchanged.
+    About 30 seconds, in a synthetic clinic app on this computer. OpenAdapt
+    turns one demonstration into a program, runs it five times and checks
+    every save in the app's database, then makes one save fail silently: the
+    screen says saved, the database has nothing, and OpenAdapt stops. The
+    program makes no AI calls. Nothing in the output directory is overwritten.
+
+    Other flags of the engine tutorial (for example --guided or
+    --interactive-record) run that tutorial instead, unchanged.
     """
-    import os
-
     _require_supported_python()
     _refuse_unknown_tutorial_options(command_ctx.args)
+    root = _quickstart_root(out)
 
-    if out is None:
-        root = Path(_DEFAULT_QUICKSTART_DIR).resolve()
-        suffix = 2
-        while root.exists():
-            root = Path(f"{_DEFAULT_QUICKSTART_DIR}-{suffix}").resolve()
-            suffix += 1
-        click.echo(f"Using output directory: {root}")
-    else:
-        root = out.expanduser().resolve()
-        if root.exists():
-            raise click.UsageError(
-                f"Output already exists: {root}. Pass --out with a new directory."
+    if command_ctx.args or not _flow_runs_quickstart():
+        # Engine-owned flags (--guided, --interactive-record, and future
+        # engine additions) run the engine's own tutorial, as before. So does
+        # a Flow older than the pieces the three-act quickstart uses.
+        _engine_tutorial(root, out is None, headed, break_it, command_ctx.args)
+        return
+
+    from openadapt.quickstart import next_steps, run_quickstart
+    from openadapt.quickstart.engine import display_available
+
+    visible = not headless and (headed or display_available())
+    steps = next_steps(
+        _hint,
+        _shell_quote,
+        _agent_serves_tutorial(),
+        keep=_keep_command(),
+        shadow=_shadowing_openadapt if _under_uvx() else None,
+    )
+    try:
+        with _synthetic_scrub_off():
+            outcome = run_quickstart(
+                root,
+                visible=visible,
+                break_it=not no_break,
+                verbose=verbose,
+                steps=steps,
             )
+    except KeyboardInterrupt:
+        click.echo(f"\nStopped. Anything written so far is in {root}", err=True)
+        raise click.exceptions.Exit(130)
+    except Exception as error:
+        if _is_externally_managed_error(error):
+            _echo_python_remedy()
+            raise click.exceptions.Exit(1) from error
+        if type(error).__name__ in ("TutorialError", "DurableAuthorityBusy"):
+            raise click.ClickException(
+                f"The quickstart stopped: {error}\nAnything it wrote is in {root}"
+            ) from error
+        raise
+    if outcome.checked != len(outcome.runs) or (
+        outcome.broken is not None and not outcome.broken.stopped
+    ):
+        raise click.exceptions.Exit(1)
 
-    argv = [
-        "tutorial",
-        "--out",
-        str(root),
-        "--name",
-        "local-quickstart",
-    ]
+
+# The oldest Flow with every piece the three-act quickstart uses (shared
+# browser, record checks bound to run inputs, the side-by-side page).
+_QUICKSTART_FLOW_MINIMUM = (2, 2, 0)
+
+
+def _flow_runs_quickstart() -> bool:
+    """Return whether the installed Flow can run the three-act quickstart."""
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as dist_version
+
+    try:
+        installed = _release_tuple(dist_version("openadapt-flow"))
+    except PackageNotFoundError:
+        return False
+    return installed is not None and installed >= _QUICKSTART_FLOW_MINIMUM
+
+
+def _engine_tutorial(
+    root: Path, announce: bool, headed: bool, break_it: bool, extra: list[str]
+) -> None:
+    """Run the engine's own tutorial with engine-only flags, as before."""
+    if announce:
+        click.echo(f"Using output directory: {root}")
+    argv = ["tutorial", "--out", str(root), "--name", "local-quickstart"]
     if headed:
         argv.append("--headed")
     if break_it:
         argv.append("--break-it")
-    # Engine-owned flags (--guided, --interactive-record, and future engine
-    # additions) forward verbatim instead of being whitelisted here.
-    argv.extend(command_ctx.args)
-
-    # The bundled tutorial contains only fixed synthetic data. Keep an
-    # installed-but-unconfigured privacy provider from blocking this known-safe
-    # fixture, then restore the operator's setting immediately.
-    scrub = os.environ.get("OPENADAPT_FLOW_SCRUB")
-    if scrub in (None, "auto"):
-        os.environ["OPENADAPT_FLOW_SCRUB"] = "off"
+    argv.extend(extra)
     try:
-        code = _invoke_flow(argv)
+        with _synthetic_scrub_off():
+            code = _invoke_flow(argv)
     except Exception as error:
         if _is_externally_managed_error(error):
             _echo_python_remedy()
             raise click.exceptions.Exit(1) from error
         raise
-    finally:
-        if scrub in (None, "auto"):
-            if scrub is None:
-                os.environ.pop("OPENADAPT_FLOW_SCRUB", None)
-            else:
-                os.environ["OPENADAPT_FLOW_SCRUB"] = scrub
     if code:
         raise click.ClickException(
             f"The verified tutorial stopped with exit code {code}. "
             f"Any completed artifacts remain in {root}."
         )
-
-    click.echo("\nLocal quickstart complete.")
-    click.echo(f"Bundle: {root / 'bundle'}")
+    click.echo(f"\nBundle: {root / 'bundle'}")
     click.echo(f"Run evidence: {root / 'run'}")
-    click.echo("Outcome: VERIFIED under the Standard profile.")
-    click.echo(
-        "The synthetic write was confirmed through a read-only system-of-record API."
-    )
-    click.echo("No model or Cloud call was enabled.")
     if break_it:
-        click.echo(
-            "The rerun against the fault-injecting backend HALTED as designed: "
-            "the form was submitted, but the system of record had no new note."
-        )
         click.echo(f"Caught-fault evidence: {root / 'run-broken' / 'REPORT.md'}")
         click.echo(_halted_rerun_result(root / "run-broken"))
-    click.echo(
-        f"Inspect qualification gaps: {_hint('flow lint ' + _shell_quote(root / 'bundle'))}"
-    )
-    if not break_it:
-        click.echo(
-            "Watch it catch a save that didn't land: "
-            + _hint(f"quickstart --break-it --out {_shell_quote(f'{root}-break-it')}")
-        )
-    # The tutorial bundle is recorded against MockMed's fault server, and
-    # `replay --drift` serves plain MockMed, so replaying that bundle halts at
-    # the login screen with or without drift. Record a demo on plain MockMed.
-    drift = Path(f"{root}-drift")
-    rec, bundle = (_shell_quote(drift / name) for name in ("rec", "bundle"))
-    click.echo("See it stop when the screen changes (a separate MockMed demo):")
-    click.echo(f"  {_hint(f'flow demo-record --out {rec}')}")
-    click.echo(f"  {_hint(f'flow compile {rec} --out {bundle} --name drift-demo')}")
-    click.echo(
-        "  "
-        + _hint(
-            f"flow replay {bundle} --drift modal --run-dir {_shell_quote(drift / 'run')}"
-        )
-    )
-    if _agent_serves_tutorial():
-        click.echo("Give a local agent the run tool (synthetic MockMed, no frames):")
-        click.echo(f"  {_hint('agent serve --allow-run')}")
-        click.echo(
-            "A client sends authorized work and gets a receipt. Frames stay here."
-        )
-    click.echo(
-        "Connect this computer when you want Cloud history and collaboration: "
-        "https://app.openadapt.ai/dashboard/settings/ingest"
-    )
-    click.echo("Qualify a consequential workflow: https://openadapt.ai/qualify")
 
 
 def _hint(rest: str) -> str:
@@ -629,11 +693,144 @@ def _hint(rest: str) -> str:
     Repeat the ``uvx`` form there; otherwise keep the plain command.
     """
 
-    prefix = sys.prefix.replace("\\", "/")
-    if "/uv/archive-v" in prefix:
+    if _under_uvx():
         major, minor = sys.version_info[:2]
         return f"uvx --python {major}.{minor} openadapt {rest}"
     return f"openadapt {rest}"
+
+
+def _under_uvx() -> bool:
+    """True when this process runs from a ``uvx`` throwaway environment."""
+    return "/uv/archive-v" in sys.prefix.replace("\\", "/")
+
+
+def _keep_command() -> Optional[str]:
+    """Under ``uvx``: the command that installs this launcher for good."""
+    if not _under_uvx():
+        return None
+    major, minor = sys.version_info[:2]
+    return f"uv tool install --python {major}.{minor} openadapt"
+
+
+def _launcher_version(path: str, run=None) -> Optional[str]:
+    """Ask the ``openadapt`` at ``path`` for its version; None when it can't say."""
+    import subprocess
+
+    try:
+        result = (run or subprocess.run)(
+            [path, "--version"], capture_output=True, text=True, timeout=15
+        )
+        text = f"{result.stdout} {result.stderr}"
+    except Exception:  # noqa: BLE001 - an unrunnable openadapt has no version
+        return None
+    match = re.search(r"\b(\d+\.\d+\.\d+\S*)", text)
+    return match.group(1) if match else None
+
+
+def _shadowing_openadapt(which=None, run=None) -> Optional[str]:
+    """Warn when the shell's ``openadapt`` is another version than this one.
+
+    Under ``uvx`` the printed commands repeat ``uvx`` and reach this version,
+    but a person who types plain ``openadapt`` gets whatever is first on PATH,
+    for example an older install in a Conda ``bin`` ahead of ``~/.local/bin``.
+    A copy of this same version is fine and gets no warning.
+    """
+    import shutil
+
+    found = (which or shutil.which)("openadapt")
+    if not found:
+        return None
+    version = _launcher_version(found, run)
+    if version == __version__:
+        return None
+    named = f"is {version}" if version else "is an unknown version"
+    return (
+        f"Your shell's openadapt {named} at {found}; the commands above use "
+        "uvx so they run this version."
+    )
+
+
+def _path_launchers(environ=None) -> list[Path]:
+    """Every ``openadapt`` executable on PATH, in PATH order (``which -a``)."""
+    env = os.environ if environ is None else environ
+    names = ["openadapt.exe", "openadapt"] if os.name == "nt" else ["openadapt"]
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for folder in env.get("PATH", "").split(os.pathsep):
+        for name in names:
+            candidate = Path(folder or ".") / name
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                real = candidate.resolve()
+                if real not in seen:
+                    seen.add(real)
+                    found.append(candidate)
+    return found
+
+
+def _this_launcher_dir() -> Path:
+    return (Path(sys.prefix) / ("Scripts" if os.name == "nt" else "bin")).resolve()
+
+
+def _uninstall_fix(path: Path) -> str:
+    """How to remove the ``openadapt`` at ``path`` from its own environment."""
+    folder = path.parent
+    for name in ("python", "python3", "python.exe"):
+        python = folder / name
+        if python.is_file():
+            return (
+                f"{_shell_quote(python)} -m pip uninstall openadapt openadapt-flow, "
+                "then run: hash -r"
+            )
+    return (
+        f"pip uninstall openadapt openadapt-flow from {folder.parent}, "
+        "then run: hash -r"
+    )
+
+
+def _launcher_conflicts(launchers=None, run=None) -> list[str]:
+    """Plain warnings when PATH holds another ``openadapt`` that matters.
+
+    Two cases: the first ``openadapt`` on PATH is another version than this
+    one (so typing ``openadapt`` runs that one), or a newer ``openadapt`` is
+    on PATH than the one running. Each names the paths and versions; the first
+    also says how to remove the other install. Copies of this same version
+    are fine.
+    """
+    here = _this_launcher_dir()
+    others = [
+        path
+        for path in (_path_launchers() if launchers is None else launchers)
+        if path.parent.resolve() != here
+    ]
+    if not others:
+        return []
+    versions = {path: _launcher_version(str(path), run) for path in others}
+    lines = []
+    first = (_path_launchers() if launchers is None else launchers)[0]
+    if first in versions and versions[first] != __version__:
+        named = versions[first] or "an unknown version"
+        lines.append(
+            f"Your shell runs openadapt {named} at {first} before this one "
+            f"({__version__}). To remove it: {_uninstall_fix(first)}"
+        )
+    mine = _release_tuple(__version__)
+    for path, version in versions.items():
+        theirs = _release_tuple(version or "")
+        if mine is not None and theirs is not None and theirs > mine:
+            lines.append(
+                f"A newer openadapt, {version}, is at {path}; this one is "
+                f"{__version__}."
+            )
+    return lines
+
+
+def _warn_about_launcher_conflicts() -> None:
+    try:
+        lines = _launcher_conflicts()
+    except Exception:  # noqa: BLE001 - a PATH check must never break a command
+        return
+    for line in lines:
+        click.echo(line, err=True)
 
 
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
@@ -997,12 +1194,18 @@ def agent(command_ctx: click.Context) -> None:
 )
 @click.pass_context
 def seal(command_ctx: click.Context) -> None:
-    """Check an OpenAdapt Seal offline: `openadapt seal verify <file|url>`.
+    """Check an OpenAdapt Seal offline: `openadapt seal verify <file|url|folder>`.
 
-    Also `openadapt seal keys pin` to pin Cloud's Seal keys after a person
-    confirms them. Every argument passes to `openadapt-agent seal` unchanged.
+    A folder is a run folder (or a folder of them, such as the quickstart's)
+    signed on this computer; each run's report is checked against its
+    `seal.json`. Also `openadapt seal keys pin` to pin Cloud's Seal keys after
+    a person confirms them. Every other argument passes to `openadapt-agent
+    seal` unchanged.
     """
     _require_supported_python()
+    args = list(command_ctx.args)
+    if len(args) >= 2 and args[0] == "verify" and Path(args[1]).is_dir():
+        sys.exit(_verify_sealed_runs(Path(args[1]), args[2:]))
     try:
         from openadapt_agent import seal_cli  # noqa: F401
         from openadapt_agent.cli import main as agent_main
@@ -1019,6 +1222,72 @@ def seal(command_ctx: click.Context) -> None:
         click.echo("Upgrade with: pip install --upgrade openadapt-agent", err=True)
         sys.exit(1)
     sys.exit(int(agent_main(["seal", *command_ctx.args]) or 0))
+
+
+def _sealed_run_dirs(folder: Path) -> list[Path]:
+    """The run folder itself when it is sealed, else its sealed run folders."""
+    if (folder / "seal.json").is_file():
+        return [folder]
+    return sorted(
+        child
+        for child in folder.iterdir()
+        if child.is_dir() and (child / "seal.json").is_file()
+    )
+
+
+def _verify_sealed_runs(folder: Path, extra: list[str]) -> int:
+    """Check each sealed run under ``folder`` with Flow's offline Seal check.
+
+    One sealed run folder goes to `openadapt flow local-seal verify` with
+    every option. A folder of them (the quickstart's) is checked run by run
+    against this computer's Seal key, or the keys pinned with ``--keys FILE``.
+    """
+    if any(arg in ("--help", "-h") for arg in extra):
+        return _invoke_flow(["local-seal", "verify", "--help"])
+    runs = _sealed_run_dirs(folder)
+    if not runs:
+        click.echo(f"not valid: no sealed run in {folder} (no seal.json)", err=True)
+        return 1
+    if runs == [folder]:
+        return _invoke_flow(["local-seal", "verify", str(folder), *extra])
+    try:
+        from openadapt_flow.offline_seal import (
+            load_registry,
+            parse_key_registry,
+            public_key_entry,
+            seal_home,
+            verify_run,
+        )
+    except ImportError:
+        click.echo(
+            "This openadapt-flow cannot check offline Seals. Upgrade with: "
+            "pip install --upgrade openadapt",
+            err=True,
+        )
+        return 1
+    if extra[:1] == ["--keys"] and len(extra) == 2:
+        registry = load_registry(Path(extra[1]))
+        source = f"keys pinned in {extra[1]}"
+    elif extra:
+        raise click.UsageError(
+            "A folder of runs takes only --keys FILE. Check one run folder for "
+            "the other options."
+        )
+    else:
+        entry = public_key_entry(seal_home())
+        registry = parse_key_registry([entry])
+        source = f"this computer's Seal key, {entry['key_id']}"
+    click.echo(f"Checking {len(runs)} sealed runs in {folder} against {source}")
+    valid = 0
+    for run in runs:
+        result = verify_run(run, registry)
+        if result.ok:
+            valid += 1
+            click.echo(f"  {run.name}  valid")
+        else:
+            click.echo(f"  {run.name}  not valid: {result.reason}")
+    click.echo(f"{valid} of {len(runs)} valid")
+    return 0 if valid == len(runs) else 1
 
 
 @main.command("connect")
