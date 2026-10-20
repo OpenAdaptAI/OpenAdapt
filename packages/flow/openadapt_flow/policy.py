@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Iterable, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from openadapt_flow.ir import ActionKind, Step, Workflow
-from openadapt_flow.risk import classify_step_risk, step_text
+from openadapt_flow.risk import classify_step_risk, is_local_edit, step_text
 from openadapt_flow.traversal import iter_workflow_steps
 from openadapt_flow.verification import declared_effect_is_independent_read
 
@@ -491,7 +491,10 @@ def step_tags(
         tags.add("identity_applicable")
     if act in _CLICK_ACTIONS and effective_risk == "reversible":
         tags.add("navigation")
-        if is_identity_applicable(step):
+        # A click the compiler classified as an in-form local edit (its
+        # runtime check sealed in the step) stays in the same form: it is
+        # not navigation to an entity.
+        if is_identity_applicable(step) and not is_local_edit(step):
             tags.add("entity_navigation")
     return tags
 
