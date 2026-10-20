@@ -141,12 +141,15 @@ def resolve_auto_repair(args: argparse.Namespace, cfg: Any) -> str:
         "repair_approval_wait": "approval_wait_s",
         "repair_model_provider": "model_provider",
         "repair_model_key_file": "model_key_file",
+        "repair_requalify": "requalify",
+        "repair_requalify_trials": "requalify_trials",
     }
     defaults = {
         "repair_screen_share_mode": "scrubbed_only",
         "repair_store": "repair-store",
         "repair_attempts": 3,
         "repair_approval_wait": 900.0,
+        "repair_requalify_trials": 1,
     }
     for flag, name in fill.items():
         if getattr(args, flag, None) is None:
@@ -184,18 +187,21 @@ def _refusal(
     args: argparse.Namespace, backend_cfg: Any, url: Optional[str]
 ) -> Optional[str]:
     from openadapt_flow.backends.factory import _normalize_kind
+    from openadapt_flow.compatibility import REPAIR_MANAGED, REPAIR_QUALIFIED
 
     if getattr(args, "managed_dispatch_file", None):
-        return "a managed dispatch binds the original bundle"
+        return REPAIR_MANAGED
     if getattr(args, "qualification_authority_file", None):
-        return (
-            "a signed qualification admission binds the original bundle; the "
-            "approved bundle needs its own admission"
-        )
+        return REPAIR_QUALIFIED
     if getattr(args, "_qualification_case_execution", None) is not None:
         return "a qualification case can't be repaired"
-    if getattr(args, "pin_digest", None):
-        return "--pin-digest pins the original bundle"
+    if getattr(args, "pin_digest", None) and not getattr(
+        args, "repair_requalify", None
+    ):
+        return (
+            "--pin-digest pins the original bundle; set repair.requalify to the "
+            "bundle's verify.yaml so a fix is re-qualified and re-admitted"
+        )
     if _normalize_kind(backend_cfg.kind) != "web":
         return "only browser runs can be repaired for now"
     if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
@@ -210,6 +216,41 @@ def _refusal(
     if not args.repair_screen_access_by:
         return "--repair-screen-access-by is required"
     return None
+
+
+def _requalification(args: argparse.Namespace) -> Any:
+    """The parent's campaign on its test copy, when repair.requalify is set."""
+
+    path = getattr(args, "repair_requalify", None)
+    if not path:
+        return None
+    from openadapt_flow.qualify.config import load_verify_config
+    from openadapt_flow.repair.readmission import Requalification
+
+    return Requalification(
+        config=load_verify_config(Path(path)),
+        trials=int(getattr(args, "repair_requalify_trials", None) or 1),
+    )
+
+
+def pinned_lineage(args: argparse.Namespace, cfg: Any) -> Any:
+    """The lineage check a ``--pin-digest`` run uses, or None.
+
+    A repaired, re-qualified version of the pinned bundle passes the pin
+    through the signed lineage in the repair store; nothing else does.
+    """
+
+    if not getattr(args, "pin_digest", None):
+        return None
+    section = getattr(cfg, "repair", None)
+    store = getattr(args, "repair_store", None) or (
+        section.store if section is not None else "repair-store"
+    )
+    from openadapt_flow.repair.readmission import READMISSIONS_DIR, lineage_check
+
+    if not (Path(store) / READMISSIONS_DIR).is_dir():
+        return None
+    return lineage_check(Path(store))
 
 
 class CliTarget:
@@ -441,6 +482,7 @@ def cmd_run_self_repair(
             fault_probes=tuple(args.repair_fault_url),
             approval_wait_s=args.repair_approval_wait,
             on_approval_request=announce,
+            requalification=_requalification(args),
         )
     except (SelfRepairRefused, ImportError, AttributeError, ValueError) as exc:
         if mode == "auto":

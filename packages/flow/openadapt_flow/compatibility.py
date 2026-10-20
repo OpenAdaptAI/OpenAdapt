@@ -135,12 +135,20 @@ POOL_LOCAL_ONLY = (
     "--workers and --readback-window apply to local runs, not a managed dispatch "
     "or a qualification case"
 )
-REPAIR_PINNED = "--pin-digest pins the original bundle"
 REPAIR_QUALIFIED = (
-    "a signed qualification admission binds the original bundle; the approved "
-    "bundle needs its own admission"
+    "a production qualification admission is signed by the qualification "
+    "authority, so a repaired bundle waits for that authority's signature"
 )
-REPAIR_MANAGED = "a managed dispatch binds the original bundle"
+REPAIR_MANAGED = (
+    "a managed dispatch is Cloud's authorization for one bundle, so a repaired "
+    "bundle runs only on a new dispatch from Cloud"
+)
+_READMISSION_EVIDENCE = (
+    "tests/test_repair_readmission.py::test_a_repair_is_requalified_and_readmitted_with_lineage",
+    "tests/test_repair_readmission.py::test_a_pin_accepts_only_a_verified_descendant",
+    "tests/test_repair_readmission.py::test_a_repair_that_fails_requalification_is_refused",
+    "tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says",
+)
 
 _REPAIR_EVIDENCE = (
     "tests/test_self_repair.py::test_renamed_button_is_repaired_approved_on_the_phone_and_verified",
@@ -302,11 +310,14 @@ CELLS: tuple[Cell, ...] = (
     Cell(
         "self_repair",
         "pinned",
-        "refused",
-        reason=REPAIR_PINNED,
+        "works",
+        note=(
+            "needs repair.requalify: the fix is re-qualified on a test copy and "
+            "re-admitted with signed lineage, and the pin accepts that new version"
+        ),
         evidence=(
             "tests/test_self_repair_cli.py::test_run_self_repair_refuses_a_pinned_bundle",
-            "tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says",
+            *_READMISSION_EVIDENCE,
         ),
     ),
     Cell(
@@ -352,11 +363,9 @@ CELLS: tuple[Cell, ...] = (
     Cell(
         "standard_changes",
         "pinned",
-        "refused",
-        reason=REPAIR_PINNED,
-        evidence=(
-            "tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says",
-        ),
+        "works",
+        note="needs repair.requalify, as self-repair",
+        evidence=_READMISSION_EVIDENCE,
     ),
     Cell(
         "standard_changes",
