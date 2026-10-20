@@ -4981,7 +4981,7 @@ class SelfRepairStepRecord(BaseModel):
     """One stage of a self-repair (:mod:`openadapt_flow.repair.self_repair`).
 
     ``stage`` is a closed word (``halt``, ``propose``, ``patch``, ``probe``,
-    ``campaign``, ``approval``, ``resume``). ``model_calls`` and
+    ``requalify``, ``campaign``, ``approval``, ``readmit``, ``resume``). ``model_calls`` and
     ``est_model_cost_usd`` are what the repair agent reported for this stage;
     every other stage is deterministic and records zero.
     """
@@ -4989,7 +4989,15 @@ class SelfRepairStepRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     stage: Literal[
-        "halt", "propose", "patch", "probe", "campaign", "approval", "resume"
+        "halt",
+        "propose",
+        "patch",
+        "probe",
+        "requalify",
+        "campaign",
+        "approval",
+        "readmit",
+        "resume",
     ]
     passed: bool
     detail: str = Field(default="", max_length=1024)
@@ -5057,6 +5065,13 @@ class SelfRepairEvidence(BaseModel):
     steps: list[SelfRepairStepRecord] = Field(default_factory=list)
     #: Set when the fix applied without a person, under a signed policy.
     standard_change: Optional[StandardChangeEvidence] = None
+    #: Set when the repaired bundle was re-qualified and re-admitted with
+    #: signed lineage (``openadapt_flow.repair.readmission``): the bundle the
+    #: item resumed on, and how many repairs it is from a person's admission.
+    readmitted_bundle_digest: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    lineage_hop: Optional[int] = Field(default=None, ge=1, le=3)
 
 
 _CheckLevelName = Literal[
