@@ -36,7 +36,11 @@
 #
 # If any build fails, nothing is published. If a later job fails, re-run the
 # failed jobs of the same run: it reuses the attested bytes. A new run refuses a
-# version that is half-published instead of rebuilding it.
+# version that is half-published instead of rebuilding it, with one exception:
+# when PyPI already serves the version and its GitHub release is a draft, a
+# dispatch resumes. It builds nothing; the publish job downloads the draft,
+# reverifies every byte against its attestations and the tag's commit, requires
+# PyPI to serve the attested wheel and sdist, and publishes the draft.
 #
 # Signing: macOS DMGs are ad-hoc signed unless Developer ID credentials exist.
 # Windows goes through SignPath when the four SIGNPATH_* secrets are set (one
@@ -105,6 +109,8 @@ jobs:
       PACKAGES_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
     outputs:
       release: ${{ steps.fresh.outputs.release }}
+      resume: ${{ steps.state.outputs.resume }}
+      resume-commit: ${{ steps.state.outputs.resume-commit }}
       version: ${{ steps.state.outputs.version }}
       tag: ${{ steps.state.outputs.tag }}
       sbom: ${{ steps.state.outputs.sbom }}
@@ -182,6 +188,30 @@ jobs:
           elif [ "${pypi}" = 404 ] && [ "${release}" = none ] && \
                ! git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
             echo "release=true" >> "${GITHUB_OUTPUT}"
+          elif [ "${pypi}" = 200 ] && [ "${release}" != false ] && \
+               git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
+            # PyPI took the wheel and sdist, the tag exists, and no published
+            # release does: the staged draft was never published. (This token
+            # cannot see drafts, so the tags endpoint reports none; the publish
+            # job requires the draft with the release App's token.) Only a
+            # dispatch resumes; any other run builds nothing and says so.
+            if [ "${EVENT_NAME}" != workflow_dispatch ]; then
+              echo "::warning::${tag} is on PyPI and tagged, but its release is not published. Dispatch this workflow on main to resume it; this run builds nothing."
+              echo "release=false" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            # Resume with the bytes already attested and staged; build nothing.
+            git fetch --no-tags origin \
+              "+refs/tags/${tag}:refs/tags/${tag}" \
+              +refs/heads/main:refs/remotes/origin/main
+            commit="$(git rev-list -n 1 "refs/tags/${tag}")"
+            git merge-base --is-ancestor "${commit}" refs/remotes/origin/main
+            echo "${tag} is on PyPI and tagged at ${commit} with no published release; resuming its publication."
+            {
+              echo "release=false"
+              echo "resume=true"
+              echo "resume-commit=${commit}"
+            } >> "${GITHUB_OUTPUT}"
           elif [ "${pypi}" = 200 ] || [ "${pypi}" = 404 ]; then
             echo "${tag} is partly published (PyPI ${pypi}, GitHub ${release})." >&2
             echo "Re-run the failed jobs of the run that started it; do not rebuild." >&2
@@ -1220,18 +1250,29 @@ jobs:
           VERSION: ${{ needs.gate.outputs.version }}
         run: |
           python scripts/release_publication.py verify-pypi \
-            --directory pypi-dist --version "${VERSION}" --wait-seconds 300
+            --directory pypi-dist --checksums release-assets/SHA256SUMS \
+            --version "${VERSION}" --wait-seconds 300
 
   publish:
     name: Publish the immutable release
     needs: [gate, stage, publish-pypi]
+    # A release publishes after PyPI. A resume (stage and publish-pypi
+    # skipped) publishes the draft an earlier run staged and PyPI already
+    # serves.
+    if: >-
+      !cancelled() && needs.gate.result == 'success' && (
+        (needs.gate.outputs.release == 'true' && needs.publish-pypi.result == 'success') ||
+        needs.gate.outputs.resume == 'true'
+      )
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     environment: release-identity
     permissions:
+      attestations: read
       contents: read
     env:
       TAG: ${{ needs.gate.outputs.tag }}
+      VERSION: ${{ needs.gate.outputs.version }}
       EXPECTED_AUTHOR: openadapt-release[bot]
     steps:
       - name: Create a repository-scoped release App token
@@ -1244,6 +1285,17 @@ jobs:
           repositories: ${{ github.event.repository.name }}
           permission-contents: write
           permission-metadata: read
+
+      - name: Require the exact release App identity
+        env:
+          ACTUAL_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+        # Runs before the checkout below, so packages/desktop doesn't exist yet.
+        working-directory: ${{ github.workspace }}
+        run: |
+          if [ "${ACTUAL_APP_SLUG}" != openadapt-release ]; then
+            echo "Publishing requires the openadapt-release App, not ${ACTUAL_APP_SLUG}." >&2
+            exit 1
+          fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1270,10 +1322,42 @@ jobs:
           echo "path=${cli}" >> "${GITHUB_OUTPUT}"
 
       - name: Download the exact attested release set
+        if: needs.gate.outputs.resume != 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: desktop-release-${{ needs.gate.outputs.tag }}
           path: packages/desktop/upload
+
+      - name: Resume from the staged draft, reverified, and the PyPI files
+        if: needs.gate.outputs.resume == 'true'
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          GH_CLI: ${{ steps.release-cli.outputs.path }}
+          ATTESTATION_TOKEN: ${{ github.token }}
+          RESUME_COMMIT: ${{ needs.gate.outputs.resume-commit }}
+        run: |
+          set -euo pipefail
+          state="$(python scripts/release_publication.py state --repository "${GITHUB_REPOSITORY}" --tag "${TAG}" --cli "${GH_CLI}" --metadata "${RUNNER_TEMP}/release.json")"
+          if [ "${state}" != draft ]; then
+            echo "Refusing to resume: ${TAG} is ${state}, not a draft." >&2
+            exit 1
+          fi
+          mkdir "${RUNNER_TEMP}/staged"
+          "${GH_CLI}" release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --dir "${RUNNER_TEMP}/staged"
+          # The same checks the stage job ran before it uploaded these files:
+          # SHA256SUMS names exactly this set, and every attestation names
+          # this workflow on main and the tag's commit.
+          GH_TOKEN="${ATTESTATION_TOKEN}" python scripts/release_publication.py reverify \
+            --directory "${RUNNER_TEMP}/staged" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --tag "${TAG}" \
+            --source-commit "${RESUME_COMMIT}" \
+            --upload upload
+          python scripts/release_publication.py python-dist \
+            --directory upload --version "${VERSION}" --output pypi-dist
+          python scripts/release_publication.py verify-pypi \
+            --directory pypi-dist --checksums upload/SHA256SUMS \
+            --version "${VERSION}" --wait-seconds 0
 
       - name: Publish the verified draft once, then verify the immutable release
         env:
