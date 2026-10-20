@@ -363,6 +363,10 @@ class LoopCertificate(BaseModel):
     writes: list[str] = Field(default_factory=list)
     conditional_steps: list[str] = Field(default_factory=list)
     returns_to_list: bool = False
+    pagination: list[str] = Field(
+        default_factory=list,
+        description="How each row is found across pages, and the page bound.",
+    )
 
 
 class InductionResult(BaseModel):
@@ -878,6 +882,9 @@ def _loose_loop(steps: list[Step], sigs: list, start: int) -> Optional["_LoopTok
                 break
             nav_tail += 1
         core_sigs = tuple(seg.positions[q].sig for q in seg.core)
+        bounds = _shift_pager_runs(steps, sigs, seg.chunks)
+        chunks = [steps[a:b] for a, b in bounds]
+        chunk_sigs = [list(sigs[a:b]) for a, b in bounds]
         return _LoopTok(
             chunks[0],
             chunks,
@@ -886,6 +893,55 @@ def _loose_loop(steps: list[Step], sigs: list, start: int) -> Optional["_LoopTok
             short_last=bool(nav_tail),
         )
     return None
+
+
+def _nav_click_key(step: Step, sig: tuple) -> Optional[tuple]:
+    """(signature, label) of a navigation-only click, else None."""
+    if step.action not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
+        return None
+    if not _navigation_only(step):
+        return None
+    return (sig, _value(step))
+
+
+def _shift_pager_runs(
+    steps: list[Step], sigs: list, chunks: list[tuple[int, int]]
+) -> list[tuple[int, int]]:
+    """Give each "next page" run to the row it serves.
+
+    Iterations are cut where each row's first step repeats, so the Next-page
+    clicks a person made to reach a row sit at the END of the previous row.
+    Each row ends in navigation clicks; the part every row ends with is the
+    return to the list. What follows it on some rows, when it is one click
+    repeated, is paging: it moves to the start of the next row.
+    """
+    tails: dict[int, list[tuple]] = {}
+    for m in range(len(chunks) - 1):
+        a, b = chunks[m]
+        keys: list[tuple] = []
+        j = b - 1
+        while j > a:
+            key = _nav_click_key(steps[j], sigs[j])
+            if key is None:
+                break
+            keys.insert(0, key)
+            j -= 1
+        tails[m] = keys
+    if not tails:
+        return list(chunks)
+    common = 0
+    first = next(iter(tails.values()))
+    while all(len(t) > common and t[common] == first[common] for t in tails.values()):
+        common += 1
+    bounds = [list(c) for c in chunks]
+    for m, keys in tails.items():
+        extra = keys[common:]
+        if not extra or len(set(extra)) != 1:
+            continue
+        cut = chunks[m][1] - len(extra)
+        bounds[m][1] = cut
+        bounds[m + 1][0] = cut
+    return [(a, b) for a, b in bounds]
 
 
 # ===========================================================================
@@ -1524,6 +1580,25 @@ def _emit_loop(
     for t, tok in zip(present, loop_toks):
         for m, (steps_m, sigs_m) in enumerate(zip(tok.iterations, tok.iteration_sigs)):
             iters.append((t, m, steps_m, sigs_m, tok.short_last and m == tok.count - 1))
+    # A run of the same navigation click (Next, Next) is one position; the
+    # longest run a row needed bounds nothing but is kept for the report.
+    run_len: dict[tuple[int, int], int] = {}
+    collapsed = []
+    for k, (t, m, steps_k, sigs_k, is_short) in enumerate(iters):
+        out_steps: list[Step] = []
+        out_sigs: list = []
+        prev_key = None
+        for st, sg in zip(steps_k, sigs_k):
+            key = _nav_click_key(st, sg)
+            if key is not None and key == prev_key:
+                run_len[(k, len(out_steps) - 1)] += 1
+                continue
+            prev_key = key
+            out_steps.append(st)
+            out_sigs.append(sg)
+            run_len[(k, len(out_steps) - 1)] = 1
+        collapsed.append((t, m, out_steps, out_sigs, is_short))
+    iters = collapsed
     positions = merge([x[3] for x in iters])
     n_iter = len(iters)
     short = {k for k, x in enumerate(iters) if x[4]}
@@ -1612,6 +1687,7 @@ def _emit_loop(
 
     # --- record-selecting clicks -----------------------------------------
     targets: dict[int, str] = {}
+    label_columns: set[str] = set()
     identity_cols: dict[str, dict[int, Optional[str]]] = {}
     identity_examples: dict[str, Optional[str]] = {}
     token_indices: dict[int, dict[str, list[int]]] = {}
@@ -1635,6 +1711,13 @@ def _emit_loop(
             None,
         )
         click_field = _field_key(st)
+        if hit is None and not any(k not in positions[q].at for k in range(n_iter)):
+            # A list a person browsed: the clicked label itself names the row.
+            hit = _param_name_for("record", loop_taken, f"record_{idx}")
+            loop_taken.add(hit)
+            for k in range(n_iter):
+                row_vals[k][hit] = _value(step_at(q, k)) or ""
+            label_columns.add(hit)
         if hit is None:
             return refuse(
                 "ambiguous_selection",
@@ -1724,10 +1807,24 @@ def _emit_loop(
             f"{name}: record check on {', '.join(sorted(used))} ({basis})"
         )
 
+    # --- paging: Next clicks some rows needed before their record ----------
+    pagers: dict[int, tuple[int, int]] = {}  # position -> (target position, runs)
+    for i, q in enumerate(body_qs[:-1]):
+        tq = body_qs[i + 1]
+        st = rep_step(q)
+        if tq not in targets or _nav_click_key(st, positions[q].sig) is None:
+            continue
+        runs = [run_len.get((k, j), 1) for k, j in positions[q].at.items()]
+        if q in optional or max(runs) > 1:
+            pagers[q] = (tq, max(runs))
+    page_bound = max([_MAX_PAGES] + [2 * r + 2 for _tq, r in pagers.values()])
+
     # --- steps present for some rows only ----------------------------------
     guards: dict[int, Guard] = {}
     conditional_notes: list[str] = []
     for q in optional:
+        if q in pagers:
+            continue
         st = rep_step(q)
         name = _field_key(st)
         if q in columns:
@@ -1818,6 +1915,13 @@ def _emit_loop(
             example=example,
             required=q not in optional,
         )
+    for name in sorted(label_columns):
+        param_specs[name] = ParamSpec(
+            name=name,
+            type=ParamKind.STRING,
+            example=row_vals[tmpl_k].get(name) or None,
+            required=True,
+        )
     for name in identity_cols:
         example = identity_examples.get(name)
         param_specs[name] = ParamSpec(
@@ -1843,7 +1947,19 @@ def _emit_loop(
     sid_of = {q: f"{body_id}_s{q}" for q in order}
     body_end = f"{body_id}_end"
     body_states: dict[str, State] = {}
+    for q, (tq, _runs) in pagers.items():
+        sid_of[q] = f"{body_id}_page0"
     for i, q in enumerate(order):
+        if q in pagers:
+            _emit_pager(
+                body_states,
+                body_id=body_id,
+                pager=rep_step(q),
+                column=targets[pagers[q][0]],
+                found=sid_of[pagers[q][0]],
+                bound=page_bound,
+            )
+            continue
         step = rep_step(q).model_copy(deep=True)
         if q in columns:
             step.param = columns[q]
@@ -1922,6 +2038,14 @@ def _emit_loop(
             writes=write_notes,
             conditional_steps=conditional_notes,
             returns_to_list=bool(tail),
+            pagination=(
+                [
+                    f"finds the row's '{targets[tq]}' on up to {page_bound} pages "
+                    f"with '{_field_key(rep_step(q))}'; stops when there is no "
+                    "next page or the bound is reached"
+                    for q, (tq, _r) in pagers.items()
+                ]
+            ),
         )
     )
     dec = ColumnDecision(
@@ -1939,6 +2063,74 @@ def _emit_loop(
         ),
     )
     return node, dec
+
+
+#: Pages a loop row is looked for on before the run stops (unrolled, so the
+#: program graph itself carries the bound).
+_MAX_PAGES = 20
+
+
+def _emit_pager(
+    states: dict[str, State],
+    *,
+    body_id: str,
+    pager: Step,
+    column: str,
+    found: str,
+    bound: int,
+) -> None:
+    """Find the row's record page by page, at most ``bound`` pages.
+
+    ``page<p>``: when the row's value is on screen, go select it; when a next
+    page exists, click it and look again; otherwise stop the run (the record
+    is on no page). The loop is unrolled, so it ends by construction.
+    """
+    missing = f"{body_id}_not_found"
+    states[missing] = State(
+        id=missing,
+        kind=StateKind.TERMINAL,
+        outcome="halt",
+        reason=(
+            f"the row's '{column}' was not found on any of the pages looked at "
+            f"(at most {bound}); stopping before acting on another record"
+        ),
+    )
+    for p in range(bound):
+        here = f"{body_id}_page{p}"
+        transitions = [
+            Transition(
+                guard=Predicate(
+                    kind=PredicateKind.TEXT_PRESENT,
+                    param=column,
+                    intent=f"the row's '{column}' is on this page",
+                ),
+                target=found,
+                label="row on this page",
+            )
+        ]
+        if p + 1 < bound and pager.anchor is not None:
+            nxt = f"{body_id}_next{p}"
+            transitions.append(
+                Transition(
+                    guard=Predicate(
+                        kind=PredicateKind.ANCHOR_RESOLVES,
+                        anchor=pager.anchor,
+                        intent="a next page exists",
+                    ),
+                    target=nxt,
+                    label="next page",
+                )
+            )
+            step = pager.model_copy(deep=True)
+            step.id = f"{pager.id}_p{p + 1}"
+            states[nxt] = State(
+                id=nxt,
+                kind=StateKind.ACTION,
+                step=step,
+                transitions=[Transition(target=f"{body_id}_page{p + 1}")],
+            )
+        transitions.append(Transition(target=missing, label="not on any page"))
+        states[here] = State(id=here, kind=StateKind.BRANCH, transitions=transitions)
 
 
 def _loop_branch_text(q, positions, iters, screen_texts) -> Optional[str]:

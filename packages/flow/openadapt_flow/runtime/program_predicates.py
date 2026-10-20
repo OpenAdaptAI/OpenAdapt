@@ -266,6 +266,25 @@ def predicate_uses_frame(predicate: Predicate | None) -> bool:
     return any(predicate_uses_frame(operand) for operand in predicate.operands)
 
 
+def predicate_text(predicate: Predicate, params: Mapping[str, object]) -> str | None:
+    """The text a TEXT_PRESENT / TEXT_ABSENT predicate looks for.
+
+    ``text`` when set; otherwise the run's value of ``param`` (a loop row's
+    record name, say). None when the predicate names a parameter the run has
+    no non-empty value for.
+    """
+
+    if predicate.text:
+        return predicate.text
+    if predicate.param is None:
+        return ""
+    from openadapt_flow.runtime.authorization import runtime_param_text
+
+    value = params.get(predicate.param)
+    text = runtime_param_text(value) if value is not None else ""  # type: ignore[arg-type]
+    return text.strip() or None
+
+
 def evaluate_program_predicate(
     predicate: Predicate,
     frame_png: bytes,
@@ -303,10 +322,13 @@ def evaluate_program_predicate(
             )
             is not None
         )
-    if kind is PredicateKind.TEXT_PRESENT:
-        return bool(predicate.text) and vision.text_present(frame_png, predicate.text)
-    if kind is PredicateKind.TEXT_ABSENT:
-        return not (predicate.text and vision.text_present(frame_png, predicate.text))
+    if kind in (PredicateKind.TEXT_PRESENT, PredicateKind.TEXT_ABSENT):
+        text = predicate_text(predicate, params)
+        if text is None:
+            # A parameter-bound text with no run value decides nothing.
+            return False
+        present = bool(text) and vision.text_present(frame_png, text)
+        return present if kind is PredicateKind.TEXT_PRESENT else not present
     if kind is PredicateKind.PARAM_EQUALS:
         if predicate.param is None or predicate.param not in params:
             return False

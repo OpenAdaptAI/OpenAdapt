@@ -14564,6 +14564,8 @@ class Replayer:
             )
             return f"anchor_resolves({label!r})"
         if kind in ("text_present", "text_absent"):
+            if not pred.text and pred.param:
+                return f"{kind}(<{pred.param}>)"
             return f"{kind}({pred.text!r})"
         if kind == "param_equals":
             return f"param_equals({pred.param!r}=={pred.value!r})"
