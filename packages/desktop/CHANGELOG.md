@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v0.21.1 (2026-10-19)
+
+0.21.0 was never published, because main's macOS, Windows and Linux builds of it failed. This release ships the 0.21.0 changes below together with these fixes.
+
+### Bug Fixes
+
+- **desktop**: go back to tauri-plugin-deep-link 2.6.1 so the Linux shell compiles
+- **desktop**: supply the reviewed PyObjC license for the 12.2.2 wheels
+- **desktop**: prepare a release on a CRLF checkout
+
+
+
 ## v0.21.0 (2026-10-18)
 
 ### Features

@@ -24,6 +24,7 @@ jobs:
     outputs:
       run_sidecar: ${{ steps.scope.outputs.run_sidecar }}
       run_native: ${{ steps.scope.outputs.run_native }}
+      native_matrix: ${{ steps.scope.outputs.native_matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -62,10 +63,36 @@ jobs:
               fi
             fi
           fi
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
+            # The checkout is the merge commit; its first parent is the base.
+            git diff --relative --name-only HEAD^1 HEAD > "${changed_paths}"
+          fi
           python scripts/classify_build_changes.py \
             --event "${EVENT_NAME}" \
             --paths-file "${changed_paths}" \
             --github-output "${GITHUB_OUTPUT}"
+          # A pull request builds the Linux installer only; main and dispatches
+          # build every platform.
+          python - "${EVENT_NAME}" >> "${GITHUB_OUTPUT}" <<'PY'
+          import json, sys
+          native = [
+              {"label": "macOS arm64", "os": "macos-15", "platform": "macos",
+               "architecture": "arm64", "target": "aarch64-apple-darwin",
+               "bundles": "dmg", "signing": "adhoc"},
+              {"label": "macOS Intel", "os": "macos-15-intel", "platform": "macos",
+               "architecture": "x86_64", "target": "x86_64-apple-darwin",
+               "bundles": "dmg", "signing": "adhoc"},
+              {"label": "Windows x86_64", "os": "windows-2022", "platform": "windows",
+               "architecture": "x86_64", "target": "x86_64-pc-windows-msvc",
+               "bundles": "msi,nsis", "signing": "unsigned"},
+              {"label": "Linux x86_64", "os": "ubuntu-22.04", "platform": "linux",
+               "architecture": "x86_64", "target": "x86_64-unknown-linux-gnu",
+               "bundles": "deb,appimage", "signing": "unsigned"},
+          ]
+          if sys.argv[1] == "pull_request":
+              native = [entry for entry in native if entry["platform"] == "linux"]
+          print("native_matrix=" + json.dumps(native))
+          PY
 
   frontend:
     name: Frontend behavior and build
@@ -133,10 +160,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # PRs prove the frozen-engine contract once on Linux. Main repeats the
-        # complete matrix for dependency, toolchain, packaging, and native
-        # changes. Immutable native release tags rebuild every supported OS.
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04"]' || '["ubuntu-22.04", "macos-14", "windows-latest"]') }}
+        # PRs prove the frozen-engine contract on Linux and macOS (macOS freezes
+        # the PyObjC wheels, whose license notices the build must find). Main
+        # repeats the complete matrix for dependency, toolchain, packaging, and
+        # native changes. Immutable native release tags rebuild every supported OS.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04", "macos-14"]' || '["ubuntu-22.04", "macos-14", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -182,7 +210,8 @@ jobs:
     name: Native installer (${{ matrix.label }})
     needs: artifact-scope
     # Main runs this evidence for dependency, toolchain, packaging, and native
-    # changes. Application-only merges already pass the PR checks and the
+    # changes, and a pull request that changes the native shell builds the
+    # Linux installer. Application-only merges already pass the PR checks and the
     # exact-main frontend, distribution, and cross-platform test jobs. Every
     # immutable desktop-v* release tag rebuilds and tests all installers in the
     # separate Native Installer Release workflow.
@@ -190,35 +219,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - label: macOS arm64
-            os: macos-15
-            platform: macos
-            architecture: arm64
-            target: aarch64-apple-darwin
-            bundles: dmg
-            signing: adhoc
-          - label: macOS Intel
-            os: macos-15-intel
-            platform: macos
-            architecture: x86_64
-            target: x86_64-apple-darwin
-            bundles: dmg
-            signing: adhoc
-          - label: Windows x86_64
-            os: windows-2022
-            platform: windows
-            architecture: x86_64
-            target: x86_64-pc-windows-msvc
-            bundles: msi,nsis
-            signing: unsigned
-          - label: Linux x86_64
-            os: ubuntu-22.04
-            platform: linux
-            architecture: x86_64
-            target: x86_64-unknown-linux-gnu
-            bundles: deb,appimage
-            signing: unsigned
+        # Built by the artifact-scope job: every platform on main and dispatch,
+        # Linux only on a pull request that changes the native shell.
+        include: ${{ fromJSON(needs.artifact-scope.outputs.native_matrix) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
