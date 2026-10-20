@@ -24,15 +24,14 @@ def test_desktop_changes_keep_their_own_uncancelled_group() -> None:
     group = " ".join(_concurrency()["group"].split())
     cancel = " ".join(_concurrency()["cancel-in-progress"].split())
     desktop = "!contains(toJSON(github.event.commits), 'packages/desktop/')"
-    # Only a push without a Desktop change joins the shared, cancellable group.
-    assert (
-        f"github.event_name == 'push' && github.event.head_commit && {desktop} && 'main-without-desktop'"
-        in group
-    )
+    # GitHub truncates the payload's commit list at 20, so a push of 20 or more
+    # commits could hide a Desktop change: it keeps its own group.
+    short = "!github.event.commits[19]"
+    shared = f"github.event_name == 'push' && github.event.head_commit && {short} && {desktop}"
+    # Only a short push without a Desktop change joins the cancellable group.
+    assert f"{shared} && 'main-without-desktop'" in group
     assert group.endswith("|| github.sha }}")
-    assert (
-        f"github.event_name == 'push' && github.event.head_commit != null && {desktop}"
-        in cancel
-    )
+    pushed = "github.event_name == 'push' && github.event.head_commit != null"
+    assert f"{pushed} && {short} && {desktop}" in cancel
     # Merge queue groups and dispatches are never cancelled.
     assert "merge_group" not in cancel and "workflow_dispatch" not in cancel
