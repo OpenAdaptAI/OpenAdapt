@@ -104,7 +104,7 @@ class ValueExpr(BaseModel):
         return self
 
     @model_serializer(mode="wrap")
-    def _serialize_compatible(self, handler):  # type: ignore[no-untyped-def]
+    def _serialize_compatible(self, handler: Any) -> Any:
         # A value without a map serializes exactly as before, so existing
         # effect contract hashes and bundle digests are unchanged.
         data = handler(self)
