@@ -223,6 +223,14 @@ class RecordConfig(BaseModel):
     duplicate_key: Optional[str] = None
     expected_count: int = Field(default=1, ge=1)
     timeout_s: float = Field(default=5.0, gt=0)
+    #: Also check that the save added exactly this record and nothing else:
+    #: the records added since the snapshot taken before the save must be
+    #: exactly ``expected_count`` records with these fields (an
+    #: ``exact_new_set`` check). ``problems_only`` needs it for a create.
+    exact_new_set: bool = False
+    #: The field that tells a new record from one that was already there, for
+    #: ``exact_new_set`` (an id the system of record assigns).
+    identity_field: str = "id"
 
     def expr(self, field: str) -> ValueExpr:
         value = self.fields[field]

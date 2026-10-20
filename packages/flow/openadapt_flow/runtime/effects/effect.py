@@ -104,7 +104,7 @@ class ValueExpr(BaseModel):
         return self
 
     @model_serializer(mode="wrap")
-    def _serialize_compatible(self, handler):  # type: ignore[no-untyped-def]
+    def _serialize_compatible(self, handler: Any) -> Any:
         # A value without a map serializes exactly as before, so existing
         # effect contract hashes and bundle digests are unchanged.
         data = handler(self)
@@ -177,9 +177,7 @@ class ValueExpr(BaseModel):
         # and literal expressions then behaves unchanged.
         if self.param is None:
             return hash(self.literal)
-        return hash(
-            ("__param__", self.param, tuple(sorted((self.map or {}).items())))
-        )
+        return hash(("__param__", self.param, tuple(sorted((self.map or {}).items()))))
 
 
 class EffectKind(str, Enum):
