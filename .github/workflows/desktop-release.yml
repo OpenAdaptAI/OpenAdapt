@@ -45,6 +45,12 @@
 # attestation. File names, the website manifest, the channel, and the release
 # notes state each platform's mode. The result is an unadmitted release
 # candidate; it creates no Production state.
+#
+# No caches. Release builds restore no npm, uv, pip or Rust cache: a cache
+# written by any earlier run (including a pull request's) could otherwise put
+# unreviewed bytes into a signed installer. Every job here installs from the
+# lockfiles on a clean runner, which costs minutes per release and is the
+# point. desktop-build.yml (pull requests and main) is where caching lives.
 name: Desktop release
 
 on:
@@ -336,6 +342,9 @@ jobs:
           python-version: "3.12"
 
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          # Release builds restore no cache; see the note at the top.
+          enable-cache: false
 
       - name: Build and check the wheel and sdist
         run: |
@@ -390,8 +399,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: packages/desktop/package-lock.json
+          # Release builds restore no cache; see the note at the top.
+          package-manager-cache: false
 
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
@@ -541,8 +550,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: packages/desktop/package-lock.json
+          # Release builds restore no cache; see the note at the top.
+          package-manager-cache: false
 
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
@@ -738,8 +747,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: packages/desktop/package-lock.json
+          # Release builds restore no cache; see the note at the top.
+          package-manager-cache: false
 
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
