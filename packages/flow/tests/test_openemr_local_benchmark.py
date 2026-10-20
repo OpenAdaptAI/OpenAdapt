@@ -49,7 +49,9 @@ from scripts.openemr_local_demo import (
     _BudgetedAgentClient,
     _capture_post_evidence,
     _confirm_create_locator,
-    _duplicate_dialog_postcondition,
+    _duplicate_dialog_postconditions,
+    _saved_chart_postcondition,
+    apply_referral_rules,
     _form_frame,
     _marked_save_step_id,
     _persist_evidence,
@@ -674,21 +676,53 @@ def test_iframe_confirm_locator_and_explicit_save_event_marker(tmp_path: Path) -
     with pytest.raises(FixtureError, match="confirmation click"):
         _marked_save_step_id(recording)
 
-    postcondition = _duplicate_dialog_postcondition()
-    assert postcondition.kind.value == "text_present"
-    assert postcondition.text == "Confirm Create New Patient"
+    dialog, no_match = _duplicate_dialog_postconditions()
+    assert dialog.kind.value == "text_present"
+    assert dialog.text == "Confirm Create New Patient"
+    assert no_match.kind.value == "text_present"
+    assert no_match.text == "No matches were found."
+
+
+def test_referral_rules_guard_duplicates_and_drop_the_mined_tab_strip() -> None:
+    """The duplicate rule is on #create, and the save step checks the chart
+    heading instead of the tab strip the recorder mined (the strip changes
+    when OpenEMR opens the new patient's tab)."""
+
+    from types import SimpleNamespace
+
+    from openadapt_flow.ir import Postcondition, PostconditionKind
+
+    region = Postcondition(
+        kind=PostconditionKind.REGION_STABLE, region=(0, 255, 1280, 545)
+    )
+    tabs = Postcondition(
+        kind=PostconditionKind.TEXT_PRESENT, text="CalendarxMessageCenterx"
+    )
+    open_step = SimpleNamespace(expect=[region])
+    save_step = SimpleNamespace(expect=[region, tabs])
+
+    apply_referral_rules(open_step, save_step)
+
+    assert open_step.expect == _duplicate_dialog_postconditions()
+    assert save_step.expect == [region, _saved_chart_postcondition()]
+    assert _saved_chart_postcondition().text == "Medical Record Dashboard"
 
 
 def test_recording_opens_real_contact_accordion_before_address_fields() -> None:
     source = inspect.getsource(record)
+    # The form scrolls before the Contact tab, so the tab's identity crop is
+    # not on the viewport edge.
+    pre_contact = source.index("recorder.scroll(0, 300)")
     contact = source.index('form.get_by_text("Contact", exact=True)')
     scroll = source.index("recorder.scroll(0, 600)")
     street = source.index('text_field("street"')
-    assert contact < scroll < street
+    assert pre_contact < contact < scroll < street
+    # #create is already in view after those scrolls: no further scroll, which
+    # would be a no-op at replay.
     country = source.index('select_by_label("country_code"')
-    save_scroll = source.index("recorder.scroll(0, 600)", scroll + 1)
     save = source.index('form.locator("#create")')
-    assert country < save_scroll < save
+    assert country < save
+    assert "recorder.scroll(0, 600)" not in source[country:save]
 
 
 def test_form_frame_requires_authentic_session_shell() -> None:

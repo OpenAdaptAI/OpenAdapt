@@ -10,6 +10,7 @@ covered by the runner's case-result signature.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 from collections.abc import Mapping
 from datetime import datetime, timezone
@@ -175,6 +176,28 @@ def verify_qualification_capability_observation(
     return True
 
 
+def _retained_run_receipt(observation_path: Path, run_id: str) -> dict | None:
+    """The run report this observation is bound to, as a receipt.
+
+    ``retain_run_evidence`` keeps the exact ``report.json`` next to the
+    observation; its digest is the binding. Evidence retained before that
+    change kept a ``run-report-receipt.json`` instead, which is still read.
+    """
+
+    report_path = observation_path.with_name("report.json")
+    if report_path.is_file() and not report_path.is_symlink():
+        return {
+            "schema": "openadapt.qualification-run-receipt/v1",
+            "run_id": run_id,
+            "report_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),
+        }
+    receipt_path = observation_path.with_name("run-report-receipt.json")
+    if receipt_path.is_symlink() or not receipt_path.is_file():
+        return None
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    return receipt if isinstance(receipt, dict) else None
+
+
 def current_signed_capability_observations(
     bundle_dir: Path,
     *,
@@ -203,10 +226,9 @@ def current_signed_capability_observations(
                 resolved.read_text(encoding="utf-8")
             )
             public_key = project.trusted_runner_keys.get(observation.attestation_key_id)
-            run_receipt_path = resolved.with_name("run-report-receipt.json")
-            if run_receipt_path.is_symlink() or not run_receipt_path.is_file():
+            run_receipt = _retained_run_receipt(resolved, observation.run_id)
+            if run_receipt is None:
                 continue
-            run_receipt = json.loads(run_receipt_path.read_text(encoding="utf-8"))
         except (OSError, ValueError, json.JSONDecodeError):
             continue
         if (

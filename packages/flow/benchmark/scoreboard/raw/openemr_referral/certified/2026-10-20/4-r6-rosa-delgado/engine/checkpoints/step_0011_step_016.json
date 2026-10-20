@@ -1,0 +1,137 @@
+{
+  "schema_version": 2,
+  "run_id": "openemr-referral-r6-rosa-delgado-1792465480",
+  "workflow_name": "openemr-create-synthetic-patient",
+  "bundle_version": "sha256:ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+  "step_index": 11,
+  "step_id": "step_016",
+  "intent": "click recorded visual target",
+  "state_id": null,
+  "next_step_index": 12,
+  "params": {
+    "title": "Mrs.",
+    "fname": "Rosa",
+    "lname": "Delgado",
+    "DOB": "1958-03-22",
+    "sex": "Female",
+    "street": "7 MILL ROAD",
+    "city": "EXAMPLETON",
+    "state_label": "Massachusetts",
+    "postal_code": "02139",
+    "phone_home": "555-0188",
+    "email": "rosa.delgado@example.invalid",
+    "country_code": "USA"
+  },
+  "effect_verified": null,
+  "effect_approved_unverified": false,
+  "effect_contract_hashes": [],
+  "effect_evidence": [],
+  "identity": {
+    "status": "verified",
+    "mode": "pixel",
+    "coverage": 1.0,
+    "expected": "recorded identifier crop",
+    "observed": "live identifier crop matches after alignment (worst window 0.036)",
+    "param": null,
+    "signal_evidence": [],
+    "quorum_required": null,
+    "quorum_verified": null,
+    "pixel_evidence": {
+      "recorded_crop_sha256": "457eccee597076f6e0d2b6fdd6b1fdd148dfc0eb72501442413c2020efc4ce15",
+      "live_crop_sha256": "14a873e4bbcb5868c0ad4ca733fbbaf8beee79ab5958cf519c11a2a85115d2a5",
+      "recorded_crop_inventory_ref": "private/identity-crops/457eccee597076f6e0d2b6fdd6b1fdd148dfc0eb72501442413c2020efc4ce15.png",
+      "live_crop_inventory_ref": "private/identity-crops/14a873e4bbcb5868c0ad4ca733fbbaf8beee79ab5958cf519c11a2a85115d2a5.png",
+      "evaluator_contract_sha256": "277ca2432781bdf72113a5225ccd2954f214cfc31b18e2b19fdec02f01e5dce7"
+    },
+    "abstain_reason": null,
+    "known_id_evidence": null,
+    "known_id_halt": null,
+    "hover": null,
+    "looks": [],
+    "look_halt": null
+  },
+  "input_verified": null,
+  "starting_state_settled": true,
+  "delivery_attempted": true,
+  "delivery_receipt": {
+    "status": "delivered",
+    "receipt_id": "playwright-0136e9b9fe5d49a7be0ed94f12d91d17",
+    "operation": "dom_click",
+    "native": false,
+    "target_fingerprint": "5628ef78c472edabf3024c8a31f45e4cf9d3e263ba2b799f726950917116142a",
+    "delivered_at": "2026-10-20T03:04:51.681262+00:00",
+    "outcome_verified": false
+  },
+  "drag_end_resolution": null,
+  "fresh_actuation_events": [],
+  "before_png": "steps/step_016_before.png",
+  "governed_authorization_id": "4acf24f7a2e84061815abc51b0a487a6",
+  "governed_approval_source": "local-cli-explicit-flag",
+  "postconditions_ok": true,
+  "expected_postconditions": [
+    {
+      "kind": "region_stable",
+      "text": null,
+      "region": [
+        53,
+        452,
+        1160,
+        348
+      ],
+      "phash": "8d025ad2a695cf9d",
+      "phash_tolerance": 16,
+      "timeout_s": 5.0,
+      "template": "templates/step_016_expect.png"
+    },
+    {
+      "kind": "text_present",
+      "text": "Address Line 2:",
+      "region": null,
+      "phash": null,
+      "phash_tolerance": 8,
+      "timeout_s": 5.0,
+      "template": null
+    }
+  ],
+  "skipped": false,
+  "actuation": "dom",
+  "delivery_uncertainty": null,
+  "resolution": {
+    "rung": "structural",
+    "point": [
+      634,
+      506
+    ],
+    "confidence": 1.0,
+    "elapsed_ms": 33.19645766168833,
+    "structural_handle": {
+      "point": [
+        634,
+        506
+      ],
+      "confidence": 1.0,
+      "region": [
+        91,
+        487,
+        1087,
+        38
+      ],
+      "target_fingerprint": "5628ef78c472edabf3024c8a31f45e4cf9d3e263ba2b799f726950917116142a",
+      "candidate_count": 1,
+      "supported_operations": [
+        "dom_click",
+        "dom_double_click",
+        "dom_drag"
+      ]
+    }
+  },
+  "drift_oracle_calls": 0,
+  "heal": null,
+  "attended_capability_digest": null,
+  "attended_reconciliation_request_digest": null,
+  "attended_reconciliation_expected_transition_digest": null,
+  "attended_reconciliation_delivery_state": null,
+  "attended_reconciliation_effect_contract_hashes": [],
+  "attended_reconciliation_at": null,
+  "created_at": "2026-10-20T03:04:52.296080+00:00"
+}
