@@ -13,13 +13,13 @@ from openadapt_flow.ir import (
     ActionKind,
     Anchor,
     ParamSpec,
-    StructuralLocator,
     Step,
+    StructuralLocator,
     Workflow,
 )
+from openadapt_flow.runtime.identity_template import build_identity_template
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.runtime.target_param import NO_TEMPLATE, bind_target_param
-from openadapt_flow.runtime.identity_template import build_identity_template
 from tests.test_replayer import (
     FakeBackend,
     Match,
@@ -159,9 +159,7 @@ def test_unsupplied_embedded_identity_parameter_refuses():
         param_specs={"dob": ParamSpec(name="dob", required=True)},
         steps=[step],
     )
-    _, ok = bind_target_param(
-        step, {"patient": "Susan", "dob": "1980-01-01"}, workflow
-    )
+    _, ok = bind_target_param(step, {"patient": "Susan", "dob": "1980-01-01"}, workflow)
     assert ok is None
     _, refusal = bind_target_param(step, {"patient": "Susan"}, workflow)
     assert refusal is not None and "'dob'" in refusal

@@ -7288,7 +7288,11 @@ class Replayer:
             # run's value; the identity check verifies the row (param mode).
             from openadapt_flow.runtime.target_param import bind_target_param
 
+            sealed_step = step
             step, refusal = bind_target_param(step, params, workflow)
+            # The sealed-leaf check compares the program's step with the
+            # step the runtime acts on; it must see the sealed one.
+            self._target_param_binding = (step, sealed_step)
             if refusal is not None:
                 return StepResult(
                     step_id=step.id,
@@ -11301,6 +11305,17 @@ class Replayer:
         self._active_delivery_region = fresh_region
         return fresh_resolution, fresh_region, fresh_png, error
 
+    def _sealed_step(self, step: Step) -> Step:
+        """The program's own step for one the runtime rebound to a run value.
+
+        ``runtime.target_param`` rebinds a record-selecting click to the
+        run's record; integrity checks compare against the sealed step.
+        """
+        binding = getattr(self, "_target_param_binding", None)
+        if binding is not None and binding[0] is step:
+            return binding[1]
+        return step
+
     def _resolve_step_target(
         self,
         step: Step,
@@ -11737,7 +11752,7 @@ class Replayer:
             or leaf.get("state_id") != self._current_state_id
             or parent_state is None
             or parent_state.kind is not StateKind.ACTION
-            or parent_state.step != step
+            or parent_state.step != self._sealed_step(step)
         ):
             return (
                 "governed program leaf frame no longer matches the exact sealed "

@@ -23,17 +23,20 @@ What it infers, and how (all deterministic + structural -- ZERO model calls):
   :class:`~openadapt_flow.ir.Relation`, its body the repeated subflow
   (Rousillon/Helena "for every row ...").
 
-  **LIMITS (loop inference is a PROTOTYPE -- keep the claim honest).** The only
-  loop shape detected is a *consecutive* repeated sub-sequence
-  (:func:`_reduce_trace`). It does NOT recognize a **search -> process ->
-  return** loop (navigate away and back each iteration), **pagination** (a
-  "next page" step between bodies), or a **per-row conditional body** (the body
-  differs row to row). When the repeated body contains a CONSEQUENTIAL
-  (irreversible / effect-bearing) action, whether those repeats are a
-  data-driven worklist or a fixed unrolled sequence cannot be certified from
-  trace *shape* alone -- inducing the wrong loop would repeat an irreversible
-  action -- so induction emits an :class:`Uncertainty` (``ambiguous_loop``)
-  and REFUSES rather than emit a possibly-wrong loop.
+  Besides back-to-back repeats, :mod:`.loop_shapes` finds **search -> open
+  -> act -> return** worklists (the last row may skip the return, which then
+  runs only when the list is not on screen) and bodies that **vary by row**
+  (a typed field some rows lack runs only when the row has a value; a
+  reversible step some rows have runs when its target shows; a write some
+  rows get needs a screen check a person accepts). A click whose label holds
+  a typed row value selects that row's record (``Step.target_param``) and is
+  identity-checked per row. A body that WRITES is emitted only when every
+  write has a record check bound to the row's values and either an
+  identity-checked selection precedes it or the check counts a new record;
+  otherwise induction emits an ``ambiguous_loop`` :class:`Uncertainty` and
+  REFUSES. Every emitted loop carries a :class:`LoopCertificate`.
+  Not recognized yet: **pagination** (a "next page" step between rows) and a
+  list nested inside each row.
 * **Branches.** A step present/divergent in some traces but not others UNDER A
   DETECTABLE CONDITION is a ``branch`` state with guarded transitions -- the
   guard is *proposed and flagged for confirmation* (Skill-DisCo: divergences
@@ -208,7 +211,8 @@ class Uncertainty(BaseModel):
         description=(
             "'ambiguous_branch' | 'ambiguous_loop' | 'unconfirmed_branch' | "
             "'unconfirmed_optional' | 'underdetermined_order' | "
-            "'ambiguous_selection' | 'alignment_failure'"
+            "'ambiguous_selection' | 'alignment_failure' | "
+            "'unconfirmed_loop_branch'"
         )
     )
     location: str = Field(description="Column / position the ambiguity is at")
@@ -337,6 +341,30 @@ class NarratedGuard(BaseModel):
     detail: str = ""
 
 
+class LoopCertificate(BaseModel):
+    """Why an induced loop may run once per row: its bound and its checks.
+
+    Written for every emitted loop. ``bound`` is the termination argument;
+    ``selections`` names each click that selects a row's record and what its
+    identity check compares; ``writes`` names each write and the row values
+    its record check is bound to.
+    """
+
+    location: str
+    relation: str
+    bound: str
+    max_iterations: int
+    row_columns: list[str] = Field(default_factory=list)
+    identity_columns: list[str] = Field(
+        default_factory=list,
+        description="Row columns the identity check needs beyond the typed ones.",
+    )
+    selections: list[str] = Field(default_factory=list)
+    writes: list[str] = Field(default_factory=list)
+    conditional_steps: list[str] = Field(default_factory=list)
+    returns_to_list: bool = False
+
+
 class InductionResult(BaseModel):
     """The induced program (or an honest refusal) plus the full audit trail."""
 
@@ -380,6 +408,10 @@ class InductionResult(BaseModel):
     probe_verdicts: list[ProbeVerdict] = Field(
         default_factory=list,
         description="One verdict per underdetermined point probing looked at.",
+    )
+    loop_certificates: list[LoopCertificate] = Field(
+        default_factory=list,
+        description="Bound and per-row checks of every emitted loop.",
     )
 
     @property
@@ -496,7 +528,48 @@ def _as_workflow(trace: TraceInput) -> Workflow:
 
     recording = Path(trace)
     with tempfile.TemporaryDirectory(prefix="induce-boot-") as tmp:
-        return compile_recording(recording, Path(tmp) / "bundle", name=recording.name)
+        # Identity bands stay readable until induction has named every row
+        # column; induce_program hashes them before returning.
+        return compile_recording(
+            recording,
+            Path(tmp) / "bundle",
+            name=recording.name,
+            phi_free_identity=False,
+        )
+
+
+def phi_free_program_identity(workflow: Workflow) -> None:
+    """Replace readable identity bands in an induced program with templates.
+
+    The same PHI-at-rest rule ``compile`` applies (audit REM-2), run after
+    induction so each template indexes the loop's row columns: a record
+    selected per row is then verified against that row's values.
+    """
+    from openadapt_flow.runtime.identity_template import (
+        build_identity_template,
+        new_salt_hex,
+    )
+    from openadapt_flow.traversal import iter_workflow_steps
+
+    salt = new_salt_hex()
+    examples = {k: str(v) for k, v in workflow.params.items()}
+    for step in iter_workflow_steps(workflow):
+        anchor = step.anchor
+        if anchor is None or anchor.identity_template is not None:
+            continue
+        if not (anchor.context_text or anchor.structured_identity):
+            continue
+        template = build_identity_template(
+            anchor.context_text,
+            structured_identity=anchor.structured_identity,
+            param_examples=examples,
+            salt_hex=salt,
+        )
+        if template is None:
+            continue
+        anchor.identity_template = template
+        anchor.context_text = None
+        anchor.structured_identity = None
 
 
 _LEADING_VERBS = frozenset(
@@ -536,6 +609,17 @@ def _field_key(step: Step) -> str:
         if struct is not None and struct.role:
             return f"select:{struct.role}"
         return _norm_intent(step)
+    if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
+        if step.field_label:
+            return step.field_label
+        if step.text and step.text in step.intent and len(step.text.strip()) >= 2:
+            # A compiled TYPE step's intent quotes the typed value ("type
+            # 'Phil'"); the value is what varies, not the field.
+            return _norm_intent(
+                step.model_copy(
+                    update={"intent": step.intent.replace(step.text, "<value>")}
+                )
+            )
     if step.anchor is not None and step.anchor.ocr_text:
         return step.anchor.ocr_text
     return _norm_intent(step)
@@ -576,12 +660,52 @@ from openadapt_flow.compiler.disambiguation import (  # noqa: E402
 # ===========================================================================
 
 
+#: How many steps back a typed value can name the row a click selects.
+_SELECTION_LOOKBACK = 6
+
+
+def _trace_sigs(steps: list[Step]) -> list[tuple[str, str]]:
+    """Alignment signatures for one trace.
+
+    A click whose label contains a value typed shortly before it (a search,
+    then a click on the result) selects the record that value names. Its
+    label differs row to row, so its signature is the value-free
+    ``select:typed`` instead of the label.
+    """
+    sigs: list[tuple[str, str]] = []
+    for i, step in enumerate(steps):
+        sig = _sig(step)
+        if step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK) and not sig[
+            1
+        ].startswith("select:"):
+            label = _squash_text(_value(step) or "")
+            for prev in steps[max(0, i - _SELECTION_LOOKBACK) : i]:
+                typed = (
+                    _squash_text(prev.text or "")
+                    if prev.action
+                    in (
+                        ActionKind.TYPE,
+                        ActionKind.SELECT_OPTION,
+                    )
+                    else ""
+                )
+                if len(typed) >= 2 and typed in label:
+                    sig = (step.action.value, "select:typed")
+                    break
+        sigs.append(sig)
+    return sigs
+
+
+def _squash_text(text: str) -> str:
+    return "".join(text.casefold().split())
+
+
 class _SingleTok:
     kind = "single"
 
-    def __init__(self, step: Step):
+    def __init__(self, step: Step, sig: Optional[tuple] = None):
         self.step = step
-        self.align_sig: tuple = _sig(step)
+        self.align_sig: tuple = sig if sig is not None else _sig(step)
 
     @property
     def value(self) -> Optional[str]:
@@ -591,11 +715,49 @@ class _SingleTok:
 class _LoopTok:
     kind = "loop"
 
-    def __init__(self, body_steps: list[Step], iterations: list[list[Step]]):
+    def __init__(
+        self,
+        body_steps: list[Step],
+        iterations: list[list[Step]],
+        *,
+        iteration_sigs: Optional[list[list[tuple]]] = None,
+        core_sigs: Optional[tuple] = None,
+        short_last: bool = False,
+    ):
         self.body_steps = body_steps
         self.iterations = iterations  # per-iteration list of steps
-        body_sig = tuple(_sig(s) for s in body_steps)
-        self.align_sig = ("__loop__", body_sig)
+        self.iteration_sigs = iteration_sigs or [
+            [_sig(s) for s in it] for it in iterations
+        ]
+        del core_sigs  # kept for callers; alignment uses the semantic core
+        self.align_sig = ("__loop__", self._semantic_core())
+        #: The last iteration stopped before the body's trailing return.
+        self.short_last = short_last
+
+    def _semantic_core(self) -> tuple:
+        """The steps every row has that carry its meaning.
+
+        Typed values, record selections and writes present in every
+        iteration, in order. Navigation and row-varying steps are left out,
+        so two traces of the same worklist align even when one ended on the
+        list and the other on a record, or when their rows differed.
+        """
+        from openadapt_flow.compiler.loop_shapes import merge
+
+        n_it = len(self.iterations)
+        core = []
+        for pos in merge(self.iteration_sigs):
+            if len(pos.at) < n_it:
+                continue
+            it0 = next(iter(pos.at))
+            step = self.iterations[it0][pos.at[it0]]
+            if (
+                step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION)
+                or pos.sig[1].startswith("select:")
+                or _step_consequential(step)
+            ):
+                core.append(pos.sig)
+        return tuple(core) or tuple(self.iteration_sigs[0])
 
     @property
     def count(self) -> int:
@@ -615,18 +777,12 @@ def _reduce_trace(steps: list[Step]) -> list:
     everything else stays a ``_SingleTok``. Smallest repeating block wins (the
     tightest loop body). Model-free and purely structural.
 
-    LIMITS (loop detection is a PROTOTYPE). This recognizes ONLY a body that
-    repeats BACK-TO-BACK in one trace. It does NOT recognize:
-      * search -> process -> return loops (each iteration navigates away and
-        back, so the body is not literally consecutive);
-      * pagination (a "next page" step separates the per-page bodies);
-      * per-row CONDITIONAL bodies (the body differs from row to row).
-    A repeat is also, on shape alone, indistinguishable from a fixed unrolled
-    sequence of distinct steps. The caller (:func:`_emit_loop`) therefore
-    REFUSES (emits an ``ambiguous_loop`` Uncertainty) rather than emit a loop
-    when the repeated body is CONSEQUENTIAL, where guessing wrong would repeat
-    an irreversible action."""
-    sigs = [_sig(s) for s in steps]
+    When no back-to-back repeat starts at a step, :func:`_loose_loop` looks
+    for rows that start with the same step and share a core (search -> open
+    -> act -> return, rows that differ). Pagination is not recognized. The
+    caller (:func:`_emit_loop`) refuses a body that writes unless each write
+    is checked per row."""
+    sigs = _trace_sigs(steps)
     n = len(steps)
     toks: list = []
     i = 0
@@ -641,18 +797,95 @@ def _reduce_trace(steps: list[Step]) -> list:
             if reps >= 2:
                 found = (length, reps)
                 break
+        loose = _loose_loop(steps, sigs, i)
+        if found is not None and loose is not None:
+            # A back-to-back repeat can be the full rows of a worklist whose
+            # last row stopped before the return; keep the longer reading.
+            if sum(len(it) for it in loose.iterations) > found[0] * found[1]:
+                found = None
         if found is not None:
             length, reps = found
             body_steps = steps[i : i + length]
             iterations = [
                 steps[i + r * length : i + r * length + length] for r in range(reps)
             ]
-            toks.append(_LoopTok(body_steps, iterations))
+            toks.append(
+                _LoopTok(
+                    body_steps,
+                    iterations,
+                    iteration_sigs=[
+                        sigs[i + r * length : i + r * length + length]
+                        for r in range(reps)
+                    ],
+                )
+            )
             i += length * reps
-        else:
-            toks.append(_SingleTok(steps[i]))
-            i += 1
+            continue
+        if loose is not None:
+            toks.append(loose)
+            i = sum(len(it) for it in loose.iterations) + i
+            continue
+        toks.append(_SingleTok(steps[i], sigs[i]))
+        i += 1
     return toks
+
+
+def _navigation_only(step: Step) -> bool:
+    """A step that only moves around: no typed value, no write."""
+    return step.action not in (
+        ActionKind.TYPE,
+        ActionKind.SELECT_OPTION,
+        ActionKind.READ,
+    ) and not _step_consequential(step)
+
+
+def _loose_loop(steps: list[Step], sigs: list, start: int) -> Optional["_LoopTok"]:
+    """Iterations that are not back-to-back repeats (see :mod:`.loop_shapes`).
+
+    Accepted only when the shared core carries a value that changes from row
+    to row (that is what makes the repeats a worklist) and the trailing
+    steps the last row skipped only navigate (the return to the list).
+    """
+    from openadapt_flow.compiler.loop_shapes import merge, segment
+
+    for seg in segment(sigs, start):
+        chunks = [steps[a:b] for a, b in seg.chunks]
+        chunk_sigs = [list(sigs[a:b]) for a, b in seg.chunks]
+        full = chunks[:-1]
+        varies = False
+        # Values compare across every iteration, the short last one included.
+        for pos in merge(chunk_sigs):
+            if len(pos.at) < 2:
+                continue
+            vals = {_value(chunks[it][j]) for it, j in pos.at.items()}
+            it0 = next(iter(pos.at))
+            step0 = chunks[it0][pos.at[it0]]
+            if len(vals) > 1 and step0.action in (
+                ActionKind.TYPE,
+                ActionKind.SELECT_OPTION,
+                ActionKind.CLICK,
+                ActionKind.DOUBLE_CLICK,
+            ):
+                varies = True
+                break
+        if not varies:
+            continue
+        # Only trailing navigation is a return; anything the last row
+        # skipped before it is a row-varying step (decided at emission).
+        nav_tail = 0
+        for q in reversed(seg.tail):
+            if not _navigation_only(full[0][seg.positions[q].at[0]]):
+                break
+            nav_tail += 1
+        core_sigs = tuple(seg.positions[q].sig for q in seg.core)
+        return _LoopTok(
+            chunks[0],
+            chunks,
+            iteration_sigs=chunk_sigs,
+            core_sigs=core_sigs,
+            short_last=bool(nav_tail),
+        )
+    return None
 
 
 # ===========================================================================
@@ -855,6 +1088,9 @@ def _instruction_for(
         return f"Record how '{name}' is identified each run."
     if kind == "alignment_failure":
         return "Record traces of the same task."
+    if kind == "unconfirmed_loop_branch":
+        name = field or "the write"
+        return f"Record rows with and without {name} under a visible condition."
     return "Record a demonstration that resolves this uncertainty."
 
 
@@ -1041,6 +1277,7 @@ def induce_program(
     screen_texts: Optional[Callable[[int, str], Optional[Sequence[str]]]] = None,
     interpreter: Optional[Any] = None,
     accepted_narration: Optional[dict[str, str]] = None,
+    accepted_loop_guards: Optional[dict[str, str]] = None,
 ) -> InductionResult:
     """Induce a parameterized :class:`ProgramGraph` from multiple demonstrations
     of the same task -- the RFC §3 induction loop (step [4] + [5]).
@@ -1078,6 +1315,10 @@ def induce_program(
             narrated guards a person accepted. The guard id pins the exact
             guard the report showed; a different guard at that location is
             not accepted. A guard a recording contradicts stays refused.
+        accepted_loop_guards: ``{"<loop location>:p<position>@<text>": person}``
+            -- a write a loop body makes for some rows only, run when that
+            screen text shows. The report proposes the text; a person
+            accepts it. Without acceptance such a loop is refused.
 
     Returns:
         An :class:`InductionResult` with the induced program (or a refusal) and
@@ -1120,6 +1361,8 @@ def induce_program(
     seen_div_groups: set[int] = set()
     optional_nodes: dict[int, _Node] = {}
     divergences: dict[int, tuple[list[_Column], int]] = {}
+    # Loop identity columns no demonstration shows (each run's rows name them).
+    identity_only: set[str] = set()
 
     for idx, col in enumerate(columns):
         present = sorted(col.tokens)
@@ -1140,7 +1383,18 @@ def induce_program(
         # --- loop ----------------------------------------------------------
         if col.kind == "loop":
             node, dec = _emit_loop(
-                idx, col, present, n, taken, param_specs, data_sources, result, propose
+                idx,
+                col,
+                present,
+                n,
+                taken,
+                param_specs,
+                data_sources,
+                result,
+                propose,
+                screen_texts=screen_texts,
+                accepted_loop_guards=accepted_loop_guards,
+                identity_only=identity_only,
             )
             decisions.append(dec)
             if node is not None:
@@ -1205,147 +1459,523 @@ def induce_program(
         params={
             key: runtime_param_text(spec.example) if spec.example is not None else ""
             for key, spec in param_specs.items()
+            if key not in identity_only
         },
         data_sources=data_sources,
         guard_sources=guard_sources,
     )
+    if any(not isinstance(t, Workflow) for t in traces):
+        phi_free_program_identity(workflow)
+        program = workflow.program
     result.program = program
     result.workflow = workflow
     return result
 
 
 def _emit_loop(
-    idx, col, present, n, taken, param_specs, data_sources, result, propose=None
+    idx,
+    col,
+    present,
+    n,
+    taken,
+    param_specs,
+    data_sources,
+    result,
+    propose=None,
+    *,
+    screen_texts=None,
+    accepted_loop_guards=None,
+    identity_only=None,
 ):
-    loop_toks = [col.tokens[t] for t in present]
-    body_steps = loop_toks[0].body_steps
-    field = _field_key(body_steps[0]) if body_steps else f"row_{idx}"
-    counts = [tok.count for tok in loop_toks]
+    """Emit a worklist LOOP for an aligned loop column, or refuse.
 
-    # LOOP HONESTY (RFC §3 [5]; see module LIMITS). Trace SHAPE alone cannot
-    # certify that a consecutive repeat is a data-driven worklist rather than a
-    # fixed unrolled sequence -- and it recognizes ONLY consecutive repeats (not
-    # search->process->return, pagination, or per-row conditional bodies). When
-    # the repeated body contains a CONSEQUENTIAL action, guessing wrong repeats
-    # an irreversible / effect-bearing write, so REFUSE (emit an Uncertainty)
-    # rather than emit a possibly-wrong loop.
-    if any(_step_consequential(s) for s in body_steps):
-        location = f"loop_{idx}"
+    The iterations of every trace are lined up into body positions
+    (:func:`.loop_shapes.merge`). Then:
+
+    * a typed value that changes by row is a row column;
+    * a click whose label contains a row column's value selects that row's
+      record (``Step.target_param``); its identity band must embed the value,
+      and other band text that changes by row becomes an identity column;
+    * steps the last row skipped at the end of the body (the return to the
+      list) move to the front, behind a branch that runs them only when the
+      body's first control is not on screen;
+    * a step present for some rows only is guarded: a typed value on its
+      column being non-empty, a reversible step on its own target, a write
+      only on screen text a person accepted;
+    * a write in the body needs, per row, a record check bound to the row's
+      columns, and either an identity-checked selection of the row before it
+      or a record check that counts a new record.
+
+    Anything else is an ``ambiguous_loop`` (or ``ambiguous_selection`` /
+    ``unconfirmed_loop_branch``) uncertainty and no loop is emitted.
+    """
+    from openadapt_flow.compiler.loop_shapes import (
+        band_identity,
+        bind_effect_columns,
+        merge,
+    )
+
+    loop_toks = [col.tokens[t] for t in present]
+    counts = [tok.count for tok in loop_toks]
+    location = f"loop_{idx}"
+
+    # (trace, iteration, steps, sigs, stopped-before-return)
+    iters: list[tuple[int, int, list[Step], list, bool]] = []
+    for t, tok in zip(present, loop_toks):
+        for m, (steps_m, sigs_m) in enumerate(zip(tok.iterations, tok.iteration_sigs)):
+            iters.append((t, m, steps_m, sigs_m, tok.short_last and m == tok.count - 1))
+    positions = merge([x[3] for x in iters])
+    n_iter = len(iters)
+    short = {k for k, x in enumerate(iters) if x[4]}
+
+    def step_at(q: int, k: int) -> Step:
+        return iters[k][2][positions[q].at[k]]
+
+    # The return to the list: trailing steps only the short last rows
+    # skipped, and only steps that navigate. A write is never moved.
+    tail: list[int] = []
+    for q in range(len(positions) - 1, -1, -1):
+        absent = set(range(n_iter)) - set(positions[q].at)
+        k0 = next(iter(positions[q].at))
+        if absent and absent <= short and _navigation_only(step_at(q, k0)):
+            tail.insert(0, q)
+        else:
+            break
+    body_qs = [q for q in range(len(positions)) if q not in tail]
+    optional = [q for q in body_qs if len(positions[q].at) < n_iter]
+
+    rep_i = max(range(len(loop_toks)), key=lambda i: loop_toks[i].count)
+    rep_t = present[rep_i]
+    cands = [k for k, x in enumerate(iters) if x[0] == rep_t]
+    tmpl_k = max(
+        cands,
+        key=lambda k: (sum(1 for p in positions if k in p.at), k not in short, -k),
+    )
+
+    def src_k(q: int) -> int:
+        at = positions[q].at
+        return tmpl_k if tmpl_k in at else min(at)
+
+    def rep_step(q: int) -> Step:
+        return step_at(q, src_k(q))
+
+    first_q = body_qs[0] if body_qs else 0
+    field = _field_key(rep_step(first_q)) if positions else f"row_{idx}"
+
+    def refuse(kind: str, detail: str, *, record_field: str = field):
         question = _confirmation_question(
             location,
             AmbiguityKind.OPTIONAL_DIALOG,
             prompt=(
-                f"A consecutive repeat of {counts} step(s) over '{field}' was "
-                "observed, and its body performs a CONSEQUENTIAL (irreversible "
-                "or effect-bearing) action. Is this a data-driven loop over a "
-                "worklist, or a fixed sequence of distinct steps? (Trace shape "
-                "cannot distinguish them, and a wrong loop repeats the "
-                "irreversible action.)"
+                f"A repeated body over '{record_field}' was observed (counts "
+                f"{counts}), but it cannot run once per row safely: {detail}"
             ),
-            evidence=f"repeated consequential body '{field}' x{counts} at column {idx}",
+            evidence=f"repeated body '{record_field}' x{counts} at column {idx}",
             consequential=True,
         )
         _add_uncertainty(
             result,
-            kind="ambiguous_loop",
+            kind=kind,
             location=location,
-            detail=(
-                f"repeated body '{field}' (counts {counts}) contains a "
-                "consequential action; a worklist loop vs a fixed unrolled "
-                "sequence is not distinguishable from trace shape -- "
-                "refusing to guess a loop over an irreversible step."
-            ),
+            detail=detail,
             consequential=True,
             question=question,
-            field=field,
+            field=record_field,
             propose=propose,
         )
-        dec = ColumnDecision(
+        return None, ColumnDecision(
             index=idx,
             kind="ambiguous_loop",
             align_sig=str(col.align_sig),
-            field=field,
+            field=record_field,
             present_in=present,
             counts=counts,
-            note=f"underdetermined consequential loop over '{field}' (counts {counts})",
+            note=f"underdetermined loop over '{record_field}' (counts {counts}): {detail}",
         )
-        return None, dec
 
-    param_name = _param_name_for(field, taken, f"row_{idx}")
-    taken.add(param_name)
-    # Representative worklist: the LONGEST demonstrated queue, inlined so the
-    # bundle is self-contained (a run may override via Replayer worklists=...).
-    rep = max(loop_toks, key=lambda tk: tk.count)
+    # --- row columns: typed values that change by row --------------------
+    columns: dict[int, str] = {}
+    row_vals: dict[int, dict[str, str]] = {k: {} for k in range(n_iter)}
+    loop_taken = set(taken)
+    for q in body_qs:
+        st = rep_step(q)
+        if st.action not in (ActionKind.TYPE, ActionKind.SELECT_OPTION) or st.secret:
+            continue
+        vals = {k: (_value(step_at(q, k)) or "") for k in positions[q].at}
+        if len({vals.get(k, "") for k in range(n_iter)}) <= 1:
+            continue
+        name = _param_name_for(_field_key(st), loop_taken, f"row_{idx}_{q}")
+        loop_taken.add(name)
+        columns[q] = name
+        for k in range(n_iter):
+            row_vals[k][name] = vals.get(k, "")
+
+    # --- record-selecting clicks -----------------------------------------
+    targets: dict[int, str] = {}
+    identity_cols: dict[str, dict[int, Optional[str]]] = {}
+    identity_examples: dict[str, Optional[str]] = {}
+    token_indices: dict[int, dict[str, list[int]]] = {}
+    selection_notes: list[str] = []
+    for q in body_qs:
+        st = rep_step(q)
+        if st.action not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
+            continue
+        vals = {k: _squash_text(_value(step_at(q, k)) or "") for k in positions[q].at}
+        if len(set(vals.values())) <= 1:
+            continue
+        hit = next(
+            (
+                name
+                for name in columns.values()
+                if all(
+                    row_vals[k][name] and _squash_text(row_vals[k][name]) in vals[k]
+                    for k in positions[q].at
+                )
+            ),
+            None,
+        )
+        click_field = _field_key(st)
+        if hit is None:
+            return refuse(
+                "ambiguous_selection",
+                f"the clicked row '{click_field}' changes by row but no typed "
+                "row value names it, so the click cannot be pointed at each "
+                "row's record",
+                record_field=click_field,
+            )
+        anchors = {
+            k: step_at(q, k).anchor
+            for k in positions[q].at
+            if step_at(q, k).anchor is not None
+        }
+        bi = band_identity(
+            column=hit,
+            template_iter=src_k(q),
+            anchors=anchors,
+            row_values=row_vals,
+            same_trace={k: iters[k][0] for k in range(n_iter)},
+            column_prefix=f"{hit}_identity_",
+        )
+        if not bi.ok:
+            return refuse(
+                "ambiguous_selection",
+                f"the click on '{click_field}' selects each row's record by "
+                f"'{hit}', but {bi.reason}",
+                record_field=click_field,
+            )
+        for name, per_iter in bi.identity_columns.items():
+            identity_cols[name] = per_iter
+            identity_examples[name] = bi.identity_examples.get(name)
+            loop_taken.add(name)
+            for k in range(n_iter):
+                value = per_iter.get(k)
+                if value is not None:
+                    row_vals[k][name] = value
+        if bi.token_indices:
+            token_indices[q] = bi.token_indices
+        targets[q] = hit
+        extra = (
+            f", also by {', '.join(bi.identity_columns)}" if bi.identity_columns else ""
+        )
+        selection_notes.append(f"{click_field}: by '{hit}'{extra} ({bi.basis})")
+
+    # --- writes: a per-row record check and a per-row identity -----------
+    effects_out: dict[int, list] = {}
+    write_notes: list[str] = []
+    all_cols = set(row_vals[tmpl_k]) | set(identity_cols) | set(columns.values())
+    for q in body_qs:
+        st = rep_step(q)
+        if not _step_consequential(st):
+            continue
+        name = _field_key(st)
+        if not st.effects:
+            return refuse(
+                "ambiguous_loop",
+                f"the body writes at '{name}' with no record check, so a "
+                "row's write could not be confirmed per row",
+            )
+        rebound, used = bind_effect_columns(list(st.effects), row_vals[src_k(q)])
+        used &= all_cols
+        if not used:
+            return refuse(
+                "ambiguous_loop",
+                f"the record check of '{name}' names no row value, so it "
+                "would check the demonstrated row on every row",
+            )
+        selected = any(tq < q and tq not in optional for tq in targets)
+        counts_new = any(
+            getattr(e.kind, "value", e.kind) == "exact_new_set"
+            or (
+                getattr(e.kind, "value", e.kind) == "record_written"
+                and (e.count_new_only or e.idempotency_key is not None)
+            )
+            for e in rebound
+        )
+        if not (selected or counts_new):
+            return refuse(
+                "ambiguous_loop",
+                f"nothing before '{name}' selects the row's record with an "
+                "identity check, and its record check does not count a new "
+                "record, so a write could land on the wrong record",
+            )
+        effects_out[q] = rebound
+        basis = "identity-checked selection" if selected else "new-record check"
+        write_notes.append(
+            f"{name}: record check on {', '.join(sorted(used))} ({basis})"
+        )
+
+    # --- steps present for some rows only ----------------------------------
+    guards: dict[int, Guard] = {}
+    conditional_notes: list[str] = []
+    for q in optional:
+        st = rep_step(q)
+        name = _field_key(st)
+        if q in columns:
+            guards[q] = Guard(
+                predicate=Predicate(
+                    kind=PredicateKind.NOT,
+                    operands=[
+                        Predicate(
+                            kind=PredicateKind.PARAM_EQUALS,
+                            param=columns[q],
+                            value="",
+                        )
+                    ],
+                    intent=f"the row has a value for '{columns[q]}'",
+                ),
+                on_unmet="skip",
+            )
+            conditional_notes.append(f"{name}: when the row has '{columns[q]}'")
+            continue
+        if q in targets:
+            return refuse(
+                "ambiguous_loop",
+                f"the record-selecting click '{name}' happens for some rows only",
+            )
+        if not _step_consequential(st):
+            guards[q] = optional_guard(st)
+            conditional_notes.append(f"{name}: when its target is on screen")
+            continue
+        text = _loop_branch_text(q, positions, iters, screen_texts)
+        loc = f"{location}:p{q}"
+        if text is not None and f"{loc}@{text}" in (accepted_loop_guards or {}):
+            guards[q] = Guard(
+                predicate=Predicate(
+                    kind=PredicateKind.TEXT_PRESENT,
+                    text=text,
+                    intent=f"'{text}' is on screen (accepted by "
+                    f"{accepted_loop_guards[f'{loc}@{text}']})",
+                ),
+                on_unmet="skip",
+            )
+            conditional_notes.append(f"{name}: when '{text}' is on screen (accepted)")
+            continue
+        detail = f"the write '{name}' happens for some rows only" + (
+            f"; the screen showed '{text}' exactly on those rows. Accept "
+            f"the guard as '{loc}@{text}' to run it only then"
+            if text is not None
+            else "; no screen text tells those rows apart"
+        )
+        if text is not None:
+            result.proposed.append(
+                Proposal(
+                    target=loc,
+                    kind="guard",
+                    content=f"run '{name}' only when '{text}' is on screen",
+                    source="screen",
+                )
+            )
+        return refuse("unconfirmed_loop_branch", detail, record_field=name)
+
+    # --- the return to the list ------------------------------------------
+    return_anchor = None
+    if tail:
+        lead = next(
+            (
+                q
+                for q in body_qs
+                if q not in optional and rep_step(q).anchor is not None
+            ),
+            None,
+        )
+        if lead is None:
+            return refuse(
+                "ambiguous_loop",
+                "the last row skipped the return to the list, and no step of "
+                "the body has an on-screen target that tells the list apart",
+            )
+        return_anchor = rep_step(lead).anchor
+
+    # --- emit ----------------------------------------------------------------
+    taken.update(loop_taken)
+    for q, name in columns.items():
+        example = row_vals[tmpl_k].get(name) or next(
+            (row_vals[k][name] for k in range(n_iter) if row_vals[k][name]), None
+        )
+        param_specs[name] = ParamSpec(
+            name=name,
+            type=ParamKind.STRING,
+            example=example,
+            required=q not in optional,
+        )
+    for name in identity_cols:
+        example = identity_examples.get(name)
+        param_specs[name] = ParamSpec(
+            name=name, type=ParamKind.STRING, example=example, required=False
+        )
+        if example is None and identity_only is not None:
+            identity_only.add(name)
+
     rel_name = f"worklist_{idx}"
+    rep_rows = [
+        {k2: v for k2, v in row_vals[k].items()}
+        for k in range(n_iter)
+        if iters[k][0] == rep_t
+    ]
     data_sources[rel_name] = Relation(
         name=rel_name,
-        rows=rep.rows(param_name),
+        rows=rep_rows,
         description=f"inferred worklist for the '{field}' loop",
     )
-    param_specs[param_name] = ParamSpec(
-        name=param_name,
-        type=ParamKind.STRING,
-        example=(rep.rows(param_name)[0][param_name] if rep.count else None),
-        required=True,
-    )
 
-    # Body subflow: the repeated step(s), the varying field bound per row.
     body_id = f"body_{idx}"
+    order = tail + body_qs
+    sid_of = {q: f"{body_id}_s{q}" for q in order}
+    body_end = f"{body_id}_end"
     body_states: dict[str, State] = {}
-    prev_ids: list[str] = []
-    for bi, bstep in enumerate(body_steps):
-        sid = f"{body_id}_s{bi}"
-        step = bstep.model_copy(deep=True)
-        if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
-            step.param = param_name
+    for i, q in enumerate(order):
+        step = rep_step(q).model_copy(deep=True)
+        if q in columns:
+            step.param = columns[q]
             step.text = None
-        st = State(
-            id=sid,
+        if q in targets:
+            step.target_param = targets[q]
+            tmpl = step.anchor.identity_template if step.anchor else None
+            if tmpl is not None and q in token_indices:
+                tmpl.param_token_indices.update(token_indices[q])
+        if q in effects_out:
+            step.effects = effects_out[q]
+        if q in guards:
+            step.guard = guards[q]
+        nxt = sid_of[order[i + 1]] if i + 1 < len(order) else body_end
+        body_states[sid_of[q]] = State(
+            id=sid_of[q],
             kind=StateKind.ACTION,
             step=step,
-            transitions=[Transition(target="__PATCH__")],
+            transitions=[Transition(target=nxt)],
         )
-        body_states[sid] = st
-        prev_ids.append(sid)
-    body_end = f"{body_id}_end"
+    entry = sid_of[order[0]] if order else body_end
+    if tail and return_anchor is not None:
+        branch_id = f"{body_id}_return"
+        body_states[branch_id] = State(
+            id=branch_id,
+            kind=StateKind.BRANCH,
+            transitions=[
+                Transition(
+                    guard=Predicate(
+                        kind=PredicateKind.NOT,
+                        operands=[
+                            Predicate(
+                                kind=PredicateKind.ANCHOR_RESOLVES,
+                                anchor=return_anchor,
+                                intent="the list's first control is on screen",
+                            )
+                        ],
+                    ),
+                    target=sid_of[tail[0]],
+                    label="not on the list: return to it first",
+                ),
+                Transition(target=sid_of[body_qs[0]], label="on the list"),
+            ],
+        )
+        entry = branch_id
     body_states[body_end] = State(
         id=body_end, kind=StateKind.TERMINAL, outcome="success"
     )
-    ordered = list(body_states)
-    for k, sid in enumerate(ordered):
-        st = body_states[sid]
-        if st.kind is StateKind.ACTION:
-            st.transitions[0].target = (
-                ordered[k + 1] if k + 1 < len(ordered) else body_end
-            )
-    body_graph = ProgramGraph(entry=ordered[0], states=body_states)
+    body_graph = ProgramGraph(entry=entry, states=body_states)
 
-    loop_state_id = f"loop_{idx}"
+    loop_state_id = location
     node = _Node(loop_state_id)
     exit_tr = Transition(target="__PATCH__")
+    spec = LoopSpec(relation=rel_name, body=body_id, var=field)
     node.states[loop_state_id] = State(
         id=loop_state_id,
         kind=StateKind.LOOP,
-        loop=LoopSpec(relation=rel_name, body=body_id, var=field),
+        loop=spec,
         transitions=[exit_tr],
     )
     node.exits = [exit_tr]
     node._subflow = (body_id, body_graph)  # type: ignore[attr-defined]
 
+    result.loop_certificates.append(
+        LoopCertificate(
+            location=location,
+            relation=rel_name,
+            bound=(
+                f"one pass per row of '{rel_name}' (a finite list), at most "
+                f"{spec.max_iterations}; more rows halt before the first pass"
+            ),
+            max_iterations=spec.max_iterations,
+            row_columns=sorted(set(columns.values())),
+            identity_columns=sorted(identity_cols),
+            selections=selection_notes,
+            writes=write_notes,
+            conditional_steps=conditional_notes,
+            returns_to_list=bool(tail),
+        )
+    )
     dec = ColumnDecision(
         index=idx,
         kind="loop",
         align_sig=str(col.align_sig),
         field=field,
-        param_name=param_name,
+        param_name=next(iter(columns.values()), None),
         present_in=present,
         counts=counts,
         note=(
-            f"loop over '{field}' -- body repeats {counts} across traces "
-            f"(counts differ => a worklist, not unrolled steps)"
+            f"loop over '{field}' -- body repeats {counts} across traces"
+            + (" (returns to the list between rows)" if tail else "")
+            + (f"; {len(write_notes)} write(s) checked per row" if write_notes else "")
         ),
     )
     return node, dec
+
+
+def _loop_branch_text(q, positions, iters, screen_texts) -> Optional[str]:
+    """Screen text shown on exactly the rows that have body position ``q``.
+
+    Read from the frame before the step (or, for rows without it, before the
+    row's next step). None when there is no screen reader or no such text.
+    """
+    if screen_texts is None:
+        return None
+    with_lines: Optional[set[str]] = None
+    without: set[str] = set()
+    for k, (t, _m, steps_k, _sigs, _short) in enumerate(iters):
+        pos = positions[q]
+        if k in pos.at:
+            step = steps_k[pos.at[k]]
+        else:
+            later = [
+                positions[r].at[k]
+                for r in range(q + 1, len(positions))
+                if k in positions[r].at
+            ]
+            if not later:
+                continue
+            step = steps_k[later[0]]
+        lines = screen_texts(t, step.id)
+        if lines is None:
+            return None
+        norm = {" ".join(str(x).split()) for x in lines if str(x).strip()}
+        if k in pos.at:
+            with_lines = norm if with_lines is None else with_lines & norm
+        else:
+            without |= norm
+    if not with_lines:
+        return None
+    cands = sorted(with_lines - without, key=lambda x: (len(x), x))
+    return cands[0] if cands else None
 
 
 def _emit_required_single(idx, col, present, taken, param_specs, result, propose=None):

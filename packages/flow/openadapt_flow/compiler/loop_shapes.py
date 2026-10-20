@@ -96,31 +96,30 @@ class Segmentation:
 
 
 def _match_last(
-    sigs: Sequence[Any], start: int, positions: list[Position], core: set[int]
-) -> tuple[int, int]:
+    sigs: Sequence[Any], start: int, positions: list[Position]
+) -> tuple[int, int, int]:
     """Greedy match of the last iteration against the body.
 
-    Returns ``(end, reached)``: the trace index after the last matched step
-    and the body index matching stopped at. Skipping an optional position is
-    allowed; skipping a core position is not (that step then ends the
-    iteration).
+    Returns ``(end, reached, matched)``: the trace index after the last
+    matched step, the body index matching stopped at, and how many steps
+    matched. Positions the last iteration skips become row-varying steps
+    (or, at the end of the body, the return it never made).
     """
 
     ptr = 0
     j = start
+    matched = 0
     while j < len(sigs) and ptr < len(positions):
-        hit = None
-        for q in range(ptr, len(positions)):
-            if positions[q].sig == sigs[j]:
-                hit = q
-                break
-            if q in core:
-                break
+        hit = next(
+            (q for q in range(ptr, len(positions)) if positions[q].sig == sigs[j]),
+            None,
+        )
         if hit is None:
             break
         ptr = hit + 1
         j += 1
-    return j, ptr
+        matched += 1
+    return j, ptr, matched
 
 
 def segment(sigs: Sequence[Any], start: int) -> Iterator[Segmentation]:
@@ -129,8 +128,8 @@ def segment(sigs: Sequence[Any], start: int) -> Iterator[Segmentation]:
     Every occurrence of ``sigs[start]`` after ``start`` may begin a new
     iteration. A candidate needs two or more iterations, a core of at least
     two steps shared by every full iteration, few extra steps per iteration,
-    and a last iteration that reaches the whole core except, possibly, a
-    trailing suffix. Callers check the steps themselves (that the core varies
+    and a last iteration that matches at least half the core in order (what
+    it skips at the end is the return it never made). Callers check the steps themselves (that the core varies
     by row, that the tail only navigates).
     """
 
@@ -147,13 +146,10 @@ def segment(sigs: Sequence[Any], start: int) -> Iterator[Segmentation]:
         if any((b - a) - len(core) > allowed for a, b in full):
             continue
         last_start = cands[k - 1]
-        end, reached = _match_last(sigs, last_start, positions, set(core))
+        end, reached, matched = _match_last(sigs, last_start, positions)
+        if matched < max(2, (len(core) + 1) // 2):
+            continue
         tail = [q for q in core if q >= reached]
-        # The last iteration must reach every core position before the tail.
-        if any(q not in tail and q >= reached for q in core):
-            continue
-        if tail and tail != core[len(core) - len(tail) :]:
-            continue
         if len(tail) >= len(core) - 1:
             continue
         yield Segmentation(
@@ -177,9 +173,7 @@ class BandIdentity:
     reason: str = ""
     #: Extra row columns the identity band needs: name -> per-iteration
     #: value (None where the band was not readable for that iteration).
-    identity_columns: dict[str, dict[int, Optional[str]]] = field(
-        default_factory=dict
-    )
+    identity_columns: dict[str, dict[int, Optional[str]]] = field(default_factory=dict)
     #: Extra columns' demonstrated values (from the template iteration).
     identity_examples: dict[str, str] = field(default_factory=dict)
     #: Hashed bands: token indices to index under each column name.
@@ -234,8 +228,7 @@ def band_identity(
             return BandIdentity(
                 ok=False,
                 reason=(
-                    "the row's identity text does not contain the value that "
-                    "selects it"
+                    "the row's identity text does not contain the value that selects it"
                 ),
             )
         return _readable_band_columns(
@@ -262,10 +255,7 @@ def band_identity(
             ok=False,
             reason="the row's hashed identity does not contain the selecting value",
         )
-    explained = {
-        tmpl.tokens[j].r
-        for j in indices
-    }
+    explained = {tmpl.tokens[j].r for j in indices}
     base = {t.r for j, t in enumerate(tmpl.tokens) if j not in indices}
     for it, other in anchors.items():
         if it == template_iter or same_trace.get(it) != same_trace[template_iter]:
@@ -335,7 +325,9 @@ def _readable_band_columns(
             continue
         other_toks = tokens(oband, row_values.get(it, {}))
         ops = SequenceMatcher(a=base, b=other_toks, autojunk=False).get_opcodes()
-        aligned[it] = [(i1, i2, j1, j2) for tag, i1, i2, j1, j2 in ops if tag != "equal"]
+        aligned[it] = [
+            (i1, i2, j1, j2) for tag, i1, i2, j1, j2 in ops if tag != "equal"
+        ]
         for tag, i1, i2, _j1, _j2 in ops:
             if tag == "insert":
                 return BandIdentity(
@@ -391,7 +383,9 @@ def _replace_ci(text: str, old: str, new: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def bind_effect_columns(effects: list[Any], template_values: dict[str, str]) -> tuple[list[Any], set[str]]:
+def bind_effect_columns(
+    effects: list[Any], template_values: dict[str, str]
+) -> tuple[list[Any], set[str]]:
     """Rebind a write's record check to the row's columns.
 
     A literal equal to the template row's value of a column becomes a
