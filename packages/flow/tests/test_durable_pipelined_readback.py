@@ -229,3 +229,24 @@ def test_a_durable_run_verifies_inline_when_the_pause_cant_hold_the_check(
 def test_the_matrix_says_durable_runs_pipeline():
     for profile in ("durable", "governed", "qualified"):
         assert matrix.cell("pipelined_readback", profile).status == "works"
+
+
+def test_the_check_starts_only_once_the_pause_holds_it(tmp_path):
+    pipeline = ReadbackPipeline()
+    try:
+        run = Run(tmp_path, "governed", pipeline=pipeline)
+        seen = []
+        check = run.verifier.verify
+
+        def verify(*args, **kwargs):
+            # A crash from here on must find the check in the durable pause.
+            pending = _store(run).read_pending()
+            seen.append(pending is not None and pending.deferred_readback is not None)
+            return check(*args, **kwargs)
+
+        run.verifier.verify = verify
+        _report, _settled = _run_and_settle(run, pipeline)
+    finally:
+        pipeline.close()
+
+    assert seen and all(seen)

@@ -131,10 +131,6 @@ FEATURES: tuple[Feature, ...] = (
     ),
 )
 
-API_QUALIFIED = (
-    "a production qualification admission doesn't cover API steps yet, so the "
-    "qualified GUI path runs"
-)
 POOL_LOCAL_ONLY = (
     "--workers and --readback-window apply to local runs, not a managed dispatch "
     "or a qualification case"
@@ -204,10 +200,15 @@ CELLS: tuple[Cell, ...] = (
     Cell(
         "api_step",
         "qualified",
-        "refused",
-        reason=API_QUALIFIED,
+        "works",
+        note=(
+            "when the signed admission's qualified effect contract names the "
+            "save's API path; otherwise the qualified GUI path runs and says why"
+        ),
         evidence=(
-            "tests/test_compatibility_matrix.py::test_api_step_refuses_where_the_matrix_says",
+            "tests/test_api_step_qualified.py::test_the_api_step_runs_when_the_admission_qualified_its_path",
+            "tests/test_api_step_qualified.py::test_a_gui_only_qualification_keeps_the_qualified_gui_path",
+            "tests/test_api_step_qualified.py::test_a_qualification_case_runs_the_path_its_contract_names",
         ),
     ),
     Cell(
@@ -443,7 +444,7 @@ CELLS: tuple[Cell, ...] = (
         "multi_surface",
         "default",
         "works",
-        note="an API step inside it runs on the GUI (below)",
+        note="an API step inside it runs on its surface (below)",
         evidence=(
             "tests/test_multi_surface_governed.py::test_governed_durable_multi_surface_run_reaches_verified",
         ),
@@ -494,7 +495,6 @@ CELLS: tuple[Cell, ...] = (
 )
 
 #: The API step combined with the other features, in one run.
-API_MULTI_SURFACE = "a run across several windows or tabs uses the GUI steps"
 API_REPAIR_PROBE = (
     "self-repair's probes and resumed run exercise the repaired GUI step, and "
     "the person approved that step, so its API step doesn't run"
@@ -542,10 +542,12 @@ COMBINATIONS: tuple[Cell, ...] = (
     Cell(
         "api_step",
         "multi_surface",
-        "refused",
-        reason=API_MULTI_SURFACE,
+        "works",
+        note="the steps it replaces stay on one browser surface, on its origin",
         evidence=(
-            "tests/test_compatibility_matrix.py::test_api_step_refuses_in_a_multi_surface_run",
+            "tests/test_api_step_multi_surface.py::test_the_api_step_runs_on_its_surface_in_a_governed_multi_surface_run",
+            "tests/test_api_step_multi_surface.py::test_the_session_must_be_on_the_surfaces_origin",
+            "tests/test_api_step_multi_surface.py::test_a_span_that_leaves_its_surface_runs_on_the_gui",
         ),
     ),
 )

@@ -161,3 +161,66 @@ def test_a_settle_that_fails_still_decides_the_item(tmp_path, monkeypatch):
     assert first.approval.needs_person
     with gate_module._READBACK_IN_FLIGHT_LOCK:
         assert not gate_module._READBACK_IN_FLIGHT
+
+
+def test_more_held_items_than_the_window_are_all_interrupted(tmp_path):
+    from openadapt_flow.approval_mode import gate as gate_module
+
+    verifier = HeldCheck()
+    item = Item(tmp_path, verifier=verifier)
+    pipeline = ReadbackPipeline()
+    try:
+        _run(item, _gate(item), "first", pipeline)
+        assert pipeline.take() is not None
+        # A second held item, from outside the one-item window.
+        with gate_module._READBACK_IN_FLIGHT_LOCK:
+            gate_module._READBACK_IN_FLIGHT["run-outside-the-window"] = float("inf")
+        second = _run(item, _gate(item), "second", ReadbackPipeline())
+    finally:
+        with gate_module._READBACK_IN_FLIGHT_LOCK:
+            gate_module._READBACK_IN_FLIGHT.pop("run-outside-the-window", None)
+        verifier.release.set()
+        pipeline.close()
+
+    assert second.approval is not None
+    assert second.approval.decision is ItemDecisionKind.APPROVAL_REQUIRED
+    assert item.log.state().is_off
+
+
+def test_a_check_past_its_deadline_goes_to_a_person(tmp_path, monkeypatch):
+    import time
+
+    from openadapt_flow.runtime import replayer as replayer_module
+
+    verifier = HeldCheck()
+    item = Item(tmp_path, verifier=verifier)
+    # A deadline 0.4 s after the hand-off.
+    monkeypatch.setattr(
+        replayer_module,
+        "READBACK_DEADLINE_MARGIN_S",
+        0.4 - item.workflow.steps[0].timeout_s,
+    )
+    pipeline = ReadbackPipeline()
+    try:
+        first = _run(item, _gate(item), "first", pipeline)
+        held = pipeline.take()
+        assert held is not None, pipeline.inline_reason
+        deadline = time.monotonic() + 10
+        while first.approval is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+        # The check never answered: the item needs a person, and the switch
+        # is off for the next item.
+        assert first.approval is not None
+        assert first.approval.needs_person
+        assert item.log.state().is_off
+        second = _run(item, _gate(item), "second", ReadbackPipeline())
+        assert second.approval is not None
+        assert second.approval.decision is ItemDecisionKind.APPROVAL_REQUIRED
+        # A late verdict doesn't change the decision.
+        decided = first.approval
+        verifier.release.set()
+        held.settled.result(timeout=30)
+        assert first.approval is decided
+    finally:
+        verifier.release.set()
+        pipeline.close()

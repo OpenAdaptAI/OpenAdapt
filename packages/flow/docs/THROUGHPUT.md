@@ -130,8 +130,11 @@ verifies inline.
 Under the problems-only approval mode, the item's approval decision waits for
 the settled check, so a save that is still being checked never reads as an
 uncertain result. While the check runs, the next item may start: its gate
-doesn't count the held item as interrupted. If settling fails, the item goes
-to a person. If the process stops first, nothing is held after the restart,
+doesn't count the held item as interrupted. That exemption is bounded. It
+covers at most one held item, the read-back window. It also lasts only until
+the step's timeout plus two minutes. When either bound is passed, the held
+item goes to a person and the switch turns off. If settling fails, the item
+goes to a person. If the process stops first, nothing is held after the restart,
 so the open item reads as interrupted and the switch turns off.
 
 ## One entry, faster
