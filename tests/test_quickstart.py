@@ -330,6 +330,7 @@ def test_numbers_follow_the_runs(root):
     assert "5 of 5" not in output
     assert "0 AI calls" not in output
     assert "Seal       seal-ed25519-0123456789abcdef · 4 reports signed" in output
+    assert "Cost       3 AI calls · $0.04 · " in output
     assert outcome.checked == 4
 
 
@@ -509,6 +510,22 @@ def _rich(root, environ, **engine_kwargs) -> str:
         clock=_clock(),
     )
     return stream.getvalue()
+
+
+def test_terminal_finale_fits_twelve_lines_with_every_optional_line(root, monkeypatch):
+    stream = _Terminal()
+    outcome = Outcome(root=root, seal=SealFacts("seal-ed25519-0", 5))
+    outcome.runs = [_run(root, index) for index in range(1, 6)]
+    steps = NextSteps(
+        verify="openadapt seal verify qs",
+        record="openadapt flow record",
+        agent="openadapt agent serve --allow-run",
+        keep="uv tool install --python 3.12 openadapt",
+        shadow="Your shell's openadapt is 1.5.1 at /opt/x; the commands above use uvx.",
+    )
+    RichView(stream, environ={}, width=110).finale(outcome, steps)
+    lines = [line for line in stream.getvalue().splitlines() if line.strip()]
+    assert len(lines) <= 12, lines
 
 
 def test_terminal_view_renders_color_boxes_and_the_comparison(root):

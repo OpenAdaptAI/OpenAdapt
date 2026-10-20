@@ -582,7 +582,13 @@ def quickstart(
     from openadapt.quickstart.engine import display_available
 
     visible = not headless and (headed or display_available())
-    steps = next_steps(_hint, _shell_quote, _agent_serves_tutorial())
+    steps = next_steps(
+        _hint,
+        _shell_quote,
+        _agent_serves_tutorial(),
+        keep=_keep_command(),
+        shadow=_shadowing_openadapt if _under_uvx() else None,
+    )
     try:
         with _synthetic_scrub_off():
             outcome = run_quickstart(
@@ -667,11 +673,55 @@ def _hint(rest: str) -> str:
     Repeat the ``uvx`` form there; otherwise keep the plain command.
     """
 
-    prefix = sys.prefix.replace("\\", "/")
-    if "/uv/archive-v" in prefix:
+    if _under_uvx():
         major, minor = sys.version_info[:2]
         return f"uvx --python {major}.{minor} openadapt {rest}"
     return f"openadapt {rest}"
+
+
+def _under_uvx() -> bool:
+    """True when this process runs from a ``uvx`` throwaway environment."""
+    return "/uv/archive-v" in sys.prefix.replace("\\", "/")
+
+
+def _keep_command() -> Optional[str]:
+    """Under ``uvx``: the command that installs this launcher for good."""
+    if not _under_uvx():
+        return None
+    major, minor = sys.version_info[:2]
+    return f"uv tool install --python {major}.{minor} openadapt"
+
+
+def _shadowing_openadapt(which=None, run=None) -> Optional[str]:
+    """Warn when the shell's ``openadapt`` is another version than this one.
+
+    Under ``uvx`` the printed commands repeat ``uvx`` and reach this version,
+    but a person who types plain ``openadapt`` gets whatever is first on PATH,
+    for example an older install in a Conda ``bin`` ahead of ``~/.local/bin``.
+    A copy of this same version is fine and gets no warning.
+    """
+    import shutil
+    import subprocess
+
+    found = (which or shutil.which)("openadapt")
+    if not found:
+        return None
+    try:
+        result = (run or subprocess.run)(
+            [found, "--version"], capture_output=True, text=True, timeout=15
+        )
+        text = f"{result.stdout} {result.stderr}"
+    except Exception:  # noqa: BLE001 - an unrunnable openadapt is still a shadow
+        text = ""
+    match = re.search(r"\b(\d+\.\d+\.\d+\S*)", text)
+    version = match.group(1) if match else None
+    if version == __version__:
+        return None
+    named = f"is {version}" if version else "is an unknown version"
+    return (
+        f"Your shell's openadapt {named} at {found}; the commands above use "
+        "uvx so they run this version."
+    )
 
 
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")

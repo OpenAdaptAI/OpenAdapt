@@ -26,8 +26,15 @@ def next_steps(
     hint: Callable[[str], str],
     quote: Callable[[object], str],
     agent_serves_tutorial: bool,
+    *,
+    keep: Optional[str] = None,
+    shadow: Optional[Callable[[], Optional[str]]] = None,
 ) -> Callable[[Outcome], NextSteps]:
-    """The finale's commands, spelled by the launcher's ``hint`` helper."""
+    """The finale's commands, spelled by the launcher's ``hint`` helper.
+
+    ``keep`` and ``shadow`` apply under ``uvx``: the install command, and a
+    check (run once, at the finale) for an older ``openadapt`` on PATH.
+    """
 
     def build(outcome: Outcome) -> NextSteps:
         verify = None
@@ -45,6 +52,8 @@ def next_steps(
                 f"flow record --backend web --url {YOUR_APP_URL} --out my-task"
             ),
             agent=agent,
+            keep=keep,
+            shadow=shadow() if shadow is not None else None,
         )
 
     return build

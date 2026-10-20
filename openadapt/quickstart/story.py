@@ -76,6 +76,11 @@ class NextSteps:
     verify: Optional[str]
     record: str
     agent: str
+    #: Under ``uvx`` only: the command that installs this version for good.
+    keep: Optional[str] = None
+    #: Under ``uvx`` only: a warning when the shell's ``openadapt`` is another
+    #: version, which the plain commands would reach instead.
+    shadow: Optional[str] = None
 
 
 @dataclass

@@ -123,7 +123,11 @@ def receipt_rows(outcome: Outcome, marks: Marks) -> list[tuple[str, str]]:
             f"{outcome.checked} of {len(outcome.runs)} saved and checked in the "
             "database",
         ),
-        ("AI calls", f"{outcome.model_calls}{dot}${outcome.cost_usd:.2f}"),
+        (
+            "Cost",
+            f"{outcome.model_calls} AI calls{dot}${outcome.cost_usd:.2f}{dot}"
+            f"{seconds(outcome.total_seconds)} in all",
+        ),
     ]
     if outcome.seal is not None:
         reports = "report" if outcome.seal.sealed == 1 else "reports"
@@ -133,7 +137,6 @@ def receipt_rows(outcome: Outcome, marks: Marks) -> list[tuple[str, str]]:
                 f"{outcome.seal.key_id}{dot}{outcome.seal.sealed} {reports} signed",
             )
         )
-    rows.append(("Time", f"{seconds(outcome.total_seconds)} in all"))
     return rows
 
 
@@ -151,10 +154,13 @@ def details_line(outcome: Outcome) -> str:
 
 
 def next_step_lines(steps: NextSteps) -> list[str]:
-    return [
+    lines = [
         f"Try it on your own app: {steps.record}",
         f"Give your agent this as a tool: {steps.agent}",
     ]
+    if steps.keep:
+        lines.append(f"Keep it: {steps.keep}")
+    return lines
 
 
 # ---------------------------------------------------------------------------
@@ -285,6 +291,8 @@ class PlainView:
         self._say(details_line(outcome))
         for line in next_step_lines(steps):
             self._say(line)
+        if steps.shadow:
+            self._say(steps.shadow)
 
     def detail(self, lines: list[str]) -> None:
         for line in lines:
@@ -479,6 +487,8 @@ class RichView:
         for line in next_step_lines(steps):
             label, _, command = line.partition(": ")
             self.console.print(f"{label}: [bold cyan]{_escape(command)}[/]")
+        if steps.shadow:
+            self.console.print(f"[yellow]{_escape(steps.shadow)}[/]")
 
     def detail(self, lines: list[str]) -> None:
         for line in lines:

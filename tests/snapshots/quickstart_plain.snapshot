@@ -31,9 +31,8 @@ The screen said "Encounter saved". The database had nothing. A bot that trusts t
 Receipt
   Program    local-quickstart · 6 steps
   Runs       5 of 5 saved and checked in the database
-  AI calls   0 · $0.00
+  Cost       0 AI calls · $0.00 · 2.5s in all
   Seal       seal-ed25519-0123456789abcdef · 5 reports signed
-  Time       2.5s in all
 Check it: openadapt seal verify openadapt-quickstart
 Details: openadapt-quickstart, one REPORT.md per run; side-by-side page openadapt-quickstart/index.html
 Try it on your own app: openadapt flow record --backend web --url https://your-app.example --out my-task
