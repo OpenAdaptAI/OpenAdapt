@@ -722,6 +722,12 @@ def _run(
                 for s in workflow.steps
             ),
         )
+        if workflow.encrypted:
+            # An encrypted bundle's runs keep their durable checkpoints under
+            # the same key (Standard and Regulated require them encrypted).
+            from openadapt_flow import crypto
+
+            kwargs["checkpoint_key"] = crypto.resolve_key(None)
         if hooks.replayer_kwargs is not None:
             kwargs.update(hooks.replayer_kwargs(ctx))
         # The signed lookup settings win over any hook, so a hook can't turn
