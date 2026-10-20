@@ -369,6 +369,18 @@ class FlowEngine:
 
     # -- act 3 ------------------------------------------------------------
 
+    def before_prompt(self) -> None:
+        """Give the keyboard back to the terminal before asking for Enter.
+
+        On macOS a visible browser takes focus when its window opens and keeps
+        it after the window closes, so Enter would go to the browser. The
+        terminal app's bundle ID is in the environment macOS gives programs
+        it starts; ``open -b`` brings that app forward without a permission
+        prompt. Elsewhere, or without the ID, nothing happens.
+        """
+
+        return_focus_to_terminal(visible=self.visible)
+
     def break_it(self) -> BreakFacts:
         """Rerun the same program while the database rejects the save."""
 
@@ -470,6 +482,26 @@ class FlowEngine:
         return demo_proof.write_demo_page(evidence)
 
 
+def return_focus_to_terminal(
+    *, visible: bool, platform: Optional[str] = None, environ=None, run=None
+) -> bool:
+    """Bring the terminal app forward on macOS after a visible browser ran."""
+
+    import os
+    import subprocess
+    import sys
+
+    env = os.environ if environ is None else environ
+    bundle = env.get("__CFBundleIdentifier", "")
+    if not visible or (platform or sys.platform) != "darwin" or not bundle:
+        return False
+    try:
+        (run or subprocess.run)(["open", "-b", bundle], check=False, timeout=5)
+    except Exception:  # noqa: BLE001 - focus is a convenience only
+        return False
+    return True
+
+
 def display_available() -> bool:
     """True when a browser window (or tab) is likely to reach a person."""
 
@@ -496,4 +528,5 @@ __all__ = [
     "display_available",
     "open_page",
     "read_screen_text",
+    "return_focus_to_terminal",
 ]

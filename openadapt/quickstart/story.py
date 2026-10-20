@@ -60,6 +60,8 @@ class Engine(Protocol):
 
     def run(self, index: int, note: Optional[str]) -> RunFacts: ...
 
+    def before_prompt(self) -> None: ...
+
     def break_it(self) -> BreakFacts: ...
 
     def seal(self, runs: list[RunFacts]) -> Optional[SealFacts]: ...
@@ -226,6 +228,7 @@ def run_story(
             view.break_setup()
             if interactive:
                 waited = clock()
+                engine.before_prompt()
                 view.confirm("Press Enter to make the next save fail silently")
                 paused += clock() - waited
             with view.breaking():

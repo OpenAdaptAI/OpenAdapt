@@ -170,6 +170,9 @@ class FakeEngine:
         self.calls.append(f"run {index}")
         return _run(self.root, index, **self._runs.get(index, {}))
 
+    def before_prompt(self):
+        self.calls.append("before prompt")
+
     def break_it(self):
         self.calls.append("break")
         return _broken(self.root, **self._broken)
@@ -416,6 +419,33 @@ def test_a_terminal_gets_the_prompt_and_waiting_is_not_counted(root, monkeypatch
     assert "Press Enter to make the next save fail silently" in stream.getvalue()
     # 106 s elapsed, 100 s of it waiting at the prompt.
     assert outcome.total_seconds == pytest.approx(6.0)
+
+
+@pytest.mark.parametrize(
+    ("visible", "platform", "environ", "opened"),
+    [
+        (True, "darwin", {"__CFBundleIdentifier": "com.apple.Terminal"}, True),
+        (False, "darwin", {"__CFBundleIdentifier": "com.apple.Terminal"}, False),
+        (True, "linux", {"__CFBundleIdentifier": "com.apple.Terminal"}, False),
+        (True, "darwin", {}, False),
+    ],
+)
+def test_focus_returns_to_the_terminal_before_the_prompt(
+    visible, platform, environ, opened
+):
+    from openadapt.quickstart.engine import return_focus_to_terminal
+
+    calls = []
+    assert (
+        return_focus_to_terminal(
+            visible=visible,
+            platform=platform,
+            environ=environ,
+            run=lambda argv, **kw: calls.append(argv),
+        )
+        is opened
+    )
+    assert calls == ([["open", "-b", "com.apple.Terminal"]] if opened else [])
 
 
 def test_end_of_input_at_the_prompt_continues(root, monkeypatch):
