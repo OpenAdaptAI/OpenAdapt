@@ -3327,17 +3327,23 @@ class Replayer:
     ) -> RunReport:
         """Apply a finished deferred read-back to the saved item report."""
 
-        self._copy_pipelined_evidence(entry, error)
-        error = self._settle_durable_readback(entry, error)
-        if error is not None:
-            self._apply_pipelined_verdict(report, error, entry=entry)
-        else:
-            # The execution completed; it was held unsuccessful only until the
-            # read-back confirmed. Re-derive the outcome from that evidence.
-            report.execution_completed = True
-            report.success = True
-        self._stamp_execution_outcome(report, workflow, run_dir)
-        self._stamp_approval(report)
+        try:
+            self._copy_pipelined_evidence(entry, error)
+            error = self._settle_durable_readback(entry, error)
+            if error is not None:
+                self._apply_pipelined_verdict(report, error, entry=entry)
+            else:
+                # The execution completed; it was held unsuccessful only until
+                # the read-back confirmed. Re-derive the outcome from that
+                # evidence.
+                report.execution_completed = True
+                report.success = True
+            self._stamp_execution_outcome(report, workflow, run_dir)
+        finally:
+            # The held approval decision is always made, even when settling
+            # fails: the report then still says unsuccessful, so the item goes
+            # to a person, and it never stays held open for the next item.
+            self._stamp_approval(report)
         report.save(run_dir)
         return report
 
