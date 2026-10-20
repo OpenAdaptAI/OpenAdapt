@@ -8245,8 +8245,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--held-out",
         action="store_true",
         help=(
-            "Also run leave-one-out held-out validation and print the per-fold "
-            "reproduction scores (needs >= 2 traces)"
+            "Also print the leave-one-out STRUCTURAL held-out coverage (needs "
+            ">= 2 traces). It compares program shape with each held-out trace, "
+            "executes nothing and checks neither identity nor effects; for a "
+            "generalization claim use openadapt_flow.validation."
+            "behavioral_generalization, which runs held-out items"
         ),
     )
     p.add_argument(

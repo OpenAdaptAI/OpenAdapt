@@ -1,0 +1,126 @@
+"""Behavioral held-out score: classes, summary, and execution through the replayer."""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import pytest
+
+from openadapt_flow.validation import behavioral_generalization as bg
+
+
+@pytest.mark.parametrize(
+    ("engine", "independent", "expected"),
+    [
+        ("VERIFIED", "VERIFIED", "generalized"),
+        ("TransactionOutcome.VERIFIED", "VERIFIED", "generalized"),
+        ("VERIFIED", "WRONG", "silent_wrong"),
+        ("VERIFIED", "MISSING", "silent_wrong"),
+        ("HALTED_BEFORE_EFFECT", "MISSING", "halted_safely"),
+        ("RECONCILIATION_REQUIRED", "MISSING", "halted_safely"),
+        ("RECONCILIATION_REQUIRED", "WRONG", "wrong_effect"),
+        ("HALTED_BEFORE_EFFECT", "VERIFIED", "wrong_effect"),
+        ("ERROR", "MISSING", "error"),
+        ("ERROR", "WRONG", "wrong_effect"),
+        ("VERIFIED", None, "generalized"),
+        ("HALTED_BEFORE_EFFECT", None, "halted_safely"),
+    ],
+)
+def test_classify_case(engine, independent, expected):
+    assert bg.classify_case(engine, independent) == expected
+
+
+def _case(cls, independent="VERIFIED"):
+    return bg.HeldOutCaseResult(
+        inputs_sha256="0" * 64, engine_outcome="X", independent=independent, case_class=cls
+    )
+
+
+def test_summary_counts_and_generalizes():
+    good = bg.summarize([_case("generalized")] * 3)
+    assert good.score == 1.0 and good.generalizes and good.independent
+    assert "3/3" in good.render() and "independent check" in good.render()
+
+    mixed = bg.summarize([_case("generalized"), _case("silent_wrong", "WRONG")])
+    assert mixed.score == 0.5 and not mixed.generalizes and mixed.silent_wrong == 1
+
+    weak = bg.summarize([_case("generalized", None)])
+    assert weak.generalizes and not weak.independent
+    assert "engine read-back only" in weak.render()
+
+    assert not bg.summarize([]).generalizes
+
+
+def test_inputs_are_digested_not_stored():
+    a = bg.inputs_digest({"note": "x", "n": 1})
+    assert a == bg.inputs_digest({"n": "1", "note": "x"}) and len(a) == 64
+
+
+def test_score_held_out_executes_each_item(monkeypatch, tmp_path):
+    """Every item runs through the replayer with its own params and verifier."""
+
+    store: list[dict] = []
+    ran: list[dict] = []
+
+    class FakeReplayer:
+        def __init__(self, backend, *, effect_verifier, **kw):
+            self.verifier = effect_verifier
+
+        def run(self, workflow, *, params, bundle_dir, run_dir):
+            ran.append(dict(params))
+            # The program writes the note; "bad" writes to the wrong patient.
+            pid = "p2" if params["note"] == "bad" else "p1"
+            store.append({"note": params["note"], "patient_id": pid})
+            ok = self.verifier == params["note"]
+            return SimpleNamespace(
+                transaction_outcome="VERIFIED" if ok else "HALTED_BEFORE_EFFECT",
+                execution_outcome=None,
+                results=[SimpleNamespace(step_id="s1", ok=ok)],
+                model_calls=0,
+            )
+
+    monkeypatch.setattr("openadapt_flow.runtime.Replayer", FakeReplayer)
+    monkeypatch.setattr(
+        "openadapt_flow.ir.Workflow.load",
+        classmethod(lambda cls, path: SimpleNamespace(model_copy=lambda deep: None)),
+    )
+    closed = []
+
+    def open_session():
+        return object(), lambda: closed.append(1)
+
+    def independent(item, before, after):
+        new = after[len(before):]
+        mine = [r for r in new if r["note"] == item["note"]]
+        if not mine:
+            return "MISSING"
+        return "VERIFIED" if mine[0]["patient_id"] == "p1" else "WRONG"
+
+    result = bg.score_held_out(
+        tmp_path,
+        [{"note": "a"}, {"note": "b"}, {"note": "bad"}],
+        open_session=open_session,
+        make_verifier=lambda params: params["note"],
+        run_root=tmp_path / "runs",
+        independent=independent,
+        snapshot=lambda: list(store),
+    )
+    assert [p["note"] for p in ran] == ["a", "b", "bad"]
+    assert len(closed) == 3
+    assert result.generalized == 2 and result.silent_wrong == 1
+    assert not result.generalizes and result.independent
+
+
+def test_independent_needs_snapshot(tmp_path):
+    with pytest.raises(ValueError):
+        bg.score_held_out(
+            tmp_path, [], open_session=lambda: None, make_verifier=lambda p: None,
+            run_root=tmp_path, independent=lambda *a: "VERIFIED",
+        )
+
+
+def test_structural_score_stays_labelled_structural():
+    from openadapt_flow.compiler.induction import HeldOutValidation
+
+    text = HeldOutValidation(per_trace=[1.0], mean=1.0, n_traces=2).render()
+    assert "STRUCTURAL" in text and "NOT behavioral" in text
