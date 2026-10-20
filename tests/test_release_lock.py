@@ -169,7 +169,10 @@ def test_release_workflow_app_creates_only_an_exact_reviewed_tag():
 
     candidate = next(step for step in create["steps"] if step.get("id") == "candidate")
     assert 'GITHUB_REF" != "refs/heads/main' in candidate["run"]
-    assert 'current_main" != "$GITHUB_SHA' in candidate["run"]
+    assert (
+        'git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main'
+        in candidate["run"]
+    )
     assert 'REQUESTED_VERSION" != "$project_version' in candidate["run"]
     assert "CHANGELOG.md must start with" in candidate["run"]
     assert "scripts/verify_release_hosting.py" in candidate["run"]
@@ -184,7 +187,9 @@ def test_release_workflow_app_creates_only_an_exact_reviewed_tag():
     refresh_index = tag["run"].index(
         "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main"
     )
-    compare_index = tag["run"].index('current_main" != "$GITHUB_SHA')
+    compare_index = tag["run"].index(
+        'git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main'
+    )
     create_index = tag["run"].index('git tag -a "$RELEASE_TAG" "$GITHUB_SHA"')
     push_index = tag["run"].index('git push origin "refs/tags/$RELEASE_TAG"')
     assert refresh_index < compare_index < create_index < push_index
@@ -192,7 +197,7 @@ def test_release_workflow_app_creates_only_an_exact_reviewed_tag():
     assert 'git push origin "refs/tags/$RELEASE_TAG"' in tag["run"]
 
 
-def test_release_workflow_rechecks_main_immediately_before_the_app_tag_push():
+def test_release_workflow_rechecks_main_history_immediately_before_the_app_tag_push():
     workflow_path = ROOT / ".github/workflows/release-and-publish.yml"
     document = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
     create = document["jobs"]["create-release-tag"]
@@ -205,14 +210,17 @@ def test_release_workflow_rechecks_main_immediately_before_the_app_tag_push():
     )
 
     # The candidate check alone is not sufficient. main can advance before the
-    # separate tag-push step starts, so that step must get and compare main too.
+    # separate tag-push step starts, so that step must fetch main and confirm the
+    # candidate is still on its history.
     assert "git fetch --no-tags origin" in candidate["run"]
     assert "git fetch --no-tags origin" in tag["run"]
-    assert 'current_main="$(git rev-parse refs/remotes/origin/main)"' in tag["run"]
-    assert 'current_main" != "$GITHUB_SHA' in tag["run"]
-    assert tag["run"].rindex('current_main" != "$GITHUB_SHA') < tag["run"].index(
-        'git push origin "refs/tags/$RELEASE_TAG"'
+    assert (
+        'git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main'
+        in tag["run"]
     )
+    assert tag["run"].rindex(
+        'git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main'
+    ) < tag["run"].index('git push origin "refs/tags/$RELEASE_TAG"')
 
 
 def test_release_workflow_checks_the_platform_selection_before_any_release_write():

@@ -45,10 +45,10 @@ self-repair are still refused, each with its reason below.
 
 | Feature | Default (gated) | Durable | Governed | Pinned | Qualified | Managed |
 | --- | --- | --- | --- | --- | --- | --- |
-| API step | Works | Works | Works | Works | Refused | Refused |
+| API step | Works | Works | Works | Works | Works | Works |
 | Pipelined read-back | Works | Refused | Refused | Works | Refused | Refused |
-| Self-repair | Works | Works | Works | Refused | Refused | Refused |
-| Standard changes | Works | Works | Works | Refused | Refused | Refused |
+| Self-repair | Works | Works | Works | Works | Refused | Refused |
+| Standard changes | Works | Works | Works | Works | Refused | Refused |
 | Parallel workers | Works | Works | Works | Works | Works | Refused |
 | Multi-surface | Works | Works | Works | Works | Works | Works |
 
@@ -65,8 +65,8 @@ refuses says it in those words.
 | Durable | Works: a save that may have landed is never resent |
 | Governed | Works: needs `api admit --identity` |
 | Pinned | Works: the pin is checked before the run |
-| Qualified | Refused: a production qualification admission doesn't cover API steps yet, so the qualified GUI path runs |
-| Managed | Refused: a managed dispatch doesn't bind API steps yet |
+| Qualified | Works: when the signed admission's qualified effect contract names the save's API path; otherwise the qualified GUI path runs and says why |
+| Managed | Works: Cloud's authorization names the API step, and each send still needs Cloud's delivery permit |
 
 ### Pipelined read-back
 
@@ -86,9 +86,9 @@ refuses says it in those words.
 | Default (gated) | Works |
 | Durable | Works: self-repair always runs durable |
 | Governed | Works: Standard contract through the Python API |
-| Pinned | Refused: --pin-digest pins the original bundle |
-| Qualified | Refused: a signed qualification admission binds the original bundle; the approved bundle needs its own admission |
-| Managed | Refused: a managed dispatch binds the original bundle |
+| Pinned | Works: needs repair.requalify: the fix is re-qualified on a test copy and re-admitted with signed lineage, and the pin accepts that new version |
+| Qualified | Refused: a production qualification admission is signed by the qualification authority, so a repaired bundle waits for that authority's signature |
+| Managed | Refused: a managed dispatch is Cloud's authorization for one bundle, so a repaired bundle runs only on a new dispatch from Cloud |
 
 ### Standard changes
 
@@ -97,9 +97,9 @@ refuses says it in those words.
 | Default (gated) | Works: needs a signed repair policy |
 | Durable | Works: needs a signed repair policy |
 | Governed | Works: needs a signed repair policy |
-| Pinned | Refused: --pin-digest pins the original bundle |
-| Qualified | Refused: a signed qualification admission binds the original bundle; the approved bundle needs its own admission |
-| Managed | Refused: a managed dispatch binds the original bundle |
+| Pinned | Works: needs repair.requalify, as self-repair |
+| Qualified | Refused: a production qualification admission is signed by the qualification authority, so a repaired bundle waits for that authority's signature |
+| Managed | Refused: a managed dispatch is Cloud's authorization for one bundle, so a repaired bundle runs only on a new dispatch from Cloud |
 
 ### Parallel workers
 
@@ -116,7 +116,7 @@ refuses says it in those words.
 
 | Profile | Result |
 | --- | --- |
-| Default (gated) | Works: an API step inside it runs on the GUI (below) |
+| Default (gated) | Works: an API step inside it runs on its surface (below) |
 | Durable | Works: resume re-binds each surface by identity |
 | Governed | Works |
 | Pinned | Works |
@@ -131,7 +131,7 @@ refuses says it in those words.
 | Pipelined read-back | Works: when the run isn't durable |
 | Self-repair | Refused: self-repair's probes and resumed run exercise the repaired GUI step, and the person approved that step, so its API step doesn't run (the first, ordinary run can use the API step) |
 | Standard changes | Refused: self-repair's probes and resumed run exercise the repaired GUI step, and the person approved that step, so its API step doesn't run (the repaired bundle's test-record run is GUI-only too) |
-| Multi-surface | Refused: a run across several windows or tabs uses the GUI steps |
+| Multi-surface | Works: the steps it replaces stay on one browser surface, on its origin |
 
 ## Evidence
 
@@ -141,8 +141,8 @@ Each cell names the tests that show it. They run in CI.
 - API step / Durable: `tests/test_api_step_durable.py::test_a_durable_run_uses_the_api_step_and_checkpoints_after_it`, `tests/test_api_step_durable.py::test_an_uncertain_send_is_never_resent_by_resume`
 - API step / Governed: `tests/test_api_step_governed.py::test_the_default_profile_runs_the_admitted_api_step`
 - API step / Pinned: `tests/test_compatibility_matrix.py::test_api_step_runs_where_the_matrix_says`
-- API step / Qualified: `tests/test_compatibility_matrix.py::test_api_step_refuses_where_the_matrix_says`
-- API step / Managed: `tests/test_compatibility_matrix.py::test_api_step_refuses_where_the_matrix_says`
+- API step / Qualified: `tests/test_api_step_qualified.py::test_the_api_step_runs_when_the_admission_qualified_its_path`, `tests/test_api_step_qualified.py::test_a_gui_only_qualification_keeps_the_qualified_gui_path`, `tests/test_api_step_qualified.py::test_a_qualification_case_runs_the_path_its_contract_names`
+- API step / Managed: `tests/test_api_step_managed.py::test_the_api_step_runs_when_clouds_authorization_admits_it`, `tests/test_api_step_managed.py::test_without_clouds_admission_the_gui_steps_run_and_say_why`
 - Pipelined read-back / Default (gated): `tests/test_readback_pipeline.py::test_confirmed_readback_settles_the_saved_report`, `tests/test_api_step_readback_repair.py::test_an_api_save_reads_back_while_the_next_item_runs`, `tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says`
 - Pipelined read-back / Durable: `tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says`
 - Pipelined read-back / Governed: `tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says`
@@ -152,13 +152,13 @@ Each cell names the tests that show it. They run in CI.
 - Self-repair / Default (gated): `tests/test_self_repair_cli.py::test_run_self_repair_cli_resumes_after_one_phone_tap`, `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
 - Self-repair / Durable: `tests/test_self_repair.py::test_renamed_button_is_repaired_approved_on_the_phone_and_verified`
 - Self-repair / Governed: `tests/test_self_repair.py::test_renamed_button_is_repaired_approved_on_the_phone_and_verified`
-- Self-repair / Pinned: `tests/test_self_repair_cli.py::test_run_self_repair_refuses_a_pinned_bundle`, `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
+- Self-repair / Pinned: `tests/test_self_repair_cli.py::test_run_self_repair_refuses_a_pinned_bundle`, `tests/test_repair_readmission.py::test_a_repair_is_requalified_and_readmitted_with_lineage`, `tests/test_repair_readmission.py::test_a_pin_accepts_only_a_verified_descendant`, `tests/test_repair_readmission.py::test_a_repair_that_fails_requalification_is_refused`, `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
 - Self-repair / Qualified: `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
 - Self-repair / Managed: `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
 - Standard changes / Default (gated): `tests/test_standard_change.py::test_relabelled_link_is_repaired_without_a_person`
 - Standard changes / Durable: `tests/test_standard_change.py::test_relabelled_link_is_repaired_without_a_person`
 - Standard changes / Governed: `tests/test_standard_change.py::test_relabelled_link_is_repaired_without_a_person`
-- Standard changes / Pinned: `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
+- Standard changes / Pinned: `tests/test_repair_readmission.py::test_a_repair_is_requalified_and_readmitted_with_lineage`, `tests/test_repair_readmission.py::test_a_pin_accepts_only_a_verified_descendant`, `tests/test_repair_readmission.py::test_a_repair_that_fails_requalification_is_refused`, `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
 - Standard changes / Qualified: `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
 - Standard changes / Managed: `tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says`
 - Parallel workers / Default (gated): `tests/test_cli_worklist_pool.py::test_two_workers_split_the_items_one_row_each`, `tests/test_compatibility_matrix.py::test_the_worklist_pool_where_the_matrix_says`
@@ -177,4 +177,4 @@ Each cell names the tests that show it. They run in CI.
 - API step / Pipelined read-back: `tests/test_api_step_readback_repair.py::test_an_api_save_reads_back_while_the_next_item_runs`
 - API step / Self-repair: `tests/test_api_step_readback_repair.py::test_a_probe_or_resumed_run_never_sends_the_api_step`
 - API step / Standard changes: `tests/test_api_step_readback_repair.py::test_a_standard_change_test_record_run_is_gui_only`
-- API step / Multi-surface: `tests/test_compatibility_matrix.py::test_api_step_refuses_in_a_multi_surface_run`
+- API step / Multi-surface: `tests/test_api_step_multi_surface.py::test_the_api_step_runs_on_its_surface_in_a_governed_multi_surface_run`, `tests/test_api_step_multi_surface.py::test_the_session_must_be_on_the_surfaces_origin`, `tests/test_api_step_multi_surface.py::test_a_span_that_leaves_its_surface_runs_on_the_gui`
