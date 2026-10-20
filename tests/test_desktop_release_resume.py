@@ -125,3 +125,23 @@ def test_a_resume_reverifies_the_draft_and_pypi_before_publishing() -> None:
 def test_the_pypi_check_compares_against_the_attested_sha256sums() -> None:
     run = _steps("publish-pypi")["Require PyPI to serve exactly these bytes"]["run"]
     assert "--directory pypi-dist --checksums release-assets/SHA256SUMS" in run
+
+
+def test_a_resume_is_bound_to_the_tag_not_to_mains_current_tree() -> None:
+    # Desktop changes merged after 0.22.0 must not block its resume: the
+    # resume publishes bytes already built and attested for the tag's commit.
+    # Only a new release requires main's Desktop tree to be unchanged.
+    gate = _steps("gate")
+    for name in (
+        "Require one version everywhere, its changelog, and a new tag in order",
+        "Choose the commit whose checks decide the release",
+        "Wait for that commit's Packages run and its desktop jobs",
+        "Require that main has not changed Desktop since that commit",
+    ):
+        assert gate[name]["if"] == "steps.state.outputs.release == 'true'", name
+    branch = _resume_branch()
+    assert "git diff" not in branch
+    assert "GITHUB_SHA" not in branch
+    run = _steps("publish")[RESUME]["run"]
+    assert "GITHUB_SHA" not in run
+    assert "git diff" not in run
