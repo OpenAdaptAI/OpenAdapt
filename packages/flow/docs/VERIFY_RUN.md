@@ -80,34 +80,88 @@ unless given, and when present they are signed with the rest of the receipt.
 
 ## Records outside the target
 
-With a baseline, a `record_written` check also refutes when a record that
-was there before the agent started and is not the target has changed
-(`forbid_collateral_change`), not only when it is gone
-(`forbid_collateral_loss`). The agent's write can be right while it also
-edited another patient's record in place, and only the baseline shows that.
-verify-run turns this on for every `record_written` effect when it judges.
-The contract in the file is unchanged, so its digest is still the one qualify
-reports, and `evidence.readback.effects[].collateral_change_checked` says the
-check ran. To skip it for one effect, for example when the read covers a
-table other people edit during the run, set `forbid_collateral_change: false`
-on that effect in `effects:`. Fields that change on their own, such as a
-modification time, belong in the verifier's `records_drop_fields`.
+With a baseline, verify-run also proves that nothing outside the declared
+delta changed: no record that the effects don't name was added, removed or
+edited, and a pre-existing target changed only in the fields the effects
+name. This is the frame check ([`VERIFICATION_COVERAGE.md`](VERIFICATION_COVERAGE.md)).
+It reads the same read set the effects use, once after the save, and judges
+the whole contract at once, so two effects on one read set never flag each
+other's targets. The agent's write can be right while it also edited another
+patient's record in place, and only the baseline shows that.
 
-A changed record is not proof that the executor changed it: another user may
-have edited it during the run. The verdict says so, and the outcome is
-`reconciliation_required`, so a person checks the record before anything is
+Without a baseline the frame can't be checked, and the run is not
+`verified`.
+
+A `frame:` section says how records are compared and who may change them:
+
+```yaml
+frame:
+  identity_field: pid        # default: id, else the whole record
+  ignore_fields: [date]      # fields that change on their own
+  target_fields: [phone_home]  # default: the fields the effects name
+  attribution:               # optional
+    kind: audit_read         # or record_field
+    actor_field: user
+    record_field: patient_id
+    self: [{param: bot_user}]  # the bot's own user or session ids
+    read:                    # a second read-only read: the app's audit log
+      kind: sql
+      sql_driver: pymysql
+      sql_query: SELECT id, user, patient_id FROM log WHERE event LIKE 'patient-record-%'
+```
+
+Each change outside the declared delta is attributed. A change that the
+audit log (`audit_read`) or the record's own modified-by field with a new
+version (`record_field`) attributes to another user is a concurrent edit: it
+is listed in `evidence.frame.concurrent_count` and does not count against the
+save. A change by one of the bot's own ids, or one nothing explains, is
+collateral, and the outcome is `reconciliation_required`. With `audit_read`,
+a log entry by the bot for a record no effect names is collateral too, even
+when the read shows no change.
+
+Without `attribution`, every change outside the delta is collateral. A
+change is not proof that the executor made it: another user may have edited
+the record during the run. A person checks the record before anything is
 retried or undone. Values compare by type. A `Decimal` or `datetime` read
 from a database equals the JSON form the baseline stored it in, while two
 strings compare exactly, so `"02139"` changed to `"2139"` is a change.
+
+When the frame is judged, the per-effect collateral rules
+(`forbid_collateral_loss`, `forbid_collateral_change`) apply only where the
+file sets them explicitly; the frame covers the rest. Without a baseline,
+`forbid_collateral_change` is turned on as before, though it can't refute
+without a baseline either.
+
+## What the receipt says was checked
+
+The receipt's `checked` field names each part of the claim behind
+`verified` and how it came out:
+
+```json
+"checked": {"delta": "held", "frame": "held", "source": "instruction"}
+```
+
+- `delta`: the declared records, read from the system of record.
+- `frame`: nothing else in the read set changed.
+- `source`: the inputs match their source. `instruction` means the inputs
+  were the task's own parameters (`--params`), with no document behind them.
+
+Each part is `held`, `refuted` or `not_checked`. `verified` requires `delta`
+and `frame` to be `held` and `source` to be `held` or `instruction`. The
+field is inside `receipt_sha256`, so a Seal signs it. `evidence.frame` holds
+the counts behind the frame part (records compared, collateral, concurrent)
+and the digest of the `frame:` section. A receipt issued before the field
+existed has neither and still checks.
 
 ## Verdicts
 
 | What the store shows | `effect_verdict` | `outcome` |
 |---|---|---|
-| The declared record, exactly once, through a system-of-record read | `CONFIRMED` | `verified` |
+| The declared record, exactly once, through a system-of-record read, and nothing else in the read set changed | `CONFIRMED` | `verified` |
+| The declared record, but no baseline, so the frame can't be checked | `CONFIRMED` | `reconciliation_required` |
 | The same, but the executor approved its own write | `CONFIRMED` | `rejected_policy` |
-| Nothing that matches | `REFUTED` | `halted_before_effect` |
-| A duplicate, a wrong value, only some of the effects, or another record that vanished or changed | `REFUTED` | `reconciliation_required` |
+| Nothing that matches, and nothing else in the read set moved | `REFUTED` | `halted_before_effect` |
+| A duplicate, a wrong value, only some of the effects, or a record outside the delta that was added, vanished or changed | `REFUTED` | `reconciliation_required` |
 | The store could not be read, no baseline, or a separate-session read | `INDETERMINATE` or `CONFIRMED` | `reconciliation_required` |
 
 Only a read through the system of record produces `verified`. A screen
