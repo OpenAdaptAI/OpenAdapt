@@ -91,9 +91,6 @@ def arm_economics(rows: list[dict[str, Any]], arm: str, cm: dict[str, Any], labo
     ops = [r for r in mine if r["type"] == "operator"]
     setup = [r for r in mine if r["type"] == "phase" and r.get("stage") == "setup"]
     maint = [r for r in mine if r["type"] == "phase" and r.get("stage") == "maintenance"]
-    for it in items:
-        for p in (it.get("detail") or {}).get("maintenance_phases", []) or []:
-            maint.append({**p, "stage": "maintenance", "item_id": it["item_id"]})
     drifts = [r for r in mine if r["type"] == "drift_applied"]
     describe = next((r.get("describe") for r in mine if r["type"] == "arm_start"), {}) or {}
 

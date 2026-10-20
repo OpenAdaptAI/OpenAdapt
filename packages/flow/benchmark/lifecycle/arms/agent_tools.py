@@ -147,6 +147,7 @@ class AgentToolsArm:
     name = "agent_tools"
 
     def __init__(self, options: dict[str, Any]) -> None:
+        self.name = str(options.get("name", self.name))
         self.model = options.get("model", "claude-fable-5-1")
         self.effort = options.get("effort", "medium")
         self.max_turns = int(options.get("max_turns", 40))
@@ -320,7 +321,7 @@ class AgentToolsArm:
         )
 
     def _loop(self, item: WorkItem, meter: budget.Meter, trace: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, int]:
-        client = budget.client()
+        client = budget.client(self.model)
         messages: list[dict[str, Any]] = [
             {"role": "user", "content": SOP.replace(
                 "End your final reply with exactly one line, either\nRESULT: SAVED\nor\nRESULT: NOT SAVED: <one-sentence reason>",

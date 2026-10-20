@@ -245,7 +245,7 @@ def tools_policy(params: dict[str, str]) -> Callable[[list[dict[str, Any]]], lis
 
 
 def test_agent_tools_registers_and_meters(tmp_path, spend, app, monkeypatch):
-    monkeypatch.setattr(budget, "client", lambda: FakeClient(tools_policy(NADIA)))
+    monkeypatch.setattr(budget, "client", lambda *a: FakeClient(tools_policy(NADIA)))
     arm = agent_tools.factory({"model": "claude-opus-5-5"})
     env, op = mock_env(app, tmp_path), Op()
     try:
@@ -263,7 +263,7 @@ def test_agent_tools_registers_and_meters(tmp_path, spend, app, monkeypatch):
 
 
 def test_agent_tools_stops_on_an_existing_chart(tmp_path, spend, app, monkeypatch):
-    monkeypatch.setattr(budget, "client", lambda: FakeClient(tools_policy(ROSA)))
+    monkeypatch.setattr(budget, "client", lambda *a: FakeClient(tools_policy(ROSA)))
     arm = agent_tools.factory({})
     env, op = mock_env(app, tmp_path), Op()
     try:
@@ -277,7 +277,7 @@ def test_agent_tools_stops_on_an_existing_chart(tmp_path, spend, app, monkeypatc
 
 def test_item_budget_turns_into_a_stop(tmp_path, spend, app, monkeypatch):
     monkeypatch.setattr(
-        budget, "client", lambda: FakeClient(lambda m: [tool_use("read_screen", {})])
+        budget, "client", lambda *a: FakeClient(lambda m: [tool_use("read_screen", {})])
     )
     arm = agent_tools.factory({"item_budget_usd": 0.02})
     env, op = mock_env(app, tmp_path), Op()
@@ -297,7 +297,9 @@ def test_cua_reads_the_result_line(tmp_path, spend, app, monkeypatch):
             [text("All done.\nRESULT: NOT SAVED: test stand-in")],
         ]
     )
-    monkeypatch.setattr(budget, "client", lambda: FakeClient(lambda m: next(replies)))
+    monkeypatch.setattr(
+        budget, "client", lambda *a: FakeClient(lambda m: next(replies))
+    )
     arm = cua.factory({"model": "claude-opus-5-5"})
     env, op = mock_env(app, tmp_path), Op()
     try:
@@ -336,11 +338,11 @@ def script_policy(
 def test_agent_script_authors_runs_and_maintains(tmp_path, spend, app, monkeypatch):
     sources = {0: V1, 1: V1, 2: V2, 3: V2}
     monkeypatch.setattr(
-        budget, "client", lambda: FakeClient(script_policy(lambda t: sources[t]))
+        budget, "client", lambda *a: FakeClient(script_policy(lambda t: sources[t]))
     )
     # One client per session loop; keep the turn counter across both loops.
     shared = FakeClient(script_policy(lambda t: sources[t]))
-    monkeypatch.setattr(budget, "client", lambda: shared)
+    monkeypatch.setattr(budget, "client", lambda *a: shared)
     arm = agent_script.factory({"model": "claude-opus-5-5"})
     env, op = mock_env(app, tmp_path), Op()
     try:
@@ -361,7 +363,7 @@ def test_agent_script_authors_runs_and_maintains(tmp_path, spend, app, monkeypat
     finally:
         arm.close()
     assert second.claimed == "done", second.product_status
-    m = second.detail["maintenance_phases"]
+    m = second.phases
     assert len(m) == 1 and m[0]["detail"]["accepted"] and m[0]["cost_usd"] > 0
     assert [r.kind for r in op.asked] == ["repair_review"]
     assert (tmp_path / "agent_script" / "script_v2.py").is_file()

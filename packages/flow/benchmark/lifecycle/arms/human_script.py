@@ -46,6 +46,7 @@ class HumanScriptArm:
     name = "human_script"
 
     def __init__(self, options: dict[str, Any]) -> None:
+        self.name = str(options.get("name", self.name))
         self.version = str(options.get("version", "v1"))
         self.headless = bool(options.get("headless", True))
         self.session: Optional[OpenEMRSession] = None

@@ -121,6 +121,14 @@ def run(source: str, session: Any, rest: Any, referral: dict[str, str], *, commi
         return RunOutcome("ERROR", "".join(tb[-3:])[-1500:], time.time() - t0, ctx.lines, blocked["n"])
     finally:
         if not commit:
+            # The confirm click may submit after the script returned. Keep the
+            # block on for a few seconds, then reload the shell so no pending
+            # submit survives, and only then lift the block.
+            try:
+                page.wait_for_timeout(5000)
+                page.reload(wait_until="domcontentloaded")
+            except Exception:  # noqa: BLE001
+                pass
             try:
                 page.unroute(f"**/*{SAVE_URL_PART}*")
             except Exception:  # noqa: BLE001

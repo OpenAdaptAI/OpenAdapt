@@ -107,6 +107,7 @@ class AgentScriptArm:
     name = "agent_script"
 
     def __init__(self, options: dict[str, Any]) -> None:
+        self.name = str(options.get("name", self.name))
         self.model = options.get("model", "claude-opus-5-5")
         self.effort = options.get("effort", "high")
         self.author_budget_usd = float(options.get("author_budget_usd", 4.0))
@@ -164,7 +165,7 @@ class AgentScriptArm:
     def _session_loop(self, opening: str, meter: budget.Meter, trace: list[dict[str, Any]]) -> tuple[Optional[str], list[dict[str, Any]]]:
         """Run the authoring agent until it submits. Returns (source, dry runs)."""
 
-        client = budget.client()
+        client = budget.client(self.model)
         messages: list[dict[str, Any]] = [{"role": "user", "content": opening}]
         dry_runs: list[dict[str, Any]] = []
         for turn in range(1, self.max_turns + 1):
@@ -350,10 +351,10 @@ class AgentScriptArm:
             model_calls=0,
             cost_usd=0.0,
             evidence=f"{self.name}/",
+            phases=phases,
             detail={
                 "attempts": attempts,
                 "script_version": self.version,
-                "maintenance_phases": phases,
                 "maintenance_cost_usd": round(maint_cost, 6),
                 "usage": [],
                 "compute_usd": round(budget.compute_usd(sum(a["s"] for a in attempts)), 6),

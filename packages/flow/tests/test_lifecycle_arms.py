@@ -137,11 +137,17 @@ def _rows():
                 "charged_s": 300.0,
             }
         )
-    rows[-2]["detail"] = {
-        "maintenance_phases": [
-            {"phase": "fix_script", "cost_usd": 0.4, "attended_s": 0}
-        ]
-    }
+    # The runner writes an arm's in-item maintenance as a maintenance phase row.
+    rows.append(
+        {
+            "type": "phase",
+            "stage": "maintenance",
+            "arm": "b",
+            "phase": "fix_script",
+            "cost_usd": 0.4,
+            "attended_s": 0,
+        }
+    )
     return rows
 
 

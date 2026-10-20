@@ -44,6 +44,7 @@ class CuaArm:
     name = "cua_alone"
 
     def __init__(self, options: dict[str, Any]) -> None:
+        self.name = str(options.get("name", self.name))
         self.model = options.get("model", "claude-fable-5-1")
         self.effort = options.get("effort", "medium")
         self.max_turns = int(options.get("max_turns", 40))
@@ -145,7 +146,7 @@ class CuaArm:
         )
 
     def _loop(self, item: WorkItem, computer: Any, meter: budget.Meter, evidence: Path) -> tuple[str, int]:
-        client = budget.client()
+        client = budget.client(self.model)
         tools = [
             {
                 "type": "computer_toolset_20260801",
