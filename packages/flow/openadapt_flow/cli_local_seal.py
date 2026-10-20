@@ -16,38 +16,65 @@ def _home(args: argparse.Namespace) -> Path:
     return Path(args.home).expanduser() if args.home else seal_home()
 
 
+def _signer(args: argparse.Namespace) -> Any:
+    """The configured Seal key. Raises LocalSealError when it can't be opened."""
+    from openadapt_flow.offline_seal import LocalSealError, signer_for
+    from openadapt_flow.seal_keys import KeyUnavailable
+
+    signer = signer_for(_home(args), spec=args.key)
+    try:
+        signer.public_raw()  # a token or keychain that can't answer stops here
+    except KeyUnavailable as exc:
+        raise LocalSealError(exc.code, str(exc)) from exc
+    return signer
+
+
 def _registry(args: argparse.Namespace) -> Any:
     from openadapt_types.seal import parse_key_registry
 
-    from openadapt_flow.offline_seal import load_registry, public_key_entry
+    from openadapt_flow.offline_seal import load_registry
 
     if args.keys:
         return load_registry(Path(args.keys))
-    # No pinned file: trust only this machine's own key, and say so.
+    # No pinned file: trust only the configured Seal key, and say so.
+    signer = _signer(args)
     print(
-        "keys: this machine's own Seal key (pass --keys to pin others)", file=sys.stderr
+        f"keys: this machine's Seal key ({signer.describe()}); "
+        "pass --keys to pin others",
+        file=sys.stderr,
     )
-    return parse_key_registry([public_key_entry(_home(args))])
+    return parse_key_registry([signer.registry_entry()])
+
+
+def _refused(exc: Any) -> int:
+    print(f"not sealed: {exc}", file=sys.stderr)
+    return 1
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
     from openadapt_flow.offline_seal import LocalSealError, seal_run
 
     try:
-        seal = seal_run(Path(args.run_dir), home=_home(args))
+        seal = seal_run(Path(args.run_dir), home=_home(args), signer=_signer(args))
     except LocalSealError as exc:
-        print(f"not sealed: {exc.code}", file=sys.stderr)
-        return 1
+        return _refused(exc)
     print(json.dumps(seal.wire(), indent=2, sort_keys=True))
     return 0
 
 
 def _cmd_file(args: argparse.Namespace) -> int:
-    from openadapt_flow.offline_seal import enqueue_for_batch, sign_file
+    from openadapt_flow.offline_seal import LocalSealError, enqueue_for_batch, sign_file
 
-    seal = sign_file(
-        Path(args.path), subject_kind=args.kind, run_id=args.run_id, home=_home(args)
-    )
+    try:
+        seal = sign_file(
+            Path(args.path),
+            subject_kind=args.kind,
+            run_id=args.run_id,
+            home=_home(args),
+            signer=_signer(args),
+        )
+    except LocalSealError as exc:
+        return _refused(exc)
     out = Path(args.out) if args.out else Path(str(args.path) + ".seal.json")
     out.write_text(
         json.dumps(seal.wire(), indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -58,9 +85,17 @@ def _cmd_file(args: argparse.Namespace) -> int:
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
-    from openadapt_flow.offline_seal import verify_local_seal, verify_run
+    from openadapt_flow.offline_seal import (
+        LocalSealError,
+        verify_local_seal,
+        verify_run,
+    )
 
-    registry = _registry(args)
+    try:
+        registry = _registry(args)
+    except LocalSealError as exc:
+        print(f"not valid: {exc}", file=sys.stderr)
+        return 1
     target = Path(args.target)
     if target.is_dir():
         result = verify_run(target, registry)
@@ -80,9 +115,90 @@ def _cmd_verify(args: argparse.Namespace) -> int:
 
 
 def _cmd_key(args: argparse.Namespace) -> int:
-    from openadapt_flow.offline_seal import public_key_entry
+    from openadapt_flow.offline_seal import LocalSealError
 
-    print(json.dumps({"keys": [public_key_entry(_home(args))]}, indent=2))
+    try:
+        signer = _signer(args)
+    except LocalSealError as exc:
+        print(f"no key: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps({"keys": [signer.registry_entry()]}, indent=2))
+    return 0
+
+
+def _cmd_key_create(args: argparse.Namespace) -> int:
+    from openadapt_flow.seal_keys import KeyUnavailable, create_key
+
+    if not args.key:
+        print(
+            "key create needs --key file:PATH or --key keychain:NAME", file=sys.stderr
+        )
+        return 2
+    try:
+        signer = create_key(args.key)
+    except KeyUnavailable as exc:
+        print(f"no key created: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps({"keys": [signer.registry_entry()]}, indent=2))
+    return 0
+
+
+def _read_registry_file(path: Path) -> list[dict[str, Any]]:
+    from openadapt_flow.offline_seal import load_registry
+
+    if not path.exists():
+        return []
+    load_registry(path)  # refuse to edit a registry that does not parse
+    data = json.loads(path.read_text(encoding="utf-8"))
+    entries = data.get("keys") if isinstance(data, dict) else data
+    return [dict(e) for e in entries or []]
+
+
+def _write_registry_file(path: Path, entries: list[dict[str, Any]]) -> None:
+    from openadapt_types.seal import parse_key_registry
+
+    parse_key_registry(entries)
+    path.write_text(json.dumps({"keys": entries}, indent=2) + "\n", encoding="utf-8")
+
+
+def _cmd_key_pin(args: argparse.Namespace) -> int:
+    from openadapt_flow.offline_seal import LocalSealError
+
+    try:
+        entry = _signer(args).registry_entry()
+    except LocalSealError as exc:
+        print(f"no key: {exc}", file=sys.stderr)
+        return 1
+    path = Path(args.registry)
+    entries = _read_registry_file(path)
+    if any(e.get("key_id") == entry["key_id"] for e in entries):
+        print(f"already pinned: {entry['key_id']}")
+        return 0
+    _write_registry_file(path, entries + [entry])
+    print(f"pinned {entry['key_id']} in {path}")
+    return 0
+
+
+def _cmd_key_revoke(args: argparse.Namespace) -> int:
+    from datetime import datetime, timezone
+
+    path = Path(args.registry)
+    entries = _read_registry_file(path)
+    at = args.at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    found = False
+    for entry in entries:
+        if entry.get("key_id") == args.key_id:
+            entry["status"], entry["revoked_at"] = "revoked", at
+            found = True
+    if not found:
+        print(f"{args.key_id} is not in {path}", file=sys.stderr)
+        return 1
+    try:
+        _write_registry_file(path, entries)
+    except ValueError as exc:
+        print(f"not revoked: {exc}", file=sys.stderr)
+        return 1
+    print(f"revoked {args.key_id} from {at}; Seals issued before then still verify")
     return 0
 
 
@@ -145,6 +261,14 @@ def register(sub: Any) -> None:
         default=None,
         help="Seal home (or OPENADAPT_SEAL_HOME; default ~/.openadapt/seal)",
     )
+    p.add_argument(
+        "--key",
+        default=None,
+        help=(
+            "Seal key: file:PATH, keychain:NAME or pkcs11:URI (or "
+            "OPENADAPT_SEAL_KEY; default a key generated under the Seal home)"
+        ),
+    )
     s = p.add_subparsers(dest="local_seal_cmd", required=True)
 
     r = s.add_parser("run", help="Seal a run directory's report.json")
@@ -164,8 +288,21 @@ def register(sub: Any) -> None:
     v.add_argument("--keys", default=None, help="Pinned key registry JSON")
     v.set_defaults(func=_cmd_verify)
 
-    k = s.add_parser("key", help="Print this machine's public Seal key for pinning")
+    k = s.add_parser("key", help="Print the Seal key's public half for pinning")
     k.set_defaults(func=_cmd_key)
+    ks = k.add_subparsers(dest="key_cmd")
+    kc = ks.add_parser(
+        "create", help="Make a new key at --key file:PATH or keychain:NAME"
+    )
+    kc.set_defaults(func=_cmd_key_create)
+    kp = ks.add_parser("pin", help="Add the Seal key to a pinned key registry")
+    kp.add_argument("registry", help="Key registry JSON to create or extend")
+    kp.set_defaults(func=_cmd_key_pin)
+    kr = ks.add_parser("revoke", help="Mark a pinned key revoked from a time on")
+    kr.add_argument("registry")
+    kr.add_argument("key_id")
+    kr.add_argument("--at", default=None, help="UTC YYYY-MM-DDTHH:MM:SSZ (default now)")
+    kr.set_defaults(func=_cmd_key_revoke)
 
     b = s.add_parser("batch", help="Fold queued Seals into one Merkle batch (local)")
     b.set_defaults(func=_cmd_batch)

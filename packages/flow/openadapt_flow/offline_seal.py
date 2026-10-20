@@ -28,9 +28,13 @@ a Seal is informational; trust comes from the key registry the verifier
 pinned, in the same JSON shape as the Cloud Seal key registry
 (``key_id``, ``public_key``, ``status``, ``revoked_at``).
 
-Signing reuses the local Ed25519 key of :mod:`openadapt_flow.execute.keys`
-(PKCS#8 PEM, mode 0600, under ``$OPENADAPT_SEAL_HOME/keys``; default
-``~/.openadapt/seal``). Nothing here touches the network or calls a model.
+By default, signing uses the local Ed25519 key of
+:mod:`openadapt_flow.execute.keys` (PKCS#8 PEM, mode 0600, under
+``$OPENADAPT_SEAL_HOME/keys``; default ``~/.openadapt/seal``). A production
+site names a key it controls with ``OPENADAPT_SEAL_KEY``: a key file, the OS
+keychain, or a PKCS#11 token (:mod:`openadapt_flow.seal_keys`). A configured
+key that cannot be used stops sealing with ``key_unavailable``; it never falls
+back to a generated key. Nothing here touches the network or calls a model.
 """
 
 from __future__ import annotations
@@ -43,7 +47,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Final, Literal, Mapping, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Final, Literal, Mapping, Optional, Sequence
 
 from openadapt_types.seal import (
     SealPublicKey,
@@ -52,6 +56,9 @@ from openadapt_types.seal import (
     seal_key_id,
 )
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
+
+if TYPE_CHECKING:
+    from openadapt_flow.seal_keys import SealSigner
 
 LOCAL_SEAL_SCHEMA: Final = "openadapt.local-seal/v1"
 LOCAL_SEAL_ISSUER: Final = "local"
@@ -135,28 +142,36 @@ def seal_home(env: Optional[Mapping[str, str]] = None) -> Path:
     return Path(value).expanduser() if value else Path.home() / ".openadapt" / "seal"
 
 
-def _private_key(home: Path) -> Any:
-    from openadapt_flow.execute.keys import load_or_create_private_key
+def signer_for(
+    home: Optional[Path] = None,
+    *,
+    spec: Optional[str] = None,
+    env: Optional[Mapping[str, str]] = None,
+) -> "SealSigner":
+    """The Seal key to sign with: ``spec``, else ``OPENADAPT_SEAL_KEY``, else generated.
 
-    return load_or_create_private_key(home)
+    Raises :class:`LocalSealError` (``key_unavailable`` and friends) when a
+    configured key cannot be opened. Never substitutes another key.
+    """
+    from openadapt_flow.seal_keys import KeyUnavailable, configured_spec, resolve_signer
+
+    try:
+        chosen = spec if spec is not None else configured_spec(env)
+        return resolve_signer(chosen, home=home or seal_home(env), env=env)
+    except KeyUnavailable as exc:
+        raise LocalSealError(exc.code, str(exc)) from exc
 
 
-def _raw_public(key: Any) -> bytes:
-    from cryptography.hazmat.primitives import serialization
+def public_key_entry(
+    home: Optional[Path] = None, *, signer: Optional["SealSigner"] = None
+) -> dict[str, str]:
+    """The Seal key as one key-registry entry, for a verifier to pin."""
+    from openadapt_flow.seal_keys import KeyUnavailable
 
-    return key.public_key().public_bytes(
-        encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
-    )
-
-
-def public_key_entry(home: Optional[Path] = None) -> dict[str, str]:
-    """This machine's Seal key as one key-registry entry, for a verifier to pin."""
-    raw = _raw_public(_private_key(home or seal_home()))
-    return {
-        "key_id": seal_key_id(raw),
-        "public_key": base64.b64encode(raw).decode("ascii"),
-        "status": "active",
-    }
+    try:
+        return (signer or signer_for(home)).registry_entry()
+    except KeyUnavailable as exc:
+        raise LocalSealError(exc.code, str(exc)) from exc
 
 
 def signing_payload(seal: Mapping[str, Any]) -> bytes:
@@ -182,10 +197,16 @@ def sign_subject(
     outcome: Optional[str] = None,
     home: Optional[Path] = None,
     now: Optional[datetime] = None,
+    signer: Optional["SealSigner"] = None,
 ) -> LocalSealV1:
-    """Sign a statement about one subject digest with this machine's key."""
-    key = _private_key(home or seal_home())
-    raw = _raw_public(key)
+    """Sign a statement about one subject digest with the configured Seal key."""
+    from openadapt_flow.seal_keys import KeyUnavailable
+
+    signer = signer or signer_for(home)
+    try:
+        raw = signer.public_raw()
+    except KeyUnavailable as exc:
+        raise LocalSealError(exc.code, str(exc)) from exc
     unsigned = {
         "schema": LOCAL_SEAL_SCHEMA,
         "issuer": LOCAL_SEAL_ISSUER,
@@ -200,7 +221,11 @@ def sign_subject(
     }
     # Validate before signing so a malformed statement is never signed.
     LocalSealV1.model_validate({**unsigned, "signature": "AA=="})
-    signature = base64.b64encode(key.sign(signing_payload(unsigned))).decode("ascii")
+    try:
+        signed = signer.sign(signing_payload(unsigned))
+    except KeyUnavailable as exc:
+        raise LocalSealError(exc.code, str(exc)) from exc
+    signature = base64.b64encode(signed).decode("ascii")
     return LocalSealV1.model_validate({**unsigned, "signature": signature})
 
 
@@ -211,6 +236,7 @@ def sign_file(
     run_id: Optional[str] = None,
     home: Optional[Path] = None,
     now: Optional[datetime] = None,
+    signer: Optional["SealSigner"] = None,
 ) -> LocalSealV1:
     """Seal the exact bytes of ``path`` (a record, an export, an audit report)."""
     digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -220,6 +246,7 @@ def sign_file(
         _safe_run_id(run_id or Path(path).name),
         home=home,
         now=now,
+        signer=signer,
     )
 
 
@@ -254,6 +281,7 @@ def seal_run(
     home: Optional[Path] = None,
     now: Optional[datetime] = None,
     enqueue: bool = True,
+    signer: Optional["SealSigner"] = None,
 ) -> LocalSealV1:
     """Write ``run_dir/seal.json`` over the exact bytes of ``report.json``.
 
@@ -295,6 +323,7 @@ def seal_run(
         outcome=outcome,
         home=home,
         now=now,
+        signer=signer,
     )
     _atomic_write_json(seal_path, seal.wire())
     if enqueue:
@@ -314,7 +343,8 @@ def seal_after_run(
     if not (Path(run_dir) / "report.json").is_file():
         return None
     try:
-        seal = seal_run(Path(run_dir), home=seal_home(env))
+        home = seal_home(env)
+        seal = seal_run(Path(run_dir), home=home, signer=signer_for(home, env=env))
     except LocalSealError as exc:
         return f"offline seal not written: {exc.code}"
     except Exception as exc:  # a Seal failure must never change the run's result

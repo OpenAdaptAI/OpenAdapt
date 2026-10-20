@@ -25,14 +25,64 @@ changes the run's exit code and calls no model.
 | `key_id`, `public_key` | The local key that signed it |
 | `signature` | Ed25519 over the domain-separated canonical statement |
 
-The key is created on first use under `$OPENADAPT_SEAL_HOME/keys`
-(default `~/.openadapt/seal`), mode 0600. Set `OPENADAPT_LOCAL_SEAL=off` to
-turn sealing off.
+Unless you name a key (see [Customer-held keys](#customer-held-keys)), the
+runner creates one on first use under `$OPENADAPT_SEAL_HOME/keys` (default
+`~/.openadapt/seal`), mode 0600. Set `OPENADAPT_LOCAL_SEAL=off` to turn
+sealing off.
 
 An offline Seal is weaker evidence than one from an independent party: the
 machine that ran the work also signed the statement. It shows the report has
 not changed since it was sealed. It does not grade the run and grants no
 authority.
+
+## Customer-held keys
+
+In production, sign with a key you control instead of the key the runner
+generates. Name it with `OPENADAPT_SEAL_KEY` (or `--key` on any
+`local-seal` command):
+
+| Source | Setting | Install |
+|---|---|---|
+| Key file you provide | `file:/etc/openadapt/seal-key.pem`, or `OPENADAPT_SEAL_KEY_FILE=/etc/openadapt/seal-key.pem` | Base package |
+| OS keychain | `keychain:NAME` | `pip install 'openadapt-flow[keychain]'` |
+| PKCS#11 token or HSM | `pkcs11:token=TOKEN;object=LABEL?module-path=/path/to/module.so` | `pip install 'openadapt-flow[pkcs11]'` |
+
+- **Key file.** A PKCS#8 PEM Ed25519 private key. The file must not be
+  readable by other users or writable by its group. An encrypted PEM opens
+  with `OPENADAPT_SEAL_KEY_PASSPHRASE`.
+- **OS keychain.** The key is stored through the `keyring` library: the
+  macOS Keychain, the Windows Credential Manager (encrypted with DPAPI), or
+  the Linux Secret Service. The key is read into memory to sign.
+  `openadapt-flow local-seal key create --key keychain:NAME` creates a key
+  there without writing it to disk.
+- **PKCS#11.** The key stays on the token, which must support CKM_EDDSA
+  (Ed25519). The module can also come from `OPENADAPT_SEAL_PKCS11_MODULE`.
+  The PIN comes from `OPENADAPT_SEAL_PKCS11_PIN`, or from another variable
+  named with `pin-source=env:VAR`. A PIN written in the URI is refused.
+  Create the key with the token's own tools.
+
+When a key is configured and can't be used (missing file, wrong passphrase,
+locked keychain, wrong PIN, token unplugged), nothing is signed. The run
+still finishes with its own exit code and prints `offline seal not written:
+key_unavailable`. OpenAdapt never falls back to a generated key.
+
+Every Seal records the signing key's `key_id`.
+
+### Pinning and rotation
+
+```bash
+# Pin the configured key in the registry the verifier uses.
+openadapt-flow local-seal key pin site-keys.json
+
+# Rotate: create and configure the new key, pin it, then revoke the old one.
+openadapt-flow local-seal key create --key file:/etc/openadapt/seal-key-2027.pem
+openadapt-flow local-seal --key file:/etc/openadapt/seal-key-2027.pem key pin site-keys.json
+openadapt-flow local-seal key revoke site-keys.json seal-ed25519-0123456789abcdef
+```
+
+`revoke` marks the old key revoked from now on, or from `--at TIME`. Seals
+the old key issued before that time still verify. Seals it issued after that
+time are refused with `revoked_key`.
 
 ## Seal records and exports
 
@@ -45,6 +95,7 @@ openadapt-flow local-seal file record.json --kind record
 
 Verification trusts pinned keys only. The `public_key` inside a Seal is never
 trusted on its own.
+Without `--keys`, `verify` trusts only the configured Seal key and says so.
 
 ```bash
 # On the site machine: print the public key for an auditor to pin.
