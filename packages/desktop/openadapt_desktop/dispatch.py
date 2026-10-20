@@ -2636,7 +2636,7 @@ class EngineDispatcher:
             return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
 
     def edit_program_sections(self, **params: Any) -> dict:
-        """Rename, merge or split a named section of the program in review."""
+        """Rename, merge or split a named section of the program during review."""
 
         from openadapt_desktop.qualification import edit_program_sections
 

@@ -177,7 +177,7 @@ export interface GraphEdge {
 export type SectionKind = "fields" | "save" | "steps";
 
 /** Where a section's title came from: interface text, narration, the field
- *  names (no title was found), or a person in review. */
+ *  names (no title was found), or a person during review. */
 export type SectionTitleSource = "ui" | "narration" | "fields" | "person";
 
 /** A named, contiguous group of action nodes that Flow compiles with every

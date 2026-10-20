@@ -12,7 +12,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         "sections",
         help=(
             "Show a compiled program's named sections (the groups a program "
-            "map folds), or rename, merge or split them in review"
+            "map folds), or rename, merge or split them during review"
         ),
         description=(
             "Every compiled bundle carries sections.json: contiguous, named "

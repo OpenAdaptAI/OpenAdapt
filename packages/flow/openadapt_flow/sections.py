@@ -34,7 +34,7 @@ Boundaries come from, in priority order:
 Titles come from the interface's own text. When none is found, the title
 describes the fields: "3 fields: title, first name, last name".
 
-A person can rename, merge or split sections in review (:func:`apply_edit`).
+A person can rename, merge or split sections during review (:func:`apply_edit`).
 The edits are stored in the bundle beside the compiled sections and are
 replayed if the program is recompiled or changed.
 """

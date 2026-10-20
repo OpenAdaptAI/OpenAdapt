@@ -47,7 +47,7 @@ The file is outside the bundle's content digest and outside the workflow
 contract hash. Here is why:
 
 - A section changes how a program is shown, never what it does. Renaming a
-  section in review must not invalidate a certification or a governed
+  section during review must not invalidate a certification or a governed
   authorization. Both are bound to those two hashes.
 - The file binds itself to one program instead. It records the workflow
   contract hash it was made for. When that hash no longer matches, or the
