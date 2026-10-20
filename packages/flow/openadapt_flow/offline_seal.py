@@ -58,6 +58,7 @@ from openadapt_types.seal import (
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
 if TYPE_CHECKING:
+    from openadapt_flow.seal_anchor import AnchorVerification, LogKey
     from openadapt_flow.seal_keys import SealSigner
 
 LOCAL_SEAL_SCHEMA: Final = "openadapt.local-seal/v1"
@@ -83,6 +84,17 @@ LocalSealRefusal = Literal[
     "revoked_key",
     "key_mismatch",
     "bad_signature",
+    # With an anchor required (openadapt_flow.seal_anchor):
+    "anchor_missing",
+    "anchor_malformed",
+    "anchor_mismatch",
+    "anchor_key_mismatch",
+    "anchor_bad_signature",
+    "anchor_unknown_log",
+    "anchor_bad_timestamp",
+    "anchor_bad_inclusion",
+    "anchor_bad_checkpoint",
+    "anchor_live_mismatch",
 ]
 
 
@@ -123,6 +135,7 @@ class LocalSealVerification:
     key_id: Optional[str] = None
     reason: Optional[LocalSealRefusal] = None
     subject_file: Optional[str] = None
+    anchor: Optional["AnchorVerification"] = None
 
 
 def mode_enabled(env: Optional[Mapping[str, str]] = None) -> bool:
@@ -396,14 +409,58 @@ def verify_local_seal(
     return LocalSealVerification(True, key_id=key.key_id)
 
 
+def check_anchor(
+    seal: Mapping[str, Any],
+    seal_path: Path,
+    result: LocalSealVerification,
+    registry: Sequence[SealPublicKey],
+    *,
+    log_keys: Optional[Sequence["LogKey"]] = None,
+    fetch: Any = None,
+) -> LocalSealVerification:
+    """Require a transparency-log anchor next to a Seal that already verified.
+
+    The anchor must be signed by the same pinned key that verified the Seal.
+    """
+    from openadapt_flow.seal_anchor import load_anchor, verify_anchor
+
+    if not result.ok:
+        return result
+    key = next(k for k in registry if k.key_id == result.key_id)
+    anchor = verify_anchor(
+        LocalSealV1.model_validate(seal).wire(),
+        load_anchor(seal_path),
+        base64.b64decode(key.public_key),
+        log_keys=log_keys,
+        fetch=fetch,
+    )
+    if not anchor.ok:
+        return LocalSealVerification(
+            False,
+            key_id=result.key_id,
+            reason=anchor.reason,
+            subject_file=result.subject_file,
+            anchor=anchor,
+        )
+    return LocalSealVerification(
+        True, key_id=result.key_id, subject_file=result.subject_file, anchor=anchor
+    )
+
+
 def verify_run(
-    run_dir: Path, registry: Sequence[SealPublicKey]
+    run_dir: Path,
+    registry: Sequence[SealPublicKey],
+    *,
+    require_anchor: bool = False,
+    log_keys: Optional[Sequence["LogKey"]] = None,
+    fetch: Any = None,
 ) -> LocalSealVerification:
     """Verify ``run_dir/seal.json`` against the run's report.
 
     The Seal must match ``report.json``, or ``report.pre-seal.json`` when a
     Cloud receipt was attached afterwards (``attach-seal`` keeps the report
-    as it was before attaching).
+    as it was before attaching). With ``require_anchor``, ``seal.anchor.json``
+    must also prove the Seal was logged in the transparency log.
     """
     run_dir = Path(run_dir)
     try:
@@ -420,7 +477,17 @@ def verify_run(
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         result = verify_local_seal(seal, digest, registry)
         if result.ok:
-            return LocalSealVerification(True, key_id=result.key_id, subject_file=name)
+            found = LocalSealVerification(True, key_id=result.key_id, subject_file=name)
+            if not require_anchor:
+                return found
+            return check_anchor(
+                seal,
+                run_dir / SEAL_FILE,
+                found,
+                registry,
+                log_keys=log_keys,
+                fetch=fetch,
+            )
         if result.reason != "subject_mismatch":
             return result
     return result

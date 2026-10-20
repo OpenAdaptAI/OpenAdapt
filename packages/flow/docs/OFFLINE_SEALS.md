@@ -114,6 +114,83 @@ can be marked `revoked` with a `revoked_at` time. Refusal reasons are closed:
 If `attach-seal` later adds a Cloud receipt to `report.json`, the offline
 Seal still verifies against `report.pre-seal.json`, which `attach-seal` keeps.
 
+## Optional: anchor a Seal in a public transparency log
+
+An offline Seal is signed on the machine that ran the work, so on its own it
+is the site's statement about itself. Anchoring records the Seal in
+[Sigstore Rekor](https://docs.sigstore.dev/logging/overview/), a public,
+append-only transparency log that OpenAdapt does not run. Anyone can then
+check that this exact Seal existed when the log recorded it and has not
+changed since, without trusting the site's key or OpenAdapt.
+
+Anchoring is off by default and runs only when a person asks for it:
+
+```bash
+openadapt-flow local-seal anchor runs/job-0007          # a run directory
+openadapt-flow local-seal anchor export.csv.seal.json   # any Seal file
+```
+
+### What becomes public
+
+Each anchor adds one `hashedrekord` entry to the public log. It holds:
+
+- the SHA-512 digest of a short anchor statement: the Seal's SHA-256 and a
+  random 32-byte nonce;
+- the Seal key's public key;
+- an Ed25519ph signature over that digest by the Seal's key;
+- the time the log recorded it.
+
+Nothing else is sent: no report, no field values, no screenshots, no run id,
+no outcome. The nonce is generated for each Seal and kept only in the local
+anchor file, so nobody can confirm a guessed report by hashing the guess and
+looking it up. Anyone can see that one key anchored several Seals, and when,
+because they share a public key. Log entries can't be deleted.
+
+A deployment that handles health data turns anchoring on deliberately, after
+deciding that a public record of "this key sealed something at this time" is
+acceptable. Under strict no-outbound mode, `anchor` refuses with
+`held_no_outbound` and sends nothing.
+
+### The anchor file
+
+`anchor` writes `seal.anchor.json` next to `seal.json` (or
+`NAME.seal.anchor.json` next to `NAME.seal.json`). It holds the nonce and
+the log's full answer: the entry UUID, the entry, the signed entry timestamp
+and the inclusion proof with the log's signed checkpoint. `anchor` checks
+that answer before writing the file. Running it again on an anchored Seal
+changes nothing. If the connection drops before the answer arrives, run it
+again: it re-sends the same digest and picks up the existing entry.
+
+The Seal key signs the anchor. With a PKCS#11 key, the token signs with
+CKM_EDDSA and the prehash flag.
+
+### Verify an anchor
+
+```bash
+openadapt-flow local-seal verify runs/job-0007 --keys site-keys.json --require-anchor
+```
+
+`--require-anchor` checks, offline, from the stored file:
+
+1. the Seal itself, against the pinned keys, as without the flag;
+2. that the anchored digest is the digest of this Seal with the stored nonce;
+3. that the entry is signed by the same pinned key that verified the Seal;
+4. the log's signed entry timestamp, against the log's public key;
+5. the inclusion proof, from the entry up to the root in the log's signed
+   checkpoint.
+
+The log key for the public Sigstore instance is built in (log ID
+`c0d23d6a…801d`). Pass `--log-key PEM` to pin another log. `--live` also
+fetches the entry from the log and compares it; it is optional and needs
+network access. Offline verification works in strict no-outbound mode.
+
+Refusal reasons are closed: `anchor_missing`, `anchor_malformed`,
+`anchor_mismatch`, `anchor_key_mismatch`, `anchor_bad_signature`,
+`anchor_unknown_log`, `anchor_bad_timestamp`, `anchor_bad_inclusion`,
+`anchor_bad_checkpoint`, `anchor_live_mismatch`.
+
+Cloud Seals are unchanged and remain the hosted option.
+
 ## Optional: batched timestamps
 
 Each new Seal is queued under `$OPENADAPT_SEAL_HOME/batch/pending`. Nothing
@@ -192,6 +269,7 @@ ranges, and a bad allow list stops startup.
 In this mode:
 
 - `attach-seal` returns `no_outbound` without contacting Cloud.
+- `local-seal anchor` refuses with `held_no_outbound` and sends nothing.
 - `local-seal submit` holds each batch as `held_no_outbound` unless the
   timestamp authority declares itself local (`MAY_EGRESS = False`).
 - Offline Seals and batches work as usual.

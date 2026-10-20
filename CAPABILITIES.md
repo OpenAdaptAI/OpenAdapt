@@ -317,7 +317,7 @@ A test fails when a command has no file or this list is out of date.
 
 - `attach-seal`
 - `countersign`
-- `local-seal`
+- `local-seal`: Offline Seals: customer-held keys, pinned verification, optional Rekor anchoring.
 - `seal`
 
 **Run on premises:**
