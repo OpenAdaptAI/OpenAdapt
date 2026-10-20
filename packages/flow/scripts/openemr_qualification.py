@@ -11,8 +11,17 @@ OAuth session). The same campaign runs without this script::
 
 What this script adds is demo-only: a second oracle that reads
 ``openemr.patient_data`` directly over SQL on the local fixture database
-(``--sql-oracle``, on by default), and flags for the fixture's state, lock and
-ports. It never calls a model. Keys are local test keys generated per
+(``--sql-oracle``, on by default), a real-duplicate check after certification
+(``--duplicate-trials``, 3 by default), and flags for the fixture's state, lock
+and ports.
+
+The six qualify cases inject faults the engine must notice; none of them is a
+business rule the application enforces. The real-duplicate check is one: the
+existing chart Rosa Delgado (born 1958-03-27) is seeded, and the certified
+bundle runs, as a certified run, on Rosa Delgado born 1958-03-22. OpenEMR's
+duplicate dialog lists the existing chart, and the program must halt before
+saving: ``HALTED_BEFORE_EFFECT``, with no new or changed chart in SQL, on every
+trial. A failure fails the qualification. It never calls a model. Keys are local test keys generated per
 campaign, never a production trust root.
 
 Usage (fixture already up; see benchmark/openemr_local/README.md)::
@@ -143,6 +152,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument(
         "--no-sql-oracle", action="store_true", help="skip the demo-only SQL check"
     )
+    parser.add_argument(
+        "--duplicate-trials",
+        type=int,
+        default=3,
+        help="certified runs on a real possible duplicate (0 skips the check)",
+    )
     args = parser.parse_args(argv)
 
     os.environ["OPENEMR_FIXTURE_STATE"] = str(args.fixture_state)
@@ -184,11 +199,88 @@ def main(argv: Optional[list[str]] = None) -> int:
             f"PARTIAL: every case run behaved as required; qualifying needs all six: {args.out}"
         )
         return 0
+    if result.certified and args.duplicate_trials > 0:
+        check = duplicate_check(result, args.out, args.duplicate_trials)
+        if not check["passed"]:
+            print(
+                "QUALIFICATION FAILED: the certified bundle did not halt on a real "
+                f"possible duplicate: {args.out / 'duplicate-check' / 'summary.json'}",
+                file=sys.stderr,
+            )
+            return 1
     print(
         f"{'CERTIFIED' if result.certified else 'QUALIFIED' if result.passed else 'FAILED'}"
         f" under {result.policy or 'no policy'}: {args.out}"
     )
     return 0 if result.passed else 1
+
+
+def duplicate_check(result: Any, out: Path, trials: int) -> dict[str, Any]:
+    """Run the certified bundle ``trials`` times on a real possible duplicate."""
+
+    from benchmark.openemr_local.certified_referrals import (
+        certified_env,
+        referral_params,
+        run_certified,
+    )
+
+    key = "r6-rosa-delgado"
+    root = out / "duplicate-check"
+    env = certified_env(Path(result.bundle_dir))
+    rows = []
+    for trial in range(1, trials + 1):
+        report, sql, seeded = run_certified(
+            env,
+            key=key,
+            params=referral_params(key),
+            expected="HALTED_BEFORE_EFFECT",
+            item=root / f"trial-{trial}",
+            trial=trial,
+            policy=result.policy,
+        )
+        rows.append(
+            {
+                "trial": trial,
+                "execution_outcome": report.execution_outcome,
+                "existing_chart_seed_status": seeded,
+                "new_charts": sql["new_charts"],
+                "changed_charts": sql["changed_charts"],
+                "passed": report.execution_outcome == "HALTED_BEFORE_EFFECT"
+                and seeded in (200, 201)
+                and sql["new_charts"] == 0
+                and sql["changed_charts"] == 0,
+            }
+        )
+        print(json.dumps({"duplicate_check": rows[-1]}), flush=True)
+    summary = {
+        "schema_version": "openadapt.openemr-duplicate-check/v1",
+        "existing_chart": "Rosa Delgado, born 1958-03-27 (seeded)",
+        "run_params": key,
+        "required": "HALTED_BEFORE_EFFECT, no new or changed chart in SQL",
+        "trials": rows,
+        "passed": all(r["passed"] for r in rows),
+    }
+    (root / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    lines = [
+        "",
+        "## Real-duplicate check",
+        "",
+        "The existing chart Rosa Delgado (born 1958-03-27) is seeded, and the "
+        "certified bundle runs on Rosa Delgado born 1958-03-22. Required: "
+        "HALTED_BEFORE_EFFECT and no new or changed chart in SQL.",
+        "",
+        "| Trial | Outcome | New charts | Changed charts | Pass |",
+        "|---|---|---|---|---|",
+        *(
+            f"| {r['trial']} | {r['execution_outcome']} | {r['new_charts']} | "
+            f"{r['changed_charts']} | {'yes' if r['passed'] else 'no'} |"
+            for r in rows
+        ),
+        "",
+    ]
+    with (out / "QUALIFICATION.md").open("a") as fh:
+        fh.write("\n".join(lines))
+    return summary
 
 
 if __name__ == "__main__":
