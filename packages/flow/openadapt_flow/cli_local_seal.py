@@ -7,7 +7,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 
 def _home(args: argparse.Namespace) -> Path:
@@ -173,6 +173,13 @@ def _cmd_verify(args: argparse.Namespace) -> int:
                 log_url=args.log_url,
                 fetch=fetch,
             )
+    stamp_lines: list[str] = []
+    if result.ok and args.require_timestamp:
+        seal_path = target / "seal.json" if target.is_dir() else Path(args.seal)
+        problem, stamp_lines = _check_timestamps(args, seal_path, auth)
+        if problem:
+            print(f"not valid: {problem}", file=sys.stderr)
+            return 1
     if result.ok:
         where = target / result.subject_file if result.subject_file else target
         print(f"valid offline Seal over {where}, key {result.key_id}")
@@ -191,9 +198,93 @@ def _cmd_verify(args: argparse.Namespace) -> int:
         if auth is not None and auth.statement is not None:
             print(_authorized_line(auth))
             print(_timing_line(result, auth))
+        for line in stamp_lines:
+            print(line)
         return 0
     print(f"not valid: {result.reason}", file=sys.stderr)
     return 1
+
+
+def _tsa_trusted(args: argparse.Namespace) -> Any:
+    if not getattr(args, "tsa_cert", None):
+        return None  # the bundled Sigstore TSA root
+    from openadapt_flow.countersign.tsa import load_pem_certificates
+
+    certs: list[Any] = []
+    for path in args.tsa_cert:
+        certs.extend(load_pem_certificates(Path(path).read_bytes()))
+    return certs
+
+
+def _check_timestamps(
+    args: argparse.Namespace, seal_path: Path, auth: Any
+) -> tuple[Optional[str], list[str]]:
+    """Each record's RFC 3161 token, checked offline against the pinned TSA."""
+    from openadapt_flow.seal_timestamp import (
+        authorization_fields,
+        seal_fields,
+        timestamp_path,
+        verify_record_timestamp,
+    )
+
+    trusted = _tsa_trusted(args)
+    records = [("Seal", seal_fields(seal_path), timestamp_path(seal_path))]
+    if auth is not None:
+        from openadapt_flow.run_authorization import _paths
+
+        statement = _paths(Path(args.authorization))[0]
+        records.append(
+            (
+                "authorization",
+                authorization_fields(statement),
+                timestamp_path(statement),
+            )
+        )
+    lines = []
+    for label, fields, path in records:
+        result = verify_record_timestamp(fields, path, trusted)
+        if not result.ok:
+            return f"{label} {result.reason}", []
+        lines.append(
+            f"{label} timestamped at {result.gen_time} by {result.tsa_subject} "
+            f"(RFC 3161, checked offline against {result.trust_anchor_subject})"
+        )
+    return None, lines
+
+
+def _cmd_timestamp(args: argparse.Namespace) -> int:
+    from openadapt_flow.countersign.tsa import SIGSTORE_TSA_URL, HttpTsa
+    from openadapt_flow.run_authorization import STATEMENT_FILE
+    from openadapt_flow.seal_timestamp import (
+        RecordTimestampError,
+        authorization_fields,
+        seal_fields,
+        timestamp_path,
+        timestamp_record,
+    )
+
+    target = Path(args.target)
+    try:
+        if target.is_dir() and (target / STATEMENT_FILE).is_file():
+            record = target / STATEMENT_FILE
+            fields = authorization_fields(record)
+        elif target.name == STATEMENT_FILE:
+            record, fields = target, authorization_fields(target)
+        else:
+            record = target / "seal.json" if target.is_dir() else target
+            fields = seal_fields(record)
+        out = timestamp_path(record)
+        stamp = timestamp_record(
+            fields,
+            out,
+            HttpTsa(args.tsa_url or SIGSTORE_TSA_URL),
+            trusted=_tsa_trusted(args),
+        )
+    except (RecordTimestampError, OSError, ValueError) as exc:
+        print(f"not timestamped: {exc}", file=sys.stderr)
+        return 1
+    print(f"timestamped: {out} at {stamp.get('gen_time')} by {stamp['tsa']}")
+    return 0
 
 
 def _verify_authorization(
@@ -651,6 +742,17 @@ def register(sub: Any) -> None:
     )
     _log_args(v)
     _auth_args(v)
+    v.add_argument(
+        "--require-timestamp",
+        action="store_true",
+        help="Also require each record's RFC 3161 token (seal.tsa.json), checked offline",
+    )
+    v.add_argument(
+        "--tsa-cert",
+        action="append",
+        default=[],
+        help="Pinned TSA certificate PEM (default: the bundled Sigstore TSA root)",
+    )
     v.set_defaults(func=_cmd_verify)
 
     a = s.add_parser(
@@ -669,6 +771,19 @@ def register(sub: Any) -> None:
     )
     _log_args(a)
     a.set_defaults(func=_cmd_anchor)
+
+    ts = s.add_parser(
+        "timestamp",
+        help="One RFC 3161 token for a Seal or a run authorization (sends a 32-byte digest)",
+    )
+    ts.add_argument(
+        "target", help="A run directory, a .seal.json, or an authorization folder"
+    )
+    ts.add_argument(
+        "--tsa-url", default=None, help="RFC 3161 TSA URL (default Sigstore)"
+    )
+    ts.add_argument("--tsa-cert", action="append", default=[])
+    ts.set_defaults(func=_cmd_timestamp)
 
     z = s.add_parser(
         "authorize", help="Run authorizations signed with a person's GitHub SSH key"
