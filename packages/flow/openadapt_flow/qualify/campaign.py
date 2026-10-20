@@ -815,10 +815,19 @@ def case_result(
     if project is None:
         raise QualifyError("the workflow's qualification project disappeared")
     run_dir = trial_dir / "run"
+    from openadapt_flow import sealed_set
+
+    # A sealed bundle's run directory is a sealed set: its files are bound by
+    # their logical names and plaintext digests, as the run report names them.
+    run_files = (
+        sealed_set.list_files(run_dir)
+        if sealed_set.is_sealed_path(run_dir)
+        else [path for path in run_dir.rglob("*") if path.is_file()]
+    )
     run_artifacts = [
         _evidence_ref(root, path, "other")
-        for path in sorted(run_dir.rglob("*"))
-        if path.is_file() and path.name != "report.json"
+        for path in sorted(run_files)
+        if path.name != "report.json"
     ]
     faults = (
         [
