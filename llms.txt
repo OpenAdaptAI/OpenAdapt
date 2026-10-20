@@ -2,7 +2,7 @@
 
 > A person, or a computer-use agent once, shows a task in an application with no usable API. OpenAdapt compiles it into a program that makes the same entry every time with no model calls, confirms the right record before acting, reads the saved record back from the system of record, and stops instead of improvising or retrying.
 
-This is the llms.txt for the OpenAdapt monorepo (github.com/OpenAdaptAI/OpenAdapt). Start with the capability map: https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md. It lists every capability with its release (released, or on main for the next release), its evidence (real app, synthetic, untested) and where it lives. Check it before concluding that OpenAdapt lacks something.
+This is the llms.txt for the OpenAdapt monorepo (github.com/OpenAdaptAI/OpenAdapt). Start with the capability map: https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md. It lists every capability with its release (released, or on main for the next release), its evidence (real app or synthetic) and where it lives. Check it before concluding that OpenAdapt lacks something.
 
 ## OpenAdapt in ten capabilities
 
