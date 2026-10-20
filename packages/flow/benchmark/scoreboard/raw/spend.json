@@ -1,5 +1,5 @@
 {
-  "total_usd": 9.466585,
+  "total_usd": 12.543253,
   "entries": [
     {
       "usd": 0.577,
@@ -999,6 +999,241 @@
       "usd": 0.038558,
       "note": "mockmed claims 2026-10-19-b item 40",
       "at": 1792417778.6049159
+    },
+    {
+      "usd": 0.076462,
+      "note": "openemr claims smoke-2026-10-19 item 901",
+      "at": 1792430785.2966359
+    },
+    {
+      "usd": 0.054558,
+      "note": "openemr claims 2026-10-19-a item 901",
+      "at": 1792431059.732926
+    },
+    {
+      "usd": 0.075012,
+      "note": "openemr claims 2026-10-19-a item 902",
+      "at": 1792431132.687249
+    },
+    {
+      "usd": 0.09622,
+      "note": "openemr claims 2026-10-19-a item 903",
+      "at": 1792431205.047155
+    },
+    {
+      "usd": 0.076365,
+      "note": "openemr claims 2026-10-19-a item 904",
+      "at": 1792431278.610539
+    },
+    {
+      "usd": 0.076347,
+      "note": "openemr claims 2026-10-19-a item 905",
+      "at": 1792431344.024213
+    },
+    {
+      "usd": 0.075535,
+      "note": "openemr claims 2026-10-19-a item 906",
+      "at": 1792431410.95189
+    },
+    {
+      "usd": 0.07509,
+      "note": "openemr claims 2026-10-19-a item 907",
+      "at": 1792431481.48844
+    },
+    {
+      "usd": 0.076201,
+      "note": "openemr claims 2026-10-19-a item 908",
+      "at": 1792431558.750873
+    },
+    {
+      "usd": 0.077198,
+      "note": "openemr claims 2026-10-19-a item 909",
+      "at": 1792431672.016395
+    },
+    {
+      "usd": 0.076297,
+      "note": "openemr claims 2026-10-19-a item 910",
+      "at": 1792431744.1075158
+    },
+    {
+      "usd": 0.075793,
+      "note": "openemr claims 2026-10-19-a item 911",
+      "at": 1792431815.7238321
+    },
+    {
+      "usd": 0.076279,
+      "note": "openemr claims 2026-10-19-a item 912",
+      "at": 1792431893.5858371
+    },
+    {
+      "usd": 0.069467,
+      "note": "openemr claims 2026-10-19-a item 913",
+      "at": 1792431965.9113548
+    },
+    {
+      "usd": 0.076408,
+      "note": "openemr claims 2026-10-19-a item 914",
+      "at": 1792432069.340117
+    },
+    {
+      "usd": 0.0773,
+      "note": "openemr claims 2026-10-19-a item 915",
+      "at": 1792432150.823377
+    },
+    {
+      "usd": 0.075401,
+      "note": "openemr claims 2026-10-19-a item 916",
+      "at": 1792432221.242806
+    },
+    {
+      "usd": 0.076329,
+      "note": "openemr claims 2026-10-19-a item 917",
+      "at": 1792432344.295297
+    },
+    {
+      "usd": 0.077408,
+      "note": "openemr claims 2026-10-19-a item 918",
+      "at": 1792432468.588453
+    },
+    {
+      "usd": 0.076529,
+      "note": "openemr claims 2026-10-19-a item 919",
+      "at": 1792432591.0398788
+    },
+    {
+      "usd": 0.07661,
+      "note": "openemr claims 2026-10-19-a item 920",
+      "at": 1792432721.5270221
+    },
+    {
+      "usd": 0.076755,
+      "note": "openemr claims 2026-10-19-a item 921",
+      "at": 1792432839.937887
+    },
+    {
+      "usd": 0.075557,
+      "note": "openemr claims 2026-10-19-a item 922",
+      "at": 1792432968.770171
+    },
+    {
+      "usd": 0.077427,
+      "note": "openemr claims 2026-10-19-a item 923",
+      "at": 1792433087.22508
+    },
+    {
+      "usd": 0.075583,
+      "note": "openemr claims 2026-10-19-a item 924",
+      "at": 1792433208.4155772
+    },
+    {
+      "usd": 0.076484,
+      "note": "openemr claims 2026-10-19-a item 925",
+      "at": 1792433326.6092649
+    },
+    {
+      "usd": 0.076539,
+      "note": "openemr claims 2026-10-19-a item 926",
+      "at": 1792433474.214904
+    },
+    {
+      "usd": 0.075817,
+      "note": "openemr claims 2026-10-19-a item 927",
+      "at": 1792433543.928725
+    },
+    {
+      "usd": 0.07891,
+      "note": "openemr claims 2026-10-19-a item 928",
+      "at": 1792433605.0661619
+    },
+    {
+      "usd": 0.076332,
+      "note": "openemr claims 2026-10-19-a item 929",
+      "at": 1792433726.308144
+    },
+    {
+      "usd": 0.069608,
+      "note": "openemr claims 2026-10-19-a item 930",
+      "at": 1792433793.840191
+    },
+    {
+      "usd": 0.07657,
+      "note": "openemr claims 2026-10-19-a item 931",
+      "at": 1792433871.941948
+    },
+    {
+      "usd": 0.076509,
+      "note": "openemr claims 2026-10-19-a item 932",
+      "at": 1792433939.423531
+    },
+    {
+      "usd": 0.077452,
+      "note": "openemr claims 2026-10-19-a item 933",
+      "at": 1792434008.57876
+    },
+    {
+      "usd": 0.076442,
+      "note": "openemr claims 2026-10-19-a item 934",
+      "at": 1792434074.6930811
+    },
+    {
+      "usd": 0.076082,
+      "note": "openemr claims 2026-10-19-a item 935",
+      "at": 1792434139.4581308
+    },
+    {
+      "usd": 0.075245,
+      "note": "openemr claims 2026-10-19-a item 936",
+      "at": 1792434266.422913
+    },
+    {
+      "usd": 0.010352,
+      "note": "mockmed code_agent 2026-10-19-timed item 1 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.354027
+    },
+    {
+      "usd": 0.010449,
+      "note": "mockmed code_agent 2026-10-19-timed item 2 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.355176
+    },
+    {
+      "usd": 0.010449,
+      "note": "mockmed code_agent 2026-10-19-timed item 3 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.356023
+    },
+    {
+      "usd": 0.010462,
+      "note": "mockmed code_agent 2026-10-19-timed item 4 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.356829
+    },
+    {
+      "usd": 0.010452,
+      "note": "mockmed code_agent 2026-10-19-timed item 5 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.357607
+    },
+    {
+      "usd": 0.04298,
+      "note": "openemr_referral code_agent 2026-10-19-timed item 721 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.3584268
+    },
+    {
+      "usd": 0.038844,
+      "note": "openemr_referral code_agent 2026-10-19-timed item 722 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.359221
+    },
+    {
+      "usd": 0.051667,
+      "note": "openemr_referral code_agent 2026-10-19-timed item 723 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.3600152
+    },
+    {
+      "usd": 0.038837,
+      "note": "openemr_referral code_agent 2026-10-19-timed item 724 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.3608162
+    },
+    {
+      "usd": 0.042055,
+      "note": "openemr_referral code_agent 2026-10-19-timed item 725 (run from the claude/scoreboard-arm7 checkout)",
+      "at": 1792435252.3616168
     }
   ]
 }

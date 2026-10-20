@@ -1,0 +1,18 @@
+{
+  "steps": 6,
+  "canary_status": "VERIFIED",
+  "canary_detail": null,
+  "canary_halt": null,
+  "admitted": true,
+  "params": {
+    "lifted": [
+      {
+        "field_label": "Note",
+        "masked_example": "Sy*****************************************ys",
+        "name": "note",
+        "step_id": "step_004"
+      }
+    ],
+    "unlifted": {}
+  }
+}

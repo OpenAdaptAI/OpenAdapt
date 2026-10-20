@@ -6,16 +6,19 @@ application. Flow doesn't hide that or guess about it. It tells a person what
 may need undoing, flags programs that write before they check, and runs a
 declared undo only after a person approves it.
 
-This page covers three parts:
+This page covers four parts:
 
 - [The change ledger](#the-change-ledger): what a stopped run may have changed.
 - [Write-ordering checks](#write-ordering-checks): writes that come before a
   check the program could have done first.
 - [Declared undo steps](#declared-undo-steps): a compensating step that a
   person approves and Flow verifies.
+- [Proposed undo steps](#proposed-undo-steps): undo steps Flow finds for each
+  saving step and tries on a test copy before a person approves them.
 
-The code is in `openadapt_flow/after_stop.py` and `openadapt_flow/cli_undo.py`.
-The end-to-end tests are in `tests/test_after_stop_mockmed.py`.
+The code is in `openadapt_flow/after_stop.py`, `openadapt_flow/undo_proposal.py`
+and `openadapt_flow/cli_undo.py`. The end-to-end tests are in
+`tests/test_after_stop_mockmed.py` and `tests/test_undo_proposal.py`.
 
 ## The change ledger
 
@@ -202,10 +205,156 @@ assert result.status == "verified"
 `approve_undo` is the record a person's approval produces. Call it only from a
 path where a person made that decision.
 
+## Proposed undo steps
+
+Writing every undo by hand doesn't scale. Most business apps already have an
+inverse path: create and delete, add a line and remove it, set a field and set
+it back. `undo propose` looks for that path for each saving step, tries each
+candidate on a test copy, and writes only the ones that pass into the bundle,
+as proposals. A person approves a proposal once. After that, Flow offers it
+after a stop like a declared undo, and each run of it still needs a person's
+approval at the time.
+
+### Where the candidates come from
+
+For each saving step with a bound record check (a `record_written` or
+`field_equals` effect), Flow looks in four places:
+
+| Source | What Flow proposes |
+| --- | --- |
+| Other recordings (`--from-recording`) | A compiled recording of a person deleting, cancelling, voiding or removing a record. Its steps are used as recorded. If none of them declares an effect, Flow adds the save's inverse: the record the save created is gone. |
+| Captured traffic (`--recording`, from `record --capture-network`) | If the recording sent a `DELETE` to the record the save created, that request. Otherwise, for a JSON `POST` whose response carried a record id, a `DELETE` to that record's URL (REST convention). For a JSON `PUT` or `PATCH` that edits a field, the same request with the field's old value. |
+| The field's old value | For a field edit typed from a parameter, the same steps again with the value read back before the change. |
+| The app's own pages | A Delete, Cancel, Void or Remove control on a page loaded after the save. Flow reports it but doesn't build steps from it; record a person using it and pass that recording. |
+
+A browser form post isn't turned into an API undo: it needs the live page's
+session token. Record a person doing the undo instead.
+
+### How a candidate is verified
+
+Only on a target the deployment file declares a test copy, with the same gate
+as `induce --probe-on` ([PROBE_INDUCTION.md](PROBE_INDUCTION.md)):
+`test_copy.declared: true`, a reset (`reset_url` or `reset_command`), a reward
+contract for the read-back, no production runtime profile, and a fresh
+session for every run.
+
+For each candidate, Flow:
+
+1. Resets the copy and reads every record through the reward contract's
+   oracle. When earlier steps also save, it first runs the steps ahead of the
+   save, reads every record, and resets, so "before" is the state just before
+   this save.
+2. Runs the workflow up to and including the save, with the deployment's own
+   effect verifier, and reads every record again. The save must complete and
+   must change something; otherwise there is nothing to undo.
+3. Runs the candidate undo in a new session, the way `undo run` would. The
+   undo's own declared effect must be confirmed by an independent read-back.
+4. Reads every record again and compares them with step 1. The candidate
+   passes only if they are the same records with the same values: the saved
+   record is back as it was, and no other record changed (the collateral
+   guard). `--ignore-field` skips a field such as a modified-at timestamp.
+5. Resets the copy.
+
+Each candidate's evidence (digests and counts of the three snapshots, how each
+run ended, and the reason) is in the report. A failed candidate is reported
+with its reason and never written. For example:
+
+```text
+1 saving step(s): 0 with a verified undo, 1 without.
+  step_010: no verified undo. network: after the undo the test copy differs from before the save: 1 record(s) added since before the save remain (also: no other recordings were given; the save creates a record; there is no old value to restore)
+    To close the gap: record a person doing the app's own delete or cancel path and pass it with --from-recording; if the only difference is a timestamp or audit field, a person may name it with --ignore-field.
+```
+
+That is MockLoan in a mode where the save also writes a fee row: the
+`DELETE` removes the disbursement and leaves the fee.
+
+The evidence file holds no record values. The report names fields, never
+values.
+
+### Finding the record at undo time
+
+An undo that deletes "the record the save created" needs that record's id,
+which the app assigns during the save. A proposed undo can carry:
+
+- `locate`: before the save runs, the replayer keeps the ids of the records
+  that already match the save's record check. At undo time, the one matching
+  record that isn't in that list is the one the save created, and its id is
+  bound to the parameter `undo_record_id`. No such record, or more than one,
+  refuses the undo before anything runs.
+- `restore`: before the save runs, the replayer keeps the old value of each
+  edited field from the one matching record. The undo writes it back.
+
+The replayer writes these values to `<run-dir>/undo/prior/` from the
+pre-action read it already makes for the save's record check, and only for a
+step whose bundle holds an undo with `locate` or `restore` when the run
+starts. A run made before the proposal was written has no such values, and
+its undo refuses. The file is
+owner-only, like `params.json`, and it holds record values, so treat the run
+directory as sensitive. They are never copied into the report. `undo run` reads
+the system of record through the deployment file's effect verifier
+(`--config`) to find the record.
+
+### Propose, approve once, run with approval
+
+```bash
+openadapt-flow undo propose bundle --config test-copy.yaml --recording rec --from-recording delete-rec-bundle --report propose.json
+openadapt-flow undo accept bundle --undo undo-save_triage-network-1
+```
+
+`undo propose` without `--config` lists the candidates and runs nothing.
+Written proposals carry their evidence in the bundle under `undo-evidence/`,
+bound by its SHA-256. Writing them re-seals the bundle and marks any
+certification expired, as `undo declare` does.
+
+`undo accept` works only at an interactive terminal. It shows the undo, why it
+was proposed and where it was verified, and the person types the undo id. It
+refuses when the evidence file is missing or changed, or the undo changed
+since it was verified. Until then the proposal is in the bundle but Flow
+doesn't offer it, and the change ledger names no undo for the step.
+
+After a stop, the approved proposal is offered, approved and run exactly as in
+[Offer, approve, run, verify](#offer-approve-run-verify).
+
+### Measured coverage
+
+`benchmark/undo_proposal/` records each synthetic app's canonical
+demonstration in a real browser with network capture, then runs
+`undo propose` against the app as a test copy.
+
+| App | Run | Saving step | Verified undo | Why not, and what would close the gap |
+| --- | --- | --- | --- | --- |
+| MockMed | live | Save Encounter | Yes: `DELETE /api/encounter/{undo_record_id}` (captured traffic, REST convention) | |
+| MockLoan | live | Authorize Disbursement | Yes: `DELETE /api/disbursement/{undo_record_id}` (captured traffic, REST convention) | |
+| MockLoan, fee-row mode | live | Authorize Disbursement | No | The save also writes a fee row on a second surface, and the `DELETE` leaves it, so the records after the undo don't match. Closes with a recording of the app's own reversal path. |
+| OpenEMR fixture, new patient | offline | `step_039` (a click Flow counts as a possible write) | No | No record check is bound to the step, so there is nothing to invert. Closes with a bound record check. |
+| OpenEMR fixture, new patient | offline | `step_040` (the save) | No | The save is a browser form post, so no API undo is built. The only control after the save is Cancel. No recording deletes a chart. Closes with a recording of the app's own delete path. |
+| openIMIS fixture, claim | offline | `step_015` (the save) | No | The recording has no network capture and no recording deletes a claim. The live fixture wasn't started. Closes with a recording of the app's own delete or cancel path, or a new recording with `--capture-network`. |
+
+Total: 6 saving steps, 2 with a verified undo (both synthetic apps' plain saves), 4 without. On the two real-app fixtures, 0 of 3: each needs a recording of the app's own delete or cancel path, or a bound record check.
+
+Live rows record the demonstration in a real browser with network capture
+and run `undo propose` against the app declared a test copy. Offline rows read
+an existing bundle and recording and run nothing; they answer whether any
+candidate can be built. Every candidate's source, status, basis and reason is
+in [`benchmark/undo_proposal/results/`](../benchmark/undo_proposal/results/).
+
 ## What this doesn't do
 
 - **No automatic rollback.** Flow doesn't undo anything by itself, and there
-  is no transaction across a GUI workflow.
+  is no transaction across a GUI workflow. A proposed undo runs only on a test
+  copy until a person approves it, and then only after a stop, with a
+  person's approval at that time.
+- **Proposals need a bound record check.** A save whose record effect is a
+  placeholder gets no candidate.
+- **Exact restore only.** A candidate passes only if every record is back as
+  it was. An app that cancels by changing a status, or that writes an audit
+  row on delete, fails unless those fields are ignored with
+  `--ignore-field`. Ignoring a field is the person's call.
+- **One test-copy run per candidate.** A pass shows the undo worked on that
+  copy, with the bundle's parameters, once. It isn't a proof for every
+  record.
+- **No undo built from an app control.** A Delete or Cancel control on the
+  saved record's page is reported, not driven. Record a person using it.
 - **No network write buffering.** Flow doesn't hold writes back until the
   whole workflow has passed its checks.
 - **No undo in a workflow with a loop.** An undo runs with the run's base

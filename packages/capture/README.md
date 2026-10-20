@@ -165,16 +165,30 @@ encode-and-decode test and refuses to start if it fails.
 ## Microphone narration
 
 `capture record --audio` also records your voice and transcribes it on this
-computer. It's off by default. It needs the `audio` extra, which adds the
-microphone libraries and a local transcription backend (faster-whisper):
+computer. It's off by default. It needs the `audio` extra (the microphone
+libraries and faster-whisper) and the `privacy` extra, because the transcript
+is scrubbed before it is stored:
 
 ```bash
-pip install "openadapt-capture[audio]"
+pip install "openadapt-capture[audio,privacy]"
+python -m spacy download en_core_web_sm
 ```
 
-Capture refuses `--audio` before it opens the microphone if the extra or a
-local backend isn't installed, and it deletes the audio after transcription unless you set
+Capture refuses `--audio` before it opens the microphone if either is
+missing, and it deletes the audio after transcription unless you set
 `RECORD_AUDIO_RETAIN_WAVEFORM`.
+
+The scrubbed transcript is saved as `narration.json` in the capture folder:
+one entry per sentence, timed on the same clock as your clicks and keys. Word
+by word text is not kept. `capture narration ./my_recording` prints it, and
+`capture transcribe ./my_recording` builds it from a retained `audio.flac`.
+
+OpenAdapt Flow uses these sentences when it learns a program from several
+recordings. If you say why you take a branch ("if the insurance is Medicare,
+skip the copay screen"), Flow proposes that condition. It becomes part of the
+program only when every recording agrees with it, a test copy confirms it, or
+a person accepts it. See Flow's
+[NARRATION.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/NARRATION.md).
 
 ## Privacy
 

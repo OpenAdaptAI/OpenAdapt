@@ -593,6 +593,8 @@ class _Patch:
     checked_step_ids: tuple[str, ...] = ()
     #: One line for the person: what the patch adds and changes.
     summary: str = ""
+    #: The agent's own account of its proposal, shown to the approver as such.
+    proposal_note: str = ""
 
 
 # -- the loop ------------------------------------------------------------------
@@ -1171,6 +1173,15 @@ class SelfRepair:
                 screen = self._settled(session)
                 continue
             point = self._point_for(op, session, screen)
+            # Page text can steer the agent toward a control that leaves the
+            # app (a link dressed as a save). A repair never clicks or points
+            # a step there.
+            offsite = _offsite_target(session.backend, point)
+            if offsite is not None:
+                raise SelfRepairRefused(
+                    f"the proposed control leads to {offsite}, outside the app; "
+                    "a repair may not point a step at another origin"
+                )
             locate = getattr(session.backend, "structural_locator_at", None)
             structural = None
             if callable(locate):
@@ -1346,6 +1357,7 @@ class SelfRepair:
             target_region=target_region,  # type: ignore[arg-type]
             checked_step_ids=checked,
             summary=summary,
+            proposal_note=str(proposal.note or ""),
         )
 
     def _retarget(
@@ -2042,6 +2054,15 @@ class SelfRepair:
                 probe.frame_png, probe.resolved_region or patch.target_region
             ),
             form_state=probe.form_state,
+            provenance={
+                "actor": f"agent:{self.agent.agent_id}"[:128],
+                "reason": patch.proposal_note[:512] or None,
+                "task_scope": (
+                    f"{', '.join(patch.checked_step_ids or (patch.step.id,))} "
+                    "only; the record check and identity evidence are the "
+                    "recorded ones"
+                )[:512],
+            },
         )
         if self.on_approval_request is not None:
             try:
@@ -2482,6 +2503,27 @@ def _shows(backend: Any, vision: Any, screen: bytes, text: str) -> bool:
             return True
     words = _screen_words(vision, screen)
     return words is not None and set(_words(text)) <= words
+
+
+def _offsite_target(backend: Any, point: tuple[int, int]) -> Optional[str]:
+    """The other origin a link or form at ``point`` leads to, if any."""
+
+    from openadapt_flow.teach_scope import link_target_at, origin_of
+
+    page = getattr(backend, "page", None)
+    if page is None:
+        return None
+    target = link_target_at(page, point[0], point[1])
+    if not target:
+        return None
+    there = origin_of(target.get("url"))
+    if there is None:
+        return None
+    try:
+        here = origin_of(str(page.url))
+    except Exception:  # noqa: BLE001 - a page we can't read is not "here"
+        here = None
+    return None if there == here else there
 
 
 def _typed_values(workflow: Workflow, params: Mapping[str, Any]) -> dict[str, str]:

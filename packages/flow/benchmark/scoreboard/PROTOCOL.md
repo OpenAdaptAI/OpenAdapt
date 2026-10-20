@@ -230,3 +230,123 @@ their double send was de-duplicated. They are relabelled `duplicate_keyed`
 (clean saves; see `meta.json`), and items 36 to 40 are the duplicate fault
 without a key. OpenEMR's fixture has no fault injection, so the experiment
 is MockMed only.
+
+## Amendment 4 (2026-10-19): OpenEMR worklist runs, and arm 6
+
+- **Worklist runs.** Arms 3, 4 and 6 on OpenEMR were also run through the
+  throughput harness (`benchmark/openemr_throughput`, #1296, engine
+  b82131e5). It runs 26 referrals as one worklist, after one sign-in per
+  worker. Its worklist stops at the first item that needs a person, and the
+  items not started are `paused`. Each run is listed on its own line under
+  the table, with its engine, beside the October study's run (engine
+  0c642bc0). The harness's own figure, correct saves over the run's wall
+  time, is listed as "worklist throughput".
+- **26 items, not 64.** The harness's made-up surnames repeat every 26
+  items. Item 26 matches item 0, OpenEMR correctly shows a possible
+  duplicate, and the run stops. The first two 64-item runs stopped exactly
+  there. They are kept outside `raw/` and not imported.
+- **Arm 6 is self-loaded.** Eight workers load the host themselves (mean
+  load 42 and 171), so no arm 6 row can pass the per-item rule. Arm 6 is
+  gated on the start only: the load is under 12 when the run starts. The
+  mean load during the run is recorded, and its figure is labelled
+  "self-loaded throughput", never timed per item. It is reported beside arm
+  4's single-worker worklist figure.
+- **Engine of an import.** An imported run's `meta.json` names the engine
+  that made the rows (the study's engine tag, or the batch's own record),
+  not the importer's checkout.
+
+## Amendment 5 (2026-10-19): the quiet window overlapped other work
+
+Another session ran headless MockMed walks, pytest and vitest from about
+10:00 to 11:45, overlapping the OpenEMR worklist runs (10:50 to 11:26).
+Each row carries the 1-minute load measured at its start and end, and the
+`timed` flag follows it. No row with a recorded load over 12 is marked
+timed:
+- arm 3: 8 of 9 rows timed (loads 7.3 to 11.0);
+- arm 4: 4 of 17 rows timed (loads 10.2 to 15.2);
+- arm 6: none (self-loaded; Amendment 4).
+
+## Amendment 6 (2026-10-19): arm 5, the API step
+
+Arm 5 comes from the #1269 harness (`benchmark/openemr_api_tier/scoreboard_arm.py`,
+engine 93c32e9f) on its own private copy of the pinned OpenEMR fixture (ports
+9811/9810). There is one bundle, compiled from a recording with network
+capture. Its save step's API step was proposed by the compiler and admitted
+under the harness's name `benchmark-fixture`; no person admitted it.
+- The API step replaces all 41 GUI steps with one POST to
+  `new_comprehensive_save.php`. Its session token (`csrf_token_form`) is read
+  from the live form in the replaying browser's own session, and the
+  duplicate search runs first as a GET pre-check.
+- There are five blocks of four referrals, with API steps on (arm
+  `program_api`) and off (arm `program`, run `api-tier-2026-10-19`).
+  The two settings are interleaved, the order alternates by block, the
+  database is reset per block, and every run is gated at load 12.
+- The possible-duplicate referral (r6) is fault `duplicate_check`: the API
+  step's pre-check refuses, the GUI steps run, and they stop with no chart.
+  That is a safe stop.
+- Task seconds for arm 5 are the engine's time; wall seconds include the
+  new browser context, sign-in and the read-back.
+
+## Amendment 7 (2026-10-19): claims versus the read-back on OpenEMR
+
+The OpenEMR counterpart of Amendment 3 (`claims_openemr.py`, run
+`raw/openemr_referral/claims/2026-10-19-a`).
+- **Faults.** OpenEMR itself and OpenAdapt are unchanged. The faults are
+  injected only in the fixture's database:
+  - by a trigger installed before the agent starts: `partial` blanks the
+    home phone, `wrong_value` changes the postal code;
+  - by a poller once the new chart is written: `duplicate` copies it,
+    `no_persist` deletes it 3 s later, `collateral_loss` deletes another
+    chart, `collateral_edit` changes another chart's phone.
+- **Setup.** The baseline is restored before every item and after the last
+  one. One existing chart is seeded through OpenEMR's patient API, because
+  the baseline has none.
+- **Plumbing checks before the run, with no agent.** Each fault was tested
+  with a direct SQL insert: the trigger or poller acted, and the ground
+  truth named it. The one-item smoke run `smoke-2026-10-19` (a clean save,
+  before the seeded chart existed) is kept and marked `in_table: false`.
+- **verify-run.** It reads OpenEMR's patient API over loopback HTTP on the
+  UI port, with the fixture's read-only oracle client. The REST verifier
+  has no TLS switch for the self-signed HTTPS port. The token goes to the
+  subprocess in an environment variable and is never stored.
+- **Fault not reached.** Item 928 (`collateral_loss`): the agent stopped to
+  ask for Birth Sex, a required field the instruction doesn't name. No chart
+  was written, so the poller never fired. It is counted as "fault not
+  reached", and item 936 was run as the fifth `collateral_loss` item.
+- **Display.** A claims run is shown in the table only when its `meta.json`
+  says `complete: true`, set when every planned item has a row.
+
+## Amendment 8 (2026-10-19): arm 7 timed pass
+
+Arm 7 (`code_agent`) ran 5 MockMed items and 5 OpenEMR items (721 to 725)
+from the `claude/scoreboard-arm7` checkout (#1307, engine a5627748),
+during a window the other sessions were asked to keep quiet. All 10 were
+correct by read-back. The load stayed between 11 and 32: another session's
+`silent-saves` benchmark ran throughout. So only 1 MockMed row is timed and
+no OpenEMR row is. On OpenEMR the agent's program compiled, but the standard
+gate refused its canary, so it is not admitted. The two fixes the run needed
+(the `signal` import, and a free port for the MockMed server) and moving its
+JIT cache out of the source tree are on #1307. The time columns now show n,
+the number of timed rows behind each median.
+
+## Amendment 9 (2026-10-19): collateral change, re-judged
+
+verify-run's collateral check caught a non-target record that vanished, but
+not one that changed: the 5 OpenEMR `collateral_edit` items were `verified`
+(#1373). The fix is #1375 (`Effect.forbid_collateral_change`, applied by
+verify-run). `claims_rejudge.py` re-judged the 5 `collateral_edit` items,
+plus the 5 clean saves as a false-alarm control, with #1375's verify-run
+(9850b627). The original run kept no records, so each item's database
+state was rebuilt without the agent: baseline restored, existing chart
+seeded, the item's chart saved through the API, and the same edit applied.
+Result: 5 of 5 caught, and 5 of 5 clean saves verified. The run is labelled
+a re-judgement on rebuilt state, not an agent run.
+
+The control found a bug in #1375 before it shipped: a baseline stores
+records as canonical JSON, so nested values came back with their keys in
+another order and read as changed. #1375 now compares values in canonical
+form, with a test. It also found a scoreboard bug: a rerun of an item could
+read the receipt an earlier run left behind. Every claims script now uses a
+fresh directory per item and reads a receipt only after verify-run exits 0
+or 1. Every row of the earlier claims runs has exit 0 or 1 and a fresh
+directory, so those runs were not affected.

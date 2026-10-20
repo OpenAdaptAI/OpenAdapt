@@ -27,6 +27,7 @@
 - `qualified-remote-decision-v2-supported`
 - `record-check-from-app-reads`
 - `reviewed-judgment-cases-supported`
+- `server-response-evidence`
 - `substrate-runtime-validation-supported`
 - `typed-business-decisions-supported`
 - `ui-readback-separate-session`
@@ -273,6 +274,21 @@
 
 - An automatic-rule case names only a reviewed rule identifier and finite option. Flow does not infer or generate executable policy from the case; the rule must be authored and qualified through the normal program path.
 - A retained human-node case preserves runtime human authority. A more-evidence-required case refuses certification instead of guessing.
+
+### `server-response-evidence` — supported — bound to required CI pass evidence
+
+> In a browser, the server's answer to a save's own write request is kept on the step and counted on the receipt at check level same_screen, as method, status and media type only. It comes from the same transaction as the save, so on its own it never confirms an effect or makes a run VERIFIED.
+
+- Surfaces: docs
+- Strongest evidence strength: **supported** (tier is `supported`)
+
+| Backing evidence | Kind | Gating / CI stage | Strength | Proves |
+|---|---|---|---|---|
+| `tests/test_server_responses.py` | test | ci (required PR gate (test)) | supported | Only same-origin fetch, XHR and form writes sent after the mark are kept, never beacons, other origins, requests already in flight or service-worker answers, and never a URL, path or body; a real Chromium save produces one; a 201 answer with an unconfirmed read-back still ends RECONCILIATION_REQUIRED and not billable; a redirect counts as not an error; the receipt counts answers without changing its evidence tier; results without answers serialize as before. |
+
+**Caveats (honest limits):**
+
+- Only the browser backend sees server answers. A save that writes to another origin (a separate API host) leaves none. An answer that arrives after the screen postconditions is not kept.
 
 ### `substrate-runtime-validation-supported` — supported — bound to required CI pass evidence
 

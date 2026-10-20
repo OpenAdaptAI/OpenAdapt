@@ -146,6 +146,16 @@ console = [
 countersign = [
     "asn1crypto>=1.5",
 ]
+# Customer-held offline Seal keys (openadapt_flow.seal_keys). `keychain`
+# stores the key in the OS keychain through keyring (MIT): macOS Keychain,
+# Windows Credential Manager (DPAPI), Linux Secret Service. `pkcs11` signs on
+# a hardware token or HSM through python-pkcs11 (MIT); the key stays on it.
+keychain = [
+    "keyring>=24",
+]
+pkcs11 = [
+    "python-pkcs11>=0.7",
+]
 # Reference Execute server: `openadapt-flow serve-execute`. Same public
 # request schema as Cloud Execute, hosted in this process with a local
 # self-signed receipt. Not the hosted control plane.

@@ -89,6 +89,7 @@ _ACTIONS: Final = frozenset(
 _RISKS: Final = frozenset({"reversible", "irreversible"})
 _OUTCOMES: Final = frozenset({"success", "halt", "escalate"})
 _GUARD_ON_UNMET: Final = frozenset({"halt", "skip"})
+_GUARD_CERTIFIED_BY: Final = frozenset({"recordings_agree", "probe", "person"})
 _POSTCONDITION_KINDS: Final = frozenset(
     {
         "text_present",
@@ -124,6 +125,7 @@ _BADGES: Final = frozenset(
         "API",
         "secret",
         "optional (skippable)",
+        "narrated rule",
         "loop",
         "human decision",
         "halt",
@@ -175,6 +177,7 @@ _NODE_PUBLIC: Final = frozenset(
         "has_api_binding",  # bool
         "postconditions",  # closed vocabulary
         "guard_on_unmet",  # closed vocabulary
+        "guard_certified_by",  # closed vocabulary
         "outcome",  # closed vocabulary
         "halts",  # REPLACED by _safe_halts (positional, no content)
         "badges",  # closed literal set + bounded count template
@@ -188,6 +191,7 @@ _NODE_LOCAL: Final = frozenset(
         "key",  # recorded key
         "api_summary",  # method + URL template
         "guard",  # free-text predicate summary
+        "guard_reason",  # spoken sentence (scrubbed, still recorded text)
         "wait_until",  # free-text predicate summary
         "reason",  # free-text terminal reason
         "media",  # references to recorded pictures, which can show recorded data
@@ -246,7 +250,8 @@ _BUNDLE_PUBLIC: Final = frozenset(
 _BUNDLE_LOCAL: Final = frozenset({"created_at", "viewport"})
 
 _EDGE_PUBLIC: Final = frozenset({"source", "target", "kind", "label"})
-_EDGE_LOCAL: Final = frozenset({"guard"})  # free-text predicate summary
+# guard: free-text predicate summary; guard_reason: spoken sentence.
+_EDGE_LOCAL: Final = frozenset({"guard", "guard_reason"})
 
 _SPEC_PUBLIC: Final = frozenset({"spec_version", "bundle", "nodes", "edges"})
 _SPEC_LOCAL: Final[frozenset[str]] = frozenset()
@@ -468,6 +473,7 @@ def _project_node(node: GraphNode) -> GraphNode:
             kind for kind in node.postconditions if kind in _POSTCONDITION_KINDS
         ],
         guard_on_unmet=_in_vocabulary(node.guard_on_unmet, _GUARD_ON_UNMET),
+        guard_certified_by=_in_vocabulary(node.guard_certified_by, _GUARD_CERTIFIED_BY),
         outcome=_in_vocabulary(node.outcome, _OUTCOMES),
         halts=_safe_halts(node),
         badges=_safe_badges(node.badges),

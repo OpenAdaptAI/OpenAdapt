@@ -51,6 +51,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from openadapt_flow import network_capture as nc
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.ir import (
     ActionKind,
     ApiAdmission,
@@ -66,6 +67,8 @@ from openadapt_flow.runtime.actuators.web_form import (
     client_rules,
     folded_checks_digest,
     form_controls,
+    form_scripts,
+    unsupported_client_rules,
 )
 
 
@@ -82,7 +85,7 @@ def _events(recording: Path) -> list[dict[str, Any]]:
     path = recording / "events.jsonl"
     return [
         json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
+        for line in _sealed.read_text(path).splitlines()
         if line.strip()
     ]
 
@@ -259,7 +262,7 @@ def propose_api_step(
             None,
             ["the program has branches; API steps cover linear programs only"],
         )
-    meta = json.loads((recording / "meta.json").read_text(encoding="utf-8"))
+    meta = json.loads(_sealed.read_text(recording / "meta.json"))
     params = {k: str(v) for k, v in (meta.get("params") or {}).items()}
     if not params:
         return workflow, None, ["the recording has no parameters to map into a request"]
@@ -348,6 +351,30 @@ def propose_api_step(
     form_path, url_problems = _url_template(form_line["url"], by_value)
     if url_problems:
         return workflow, None, url_problems
+    # A browser runs the page's validation and script before it submits; the
+    # API step can only stand in for what it can evaluate itself.
+    unsupported = unsupported_client_rules(client_rules(form_line["response_text"]))
+    if unsupported:
+        return (
+            workflow,
+            None,
+            [
+                "the form validates with rules the API step can't evaluate "
+                f"({', '.join(unsupported)}); it stays on the GUI"
+            ],
+        )
+    scripts = form_scripts(
+        form_line["response_text"], _path(post["url"]), [n for n, _ in post["form"]]
+    )
+    if scripts:
+        return (
+            workflow,
+            None,
+            [
+                "the form runs script the API step can't run "
+                f"({', '.join(scripts[:5])}); it stays on the GUI"
+            ],
+        )
 
     # Steps the API step stands in for: those recorded on the form page.
     folded: list[Step] = []
@@ -565,6 +592,18 @@ def propose_api_step(
             and form_t < float(ln["t"]) < float(post["t"])
         }
     )
+    if others:
+        # The steps the API step would replace also wrote (a reservation, an
+        # autosave, a background call): the one request can't stand in for
+        # them, and skipping them would change what the program does.
+        return (
+            workflow,
+            None,
+            [
+                "the steps the API step would replace also sent "
+                f"{', '.join(others)}; one request can't stand in for them"
+            ],
+        )
     spec = WebFormSpec(
         form_path=form_path,
         fields=fields,
@@ -575,7 +614,7 @@ def propose_api_step(
         replaces_steps=[s.id for s in folded],
         other_writes_seen=others,
         screen_only_checks=screen_only,
-        folded_checks_digest=folded_checks_digest(folded[:-1]),
+        folded_checks_digest=folded_checks_digest(folded),
     )
     binding = ApiBinding(
         kind="web_form",
@@ -740,6 +779,11 @@ def admit_api_step(
             and b.kind == "web_form"
             and (step_id is None or step.id == step_id)
         ):
+            if b.web_form is not None and b.web_form.other_writes_seen:
+                raise ApiProposalError(
+                    f"{step.id}: the steps the API step would replace also sent "
+                    f"{', '.join(b.web_form.other_writes_seen)}; it can't be admitted"
+                )
             if not step.effects:
                 raise ApiProposalError(
                     f"{step.id} has no record check; an API step must be confirmed by one "
