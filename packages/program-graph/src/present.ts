@@ -1,6 +1,14 @@
 // Words and tones for nodes. Every value is read from the spec.
 
-import { nodeEffects, nodeHalts, nodeKind, nodePostconditions, type GraphNode } from "./spec.js";
+import {
+  nodeEffects,
+  nodeHalts,
+  nodeKind,
+  nodePostconditions,
+  specNodes,
+  type GraphNode,
+  type ProgramGraphSpec,
+} from "./spec.js";
 
 export type NodeTone = "default" | "governed" | "branch" | "halt" | "terminal" | "stop";
 
@@ -26,10 +34,42 @@ export function nodeTone(node: GraphNode): NodeTone {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** The chip on a card: "03", "END", "STOP". */
-export function stepChip(node: GraphNode): string {
+/**
+ * How cards are numbered. "index": every node by its place in the program
+ * (a loop counts as a step). "actions": only the actions, 1 to N, and every
+ * other node shows its kind ("LOOP").
+ */
+export type Numbering = "index" | "actions";
+
+/** A node's step number, or null for a node that is not numbered. */
+export type StepNumberer = (node: GraphNode) => number | null;
+
+export const indexNumber: StepNumberer = (node) => node.index + 1;
+
+export function stepNumberer(spec: ProgramGraphSpec, numbering: Numbering = "index"): StepNumberer {
+  if (numbering === "index") return indexNumber;
+  const numbers = new Map<string, number>();
+  [...specNodes(spec)]
+    .sort((a, b) => a.index - b.index)
+    .filter((node) => nodeKind(node) === "action")
+    .forEach((node, i) => numbers.set(node.id, i + 1));
+  return (node) => numbers.get(node.id) ?? null;
+}
+
+const SHORT_KIND: Record<string, string> = {
+  loop: "LOOP",
+  branch: "IF",
+  business_decision: "ASK",
+  subflow_call: "CALL",
+  child_bundle: "SUB",
+  action: "STEP",
+};
+
+/** The chip on a card: "03", "LOOP", "END", "STOP". */
+export function stepChip(node: GraphNode, numberOf: StepNumberer = indexNumber): string {
   if (nodeKind(node) === "terminal") return nodeTone(node) === "stop" ? "STOP" : "END";
-  return pad(node.index + 1);
+  const n = numberOf(node);
+  return n === null ? SHORT_KIND[nodeKind(node)] ?? "STEP" : pad(n);
 }
 
 export function kindLabel(node: GraphNode): string {
@@ -60,8 +100,14 @@ export function evidenceLanes(node: GraphNode): EvidenceLanes {
 }
 
 /** One sentence for a screen reader: what the card is and what it checks. */
-export function nodeDescription(node: GraphNode, title = displayTitle(node)): string {
-  const parts = [`${stepChip(node) === "END" || stepChip(node) === "STOP" ? stepChip(node).toLowerCase() : `step ${stepChip(node)}`}, ${kindLabel(node)}: ${title}.`];
+export function nodeDescription(
+  node: GraphNode,
+  title = displayTitle(node),
+  numberOf: StepNumberer = indexNumber,
+): string {
+  const chip = stepChip(node, numberOf);
+  const lead = /^\d+$/.test(chip) ? `step ${chip}, ${kindLabel(node)}` : chip === "END" || chip === "STOP" ? `${chip.toLowerCase()}, ${kindLabel(node)}` : kindLabel(node);
+  const parts = [`${lead}: ${title}.`];
   if (node.identity?.armed) parts.push("Checks the right record.");
   if (nodeEffects(node).length) parts.push("Reads the saved record back.");
   const halts = nodeHalts(node).length;

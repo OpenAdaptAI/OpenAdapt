@@ -86,14 +86,18 @@ export function validateFolds(spec: ProgramGraphSpec, folds: FoldSpec): string[]
   return problems;
 }
 
-function foldedNode(group: FoldGroup, members: GraphNode[]): GraphNode {
+type Numberer = (node: GraphNode) => number | null;
+const byIndex: Numberer = (node) => node.index + 1;
+
+function foldedNode(group: FoldGroup, members: GraphNode[], numberOf: Numberer): GraphNode {
+  const num = (node: GraphNode) => numberOf(node) ?? node.index + 1;
   const identities = members.map((node) => node.identity).filter((id) => id?.applicable);
   const unique = (values: string[]) => [...new Set(values)];
   return {
     id: group.id,
     index: Math.min(...members.map((node) => node.index)),
     kind: members.every((node) => nodeKind(node) === "action") ? "action" : nodeKind(members[0]),
-    title: group.title ?? `Steps ${pad(members[0].index + 1)}–${pad(members[members.length - 1].index + 1)}`,
+    title: group.title ?? `Steps ${pad(num(members[0]))}–${pad(num(members[members.length - 1]))}`,
     action: null,
     risk: members.some((node) => node.risk === "irreversible")
       ? "irreversible"
@@ -111,7 +115,7 @@ function foldedNode(group: FoldGroup, members: GraphNode[]): GraphNode {
     postconditions: members.flatMap(nodePostconditions),
     // Each member's rules, numbered by step: two members' "declared stop
     // rule 1" are two different rules.
-    halts: members.flatMap((node) => nodeHalts(node).map((halt) => `step ${pad(node.index + 1)}: ${halt}`)),
+    halts: members.flatMap((node) => nodeHalts(node).map((halt) => `step ${pad(num(node))}: ${halt}`)),
     badges: unique(members.flatMap((node) => node.badges ?? [])),
   };
 }
@@ -127,8 +131,11 @@ export function deriveDisplayGraph(
     expanded?: ReadonlySet<string>;
     stopExits?: StopExit[] | null;
     stopLabel?: string;
+    /** Step numbers for fold chips and titles (see stepNumberer). */
+    numberOf?: Numberer;
   } = {},
 ): DisplayGraph {
+  const numberOf = options.numberOf ?? byIndex;
   const nodes = specNodes(spec);
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const ownerOf = new Map(nodes.map((node) => [node.id, node.id]));
@@ -142,7 +149,7 @@ export function deriveDisplayGraph(
       .filter((node): node is GraphNode => node !== undefined && ownerOf.get(node.id) === node.id)
       .sort((a, b) => a.index - b.index);
     if (members.length === 0) continue;
-    const card = foldedNode(group, members);
+    const card = foldedNode(group, members, numberOf);
     for (const member of members) ownerOf.set(member.id, group.id);
     replaced.set(members[0].id, card);
     folds.set(group.id, {
@@ -150,8 +157,8 @@ export function deriveDisplayGraph(
       title: card.title,
       subtitle: group.subtitle,
       members,
-      first: members[0].index + 1,
-      last: members[members.length - 1].index + 1,
+      first: numberOf(members[0]) ?? members[0].index + 1,
+      last: numberOf(members[members.length - 1]) ?? members[members.length - 1].index + 1,
     });
   }
 

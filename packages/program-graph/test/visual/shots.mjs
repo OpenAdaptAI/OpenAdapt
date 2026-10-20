@@ -30,6 +30,7 @@ export const SHOTS = [
   { id: "records-map", query: "?case=records" },
   { id: "records-evidence", query: "?case=records&view=evidence" },
   { id: "records-phone", query: "?case=records", viewport: { width: 375, height: 812 } },
+  { id: "referral-phone", query: "?cursor=end", viewport: { width: 372, height: 812 } },
 ];
 
 fs.mkdirSync(outDir, { recursive: true });

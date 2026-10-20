@@ -1,5 +1,7 @@
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useMemo,
@@ -18,7 +20,11 @@ import {
   kindLabel,
   nodeDescription,
   nodeTone,
+  indexNumber,
   stepChip,
+  stepNumberer,
+  type Numbering,
+  type StepNumberer,
   type LaneState,
 } from "./present.js";
 import { nodeEffects, nodeHalts, nodeKind, specEdges, specNodes, type GraphNode, type ProgramGraphSpec } from "./spec.js";
@@ -80,6 +86,8 @@ export interface ProgramWorkbenchProps {
   showInspector?: boolean;
   /** Word stop rules plainly (stopRuleWords) instead of Flow's rule names. */
   plainStopRules?: boolean;
+  /** "index" (default): number every node; "actions": number only the actions, 1 to N. */
+  numbering?: Numbering;
   /** Override a node's display title (for example, a public projection). */
   titleFor?: (node: GraphNode) => string;
   /** Override the notes under the map and the evidence table; null hides one. */
@@ -101,6 +109,8 @@ const DEFAULT_CANVAS_NOTE = "The map follows the emitted edge targets. It keeps 
 const DEFAULT_EVIDENCE_NOTE = "These rows show the declared contract. They do not report a live verdict.";
 
 const pad = (n: number) => String(n).padStart(2, "0");
+
+const NumberOf = createContext<StepNumberer>(indexNumber);
 
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -124,9 +134,9 @@ function EvidenceState({ label, state, value }: { label: string; state: LaneStat
   );
 }
 
-function chipFor(node: GraphNode, fold: FoldInfo | undefined): string {
+function chipFor(node: GraphNode, fold: FoldInfo | undefined, numberOf: StepNumberer): string {
   if (fold) return fold.first === fold.last ? pad(fold.first) : `${pad(fold.first)}–${pad(fold.last)}`;
-  return stepChip(node);
+  return stepChip(node, numberOf);
 }
 
 function RunFacts({ state }: { state: NodeRunState }) {
@@ -188,6 +198,7 @@ function NodeInspector({
   onRefold: (id: string) => void;
   onPickMember: (foldId: string, memberId: string) => void;
 }) {
+  const numberOf = useContext(NumberOf);
   const lanes = evidenceLanes(node);
   const memberLanes = fold?.members.map(evidenceLanes) ?? [];
   const isStop = node.id === STOP_NODE_ID;
@@ -195,7 +206,7 @@ function NodeInspector({
     <aside className="opg-inspector" aria-label="Selected program step" aria-live="polite">
       <div className="opg-inspector-head">
         <span>{fold ? "Selected steps" : "Selected step"}</span>
-        <code>{chipFor(node, fold)}</code>
+        <code>{chipFor(node, fold, numberOf)}</code>
       </div>
       <h3>{titleFor(node)}</h3>
       <p className="opg-mono">{fold ? (fold.subtitle ?? `${fold.members.length} steps`) : isStop ? "Where a stop rule ends the run" : node.id}</p>
@@ -274,7 +285,7 @@ function NodeInspector({
             {fold.members.map((member) => (
               <li key={member.id}>
                 <button type="button" onClick={() => onPickMember(fold.id, member.id)}>
-                  <code>{stepChip(member)}</code>
+                  <code>{stepChip(member, numberOf)}</code>
                   {titleFor(member)}
                 </button>
               </li>
@@ -353,6 +364,7 @@ function MapPanel({
   canvasNote: string | null;
   layoutOptions?: LayoutOptions;
 }) {
+  const numberOf = useContext(NumberOf);
   const layout = useMemo(() => layoutProgramGraph(display.spec, layoutOptions), [display.spec, layoutOptions]);
   const nodes = specNodes(display.spec);
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
@@ -371,12 +383,20 @@ function MapPanel({
     const box = viewport.current;
     const point = layout.nodes.find((node) => node.id === currentCard);
     if (!box || !point) return;
-    const top = point.y;
-    const bottom = point.y + point.height;
-    if (top >= box.scrollTop && bottom <= box.scrollTop + box.clientHeight) return;
-    const target = Math.max(0, top - (box.clientHeight - point.height) / 2);
-    if (typeof box.scrollTo === "function") box.scrollTo({ top: target });
-    else box.scrollTop = target;
+    // The canvas is centred in the viewport when it is narrower than it.
+    const canvas = box.firstElementChild as HTMLElement | null;
+    const offsetX = canvas?.offsetLeft ?? 0;
+    const left = point.x + offsetX;
+    const inY = point.y >= box.scrollTop && point.y + point.height <= box.scrollTop + box.clientHeight;
+    const inX = left >= box.scrollLeft && left + point.width <= box.scrollLeft + box.clientWidth;
+    if (inY && inX) return;
+    const top = inY ? box.scrollTop : Math.max(0, point.y - (box.clientHeight - point.height) / 2);
+    const leftTarget = inX ? box.scrollLeft : Math.max(0, left - (box.clientWidth - point.width) / 2);
+    if (typeof box.scrollTo === "function") box.scrollTo({ top, left: leftTarget });
+    else {
+      box.scrollTop = top;
+      box.scrollLeft = leftTarget;
+    }
   }, [currentCard, traceState?.cursor, layout]);
 
   useEffect(() => {
@@ -539,8 +559,8 @@ function MapPanel({
                   aria-pressed={isSelected}
                   aria-label={
                     nodeFold
-                      ? `Steps ${chipFor(node, nodeFold)}, ${nodeFold.members.length} steps: ${title}.${runWords}`
-                      : `${nodeDescription(node, title)}${runWords}`
+                      ? `Steps ${chipFor(node, nodeFold, numberOf)}, ${nodeFold.members.length} steps: ${title}.${runWords}`
+                      : `${nodeDescription(node, title, numberOf)}${runWords}`
                   }
                   tabIndex={isSelected ? 0 : -1}
                   onClick={() => setSelectedId(node.id)}
@@ -553,7 +573,7 @@ function MapPanel({
                   }}
                   onKeyDown={(event) => move(event, node.id)}
                 >
-                  <span className="opg-node-index">{chipFor(node, nodeFold)}</span>
+                  <span className="opg-node-index">{chipFor(node, nodeFold, numberOf)}</span>
                   <span className="opg-node-copy">
                     <small>{nodeFold ? (nodeFold.subtitle ?? `${nodeFold.members.length} steps`) : kindLabel(node)}</small>
                     <strong>{title}</strong>
@@ -632,13 +652,14 @@ function StopRulesList({
   halt: TraceState["halted"];
   plain?: boolean;
 }) {
+  const numberOf = useContext(NumberOf);
   const rules = specNodes(spec).filter((node) => nodeHalts(node).length > 0 || nodeKind(node) === "terminal");
   const stopped = halt ? specNodes(spec).find((node) => node.id === halt.node) : undefined;
   return (
     <div className="opg-stop-list">
       {halt && stopped && (
         <article data-run="halted">
-          <span className="opg-mono">this run stopped at step {stopped.index + 1}</span>
+          <span className="opg-mono">this run stopped at step {numberOf(stopped) ?? stopped.index + 1}</span>
           <strong>{titleFor(stopped)}</strong>
           <p>{halt.reason ?? "The run stopped at this step."}</p>
         </article>
@@ -648,7 +669,13 @@ function StopRulesList({
       ) : (
         rules.map((node) => (
           <article key={`stop-${node.id}`}>
-            <span className="opg-mono">{nodeKind(node) === "terminal" ? "terminal" : `step ${node.index + 1}`}</span>
+            <span className="opg-mono">
+              {nodeKind(node) === "terminal"
+                ? "terminal"
+                : numberOf(node) === null
+                  ? kindLabel(node)
+                  : `step ${numberOf(node)}`}
+            </span>
             <strong>{titleFor(node)}</strong>
             <p>
               {nodeHalts(node).length
@@ -763,7 +790,8 @@ function TraceChip({ trace, state, playing }: { trace?: RunTrace | null; state: 
 
 /** Selection, folds and trace position, each either owned here or by the host. */
 function useWorkbenchState(props: ProgramWorkbenchProps) {
-  const { spec, folds, stopExits, trace, playhead, autoPlay = false, initialCursor = 0, speed = 14 } = props;
+  const { spec, folds, stopExits, trace, playhead, autoPlay = false, initialCursor = 0, speed = 14, numbering } = props;
+  const numberOf = useMemo(() => stepNumberer(spec, numbering), [spec, numbering]);
   const [ownSelected, setOwnSelected] = useState(props.initialSelectedId ?? specNodes(spec)[0]?.id ?? "");
   const selectedId = props.selectedId ?? ownSelected;
   const [ownExpanded, setOwnExpanded] = useState<Set<string>>(() => new Set());
@@ -826,7 +854,10 @@ function useWorkbenchState(props: ProgramWorkbenchProps) {
     if (halt && !list.some((stop) => stop.node === halt.node)) list.push({ node: halt.node, label: "stopped" });
     return list;
   }, [stopExits, halt?.node]); // eslint-disable-line react-hooks/exhaustive-deps
-  const display = useMemo(() => deriveDisplayGraph(spec, { folds, expanded, stopExits: exits }), [spec, folds, expanded, exits]);
+  const display = useMemo(
+    () => deriveDisplayGraph(spec, { folds, expanded, stopExits: exits, numberOf }),
+    [spec, folds, expanded, exits, numberOf],
+  );
   const traceState = useMemo(
     () =>
       trace
@@ -848,7 +879,7 @@ function useWorkbenchState(props: ProgramWorkbenchProps) {
     if (!first) setSelectedId(traceState.current.node);
   }, [traceState, moveKey, cursor, trace, setSelectedId]);
 
-  return { selectedId, setSelectedId, expanded, setExpanded, cursor, setCursor, playing, setPlaying, display, traceState };
+  return { selectedId, setSelectedId, expanded, setExpanded, cursor, setCursor, playing, setPlaying, display, traceState, numberOf };
 }
 
 /**
@@ -913,6 +944,7 @@ export function ProgramWorkbench(props: ProgramWorkbenchProps) {
     );
 
   return (
+    <NumberOf.Provider value={state.numberOf}>
     <div className={`opg-root${className ? ` ${className}` : ""}`} data-theme={theme} style={style}>
       {showHeader && (
         <div className="opg-topbar">
@@ -985,6 +1017,7 @@ export function ProgramWorkbench(props: ProgramWorkbenchProps) {
           <StopRulesList spec={spec} titleFor={titleFor} halt={traceState?.finished ? traceState.halted : null} plain={plainStopRules} />,
         )}
     </div>
+    </NumberOf.Provider>
   );
 }
 
@@ -995,17 +1028,23 @@ export function ProgramMap(props: Omit<ProgramWorkbenchProps, "views" | "showHea
 
 type PanelProps = {
   spec: ProgramGraphSpec;
+  numbering?: Numbering;
   titleFor?: (node: GraphNode) => string;
   theme?: "dark" | "light";
   className?: string;
   style?: CSSProperties;
 };
 
-const Root = ({ theme = "dark", className, style, children }: PanelProps & { children: ReactNode }) => (
-  <div className={`opg-root${className ? ` ${className}` : ""}`} data-theme={theme} style={style}>
-    {children}
-  </div>
-);
+const Root = ({ spec, numbering, theme = "dark", className, style, children }: PanelProps & { children: ReactNode }) => {
+  const numberOf = useMemo(() => stepNumberer(spec, numbering), [spec, numbering]);
+  return (
+    <NumberOf.Provider value={numberOf}>
+      <div className={`opg-root${className ? ` ${className}` : ""}`} data-theme={theme} style={style}>
+        {children}
+      </div>
+    </NumberOf.Provider>
+  );
+};
 
 /** The inspector for one step, outside the workbench. */
 export function StepInspector(
@@ -1028,8 +1067,8 @@ export function StepInspector(
   const display = useMemo(() => {
     const exits = [...(props.stopExits ?? [])];
     if (halt && !exits.some((stop) => stop.node === halt.node)) exits.push({ node: halt.node });
-    return deriveDisplayGraph(spec, { folds, expanded, stopExits: exits });
-  }, [spec, folds, expanded, props.stopExits, halt?.node]); // eslint-disable-line react-hooks/exhaustive-deps
+    return deriveDisplayGraph(spec, { folds, expanded, stopExits: exits, numberOf: stepNumberer(spec, props.numbering) });
+  }, [spec, folds, expanded, props.stopExits, halt?.node, props.numbering]); // eslint-disable-line react-hooks/exhaustive-deps
   const traceState = trace
     ? traceStateAt(trace, cursor, display.ownerOf)
     : playhead

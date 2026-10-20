@@ -70,6 +70,7 @@ import "@openadapt/program-graph/styles.css";
 | `views`, `initialView` | Which tabs to show (`program`, `evidence`, `stops`) and which opens first. One view shows no tab bar. |
 | `showHeader`, `showPlayer`, `showInspector` | Hide the title bar, the player or the inspector. |
 | `plainStopRules` | Show stop rules in plain words (`stopRuleWords`), not Flow's rule names. Use it with the public projection, which names rules only "declared stop rule N". |
+| `numbering` | `index` (default) numbers every node, so a loop counts as a step. `actions` numbers only the actions, 1 to N, and shows the loop as "LOOP". |
 | `titleFor` | Replaces a node's displayed title. |
 | `notes` | Replaces or hides (`null`) the note under the map and under the evidence table. |
 | `theme` | `dark` (default) or `light`. The workbench keeps its own colours whatever the host page's theme. |
@@ -80,7 +81,8 @@ A host that lays out its own page can use the parts on their own:
 `EvidenceLanes` and `StopRules`. Each takes `spec`, `theme` and `titleFor`.
 
 The layout follows the workbench's own width: below 760 px the inspector
-stacks under the map, and the map pans in both directions.
+stacks under the map, and the map pans in both directions; below 520 px the
+title bar wraps. While a run plays, the card it is at stays in view.
 
 The package also exports the pieces: `layoutProgramGraph`, `rankNodes`,
 `deriveDisplayGraph`, `foldSequences` (folds for a program that has none),

@@ -13,6 +13,7 @@
   prop that lights a step without a trace; `showHeader`, `showPlayer` and
   `showInspector`; and `ProgramMap`, `StepInspector`, `EvidenceLanes` and
   `StopRules` as separate components.
+- `numbering="actions"`: number only the actions, 1 to N.
 - `stopRuleWords`: a step's stop rules in plain words, rebuilt from the public
   projection by Flow's builder rules.
 - Dark and light themes from `--opg-*` CSS variables; the layout follows the

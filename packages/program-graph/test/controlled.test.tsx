@@ -88,3 +88,20 @@ describe("host-driven workbench", () => {
     expect(screen.getByText(/this run stopped at step 41/)).toBeTruthy();
   });
 });
+
+describe("numbering", () => {
+  it("numbers only the actions 1 to 41 and labels the loop", () => {
+    render(<ProgramWorkbench spec={referral.spec} folds={referral.folds} numbering="actions" trace={referral.trace} initialCursor={referral.trace.events.length} />);
+    expect(screen.getByRole("button", { name: /^loop: / }).textContent).toContain("LOOP");
+    expect(screen.getByRole("button", { name: /^Steps 01–09, 9 steps: Name/ })).toBeTruthy();
+    const save = screen.getByRole("button", { name: /^Steps 39–41, 3 steps: Create the chart/ });
+    expect(save.getAttribute("data-run")).toBe("halted");
+    fireEvent.click(screen.getByRole("tab", { name: "Stop rules" }));
+    expect(screen.getByText(/this run stopped at step 40/)).toBeTruthy();
+  });
+
+  it("keeps Desktop's numbering by default", () => {
+    render(<ProgramWorkbench spec={processRecords} />);
+    expect(screen.getByRole("button", { name: /^step 02, loop: For each record/ })).toBeTruthy();
+  });
+});

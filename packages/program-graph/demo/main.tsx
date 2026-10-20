@@ -22,6 +22,7 @@ const referral = (
     trace={trace as RunTrace}
     iterationNoun="referral"
     plainStopRules
+    numbering="actions"
     initialCursor={cursor}
     autoPlay={q.get("play") === "1"}
     initialView={view}

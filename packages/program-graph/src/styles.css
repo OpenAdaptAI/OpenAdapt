@@ -768,6 +768,12 @@
   }
 }
 @container (max-width: 520px) {
+  .opg-topbar {
+    flex-wrap: wrap;
+  }
+  .opg-topbar > div {
+    flex: 1 1 240px;
+  }
   .opg-player {
     flex-wrap: wrap;
   }
