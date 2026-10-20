@@ -357,7 +357,7 @@ def test_qualification_beside_the_bundle_is_marked_unbound(tmp_path):
     statement = _statement(tmp_path, bundle, raw)
     summary, _, _ = prepare(statement, key, [bundle])
     assert "not covered by its digest" in summary
-    assert "Each item   one run only" in summary
+    assert "Each item    one run only" in summary
 
 
 def test_qualification_line_without_a_report(tmp_path):

@@ -537,8 +537,12 @@ def _cmd_authorize_create(args: argparse.Namespace) -> int:
         print(f"not created: {code}: {exc}", file=sys.stderr)
         return 1
     print(f"wrote {path} and {path.parent / 'run-authorization.allowed_signers'}")
-    print("sign it with your GitHub SSH key:")
-    print(signing_command(path))
+    print("review what it allows and sign it with your GitHub SSH key:")
+    print(
+        f"openadapt-flow local-seal authorize sign {path} --key ~/.ssh/id_ed25519 "
+        "--bundle <the program bundle>"
+    )
+    print(f"(or sign it directly: {signing_command(path)})")
     return 0
 
 

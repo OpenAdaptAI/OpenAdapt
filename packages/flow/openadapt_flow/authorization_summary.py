@@ -321,7 +321,7 @@ def render(
         f"  Profile      {scope.profile}",
         f"  Seal keys    {', '.join(scope.seal_key_ids)}",
         f"  Issued at    {statement.issued_at}",
-        "  Each item   "
+        "  Each item    "
         + ("may be used for many runs" if scope.reusable else "one run only"),
         "  Not allowed  any other bundle, item, profile or Seal key",
         "",
