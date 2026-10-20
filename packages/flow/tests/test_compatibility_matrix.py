@@ -200,8 +200,11 @@ def test_the_published_page_is_current_and_linked():
 # -- the API step ---------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("profile", _cells("api_step", "works"))
+@pytest.mark.parametrize(
+    "profile", [p for p in _cells("api_step", "works") if p != "managed"]
+)
 def test_api_step_runs_where_the_matrix_says(tmp_path, profile):
+    # Managed: tests/test_api_step_managed.py runs a real dispatch binding.
     run = Run(tmp_path, profile)
     report = run.run()
 
@@ -221,12 +224,6 @@ def test_api_step_runs_where_the_matrix_says(tmp_path, profile):
 def test_api_step_refuses_where_the_matrix_says(tmp_path, profile):
     reason = matrix.cell("api_step", profile).reason
     run = Run(tmp_path, "qualified" if profile == "qualified" else "default")
-    if profile == "managed":
-        replayer = run.replayer()
-        replayer.managed_dispatch_binding = object()
-        _end, _save, why = replayer._web_form_span_at(run.workflow, 0, durable=True)
-        assert why == reason
-        return
     report = run.run()
     assert run.transport.posts == []
     assert report.results[0].api_fallback == reason

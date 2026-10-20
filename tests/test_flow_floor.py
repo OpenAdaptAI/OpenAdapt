@@ -24,9 +24,10 @@ except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10 CI
     import tomli as tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
-# Launcher 1.17 requires Flow 2 (approval by default), so 1.x is below the floor.
-BELOW_FLOOR = ["1.29.0", "1.33.0", "1.34.0", "1.34.9", "1.35.0", "1.35.1"]
-ACCEPTED = "2.0.0"
+# Launcher 1.18 requires Flow 2.2 (the quickstart's offline Seals, shared
+# browser and OCR prewarm), so 1.x, 2.0 and 2.1 are below the floor.
+BELOW_FLOOR = ["1.29.0", "1.34.9", "1.35.1", "2.0.0", "2.1.0", "2.1.9"]
+ACCEPTED = "2.2.0"
 
 
 def _flow_requirements() -> list[Requirement]:
