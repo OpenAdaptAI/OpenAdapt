@@ -34,8 +34,33 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      # PR tier: a change confined to packages/flow, agent, types or desktop
+      # is tested by the Packages workflow, so this job reports success without
+      # running its suite. The job itself always runs, because a skipped matrix
+      # job never reports its required check name. The merge queue and main
+      # always run everything.
+      - name: Scope (skip the suite for package-only pull requests)
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != pull_request ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # The checkout is the PR merge commit; its first parent is the base tip.
+          changed="$(git diff --name-only HEAD^1 HEAD)"
+          # Root tests also read each package's README and source policy.
+          outside="$(grep -vE '^packages/(flow|agent|types|desktop)/' <<<"$changed" || true)"
+          shared="$(grep -E '^packages/[^/]+/(README\.md|source-policy[^/]*)$' <<<"$changed" || true)"
+          if [ -n "$outside$shared" ]; then run=true; else run=false; fi
+          echo "run=$run" | tee -a "$GITHUB_OUTPUT"
 
       - name: Set up Python ${{ matrix.python-version }}
+        if: steps.scope.outputs.run == 'true'
         uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
@@ -43,6 +68,7 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
         run: |
           python -m pip install --upgrade pip
           # Sibling packages are installed explicitly so the
@@ -60,19 +86,23 @@ jobs:
             openadapt-retrieval
 
       - name: Lint with ruff
+        if: steps.scope.outputs.run == 'true'
         run: |
           ruff check openadapt/
           ruff format --check openadapt/
 
       - name: Verify package imports
+        if: steps.scope.outputs.run == 'true'
         run: |
           python -c "from openadapt.cli import main; print('CLI import OK')"
           python -c "from openadapt.version import __version__; print(f'Version: {__version__}')"
 
       - name: Run tests
+        if: steps.scope.outputs.run == 'true'
         run: pytest tests/ -v
 
       - name: Build release artifacts and reject workstation state
+        if: steps.scope.outputs.run == 'true'
         run: |
           python -m build
           python scripts/verify_release_artifacts.py
