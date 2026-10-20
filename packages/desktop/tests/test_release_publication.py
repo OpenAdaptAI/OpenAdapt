@@ -59,18 +59,25 @@ def test_python_dist_takes_only_the_attested_wheel_and_sdist(tmp_path: Path) -> 
     assert checksums.is_file()
 
 
-def _dist(tmp_path: Path, version: str) -> tuple[Path, dict[str, str]]:
+def _dist(tmp_path: Path, version: str) -> tuple[Path, Path, dict[str, str]]:
+    """A pypi-dist directory and the attested SHA256SUMS that names its files."""
+
     directory = tmp_path / "pypi-dist"
     directory.mkdir()
     digests = {}
     for name in python_distribution_names(version):
         (directory / name).write_bytes(name.encode())
         digests[name] = hashlib.sha256(name.encode()).hexdigest()
-    return directory, digests
+    checksums = tmp_path / "SHA256SUMS"
+    lines = [f"{digest}  {name}" for name, digest in sorted(digests.items())]
+    # The attested set names every release file, not only the wheel and sdist.
+    lines.append(f"{'2' * 64}  OpenAdapt-Desktop-{version}-x86_64.AppImage")
+    checksums.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return directory, checksums, digests
 
 
 def test_verify_pypi_waits_for_and_requires_the_exact_bytes(tmp_path: Path) -> None:
-    directory, digests = _dist(tmp_path, "1.2.3")
+    directory, checksums, digests = _dist(tmp_path, "1.2.3")
     answers = [urllib.error.HTTPError("u", 404, "missing", None, None), {}, digests]
 
     def fetch(_version: str) -> dict[str, str]:
@@ -80,25 +87,108 @@ def test_verify_pypi_waits_for_and_requires_the_exact_bytes(tmp_path: Path) -> N
         return answer
 
     served = release_publication.verify_pypi(
-        directory, version="1.2.3", wait_seconds=60, fetch=fetch, sleep=lambda _s: None
+        directory,
+        version="1.2.3",
+        checksums=checksums,
+        wait_seconds=60,
+        fetch=fetch,
+        sleep=lambda _s: None,
     )
     assert served == digests
 
 
+def test_verify_pypi_ignores_the_publish_actions_attestation_files(tmp_path: Path) -> None:
+    # pypa/gh-action-pypi-publish with attestations writes one beside each
+    # upload; Desktop 0.22.0 run 39374653331 refused them as unexpected.
+    directory, checksums, digests = _dist(tmp_path, "1.2.3")
+    for name in digests:
+        (directory / f"{name}.publish.attestation").write_text("{}", encoding="utf-8")
+    served = release_publication.verify_pypi(
+        directory, version="1.2.3", checksums=checksums, wait_seconds=0, fetch=lambda _v: digests
+    )
+    assert served == digests
+
+
+def test_verify_pypi_compares_against_the_attested_sha256sums(tmp_path: Path) -> None:
+    directory, checksums, digests = _dist(tmp_path, "1.2.3")
+    wheel = next(name for name in digests if name.endswith(".whl"))
+    (directory / wheel).write_bytes(b"swapped after attestation")
+    tampered = {**digests, wheel: hashlib.sha256(b"swapped after attestation").hexdigest()}
+    with pytest.raises(ValueError, match="differs from the attested SHA256SUMS"):
+        release_publication.verify_pypi(
+            directory,
+            version="1.2.3",
+            checksums=checksums,
+            wait_seconds=0,
+            fetch=lambda _v: tampered,
+        )
+
+
+def test_verify_pypi_refuses_any_other_extra_local_file(tmp_path: Path) -> None:
+    directory, checksums, digests = _dist(tmp_path, "1.2.3")
+    (directory / "openadapt_desktop-1.2.3-cp312-win_amd64.whl").write_bytes(b"extra")
+    with pytest.raises(ValueError, match="unexpected distribution set"):
+        release_publication.verify_pypi(
+            directory,
+            version="1.2.3",
+            checksums=checksums,
+            wait_seconds=0,
+            fetch=lambda _v: digests,
+        )
+    (directory / "openadapt_desktop-1.2.3-cp312-win_amd64.whl").unlink()
+    # The exemption is for the attestation suffix only, not anything nearby.
+    (directory / "openadapt_desktop-1.2.3.tar.gz.attestation").write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError, match="unexpected distribution set"):
+        release_publication.verify_pypi(
+            directory,
+            version="1.2.3",
+            checksums=checksums,
+            wait_seconds=0,
+            fetch=lambda _v: digests,
+        )
+
+
+def test_verify_pypi_requires_sha256sums_to_name_the_wheel_and_sdist(tmp_path: Path) -> None:
+    directory, checksums, digests = _dist(tmp_path, "1.2.3")
+    checksums.write_text(f"{'2' * 64}  OpenAdapt-Desktop-1.2.3-x86_64.AppImage\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="does not name"):
+        release_publication.verify_pypi(
+            directory,
+            version="1.2.3",
+            checksums=checksums,
+            wait_seconds=0,
+            fetch=lambda _v: digests,
+        )
+
+
 def test_verify_pypi_refuses_different_or_extra_files(tmp_path: Path) -> None:
-    directory, digests = _dist(tmp_path, "1.2.3")
+    directory, checksums, digests = _dist(tmp_path, "1.2.3")
     other = {name: "0" * 64 for name in digests}
     with pytest.raises(ValueError, match="different bytes"):
         release_publication.verify_pypi(
-            directory, version="1.2.3", wait_seconds=0, fetch=lambda _v: other
+            directory, version="1.2.3", checksums=checksums, wait_seconds=0, fetch=lambda _v: other
         )
     extra = {**digests, "openadapt_desktop-1.2.3-cp312-win_amd64.whl": "1" * 64}
     with pytest.raises(ValueError, match="unexpected files"):
         release_publication.verify_pypi(
-            directory, version="1.2.3", wait_seconds=0, fetch=lambda _v: extra
+            directory, version="1.2.3", checksums=checksums, wait_seconds=0, fetch=lambda _v: extra
         )
     with pytest.raises(ValueError, match="in time"):
         release_publication.verify_pypi(
-            directory, version="1.2.3", wait_seconds=0, fetch=lambda _v: {}
+            directory, version="1.2.3", checksums=checksums, wait_seconds=0, fetch=lambda _v: {}
         )
     assert json.dumps(digests)
+
+
+def test_verify_pypi_command_takes_the_attested_checksums(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directory, checksums, digests = _dist(tmp_path, "1.2.3")
+    (directory / "openadapt_desktop-1.2.3.tar.gz.publish.attestation").write_text("{}")
+    monkeypatch.setattr(release_publication, "pypi_digests", lambda _v: digests)
+    argv = ["verify-pypi", "--directory", str(directory), "--version", "1.2.3"]
+    with pytest.raises(SystemExit):
+        release_publication.main(argv)
+    assert (
+        release_publication.main([*argv, "--checksums", str(checksums), "--wait-seconds", "0"]) == 0
+    )
