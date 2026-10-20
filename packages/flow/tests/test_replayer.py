@@ -2165,6 +2165,8 @@ def test_closed_loop_scroll_stops_when_next_anchor_resolves(bundle, run_dir):
     # The scroll step itself records no resolution (the probe belongs to the
     # next step's anchor); only the click counts a rung.
     assert report.results[0].resolution is None
+    # It really scrolled, so it is not marked as skipped-with-target-in-view.
+    assert report.results[0].scroll_target_ready_before is None
     assert report.rung_counts == {"template": 1}
 
 
@@ -2203,6 +2205,10 @@ def test_closed_loop_scroll_noops_when_anchor_already_in_view(bundle, run_dir):
     )
     assert report.success is True
     assert backend.actions == [("click", 110, 105, False)]
+    # No input was sent, and the replayer records why: the next step's
+    # target was already on the before-frame.
+    assert report.results[0].delivery_attempted is not True
+    assert report.results[0].scroll_target_ready_before is True
 
 
 def test_closed_loop_scroll_ocr_ambiguity_continues_but_click_halts(
