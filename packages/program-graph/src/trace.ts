@@ -6,6 +6,7 @@
 // it never carries the values a run typed.
 
 import { STOP_NODE_ID } from "./fold.js";
+import { nodeKind, specEdges, specNodes, type ProgramGraphSpec } from "./spec.js";
 
 export const TRACE_VERSION = 1;
 
@@ -160,4 +161,94 @@ export function playbackDelay(trace: RunTrace, index: number, speed: number): nu
   const ms = event?.duration_ms;
   if (ms == null || !Number.isFinite(ms)) return 140;
   return Math.max(45, Math.min(700, ms / Math.max(speed, 0.1)));
+}
+
+/**
+ * A playhead set by the host page instead of a trace: the step the run is at,
+ * the loop iteration, and whether the step is running, saved or stopped.
+ */
+export interface Playhead {
+  node: string;
+  iteration?: number | null;
+  status: "running" | "saved" | "stopped";
+  reason?: string | null;
+}
+
+/**
+ * The trace state a playhead stands for, on the displayed graph. Steps before
+ * the playhead in program order count as reached. A loop reached on a later
+ * iteration lights its return edge; a stop lights the exit to the stop card.
+ */
+export function traceStateFromPlayhead(
+  spec: ProgramGraphSpec,
+  playhead: Playhead,
+  ownerOf?: ReadonlyMap<string, string>,
+): TraceState {
+  const owner = (id: string) => ownerOf?.get(id) ?? id;
+  const nodes = specNodes(spec);
+  const here = owner(playhead.node);
+  const at = nodes.find((node) => node.id === here);
+  const iteration = playhead.iteration ?? null;
+  const event: TraceEvent = {
+    node: playhead.node,
+    status: playhead.status === "stopped" ? "halted" : "ok",
+    iteration,
+    reason: playhead.reason ?? null,
+  };
+  const states = new Map<string, NodeRunState>();
+  const taken = new Set<string>();
+  let latestEdge: string | null = null;
+  if (at) {
+    for (const node of nodes) {
+      if (node.index >= at.index || node.id === STOP_NODE_ID || nodeKind(node) === "terminal") continue;
+      const loop = nodeKind(node) === "loop";
+      states.set(node.id, {
+        status: "done",
+        visits: 1,
+        iterations: loop && iteration ? iteration : 0,
+        events: [],
+      });
+    }
+    states.set(here, {
+      status: playhead.status === "stopped" ? "halted" : "active",
+      visits: 1,
+      iterations: nodeKind(at) === "loop" && iteration ? iteration : 0,
+      last: event,
+      events: [event],
+    });
+    for (const edge of specEdges(spec)) {
+      const s = nodes.find((node) => node.id === edge.source);
+      const t = nodes.find((node) => node.id === edge.target);
+      if (s && t && s.index < at.index && t.index <= at.index && t.index > s.index) taken.add(`${s.id}>${t.id}`);
+    }
+    if (nodeKind(at) === "loop" && (iteration ?? 1) > 1) {
+      const back = specEdges(spec).find((edge) => {
+        const s = nodes.find((node) => node.id === edge.source);
+        return edge.target === here && s !== undefined && s.index > at.index;
+      });
+      if (back) latestEdge = `${back.source}>${here}`;
+    } else {
+      const into = specEdges(spec).find((edge) => {
+        const s = nodes.find((node) => node.id === edge.source);
+        return edge.target === here && s !== undefined && s.index < at.index;
+      });
+      if (into) latestEdge = `${into.source}>${here}`;
+    }
+    if (latestEdge) taken.add(latestEdge);
+    if (playhead.status === "stopped") {
+      latestEdge = `${here}>${STOP_NODE_ID}`;
+      taken.add(latestEdge);
+      states.set(STOP_NODE_ID, { status: "halted", visits: 1, iterations: 0, last: event, events: [event] });
+    }
+  }
+  return {
+    cursor: 0,
+    nodes: states,
+    taken,
+    latestEdge,
+    current: event,
+    iteration,
+    halted: playhead.status === "stopped" ? event : null,
+    finished: playhead.status === "stopped",
+  };
 }

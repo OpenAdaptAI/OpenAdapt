@@ -21,6 +21,7 @@ const referral = (
     stopExits={(folds as { stops: StopExit[] }).stops}
     trace={trace as RunTrace}
     iterationNoun="referral"
+    plainStopRules
     initialCursor={cursor}
     autoPlay={q.get("play") === "1"}
     initialView={view}

@@ -14,6 +14,7 @@ import { layoutProgramGraph, type EdgeLayout, type LayoutOptions } from "./layou
 import {
   displayTitle,
   evidenceLanes,
+  stopRuleWords,
   kindLabel,
   nodeDescription,
   nodeTone,
@@ -21,7 +22,16 @@ import {
   type LaneState,
 } from "./present.js";
 import { nodeEffects, nodeHalts, nodeKind, specEdges, specNodes, type GraphNode, type ProgramGraphSpec } from "./spec.js";
-import { haltEvent, playbackDelay, traceStateAt, type NodeRunState, type RunTrace, type TraceState } from "./trace.js";
+import {
+  haltEvent,
+  playbackDelay,
+  traceStateAt,
+  traceStateFromPlayhead,
+  type NodeRunState,
+  type Playhead,
+  type RunTrace,
+  type TraceState,
+} from "./trace.js";
 
 export type ProgramView = "program" | "evidence" | "stops";
 
@@ -51,7 +61,25 @@ export interface ProgramWorkbenchProps {
   initialView?: ProgramView;
   /** Node selected on mount. Defaults to the first node. */
   initialSelectedId?: string;
+  /** Controlled selection: the host owns it and updates it from onSelect. */
+  selectedId?: string;
   onSelect?: (nodeId: string) => void;
+  /** Controlled trace position: events applied. The host updates it from onCursorChange. */
+  cursor?: number;
+  onCursorChange?: (cursor: number) => void;
+  /** Light one step without a trace: the host page drives the run. */
+  playhead?: Playhead | null;
+  /** Controlled folds: ids of the fold groups shown open. */
+  expanded?: string[];
+  onExpandedChange?: (expanded: string[]) => void;
+  /** Show the title bar (default true). */
+  showHeader?: boolean;
+  /** Show the trace player when there is a trace (default true). */
+  showPlayer?: boolean;
+  /** Show the selected-step inspector beside the map (default true). */
+  showInspector?: boolean;
+  /** Word stop rules plainly (stopRuleWords) instead of Flow's rule names. */
+  plainStopRules?: boolean;
   /** Override a node's display title (for example, a public projection). */
   titleFor?: (node: GraphNode) => string;
   /** Override the notes under the map and the evidence table; null hides one. */
@@ -148,7 +176,9 @@ function NodeInspector({
   onUnfold,
   onRefold,
   onPickMember,
+  plainStopRules,
 }: {
+  plainStopRules?: boolean;
   node: GraphNode;
   fold?: FoldInfo;
   partOf?: { id: string; title: string };
@@ -262,12 +292,24 @@ function NodeInspector({
         </button>
       )}
 
-      {nodeHalts(node).length > 0 && (
-        <div className="opg-stop-rule">
-          <span>Stops before acting if</span>
-          <strong>{nodeHalts(node).join("; ")}</strong>
-        </div>
-      )}
+      {nodeHalts(node).length > 0 &&
+        (plainStopRules ? (
+          <div className="opg-stop-rule">
+            <span>Stop rules</span>
+            {(fold ? fold.members.flatMap(stopRuleWords) : stopRuleWords(node))
+              .filter((rule, i, all) => all.findIndex((other) => other.text === rule.text) === i)
+              .map((rule, i) => (
+              <strong key={i} data-kind={rule.kind}>
+                {rule.text}
+              </strong>
+            ))}
+          </div>
+        ) : (
+          <div className="opg-stop-rule">
+            <span>Stops before acting if</span>
+            <strong>{nodeHalts(node).join("; ")}</strong>
+          </div>
+        ))}
 
       {run && run.status !== "pending" && <RunFacts state={run} />}
     </aside>
@@ -282,7 +324,7 @@ function edgeRunState(edge: EdgeLayout, trace: TraceState | null): "taken" | "la
   return undefined;
 }
 
-function ProgramMap({
+function MapPanel({
   display,
   fullSpec,
   folds,
@@ -294,7 +336,11 @@ function ProgramMap({
   titleFor,
   canvasNote,
   layoutOptions,
+  showInspector = true,
+  plainStopRules,
 }: {
+  showInspector?: boolean;
+  plainStopRules?: boolean;
   display: DisplayGraph;
   fullSpec: ProgramGraphSpec;
   folds?: FoldSpec | null;
@@ -341,9 +387,40 @@ function ProgramMap({
   });
 
   if (!selected) return <p className="opg-empty">The compiled graph is empty.</p>;
+  const inspector = (
+    <NodeInspector
+      node={selected}
+      fold={display.folds.get(selected.id)}
+      partOf={(() => {
+        const group = folds?.groups.find((g) => expanded.has(g.id) && g.nodes.includes(selected.id));
+        return group ? { id: group.id, title: group.title ?? group.id } : undefined;
+      })()}
+      run={traceState?.nodes.get(selected.id)}
+      titleFor={titleFor}
+      plainStopRules={plainStopRules}
+      onUnfold={(id) => {
+        const group = display.folds.get(id);
+        setExpanded(new Set([...expanded, id]));
+        if (group) {
+          setSelectedId(group.members[0].id);
+          focusAfterRender.current = group.members[0].id;
+        }
+      }}
+      onRefold={(id) => {
+        const next = new Set(expanded);
+        next.delete(id);
+        setExpanded(next);
+        setSelectedId(id);
+        focusAfterRender.current = id;
+      }}
+      onPickMember={(foldId, memberId) => {
+        setExpanded(new Set([...expanded, foldId]));
+        setSelectedId(memberId);
+        focusAfterRender.current = memberId;
+      }}
+    />
+  );
 
-  const fold = display.folds.get(selected.id);
-  const parentFold = folds?.groups.find((group) => expanded.has(group.id) && group.nodes.includes(selected.id));
   const runFor = (id: string) => traceState?.nodes.get(id);
   const edgeCount = specEdges(fullSpec).length;
   const nodeCount = specNodes(fullSpec).length;
@@ -389,7 +466,7 @@ function ProgramMap({
   };
 
   return (
-    <div className="opg-grid">
+    <div className="opg-grid" data-inspector={showInspector || undefined}>
       <div className="opg-canvas-shell">
         <div className="opg-canvas-head">
           <span>Compiled topology</span>
@@ -503,38 +580,12 @@ function ProgramMap({
         </ul>
         {canvasNote && <p className="opg-canvas-note">{canvasNote}</p>}
       </div>
-      <NodeInspector
-        node={selected}
-        fold={fold}
-        partOf={parentFold ? { id: parentFold.id, title: parentFold.title ?? parentFold.id } : undefined}
-        run={runFor(selected.id)}
-        titleFor={titleFor}
-        onUnfold={(id) => {
-          const group = display.folds.get(id);
-          setExpanded(new Set([...expanded, id]));
-          if (group) {
-            setSelectedId(group.members[0].id);
-            focusAfterRender.current = group.members[0].id;
-          }
-        }}
-        onRefold={(id) => {
-          const next = new Set(expanded);
-          next.delete(id);
-          setExpanded(next);
-          setSelectedId(id);
-          focusAfterRender.current = id;
-        }}
-        onPickMember={(foldId, memberId) => {
-          setExpanded(new Set([...expanded, foldId]));
-          setSelectedId(memberId);
-          focusAfterRender.current = memberId;
-        }}
-      />
+      {showInspector && inspector}
     </div>
   );
 }
 
-function EvidenceMatrix({ spec, titleFor, note }: { spec: ProgramGraphSpec; titleFor: (node: GraphNode) => string; note: string | null }) {
+function EvidenceTable({ spec, titleFor, note }: { spec: ProgramGraphSpec; titleFor: (node: GraphNode) => string; note: string | null }) {
   return (
     <div className="opg-matrix-scroll">
       <table className="opg-matrix">
@@ -570,7 +621,17 @@ function EvidenceMatrix({ spec, titleFor, note }: { spec: ProgramGraphSpec; titl
   );
 }
 
-function StopRules({ spec, titleFor, halt }: { spec: ProgramGraphSpec; titleFor: (node: GraphNode) => string; halt: TraceState["halted"] }) {
+function StopRulesList({
+  spec,
+  titleFor,
+  halt,
+  plain,
+}: {
+  spec: ProgramGraphSpec;
+  titleFor: (node: GraphNode) => string;
+  halt: TraceState["halted"];
+  plain?: boolean;
+}) {
   const rules = specNodes(spec).filter((node) => nodeHalts(node).length > 0 || nodeKind(node) === "terminal");
   const stopped = halt ? specNodes(spec).find((node) => node.id === halt.node) : undefined;
   return (
@@ -589,7 +650,13 @@ function StopRules({ spec, titleFor, halt }: { spec: ProgramGraphSpec; titleFor:
           <article key={`stop-${node.id}`}>
             <span className="opg-mono">{nodeKind(node) === "terminal" ? "terminal" : `step ${node.index + 1}`}</span>
             <strong>{titleFor(node)}</strong>
-            <p>{nodeHalts(node).length ? nodeHalts(node).join("; ") : "Declared terminal program state."}</p>
+            <p>
+              {nodeHalts(node).length
+                ? plain
+                  ? stopRuleWords(node).map((rule) => rule.text).join(" ")
+                  : nodeHalts(node).join("; ")
+                : "Declared terminal program state."}
+            </p>
           </article>
         ))
       )}
@@ -693,47 +760,54 @@ function TraceChip({ trace, state, playing }: { trace?: RunTrace | null; state: 
   );
 }
 
-/**
- * The program workbench: the map of a compiled program, its declared
- * evidence, its stop rules, and, given a run trace, what one run did.
- */
-export function ProgramWorkbench({
-  spec,
-  title,
-  kicker = "The steps",
-  folds,
-  stopExits,
-  trace,
-  autoPlay = false,
-  initialCursor = 0,
-  speed = 14,
-  iterationNoun = "iteration",
-  views = ["program", "evidence", "stops"],
-  initialView,
-  initialSelectedId,
-  onSelect,
-  titleFor = displayTitle,
-  notes,
-  layout,
-  theme = "dark",
-  className,
-  style,
-}: ProgramWorkbenchProps) {
-  const [view, setView] = useState<ProgramView>(initialView ?? views[0] ?? "program");
-  const [selectedId, setSelected] = useState(initialSelectedId ?? specNodes(spec)[0]?.id ?? "");
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
-  const reducedMotion = usePrefersReducedMotion();
-  const [cursor, setCursorRaw] = useState(initialCursor);
-  const [playing, setPlaying] = useState(false);
-  const baseId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
-  const tabs = useRef(new Map<ProgramView, HTMLButtonElement>());
 
+/** Selection, folds and trace position, each either owned here or by the host. */
+function useWorkbenchState(props: ProgramWorkbenchProps) {
+  const { spec, folds, stopExits, trace, playhead, autoPlay = false, initialCursor = 0, speed = 14 } = props;
+  const [ownSelected, setOwnSelected] = useState(props.initialSelectedId ?? specNodes(spec)[0]?.id ?? "");
+  const selectedId = props.selectedId ?? ownSelected;
+  const [ownExpanded, setOwnExpanded] = useState<Set<string>>(() => new Set());
+  const expanded = useMemo(
+    () => (props.expanded ? new Set(props.expanded) : ownExpanded),
+    [props.expanded, ownExpanded],
+  );
+  const reducedMotion = usePrefersReducedMotion();
+  const [ownCursor, setOwnCursor] = useState(initialCursor);
+  const cursor = props.cursor ?? ownCursor;
+  const [playing, setPlaying] = useState(false);
   const total = trace?.events.length ?? 0;
-  const setCursor = useCallback((next: number) => setCursorRaw(Math.max(0, Math.min(total, next))), [total]);
+
+  const { onSelect, onCursorChange, onExpandedChange } = props;
+  const setSelectedId = useCallback(
+    (id: string) => {
+      setOwnSelected(id);
+      onSelect?.(id);
+    },
+    [onSelect],
+  );
+  const setExpanded = useCallback(
+    (next: Set<string>) => {
+      setOwnExpanded(next);
+      onExpandedChange?.([...next]);
+    },
+    [onExpandedChange],
+  );
+  const cursorRef = useRef(cursor);
+  cursorRef.current = cursor;
+  const setCursor = useCallback(
+    (next: number) => {
+      const clamped = Math.max(0, Math.min(total, next));
+      setOwnCursor(clamped);
+      onCursorChange?.(clamped);
+    },
+    [total, onCursorChange],
+  );
 
   useEffect(() => {
-    setCursorRaw(Math.max(0, Math.min(trace?.events.length ?? 0, initialCursor)));
+    if (props.cursor === undefined) setOwnCursor(Math.max(0, Math.min(trace?.events.length ?? 0, initialCursor)));
     setPlaying(Boolean(trace) && autoPlay && !reducedMotion);
+    // A new trace starts over; a controlled cursor is the host's.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trace, autoPlay, reducedMotion, initialCursor]);
 
   useEffect(() => {
@@ -742,41 +816,72 @@ export function ProgramWorkbench({
       setPlaying(false);
       return;
     }
-    const timer = setTimeout(() => setCursorRaw((c) => Math.min(total, c + 1)), playbackDelay(trace, cursor, speed));
+    const timer = setTimeout(() => setCursor(cursorRef.current + 1), playbackDelay(trace, cursor, speed));
     return () => clearTimeout(timer);
-  }, [playing, cursor, total, trace, speed]);
+  }, [playing, cursor, total, trace, speed, setCursor]);
 
-  const halt = haltEvent(trace);
+  const halt = trace ? haltEvent(trace) : playhead?.status === "stopped" ? { node: playhead.node, status: "halted" as const } : null;
   const exits = useMemo(() => {
     const list = [...(stopExits ?? [])];
     if (halt && !list.some((stop) => stop.node === halt.node)) list.push({ node: halt.node, label: "stopped" });
     return list;
-  }, [stopExits, halt]);
-  const display = useMemo(
-    () => deriveDisplayGraph(spec, { folds, expanded, stopExits: exits }),
-    [spec, folds, expanded, exits],
-  );
+  }, [stopExits, halt?.node]); // eslint-disable-line react-hooks/exhaustive-deps
+  const display = useMemo(() => deriveDisplayGraph(spec, { folds, expanded, stopExits: exits }), [spec, folds, expanded, exits]);
   const traceState = useMemo(
-    () => (trace ? traceStateAt(trace, cursor, display.ownerOf) : null),
-    [trace, cursor, display],
-  );
-
-  const setSelectedId = useCallback(
-    (id: string) => {
-      setSelected(id);
-      onSelect?.(id);
-    },
-    [onSelect],
+    () =>
+      trace
+        ? traceStateAt(trace, cursor, display.ownerOf)
+        : playhead
+          ? traceStateFromPlayhead(display.spec, playhead, display.ownerOf)
+          : null,
+    [trace, cursor, playhead, display],
   );
 
   // When the run moves, select the step it reached, so the inspector shows
   // what happened there. A viewer's own selection stands until the next move.
-  const followed = useRef(0);
+  const followed = useRef<string | null>(null);
+  const moveKey = trace ? `c${cursor}` : playhead ? `p${playhead.node}:${playhead.iteration ?? ""}:${playhead.status}` : null;
   useEffect(() => {
-    if (!traceState?.current || followed.current === cursor) return;
-    followed.current = cursor;
-    setSelected(traceState.current.node);
-  }, [traceState, cursor]);
+    if (!traceState?.current || moveKey === null || followed.current === moveKey) return;
+    const first = followed.current === null && cursor === 0 && Boolean(trace);
+    followed.current = moveKey;
+    if (!first) setSelectedId(traceState.current.node);
+  }, [traceState, moveKey, cursor, trace, setSelectedId]);
+
+  return { selectedId, setSelectedId, expanded, setExpanded, cursor, setCursor, playing, setPlaying, display, traceState };
+}
+
+/**
+ * The program workbench: the map of a compiled program, its declared
+ * evidence, its stop rules, and, given a run trace, what one run did.
+ */
+export function ProgramWorkbench(props: ProgramWorkbenchProps) {
+  const {
+    spec,
+    title,
+    kicker = "The steps",
+    folds,
+    trace,
+    iterationNoun = "iteration",
+    views = ["program", "evidence", "stops"],
+    initialView,
+    titleFor = displayTitle,
+    notes,
+    layout,
+    theme = "dark",
+    className,
+    style,
+    showHeader = true,
+    showPlayer = true,
+    showInspector = true,
+    plainStopRules = false,
+  } = props;
+  const state = useWorkbenchState(props);
+  const { traceState } = state;
+  const [view, setView] = useState<ProgramView>(initialView ?? views[0] ?? "program");
+  const baseId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const tabs = useRef(new Map<ProgramView, HTMLButtonElement>());
+  const tabbed = views.length > 1;
 
   const tabKey = (event: KeyboardEvent<HTMLButtonElement>, id: ProgramView) => {
     const i = views.indexOf(id);
@@ -792,38 +897,43 @@ export function ProgramWorkbench({
     tabs.current.get(next)?.focus();
   };
 
-  const panel = (id: ProgramView, body: ReactNode) => (
-    <div
-      role="tabpanel"
-      id={`${baseId}-panel-${id}`}
-      aria-labelledby={`${baseId}-tab-${id}`}
-      hidden={view !== id}
-      tabIndex={-1}
-    >
-      {view === id && body}
-    </div>
-  );
+  const panel = (id: ProgramView, body: ReactNode) =>
+    tabbed ? (
+      <div
+        role="tabpanel"
+        id={`${baseId}-panel-${id}`}
+        aria-labelledby={`${baseId}-tab-${id}`}
+        hidden={view !== id}
+        tabIndex={-1}
+      >
+        {view === id && body}
+      </div>
+    ) : (
+      view === id && <div>{body}</div>
+    );
 
   return (
     <div className={`opg-root${className ? ` ${className}` : ""}`} data-theme={theme} style={style}>
-      <div className="opg-topbar">
-        <div>
-          <span className="opg-kicker">{kicker}</span>
-          <strong>{title ?? spec.bundle.name}</strong>
+      {showHeader && (
+        <div className="opg-topbar">
+          <div>
+            <span className="opg-kicker">{kicker}</span>
+            <strong>{title ?? spec.bundle.name}</strong>
+          </div>
+          <TraceChip trace={trace} state={trace ? traceState : null} playing={state.playing} />
         </div>
-        <TraceChip trace={trace} state={traceState} playing={playing} />
-      </div>
-      {trace && traceState && (
+      )}
+      {showPlayer && trace && traceState && (
         <TracePlayer
           trace={trace}
           state={traceState}
-          playing={playing}
-          setPlaying={setPlaying}
-          setCursor={setCursor}
+          playing={state.playing}
+          setPlaying={state.setPlaying}
+          setCursor={state.setCursor}
           iterationNoun={iterationNoun}
         />
       )}
-      {views.length > 1 && (
+      {tabbed && (
         <div className="opg-tabs" role="tablist" aria-label="Program workbench views">
           {views.map((id) => (
             <button
@@ -848,28 +958,140 @@ export function ProgramWorkbench({
       {views.includes("program") &&
         panel(
           "program",
-          <ProgramMap
-            display={display}
+          <MapPanel
+            display={state.display}
             fullSpec={spec}
             folds={folds}
-            expanded={expanded}
-            setExpanded={setExpanded}
+            expanded={state.expanded}
+            setExpanded={state.setExpanded}
             traceState={traceState}
-            selectedId={selectedId}
-            setSelectedId={setSelectedId}
+            selectedId={state.selectedId}
+            setSelectedId={state.setSelectedId}
             titleFor={titleFor}
             canvasNote={notes?.canvas === undefined ? DEFAULT_CANVAS_NOTE : notes.canvas}
             layoutOptions={layout}
+            showInspector={showInspector}
+            plainStopRules={plainStopRules}
           />,
         )}
       {views.includes("evidence") &&
         panel(
           "evidence",
-          <EvidenceMatrix spec={spec} titleFor={titleFor} note={notes?.evidence === undefined ? DEFAULT_EVIDENCE_NOTE : notes.evidence} />,
+          <EvidenceTable spec={spec} titleFor={titleFor} note={notes?.evidence === undefined ? DEFAULT_EVIDENCE_NOTE : notes.evidence} />,
         )}
       {views.includes("stops") &&
-        panel("stops", <StopRules spec={spec} titleFor={titleFor} halt={traceState?.finished ? traceState.halted : null} />)}
+        panel(
+          "stops",
+          <StopRulesList spec={spec} titleFor={titleFor} halt={traceState?.finished ? traceState.halted : null} plain={plainStopRules} />,
+        )}
     </div>
   );
 }
 
+/** The map alone, with no title bar, tabs, player or inspector. */
+export function ProgramMap(props: Omit<ProgramWorkbenchProps, "views" | "showHeader" | "showPlayer">) {
+  return <ProgramWorkbench showInspector={false} {...props} views={["program"]} showHeader={false} showPlayer={false} />;
+}
+
+type PanelProps = {
+  spec: ProgramGraphSpec;
+  titleFor?: (node: GraphNode) => string;
+  theme?: "dark" | "light";
+  className?: string;
+  style?: CSSProperties;
+};
+
+const Root = ({ theme = "dark", className, style, children }: PanelProps & { children: ReactNode }) => (
+  <div className={`opg-root${className ? ` ${className}` : ""}`} data-theme={theme} style={style}>
+    {children}
+  </div>
+);
+
+/** The inspector for one step, outside the workbench. */
+export function StepInspector(
+  props: PanelProps & {
+    nodeId: string;
+    folds?: FoldSpec | null;
+    expanded?: string[];
+    onExpandedChange?: (expanded: string[]) => void;
+    onSelect?: (nodeId: string) => void;
+    trace?: RunTrace | null;
+    cursor?: number;
+    playhead?: Playhead | null;
+    stopExits?: StopExit[] | null;
+    plainStopRules?: boolean;
+  },
+) {
+  const { spec, nodeId, folds, trace, cursor = 0, playhead, plainStopRules, titleFor = displayTitle } = props;
+  const expanded = useMemo(() => new Set(props.expanded ?? []), [props.expanded]);
+  const halt = trace ? haltEvent(trace) : playhead?.status === "stopped" ? playhead : null;
+  const display = useMemo(() => {
+    const exits = [...(props.stopExits ?? [])];
+    if (halt && !exits.some((stop) => stop.node === halt.node)) exits.push({ node: halt.node });
+    return deriveDisplayGraph(spec, { folds, expanded, stopExits: exits });
+  }, [spec, folds, expanded, props.stopExits, halt?.node]); // eslint-disable-line react-hooks/exhaustive-deps
+  const traceState = trace
+    ? traceStateAt(trace, cursor, display.ownerOf)
+    : playhead
+      ? traceStateFromPlayhead(display.spec, playhead, display.ownerOf)
+      : null;
+  const shown = display.ownerOf.get(nodeId) ?? nodeId;
+  const node = specNodes(display.spec).find((n) => n.id === shown);
+  if (!node) return null;
+  const group = folds?.groups.find((g) => expanded.has(g.id) && g.nodes.includes(node.id));
+  const change = (next: Set<string>) => props.onExpandedChange?.([...next]);
+  return (
+    <Root {...props}>
+      <NodeInspector
+        node={node}
+        fold={display.folds.get(node.id)}
+        partOf={group ? { id: group.id, title: group.title ?? group.id } : undefined}
+        run={traceState?.nodes.get(node.id)}
+        titleFor={titleFor}
+        plainStopRules={plainStopRules}
+        onUnfold={(id) => {
+          change(new Set([...expanded, id]));
+          const members = display.folds.get(id)?.members;
+          if (members?.length) props.onSelect?.(members[0].id);
+        }}
+        onRefold={(id) => {
+          const next = new Set(expanded);
+          next.delete(id);
+          change(next);
+          props.onSelect?.(id);
+        }}
+        onPickMember={(foldId, memberId) => {
+          change(new Set([...expanded, foldId]));
+          props.onSelect?.(memberId);
+        }}
+      />
+    </Root>
+  );
+}
+
+/** The evidence-lanes table, outside the workbench. */
+export function EvidenceLanes(props: PanelProps & { note?: string | null }) {
+  return (
+    <Root {...props}>
+      <EvidenceTable
+        spec={props.spec}
+        titleFor={props.titleFor ?? displayTitle}
+        note={props.note === undefined ? DEFAULT_EVIDENCE_NOTE : props.note}
+      />
+    </Root>
+  );
+}
+
+/** The stop rules, outside the workbench; with a trace, the stop it hit first. */
+export function StopRules(props: PanelProps & { trace?: RunTrace | null; plainStopRules?: boolean }) {
+  return (
+    <Root {...props}>
+      <StopRulesList
+        spec={props.spec}
+        titleFor={props.titleFor ?? displayTitle}
+        halt={haltEvent(props.trace)}
+        plain={props.plainStopRules}
+      />
+    </Root>
+  );
+}

@@ -109,7 +109,9 @@ function foldedNode(group: FoldGroup, members: GraphNode[]): GraphNode {
       : null,
     effects: members.flatMap(nodeEffects),
     postconditions: members.flatMap(nodePostconditions),
-    halts: unique(members.flatMap(nodeHalts)),
+    // Each member's rules, numbered by step: two members' "declared stop
+    // rule 1" are two different rules.
+    halts: members.flatMap((node) => nodeHalts(node).map((halt) => `step ${pad(node.index + 1)}: ${halt}`)),
     badges: unique(members.flatMap((node) => node.badges ?? [])),
   };
 }

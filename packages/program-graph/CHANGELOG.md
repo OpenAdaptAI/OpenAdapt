@@ -9,6 +9,13 @@
   and skipped steps.
 - Folds: show a run of steps as one card; a viewer can open and close each.
 - Run traces: play, step and scrub a recorded run over the map.
-- Dark and light themes from `--opg-*` CSS variables.
+- Host-driven use: controlled selection, trace cursor and folds; a `playhead`
+  prop that lights a step without a trace; `showHeader`, `showPlayer` and
+  `showInspector`; and `ProgramMap`, `StepInspector`, `EvidenceLanes` and
+  `StopRules` as separate components.
+- `stopRuleWords`: a step's stop rules in plain words, rebuilt from the public
+  projection by Flow's builder rules.
+- Dark and light themes from `--opg-*` CSS variables; the layout follows the
+  workbench's own width.
 - The OpenEMR referral fixture: a compiled program and a recorded run, both on
   synthetic data.

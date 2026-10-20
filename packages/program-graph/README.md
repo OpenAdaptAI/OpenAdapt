@@ -63,15 +63,29 @@ import "@openadapt/program-graph/styles.css";
 | `stopExits` | `[{ node, label }]`. Draws each stop rule as an exit to a "Stop the run" card. |
 | `trace` | A run trace (below). Adds the player. |
 | `initialCursor`, `autoPlay`, `speed` | Where the trace starts, whether it plays on load (never when the viewer prefers reduced motion), and how much faster than recorded time it plays. |
-| `views`, `initialView` | Which tabs to show (`program`, `evidence`, `stops`) and which opens first. |
+| `cursor`, `onCursorChange` | Controlled trace position, for a host that runs its own play bar. |
+| `playhead` | `{ node, iteration, status: "running" \| "saved" \| "stopped", reason }`. Lights one step without a trace: earlier steps show as reached, a loop on a later iteration animates its return edge, and a stop lights the exit to the stop card with its reason. |
+| `selectedId`, `onSelect`, `initialSelectedId` | Controlled or initial selection. |
+| `expanded`, `onExpandedChange` | Controlled open folds. |
+| `views`, `initialView` | Which tabs to show (`program`, `evidence`, `stops`) and which opens first. One view shows no tab bar. |
+| `showHeader`, `showPlayer`, `showInspector` | Hide the title bar, the player or the inspector. |
+| `plainStopRules` | Show stop rules in plain words (`stopRuleWords`), not Flow's rule names. Use it with the public projection, which names rules only "declared stop rule N". |
 | `titleFor` | Replaces a node's displayed title. |
 | `notes` | Replaces or hides (`null`) the note under the map and under the evidence table. |
-| `theme` | `dark` (default) or `light`. |
+| `theme` | `dark` (default) or `light`. The workbench keeps its own colours whatever the host page's theme. |
 | `layout` | Card size and spacing. |
+
+A host that lays out its own page can use the parts on their own:
+`ProgramMap` (the map only), `StepInspector` (one step's inspector),
+`EvidenceLanes` and `StopRules`. Each takes `spec`, `theme` and `titleFor`.
+
+The layout follows the workbench's own width: below 760 px the inspector
+stacks under the map, and the map pans in both directions.
 
 The package also exports the pieces: `layoutProgramGraph`, `rankNodes`,
 `deriveDisplayGraph`, `foldSequences` (folds for a program that has none),
-`validateFolds`, `traceStateAt`, and the spec and trace types.
+`validateFolds`, `traceStateAt`, `traceStateFromPlayhead`, `stopRuleWords`,
+and the spec and trace types.
 
 ### Theme
 

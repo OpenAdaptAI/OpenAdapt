@@ -79,6 +79,8 @@
   font-family: var(--opg-font-sans);
   font-size: 14px;
   line-height: var(--opg-line-height);
+  /* The layout follows the workbench's own width, not the page's. */
+  container-type: inline-size;
 }
 .opg-root *,
 .opg-root *::before,
@@ -261,6 +263,9 @@
 /* Program map ---------------------------------------------------------------- */
 .opg-grid {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.opg-grid[data-inspector="true"] {
   grid-template-columns: minmax(0, 1fr) 252px;
 }
 .opg-canvas-shell {
@@ -321,6 +326,13 @@
 .opg-edges g[data-run="latest"] path {
   stroke: var(--opg-ok);
   stroke-width: 2;
+  stroke-dasharray: 6 4;
+  animation: opg-flow 0.6s linear infinite;
+}
+@keyframes opg-flow {
+  to {
+    stroke-dashoffset: -10;
+  }
 }
 .opg-edges g[data-kind="exception"][data-run] path {
   stroke: var(--opg-attention);
@@ -651,6 +663,9 @@
   border-radius: var(--opg-radius-1);
   background: color-mix(in srgb, var(--opg-attention) 7%, transparent);
 }
+.opg-stop-rule strong[data-kind="review"] {
+  color: var(--opg-text-muted);
+}
 .opg-stop-rule strong {
   color: var(--opg-attention);
   font-size: 8px;
@@ -743,8 +758,8 @@
   font-size: 10px;
 }
 
-@media (max-width: 900px) {
-  .opg-grid {
+@container (max-width: 760px) {
+  .opg-grid[data-inspector="true"] {
     grid-template-columns: 1fr;
   }
   .opg-inspector {
@@ -752,7 +767,7 @@
     border-left: 0;
   }
 }
-@media (max-width: 520px) {
+@container (max-width: 520px) {
   .opg-player {
     flex-wrap: wrap;
   }
@@ -764,6 +779,9 @@
 @media (prefers-reduced-motion: reduce) {
   .opg-node {
     transition: none;
+  }
+  .opg-edges g[data-run="latest"] path {
+    animation: none;
   }
   .opg-node:hover {
     transform: none;
