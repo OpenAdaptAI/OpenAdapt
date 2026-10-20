@@ -73,6 +73,16 @@ def sha256_hex(value: Any) -> str:
 
 
 # -- the read-back contract ----------------------------------------------------
+def _report_bytes(path: Path) -> bytes:
+    """A run report's bytes; a sealed run directory's report is decrypted."""
+
+    if path.is_file():
+        return path.read_bytes()
+    from openadapt_flow import sealed_set
+
+    return sealed_set.read_bytes(path)
+
+
 def verifier_identity_of(cfg: Any, verifier: Any) -> str:
     """``openadapt.effect-verifier-identity/v1`` of the configured read-back."""
 
@@ -186,7 +196,7 @@ def case_entry(
         "outcome": _outcome(observed, tier, landed),
         # The run report is the record this trial produced today. An
         # openadapt.effect-receipt/v1 replaces it once openadapt-types ships it.
-        "receipt_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),
+        "receipt_sha256": hashlib.sha256(_report_bytes(report_path)).hexdigest(),
         "evidence_digest": f"sha256:{sha256_hex(dict(oracle))}",
         "engine_outcome": report.execution_outcome,
         "executor_model_calls": int(report.model_calls or 0),
