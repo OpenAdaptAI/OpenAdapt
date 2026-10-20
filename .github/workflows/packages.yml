@@ -49,10 +49,29 @@ permissions:
   contents: read
 
 concurrency:
-  # A pull request's newer push supersedes its older run. Runs on main are
-  # never cancelled: desktop-release.yml needs every main commit's own result.
-  group: packages-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # A pull request's newer push supersedes its older run.
+  #
+  # On main, desktop-release.yml waits for the Packages run of the newest
+  # first-parent commit that changed packages/desktop (#1398). A push whose
+  # commits touch packages/desktop/ therefore keeps its own group and is never
+  # cancelled. Every other push to main shares one group, so a newer one
+  # cancels it instead of queueing behind it. The test is conservative: any
+  # mention of packages/desktop/ in the push payload (file lists or messages)
+  # counts as a Desktop change, and a push with no commit list keeps its own
+  # group. Merge queue groups and dispatches are never cancelled.
+  group: >-
+    packages-${{
+      github.event.pull_request.number
+      || (github.event_name == 'push'
+          && github.event.head_commit
+          && !contains(toJSON(github.event.commits), 'packages/desktop/')
+          && 'main-without-desktop')
+      || github.sha }}
+  cancel-in-progress: >-
+    ${{ github.event_name == 'pull_request'
+        || (github.event_name == 'push'
+            && github.event.head_commit != null
+            && !contains(toJSON(github.event.commits), 'packages/desktop/')) }}
 
 env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
