@@ -144,6 +144,9 @@ def _keys(keys: Path) -> dict[str, Any]:
     public = base64.b64encode(
         status.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
     ).decode("ascii")
+    # Durable resume opens the bundle and the checkpoints with one key
+    # (OPENADAPT_BUNDLE_KEY), as `openadapt-flow resume` does.
+    values["checkpoint_key"] = values["bundle_key"]
     return {
         **values,
         "status_private": status,
