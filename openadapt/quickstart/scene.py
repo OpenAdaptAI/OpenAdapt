@@ -36,6 +36,8 @@ class Scene:
     act3_subtitle: str
     #: The line before Act 3 runs.
     break_setup: str
+    #: The prompt before Act 3 runs, on a terminal.
+    confirm_prompt: str
     #: What the spinner says while Act 3 runs.
     breaking: str
     #: The record's label in Act 3 ("What the database showed").
@@ -153,6 +155,7 @@ MOCKMED = Scene(
     break_setup=(
         "The app will show its saved message. The database will reject the save."
     ),
+    confirm_prompt="Press Enter to make the next save fail silently",
     breaking="Running the program once more, checking the database",
     record_label="What the database showed",
     record_noun="record",
@@ -174,6 +177,7 @@ OPENEMR = Scene(
         "OpenEMR already has a chart for Rosa Delgado. The next referral is a "
         "Rosa Delgado with another birth date."
     ),
+    confirm_prompt="Press Enter to run the program on that referral",
     breaking="Running the program on the referral, then reading OpenEMR's charts",
     record_label="What OpenEMR's record showed",
     record_noun="chart",

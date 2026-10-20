@@ -195,8 +195,9 @@ class QuickstartFixture(fx.OpenEMRFixture):
     def discard(self) -> None:
         """Remove this project's containers and volumes and its state folder.
 
-        Only for a setup that never finished (no baseline): nothing in it is
-        anyone's work. Another project or state folder is never touched.
+        For a setup that never finished, and for cold timing runs: it holds
+        synthetic data only, never anyone's work. Another project or state
+        folder is never touched.
         """
 
         if self.runtime_env.exists():

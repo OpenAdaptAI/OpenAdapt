@@ -270,7 +270,7 @@ def run_story(
             if interactive:
                 waited = clock()
                 engine.before_prompt()
-                view.confirm("Press Enter to make the next save fail silently")
+                view.confirm(scene.confirm_prompt)
                 paused += clock() - waited
             with view.breaking():
                 outcome.broken = engine.break_it()
