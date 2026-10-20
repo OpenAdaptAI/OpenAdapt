@@ -656,6 +656,18 @@ def _gate_identity(
     certifying_policy: Optional[Policy],
 ) -> GateResult:
     """Gate 2: every entity-sensitive / consequential action is identity-armed."""
+    from openadapt_flow.runtime.target_param import UNQUALIFIED_SELECTION_REASON
+
+    selecting = [step.id for step in steps if step.target_param is not None]
+    if selecting:
+        # Whatever the certifying policy: not admitted until qualification
+        # covers a record-selecting click.
+        return _result(
+            GATE_IDENTITY,
+            False,
+            f"{len(selecting)} step(s) {UNQUALIFIED_SELECTION_REASON}",
+            selecting,
+        )
     must_arm = [
         step
         for step in steps

@@ -91,6 +91,24 @@ def has_identity_evidence(anchor: Anchor) -> bool:
     )
 
 
+#: Why a bundle with a record-selecting click is not admitted for
+#: certified, production or governed runs yet.
+UNQUALIFIED_SELECTION_REASON = (
+    "selects a record by a run value (target_param); qualification's fault "
+    "driver cannot yet qualify such a click (it needs the recorded crop of the "
+    "row), so this bundle is refused for certified, production and governed "
+    "runs until it can"
+)
+
+
+def record_selecting_steps(workflow: Workflow) -> list[Step]:
+    """Every step of ``workflow`` that selects a record by a run value."""
+
+    from openadapt_flow.traversal import iter_workflow_steps
+
+    return [s for s in iter_workflow_steps(workflow) if s.target_param is not None]
+
+
 def bind_target_param(
     step: Step,
     params: Mapping[str, object],

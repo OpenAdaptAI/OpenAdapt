@@ -248,3 +248,44 @@ def test_healing_never_adopts_another_record_s_row(bundle, run_dir):
     )
     assert report.success is True
     assert report.results[0].heal is None
+
+
+# --------------------------------------------------------------------------
+# Not admitted for certified, production or governed runs (yet)
+# --------------------------------------------------------------------------
+
+
+def test_clinical_write_certification_refuses_a_record_selecting_click():
+    from openadapt_flow.policy import evaluate_policy, load_policy
+
+    workflow = _wf(_row_click())
+    report = evaluate_policy(workflow, load_policy("clinical-write"))
+    hits = [v for v in report.violations if v.rule == "unqualified_record_selection"]
+    assert [v.step_id for v in hits] == ["s_open"]
+    assert "fault driver" in hits[0].reason
+
+    plain = evaluate_policy(
+        _wf(_row_click(target_param=None)), load_policy("clinical-write")
+    )
+    assert not any(v.rule == "unqualified_record_selection" for v in plain.violations)
+
+    permissive = evaluate_policy(workflow, load_policy("permissive"))
+    assert not any(
+        v.rule == "unqualified_record_selection" for v in permissive.violations
+    )
+
+
+def test_governed_run_gate_refuses_whatever_the_policy():
+    from openadapt_flow.run_gate import GATE_IDENTITY, _gate_identity
+
+    workflow = _wf(_row_click())
+    result = _gate_identity(
+        workflow,
+        list(workflow.steps),
+        require_current_risk_certification=False,
+        certifying_policy=None,
+    )
+    assert result.gate == GATE_IDENTITY
+    assert result.passed is False
+    assert result.offenders == ["s_open"]
+    assert "target_param" in result.detail

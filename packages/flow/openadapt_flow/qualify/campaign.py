@@ -286,6 +286,13 @@ def check_ready(
             problems.append(
                 f"record.fields.{name} uses parameter {expr.param!r}, which has no input"
             )
+    from openadapt_flow.runtime.target_param import (
+        UNQUALIFIED_SELECTION_REASON,
+        record_selecting_steps,
+    )
+
+    for step in record_selecting_steps(workflow):
+        problems.append(f"step {step.id} {UNQUALIFIED_SELECTION_REASON}")
     if save.anchor is None or not save.identity_armed:
         problems.append(f"save step {save.id} has no armed identity check")
     if not save.effects:
