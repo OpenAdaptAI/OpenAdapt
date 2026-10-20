@@ -152,6 +152,29 @@ class EffectInfo(BaseModel):
     )
 
 
+class MediaRef(BaseModel):
+    """References to pictures of a step, never the pictures themselves.
+
+    Each value is an opaque reference (a bundle-relative path, an asset id)
+    that the surface showing the graph resolves to a URL it has decided is
+    safe to show. The spec never embeds image data."""
+
+    crop: Optional[str] = Field(
+        default=None, description="Reference to a crop of the step's target"
+    )
+    frame: Optional[str] = Field(
+        default=None, description="Reference to the full screen at the step"
+    )
+
+
+class NodeMedia(BaseModel):
+    """Pictures of a step from its recording. Operator-local: the public
+    projection drops it, because a recorded picture can show recorded data."""
+
+    recorded: Optional[MediaRef] = None
+    alt: str = Field(default="", description="Text alternative for the pictures")
+
+
 class ParamInfo(BaseModel):
     """A typed workflow parameter (the run's inputs)."""
 
@@ -272,6 +295,11 @@ class GraphNode(BaseModel):
     #: Short capability/risk badges, e.g. "irreversible", "identity gate",
     #: "effect check", "unarmed", "secret", "API", "child bundle".
     badges: list[str] = Field(default_factory=list)
+    # -- media (references only; resolved by the surface) --
+    media: Optional[NodeMedia] = Field(
+        default=None,
+        description="References to recorded pictures of the step; never image data",
+    )
     # -- child_bundle payload (kind == child_bundle) --
     surface: Optional[str] = Field(
         default=None,

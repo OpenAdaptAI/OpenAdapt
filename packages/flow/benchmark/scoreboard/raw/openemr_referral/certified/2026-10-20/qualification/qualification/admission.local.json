@@ -1,0 +1,90 @@
+{
+  "algorithm": "ed25519",
+  "payload": {
+    "action_policy_sha256": "4fe2a373d018ab3580615e4b6237c89a07aa29dc81591abfdbfc1ea6855ef926",
+    "admission_id": "c5129cc5-4020-58f7-8594-8b177e4ca8f4",
+    "application_contract_sha256": "1d301290b5727b731da250bc1d6d89db28f127ff743a1da13c75ad8c16f4d420",
+    "bundle_artifact_sha256": "ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+    "bundle_content_digest": "ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+    "bundle_version_id": "058b1017-ba98-53d6-b8aa-c703f3aeaf50",
+    "campaign": {
+      "artifact_sha256": "c4b92be7e05fbf001f29dac5ca78466456c7702c777b087fe27bfce13fba7abe",
+      "contract_sha256": "6e121e781ace28b143a50e20381f120e2e3da269b92ecc78fddf0679b9427f9f",
+      "decision": "admitted",
+      "failure_taxonomy": [
+        "ambiguity",
+        "missing_effect",
+        "over_halt",
+        "silent_incorrect_success",
+        "stale_identity",
+        "weak_effect",
+        "wrong_identity"
+      ],
+      "oracle_contract_sha256": "672808f556e2b2d846754cabf9d1712834afca202e2af106a5bc15fe75dd7128",
+      "oracle_id": "rest",
+      "outcomes_sha256": "b48f4af5e06100bcd53f8e3b59af7dde1f939c3345297c6dcda824f6e4e16f6e",
+      "tasks": [
+        {
+          "condition": "fault-ambiguity",
+          "observed_trials": 3,
+          "required_trials": 3,
+          "task": "openemr-local-patient-registration-v2"
+        },
+        {
+          "condition": "fault-missing-effect",
+          "observed_trials": 3,
+          "required_trials": 3,
+          "task": "openemr-local-patient-registration-v2"
+        },
+        {
+          "condition": "fault-stale-identity",
+          "observed_trials": 3,
+          "required_trials": 3,
+          "task": "openemr-local-patient-registration-v2"
+        },
+        {
+          "condition": "fault-weak-effect",
+          "observed_trials": 3,
+          "required_trials": 3,
+          "task": "openemr-local-patient-registration-v2"
+        },
+        {
+          "condition": "fault-wrong-identity",
+          "observed_trials": 3,
+          "required_trials": 3,
+          "task": "openemr-local-patient-registration-v2"
+        },
+        {
+          "condition": "representative",
+          "observed_trials": 3,
+          "required_trials": 3,
+          "task": "openemr-local-patient-registration-v2"
+        }
+      ]
+    },
+    "effect_contract_sha256": "0a3f5da1870c4acacae4234a2edb959997f163a2a75974600d794cb042bc8a41",
+    "environment_contract_sha256": "66260fc857f5570d123ac120f0c03e9e7d7746d1d3348c780fde67193995d6d8",
+    "expires_at": "2026-10-27T02:56:35Z",
+    "governed_authorization_template_sha256": "c957eb98218b02a1e6d4f1328e202e45438b093fafd7022a609ac84a36db63b3",
+    "identity_contract_sha256": "2c5e60b088f1d66c1999a07fe82f5929eb2b4f6abf31c93bb3a20b87628a1697",
+    "input_policy_sha256": "ca06a5237718f4b62debdadaa74415e4ded9afd4e0e5a437a426020f85e4cbdd",
+    "issued_at": "2026-10-20T02:56:35Z",
+    "issuer": {
+      "key_id": "qa-ed25519-eeaf9c80006a704b",
+      "ref": "local-dev@qualify",
+      "workflow": "openadapt-flow/local-dev-admission"
+    },
+    "network_policy_sha256": "eee7e44bfb7f69bf99d42e3fd0a835518d7914014fe5e202b4f4e57fab8bc457",
+    "not_before": "2026-10-20T02:56:35Z",
+    "operator_contract_sha256": "a6f2ef812d80953ad83679ea4979410f0dc5dce87e86cb20f6980ca6d1dd5561",
+    "runtime_contract_sha256": "b89bd2de3c76b06e75c1939d287c575b2469d22de694d7794a4dfe9e1d5b2835",
+    "runtime_environment_sha256": "dc90a303b2b4f2382dcfea6a65c755909ac991d9f8a2162702bf0f1998ff2f4f",
+    "runtime_validation_id": "dc7a61c3-889f-589a-be11-52036ba4c821",
+    "schema_version": "openadapt.qualification-admission/v1",
+    "substrate_contract_sha256": "34846642d80e8639b15ec7420eee445410310942157e6fdd2f80e29b4990c1a1",
+    "tenant_id": "554fbd8e-2247-5209-927b-4bccc7cc9fa0",
+    "workflow_id": "3b88773b-c47c-5e64-81d7-b51e70790f41",
+    "workflow_version_id": "3da914c8-b471-5bcb-8ba7-e76b8f51ae33"
+  },
+  "signature": "ikboGZAsngOok3zg46gjTS+qxFJHzkL6cynNjVIwzCjAgeA20mnKx0xEbWG7pGkwMjDj+KCHutUiJ59cM84wBA=="
+}

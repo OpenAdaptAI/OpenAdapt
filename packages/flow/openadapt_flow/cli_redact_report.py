@@ -51,9 +51,11 @@ def _cmd_redact_report(args: argparse.Namespace) -> int:
             print(f"  {r.pointer}  {r.reason}")
     print(f"original kept on this machine (never publish it): {result.kept}")
     if result.moved_seals:
+        from openadapt_flow.cli_hints import command
+
         print(
             "the old Seal covered the original bytes and was moved there too; "
-            f"seal again: openadapt-flow local-seal run {result.run_dir}"
+            f"seal again: {command(f'local-seal run {result.run_dir}')}"
         )
     return 0
 

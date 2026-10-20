@@ -150,8 +150,8 @@ drives an app).
 (`--url`, `--target-url`, or any other `--...url` flag that names the app)
 without `--backend` or `--config`, unless the command is listed here with the
 reason. Service endpoints (`--tsa-url`, `--cloud-url`, `--execute-url`,
-`--control-plane-url`, `--effects-base-url`, `--api-base-url`, `--agent-url`)
-are not app URLs.
+`--control-plane-url`, `--effects-base-url`, `--api-base-url`, `--agent-url`,
+and `--log-url`, the transparency log) are not app URLs.
 
 <!-- url-flag-refusals: the test reads this table. -->
 | Command | URL flag | Why it has no backend-neutral alternative |

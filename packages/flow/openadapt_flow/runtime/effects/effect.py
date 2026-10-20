@@ -762,6 +762,22 @@ class Effect(BaseModel):
             )
         return self
 
+    @model_serializer(mode="wrap")
+    def _drop_unset_collateral_change(self, handler: Any) -> dict[str, Any]:
+        """Keep the bytes of effects that predate ``forbid_collateral_change``.
+
+        Every hash over a dumped workflow (the workflow contract hash that a
+        certification and a governed authorization bind, as well as the
+        content digest) was computed before this field existed. Dropping the
+        False default keeps those hashes reproducible; a contract that turns
+        the check on is still hashed.
+        """
+
+        data: dict[str, Any] = handler(self)
+        if not self.forbid_collateral_change:
+            data.pop("forbid_collateral_change", None)
+        return data
+
     @model_validator(mode="after")
     def _exact_new_set_shape(self) -> "Effect":
         """Refuse an ``exact_new_set`` whose declared set is unusable, and

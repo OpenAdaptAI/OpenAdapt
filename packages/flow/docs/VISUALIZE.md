@@ -53,6 +53,8 @@ ProgramGraphSpec
 │   ├─ postconditions      # vision verification kinds
 │   ├─ guard / wait_until  # control-flow preconditions
 │   ├─ halts               # fail-safe HALT points this node introduces
+│   ├─ media               # references to recorded pictures (operator-local;
+│   │                      # the public projection removes it)
 │   └─ badges
 └─ edges: [GraphEdge]      # sequence | branch | exception | loop_body | handoff
 ```
