@@ -1678,3 +1678,65 @@ def test_dispatcher_versions_exact_bundle_without_mutating_source(tmp_path: Path
     assert version["version"] == 2
     assert Path(version["bundle_path"]).joinpath("workflow.json").read_bytes() == original
     assert (bundle / "workflow.json").read_bytes() == original
+
+
+def _form_bundle(path: Path) -> Path:
+    def click(step_id: str, selector: str, **kw) -> Step:
+        return Step(
+            id=step_id,
+            intent="click",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="templates/x.png",
+                region=(0, 0, 10, 10),
+                click_point=(5, 5),
+                structural=StructuralLocator(
+                    selector=selector,
+                    role=kw.pop("role", "textbox"),
+                    name=kw.pop("name", None),
+                ),
+            ),
+            **kw,
+        )
+
+    return _bundle(
+        path,
+        click("step_000", "#first"),
+        Step(id="step_001", intent="type", action=ActionKind.TYPE, param="first_name"),
+        click("step_002", "#last"),
+        Step(id="step_003", intent="type", action=ActionKind.TYPE, param="last_name"),
+        click("step_004", "#save", role="button", name="Save patient", risk="irreversible"),
+        params={"first_name": "Ada", "last_name": "Lovelace"},
+    )
+
+
+def test_review_graph_carries_the_named_sections_and_edits_them(tmp_path: Path) -> None:
+    pytest.importorskip("openadapt_flow.sections")
+    from openadapt_desktop.qualification import edit_program_sections
+
+    bundle = _form_bundle(tmp_path / "bundle")
+    digest = Workflow.load(bundle).manifest.content_digest
+    graph = inspect_bundle(bundle, workflow_id="wf-1")["graph"]
+    assert [(s["title"], s["kind"]) for s in graph["sections"]] == [
+        ("2 fields: first name, last name", "fields"),
+        ("Save patient", "save"),
+    ]
+
+    edited = edit_program_sections(
+        bundle,
+        edit={"op": "rename", "section": graph["sections"][0]["section"], "title": "Patient name"},
+    )
+    assert edited["graph"]["sections"][0]["title"] == "Patient name"
+    reloaded = inspect_bundle(bundle, workflow_id="wf-1")["graph"]
+    assert reloaded["sections"][0]["title"] == "Patient name"
+    assert Workflow.load(bundle).manifest.content_digest == digest
+
+    with pytest.raises(QualificationError, match="save section stays separate"):
+        edit_program_sections(
+            bundle,
+            edit={
+                "op": "merge",
+                "section": graph["sections"][0]["section"],
+                "other": graph["sections"][1]["section"],
+            },
+        )

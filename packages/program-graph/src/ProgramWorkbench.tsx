@@ -8,12 +8,13 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type FormEvent,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import { defaultTourStops, type TourStop } from "./tour.js";
-import { deriveDisplayGraph, foldSequences, STOP_NODE_ID, type DisplayGraph, type FoldInfo, type FoldSpec, type StopExit } from "./fold.js";
+import { deriveDisplayGraph, foldSequences, sectionFolds, sectionReview, STOP_NODE_ID, type DisplayGraph, type FoldInfo, type FoldSpec, type SectionEdit, type SectionReview, type StopExit } from "./fold.js";
 import { layoutProgramGraph, type EdgeLayout, type LayoutOptions } from "./layout.js";
 import {
   displayTitle,
@@ -112,6 +113,12 @@ export interface ProgramWorkbenchProps {
   compact?: boolean;
   /** Resolve step media references to URLs. Without it, no pictures show. */
   resolveMedia?: MediaResolver;
+  /**
+   * Let a reviewer rename, merge or split the compiled sections (spec.sections).
+   * The host stores the edit (Flow: `openadapt-flow sections`) and passes back
+   * the new spec. Without it, sections are read-only.
+   */
+  onEditSection?: (edit: SectionEdit) => void;
   /** A guided tour: true for the default stops, or your own. */
   tour?: boolean | TourStop[];
   /** The viewer has seen the tour: it does not open by itself. */
@@ -256,6 +263,74 @@ function MediaFigures({
   );
 }
 
+function SectionReviewControls({
+  review,
+  folded,
+  onEditSection,
+}: {
+  review: SectionReview;
+  folded: boolean;
+  onEditSection: (edit: SectionEdit) => void;
+}) {
+  const { section, mergeWith, splitAt } = review;
+  const [renaming, setRenaming] = useState(false);
+  const [title, setTitle] = useState(section.title);
+  useEffect(() => {
+    setRenaming(false);
+    setTitle(section.title);
+  }, [section.id, section.title]);
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    const next = title.replace(/\s+/g, " ").trim();
+    if (next && next !== section.title) onEditSection({ op: "rename", section: section.section, title: next });
+    setRenaming(false);
+  };
+  return (
+    <div className="opg-section-review" aria-label="Review this section">
+      <span>Section</span>
+      {folded && renaming ? (
+        <form onSubmit={submit}>
+          <input
+            aria-label="Section title"
+            value={title}
+            maxLength={80}
+            autoFocus
+            onChange={(event) => setTitle(event.target.value)}
+          />
+          <button type="submit">Save</button>
+          <button type="button" onClick={() => setRenaming(false)}>
+            Cancel
+          </button>
+        </form>
+      ) : (
+        folded && (
+          <button type="button" className="opg-fold-toggle" onClick={() => setRenaming(true)}>
+            Rename this section
+          </button>
+        )
+      )}
+      {folded && mergeWith && (
+        <button
+          type="button"
+          className="opg-fold-toggle"
+          onClick={() => onEditSection({ op: "merge", section: section.section, other: mergeWith.section })}
+        >
+          Merge with the next section
+        </button>
+      )}
+      {!folded && splitAt && (
+        <button
+          type="button"
+          className="opg-fold-toggle"
+          onClick={() => onEditSection({ op: "split", section: section.section, at: splitAt })}
+        >
+          Start a new section at this step
+        </button>
+      )}
+    </div>
+  );
+}
+
 function NodeInspector({
   node,
   fold,
@@ -268,10 +343,14 @@ function NodeInspector({
   plainStopRules,
   resolveMedia,
   onClose,
+  review,
+  onEditSection,
 }: {
   plainStopRules?: boolean;
   resolveMedia?: MediaResolver;
   onClose?: () => void;
+  review?: SectionReview | null;
+  onEditSection?: (edit: SectionEdit) => void;
   node: GraphNode;
   fold?: FoldInfo;
   partOf?: { id: string; title: string };
@@ -391,6 +470,10 @@ function NodeInspector({
         </button>
       )}
 
+      {review && onEditSection && (
+        <SectionReviewControls review={review} folded={Boolean(fold)} onEditSection={onEditSection} />
+      )}
+
       {nodeHalts(node).length > 0 &&
         (plainStopRules ? (
           <div className="opg-stop-rule">
@@ -443,7 +526,9 @@ function MapPanel({
   resolveMedia,
   inspectorOpen,
   setInspectorOpen,
+  onEditSection,
 }: {
+  onEditSection?: (edit: SectionEdit) => void;
   showInspector?: boolean;
   plainStopRules?: boolean;
   compact?: boolean;
@@ -558,14 +643,21 @@ function MapPanel({
   });
 
   if (!selected) return <p className="opg-empty">The compiled graph is empty.</p>;
+  const openGroup = folds?.groups.find((g) => expanded.has(g.id) && g.nodes.includes(selected.id));
+  const review = onEditSection
+    ? display.folds.has(selected.id)
+      ? sectionReview(fullSpec, selected.id)
+      : openGroup
+        ? sectionReview(fullSpec, openGroup.id, selected.id)
+        : null
+    : null;
   const inspector = (
     <NodeInspector
       node={selected}
       fold={display.folds.get(selected.id)}
-      partOf={(() => {
-        const group = folds?.groups.find((g) => expanded.has(g.id) && g.nodes.includes(selected.id));
-        return group ? { id: group.id, title: group.title ?? group.id } : undefined;
-      })()}
+      partOf={openGroup ? { id: openGroup.id, title: openGroup.title ?? openGroup.id } : undefined}
+      review={review}
+      onEditSection={onEditSection}
       run={traceState?.nodes.get(selected.id)}
       titleFor={titleFor}
       plainStopRules={plainStopRules}
@@ -766,7 +858,7 @@ function MapPanel({
                   <span className="opg-node-index">{chipFor(node, nodeFold, numberOf)}</span>
                   <span className="opg-node-copy">
                     <small>{nodeFold ? (nodeFold.subtitle ?? `${nodeFold.members.length} steps`) : kindLabel(node)}</small>
-                    <strong>{title}</strong>
+                    <strong title={nodeFold ? title : undefined}>{title}</strong>
                   </span>
                   <span className="opg-node-signals" aria-hidden="true">
                     {nodeKind(node) === "loop" && run && run.iterations > 0 && <b>×{run.iterations}</b>}
@@ -1164,7 +1256,6 @@ export function ProgramWorkbench(props: ProgramWorkbenchProps) {
     spec,
     title,
     kicker = "The steps",
-    folds,
     trace,
     iterationNoun = "iteration",
     views = ["program", "evidence", "stops"],
@@ -1185,9 +1276,13 @@ export function ProgramWorkbench(props: ProgramWorkbenchProps) {
     tourSeen = false,
     onTourEnd,
   } = props;
-  // A compact stage folds straight runs of steps when no folds are given.
+  // Without a folds prop, the map folds the compiled sections the spec
+  // carries; a compact stage without them folds straight runs of steps.
   const effectiveFolds = useMemo(
-    () => (props.folds !== undefined ? props.folds : compact ? foldSequences(spec) : null),
+    () =>
+      props.folds !== undefined
+        ? props.folds
+        : (sectionFolds(spec) ?? (compact ? foldSequences(spec) : null)),
     [props.folds, compact, spec],
   );
   const state = useWorkbenchState({ ...props, folds: effectiveFolds });
@@ -1347,7 +1442,7 @@ export function ProgramWorkbench(props: ProgramWorkbenchProps) {
           <MapPanel
             display={state.display}
             fullSpec={spec}
-            folds={folds}
+            folds={effectiveFolds}
             expanded={state.expanded}
             setExpanded={state.setExpanded}
             traceState={traceState}
@@ -1362,6 +1457,7 @@ export function ProgramWorkbench(props: ProgramWorkbenchProps) {
             resolveMedia={resolveMedia}
             inspectorOpen={inspectorOpen}
             setInspectorOpen={setInspectorOpen}
+            onEditSection={props.onEditSection}
           />,
         )}
       {views.includes("evidence") &&

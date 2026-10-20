@@ -1957,6 +1957,35 @@ class PlaywrightBackend:
             name=result.get("name"),
         )
 
+    def section_context_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """The form section around the element under (x, y), or None.
+
+        Runs :data:`openadapt_flow.section_capture.SECTION_CONTEXT_JS` on the
+        actionable element: the nearest legend, accordion or tab header,
+        dialog, landmark or heading. Display metadata for named sections only.
+        """
+        from openadapt_flow.section_capture import SECTION_CONTEXT_JS
+
+        try:
+            point = self._frame_point(int(x), int(y))
+            if point is None:
+                return None
+            result = point.scope.evaluate(
+                "([px, py]) => { const el = document.elementFromPoint(px, py);"
+                " if (!el) return null; const target = el.closest("
+                "'button, a[href], input, select, textarea, [role]') || el;"
+                f" return ({SECTION_CONTEXT_JS})(target); }}",
+                [point.x, point.y],
+            )
+        except Exception:
+            return None
+        if not isinstance(result, dict) or not isinstance(result.get("text"), str):
+            return None
+        out: dict[str, Any] = {"kind": result.get("kind"), "text": result["text"]}
+        if result.get("header") is True:
+            out["header"] = True
+        return out
+
     def locate_structural(
         self, locator: StructuralLocator
     ) -> Optional[StructuralHandle]:
