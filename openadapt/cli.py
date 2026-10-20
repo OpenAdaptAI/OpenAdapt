@@ -1253,11 +1253,11 @@ def _verify_sealed_runs(folder: Path, extra: list[str]) -> int:
     try:
         from openadapt_flow.offline_seal import (
             load_registry,
+            parse_key_registry,
+            public_key_entry,
             seal_home,
-            signer_for,
             verify_run,
         )
-        from openadapt_types.seal import parse_key_registry
     except ImportError:
         click.echo(
             "This openadapt-flow cannot check offline Seals. Upgrade with: "
@@ -1274,9 +1274,9 @@ def _verify_sealed_runs(folder: Path, extra: list[str]) -> int:
             "the other options."
         )
     else:
-        signer = signer_for(seal_home())
-        registry = parse_key_registry([signer.registry_entry()])
-        source = f"this computer's Seal key, {signer.registry_entry()['key_id']}"
+        entry = public_key_entry(seal_home())
+        registry = parse_key_registry([entry])
+        source = f"this computer's Seal key, {entry['key_id']}"
     click.echo(f"Checking {len(runs)} sealed runs in {folder} against {source}")
     valid = 0
     for run in runs:

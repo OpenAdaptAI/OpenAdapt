@@ -596,16 +596,17 @@ class FlowEngine:
         """
 
         try:
-            from openadapt_flow.offline_seal import seal_home, seal_run, signer_for
+            from openadapt_flow.offline_seal import seal_home, seal_run
         except ImportError:
             return None
         checked = [run for run in runs if run.checked]
         if not checked:
             return None
-        signer = signer_for(seal_home())
         key_id = ""
         for run in checked:
-            seal = seal_run(run.run_dir, enqueue=False, signer=signer)
+            # The configured Seal key, or one generated under the Seal home
+            # on first use (the offline-Seal default).
+            seal = seal_run(run.run_dir, home=seal_home(), enqueue=False)
             key_id = str(seal.key_id)
         return SealFacts(key_id=key_id, sealed=len(checked))
 
@@ -671,12 +672,27 @@ def return_focus_to_terminal(
     return True
 
 
-def display_available() -> bool:
-    """True when a browser window (or tab) is likely to reach a person."""
+def display_available(
+    *, platform: Optional[str] = None, environ=None, isatty=None
+) -> bool:
+    """True when a browser window (or tab) is likely to reach a person.
 
-    from openadapt_flow.demo_proof import display_available as available
+    The same rule as ``openadapt flow demo``: output on a terminal, and a
+    display (X11 or Wayland, or a local macOS or Windows session, not SSH).
+    """
 
-    return available()
+    import os
+    import sys
+
+    env = os.environ if environ is None else environ
+    tty = isatty() if isatty is not None else sys.stdout.isatty()
+    if not tty:
+        return False
+    if env.get("DISPLAY") or env.get("WAYLAND_DISPLAY"):
+        return True
+    if env.get("SSH_CONNECTION") or env.get("SSH_TTY"):
+        return False
+    return (platform or sys.platform) in ("darwin", "win32")
 
 
 def open_page(page: Path) -> bool:

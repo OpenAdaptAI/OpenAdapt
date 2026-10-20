@@ -457,6 +457,25 @@ def test_a_terminal_gets_the_prompt_and_waiting_is_not_counted(root, monkeypatch
 
 
 @pytest.mark.parametrize(
+    ("environ", "platform", "tty", "shown"),
+    [
+        ({}, "darwin", True, True),
+        ({}, "linux", True, False),
+        ({"DISPLAY": ":0"}, "linux", True, True),
+        ({"SSH_CONNECTION": "x"}, "darwin", True, False),
+        ({}, "darwin", False, False),
+    ],
+)
+def test_display_available_needs_no_engine(environ, platform, tty, shown):
+    from openadapt.quickstart.engine import display_available
+
+    assert (
+        display_available(platform=platform, environ=environ, isatty=lambda: tty)
+        is shown
+    )
+
+
+@pytest.mark.parametrize(
     ("visible", "platform", "environ", "opened"),
     [
         (True, "darwin", {"__CFBundleIdentifier": "com.apple.Terminal"}, True),
@@ -703,7 +722,7 @@ def test_step_ticker_reports_steps_as_the_recorder_writes_them(tmp_path):
 
 def _seal_available() -> bool:
     try:
-        import openadapt_flow.offline_seal  # noqa: F401
+        from openadapt_flow.offline_seal import seal_run  # noqa: F401
     except ImportError:
         return False
     return True
@@ -767,11 +786,10 @@ def test_every_printed_command_answers_help_in_a_fresh_environment(tmp_path):
 def test_seal_verify_checks_each_sealed_run_in_a_folder(tmp_path, monkeypatch):
     if not _seal_available():
         pytest.skip("this openadapt-flow cannot sign offline Seals")
-    from openadapt_flow.offline_seal import seal_run, signer_for
+    from openadapt_flow.offline_seal import seal_run
 
     monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
     root = tmp_path / "openadapt-quickstart"
-    signer = signer_for(tmp_path / "seal")
     for index in (1, 2):
         run = root / f"run-{index}"
         run.mkdir(parents=True)
@@ -779,7 +797,7 @@ def test_seal_verify_checks_each_sealed_run_in_a_folder(tmp_path, monkeypatch):
             json.dumps({"execution_outcome": "VERIFIED", "n": index}),
             encoding="utf-8",
         )
-        seal_run(run, home=tmp_path / "seal", enqueue=False, signer=signer)
+        seal_run(run, home=tmp_path / "seal", enqueue=False)
     (root / "bundle").mkdir()
 
     result = CliRunner().invoke(cli.main, ["seal", "verify", str(root)])
