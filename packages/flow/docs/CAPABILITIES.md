@@ -144,7 +144,22 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   [display-scaling sweep](../benchmark/pixel_scale/README.md), healthy runs
   went from 3 of 24 to 17 of 24, and every wrong-record run still
   halted with nothing saved. Record IDs with 1/l or 0/O still halt at the
-  identity check off the recorded render.
+  identity check off the recorded render when the workflow always opens the
+  recorded record.
+- **Extra looks before a look-alike stop.** A record ID with 1/l or 0/O no
+  longer stops the run on its first read. The replayer reads two fresh frames
+  and a 2x crop, checks the known-ID list, and, where configured, selects and
+  copies the ID (`runtime.identity_copy_look`). Only the list or a copied ID
+  equal to a run parameter settles the record
+  (`openadapt_flow/runtime/identity_looks.py`). On the rendered dense record
+  list, false stops fell from 232 to 24 of 288 with the copy and a run
+  parameter, with 0 wrong-record accepts
+  ([IDENTITY_LOOKS.md](../benchmark/identity_looks/IDENTITY_LOOKS.md)).
+- **Hover response before an icon-only click.** On a pixel surface the
+  recorder can keep a click target's hover response; replay compares it and
+  stops before the click when it differs
+  (`openadapt_flow/runtime/hover_evidence.py`,
+  [hover_identity](../benchmark/hover_identity/README.md)).
 
 Compiled workflows can also be emitted as Agent Skills or MCP servers
 (`emit-skill` / `emit-mcp`), so other agents can invoke them.

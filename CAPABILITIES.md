@@ -84,7 +84,7 @@ shipping in the next release.
 | Learns branching programs from several demonstrations, from repeated halts, and from many background runs. | `induce`, `teach-branch`, [SHADOW_MINING.md](packages/capture/docs/SHADOW_MINING.md), [LEARN_FROM_MANY_RUNS.md](packages/flow/docs/LEARN_FROM_MANY_RUNS.md) |
 | Chains programs across surfaces, and one program can switch surfaces, tabs and popups mid-run. | `compose`, `process`, [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
 | Uses page structure first on web, Windows, macOS and Linux, with pixels as the fallback for remote desktops. Benchmarks labelled "vision-only" ran a deliberately pixel-only arm. | [RESOLUTION_LADDER.md](packages/flow/docs/RESOLUTION_LADDER.md) |
-| Runs steps as direct API calls, compiled from the network traffic captured while recording. | `api`, [#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269) |
+| Replaces a single HTML form submission with the request the app itself sends, compiled from the network traffic captured while recording, then reads the record back. JSON or GraphQL requests, multi-step wizards and governed runs still use the screen steps. | `api`, [API_TIER.md](packages/flow/docs/API_TIER.md) |
 | Builds the record check itself. After a save, the app usually reads the record back to show it; `scaffold-verifier` finds that read in the captured traffic or a read-only database, builds the check from it and tries to break it before a person reviews it. No API or SQL needs to be written by hand. | [EFFECT_KIT.md](packages/flow/docs/EFFECT_KIT.md#a-record-check-built-from-the-apps-own-reads-scaffold-verifier) |
 | Checks a save on desktop, RDP and Citrix apps with no API at all, by looking the record up in the app's own screens in a separate session. | [EFFECT_KIT.md](packages/flow/docs/EFFECT_KIT.md#separate-session-desktop-read-back-desktop_readback) |
 | Keeps pixel-path runs working across display scaling from 100% to 175% and font smoothing on or off, and stops rather than saves when the record changed. | [benchmark/pixel_scale](packages/flow/benchmark/pixel_scale/README.md) |
@@ -185,6 +185,8 @@ improvising or retrying when something is off.
 | One program that switches surfaces, tabs and popups mid-run | On main ([#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197)) | Real Chromium; Windows switch on a mock | [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
 | Halt when a workflow qualified with page structure runs on a pixels-only surface | Released | Synthetic | `openadapt-flow qualify` |
 | Lift look-alike identity stops with a complete known-ID list | Released | Synthetic (rendered record list) | `openadapt-flow known-ids` |
+| Take extra looks before stopping on a look-alike record ID: fresh frames, the known-ID list, and a select-and-copy of the ID where the surface allows it | On main ([#1333](https://github.com/OpenAdaptAI/OpenAdapt/pull/1333)) | Synthetic (dense record list in a browser) | `runtime.identity_copy_look` in deployment.yaml; [IDENTITY_LOOKS.md](packages/flow/benchmark/identity_looks/IDENTITY_LOOKS.md) |
+| Check an icon-only click target's hover response (highlight, tooltip) before clicking on a pixel surface, and re-check the target and identity regions on a fresh frame right before every pixel click | On main ([#1334](https://github.com/OpenAdaptAI/OpenAdapt/pull/1334)) | Synthetic (in-process kiosk) | `Recorder(capture_hover=True)`; [hover_identity](packages/flow/benchmark/hover_identity/README.md) |
 
 ## The fastest layer the app allows
 
@@ -354,6 +356,7 @@ A test fails when a command has no file or this list is out of date.
 - `bench`
 - `benchmark`
 - `demo`
+- `silent-saves`: Scores any GUI agent on injected bad saves, from the source checkout.
 - `tutorial`
 
 **Guard an agent you already run:**
@@ -387,6 +390,29 @@ A test fails when a command has no file or this list is out of date.
   complete database read path caught all 72. This is a coverage test over a
   small, hand-authored set of faults, not a real-world error rate:
   [EFFECT_E2E.md](packages/flow/benchmark/effect_e2e/EFFECT_E2E.md).
+- **OpenEMR referral: agent, screen program and API step.** Median wall time
+  per referral, from a fresh browser through sign-in, the entry and the read-back:
+  agent alone 36.5 s (62 of 63 correct, the 14 to 15 Oct study); compiled program
+  on the screen 22.5 s (18 of 18); the same program with the API step 3.3 s
+  (18 of 18). The program rows ran on 19 Oct, interleaved on one copy, without
+  the approval gate or resumable runs, and the API step was admitted by the
+  benchmark harness:
+  [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#openemr-agent-screen-program-and-api-step).
+- **An agent's claims versus the read-back, on OpenEMR.** With faults injected
+  in the fixture's database (partial, wrong value, duplicate, not persisted,
+  another chart deleted, another chart edited; 5 items each), Claude Sonnet 5.5
+  computer use claimed success on all 30 bad saves. `verify-run` caught 25 and
+  confirmed 5 of 5 clean saves with no false alarms. It missed all 5 edits to a
+  different chart: its collateral check finds a removed record, not a changed
+  one.:
+  [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back).
+- **An agent's claims versus the read-back.** Claude Sonnet 5.5 computer use,
+  working alone on a test app whose server broke the save in 6 ways (5 items
+  each), reported all 30 bad saves as done. `verify-run` flagged all 30 and
+  confirmed all 10 clean saves, with no false alarms. The app shows "saved"
+  before the server answers, so this measures what the screen can't show, not
+  the agent's care. Not yet run on OpenEMR:
+  [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back).
 
 ## Limits
 

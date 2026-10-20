@@ -4699,6 +4699,32 @@ def _cmd_bench(args: argparse.Namespace) -> int:
     return 0 if result["success_count"] == result["n"] else 1
 
 
+def _cmd_silent_saves(args: argparse.Namespace) -> int:
+    """``silent-saves``: hand off to ``benchmark/silent_saves`` in the checkout."""
+
+    import importlib.util
+
+    pkg = Path(__file__).resolve().parents[1] / "benchmark" / "silent_saves"
+    if not (pkg / "__init__.py").is_file():
+        print(
+            "silent-saves runs from a source checkout of OpenAdapt "
+            "(packages/flow/benchmark/silent_saves); the wheel does not ship it.",
+            file=sys.stderr,
+        )
+        return 2
+    if "silent_saves" not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            "silent_saves", pkg / "__init__.py", submodule_search_locations=[str(pkg)]
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["silent_saves"] = module
+        spec.loader.exec_module(module)
+    from silent_saves.cli import main as silent_saves_main  # type: ignore[import-not-found]
+
+    return int(silent_saves_main(list(args.silent_saves_argv)))
+
+
 def _cmd_benchmark(args: argparse.Namespace) -> int:
     from openadapt_flow.benchmark.run_benchmark import run_benchmark
 
@@ -9262,6 +9288,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--headed", action="store_true", help="Run the browsers headed")
     p.set_defaults(func=_cmd_benchmark)
+
+    # Arguments are parsed by the benchmark itself (benchmark/silent_saves),
+    # which ships in the source checkout, not the wheel. prefix_chars="+"
+    # passes every "-" option through untouched.
+    p = sub.add_parser(
+        "silent-saves",
+        help=(
+            "Score any GUI agent on injected bad saves: how often it reports "
+            "success while the record is wrong (source checkout)"
+        ),
+        add_help=False,
+        prefix_chars="+",
+    )
+    p.add_argument("silent_saves_argv", nargs="*")
+    p.set_defaults(func=_cmd_silent_saves)
 
     from openadapt_flow.registry import add_parser as _add_pull_parser
 

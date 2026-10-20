@@ -31,6 +31,39 @@ each save, reads the save back from the system of record after it, and returns
 a plain outcome. When anything doesn't match, it stops and tells your agent
 instead of guessing.
 
+## Measured on OpenEMR
+
+One new-patient referral in a test copy of OpenEMR, timed from a fresh
+browser through sign-in, the entry and the saved record read back (median):
+
+| Who does the entry | Time per referral | Saved correctly | Model cost |
+|---|---|---|---|
+| Agent alone (Claude Sonnet 5.5 computer use) | `██████████████████` 36.5 s | 62 of 63 | about $0.08 |
+| OpenAdapt program, screen steps | `███████████` 22.5 s | 18 of 18 | $0 |
+| OpenAdapt program, API step | `██` 3.3 s | 18 of 18 | $0 |
+
+The API step replaces the program's 41 screen steps with the one form
+submission the app itself sends, then reads the record back. It covers single
+HTML form saves like this one; other apps and request types are not yet
+measured. In both program rows a
+possible-duplicate referral stopped without saving, as it should. Both program
+rows ran on 19 Oct on one copy of the app, interleaved, without the approval
+gate and without resumable runs; the API step was admitted by the benchmark
+harness, not by a person. The agent rows are the 14 to 15 Oct timing study, on
+its own copy of the app.
+[SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#openemr-agent-screen-program-and-api-step)
+has every run.
+
+A screen can't show a save that went wrong behind it. On a test copy of
+OpenEMR, with faults injected in its database (a field blanked, a value changed, a
+duplicate chart, a chart removed, another chart deleted or edited), the agent
+claimed success on all 30 bad saves. Reading the record back caught 25 of the
+30 and confirmed all 5 clean saves, with no false alarms. It missed the 5 where
+a different chart was edited. On MockMed, a test app
+that shows a save as done before its server answers, the agent also claimed
+all 30 bad saves, and the read-back caught all 30
+([details below](#why-the-read-back-matters)).
+
 ## One harness, three modes
 
 | Mode | What happens | Model calls |
@@ -55,6 +88,16 @@ Each check below was asked whether those 72 bad saves had succeeded:
 This is a coverage test over a small, hand-written set of faults, not a
 real-world error rate. [EFFECT_E2E.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)
 has the method and raw results.
+
+An agent working alone can't see these faults either. Claude Sonnet 5.5, using
+computer use, did a task on a test app whose server broke the save in 6 ways,
+5 times each. The agent reported all 30 bad saves as done. Given the agent's
+run, `openadapt-flow verify-run` read each record back: it flagged all 30 and
+confirmed all 10 clean saves, with no false alarms. The test app shows "saved"
+before the server answers, so the screen gave the agent nothing to notice. That
+gap is what the read-back closes.
+[SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back)
+has the method, the raw runs and the cost.
 
 ## Try it in one command
 
@@ -437,7 +480,7 @@ shipping in the next release.
 | Learns branching programs from several demonstrations, from repeated halts, and from many background runs. | `induce`, `teach-branch`, [SHADOW_MINING.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/docs/SHADOW_MINING.md), [LEARN_FROM_MANY_RUNS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/LEARN_FROM_MANY_RUNS.md) |
 | Chains programs across surfaces, and one program can switch surfaces, tabs and popups mid-run. | `compose`, `process`, [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
 | Uses page structure first on web, Windows, macOS and Linux, with pixels as the fallback for remote desktops. Benchmarks labelled "vision-only" ran a deliberately pixel-only arm. | [RESOLUTION_LADDER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/RESOLUTION_LADDER.md) |
-| Runs steps as direct API calls, compiled from the network traffic captured while recording. | `api`, [#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269) |
+| Replaces a single HTML form submission with the request the app itself sends, compiled from the network traffic captured while recording, then reads the record back. JSON or GraphQL requests, multi-step wizards and governed runs still use the screen steps. | `api`, [API_TIER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/API_TIER.md) |
 | Builds the record check itself. After a save, the app usually reads the record back to show it; `scaffold-verifier` finds that read in the captured traffic or a read-only database, builds the check from it and tries to break it before a person reviews it. No API or SQL needs to be written by hand. | [EFFECT_KIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EFFECT_KIT.md#a-record-check-built-from-the-apps-own-reads-scaffold-verifier) |
 | Checks a save on desktop, RDP and Citrix apps with no API at all, by looking the record up in the app's own screens in a separate session. | [EFFECT_KIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EFFECT_KIT.md#separate-session-desktop-read-back-desktop_readback) |
 | Keeps pixel-path runs working across display scaling from 100% to 175% and font smoothing on or off, and stops rather than saves when the record changed. | [benchmark/pixel_scale](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/pixel_scale/README.md) |
@@ -538,6 +581,8 @@ improvising or retrying when something is off.
 | One program that switches surfaces, tabs and popups mid-run | On main ([#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197)) | Real Chromium; Windows switch on a mock | [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
 | Halt when a workflow qualified with page structure runs on a pixels-only surface | Released | Synthetic | `openadapt-flow qualify` |
 | Lift look-alike identity stops with a complete known-ID list | Released | Synthetic (rendered record list) | `openadapt-flow known-ids` |
+| Take extra looks before stopping on a look-alike record ID: fresh frames, the known-ID list, and a select-and-copy of the ID where the surface allows it | On main ([#1333](https://github.com/OpenAdaptAI/OpenAdapt/pull/1333)) | Synthetic (dense record list in a browser) | `runtime.identity_copy_look` in deployment.yaml; [IDENTITY_LOOKS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/identity_looks/IDENTITY_LOOKS.md) |
+| Check an icon-only click target's hover response (highlight, tooltip) before clicking on a pixel surface, and re-check the target and identity regions on a fresh frame right before every pixel click | On main ([#1334](https://github.com/OpenAdaptAI/OpenAdapt/pull/1334)) | Synthetic (in-process kiosk) | `Recorder(capture_hover=True)`; [hover_identity](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/hover_identity/README.md) |
 
 ## The fastest layer the app allows
 
@@ -707,6 +752,7 @@ A test fails when a command has no file or this list is out of date.
 - `bench`
 - `benchmark`
 - `demo`
+- `silent-saves`: Scores any GUI agent on injected bad saves, from the source checkout.
 - `tutorial`
 
 **Guard an agent you already run:**
@@ -740,6 +786,29 @@ A test fails when a command has no file or this list is out of date.
   complete database read path caught all 72. This is a coverage test over a
   small, hand-authored set of faults, not a real-world error rate:
   [EFFECT_E2E.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md).
+- **OpenEMR referral: agent, screen program and API step.** Median wall time
+  per referral, from a fresh browser through sign-in, the entry and the read-back:
+  agent alone 36.5 s (62 of 63 correct, the 14 to 15 Oct study); compiled program
+  on the screen 22.5 s (18 of 18); the same program with the API step 3.3 s
+  (18 of 18). The program rows ran on 19 Oct, interleaved on one copy, without
+  the approval gate or resumable runs, and the API step was admitted by the
+  benchmark harness:
+  [SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#openemr-agent-screen-program-and-api-step).
+- **An agent's claims versus the read-back, on OpenEMR.** With faults injected
+  in the fixture's database (partial, wrong value, duplicate, not persisted,
+  another chart deleted, another chart edited; 5 items each), Claude Sonnet 5.5
+  computer use claimed success on all 30 bad saves. `verify-run` caught 25 and
+  confirmed 5 of 5 clean saves with no false alarms. It missed all 5 edits to a
+  different chart: its collateral check finds a removed record, not a changed
+  one.:
+  [SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back).
+- **An agent's claims versus the read-back.** Claude Sonnet 5.5 computer use,
+  working alone on a test app whose server broke the save in 6 ways (5 items
+  each), reported all 30 bad saves as done. `verify-run` flagged all 30 and
+  confirmed all 10 clean saves, with no false alarms. The app shows "saved"
+  before the server answers, so this measures what the screen can't show, not
+  the agent's care. Not yet run on OpenEMR:
+  [SCOREBOARD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back).
 
 ## Limits
 
@@ -1295,7 +1364,14 @@ kiosk recorded `A1001` as `Alo01`), so in a workflow that always opens the
 recorded record, the copy can stop a run but never confirm one. It confirms
 only a record chosen by a run parameter. Governed and qualification runs never
 take it. The check just before the click takes no input; it reuses the copy
-only when the identifier's pixels are unchanged since the look.
+only when the identifier's pixels are unchanged since the look. On a rendered
+dense record list with the ID as a run parameter, false stops on the correct
+row went from 232 to 24 of 288 with the copy look, and wrong-record accepts
+stayed 0 of 288
+([`benchmark/identity_looks/IDENTITY_LOOKS.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/../benchmark/identity_looks/IDENTITY_LOOKS.md)).
+When the recording itself read the ID with a look-alike glyph, the band is not
+linked to the run parameter and the copy cannot confirm the record; 22 of the
+24 remaining stops were that case.
 
 Permissive `replay` may proceed on an unreadable reversible target and reports
 that condition. Governed `run` requires an affirmative live verdict for every
@@ -1342,7 +1418,10 @@ Controls that don't answer the pointer, such as most text fields, get no
 evidence this way. The browser, remote-display (Citrix and RDP client window)
 and FreeRDP backends can hover. The Aardwolf RDP transport and the native
 Windows, macOS and Linux backends can't move the pointer without a button
-yet, so they take no hover look.
+yet, so they take no hover look. On an in-process kiosk with two identical
+icons that differ only by tooltip, swapped between recording and replay, the
+look-alike icon was clicked in 2 of 3 runs before and 0 of 3 after
+([`benchmark/hover_identity`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/../benchmark/hover_identity/README.md)).
 
 A pixel step is checked on one frame and clicked a moment later. Consequential
 identity-gated clicks were already bound to the exact checked frame. Every
@@ -1435,7 +1514,9 @@ OCR tier then decides, and an identifier OCR cannot confirm, such as one with
 1/l or 0/O, still halts. In the display-scaling sweep
 ([`benchmark/pixel_scale`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/../benchmark/pixel_scale/README.md)) the RDP
 fixture's own IDs (`MRN A1001`) halted at the identity check at every render
-other than the recorded one.
+other than the recorded one, before and after the extra identity looks: that
+workflow always opens the recorded record, whose ID the recording read as
+`MRN Alo01`, and the kiosk has no selectable text.
 
 ### 2. A postcondition verifies only what it observes
 

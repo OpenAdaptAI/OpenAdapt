@@ -1,0 +1,10 @@
+{
+  "admission_error": "AdmissionError: --accept-params: no flagged proposal named 'note' (available: none)",
+  "admitted": false,
+  "params": {
+    "lifted": [],
+    "unlifted": {
+      "note": "not typed in any step"
+    }
+  }
+}

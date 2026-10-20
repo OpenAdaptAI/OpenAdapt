@@ -156,6 +156,7 @@ def build() -> dict[str, Any]:
         rows = schema.read_rows(items)
         tasks.setdefault(task, {}).setdefault(arm, {"rows": [], "meta": []})
         tasks[task][arm]["rows"].extend(rows)
+        tasks[task][arm].setdefault("runs", {})[run.name] = rows
         hc = run / "hand_check.json"
         if hc.is_file():
             tasks[task][arm].setdefault("hand_checks", []).extend(
@@ -191,6 +192,8 @@ def build() -> dict[str, Any]:
             out["tasks"][task][arm] = {
                 "label": ARM_LABEL.get(arm, arm),
                 **summarize(data["rows"]),
+                "runs": {name: summarize(rows) for name, rows in data["runs"].items()},
+                "run_meta": {m["run"]: m for m in data["meta"]},
                 "hand_check": {
                     "rows_not_correct": len(to_check),
                     "checked": len(to_check & checked),
@@ -227,6 +230,10 @@ def claims() -> dict[str, Any]:
     out: dict[str, Any] = {}
     for items in sorted(schema.RAW.glob("*/claims/*/items.csv")):
         run = items.parent
+        meta = run / "meta.json"
+        info = json.loads(meta.read_text()) if meta.is_file() else {}
+        if info.get("in_table") is False or info.get("complete") is not True:
+            continue  # kept out: a plumbing check, or a run still going
         rows = schema.read_rows(items)
         hc_file = run / "hand_check.json"
         hand = json.loads(hc_file.read_text())["items"] if hc_file.is_file() else []
@@ -252,12 +259,19 @@ def claims() -> dict[str, Any]:
                     "clean_saves": 0,
                     "clean_confirmed": 0,
                     "false_alarms": 0,
+                    "fault_not_reached": 0,
                     "ground_truth": {},
                     "verify_outcome": {},
                 },
             )
             bad = r["ground_truth"] != "correct"
             f["n"] += 1
+            if r["fault"] != "ok" and r.get("fault_applied", "x") == "":
+                # The agent stopped before any chart was written, so the
+                # injected fault never fired: neither a bad save nor a clean one.
+                f["fault_not_reached"] += 1
+                f["claimed_success"] += t(r)
+                continue
             f["claimed_success"] += t(r)
             f["ground_truth"][r["ground_truth"]] = (
                 f["ground_truth"].get(r["ground_truth"], 0) + 1
@@ -281,6 +295,9 @@ def claims() -> dict[str, Any]:
         }
         claimed = [r for r in rows if t(r)]
         out[f"{run.parent.parent.name}/{run.name}"] = {
+            "rebuilt_state": bool(info.get("rebuilt_state")),
+            "source_run": info.get("source_run"),
+            "verify_run_git_head": info.get("verify_run_git_head"),
             "per_fault": per_fault,
             "total": total,
             "cost_usd": round(sum(float(r["cost_usd"]) for r in rows), 6),
@@ -298,40 +315,129 @@ def claims() -> dict[str, Any]:
     return out
 
 
+#: The OpenEMR comparison the README quotes: (bar, arm, run).
+THREE_BARS = (
+    ("Agent alone", "agent", "study-main-0c642bc0"),
+    ("Compiled program, screen (API step off)", "program", "api-tier-2026-10-19"),
+    ("Compiled program, API step on", "program_api", "api-tier-2026-10-19"),
+    (
+        "Arm 3 today, worklist (not comparable on wall time)",
+        "program",
+        "worklist-std-2026-10-19",
+    ),
+)
+
+
+def _three_bars_markdown(sb: dict[str, Any]) -> list[str]:
+    arms = sb["tasks"].get("openemr_referral", {})
+    rows = []
+    for bar, arm, run in THREE_BARS:
+        r = arms.get(arm, {}).get("runs", {}).get(run)
+        m = arms.get(arm, {}).get("run_meta", {}).get(run, {})
+        if r is None:
+            continue
+        engine = str((m.get("engine") or {}).get("git_head", ""))[:8]
+        gate = (
+            "the study's start gate: 1-minute load under 12 before each run"
+            if arm == "agent"
+            else "per row: load at or under 12 at the start and the end"
+        )
+        rows.append(
+            f"| {bar} | `{arm}` / `{run}` | {engine} | "
+            f"{m.get('profile') or m.get('note') or '-'} | "
+            f"{r['correct']} of {r['normal_items']} | {r['timed_correct_items']} | "
+            f"{_fmt(r['item_s_median'])} | {_fmt(r['wall_s_median'])} | {gate} |"
+        )
+    if not rows:
+        return []
+    return [
+        "## OpenEMR: agent, screen program and API step",
+        "",
+        "One referral, entered by the agent alone, by the compiled program on "
+        "the screen, and by the same program with the API step (#1269). The "
+        "screen and API rows are the same bundle, interleaved by block on one "
+        "fixture copy. Medians are over correct, timed rows (n). Wall seconds "
+        "run from a new browser context through sign-in, the work and the "
+        "read-back, for the agent and for arm 5 alike; task seconds are the "
+        "arm's own work (the agent's first action to its answer; the engine's "
+        "time for a program). The possible-duplicate referral (r6) is in both "
+        "program rows as a safe stop. The worklist run signs in once per "
+        "worker, so its wall time is not comparable.",
+        "",
+        "| Bar | Arm / run | Engine | Profile | Correct (read back) | n timed | Task s median | Wall s median | Load gate |",
+        "|---|---|---|---|---|---|---|---|---|",
+        *rows,
+        "",
+    ]
+
+
 def _claims_markdown(cl: dict[str, Any]) -> list[str]:
     if not cl:
         return []
     lines = [
         "## The agent's claims versus the read-back",
         "",
-        "Separate from arms 1 to 7 (`claims.py`). Claude Sonnet 5.5 computer use "
-        "works alone while the app's server breaks the save. A bad save is one "
-        "where the store, compared before and after, does not hold exactly the "
-        "intended record (or lost another record). `verify-run` then judges the "
-        "same write from the system of record, with a baseline taken before the "
-        "agent started. Untimed. MockMed's screen shows the save as done under "
-        "every one of these faults (the app updates the page before the server "
-        "answers), so the agent cannot see them; that is the case verify-run is "
-        "for. OpenEMR's fixture has no fault injection, so it is not in this "
-        "table. `duplicate_keyed`: a double send the server de-duplicated on an "
-        "idempotency key, so a clean save (see the run's meta.json).",
+        "Separate from arms 1 to 7 (`claims.py`, `claims_openemr.py`). Claude "
+        "Sonnet 5.5 computer use works alone while the save is broken. A bad save "
+        "is one where the store, compared before and after, does not hold exactly "
+        "the intended record, or another record was lost or changed. "
+        "`verify-run` then judges the same write from the system of record, with "
+        "a baseline taken before the agent started. Untimed.",
+        "",
+        "- MockMed: the fault server breaks the write, and the screen shows the "
+        "save as done under every fault (the app updates the page before the "
+        "server answers). `duplicate_keyed` is a double send the server "
+        "de-duplicated on an idempotency key, so a clean save (the run's "
+        "meta.json).",
+        "- OpenEMR: OpenEMR is unchanged; the faults are injected only in the "
+        "fixture's database, by a trigger (`partial`: home phone blanked; "
+        "`wrong_value`: postal code changed) or by a poller after the chart is "
+        "written (`duplicate`, `no_persist`, `collateral_loss`: another chart "
+        "deleted, `collateral_edit`: another chart's phone changed). One existing "
+        "chart is seeded before every item. verify-run's collateral check covers "
+        "a chart that vanished; a changed chart that is not the target is outside "
+        'its contract, which `collateral_edit` measures. "Fault not reached": '
+        "the agent stopped before any chart was written.",
         "",
     ]
     for key, c in cl.items():
+        title = (
+            f"### {key} (rebuilt state, judged by fixed verify-run)"
+            if c.get("rebuilt_state")
+            else f"### {key}"
+        )
+        lines += [title, ""]
+        if c.get("rebuilt_state"):
+            lines += [
+                f"**Rebuilt state, judged by fixed verify-run.** Not the original "
+                f"run and not a new agent run: each item of run `{c['source_run']}` "
+                "had its database state rebuilt without the agent (the item's chart "
+                "saved through the API, the same fault applied), then judged by "
+                f"verify-run at {str(c['verify_run_git_head'])[:8]} (#1375, the "
+                "collateral-change check). The agent's claims are the source run's.",
+            ]
         lines += [
-            f"### {key}",
             "",
-            "| Fault | Items | Bad saves | Agent claimed success | Bad saves the agent claimed as success | ...of those, caught by verify-run | Bad saves caught by verify-run | Clean saves | Clean saves verify-run confirmed | False alarms |",
-            "|---|---|---|---|---|---|---|---|---|---|",
+            "| Fault | Items | Bad saves | Agent claimed success | Bad saves the agent claimed as success | ...of those, caught by verify-run | Bad saves caught by verify-run | Clean saves | Clean saves verify-run confirmed | False alarms | Fault not reached |",
+            "|---|---|---|---|---|---|---|---|---|---|---|",
         ]
         for name, f in list(c["per_fault"].items()) + [("all", c["total"])]:
             lines.append(
                 f"| {name} | {f['n']} | {f['bad_saves']} | {f['claimed_success']} | "
                 f"{f['bad_claimed_success']} | {f['bad_claimed_caught_by_verify_run']} | "
                 f"{f['bad_caught_by_verify_run']} | {f['clean_saves']} | "
-                f"{f['clean_confirmed']} | {f['false_alarms']} |"
+                f"{f['clean_confirmed']} | {f['false_alarms']} | "
+                f"{f.get('fault_not_reached', 0)} |"
             )
         hc = c["hand_check"]
+        if c.get("rebuilt_state"):
+            lines += [
+                "",
+                f"- The agent's claims are the source run's, hand-checked there "
+                f"(`{c['source_run']}`).",
+                "",
+            ]
+            continue
         lines += [
             "",
             f"- Hand check of every item where the agent claimed success: "
@@ -385,7 +491,8 @@ def markdown(sb: dict[str, Any]) -> str:
                 f"{s['silent_wrong']} | {s['safe_stops_normal']} / {fault_stops} of {s['fault_items']} | "
                 f"{s['flagged_wrong']} | {s['paused']} | {_fmt(s['model_calls_per_item'])} | "
                 f"{_fmt(s['cost_usd_per_item'] if s['cost_usd_per_item'] is not None else None, '')} | "
-                f"{_fmt(s['item_s_median'])} / {_fmt(s['item_s_p90'])} | "
+                f"{_fmt(s['item_s_median'])} / {_fmt(s['item_s_p90'])}"
+                f"{'' if s['item_s_median'] is None else ' (n=' + str(s['timed_correct_items']) + ')'} | "
                 f"{_fmt(s['wall_s_median'])} / {_fmt(s['wall_s_p90'])} | "
                 f"{_fmt(s['items_per_hour'])} | "
                 f"{s['approvals_asked']} | {(str(round(load['min'])) + '-' + str(round(load['max']))) if load else '-'} |"
@@ -396,6 +503,44 @@ def markdown(sb: dict[str, Any]) -> str:
                 lines.append(
                     f"- {task} / {arm}: fault items {json.dumps(s['fault_items_by_kind'])}"
                 )
+        for arm, s in arms.items():
+            worklist = any(
+                m.get("wall_s") and m.get("saved_correct") is not None
+                for m in s["run_meta"].values()
+            )
+            if len(s["runs"]) < 2 and not worklist:
+                continue
+            # Runs of one arm can differ in engine or harness (meta.json);
+            # show each so a blended figure is never the only one.
+            for name, r in s["runs"].items():
+                meta = s["run_meta"].get(name, {})
+                engine = str((meta.get("engine") or {}).get("git_head", ""))[:8]
+                lines.append(
+                    f"- {task} / {arm} / run `{name}` (engine {engine}): "
+                    f"{r['items']} rows, {r['correct']} of {r['normal_items']} "
+                    f"correct, {r['paused']} paused, task s median "
+                    f"{_fmt(r['item_s_median'])} (timed rows only), "
+                    f"items/hour {_fmt(r['items_per_hour'])}"
+                )
+                if meta.get("wall_s") and meta.get("saved_correct") is not None:
+                    # The harness's own worklist figure: correct saves over the
+                    # run's wall time. For arm 6 the workers load the host
+                    # themselves, so it is gated on the start only (Amendment 4).
+                    start = ((meta.get("gate") or {}).get("load_at_start") or [None])[0]
+                    label = (
+                        "self-loaded throughput"
+                        if arm == "parallel"
+                        else "worklist throughput"
+                    )
+                    lines.append(
+                        f"  - {label}: "
+                        f"{meta['saved_correct'] / meta['wall_s'] * 3600:.0f} correct "
+                        f"items/hour ({meta['saved_correct']} correct of "
+                        f"{meta['items_run']} run in {meta['wall_s']:.0f} s wall, "
+                        f"{meta.get('workers', 1)} worker(s)); load at start "
+                        f"{'-' if start is None else round(start, 1)}, mean during "
+                        f"{round(meta.get('load1_mean') or 0, 1)}"
+                    )
         for arm, s in arms.items():
             hc = s["hand_check"]
             if arm == "agent" and hc["rows_not_correct"]:
@@ -415,6 +560,7 @@ def markdown(sb: dict[str, Any]) -> str:
                     + " (evidence for each in hand_check.json)"
                 )
         lines.append("")
+    lines += _three_bars_markdown(sb)
     lines += _claims_markdown(sb.get("claims", {}))
     lines.append(
         f"Claude API spend so far: ${sb['spend_usd']}."
