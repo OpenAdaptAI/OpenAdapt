@@ -8,7 +8,9 @@
   replayed over the step table and the program map, with a tamper demo. The
   host's own parts (links, footer, live checks, how files load) come in
   `host`.
-- `SealArt`, `SealEmblem`, `SealMap`, `HashLine`, `OpenAdaptMark`.
+- `SealArt`, `MiniIris`, `SealEmblem`, `SealMap` (the full program
+  workbench, with a Seal card in its inspector: `InspectorSealCard`,
+  `useInspectorHost`), `HashLine`, `OpenAdaptMark`; `sealOutcomeLine`.
 - The checks: offline Seals (`openadapt.local-seal/v1`), run authorizations,
   Sigstore Rekor anchors and RFC 3161 timestamps, the same rules and refusal
   codes as `openadapt-flow local-seal verify`. A pure-JavaScript Ed25519
@@ -17,4 +19,5 @@
   browser or in Node.
 - `dist/seal-viewer.html`: the offline viewer, one HTML file with no network
   requests. The launcher ships it as `openadapt/seal_view/viewer.html`.
-- Extracted from openadapt.ai's Seal page (OpenAdaptAI/openadapt-web#587).
+- Extracted from openadapt.ai's Seal page (OpenAdaptAI/openadapt-web#587,
+  through 4da61c59).

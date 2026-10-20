@@ -8,13 +8,14 @@ async function get(url, bytes = false) {
     return bytes ? new Uint8Array(await r.arrayBuffer()) : r.text()
 }
 
-/** files: { report, seal, anchor?, tsa? }; authorization: authorizationFor() or null. */
+/** files: { report, seal, anchor?, tsa?, tsr? }; authorization: authorizationFor() or null. */
 export async function loadSealFiles(files, authorization = null) {
-    const [report, sealText, anchorText, tsaText, auth] = await Promise.all([
+    const [report, sealText, anchorText, tsaText, tsrBytes, auth] = await Promise.all([
         get(files.report, true),
         get(files.seal),
         files.anchor ? get(files.anchor) : null,
         files.tsa ? get(files.tsa) : null,
+        files.tsr ? get(files.tsr, true) : null,
         authorization
             ? Promise.all([
                   get(authorization.statement),
@@ -29,6 +30,7 @@ export async function loadSealFiles(files, authorization = null) {
         sealText,
         anchorText,
         tsaText,
+        tsrBytes,
         auth: auth
             ? { statement: auth[0], sig: auth[1], signers: auth[2], anchorText: auth[3] }
             : null,

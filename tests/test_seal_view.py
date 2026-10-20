@@ -319,6 +319,24 @@ def test_the_stopped_run_verifies_and_replays_to_the_stop(browser, runs):
         reader.close()
 
 
+def test_the_map_shows_the_sealed_step_and_goes_back_to_the_seal(browser, runs):
+    reader = Reader(browser, _page(runs / "run-1"))
+    try:
+        reader.verdict("Valid")
+        reader.page.locator("#map-h").scroll_into_view_if_needed()
+        reader.page.locator(".opg-node", has_text="Click Save Encounter").first.click()
+        card = reader.page.locator("[data-seal-card]")
+        card.wait_for()
+        assert "This is the step the Seal certifies" in card.text_content()
+        assert "2 of 2 read back · signature valid" in card.inner_text()
+        reader.page.get_by_role("button", name="Back to the Seal").click()
+        stage = reader.page.locator('section[aria-label="The Seal"]')
+        assert stage.get_attribute("data-pulse") in ("1", "2")
+        assert reader.outside() == []
+    finally:
+        reader.close()
+
+
 def test_a_page_with_no_run_says_how_to_make_one(browser, tmp_path):
     empty = tmp_path / "seal.html"
     empty.write_text(viewer_template(), encoding="utf-8")

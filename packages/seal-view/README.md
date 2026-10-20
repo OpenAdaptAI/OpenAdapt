@@ -20,13 +20,16 @@ openadapt.ai's Seal pages and `openadapt quickstart` use the same code.
   its reason and code (`subject_mismatch`, `bad_signature`, `unknown_key` and
   the others `openadapt-flow local-seal verify` uses).
 - **The replay.** One frame index drives the ring, the step line, the step
-  table, the read-back table and the program map
-  ([`@openadapt/program-graph`](../program-graph/README.md)).
+  table, the read-back table and the full program workbench
+  ([`@openadapt/program-graph`](../program-graph/README.md)): sections,
+  inspector, evidence lanes, stop rules and a tour. While the inspector shows
+  the step the Seal certifies (the save, or the stop), a card at its top says
+  so and goes back up to the Seal.
 - **Tamper with it.** Change the outcome or the AI call count in a copy of the
   report, or the outcome in a copy of the Seal, and check the copy.
 - **Witnesses.** A Sigstore Rekor entry (`seal.anchor.json`) and an RFC 3161
-  timestamp (`seal.tsa.json`) are checked offline and shown only when the run
-  has them.
+  timestamp (`seal.tsa.json` naming its token file `seal.tsr`) are checked
+  offline and shown only when the run has them.
 
 ## Use it
 
@@ -43,7 +46,8 @@ const { page } = await sealPageProps({ files, keys, program: { spec } })
 
 `spec` is the program graph of the run's bundle (`openadapt-flow visualize
 --format json`). `host` holds the parts that differ between hosts: `Link`,
-`links`, `copyHref`, `kicker`, `footer`, `keyWords`, `live` (Rekor's live entry
+`links`, `map` (`kicker`, `title`, `resolveMedia` for the workbench),
+`copyHref`, `kicker`, `footer`, `keyWords`, `live` (Rekor's live entry
 and GitHub's key list, default on) and `loadFiles` (default: fetch the paths in
 `seal.files`). `sealPageMeta(page)` gives the title and description for the
 host's `<head>`.
@@ -58,7 +62,7 @@ slot that `openadapt seal view RUN_DIR` fills with the run's files. Its
 Content-Security-Policy allows no requests, so it works from `file://` with
 the network off and uploads nothing.
 
-Size, measured on 2026-10-20: 202,270 bytes (65,703 gzipped). The budget is
+Size, measured on 2026-10-20: 212,468 bytes (68,661 gzipped). The budget is
 262,144 bytes (`VIEWER_BUDGET` in `scripts/build.mjs`, and
 `tests/snapshots/seal_viewer_size.json` at the repository root);
 `node scripts/build.mjs --check` fails over it or when the launcher's copy is

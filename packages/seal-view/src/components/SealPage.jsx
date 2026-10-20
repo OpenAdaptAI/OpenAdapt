@@ -20,8 +20,9 @@
 //   loadFiles()  the run's files as the check reads them (default: fetch the
 //                paths in seal.files, lib/sealFiles.mjs)
 //   Link         the host's link component (default: a plain <a>)
-//   links        { home: {href, label}, map: {href, label}, docs, keys: {href, label},
+//   links        { home: {href, label}, programMap: {href, label}, docs, keys: {href, label},
 //                  file(name) -> href of one of the run's files, or null }
+//   map          { kicker, title, resolveMedia(ref) } for the program workbench
 //   copyHref     the page's own address, for "Copy link" (none: no button)
 //   live         ask the network once the offline proof passes: Rekor's live
 //                entry and GitHub's key list (default true; the viewer: false)
@@ -40,6 +41,7 @@ import { rekorLiveMatch, rekorSearchUrl } from '../lib/rekorLive.mjs'
 import { frameOfStep, litAt, nextHighlight, replayFrames } from '../lib/sealReplay.mjs'
 import { authorizedLine as authorizedWords, checkGithubIdentity } from '../lib/runAuthorization.mjs'
 import { runDate } from '../lib/sealDates.mjs'
+import { sealOutcomeLine } from '../lib/sealOutcome.mjs'
 import SealArt from './SealArt.jsx'
 import HashLine from './HashLine.jsx'
 import OpenAdaptMark from './OpenAdaptMark.jsx'
@@ -172,6 +174,7 @@ export default function SealPage({ seal: page, host = {} }) {
         unchanged = 'The published files are unchanged.',
         canonicalOrigin = null,
         chrome = true,
+        map = {},
     } = host
     const {
         rings,
@@ -219,6 +222,45 @@ export default function SealPage({ seal: page, host = {} }) {
     const stageRef = useRef(null)
     const runId = useRef(0)
     useParallax(stageRef, !reduced)
+    // The map inspector's "Back to the Seal ↑": scroll up to the Seal and pulse it once.
+    const [pulse, setPulse] = useState(0)
+    const pulseTimer = useRef(0)
+    const tiltRef = useRef(null)
+    const heldPointer = useRef(false)
+    const heldListener = useRef(null)
+    const backToSeal = useCallback(
+        (event) => {
+            const el = stageRef.current
+            if (!el) return
+            const target = tiltRef.current || el
+            target.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' })
+            el.focus({ preventScroll: true })
+            // Hover means nothing until the pointer itself moves again.
+            heldPointer.current = true
+            let from = event && event.detail > 0 ? [event.screenX, event.screenY] : null
+            const moved = (e) => {
+                from ??= [e.screenX, e.screenY]
+                if (Math.hypot(e.screenX - from[0], e.screenY - from[1]) < 6) return
+                heldPointer.current = false
+                window.removeEventListener('pointermove', moved)
+            }
+            if (heldListener.current) window.removeEventListener('pointermove', heldListener.current)
+            heldListener.current = moved
+            window.addEventListener('pointermove', moved)
+            // Two values, so a second press restarts the animation; it clears itself.
+            setPulse((n) => (n % 2) + 1)
+            clearTimeout(pulseTimer.current)
+            pulseTimer.current = setTimeout(() => setPulse(0), 1600)
+        },
+        [reduced]
+    )
+    useEffect(
+        () => () => {
+            clearTimeout(pulseTimer.current)
+            if (heldListener.current) window.removeEventListener('pointermove', heldListener.current)
+        },
+        []
+    )
 
     // The replay: one index into the run's frames is the only playback state.
     const frames = useMemo(() => replayFrames(rings), [rings])
@@ -403,6 +445,8 @@ export default function SealPage({ seal: page, host = {} }) {
     const onActive = useCallback(
         (i, how = {}) => {
             if (how.focus) setFocusIndex(i)
+            // After "Back to the Seal", the Seal scrolls under a pointer that never moved: not pointing.
+            if (!how.focus && heldPointer.current) return
             // During a replay, pointing at a step moves the replay there (the same index).
             if (frame !== null) seek(frameOfStep(frames, i))
             else setHovered(i)
@@ -669,8 +713,8 @@ export default function SealPage({ seal: page, host = {} }) {
                         ) : null}
                     </section>
 
-                    <section className={s.stage} ref={stageRef} aria-label="The Seal">
-                        <div className={s.tilt}>
+                    <section className={s.stage} ref={stageRef} aria-label="The Seal" tabIndex={-1} data-pulse={pulse || undefined}>
+                        <div className={s.tilt} ref={tiltRef}>
                             <SealArt
                                 rings={rings}
                                 tone={tone}
@@ -729,19 +773,18 @@ export default function SealPage({ seal: page, host = {} }) {
                 <section className={s.mapBand} aria-labelledby="map-h">
                     <div className={s.mapHead}>
                         <h2 id="map-h">The program this run ran</h2>
-                        {links.map ? (
-                            <Link href={links.map.href} className={s.mapLink}>
-                                {links.map.label}
-                            </Link>
-                        ) : null}
                     </div>
                     <WhenNear minHeight={420}>
                         <SealMap
                             program={program}
+                            map={{ title: `${job} · ${app}`, ...map }}
                             step={shown}
                             status={step ? (step.status === 'stopped' ? 'stopped' : current?.stage === 'done' ? 'saved' : 'running') : null}
                             onPick={(i) => (replaying ? seek(frameOfStep(frames, i)) : setSelected(i))}
                             anchor={rings.anchor}
+                            sealRun={{ rings, tone, irisSeed: seed, referral }}
+                            sealLine={sealOutcomeLine({ rings, label, stopReason }, verdict === 'valid')}
+                            onBackToSeal={backToSeal}
                         />
                     </WhenNear>
                 </section>
@@ -914,6 +957,8 @@ const WITNESS_REASONS = {
     tsa_not_timestamping: "The signing certificate isn't for time stamping.",
     tsa_content_mismatch: "The timestamp's signed content doesn't match.",
     tsa_malformed: "The timestamp isn't well formed.",
+    tsa_token_missing: "The timestamp's token file is missing.",
+    tsa_token_mismatch: "The timestamp's token file isn't the one its record names.",
 }
 
 // The signed fields and the outside witnesses, one table. A witness the files
@@ -1006,7 +1051,7 @@ function RecordTable({ seal, files, links, witnesses, witness, live, authorizati
             </table>
             {links.file ? (
                 <p className={s.fileLinks}>
-                    {['report.json', 'seal.json', files.anchor ? 'seal.anchor.json' : null, files.tsa ? 'seal.tsa.json' : null]
+                    {['report.json', 'seal.json', files.anchor ? 'seal.anchor.json' : null, files.tsa ? 'seal.tsa.json' : null, files.tsr ? 'seal.tsr' : null]
                         .filter(Boolean)
                         .map((name) => [name, links.file(name)])
                         .filter(([, href]) => href)

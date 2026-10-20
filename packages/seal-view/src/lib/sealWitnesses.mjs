@@ -3,7 +3,7 @@
 //   - Sigstore Rekor, the public transparency log: seal.anchor.json, checked
 //     offline (signed entry timestamp, inclusion proof, checkpoint) against the
 //     pinned Rekor key (lib/sealAnchor.mjs);
-//   - Sigstore's Timestamp Authority: seal.tsa.json, an RFC 3161 token checked
+//   - Sigstore's Timestamp Authority: seal.tsa.json naming seal.tsr, an RFC 3161 token checked
 //     against the pinned Sigstore TSA root, stamping the Seal's own SHA-256
 //     (lib/tsaToken.mjs).
 // A witness the files don't have is null: the page shows nothing for it.
@@ -21,7 +21,7 @@ function parse(text) {
 }
 
 /**
- * files: { sealText, anchorText?, tsaText? }; keys: the pinned Seal keys.
+ * files: { sealText, anchorText?, tsaText?, tsrBytes? }; keys: the pinned Seal keys.
  * Returns { rekor, tsa }, each null or { ok, reason, ... }.
  */
 export async function checkWitnesses(files, keys, { logKeys = null } = {}) {
@@ -40,7 +40,7 @@ export async function checkWitnesses(files, keys, { logKeys = null } = {}) {
         }
     }
     if (files.tsaText != null) {
-        tsa = seal ? await verifySealTimestamp(files.tsaText, await sealSha256(seal)) : { ok: false, reason: 'tsa_malformed' }
+        tsa = seal ? await verifySealTimestamp(files.tsaText, await sealSha256(seal), files.tsrBytes ?? null) : { ok: false, reason: 'tsa_malformed' }
     }
     return { rekor, tsa }
 }

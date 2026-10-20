@@ -1,9 +1,9 @@
 """Write a sealed run's Seal as one offline HTML page: ``RUN_DIR/seal.html``.
 
-The page is ``viewer.html`` (built from ``packages/seal-view``; React, the
+The page is ``viewer.html`` (built from ``packages/seal-view``; Preact, the
 program map and the Seal inlined) with the run's own files embedded in it:
 the exact bytes of ``report.json``, the exact text of ``seal.json`` (and of
-``seal.anchor.json`` and ``seal.tsa.json`` when the run has them), the Seal
+``seal.anchor.json``, ``seal.tsa.json`` and ``seal.tsr`` when the run has them), the Seal
 keys the reader trusts, and the program graph of the run's bundle. In the
 browser it checks the Ed25519 signature over the embedded report, draws the
 Seal from it, replays the run over the step table and the program map, and
@@ -29,7 +29,13 @@ PAGE_NAME = "seal.html"
 #: Where the run's files go in the viewer.
 DATA_SLOT = "<!--SEAL-DATA-->"
 #: The run's files a reader can open from the page, when present.
-RUN_FILES = ("report.json", "seal.json", "seal.anchor.json", "seal.tsa.json")
+RUN_FILES = (
+    "report.json",
+    "seal.json",
+    "seal.anchor.json",
+    "seal.tsa.json",
+    "seal.tsr",
+)
 
 
 class SealViewError(RuntimeError):
@@ -52,6 +58,13 @@ def viewer_template() -> str:
 def _text(path: Path) -> Optional[str]:
     try:
         return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+
+
+def _b64(path: Path) -> Optional[str]:
+    try:
+        return base64.b64encode(path.read_bytes()).decode("ascii")
     except FileNotFoundError:
         return None
 
@@ -203,6 +216,7 @@ def page_data(
         "seal_text": seal,
         "anchor_text": _text(run_dir / "seal.anchor.json"),
         "tsa_text": _text(run_dir / "seal.tsa.json"),
+        "tsr_b64": _b64(run_dir / "seal.tsr"),
         "keys": keys,
         "program": {"spec": dict(program)},
         "about": dict(about or {}),

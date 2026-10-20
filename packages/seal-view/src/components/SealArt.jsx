@@ -374,3 +374,13 @@ function Iris({ layers, phase, broken, tone }) {
         </div>
     )
 }
+
+/** The Seal's iris alone, small and turning: for cards that point at a Seal. */
+export function MiniIris({ seed, tone, size = 64 }) {
+    const layers = useMemo(() => iris(seed, { radius: 100 }), [seed])
+    return (
+        <span className={s.mini} data-tone={tone} style={{ width: size, height: size }} aria-hidden="true">
+            <Iris layers={layers} phase="rest" broken={false} tone={tone} />
+        </span>
+    )
+}

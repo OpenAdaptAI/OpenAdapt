@@ -824,3 +824,35 @@
         display: none;
     }
 }
+
+/* The small iris on the map inspector's Seal card (MiniIris). */
+.mini {
+    --t0: #4cf0b8;
+    --soft: #b9fbe5;
+    --fail: #ff4d6a;
+    position: relative;
+    display: inline-block;
+    flex: none;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(76, 240, 184, 0.14), rgba(4, 12, 10, 0.9) 70%);
+    box-shadow: 0 0 0 1px rgba(76, 240, 184, 0.35), 0 0 24px -6px rgba(76, 240, 184, 0.55);
+}
+.mini[data-tone='halt'] {
+    --t0: #ffbf55;
+    --soft: #ffe2ad;
+    background: radial-gradient(circle, rgba(255, 191, 85, 0.14), rgba(16, 10, 2, 0.9) 70%);
+    box-shadow: 0 0 0 1px rgba(255, 191, 85, 0.4), 0 0 24px -6px rgba(255, 191, 85, 0.5);
+}
+.mini .iris {
+    inset: 8%;
+    left: 8%;
+    top: 8%;
+    width: 84%;
+    height: 84%;
+}
+@media (prefers-reduced-motion: reduce) {
+    .mini .iris,
+    .mini .irisLayer {
+        animation: none;
+    }
+}

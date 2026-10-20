@@ -25,7 +25,7 @@ const hexOf = async (text) => sha256Hex(new TextEncoder().encode(text))
 export const irisSeed = async (seal) => hexOf(seal.subject_sha256 + (await hexOf(canonicalJson(seal))))
 
 /**
- * files: { report: Uint8Array, sealText, anchorText?, tsaText?, auth? }
+ * files: { report: Uint8Array, sealText, anchorText?, tsaText?, tsrBytes?, auth? }
  *   (auth: { statement, sig, signers, anchorText? }, the run authorization's texts)
  * program: { spec, folds?, titles?, digest? } (programOf)
  * about: { id?, app, job, startedAt? } (what to call the run)
@@ -65,6 +65,7 @@ export async function sealPageProps({ files, keys, program, about = {}, authoriz
                 seal: 'seal.json',
                 anchor: files.anchorText != null ? 'seal.anchor.json' : null,
                 tsa: files.tsaText != null ? 'seal.tsa.json' : null,
+                tsr: files.tsrBytes != null ? 'seal.tsr' : null,
             },
             anchor: null,
             authorization,

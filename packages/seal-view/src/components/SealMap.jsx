@@ -1,21 +1,38 @@
-// The compiled program this run ran, as the shared program map
-// (@openadapt/program-graph), read-only, under the Seal. It follows the Seal
-// page's one frame index: the step the page shows is lit and selected here,
-// its section unfolded; picking a step here picks it on the Seal.
-// `program` is { spec, folds?, titles? }: the run's program graph, its
-// sections and a name per node id (sealPageProps fills them in).
+// The compiled program this run ran, under the Seal: the full program
+// workbench (@openadapt/program-graph), with its sections, inspector,
+// evidence lanes, stop rules, zoom, fit, Expand, the step pictures the host
+// resolves and a guided tour. It follows the Seal page's one frame index: the
+// step the page shows is lit and selected here, its section unfolded; picking
+// a step here picks it on the Seal. While the inspector shows the step the
+// Seal certifies, a card at its top says so and goes back up to the Seal.
+//
+// program: { spec, folds?, titles? } (sealPageProps fills them in);
+// map: { kicker?, title?, resolveMedia? } from the host.
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ProgramMap } from '@openadapt/program-graph'
+import { createPortal } from 'react-dom'
+import { ProgramWorkbench, defaultTourStops } from '@openadapt/program-graph'
+import { InspectorSealCard, useInspectorHost } from './InspectorSeal.jsx'
 import s from './SealPage.module.css'
 
-export default function SealMap({ program, step, status, onPick, anchor = null }) {
+const NO_GROUPS = []
+
+export default function SealMap({
+    program,
+    map = {},
+    step,
+    status,
+    onPick,
+    anchor = null,
+    sealRun = null,
+    sealLine = '',
+    onBackToSeal,
+}) {
     const { spec, folds = null, titles = {} } = program
+    const groups = folds?.groups || NO_GROUPS
     const actions = useMemo(() => spec.nodes.filter((n) => n.kind === 'action').map((n) => n.id), [spec])
-    const groupOf = useMemo(
-        () => Object.fromEntries((folds?.groups || []).flatMap((g) => g.nodes.map((id) => [id, g.id]))),
-        [folds]
-    )
+    const groupOf = useMemo(() => Object.fromEntries(groups.flatMap((g) => g.nodes.map((id) => [id, g.id]))), [groups])
     const titleFor = useMemo(() => (node) => titles[node.id] || node.title, [titles])
+    const tour = useMemo(() => defaultTourStops(spec, { title: titleFor }), [spec, titleFor])
     const box = useRef(null)
     // The Seal's step on the map (the save, or the stop): marked on its card, or
     // on its section's card while the section is folded. The package owns the
@@ -27,7 +44,7 @@ export default function SealMap({ program, step, status, onPick, anchor = null }
         if (!anchor) return
         const id = actions[anchor.step]
         const title = titles[id]
-        const group = (folds?.groups || []).find((g) => g.nodes.includes(id))
+        const group = groups.find((g) => g.nodes.includes(id))
         const cards = [...root.querySelectorAll('.opg-node')]
         const label = (el) => el.getAttribute('aria-label') || ''
         const card =
@@ -36,6 +53,9 @@ export default function SealMap({ program, step, status, onPick, anchor = null }
         if (card) card.dataset.sealAnchor = anchor.kind
     })
     const node = step != null ? actions[step] : null
+    // A folded card or the stop card the visitor picked, until the replay moves on.
+    const [own, setOwn] = useState(null)
+    useEffect(() => setOwn(null), [node])
     // The visitor's own unfolded sections, plus the current step's.
     const [open, setOpen] = useState([])
     const expanded = useMemo(
@@ -43,28 +63,52 @@ export default function SealMap({ program, step, status, onPick, anchor = null }
         [open, node, groupOf]
     )
     const playhead = useMemo(() => (node ? { node, iteration: 1, status: status || 'running' } : null), [node, status])
+    const anchorId = anchor ? actions[anchor.step] : null
+    const anchorIds = useMemo(() => (anchorId ? [anchorId] : []), [anchorId])
+    const sealHost = useInspectorHost(box, anchorIds, groups).host
     return (
         <div className={s.map} data-step={step ?? ''} ref={box}>
-            <ProgramMap
+            <ProgramWorkbench
                 spec={spec}
                 folds={folds}
                 stopExits={folds?.stops}
                 compact
                 numbering="actions"
+                kicker={map.kicker || 'Compiled program'}
+                title={map.title}
                 titleFor={titleFor}
+                resolveMedia={map.resolveMedia}
+                tour={tour}
+                tourSeen
+                plainStopRules
                 theme="dark"
                 playhead={playhead}
-                selectedId={node || actions[0]}
+                selectedId={own || node || actions[0]}
                 onSelect={(id) => {
                     // The map selects the step its playhead reaches on its own;
                     // only a different step is the visitor picking one.
-                    if (id === node) return
+                    if (id === node && !own) return
+                    // The folded card holding the Seal's step: that step, with its Seal card.
+                    if (anchorId && groupOf[anchorId] === id && groups.some((g) => g.id === id)) {
+                        setOwn(null)
+                        onPick(anchor.step)
+                        return
+                    }
                     const i = actions.indexOf(id)
-                    if (i >= 0) onPick(i)
+                    if (i >= 0) {
+                        setOwn(null)
+                        onPick(i)
+                    } else setOwn(id)
                 }}
                 expanded={expanded}
                 onExpandedChange={setOpen}
             />
+            {sealHost && sealRun
+                ? createPortal(
+                      <InspectorSealCard seals={[{ ...sealRun, line: sealLine, anchor }]} onBack={onBackToSeal} />,
+                      sealHost
+                  )
+                : null}
         </div>
     )
 }

@@ -7,7 +7,7 @@
 // network requests: no fonts, no CDN, no live checks, so it works from file://
 // with the network off.
 //
-// seal-data: { report_b64, seal_text, anchor_text?, tsa_text?, auth?, keys,
+// seal-data: { report_b64, seal_text, anchor_text?, tsa_text?, tsr_b64?, auth?, keys,
 //              program: { spec, folds?, titles? },
 //              about: { app, job, kicker? }, host: { keyWords?, unchanged?, footer? },
 //              commands? }
@@ -48,6 +48,7 @@ async function main() {
         sealText: data.seal_text,
         anchorText: data.anchor_text ?? null,
         tsaText: data.tsa_text ?? null,
+        tsrBytes: data.tsr_b64 ? bytes(data.tsr_b64) : null,
         auth: data.auth ?? null,
     }
     let props

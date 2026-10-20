@@ -1406,10 +1406,6 @@
     font-weight: 400;
     letter-spacing: -0.02em;
 }
-.mapLink {
-    font-size: 14.5px;
-    color: var(--tone-soft) !important;
-}
 .map {
     border-radius: 18px;
     overflow: hidden;
@@ -1466,6 +1462,11 @@
 }
 
 /* The Seal's step on the program map. */
+/* The Seal's replay drives this map, not a trace: the package's
+   "No live trace bound" would mislead here. */
+.map :global(.opg-trace-state) {
+    display: none;
+}
 .map :global(.opg-node[data-seal-anchor]) {
     box-shadow:
         0 0 0 2px rgba(76, 240, 184, 0.6),
@@ -1491,4 +1492,36 @@
 .map :global(.opg-node[data-seal-anchor='stop'])::after {
     background: #ffbf55;
     color: #1a1002;
+}
+
+/* "Back to the Seal ↑" from the map inspector: the Seal pulses once. The two
+   values restart the animation on every press. */
+.stage:focus {
+    outline: none;
+}
+.stage[data-pulse='1'] .tilt {
+    animation: sealPulseA 1100ms ease-out;
+}
+.stage[data-pulse='2'] .tilt {
+    animation: sealPulseB 1100ms ease-out;
+}
+@keyframes sealPulseA {
+    30% {
+        scale: 1.045;
+        filter: drop-shadow(0 0 32px color-mix(in srgb, var(--tone-soft) 55%, transparent));
+    }
+}
+@keyframes sealPulseB {
+    30% {
+        scale: 1.045;
+        filter: drop-shadow(0 0 32px color-mix(in srgb, var(--tone-soft) 55%, transparent));
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .stage[data-pulse] .tilt {
+        animation: none;
+        outline: 2px solid var(--tone-soft, #b9fbe5);
+        outline-offset: 8px;
+        border-radius: 50%;
+    }
 }

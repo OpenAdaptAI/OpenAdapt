@@ -25,6 +25,8 @@ export const AUTHORIZATION_FILES = {
     sig: 'run-authorization.json.sig',
     signers: 'run-authorization.allowed_signers',
     anchor: 'run-authorization.anchor.json',
+    tsa: 'run-authorization.tsa.json',
+    tsr: 'run-authorization.tsr',
 }
 const HEX64 = /^[a-f0-9]{64}$/
 // Short labels (r3), never names or record numbers.

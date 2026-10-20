@@ -1,4 +1,4 @@
-// Checks an RFC 3161 timestamp token (seal.tsa.json, from Sigstore's
+// Checks an RFC 3161 timestamp token (seal.tsr, named by seal.tsa.json, from Sigstore's
 // Timestamp Authority at timestamp.sigstore.dev) in the browser or in Node,
 // with WebCrypto, the way `openssl ts -verify` does for one pinned root:
 //   1. the token is CMS SignedData over a TSTInfo;
@@ -9,6 +9,8 @@
 // It returns the time the token attests (genTime, read from the token, never
 // from the JSON beside it) and the digest it stamps (the message imprint), so
 // the page can compare that digest with the Seal's own.
+
+import { canonicalJson, duplicateKey } from './localSeal.mjs'
 
 // The Sigstore TSA root (O=sigstore.dev, CN=sigstore-tsa-selfsigned), the same
 // file as OpenAdapt's openadapt_flow/countersign/trust/sigstore-tsa-root.pem and
@@ -274,27 +276,73 @@ export async function verifyTimestampToken(der, rootPem = SIGSTORE_TSA_ROOT_PEM)
     }
 }
 
+// The token file beside a record's .tsa.json: a bare name ending .tsr, never a path.
+export const TSR_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\.tsr$/
+const HEX64 = /^[a-f0-9]{64}$/
+
+async function sha256Hex(bytes) {
+    const d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
+    return [...d].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 /**
- * Check seal.tsa.json's text for one Seal: the token verifies, and the digest
- * it stamps is the Seal's own SHA-256 (sealHex, computed by the caller from
- * the Seal file). Adds `matches` and `reason` tsa_imprint_mismatch.
+ * A record's timestamp file (openadapt.record-timestamp/v1, the token-file
+ * layout): the digest fields, imprint_sha256, tsa, tsr_file, tsr_sha256 and
+ * gen_time. null when it isn't one, or repeats a key.
  */
-export async function verifySealTimestamp(tsaText, sealHex) {
+export function parseTimestampFile(text) {
+    if (typeof text !== 'string' || duplicateKey(text) !== null) return null
     let file
     try {
-        file = JSON.parse(tsaText)
+        file = JSON.parse(text)
     } catch {
-        return { ok: false, reason: 'tsa_malformed' }
+        return null
     }
-    if (!file || file.schema !== TSA_SCHEMA || typeof file.token !== 'string') return { ok: false, reason: 'tsa_malformed' }
-    let der
-    try {
-        der = pemBytes(file.token)
-    } catch {
-        return { ok: false, reason: 'tsa_malformed' }
-    }
-    const r = await verifyTimestampToken(der)
-    const matches = r.imprintAlg === 'SHA-256' && r.imprint === sealHex
+    if (!file || typeof file !== 'object' || Array.isArray(file) || file.schema !== TSA_SCHEMA) return null
+    if (typeof file.tsr_file !== 'string' || !TSR_FILE.test(file.tsr_file)) return null
+    if (!HEX64.test(file.tsr_sha256) || !HEX64.test(file.imprint_sha256)) return null
+    if ('token' in file) return null
+    return file
+}
+
+/**
+ * Check one record's timestamp: the .tsr bytes are the ones the JSON names
+ * (tsr_sha256), and the token in them verifies and stamps `imprintHex`.
+ * Reasons beyond verifyTimestampToken's: tsa_malformed, tsa_token_missing,
+ * tsa_token_mismatch, tsa_imprint_mismatch.
+ */
+export async function verifyRecordTimestamp(tsaText, tsrBytes, imprintHex) {
+    const file = parseTimestampFile(tsaText)
+    if (!file) return { ok: false, reason: 'tsa_malformed' }
+    if (!tsrBytes || !tsrBytes.length) return { ok: false, reason: 'tsa_token_missing' }
+    if ((await sha256Hex(tsrBytes)) !== file.tsr_sha256) return { ok: false, reason: 'tsa_token_mismatch' }
+    if (file.imprint_sha256 !== imprintHex) return { ok: false, reason: 'tsa_imprint_mismatch', matches: false }
+    const r = await verifyTimestampToken(tsrBytes)
+    const matches = r.imprintAlg === 'SHA-256' && r.imprint === imprintHex
     if (r.ok && !matches) return { ...r, ok: false, reason: 'tsa_imprint_mismatch', matches }
     return { ...r, matches }
+}
+
+/**
+ * Check seal.tsa.json and its seal.tsr for one Seal: the token stamps the
+ * Seal's own SHA-256 (sealHex, computed by the caller from the Seal file).
+ */
+export async function verifySealTimestamp(tsaText, sealHex, tsrBytes) {
+    const file = parseTimestampFile(tsaText)
+    if (!file) return { ok: false, reason: 'tsa_malformed' }
+    if (file.seal_sha256 !== sealHex) return { ok: false, reason: 'tsa_imprint_mismatch', matches: false }
+    return verifyRecordTimestamp(tsaText, tsrBytes, sealHex)
+}
+
+/**
+ * Check run-authorization.tsa.json and its .tsr: the token stamps SHA-256 of
+ * canonical JSON {run_authorization_sha256, signature_sha256}.
+ */
+export async function verifyAuthorizationTimestamp(tsaText, tsrBytes, authSha256, signatureSha256) {
+    const file = parseTimestampFile(tsaText)
+    if (!file) return { ok: false, reason: 'tsa_malformed' }
+    if (file.run_authorization_sha256 !== authSha256 || file.signature_sha256 !== signatureSha256)
+        return { ok: false, reason: 'tsa_imprint_mismatch', matches: false }
+    const imprint = await sha256Hex(new TextEncoder().encode(canonicalJson({ run_authorization_sha256: authSha256, signature_sha256: signatureSha256 })))
+    return verifyRecordTimestamp(tsaText, tsrBytes, imprint)
 }
