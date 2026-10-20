@@ -169,6 +169,42 @@ the counts behind the frame part (records compared, collateral, concurrent)
 and the digest of the `frame:` section. A receipt issued before the field
 existed has neither and still checks.
 
+## Admission: a check shown to catch its faults
+
+A record check proves little until it has been seen to fail. The fault gate
+(`openadapt_flow/fault_gate.py`, [`VERIFICATION_COVERAGE.md`](VERIFICATION_COVERAGE.md))
+runs the check against a test copy of the system of record. It writes seven
+kinds of bad save to the copy's store, and the check reads each one through
+its own read: a wrong value in each declared field, the values on a
+look-alike record, an edit to another record, a partial write, a duplicate,
+no write, and a write that lands after the check's timeout. A read whose
+scope can't see a fault fails the gate, not only a judge that misses it.
+
+The gate writes `check_coverage.json` (`openadapt.check-coverage/v1`): faults
+killed over faults applicable, per class, bound to the check by its digest
+(the effects, the read and the frame; not where the store is). An
+`admission:` section makes verify-run require it:
+
+```yaml
+admission:
+  coverage: check_coverage.json   # relative to verify.yaml
+  min_coverage: 1.0               # default: every applicable fault caught
+  require_classes: [unrelated_edit]
+  refuse_test_copies: [recorded_states]   # the default
+```
+
+Under a policy, `checked.coverage` in the receipt holds the totals, the
+record's digest and `policy` (`met`, or why not, such as
+`coverage_for_another_check`). `verified` requires `met`. A changed check
+needs a new coverage record. Without `admission:` nothing about coverage is
+required or stated.
+
+`openadapt-flow scaffold-verifier --db app.sqlite --fault-gate` runs the gate
+on a copy of the database and keeps the check a draft when a fault survives.
+Without `--fault-gate` it writes the coverage of its recorded-state test,
+which can't test a wrong value written over the right record or a late
+write, so that record is incomplete and refused by default.
+
 ## Verdicts
 
 | What the store shows | `effect_verdict` | `outcome` |
