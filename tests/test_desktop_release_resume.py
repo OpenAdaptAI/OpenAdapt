@@ -47,12 +47,31 @@ def test_only_a_dispatch_resumes_a_version_on_pypi_with_its_tag_and_no_release()
 ):
     branch = _resume_branch()
     condition = branch.split("; then", 1)[0]
-    assert '[ "${EVENT_NAME}" = workflow_dispatch ]' in condition
     assert 'git ls-remote --exit-code --tags origin "refs/tags/${tag}"' in condition
     # The tags endpoint never returns a draft to this token, so a staged draft
     # reads as "none"; anything but a published release may resume.
     assert '[ "${release}" != false ]' in condition
-    assert _steps("gate")[STATE]["env"]["EVENT_NAME"] == "${{ github.event_name }}"
+    assert _jobs()["gate"]["env"]["EVENT_NAME"] == "${{ github.event_name }}"
+    # A workflow_run (or push) in this state builds nothing and warns; only a
+    # dispatch goes on to resume.
+    quiet, resume = branch.split("# Resume with the bytes already attested", 1)
+    assert 'if [ "${EVENT_NAME}" != workflow_dispatch ]; then' in quiet
+    assert "::warning::" in quiet
+    assert 'echo "release=false" >> "${GITHUB_OUTPUT}"' in quiet
+    assert "exit 0" in quiet
+    assert "resume=true" not in quiet
+    assert 'echo "resume=true"' in resume
+
+
+def test_a_dispatch_always_reaches_the_release_state_check() -> None:
+    # With the workflow_run gate, the state step runs only for a candidate; a
+    # dispatch is always one, so a resume never depends on the subject.
+    run = _steps("gate")["Choose the commit whose checks decide the release"]["run"]
+    dispatch = run.split("\nelse\n", 1)[1]
+    assert "candidate=false" not in dispatch
+    assert run.rstrip().endswith('echo "candidate=true" >> "${GITHUB_OUTPUT}"')
+    state = _steps("gate")[STATE]
+    assert state["if"] == "steps.subject.outputs.candidate == 'true'"
 
 
 def test_a_resume_builds_nothing_and_names_the_tags_commit() -> None:
@@ -134,11 +153,12 @@ def test_a_resume_is_bound_to_the_tag_not_to_mains_current_tree() -> None:
     gate = _steps("gate")
     for name in (
         "Require one version everywhere, its changelog, and a new tag in order",
-        "Choose the commit whose checks decide the release",
-        "Wait for that commit's Packages run and its desktop jobs",
+        "Require that commit's Packages run and its desktop jobs to have passed",
         "Require that main has not changed Desktop since that commit",
     ):
         assert gate[name]["if"] == "steps.state.outputs.release == 'true'", name
+    # A resume leaves the release output empty, so nothing builds.
+    assert _jobs()["gate"]["outputs"]["release"] == "${{ steps.fresh.outputs.release }}"
     branch = _resume_branch()
     assert "git diff" not in branch
     assert "GITHUB_SHA" not in branch

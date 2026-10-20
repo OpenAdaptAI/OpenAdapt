@@ -70,7 +70,9 @@ NATIVE_RELEASE_PROVENANCE_SCHEMA = "openadapt.native-release-provenance/v3"
 # paths name the root file.
 NATIVE_RELEASE_WORKFLOW = ".github/workflows/desktop-release.yml"
 NATIVE_RELEASE_WORKFLOW_NAME = "Desktop release"
-NATIVE_RELEASE_EVENTS = frozenset({"push", "workflow_dispatch"})
+# Releases start from a successful Packages run on main (workflow_run) or a
+# dispatch; "push" stays valid for the releases made before that.
+NATIVE_RELEASE_EVENTS = frozenset({"push", "workflow_dispatch", "workflow_run"})
 DEFAULT_REPOSITORY = "OpenAdaptAI/OpenAdapt"
 VERIFIED_RELEASE_CHANNEL = "openadapt-desktop-channel.json"
 NATIVE_RELEASE_CHANNEL_SCHEMA = "openadapt.desktop-release-channel/v3"
@@ -1022,7 +1024,8 @@ def _validate_attestation_record(record: object, *, provenance: dict, checksums:
     commit = provenance["source_commit"]
     run_id = provenance["run_id"]
     run_attempt = provenance["run_attempt"]
-    # A release runs on the push that merged the version, or on a dispatch.
+    # A release runs when Packages passes on main, or on a dispatch; releases
+    # before 0.22.0 ran on the push that merged the version.
     trigger = provenance["event"]
     repository_url = f"https://github.com/{repository}"
     workflow_uri = f"{repository_url}/{NATIVE_RELEASE_WORKFLOW}@refs/heads/main"

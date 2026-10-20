@@ -1,10 +1,10 @@
 # OpenAdapt Desktop (packages/desktop): the Python engine tests.
 #
 # Called from packages.yml when a change touches packages/desktop, so its jobs
-# feed the required packages-gate. Pull requests run the Linux lane on Python
-# 3.11 and 3.12 and one Windows lane, because Windows checks files out with CRLF
-# and has its own paths. A push to main repeats the same contract on macOS and
-# Windows, so a release always rests on the complete cross-platform matrix.
+# feed the required packages-gate. Pull requests run one Linux lane (Python
+# 3.12). The merge queue and every push to main run Linux, macOS and Windows on
+# Python 3.11 and 3.12 (Windows checks files out with CRLF and has its own
+# paths), so nothing merges, and no release is built, without the full matrix.
 # Ported from openadapt-desktop's test.yml.
 name: Desktop test
 
@@ -24,9 +24,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest", "windows-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
-        python-version: ["3.11", "3.12"]
-        exclude: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"windows-latest","python-version":"3.11"}]' || '[]') }}
+        # PR tier: Linux, one Python. The merge queue and main run macOS and
+        # Windows (CRLF checkouts, Windows paths) on both Pythons.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.11", "3.12"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
