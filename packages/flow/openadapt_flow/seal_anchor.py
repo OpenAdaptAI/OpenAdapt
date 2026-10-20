@@ -107,9 +107,21 @@ def anchor_path(seal_path: Path) -> Path:
 
 def statement(seal_sha256: str, nonce: str) -> bytes:
     """The bytes whose SHA-512 goes to the log. Nothing else about the run does."""
-    return _STATEMENT_DOMAIN + canonical_json(
-        {"nonce": nonce, "seal_sha256": seal_sha256}
-    ).encode("utf-8")
+    return record_statement({"seal_sha256": seal_sha256}, nonce)
+
+
+# The records an anchor can cover, by the digest fields that name them.
+_RECORD_FIELDS = (
+    ("seal_sha256",),
+    ("run_authorization_sha256", "signature_sha256"),
+)
+
+
+def record_statement(fields: Mapping[str, str], nonce: str) -> bytes:
+    """Domain-separated statement over a record's digests and a nonce."""
+    return _STATEMENT_DOMAIN + canonical_json({"nonce": nonce, **fields}).encode(
+        "utf-8"
+    )
 
 
 def new_nonce() -> str:
@@ -431,21 +443,43 @@ def verify_anchor(
     pinned log; default the public Rekor) and compared. The anchor file's
     own ``log_url`` is never used for that.
     """
+    return verify_record_anchor(
+        {"seal_sha256": _seal_digest(seal)},
+        anchor,
+        public_raw,
+        log_keys=log_keys,
+        log_url=log_url,
+        fetch=fetch,
+    )
+
+
+def verify_record_anchor(
+    fields: Mapping[str, str],
+    anchor: Any,
+    public_raw: bytes,
+    *,
+    log_keys: Optional[Sequence[LogKey]] = None,
+    log_url: Optional[str] = None,
+    fetch: Optional[Callable[[str, str], Mapping[str, Any]]] = None,
+) -> AnchorVerification:
+    """Check that ``anchor`` anchors exactly the record whose digests are ``fields``."""
     if anchor is None:
         return AnchorVerification(False, reason="anchor_missing")
     try:
         if anchor["schema"] != ANCHOR_SCHEMA:
             raise ValueError("schema")
         nonce = str(anchor["nonce"])
-        seal_hex = str(anchor["seal_sha256"])
         entry = anchor["entry"]
-        if not (_HEX64.match(nonce) and _HEX64.match(seal_hex)):
+        stored = {name: anchor[name] for name in fields}
+        if not _HEX64.match(nonce) or not all(
+            isinstance(v, str) and _HEX64.match(v) for v in stored.values()
+        ):
             raise ValueError("format")
     except _MALFORMED:
         return AnchorVerification(False, reason="anchor_malformed")
-    if seal_hex != _seal_digest(seal):
+    if stored != dict(fields):
         return AnchorVerification(False, reason="anchor_mismatch")
-    digest = hashlib.sha512(statement(seal_hex, nonce)).hexdigest()
+    digest = hashlib.sha512(record_statement(fields, nonce)).hexdigest()
     if anchor.get("statement_sha512") != digest:
         return AnchorVerification(False, reason="anchor_mismatch")
     result = verify_entry(
@@ -470,9 +504,12 @@ def verify_anchor(
 
 
 def load_anchor(seal_path: Path) -> Optional[dict[str, Any]]:
+    return _load_anchor_file(anchor_path(seal_path))
+
+
+def _load_anchor_file(path: Path) -> Optional[dict[str, Any]]:
     from openadapt_flow.offline_seal import loads_strict
 
-    path = anchor_path(seal_path)
     try:
         data = loads_strict(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -588,51 +625,75 @@ def anchor_seal(
     Refuses in strict no-outbound mode, when ``signer`` is not the key that
     signed the Seal, and when the log's answer does not verify.
     """
-    from openadapt_flow import no_outbound
-    from openadapt_flow.ed25519ph import verify_prehashed
-    from openadapt_flow.offline_seal import LocalSealV1
-    from openadapt_flow.seal_keys import KeyUnavailable
+    from openadapt_flow.offline_seal import LocalSealV1, loads_strict
 
     seal_path = Path(seal_path)
     try:
         seal = LocalSealV1.model_validate(
-            json.loads(seal_path.read_text(encoding="utf-8"))
+            loads_strict(seal_path.read_text(encoding="utf-8"))
         ).wire()
     except Exception as exc:
         raise AnchorError("seal_unreadable", str(seal_path)) from exc
-    keys = log_keys if log_keys is not None else default_log_keys()
-    try:
-        public_raw = signer.public_raw()
-    except KeyUnavailable as exc:
-        raise AnchorError(exc.code, str(exc)) from exc
     if signer.key_id != seal["key_id"]:
         raise AnchorError(
             "anchor_key_mismatch",
             f"the Seal was signed by {seal['key_id']}, not {signer.key_id}",
         )
-    seal_hex = _seal_digest(seal)
-    out = anchor_path(seal_path)
-    existing = load_anchor(seal_path)
+    return anchor_record(
+        {"seal_sha256": _seal_digest(seal)},
+        anchor_path(seal_path),
+        signer,
+        log_url=log_url,
+        log_keys=log_keys,
+        submit=submit,
+        env=env,
+    )
+
+
+def anchor_record(
+    fields: Mapping[str, str],
+    out: Path,
+    signer: "SealSigner",
+    *,
+    log_url: str = REKOR_URL,
+    log_keys: Optional[Sequence[LogKey]] = None,
+    submit: Callable[[str, str, bytes, bytes], Mapping[str, Any]] = submit_hashedrekord,
+    env: Optional[Mapping[str, str]] = None,
+) -> dict[str, Any]:
+    """Anchor one record, named by its digest ``fields``, and write ``out``."""
+    from openadapt_flow import no_outbound
+    from openadapt_flow.ed25519ph import verify_prehashed
+    from openadapt_flow.seal_keys import KeyUnavailable
+
+    if tuple(sorted(fields)) not in {tuple(sorted(f)) for f in _RECORD_FIELDS}:
+        raise AnchorError("anchor_malformed", f"unknown record fields {sorted(fields)}")
+    keys = log_keys if log_keys is not None else default_log_keys()
+    try:
+        public_raw = signer.public_raw()
+    except KeyUnavailable as exc:
+        raise AnchorError(exc.code, str(exc)) from exc
+    out = Path(out)
+    existing = _load_anchor_file(out)
     if existing is not None and "entry" in existing:
-        if verify_anchor(seal, existing, public_raw, log_keys=keys).ok:
+        if verify_record_anchor(fields, existing, public_raw, log_keys=keys).ok:
             return existing
         raise AnchorError("anchor_exists", f"{out} does not verify; inspect it by hand")
-    if existing is not None and existing.get("seal_sha256") == seal_hex:
+    if existing is not None and all(existing.get(k) == v for k, v in fields.items()):
         nonce = str(existing.get("nonce", ""))  # resume a submission that was cut off
         if not _HEX64.match(nonce):
             raise AnchorError("anchor_exists", f"{out} is unreadable")
     elif existing is not None:
-        raise AnchorError("anchor_exists", f"{out} belongs to a different Seal")
+        raise AnchorError("anchor_exists", f"{out} belongs to a different record")
     else:
         nonce = new_nonce()
-    message = statement(seal_hex, nonce)
+    message = record_statement(fields, nonce)
     digest = hashlib.sha512(message).hexdigest()
     pending = {
         "schema": ANCHOR_SCHEMA,
-        "seal_sha256": seal_hex,
+        **fields,
         "nonce": nonce,
         "statement_sha512": digest,
-        "key_id": seal["key_id"],
+        "key_id": signer.key_id,
         "log_url": log_url,
     }
     if no_outbound.enabled(env):
@@ -648,7 +709,7 @@ def anchor_seal(
     _write_json(out, pending)
     entry = dict(submit(log_url, digest, signature, public_raw))
     anchor = {**pending, "entry": entry}
-    result = verify_anchor(seal, anchor, public_raw, log_keys=keys)
+    result = verify_record_anchor(fields, anchor, public_raw, log_keys=keys)
     if not result.ok:
         raise AnchorError("log_answer_invalid", str(result.reason))
     _write_json(out, anchor)

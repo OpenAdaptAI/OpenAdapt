@@ -77,6 +77,10 @@ _ISO_SECONDS = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
 _B64 = r"^[A-Za-z0-9+/]+={0,2}$"
 _OUTCOME = r"^[A-Z][A-Z_]{0,31}$"
 _RUN_ID = re.compile(r"[^A-Za-z0-9._:-]")
+# A short label (a lower-case prefix and a number, "r3"); never free text such
+# as a record number. The authorization lists which labels are allowed.
+_SCOPE_ITEM = r"^[a-z]{1,8}[0-9]{1,6}$"
+_OPTIONAL_FIELDS = ("authorization_sha256", "scope_item")
 
 SubjectKind = Literal["run-report", "record", "export", "file"]
 
@@ -101,6 +105,18 @@ LocalSealRefusal = Literal[
     "anchor_bad_checkpoint",
     "anchor_live_mismatch",
     "anchor_live_unavailable",
+    # With an authorization required (openadapt_flow.run_authorization):
+    "auth_missing",
+    "auth_malformed",
+    "auth_unsigned",
+    "auth_bad_signature",
+    "auth_unknown_signer",
+    "auth_not_on_github",
+    "auth_live_unavailable",
+    "auth_not_referenced",
+    "auth_reference_mismatch",
+    "auth_scope_mismatch",
+    "auth_bundle_mismatch",
 ]
 
 
@@ -129,10 +145,19 @@ class LocalSealV1(BaseModel):
     run_id: StrictStr = Field(min_length=1, max_length=128)
     outcome: Optional[StrictStr] = Field(default=None, pattern=_OUTCOME)
     issued_at: StrictStr = Field(pattern=_ISO_SECONDS)
+    # Optional, signed: the run authorization this run was sealed under
+    # (openadapt_flow.run_authorization) and the scope item it claims.
+    authorization_sha256: Optional[StrictStr] = Field(default=None, pattern=_SHA256_HEX)
+    scope_item: Optional[StrictStr] = Field(default=None, pattern=_SCOPE_ITEM)
     signature: StrictStr = Field(pattern=_B64)
 
     def wire(self) -> dict[str, Any]:
-        return self.model_dump(mode="json", by_alias=True)
+        out = self.model_dump(mode="json", by_alias=True)
+        # Absent, not null: Seals without an authorization keep their bytes.
+        for name in _OPTIONAL_FIELDS:
+            if out.get(name) is None:
+                out.pop(name, None)
+        return out
 
 
 @dataclass(frozen=True)
@@ -144,6 +169,16 @@ class LocalSealVerification:
     anchor: Optional["AnchorVerification"] = None
     # Set with reason="revoked_key" once the signature itself has verified.
     revoked_at: Optional[str] = None
+    # With an authorization: "before_run" only when both anchors are checked
+    # and auth log time < the run's started_at <= the Seal's log time (a
+    # started_at after the Seal was logged is not believed). "after_run" for
+    # any other order with both anchors; "not_anchored" when either anchor is
+    # missing or the run states no start time. Re-sealing never makes a later
+    # authorization "before_run".
+    authorization_timing: Optional[str] = None
+    # Secondary: the authorization's log time against this Seal's log time,
+    # "before_seal" / "after_seal" (None without both anchors).
+    authorization_vs_seal: Optional[str] = None
 
 
 def mode_enabled(env: Optional[Mapping[str, str]] = None) -> bool:
@@ -237,6 +272,8 @@ def sign_subject(
     home: Optional[Path] = None,
     now: Optional[datetime] = None,
     signer: Optional["SealSigner"] = None,
+    authorization_sha256: Optional[str] = None,
+    scope_item: Optional[str] = None,
 ) -> LocalSealV1:
     """Sign a statement about one subject digest with the configured Seal key."""
     from openadapt_flow.seal_keys import KeyUnavailable
@@ -258,6 +295,9 @@ def sign_subject(
         "outcome": outcome,
         "issued_at": _utc_seconds(now),
     }
+    if authorization_sha256 is not None:
+        unsigned["authorization_sha256"] = authorization_sha256
+        unsigned["scope_item"] = scope_item
     # Validate before signing so a malformed statement is never signed.
     LocalSealV1.model_validate({**unsigned, "signature": "AA=="})
     try:
@@ -321,18 +361,26 @@ def seal_run(
     now: Optional[datetime] = None,
     enqueue: bool = True,
     signer: Optional["SealSigner"] = None,
+    authorization: Optional[tuple[str, str]] = None,
+    replace_unanchored: bool = False,
 ) -> LocalSealV1:
     """Write ``run_dir/seal.json`` over the exact bytes of ``report.json``.
 
     Idempotent for an unchanged report. Refuses to overwrite a Seal that
     covers different bytes: a report that changed after it was sealed is a
     question for a person, not something to re-sign silently.
+
+    ``authorization`` is ``(authorization_sha256, scope_item)``; check it
+    with :mod:`openadapt_flow.run_authorization` first. With
+    ``replace_unanchored``, a Seal over the same bytes that names no (or
+    another) authorization is re-signed, but only while it has no
+    transparency-log anchor: an anchored Seal is public and never replaced.
     """
     run_dir = Path(run_dir)
     report_path = run_dir / "report.json"
     try:
         raw = report_path.read_bytes()
-        report = json.loads(raw.decode("utf-8"))
+        report = loads_strict(raw.decode("utf-8"))
     except (OSError, UnicodeDecodeError, ValueError) as exc:
         raise LocalSealError("report_unreadable", str(report_path)) from exc
     if not isinstance(report, dict):
@@ -346,11 +394,24 @@ def seal_run(
             )
         except Exception as exc:
             raise LocalSealError("existing_seal_unreadable", str(seal_path)) from exc
-        if existing.subject_sha256 == digest:
+        wanted = authorization or (None, None)
+        same_ref = (existing.authorization_sha256, existing.scope_item) == wanted
+        if existing.subject_sha256 != digest:
+            raise LocalSealError(
+                "already_sealed", "seal.json covers different report bytes"
+            )
+        if same_ref:
             return existing
-        raise LocalSealError(
-            "already_sealed", "seal.json covers different report bytes"
-        )
+        if not replace_unanchored:
+            raise LocalSealError(
+                "already_sealed", "seal.json names another authorization"
+            )
+        from openadapt_flow.seal_anchor import anchor_path
+
+        if anchor_path(seal_path).exists():
+            raise LocalSealError(
+                "already_anchored", "an anchored Seal is public and is never replaced"
+            )
     outcome = report.get("execution_outcome")
     if not (isinstance(outcome, str) and re.match(_OUTCOME, outcome)):
         outcome = None
@@ -363,6 +424,8 @@ def seal_run(
         home=home,
         now=now,
         signer=signer,
+        authorization_sha256=authorization[0] if authorization else None,
+        scope_item=authorization[1] if authorization else None,
     )
     _atomic_write_json(seal_path, seal.wire())
     if enqueue:
@@ -511,6 +574,43 @@ def check_anchor(
     )
 
 
+def _check_authorization(
+    found: LocalSealVerification, seal: Mapping[str, Any], report_path: Path, auth: Any
+) -> LocalSealVerification:
+    from openadapt_flow.run_authorization import check_run
+
+    try:
+        report = loads_strict(report_path.read_bytes())  # the bytes the Seal covers
+    except (OSError, ValueError):
+        return dataclasses.replace(found, ok=False, reason="malformed")
+    problem = check_run(LocalSealV1.model_validate(seal).wire(), report, auth)
+    if problem:
+        return dataclasses.replace(found, ok=False, reason=problem)  # type: ignore[arg-type]
+    timing, vs_seal = "not_anchored", None
+    auth_time = getattr(auth.anchor, "integrated_time", None) if auth.anchor else None
+    seal_time = found.anchor.integrated_time if found.anchor is not None else None
+    if auth_time is not None and seal_time is not None:
+        vs_seal = "before_seal" if auth_time <= seal_time else "after_seal"
+        started = _started_epoch(report.get("started_at"))
+        if started is not None:
+            timing = "before_run" if auth_time < started <= seal_time else "after_run"
+    return dataclasses.replace(
+        found, authorization_timing=timing, authorization_vs_seal=vs_seal
+    )
+
+
+def _started_epoch(value: Any) -> Optional[int]:
+    if not isinstance(value, str):
+        return None
+    try:
+        when = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if when.tzinfo is None:
+        return None
+    return int(when.timestamp())
+
+
 def verify_run(
     run_dir: Path,
     registry: Sequence[SealPublicKey],
@@ -520,6 +620,7 @@ def verify_run(
     log_keys: Optional[Sequence["LogKey"]] = None,
     log_url: Optional[str] = None,
     fetch: Any = None,
+    authorization: Any = None,
 ) -> LocalSealVerification:
     """Verify ``run_dir/seal.json`` against the run's report.
 
@@ -530,7 +631,10 @@ def verify_run(
     ``report.json`` changed after sealing is refused even if a
     ``report.pre-seal.json`` matches.
     With ``require_anchor``, ``seal.anchor.json`` must also prove the Seal
-    was logged in the transparency log, and ``strict`` is implied.
+    was logged in the transparency log, and ``strict`` is implied. With
+    ``authorization`` (a verified
+    :class:`openadapt_flow.run_authorization.AuthorizationVerification`), the
+    Seal must name it, and the run must fit its scope and bundle digest.
     """
     run_dir = Path(run_dir)
     try:
@@ -550,15 +654,17 @@ def verify_run(
         if result.reason == "subject_mismatch":
             continue
         found = dataclasses.replace(result, subject_file=name)
-        if not require_anchor:
+        if require_anchor:
+            found = check_anchor(
+                seal,
+                run_dir / SEAL_FILE,
+                found,
+                registry,
+                log_keys=log_keys,
+                log_url=log_url,
+                fetch=fetch,
+            )
+        if not found.ok or authorization is None:
             return found
-        return check_anchor(
-            seal,
-            run_dir / SEAL_FILE,
-            found,
-            registry,
-            log_keys=log_keys,
-            log_url=log_url,
-            fetch=fetch,
-        )
+        return _check_authorization(found, seal, path, authorization)
     return result

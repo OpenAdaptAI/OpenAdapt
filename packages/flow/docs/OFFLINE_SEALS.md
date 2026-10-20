@@ -117,6 +117,14 @@ openadapt-flow local-seal verify runs/job-0007 --keys site-keys.json
 openadapt-flow local-seal verify export.csv --seal export.csv.seal.json --keys site-keys.json
 ```
 
+A file that `verify`, `timestamp` or `anchor` can't use stops the command
+with one line and exit code 2, never a traceback. That covers a missing or
+empty file, text that isn't JSON, JSON with a repeated key, a key registry
+in the wrong shape, and a web page saved in place of the file. For a web
+page the line reads, for example, `site-keys.json is not JSON (it starts
+with '<!DOCTYPE html>': it looks like a web page, check the URL)`. Exit
+code 1 means the files were read and the Seal was refused.
+
 `site-keys.json` has the same shape as the Cloud Seal key registry, so a key
 can be marked `revoked` with a `revoked_at` time. Refusal reasons are closed:
 `unsigned`, `malformed`, `subject_mismatch`, `unknown_key`, `revoked_key`,
@@ -225,6 +233,227 @@ Refusal reasons are closed: `anchor_missing`, `anchor_malformed`,
 An anchor file in the wrong shape, at any field, is `anchor_malformed`.
 
 Cloud Seals are unchanged and remain the hosted option.
+
+## Run authorizations: who authorized the runs
+
+A Seal names the machine key that sealed a run. A run authorization names
+the person who authorized it. The scheme of the `authorizer` handle names
+the identity provider. The provider built so far is `ssh-github`
+(`github:<user>`): an Ed25519 SSH key the person publishes on GitHub.
+
+The statement (`openadapt.run-authorization/v1`, `run-authorization.json`)
+holds:
+
+| Field | Meaning |
+|---|---|
+| `bundle_content_digest` | The compiled program the person authorizes |
+| `scope.items` | The work items: short labels, a lower-case prefix and a number (`r3`, `r4`), never names or record numbers |
+| `scope.profile` | The execution profile the runs must use, for example `standard` |
+| `scope.seal_key_ids` | The Seal keys allowed to seal runs under it, and to anchor it |
+| `scope.reusable` | `false` (the default): one run per item. `true`: many |
+| `authorizer` | The person's public handle, `github:<user>` |
+| `signer_fingerprint` | The `SHA256:` fingerprint of the SSH key that must sign it |
+| `issued_at`, `nonce` | When, and 32 random bytes |
+
+```bash
+# 1. Write the statement; it names the key GitHub lists for the user.
+openadapt-flow local-seal authorize create --out auth/ --bundle-digest <digest> \
+    --item r3,r4,r5,r6 --profile standard --authorizer github:<user>
+
+# 2. The person reviews what it allows, then signs with that key.
+openadapt-flow local-seal authorize sign auth/run-authorization.json \
+    --key ~/.ssh/id_ed25519 --bundle path/to/bundle
+
+# 3. Seal each run under it, naming its item.
+openadapt-flow local-seal run runs/r3 --authorization auth/ --item r3
+
+# 4. Optional: anchor and timestamp the authorization.
+openadapt-flow local-seal authorize anchor auth/
+openadapt-flow local-seal timestamp auth/
+```
+
+`authorize create` reads `https://github.com/<user>.keys` once. It writes the
+fingerprint of the user's Ed25519 key into the statement; when GitHub lists
+several, pass `--signer-fingerprint`. It also keeps a copy of those keys as
+`run-authorization.allowed_signers`, for `ssh-keygen -Y verify`.
+
+`authorize sign` prints a plain-text summary of about 30 lines, then asks
+`Sign this authorization? [y/N]`. The summary shows:
+
+- the authorizer, the signing key, and whether the stored copy of the
+  GitHub keys lists it (✓ or ✗);
+- the program: its name, app, short bundle digest and step count;
+- the qualification result from a `QUALIFICATION.md` next to the bundle,
+  marked "not covered by its digest" unless the bundle digest covers that
+  file;
+- an outline: one line per section (compiled sections, or else one per
+  field the steps fill), the consequential write and its record
+  read-backs, and the stop rules;
+- the scope, whether each item is one run only, and what the authorization
+  does not allow;
+- the statement's SHA-256 and path.
+
+Control characters and terminal escape codes are removed from everything
+it prints.
+
+The bundle given with `--bundle` (default: `bundle/` next to the statement)
+must have a recomputed content digest equal to `bundle_content_digest`, or
+`sign` refuses before showing anything. It also refuses a key other than
+the one the statement names. For a key missing from the stored copy, it
+warns and asks you to type "yes".
+
+On "y", it signs a private copy of exactly the bytes it showed: a 0600 file
+in a new private folder, passed to `ssh-keygen` after `--`. It writes the
+signature only if the statement on disk still has those bytes. It exits
+non-zero if the new signature doesn't verify. `--dry-run` prints the
+summary and signs nothing. Running `ssh-keygen -Y sign` yourself also
+works.
+
+`local-seal run --authorization` refuses to seal unless:
+
+- the authorization's signature verifies;
+- the run's report has the authorized bundle digest and profile;
+- the item is in scope;
+- the Seal key is in scope.
+
+The Seal then records `authorization_sha256` (the SHA-256 of
+`run-authorization.json`) and `scope_item`, signed by the Seal key. Seals
+without an authorization don't have these fields and keep their exact
+bytes. A Seal that was already written, for example by the run hook, is
+re-signed only with `--replace-unanchored`, and only if it has never been
+anchored.
+
+Verify:
+
+```bash
+openadapt-flow local-seal authorize verify auth/ --live
+openadapt-flow local-seal verify runs/r3 runs/r4 --keys site-keys.json --require-anchor --authorization auth/ --live
+```
+
+The verifier checks:
+
+- the signature over the exact statement bytes, in the
+  `openadapt-run-authorization` namespace, by the key `signer_fingerprint`
+  names;
+- that the Seal names this authorization and an item in its scope;
+- that the run's profile, bundle digest and Seal key match the scope;
+- for a single-use authorization, that no item is sealed twice among the
+  runs given (`auth_item_reused`);
+- with `--require-anchor`, the authorization's anchor, made by a Seal key
+  in its scope.
+
+### Whose key it is
+
+The signature proves that the key named in the statement signed it. It
+proves nothing about who owns that key unless you check the key yourself:
+
+- `--live` reads `https://github.com/<user>.keys` now. It fetches over
+  HTTPS from github.com only, follows no redirects, ignores proxy settings,
+  and refuses a key GitHub doesn't list (`auth_not_on_github`).
+- `--allowed-signers FILE` checks against a file you pinned yourself.
+
+Without either, the result reads "identity not verified (self-asserted
+github:<user>)". The stored `run-authorization.allowed_signers` copy is
+never used as proof: whoever wrote the statement can write that file too.
+`local-seal profile` links an identity only when one of the two checks
+passed.
+
+### Before or after the run
+
+The person can sign before the runs or after them. Either way the
+authorization is valid, and the verifier states what can be shown. The
+verifier reports `before_run` only when the authorization and the Seal are
+both anchored and
+
+> authorization's log time < the run's `started_at` ≤ the Seal's log time
+
+- `before_run`: "Authorized by @user before this run".
+- `after_run`: "Authorization signed by @user on <date>, after this run".
+  This is reported for any other order with both anchors, including a
+  `started_at` later than the Seal's own log time, which isn't believed.
+- `not_anchored`: either anchor is missing, or the run states no start
+  time.
+
+Re-sealing a run under a later authorization never makes it `before_run`.
+`started_at` is the runner's own record, inside the sealed report.
+
+You can check the signature with OpenSSH alone (this proves the signature,
+not the identity):
+
+```bash
+ssh-keygen -Y verify -f auth/run-authorization.allowed_signers -I github:<user> \
+    -n openadapt-run-authorization -s auth/run-authorization.json.sig < auth/run-authorization.json
+```
+
+Refusal reasons:
+
+- `auth_missing`, `auth_malformed` (including a repeated JSON key) and
+  `auth_unsigned`;
+- `auth_bad_signature`, `auth_signer_mismatch`, `auth_unknown_signer`,
+  `auth_not_on_github` and `auth_live_unavailable`;
+- `auth_not_referenced`, `auth_reference_mismatch`, `auth_scope_mismatch`,
+  `auth_bundle_mismatch` and `auth_item_reused`.
+
+## Operator profile
+
+```bash
+openadapt-flow local-seal profile runs/* --keys site-keys.json --authorization auth/
+```
+
+`profile` writes `operator-profile.json` (`openadapt.operator-profile/v1`),
+keyed by Seal key ID. For each key it lists:
+
+- the number of runs in each outcome. Verified, stopped before any effect,
+  completed but unverified, and failed always appear, even at zero. Any
+  other outcome appears under its own code.
+- the apps and programs used: the report's app name, or else the first word
+  of the program name;
+- the first and last time the log recorded one of the key's Seals, and each
+  Rekor log index;
+- `run_list`: one line per counted Seal, so a reader can recount. Each line
+  holds the Seal's SHA-256, its scope item, the outcome codes, app, program,
+  issue time and Rekor entry.
+- `linked_identity`, only when an authorization verifies with its key
+  checked by `--live` or `--allowed-signers`, names this Seal key in its
+  scope, and the Seals reference it. It names the handle, the identity
+  provider (`ssh-github`), the SSH key fingerprint and what it was checked
+  against.
+
+Only Seals that verify against the pinned keys and have a valid anchor are
+counted. The same Seal or Rekor entry given twice counts once. A second
+Seal for an item under a single-use authorization isn't counted. The rest
+appear under `excluded` as `unanchored`, `not_valid`, `duplicate` or
+`item_reused`, without detail.
+
+The profile holds no report content: no patient names, parameters, record
+IDs, run IDs or folder names.
+
+## Optional: one RFC 3161 timestamp per record
+
+A transparency-log anchor records when Rekor saw a record. An RFC 3161 token
+from a timestamp authority is a second, independent time, signed by the
+TSA's certificate. Sigstore's TSA (`timestamp.sigstore.dev`) is the default.
+
+```bash
+openadapt-flow local-seal timestamp runs/job-0007            # writes runs/job-0007/seal.tsa.json
+openadapt-flow local-seal timestamp auth/                    # writes auth/run-authorization.tsa.json
+openadapt-flow local-seal verify runs/job-0007 --keys site-keys.json --require-timestamp
+```
+
+Each request sends only a 32-byte SHA-256 imprint and a random nonce:
+
+- for a Seal, `seal_sha256`;
+- for a run authorization, SHA-256 of
+  `canonical_json({"run_authorization_sha256", "signature_sha256"})`, which
+  covers the statement and the signature together.
+
+The token file (`openadapt.record-timestamp/v1`) holds the record's digest
+fields, `imprint_sha256`, `tsa`, `token` (base64 DER TimeStampToken) and
+`gen_time`. `timestamp` checks the token offline before writing it.
+`--require-timestamp` checks it again, against the Sigstore TSA root shipped
+with OpenAdapt, or the certificates you pass with `--tsa-cert`. Strict
+no-outbound mode refuses to send. To cover many Seals with one token instead,
+use batched timestamps.
 
 ## Optional: batched timestamps
 
