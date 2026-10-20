@@ -1,0 +1,276 @@
+{
+  "schema_version": 2,
+  "run_id": "openemr-referral-r5-grace-adeyemi-1792465453",
+  "workflow_name": "openemr-create-synthetic-patient",
+  "bundle_version": "sha256:ec096afa2b614326b00ec3155f256041c19d86f3998761ce9d772cfd911460b6",
+  "step_index": 28,
+  "step_id": "step_040",
+  "intent": "click 'Confirm Create New Patient'",
+  "state_id": null,
+  "next_step_index": 29,
+  "params": {
+    "title": "Ms.",
+    "fname": "Grace",
+    "lname": "Adeyemi",
+    "DOB": "1990-02-08",
+    "sex": "Female",
+    "street": "402 CEDAR ROW",
+    "city": "EXAMPLETON",
+    "state_label": "Massachusetts",
+    "postal_code": "02139",
+    "phone_home": "555-0145",
+    "email": "grace.adeyemi@example.invalid",
+    "country_code": "USA"
+  },
+  "effect_verified": true,
+  "effect_approved_unverified": false,
+  "effect_contract_hashes": [
+    "sha256:7d7ad06e7e3b7d041608c5839c290b1825749f5979d0a3a46c74700ca8f47a0b",
+    "sha256:c783b698a30f7c445802145e3f87664bd89d8bae653e8d5866f026b1aec484e4",
+    "sha256:7b7ea019315625f980bd0095371437f08756353a8985b8a56bd51ef9546a47dc",
+    "sha256:7cf0bd6a4c6db7fa978d0afbde9745af4b5e1102ab22241e5ea0764c892afc9a",
+    "sha256:fad252a91c8ab11dd05b7369ce4a231fbf289dfe0543ff2b3ef897e58a5b1d7a",
+    "sha256:4e67a4af2e4b15cdede660f9504c28134bca700502c097daf297b4161ebdae7d",
+    "sha256:3f111917801c6b75233b44e4aa818b33fe7043137c56b291934a420293eac0f9",
+    "sha256:08a55a57480cd2c3d4284ec0a5852ab0eef10bdba2884e6dd04b08745a9c1e82",
+    "sha256:b1999037d2caef3914e30398486495c4a9b7d7d6ff45c86c6673b4bc02b1d68f",
+    "sha256:acf37649590c00a5aaacc60ba27b3a8bec9e12d53636fe1d5eb17b7e7215678f",
+    "sha256:30889618325841a2c6cbfe33aeb2fe623a2c5b1d3ef17489e9f45fc16d204e51"
+  ],
+  "effect_evidence": [
+    {
+      "effect_contract_hash": "sha256:7d7ad06e7e3b7d041608c5839c290b1825749f5979d0a3a46c74700ca8f47a0b",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:c783b698a30f7c445802145e3f87664bd89d8bae653e8d5866f026b1aec484e4",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:7b7ea019315625f980bd0095371437f08756353a8985b8a56bd51ef9546a47dc",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:7cf0bd6a4c6db7fa978d0afbde9745af4b5e1102ab22241e5ea0764c892afc9a",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:fad252a91c8ab11dd05b7369ce4a231fbf289dfe0543ff2b3ef897e58a5b1d7a",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:4e67a4af2e4b15cdede660f9504c28134bca700502c097daf297b4161ebdae7d",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:3f111917801c6b75233b44e4aa818b33fe7043137c56b291934a420293eac0f9",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:08a55a57480cd2c3d4284ec0a5852ab0eef10bdba2884e6dd04b08745a9c1e82",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:b1999037d2caef3914e30398486495c4a9b7d7d6ff45c86c6673b4bc02b1d68f",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:acf37649590c00a5aaacc60ba27b3a8bec9e12d53636fe1d5eb17b7e7215678f",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    },
+    {
+      "effect_contract_hash": "sha256:30889618325841a2c6cbfe33aeb2fe623a2c5b1d3ef17489e9f45fc16d204e51",
+      "substrate": "rest",
+      "verifier_identity": "sha256:7b0a4449cf2d6e07c6d1b7ce218f052e7bc3dafb5008903b4cb79aa697062fd2",
+      "verification_tier": 1,
+      "initial_verdict": "confirmed",
+      "final_verdict": "confirmed",
+      "reconciliation_completed": false,
+      "reconciliation_actions": 0,
+      "observed_effect": "present",
+      "endpoint_scope": "loopback"
+    }
+  ],
+  "identity": {
+    "status": "verified",
+    "mode": "structured",
+    "coverage": 1.0,
+    "expected": "<structured identity template>",
+    "observed": "{\"form_path\":\"/interface/new/new_comprehensive.php\",\"label\":\"Confirm Create New Patient\",\"target_id\":\"confirm_create\",\"target_kind\":\"action\"}",
+    "param": null,
+    "signal_evidence": [],
+    "quorum_required": null,
+    "quorum_verified": null,
+    "pixel_evidence": null,
+    "abstain_reason": null,
+    "known_id_evidence": null,
+    "known_id_halt": null,
+    "hover": null,
+    "looks": [],
+    "look_halt": null
+  },
+  "input_verified": null,
+  "starting_state_settled": true,
+  "delivery_attempted": true,
+  "delivery_receipt": {
+    "status": "delivered",
+    "receipt_id": "playwright-1ec18ce65d25472f94416d140872b981",
+    "operation": "dom_click",
+    "native": false,
+    "target_fingerprint": "f749dd19525cdc658cafb539d251afdd2cf67e579334244a84dbde6c99617468",
+    "delivered_at": "2026-10-20T03:04:34.022996+00:00",
+    "outcome_verified": false
+  },
+  "drag_end_resolution": null,
+  "fresh_actuation_events": [],
+  "before_png": "steps/step_040_before.png",
+  "governed_authorization_id": "625efdeb6e924901b533c6789854a3fe",
+  "governed_approval_source": "local-cli-explicit-flag",
+  "postconditions_ok": true,
+  "expected_postconditions": [
+    {
+      "kind": "region_stable",
+      "text": null,
+      "region": [
+        0,
+        255,
+        1280,
+        545
+      ],
+      "phash": "fe4b96c1c9196970",
+      "phash_tolerance": 16,
+      "timeout_s": 5.0,
+      "template": "templates/step_040_expect.png"
+    },
+    {
+      "kind": "text_present",
+      "text": "Medical Record Dashboard",
+      "region": null,
+      "phash": null,
+      "phash_tolerance": 8,
+      "timeout_s": 10.0,
+      "template": null
+    }
+  ],
+  "skipped": false,
+  "actuation": "dom",
+  "delivery_uncertainty": null,
+  "resolution": {
+    "rung": "structural",
+    "point": [
+      600,
+      280
+    ],
+    "confidence": 1.0,
+    "elapsed_ms": 48.399750143289566,
+    "structural_handle": {
+      "point": [
+        600,
+        280
+      ],
+      "confidence": 1.0,
+      "region": [
+        488,
+        261,
+        225,
+        38
+      ],
+      "target_fingerprint": "f749dd19525cdc658cafb539d251afdd2cf67e579334244a84dbde6c99617468",
+      "candidate_count": 1,
+      "supported_operations": [
+        "dom_click",
+        "dom_double_click",
+        "dom_drag"
+      ]
+    }
+  },
+  "drift_oracle_calls": 0,
+  "heal": null,
+  "attended_capability_digest": null,
+  "attended_reconciliation_request_digest": null,
+  "attended_reconciliation_expected_transition_digest": null,
+  "attended_reconciliation_delivery_state": null,
+  "attended_reconciliation_effect_contract_hashes": [],
+  "attended_reconciliation_at": null,
+  "created_at": "2026-10-20T03:04:35.386110+00:00"
+}
