@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 
 from openadapt_flow.teach_scope import TeachScope, WriteClaim
 
-__all__ = ["EncounterWrites", "encounter_scope"]
+__all__ = ["EncounterWrites", "encounter_authorization_spec", "encounter_scope"]
 
 
 class EncounterWrites:
@@ -70,3 +70,47 @@ def encounter_scope(
         constants=constants,
         write_adapter=EncounterWrites(),
     )
+
+
+def encounter_authorization_spec(
+    base_url: str,
+    *,
+    patient_id: str,
+    note: Optional[str] = None,
+    note_sha256: Optional[str] = None,
+    encounter_type: str = "Triage",
+    purposes: tuple[str, ...] = ("teach", "repair"),
+    forbidden_controls: tuple[str, ...] = ("Delete encounter",),
+) -> dict[str, Any]:
+    """The teach authorization a person signs for MockMed's add-a-note task.
+
+    Give the note as ``note`` (spelled out in the statement) or as
+    ``note_sha256`` (the operator supplies the value at teach time).
+    """
+
+    from openadapt_flow.teach_scope import origin_of
+
+    if (note is None) == (note_sha256 is None):
+        raise ValueError("give note or note_sha256")
+    return {
+        "task": {
+            "task_id": "mockmed.add_note",
+            "summary": "Add one triage encounter note to the named patient",
+        },
+        "purposes": list(purposes),
+        "origins": [origin_of(base_url)],
+        "inputs": {
+            "note": {"value": note} if note is not None else {"sha256": note_sha256}
+        },
+        "writes": {
+            "record_kind": "encounter",
+            "identity": {"patient_id": {"value": patient_id}},
+            "fields": {"type": {"value": encounter_type}, "note": {"input": "note"}},
+            "expected_rows": 1,
+            "write_adapter": "openadapt_flow.mockmed.teach_scope:EncounterWrites",
+        },
+        "forbidden": {
+            "actions": ["drag", "delete_request", "new_window", "download", "file_upload"],
+            "controls": list(forbidden_controls),
+        },
+    }

@@ -105,7 +105,17 @@ DRAFT_MARKER = "jit_draft.json"
 DRAFT_ORIGIN = "agent_run"
 #: The fields of ``candidate.json`` that say who made the recording. They are
 #: signed with the bundle digest in the candidate's ``recorder`` block.
-RECORDER_FIELDS = ("recorded_by", "agent_principal_id", "dialect")
+RECORDER_FIELDS = (
+    "recorded_by",
+    "agent_principal_id",
+    "dialect",
+    # What the agent was allowed to do and who signed it. Absent (None) on
+    # drafts from before teach authorizations, which still verify.
+    "teach_scope",
+    "teach_authorization",
+)
+#: Where a draft keeps a copy of the teach authorization it was taught under.
+TEACH_AUTHORIZATION_DIR = "teach-authorization"
 EVENTS_FILE = "lifecycle.jsonl"
 ADMISSION_FILE = "admission.json"
 #: Every canary run, one JSON object per line. ``canary.json`` is the latest.
@@ -761,6 +771,23 @@ def state_of(
     return None
 
 
+def _teach_authorization_status(
+    program: Path, candidate: Mapping[str, Any]
+) -> dict[str, Any]:
+    if candidate.get("demonstrated_by") != "agent":
+        return {"met": True, "required": False}
+    try:
+        recorded = teach_authorization_gate(program, candidate)
+    except AdmissionError as exc:
+        return {"met": False, "required": True, "problem": str(exc)}
+    return {
+        "met": True,
+        "required": True,
+        "sha256": (recorded or {}).get("sha256"),
+        "authorizer": (recorded or {}).get("authorizer"),
+    }
+
+
 def _evidence_at(path: Path, digest: str) -> Optional[dict[str, Any]]:
     record = _read(path)
     if record is None or record.get("digest") != digest:
@@ -817,6 +844,7 @@ def admission_status(
                 "met": bool(canary and canary.get("passed")),
                 "outcome": (canary or {}).get("outcome"),
             },
+            "teach_authorization": _teach_authorization_status(program, candidate),
         },
         "needs_person": _evidence_at(program / NEEDS_PERSON_FILE, digest),
         # A policy such as clinical-write needs one on every write; a person
@@ -1224,6 +1252,7 @@ def _evidence_gates(
 
     from openadapt_flow.policy import evaluate_policy, load_policy
 
+    teach_authorization_gate(program, candidate)
     task_params = _task_params(candidate)
     if task_params and _evidence_at(program / PARAMS_FILE, digest) is None:
         raise AdmissionError(f"confirm the parameters {task_params} first")
@@ -1261,6 +1290,49 @@ def _evidence_gates(
     if not report.passed:
         raise AdmissionError(f"not certified under {policy!r}:\n{report.render()}")
     return canary
+
+
+def teach_authorization_gate(
+    program: Path, candidate: Mapping[str, Any]
+) -> Optional[dict[str, Any]]:
+    """An agent-taught draft needs a person's signed teach authorization.
+
+    The draft's ``teach_authorization`` entry (signed into the recorder
+    block) must name the statement kept beside the draft, the statement's
+    signature must verify, and the signer's identity must check out against
+    the operator's pinned authorizers (``OPENADAPT_TEACH_AUTHORIZERS``). The
+    capture must also have run under the bound scope with a verified
+    read-back. Returns the recorded entry; a draft a person demonstrated
+    returns ``None``.
+    """
+
+    from openadapt_flow import teach_authorization as ta
+
+    if candidate.get("demonstrated_by") != "agent":
+        return None
+    recorded = candidate.get("teach_authorization")
+    statement = program / TEACH_AUTHORIZATION_DIR / ta.STATEMENT_FILE
+    try:
+        ta.check_admission(recorded, statement if statement.is_file() else None)
+    except ta.TeachAuthorizationError as exc:
+        raise AdmissionError(
+            f"an agent-taught draft needs a person's signed teach authorization "
+            f"({exc.code}): {exc}"
+        ) from exc
+    scope = candidate.get("teach_scope") or {}
+    bound = (scope.get("scope") or {}).get("authorization") or {}
+    readback = scope.get("readback") or {}
+    if bound.get("sha256") != recorded.get("sha256"):  # type: ignore[union-attr]
+        raise AdmissionError(
+            "the draft was not captured under the scope its teach authorization "
+            "binds (teach_auth_not_bound)"
+        )
+    if readback.get("status") != "verified":
+        raise AdmissionError(
+            "the authorized capture's read-back did not verify "
+            "(teach_auth_readback_unverified)"
+        )
+    return dict(recorded)  # type: ignore[arg-type]
 
 
 def _write_manifest(
@@ -1323,6 +1395,10 @@ def _write_manifest(
         "signing_key": fingerprint_of(private.public_key()),
         **(extra or {}),
     }
+    if candidate.get("teach_authorization"):
+        # The bundle carries who authorized the teaching. Only written when
+        # present, so manifests from before teach authorizations verify.
+        body["teach_authorization"] = candidate["teach_authorization"]
     if mode == "agent_policy" and _is_recording_agent(name, recorder):
         # Only written when true, so manifests from before self-admission
         # existed verify unchanged.
