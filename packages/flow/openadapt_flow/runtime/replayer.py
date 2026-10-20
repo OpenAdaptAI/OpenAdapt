@@ -10073,9 +10073,13 @@ class Replayer:
                     observed="exact local pixel evidence could not be retained",
                 )
         result.identity = check
-        governed = (
-            self.governed_authorization is not None
-            and self.governed_authorization.requires_verified_identity(step.id)
+        # Under a governed run, an armed step needs a verified identity before
+        # it acts, whether or not the authorization lists it: the durable
+        # checkpoint demands the same (step.identity_armed), and it only runs
+        # after the click. An unreadable or abstained identity halts here.
+        governed = self.governed_authorization is not None and (
+            self.governed_authorization.requires_verified_identity(step.id)
+            or step.identity_armed
         )
         signal_quorum = check.mode == "signal_quorum"
         if signal_quorum and check.status == "mismatch":
