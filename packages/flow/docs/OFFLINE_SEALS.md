@@ -226,6 +226,120 @@ An anchor file in the wrong shape, at any field, is `anchor_malformed`.
 
 Cloud Seals are unchanged and remain the hosted option.
 
+## Run authorizations: who authorized the runs
+
+A Seal names the machine key that sealed a run. A run authorization names
+the person who authorized it, by the SSH key they publish on GitHub. Ed25519
+SSH keys only.
+
+The statement (`openadapt.run-authorization/v1`, `run-authorization.json`)
+holds:
+
+| Field | Meaning |
+|---|---|
+| `bundle_content_digest` | The compiled program the person authorizes |
+| `scope.items` | The work items, for example `r3`, `r4` |
+| `scope.profile` | The execution profile the runs must use, for example `standard` |
+| `scope.seal_key_ids` | The Seal keys allowed to seal runs under it |
+| `authorizer` | The person's public handle, `github:<user>` |
+| `issued_at`, `nonce` | When, and 32 random bytes |
+
+```bash
+# 1. Write the statement and a snapshot of https://github.com/<user>.keys.
+openadapt-flow local-seal authorize create --out auth/ --bundle-digest <digest> \
+    --item r3,r4,r5,r6 --profile standard --authorizer github:<user>
+
+# 2. The person signs it with their own GitHub SSH key (create prints this line).
+ssh-keygen -Y sign -n openadapt-run-authorization -f ~/.ssh/id_ed25519 auth/run-authorization.json
+
+# 3. Seal each run under it, naming its item.
+openadapt-flow local-seal run runs/r3 --authorization auth/ --item r3
+
+# 4. Optional: anchor the authorization in the transparency log, as a Seal.
+openadapt-flow local-seal authorize anchor auth/
+```
+
+`authorize create` reads `https://github.com/<user>.keys` once and stores the
+Ed25519 keys it lists in `run-authorization.allowed_signers`, in the format
+`ssh-keygen -Y verify` reads. OpenAdapt never holds the person's private
+key; only the person runs step 2.
+
+`local-seal run --authorization` refuses to seal unless the authorization's
+signature verifies, the run's report has the authorized bundle digest and
+profile, the item is in scope, and the Seal key is in scope. The Seal then
+records `authorization_sha256` (the SHA-256 of `run-authorization.json`) and
+`scope_item`, signed by the Seal key. Seals without an authorization don't
+have these fields and keep their exact bytes. A Seal that was already
+written, for example by the run hook, is re-signed only with
+`--replace-unanchored`, and only if it has never been anchored.
+
+Verify:
+
+```bash
+openadapt-flow local-seal authorize verify auth/
+openadapt-flow local-seal verify runs/r3 --keys site-keys.json --require-anchor --authorization auth/
+```
+
+The verifier checks offline:
+
+- the person's signature over the exact statement bytes, in the
+  `openadapt-run-authorization` namespace;
+- that the signing key is listed for the `authorizer` in the stored GitHub
+  snapshot, or in your own file passed with `--allowed-signers`;
+- that the Seal names this authorization and an item in its scope;
+- that the run's profile, bundle digest and Seal key match the scope;
+- with `--require-anchor`, the authorization's anchor, and that the log
+  recorded the authorization before the Seal.
+
+`--live` also re-reads `https://github.com/<user>.keys` and refuses a key
+GitHub no longer lists (`auth_not_on_github`). The host is always
+github.com; nothing in the files chooses where to fetch from.
+
+You can check the signature with OpenSSH alone:
+
+```bash
+ssh-keygen -Y verify -f auth/run-authorization.allowed_signers -I github:<user> \
+    -n openadapt-run-authorization -s auth/run-authorization.json.sig < auth/run-authorization.json
+```
+
+What the snapshot proves: that the key listed for the user at the time of
+the snapshot signed the statement. It doesn't prove who controls the GitHub
+account. Pin your own allowed-signers file, or use `--live`, when that
+matters.
+
+Refusal reasons: `auth_missing`, `auth_malformed` (including a repeated JSON
+key), `auth_unsigned`, `auth_bad_signature`, `auth_unknown_signer`,
+`auth_not_on_github`, `auth_live_unavailable`, `auth_not_referenced`,
+`auth_reference_mismatch`, `auth_scope_mismatch`, `auth_bundle_mismatch`,
+`auth_anchored_after_seal`.
+
+## Operator profile
+
+```bash
+openadapt-flow local-seal profile runs/* --keys site-keys.json --authorization auth/
+```
+
+`profile` writes `operator-profile.json` (`openadapt.operator-profile/v1`),
+keyed by Seal key ID. For each key it lists:
+
+- the number of runs in each outcome. Verified, stopped before any effect,
+  completed but unverified, and failed always appear, even at zero. Any
+  other outcome appears under its own code.
+- the apps and programs used: the report's app name, or else the first word
+  of the program name;
+- the first and last time the log recorded one of the key's Seals, and each
+  Rekor log index;
+- `linked_identity`, only when an authorization signed with the person's
+  GitHub key verifies, names this Seal key in its scope, and the Seals
+  reference it.
+
+Only Seals that verify against the pinned keys and have a valid anchor are
+counted. The rest are counted under `excluded` as `unanchored` or
+`not_valid`, without detail.
+
+The profile holds no report content: no patient names, parameters, record
+IDs, run IDs or folder names.
+
 ## Optional: batched timestamps
 
 Each new Seal is queued under `$OPENADAPT_SEAL_HOME/batch/pending`. Nothing
