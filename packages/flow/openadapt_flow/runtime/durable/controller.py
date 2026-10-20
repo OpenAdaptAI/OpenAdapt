@@ -764,17 +764,30 @@ class DurableRun:
             raise StateDiverged(
                 "the deferred record check's durable pause changed before it settled"
             )
-        surfaces = dict(
-            active_surface=active_surface, surface_observations=surface_observations
-        )
         if result.ok:
-            self.record(step_index, step, result, params, workflow=workflow, **surfaces)
+            self.record(
+                step_index,
+                step,
+                result,
+                params,
+                workflow=workflow,
+                active_surface=active_surface,
+                surface_observations=surface_observations,
+            )
             self.complete()
             self._sync_authority()
             return
         if result.delivery_uncertainty is None:
             result.delivery_uncertainty = current.delivery_uncertainty
-        self.record(step_index, step, result, params, workflow=workflow, **surfaces)
+        self.record(
+            step_index,
+            step,
+            result,
+            params,
+            workflow=workflow,
+            active_surface=active_surface,
+            surface_observations=surface_observations,
+        )
 
     # -- Phase-2 program (state-machine) durability --------------------------
 
