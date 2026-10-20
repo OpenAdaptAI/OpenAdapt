@@ -718,7 +718,11 @@ def _launcher_version(path: str, run=None) -> Optional[str]:
 
     try:
         result = (run or subprocess.run)(
-            [path, "--version"], capture_output=True, text=True, timeout=15
+            [path, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env={**os.environ, _NO_LAUNCHER_CHECK: "1"},
         )
         text = f"{result.stdout} {result.stderr}"
     except Exception:  # noqa: BLE001 - an unrunnable openadapt has no version
@@ -824,7 +828,15 @@ def _launcher_conflicts(launchers=None, run=None) -> list[str]:
     return lines
 
 
+#: Set in the environment of every ``openadapt --version`` this check runs, so
+#: the child never runs the check itself. Without it, two installs that both
+#: carry the check ask each other for their version forever.
+_NO_LAUNCHER_CHECK = "OPENADAPT_NO_LAUNCHER_CHECK"
+
+
 def _warn_about_launcher_conflicts() -> None:
+    if os.environ.get(_NO_LAUNCHER_CHECK):
+        return
     try:
         lines = _launcher_conflicts()
     except Exception:  # noqa: BLE001 - a PATH check must never break a command
