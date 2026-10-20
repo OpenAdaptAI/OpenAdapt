@@ -149,7 +149,9 @@ export interface GraphNode {
   api_summary?: string | null;
   postconditions?: string[];
   guard?: string | null;
+  /** The scrubbed spoken sentence that suggested this guard. */
   guard_reason?: string | null;
+  /** recordings_agree | probe | person: what certified a narrated guard. */
   guard_certified_by?: string | null;
   guard_on_unmet?: string | null;
   wait_until?: string | null;
@@ -167,6 +169,7 @@ export interface GraphEdge {
   kind?: EdgeKind;
   label?: string;
   guard?: string | null;
+  /** The scrubbed spoken sentence that suggested this branch. */
   guard_reason?: string | null;
 }
 
