@@ -144,7 +144,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12"]
+        # PR tier: one Python; the merge queue and main add the oldest.
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.10", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/types
@@ -187,7 +188,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12"]
+        # PR tier: one Python; the merge queue and main add the oldest.
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.10", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/agent
@@ -439,7 +441,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        # PR tier: one Python; the merge queue and main run all three.
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/capture
@@ -499,7 +502,8 @@ jobs:
   capture-macos:
     name: capture (macos, py3.12)
     needs: scope
-    if: needs.scope.outputs.capture == 'true'
+    # Merge queue and main only; the PR tier runs capture on Linux.
+    if: needs.scope.outputs.capture == 'true' && github.event_name != 'pull_request'
     runs-on: macos-latest
     timeout-minutes: 30
     defaults:
@@ -528,7 +532,8 @@ jobs:
   capture-windows:
     name: capture (windows, py3.12)
     needs: scope
-    if: needs.scope.outputs.capture == 'true'
+    # Merge queue and main only; the PR tier runs capture on Linux.
+    if: needs.scope.outputs.capture == 'true' && github.event_name != 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 45
     defaults:
@@ -596,7 +601,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        # PR tier: one Python; the merge queue and main run all three.
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/privacy
