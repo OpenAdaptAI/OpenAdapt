@@ -372,9 +372,21 @@ def configure_project(
         runtime_version=FLOW_VERSION,
         required_capabilities=capabilities,
     )
+    # Re-qualifying a bundle that already has a project (a sealed copy, a
+    # repaired copy, or one certified before) replaces the project with a new
+    # revision of it: the same project id, revision + 1, linked to the prior
+    # revision's digest. Every case runs again; nothing carries over.
+    prior = workflow.qualification
     project = init_project(
-        workflow, environment=boundary, minimum_effect_tier=minimum_effect_tier
+        workflow,
+        environment=boundary,
+        minimum_effect_tier=minimum_effect_tier,
+        replace=prior is not None,
     )
+    if prior is not None:
+        project.project_id = prior.project_id
+        project.revision = prior.revision + 1
+        project.previous_revision_sha256 = prior.revision_digest()
     record = config.record.name
     for step in workflow.steps:
         irreversible = step.risk == "irreversible"
