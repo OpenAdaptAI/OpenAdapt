@@ -57,13 +57,16 @@ concurrency:
   # cancelled. Every other push to main shares one group, so a newer one
   # cancels it instead of queueing behind it. The test is conservative: any
   # mention of packages/desktop/ in the push payload (file lists or messages)
-  # counts as a Desktop change, and a push with no commit list keeps its own
-  # group. Merge queue groups and dispatches are never cancelled.
+  # counts as a Desktop change. A push with no commit list, or with 20 or more
+  # commits (GitHub truncates the payload's list at 20, which could hide a
+  # Desktop change), keeps its own group. Merge queue groups and dispatches
+  # are never cancelled.
   group: >-
     packages-${{
       github.event.pull_request.number
       || (github.event_name == 'push'
           && github.event.head_commit
+          && !github.event.commits[19]
           && !contains(toJSON(github.event.commits), 'packages/desktop/')
           && 'main-without-desktop')
       || github.sha }}
@@ -71,6 +74,7 @@ concurrency:
     ${{ github.event_name == 'pull_request'
         || (github.event_name == 'push'
             && github.event.head_commit != null
+            && !github.event.commits[19]
             && !contains(toJSON(github.event.commits), 'packages/desktop/')) }}
 
 env:
