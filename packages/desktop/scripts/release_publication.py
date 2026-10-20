@@ -10,7 +10,7 @@ manifest, the provenance, the verifier, ``SHA256SUMS``, and the channel.
     notes        release notes that state each platform's signing
     state        whether the GitHub release is absent, a draft, or published
     python-dist  the wheel and sdist, checked against SHA256SUMS
-    verify-pypi  require PyPI to serve exactly those bytes
+    verify-pypi  require PyPI to serve exactly the attested wheel and sdist
 """
 
 from __future__ import annotations
@@ -171,14 +171,47 @@ def pypi_digests(version: str) -> dict[str, str]:
     return {item["filename"]: item["digests"]["sha256"] for item in data.get("urls", [])}
 
 
-def verify_pypi(
-    directory: Path, *, version: str, wait_seconds: int, fetch=pypi_digests, sleep=time.sleep
-) -> dict[str, str]:
-    """Require PyPI to serve exactly the files in ``directory``, byte for byte."""
+# pypa/gh-action-pypi-publish writes one of these next to each file it uploads
+# with attestations enabled. They are PyPI's upload attestations, not
+# distributions, and PyPI never lists them as files of the release.
+PUBLISH_ATTESTATION_SUFFIX = ".publish.attestation"
 
-    expected = {path.name: _sha256(path) for path in directory.iterdir() if path.is_file()}
-    if set(expected) != native_release.python_distribution_names(version):
-        raise ValueError(f"unexpected distribution set: {sorted(expected)}")
+
+def verify_pypi(
+    directory: Path,
+    *,
+    version: str,
+    checksums: Path,
+    wait_seconds: int,
+    fetch=None,
+    sleep=time.sleep,
+) -> dict[str, str]:
+    """Require PyPI to serve exactly the attested wheel and sdist, byte for byte.
+
+    The expected digests come from the attested ``checksums`` (SHA256SUMS), and
+    the files in ``directory`` must be those bytes. The publish action's
+    ``*.publish.attestation`` files beside them are ignored; anything else is
+    refused.
+    """
+
+    fetch = fetch or pypi_digests
+    names = native_release.python_distribution_names(version)
+    attested = native_release.read_checksums(checksums)
+    missing = sorted(names - set(attested))
+    if missing:
+        raise ValueError(f"the attested SHA256SUMS does not name {missing}")
+    expected = {name: attested[name] for name in sorted(names)}
+    present = {
+        path.name
+        for path in directory.iterdir()
+        if not (path.name.endswith(PUBLISH_ATTESTATION_SUFFIX) and path.is_file())
+    }
+    if present != names:
+        raise ValueError(f"unexpected distribution set: {sorted(present)}")
+    for name, digest in expected.items():
+        path = directory / name
+        if not path.is_file() or path.is_symlink() or _sha256(path) != digest:
+            raise ValueError(f"{name} differs from the attested SHA256SUMS")
     deadline = time.monotonic() + wait_seconds
     while True:
         try:
@@ -223,6 +256,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("verify-pypi")
     p.add_argument("--directory", type=Path, required=True)
     p.add_argument("--version", required=True)
+    p.add_argument("--checksums", type=Path, required=True)
     p.add_argument("--wait-seconds", type=int, default=300)
     args = parser.parse_args(argv)
     try:
@@ -260,7 +294,10 @@ def main(argv: list[str] | None = None) -> int:
                 print(path)
         elif args.command == "verify-pypi":
             served = verify_pypi(
-                args.directory, version=args.version, wait_seconds=args.wait_seconds
+                args.directory,
+                version=args.version,
+                checksums=args.checksums,
+                wait_seconds=args.wait_seconds,
             )
             print(f"PyPI serves exactly {sorted(served)}")
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:

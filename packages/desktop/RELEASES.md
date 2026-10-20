@@ -29,6 +29,12 @@ launcher's.
    through Trusted Publishing, and the draft is published once. If any build
    fails, nothing is published. A later failure resumes by re-running the
    failed jobs of the same run; a new run refuses a half-published version.
+   One state resumes from a new run instead: PyPI serves the version, the tag
+   exists, and the release is still a draft. Dispatch the workflow on main
+   (`gh workflow run desktop-release.yml --ref main`). It builds nothing; the
+   publish job downloads the draft, reverifies every file against
+   `SHA256SUMS` and its attestations for the tag's commit, requires PyPI to
+   serve the attested wheel and sdist, and publishes the draft.
 5. Signing is stated, never implied. macOS DMGs are ad-hoc signed until
    Developer ID credentials exist. Windows goes through SignPath when the four
    `SIGNPATH_*` secrets are set in `native-release`: one request deep-signs the
