@@ -1,0 +1,18 @@
+{
+  "steps": 7,
+  "canary_status": "refused",
+  "canary_detail": "no canary ran: a write step lacks an independent read-back: step_000: record_written is placeholder",
+  "canary_halt": null,
+  "admitted": false,
+  "params": {
+    "lifted": [
+      {
+        "field_label": "Note",
+        "masked_example": "Sy*******************************************ys",
+        "name": "note",
+        "step_id": "step_005"
+      }
+    ],
+    "unlifted": {}
+  }
+}

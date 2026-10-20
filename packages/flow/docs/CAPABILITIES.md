@@ -72,6 +72,9 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   underdetermined. The healthy replay path still makes no model call.
   [`LEARN_FROM_MANY_RUNS.md`](LEARN_FROM_MANY_RUNS.md) covers `induce`,
   `teach-branch` and shadow mining together, with each one's status.
+  Spoken narration recorded with the demonstration proposes branch
+  conditions; a proposal becomes a guard only when every recording agrees, a
+  probe confirms it, or a person accepts it. See [`NARRATION.md`](NARRATION.md).
   With `--probe-on test-copy.yaml`, a refused optional step is instead
   replayed both ways on a declared test copy and scored by reading the record
   back; it is certified only when exactly one reading works for every
@@ -141,7 +144,22 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   [display-scaling sweep](../benchmark/pixel_scale/README.md), healthy runs
   went from 3 of 24 to 17 of 24, and every wrong-record run still
   halted with nothing saved. Record IDs with 1/l or 0/O still halt at the
-  identity check off the recorded render.
+  identity check off the recorded render when the workflow always opens the
+  recorded record.
+- **Extra looks before a look-alike stop.** A record ID with 1/l or 0/O no
+  longer stops the run on its first read. The replayer reads two fresh frames
+  and a 2x crop, checks the known-ID list, and, where configured, selects and
+  copies the ID (`runtime.identity_copy_look`). Only the list or a copied ID
+  equal to a run parameter settles the record
+  (`openadapt_flow/runtime/identity_looks.py`). On the rendered dense record
+  list, false stops fell from 232 to 24 of 288 with the copy and a run
+  parameter, with 0 wrong-record accepts
+  ([IDENTITY_LOOKS.md](../benchmark/identity_looks/IDENTITY_LOOKS.md)).
+- **Hover response before an icon-only click.** On a pixel surface the
+  recorder can keep a click target's hover response; replay compares it and
+  stops before the click when it differs
+  (`openadapt_flow/runtime/hover_evidence.py`,
+  [hover_identity](../benchmark/hover_identity/README.md)).
 
 Compiled workflows can also be emitted as Agent Skills or MCP servers
 (`emit-skill` / `emit-mcp`), so other agents can invoke them.

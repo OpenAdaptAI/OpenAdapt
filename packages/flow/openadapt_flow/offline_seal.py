@@ -379,6 +379,12 @@ def seal_after_run(
     """
     if run_dir is None or not mode_enabled(env):
         return None
+    from openadapt_flow import sealed_set
+
+    if sealed_set.is_sealed(Path(run_dir)):
+        # The offline Seal rewrites report.json in place; that is not built
+        # for an encrypted run directory yet, so say so instead of skipping.
+        return "offline seal not written: the run directory is encrypted at rest"
     if not (Path(run_dir) / "report.json").is_file():
         return None
     try:

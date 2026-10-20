@@ -11,6 +11,8 @@ fault-model study uses for ``classify``).
 
 from __future__ import annotations
 
+from datetime import date, datetime, time
+from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable, Optional
 
 from openadapt_flow.runtime.effects.effect import (
@@ -261,6 +263,72 @@ def _judge_exact_new_set(
     )
 
 
+_NUMBER = (int, float, Decimal)
+_WHEN = (datetime, date, time)
+
+
+def _as_number(value: Any) -> Optional[Decimal]:
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _as_when(value: Any) -> Optional[Any]:
+    if isinstance(value, _WHEN):
+        return value
+    if isinstance(value, str):
+        for parse in (datetime.fromisoformat, date.fromisoformat, time.fromisoformat):
+            try:
+                return parse(value)
+            except ValueError:
+                continue
+    return None
+
+
+def _same_value(before: Any, after: Any) -> bool:
+    """Whether a record field is unchanged between the baseline and now.
+
+    The baseline may have been written to JSON and read back (verify-run's
+    baseline file), while the current read has the driver's own types. So a
+    ``Decimal('1.50')`` read now equals the ``"1.50"`` or ``1.5`` it was
+    stored as, a ``datetime`` equals its ISO string (either separator), and
+    ``bytes`` equal their hex or UTF-8 text. Nested values compare element by
+    element, so key order doesn't matter. Two strings compare exactly: a
+    text field that changed from ``"02139"`` to ``"2139"`` is a change.
+    """
+
+    if isinstance(before, dict) and isinstance(after, dict):
+        return set(before) == set(after) and all(
+            _same_value(before[k], after[k]) for k in before
+        )
+    if isinstance(before, (list, tuple)) and isinstance(after, (list, tuple)):
+        return len(before) == len(after) and all(
+            _same_value(b, a) for b, a in zip(before, after)
+        )
+    if before is None or after is None:
+        return before is None and after is None
+    if isinstance(before, bool) or isinstance(after, bool):
+        return before == after
+    if isinstance(before, (bytes, bytearray)) or isinstance(after, (bytes, bytearray)):
+        raw, other = (
+            (before, after)
+            if isinstance(before, (bytes, bytearray))
+            else (after, before)
+        )
+        if isinstance(other, (bytes, bytearray)):
+            return bytes(raw) == bytes(other)
+        text = str(other)
+        return text == bytes(raw).hex() or text == bytes(raw).decode("utf-8", "replace")
+    if isinstance(before, _NUMBER) or isinstance(after, _NUMBER):
+        b, a = _as_number(before), _as_number(after)
+        return b is not None and a is not None and b == a
+    if isinstance(before, _WHEN) or isinstance(after, _WHEN):
+        b, a = _as_when(before), _as_when(after)
+        return b is not None and a is not None and b == a
+    return before == after
+
+
 def _judge_record_written(
     effect: Effect,
     before: EffectState,
@@ -285,7 +353,26 @@ def _judge_record_written(
             if stable_id(r) not in current_ids:
                 collateral_lost.append(r)
 
-    if count_ok and not collateral_lost:
+    # Collateral change: a non-target record that is still there but whose
+    # fields differ from the pre-state (an in-place write to the wrong row).
+    collateral_changed: list[tuple[dict[str, Any], list[str]]] = []
+    if effect.forbid_collateral_change and before.reachable:
+        now = {stable_id(r): r for r in current}
+        for r in before.records:
+            if record_matches(r, effect.match):
+                continue
+            after = now.get(stable_id(r))
+            if after is None:
+                continue  # vanished: the collateral-loss rule's case
+            fields = sorted(
+                k
+                for k in set(r) | set(after)
+                if not _same_value(r.get(k), after.get(k))
+            )
+            if fields:
+                collateral_changed.append((r, fields))
+
+    if count_ok and not collateral_lost and not collateral_changed:
         return EffectVerdict(
             verdict=Verdict.CONFIRMED,
             kind=effect.kind,
@@ -324,6 +411,16 @@ def _judge_record_written(
             f"{len(collateral_lost)} pre-existing record(s) vanished -- "
             f"collateral loss (stale / concurrent last-write-wins overwrote "
             f"another actor's row)"
+        )
+    if collateral_changed:
+        names = sorted({f for _r, fields in collateral_changed for f in fields})
+        reasons.append(
+            f"{len(collateral_changed)} pre-existing record(s) outside the "
+            f"target changed -- collateral change (field(s): "
+            f"{', '.join(names[:_SAMPLE_LIMIT])}"
+            f"{'' if len(names) <= _SAMPLE_LIMIT else ', ...'}); this may be "
+            f"another user's concurrent edit, not this action -- a person "
+            f"should reconcile it before anything is retried or undone"
         )
     return EffectVerdict(
         verdict=Verdict.REFUTED,

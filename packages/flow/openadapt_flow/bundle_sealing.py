@@ -1,4 +1,4 @@
-"""Atomic, non-destructive encryption of a compiled workflow bundle."""
+"""Atomic, non-destructive encryption of a whole compiled workflow bundle."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from errno import EEXIST, ENOTEMPTY
 from pathlib import Path
 
-from openadapt_flow import crypto
+from openadapt_flow import crypto, sealed_set
 from openadapt_flow.ir import Workflow
 
 
@@ -28,6 +28,7 @@ class SealedBundle:
     path: Path
     content_digest: str
     certification_invalidated: bool
+    set_digest: str = ""
 
 
 def _lexists(path: Path) -> bool:
@@ -75,34 +76,73 @@ def _validate_paths(source: Path, destination: Path) -> tuple[Path, Path]:
     return source, destination
 
 
-def _verify_sealed_bundle(bundle: Path, key: str) -> Workflow:
-    if (bundle / "workflow.json").exists():
-        raise BundleSealingError("sealed bundle retained plaintext workflow.json")
-    encrypted_workflow = bundle / "workflow.json.enc"
-    if not encrypted_workflow.is_file() or not crypto.is_encrypted(
-        encrypted_workflow.read_bytes()
-    ):
-        raise BundleSealingError("sealed bundle is missing encrypted workflow.json")
-
-    templates = bundle / "templates"
-    if templates.is_dir():
-        for path in templates.rglob("*"):
-            if path.is_symlink():
-                raise BundleSealingError("sealed bundle contains a template symlink")
-            if not path.is_file():
-                continue
-            if path.suffix != ".enc" or not crypto.is_encrypted(path.read_bytes()):
-                raise BundleSealingError(
-                    "sealed bundle retained a plaintext template asset: "
-                    f"{path.relative_to(bundle).as_posix()}"
-                )
-
+def _verify_sealed_bundle(bundle: Path, key: str) -> tuple[Workflow, str]:
+    """Re-open the staged bundle exactly as a reader would and check that no
+    file holding patient data is left in plaintext."""
+    try:
+        opened = sealed_set.SealedSet.open(bundle, key, expect="bundle")
+        opened.verify_all()
+    except sealed_set.SealedSetError as exc:
+        raise BundleSealingError(f"sealed bundle failed verification: {exc}") from exc
+    for rel in opened.files():
+        entry = sealed_set.classify("bundle", rel)
+        if entry is None or (
+            entry.classification != "structural" and opened.codec(rel) != "set"
+        ):
+            raise BundleSealingError(f"sealed bundle retained plaintext {rel}")
     workflow = Workflow.load(bundle, key=key, verify_integrity=True)
     if not workflow.encrypted or workflow.manifest is None:
         raise BundleSealingError("sealed bundle did not retain its encrypted manifest")
     if not workflow.manifest.content_digest:
         raise BundleSealingError("sealed bundle has no integrity content digest")
-    return workflow
+    return workflow, opened.set_digest
+
+
+def _source_files(source: Path, key: str) -> dict[str, bytes]:
+    """Every file of the source bundle except the parts ``Workflow`` owns,
+    read into memory and classified. An unknown file is refused."""
+    handled = {"workflow.json", "workflow.json.enc", "manifest.json"}
+    reader: sealed_set.SealedSet | None = None
+    if sealed_set.is_sealed(source):
+        reader = sealed_set.SealedSet.open(source, key, expect="bundle")
+        names = reader.files()
+    else:
+        names = [
+            p.relative_to(source).as_posix()
+            for p in sorted(source.rglob("*"))
+            if p.is_file()
+        ]
+    out: dict[str, bytes] = {}
+    unknown: list[str] = []
+    for rel in names:
+        if rel in handled or rel.startswith("templates/"):
+            continue
+        if sealed_set.classify("bundle", rel) is None:
+            unknown.append(rel)
+            continue
+        out[rel] = reader.read_bytes(rel) if reader else (source / rel).read_bytes()
+    if unknown:
+        raise BundleSealingError(
+            "source bundle contains file(s) Flow does not know, so it cannot "
+            "say whether they hold patient data: "
+            + ", ".join(unknown)
+            + ". Move them out of the bundle (or delete them) and seal again."
+        )
+    return out
+
+
+def _template_assets(source: Path, workflow: Workflow) -> dict[str, bytes]:
+    """Plaintext template crops: decrypted in memory for an encrypted source,
+    read from disk for a plaintext one."""
+    assets = workflow.decrypted_templates()
+    tdir = source / "templates"
+    if tdir.is_dir() and not sealed_set.is_sealed(source):
+        for path in sorted(tdir.rglob("*")):
+            if path.is_file() and path.suffix != ".enc":
+                assets.setdefault(
+                    path.relative_to(source).as_posix(), path.read_bytes()
+                )
+    return assets
 
 
 def _publish_no_replace(staging: Path, destination: Path) -> None:
@@ -219,10 +259,16 @@ def _cleanup_staging(staging: Path | None, original_error: Exception) -> None:
 
 
 def seal_bundle(source: Path | str, destination: Path | str) -> SealedBundle:
-    """Copy, validate, encrypt, verify, and atomically publish a bundle.
+    """Validate, encrypt, verify, and atomically publish a sealed bundle.
 
-    The source is never modified. ``OPENADAPT_BUNDLE_KEY`` is the only supported
-    key input so the passphrase cannot leak through process arguments.
+    Every file of the source is classified against
+    :data:`openadapt_flow.sealed_set.BUNDLE_FILES`; an unknown file refuses
+    the seal. Every file that can hold patient data is encrypted in memory,
+    and the whole set is bound to one authenticated index, so no file can be
+    swapped, added or dropped afterwards (:mod:`openadapt_flow.sealed_set`).
+    The source is never modified. ``OPENADAPT_BUNDLE_KEY`` is the only
+    supported key input so the passphrase cannot leak through process
+    arguments.
     """
     staging: Path | None = None
     try:
@@ -234,9 +280,11 @@ def seal_bundle(source: Path | str, destination: Path | str) -> SealedBundle:
         source_path, destination_path = _validate_paths(Path(source), Path(destination))
         _reject_symlinks(source_path)
         try:
-            Workflow.load(source_path, key=key, verify_integrity=True)
+            source_workflow = Workflow.load(source_path, key=key, verify_integrity=True)
         except Exception as exc:
             raise BundleSealingError(f"source bundle validation failed: {exc}") from exc
+        others = _source_files(source_path, key)
+        assets = _template_assets(source_path, source_workflow)
 
         destination_path.parent.mkdir(parents=True, exist_ok=True)
         staging = Path(
@@ -246,19 +294,16 @@ def seal_bundle(source: Path | str, destination: Path | str) -> SealedBundle:
             )
         )
         staging.chmod(0o700)
-        shutil.copytree(
-            source_path,
-            staging,
-            dirs_exist_ok=True,
-            symlinks=True,
-        )
-        # Refuse a symlink introduced between the source preflight and copy.
+        # Nothing is copied: every byte is encrypted in memory and only
+        # ciphertext (and the structural manifest) is written to staging.
+        certification_invalidated = _invalidate_prior_certification(source_workflow)
+        source_workflow._decrypted_templates = dict(assets)
+        with sealed_set.writing(staging, "bundle", key) as writer:
+            source_workflow.save(staging, encrypt=True, key=key)
+            for rel, data in others.items():
+                writer.write(rel, data)
         _reject_symlinks(staging)
-        staged_workflow = Workflow.load(staging, key=key, verify_integrity=True)
-        certification_invalidated = _invalidate_prior_certification(staged_workflow)
-        staged_workflow.save(staging, encrypt=True, key=key)
-        _reject_symlinks(staging)
-        sealed = _verify_sealed_bundle(staging, key)
+        sealed, set_digest = _verify_sealed_bundle(staging, key)
         manifest = sealed.manifest
         if manifest is None:  # Defensive: _verify_sealed_bundle already refuses this.
             raise BundleSealingError("sealed bundle did not retain its manifest")
@@ -273,6 +318,7 @@ def seal_bundle(source: Path | str, destination: Path | str) -> SealedBundle:
             path=destination_path,
             content_digest=manifest.content_digest,
             certification_invalidated=certification_invalidated,
+            set_digest=set_digest,
         )
     except BundleSealingError as exc:
         _cleanup_staging(staging, exc)

@@ -99,6 +99,7 @@ drives an app).
 | `effects.kind: desktop_readback` ([#1280](https://github.com/OpenAdaptAI/OpenAdapt/pull/1280)) | refused: "a web record page uses effects.kind: ui_readback" | tested (UI Automation, WinForms stand-in) | works (OCR; Accessibility tree not read yet) | works (OCR; AT-SPI tree not read yet) | tested (network RDP, OCR) | works (OCR) |
 | `openadapt-agent serve --authoring` (pinning a window) | tested | tested | tested (frontmost window only) | **refused** | tested | tested |
 | `openadapt-agent` run tools | tested | works (surface from `--config`) | works | works | works | works |
+| `openadapt-agent serve --teach` (record, check, compile, admit over MCP) | tested (`tests/e2e/test_mcp_teach_e2e.py`) | works (a person approves every save) | works (same) | works (same; needs `linux_allow_physical_input`) | tested; admission refused: pixel identity | tested; admission refused: pixel identity |
 
 - `SurfaceApp`: `tests/test_jit_surface_app.py` (every kind: validation,
   origin binding, Citrix readiness refusal) and
@@ -128,6 +129,16 @@ drives an app).
   `--authoring --config deploy.yaml --authoring-from-config` for every
   surface except network RDP, which it refuses (each run's own session would
   disconnect the recording's).
+- `serve --teach`: `tests/test_mcp_teach_surfaces.py` teaches MockMed over
+  MCP through the real `RemoteDisplayBackend` and `CitrixWorkspaceBackend`:
+  run 1 records, passes its record check and a person confirms it; the canary
+  is refused with the identity-coverage reason above, so nothing is admitted.
+  `tests/test_compile_agent_surface_harness.py` covers the surface harness on
+  a native window (what is gated, nothing performed when refused). Off the
+  web the harness can't read which record a form shows, so a person approves
+  every gated action in the client's form. Native backends list no controls
+  yet (the `authoring_tree()` gap below), so the agent reads the screen
+  (`--teach-screens`) and clicks pixels there too.
 - An agent clicks at window coordinates. Native Linux refuses coordinate
   input unless the section sets `linux_allow_physical_input: true`
   ("coordinate input is disabled for native Linux"), so agent-driven
@@ -165,5 +176,5 @@ and `--log-url`, the transparency log) are not app URLs.
 | `route` on a desktop surface: no test | [#1264](https://github.com/OpenAdaptAI/OpenAdapt/pull/1264) | [#1288](https://github.com/OpenAdaptAI/OpenAdapt/pull/1288) |
 | `induce --probe-on` on a desktop test copy: no test | [#1276](https://github.com/OpenAdaptAI/OpenAdapt/pull/1276) | [#1289](https://github.com/OpenAdaptAI/OpenAdapt/pull/1289) |
 | `run --self-repair` refuses non-web: "only browser runs can be repaired for now" | [#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265) | refused with a reason; desktop support after it merges |
-| `compile-agent` takes `--backend`/`--config` but refuses every non-web target (exit 2, before anything runs); its observe step and save gate read the DOM | [#1277](https://github.com/OpenAdaptAI/OpenAdapt/pull/1277) | refused with a reason; desktop support (via `jit.SurfaceApp`) after it merges |
+| `compile-agent` takes `--backend`/`--config` but refuses every non-web target (exit 2, before anything runs); its Claude agent reads the DOM listing | [#1277](https://github.com/OpenAdaptAI/OpenAdapt/pull/1277) | refused with a reason; the same pipeline runs on every surface through `serve --teach` (`FirstRunCompiler(surface=...)` with the surface harness) |
 | The GTK3 AT-SPI qualification job is in `packages/flow/.github/`, which GitHub does not run in the monorepo | `.github/workflows/` | follow-up |
