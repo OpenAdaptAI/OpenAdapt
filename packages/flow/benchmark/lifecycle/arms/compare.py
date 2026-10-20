@@ -33,7 +33,9 @@ from . import budget, economics, report
 
 DEFAULT_ARMS = [
     # (name in the ledger, module:factory, options)
-    ("openadapt", "lifecycle.arms.openadapt:make", {}),
+    # The soak's OpenAdapt arm: the certified referral program under the production
+    # configuration. Its API tier is refused on this form (results/api_tier/).
+    ("openadapt", "lifecycle.openadapt_arm:make", {}),
     ("cua_alone", "lifecycle.arms.cua:factory", {"model": "claude-opus-5-5", "item_budget_usd": 1.00}),
     ("agent_tools", "lifecycle.arms.agent_tools:factory", {"model": "claude-opus-5-5", "item_budget_usd": 0.60}),
     ("agent_script", "lifecycle.arms.agent_script:factory", {"model": "claude-opus-5-5"}),
