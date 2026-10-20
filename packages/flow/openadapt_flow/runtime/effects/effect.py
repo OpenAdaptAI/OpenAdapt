@@ -177,9 +177,7 @@ class ValueExpr(BaseModel):
         # and literal expressions then behaves unchanged.
         if self.param is None:
             return hash(self.literal)
-        return hash(
-            ("__param__", self.param, tuple(sorted((self.map or {}).items())))
-        )
+        return hash(("__param__", self.param, tuple(sorted((self.map or {}).items()))))
 
 
 class EffectKind(str, Enum):

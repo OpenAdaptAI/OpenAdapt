@@ -46,9 +46,10 @@ def test_a_value_without_a_map_is_unchanged():
     plain = ValueExpr(param="state_label")
     assert "map" not in plain.model_dump()
     assert plain.model_dump() == {"literal": None, "param": "state_label"}
-    assert _effect(plain).contract_hash() == _effect(
-        ValueExpr.model_validate({"param": "state_label"})
-    ).contract_hash()
+    assert (
+        _effect(plain).contract_hash()
+        == _effect(ValueExpr.model_validate({"param": "state_label"})).contract_hash()
+    )
     assert plain.resolve({"state_label": "Massachusetts"}) == "Massachusetts"
 
 
@@ -59,9 +60,10 @@ def test_the_map_is_part_of_the_contract():
     assert mapped != other
     assert hash(mapped) != hash(other)
     assert _effect(mapped).contract_hash() != _effect(other).contract_hash()
-    assert _effect(mapped).contract_hash() != _effect(
-        ValueExpr(param="state_label")
-    ).contract_hash()
+    assert (
+        _effect(mapped).contract_hash()
+        != _effect(ValueExpr(param="state_label")).contract_hash()
+    )
 
 
 def test_a_map_needs_a_parameter_and_entries():
