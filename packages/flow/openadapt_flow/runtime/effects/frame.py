@@ -25,6 +25,18 @@ Every change outside the declared records is attributed:
 An audit entry by the bot for a record no effect declares is collateral even
 when the read shows nothing: the log shows a write the contract doesn't cover.
 
+Only evidence the bot can't write counts (the safety review of #1443):
+
+- attribution comes from the app's audit log, or from record fields the
+  frame declares as server-set (``server_set``); a field the run itself
+  writes is never evidence of who changed a record, so attribution that
+  names one is refused and every change stays unattributed;
+- the run's own identities (``self`` and the executor's id) are never
+  "another actor";
+- another actor's change to a record the save declares is never excused:
+  the saved value may no longer stand, so it blocks like collateral. Only
+  changes outside the declared delta can be concurrent edits.
+
 The judge reads nothing itself; callers pass the snapshots. Fail-safe: a
 missing baseline, an unreadable read, a record without its identity field or
 an unresolved self id makes the frame ``not_checked``, never ``held``.
@@ -87,6 +99,11 @@ class FrameAttribution(BaseModel):
     read: Optional[dict[str, Any]] = None
     #: ``record_field`` only: a version, revision or ETag on each record.
     version_field: Optional[str] = None
+    #: ``record_field`` only: the record fields this app sets on the server
+    #: and no user or API client can write. ``actor_field`` and
+    #: ``version_field`` must be among them: declaring them is the per-app
+    #: statement that they are evidence.
+    server_set: list[str] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -108,11 +125,22 @@ class FrameAttribution(BaseModel):
                 raise ValueError("audit_read attribution needs record_field and read")
             if self.version_field is not None:
                 raise ValueError("version_field applies to record_field attribution")
+            if self.server_set:
+                raise ValueError("server_set applies to record_field attribution")
         else:
             if self.read is not None or self.record_field is not None:
                 raise ValueError(
                     "record_field attribution reads the records themselves; "
                     "read and record_field apply to audit_read"
+                )
+            needed = {self.actor_field} | (
+                {self.version_field} if self.version_field else set()
+            )
+            missing = sorted(needed - set(self.server_set))
+            if missing:
+                raise ValueError(
+                    "record_field attribution needs its fields declared server-set "
+                    "(fields no user or API client can write): " + ", ".join(missing)
                 )
         return self
 
@@ -167,6 +195,8 @@ class FrameChange:
     #: True for a bot audit entry on an undeclared record the read shows as
     #: unchanged.
     audit_only: bool = False
+    #: True when another actor changed a record this save declares.
+    other_on_target: bool = False
     #: In memory only, for the operator's console; never put in a receipt.
     key: Any = None
 
@@ -198,6 +228,9 @@ class FrameVerdict:
             "collateral_kinds": sorted({c.change for c in self.collateral}),
             "unattributed_count": sum(
                 1 for c in self.collateral if c.attribution == "unattributed"
+            ),
+            "target_changed_by_other": sum(
+                1 for c in self.collateral if c.other_on_target
             ),
         }
 
@@ -290,6 +323,7 @@ def judge_frame(
     routes: Optional[Mapping[str, Sequence[str]]] = None,
     audit_before: Optional[list[dict[str, Any]]] = None,
     audit_after: Optional[list[dict[str, Any]]] = None,
+    run_actors: Sequence[str] = (),
 ) -> FrameVerdict:
     """Judge the frame of ``effects`` over ``slices``.
 
@@ -304,6 +338,8 @@ def judge_frame(
             every effect belongs to every slice.
         audit_before: ``audit_read`` entries read with the baseline.
         audit_after: ``audit_read`` entries read after the save.
+        run_actors: More ids of this run (the executor's), never "another
+            actor".
     """
 
     attribution = spec.attribution
@@ -317,14 +353,23 @@ def judge_frame(
                 "not supply; changes can't be attributed",
                 mode,
             )
-        self_ids = resolved
+        self_ids = resolved | {str(a) for a in run_actors if str(a)}
 
     ignore = set(spec.ignore_fields)
-    may_change = (
-        set(spec.target_fields)
-        if spec.target_fields is not None
-        else declared_fields(effects)
-    )
+    if attribution is not None and attribution.kind == "record_field":
+        # Server-set bookkeeping moves on every write; it says who, not what.
+        ignore |= set(attribution.server_set)
+    written = declared_fields(effects)
+    may_change = set(spec.target_fields) if spec.target_fields is not None else written
+    if attribution is not None and attribution.kind == "record_field":
+        # A field this run writes (or any run parameter names) is not evidence
+        # of who changed a record: refuse the attribution, fail closed.
+        evidence = {attribution.actor_field} | (
+            {attribution.version_field} if attribution.version_field else set()
+        )
+        if evidence & (written | may_change | set(params)):
+            attribution = None
+            mode = "attribution_refused"
 
     def key_of(record: Mapping[str, Any]) -> Any:
         if spec.identity_field:
@@ -337,6 +382,29 @@ def judge_frame(
         if audit_before is not None and audit_after is not None:
             seen = {stable_id(e) for e in audit_before}
             window_entries = [e for e in audit_after if stable_id(e) not in seen]
+
+    def other_on_target(
+        key: Any,
+        before: Optional[Mapping[str, Any]],
+        after: Optional[Mapping[str, Any]],
+    ) -> bool:
+        """Did another actor change this declared record in the window?"""
+
+        if attribution is None:
+            return False
+        if attribution.kind == "audit_read":
+            return window_entries is not None and any(
+                str(get_path(e, attribution.record_field or "")) == str(key)
+                and get_path(e, attribution.actor_field) not in (None, "")
+                and str(get_path(e, attribution.actor_field)) not in self_ids
+                for e in window_entries
+            )
+        if after is None:
+            return False
+        if before is not None and not _changed_fields(before, after, ignore):
+            return False  # untouched in the window
+        actor = get_path(after, attribution.actor_field)
+        return actor not in (None, "") and str(actor) not in self_ids
 
     def attribute(
         key: Any,
@@ -441,6 +509,20 @@ def judge_frame(
             )
             if is_declared:
                 declared_keys.add(str(key))
+                if other_on_target(key, before, after):
+                    # The saved value may not stand: never excused.
+                    collateral.append(
+                        FrameChange(
+                            name,
+                            "changed",
+                            "other",
+                            _changed_fields(before or {}, after or {}, ignore),
+                            on_target=True,
+                            other_on_target=True,
+                            key=key,
+                        )
+                    )
+                    continue
                 if before is None or after is None:
                     continue  # a new or removed target: the delta check's case
                 stray = [
@@ -526,6 +608,9 @@ def _reason(verdict: FrameVerdict) -> str:
             label = (
                 "written by this run per the audit log"
                 if change.audit_only
+                else "saved record changed by another actor (the saved value may "
+                "not stand)"
+                if change.other_on_target
                 else f"{change.change} outside the declared fields of a target"
                 if change.on_target
                 else change.change
@@ -557,6 +642,11 @@ def _reason(verdict: FrameVerdict) -> str:
         parts.append(
             f"{len(verdict.concurrent)} change(s) attributed to another actor "
             "(concurrent edits, not counted against this save)"
+        )
+    if verdict.attribution == "attribution_refused":
+        parts.append(
+            "attribution refused: it names a field this run writes, which is no "
+            "evidence of who changed a record"
         )
     if verdict.attribution == "audit_read_unavailable":
         parts.append("the audit log could not be read, so no change was attributed")

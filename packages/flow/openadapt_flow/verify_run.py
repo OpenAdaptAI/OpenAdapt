@@ -392,6 +392,7 @@ def judge_run_frame(
     params: Mapping[str, object],
     *,
     audit_verifier: Any = None,
+    run_actors: Sequence[str] = (),
 ) -> FrameVerdict:
     """Read the slice after the save and judge the frame against ``before``."""
 
@@ -462,6 +463,7 @@ def judge_run_frame(
         routes=routes,
         audit_before=audit_before,
         audit_after=audit_after,
+        run_actors=run_actors,
     )
 
 
@@ -967,6 +969,8 @@ def verify_run(
             bound_effects,
             params,
             audit_verifier=_audit_verifier(cfg, params),
+            # The executor's own id is this run, never "another user".
+            run_actors=[str(run_record.get("executor_id") or "")],
         )
     else:
         frame = FrameVerdict(
