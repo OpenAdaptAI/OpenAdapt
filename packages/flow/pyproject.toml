@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-flow"
-version = "2.2.0"
+version = "2.3.0"
 description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
 readme = "README.md"
 license = { text = "MIT" }
@@ -366,6 +366,8 @@ exclude = [
     "/public-demo",
     "/THIRD_PARTY_NOTICES.md",
     "/benchmark/openimis_claims",
+    # openIMIS runs, tasks and results committed under other benchmarks.
+    "/benchmark/**/*openimis*",
     "/benchmark/reliability",
     "/docs/validation/IDENTITY_ROC.md",
     "/docs/validation/adversary_corpus_manifest.json",
