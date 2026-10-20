@@ -884,6 +884,26 @@ def reads_from_sqlite(
                     scope=sorted(set(scope.values())),
                 )
             )
+            if scope:
+                # The scoped read can't see another subject's rows in the same
+                # table, so an edit there would pass. Read the table whole too:
+                # the frame then sees every row the save didn't declare.
+                search.surfaces.append(
+                    Surface(
+                        name=_unique_name(f"{table}_all", search.taken),
+                        config={
+                            "kind": "sql",
+                            "sqlite_database": str(db_path),
+                            "sql_query": query,
+                        },
+                        after=rows,
+                        before=_minus(rows, row),
+                        before_recorded=False,
+                        source=f"table {table}, every row",
+                        target=row,
+                        bound=bound,
+                    )
+                )
     finally:
         conn.close()
     if complete:
@@ -1707,7 +1727,7 @@ def gate_on_database(proposal: Proposal, db_path: Path, cfg: Any) -> Optional[An
         or "id" not in target.target
     ):
         return None
-    table = target.source.split(" ", 1)[1]
+    table = target.source.split(" ", 1)[1].split(",", 1)[0]
     copy_ = SqliteCopy(db_path, table, target.target, saved_key=target.target["id"])
     return run_gate(cfg, proposal.params, copy_)
 
