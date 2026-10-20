@@ -223,6 +223,14 @@ class RecordConfig(BaseModel):
     duplicate_key: Optional[str] = None
     expected_count: int = Field(default=1, ge=1)
     timeout_s: float = Field(default=5.0, gt=0)
+    #: Also check that the save added exactly this record and nothing else:
+    #: the records added since the snapshot taken before the save must be
+    #: exactly ``expected_count`` records with these fields (an
+    #: ``exact_new_set`` check). ``problems_only`` needs it for a create.
+    exact_new_set: bool = False
+    #: The field that tells a new record from one that was already there, for
+    #: ``exact_new_set`` (an id the system of record assigns).
+    identity_field: str = "id"
 
     def expr(self, field: str) -> ValueExpr:
         value = self.fields[field]
@@ -400,6 +408,12 @@ def _expand(
     return value
 
 
+#: ``openadapt.verify/v1`` sections only ``verify-run`` reads. Qualify accepts
+#: and ignores them, so one file serves both (the mirror of verify-run's
+#: ``QUALIFY_ONLY_SECTIONS``).
+VERIFY_RUN_ONLY_SECTIONS: tuple[str, ...] = ("frame",)
+
+
 def parse_verify_config(
     data: Any,
     *,
@@ -410,6 +424,7 @@ def parse_verify_config(
 
     if not isinstance(data, dict):
         raise QualifyConfigError("verify.yaml must be a YAML mapping")
+    data = {k: v for k, v in data.items() if k not in VERIFY_RUN_ONLY_SECTIONS}
     missing: list[str] = []
     data = _expand(data, missing, env)
     if missing:

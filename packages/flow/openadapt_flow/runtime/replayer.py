@@ -2667,8 +2667,10 @@ class Replayer:
             ids = [s.id for s in workflow.steps[step_index : end_index + 1]]
             if not self.api_steps:
                 reason = self.api_steps_off_reason or "API steps are off for this run"
-            elif getattr(self, "_surface_router", None) is not None:
-                reason = "a run across several windows or tabs uses the GUI steps"
+            elif surface_reason := self._web_form_surface_refusal(
+                workflow, step_index, end_index, binding
+            ):
+                reason = surface_reason
             elif self._approval_gated() and not callable(
                 getattr(self._actuator_for(binding), "prepare", None)
             ):
@@ -2724,31 +2726,90 @@ class Replayer:
             return end_index, save, reason
         return None
 
+    def _web_form_surface_refusal(
+        self, workflow: Workflow, start_index: int, end_index: int, binding: Any
+    ) -> Optional[str]:
+        """Why a multi-surface run can't use this API step, or None when it can.
+
+        The API step is bound to its span's surface the way it is bound to the
+        page in a single-surface run: every step it replaces runs on that one
+        browser surface, none of them switches, opens or closes a surface, the
+        surface is the active one, and the request goes to that surface's
+        session on its declared origin.
+        """
+
+        router = getattr(self, "_surface_router", None)
+        if router is None:
+            return None
+        span = workflow.steps[start_index : end_index + 1]
+        surfaces = {s.surface or router.primary_id for s in span}
+        if len(surfaces) != 1:
+            return (
+                "the steps the API step replaces run on more than one surface, "
+                "so the GUI steps run"
+            )
+        if any(
+            s.action is ActionKind.SWITCH_SURFACE or s.opens or s.closes_surface
+            for s in span
+        ):
+            return (
+                "the steps the API step replaces switch, open or close a "
+                "surface, so the GUI steps run"
+            )
+        (surface_id,) = surfaces
+        if surface_id != router.active_id:
+            return "the API step's surface is not the active one, so the GUI steps run"
+        spec = router.specs[surface_id]
+        if spec.kind != "web":
+            return "the API step's surface is not a browser, so the GUI steps run"
+        actuator = self._actuator_for(binding)
+        if actuator is None:
+            return "there is no live browser session for the API step"
+        from openadapt_flow.runtime.surfaces import url_origin
+
+        if spec.is_page:
+            expected = spec.origin
+        else:
+            seen = router.observations.get(surface_id)
+            expected = seen.origin if seen is not None else None
+        actual = url_origin(
+            getattr(getattr(actuator, "transport", None), "base_url", None)
+        )
+        if expected is not None and actual != url_origin(expected):
+            return (
+                "the API step's session is on another origin than its surface, "
+                "so the GUI steps run"
+            )
+        return None
+
     def _governed_web_form_refusal(
         self, workflow: Workflow, save: Step
     ) -> Optional[str]:
         """Why a governed run can't use this API step, or None when it can.
 
-        The run's authorization must have admitted this exact API step. A
-        qualification case runs the path it names, and a managed (Cloud)
-        dispatch or a production qualification admission doesn't bind API
-        steps yet, so those run the GUI steps.
+        The run's authorization must have admitted this exact API step. For a
+        managed (Cloud) dispatch that is Cloud's authorization, whose
+        ``api_steps`` are inside the dispatch binding digest Cloud signs.
+
+        A qualification case runs the path its contract names for the save:
+        the API step when that path is ``api``, the GUI steps otherwise. A run
+        under a production qualification admission uses the API step only
+        when the qualified effect contract, which the signed admission binds,
+        names the save's API path; that contract exists only when the
+        qualification campaign ran the API path's cases.
         """
 
         authorization = self.governed_authorization
         assert authorization is not None
         if authorization.qualification_case_id is not None:
-            return (
-                "a qualification case runs the GUI path it names; qualifying "
-                "an API step's path is not supported yet"
-            )
-        if self.managed_dispatch_binding is not None:
-            return "a managed dispatch doesn't bind API steps yet"
-        if authorization.production_qualification_admission_id is not None:
-            return (
-                "a production qualification admission doesn't cover API steps "
-                "yet, so the qualified GUI path runs"
-            )
+            if authorization.qualification_case_action_paths.get(save.id) != "api":
+                return "a qualification case runs the GUI path it names"
+        elif authorization.production_qualification_admission_id is not None:
+            if not authorization.effect_requirements(save.id, "api"):
+                return (
+                    "the production qualification admission didn't qualify this "
+                    "API step's path, so the qualified GUI path runs"
+                )
         return authorization.admitted_api_step(save, workflow)
 
     def _resume_inside_web_form_span(
@@ -2837,6 +2898,8 @@ class Replayer:
         if result.api_fallback is not None:
             self._web_form_fallback_reason = result.api_fallback
             return None
+        router = getattr(self, "_surface_router", None)
+        surface = router.active_id if router is not None else None
         folded = [
             StepResult(
                 step_id=s.id,
@@ -2844,6 +2907,7 @@ class Replayer:
                 ok=True,
                 skipped=True,
                 actuation="api_folded",
+                surface=surface,
                 risk=s.risk,
                 risk_explanation=s.risk_explanation,
                 risk_review_required=s.risk_review_required,
@@ -8971,7 +9035,11 @@ class Replayer:
             return self.api_actuator
         if self.web_form_actuator is not None:
             return self.web_form_actuator
-        page = getattr(self.backend, "page", None)
+        # In a multi-surface run the request goes through the active
+        # surface's session, which on a resume may not be self.backend yet.
+        router = getattr(self, "_surface_router", None)
+        backend = router.active_backend if router is not None else self.backend
+        page = getattr(backend, "page", None)
         if page is None:
             return None
         from openadapt_flow.runtime.actuators.web_form import (
