@@ -280,13 +280,29 @@ Under qualification:
   probes and resumed run use the GUI steps, because the repair and the
   person's approval are about the GUI step ([SELF_REPAIR.md](SELF_REPAIR.md)).
 
+## In a multi-surface program
+
+An API step inside a program that runs across several tabs, popups or
+apps ([MULTI_SURFACE.md](MULTI_SURFACE.md)) is bound to its surface, just as it is
+bound to the page in a single-surface program. It runs when:
+
+- every step it replaces runs on one browser surface;
+- none of those steps switches, opens or closes a surface;
+- that surface is the active one;
+- the request goes to that surface's session, on the surface's recorded origin
+  (a popup's declared origin, or the origin last observed on the primary).
+
+The folded steps record the surface they stand for. The outcome reads `VERIFIED`
+only when every result's surface matches its step's declared surface. When one of
+these conditions fails, the GUI steps run and the first of them says why.
+
 Every feature under every run profile, and the API step with each other
 feature, is in [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## When it doesn't run
 
-The API step runs only in a plain linear run. It doesn't run, and the GUI
-steps run instead, when:
+The API step runs only in a linear run (a program with a single surface or
+several). It doesn't run, and the GUI steps run instead, when:
 
 - an approval mode is on and the API actuator can't prepare the request
   before sending it (a deployment's own actuator without `prepare`);
@@ -298,6 +314,9 @@ steps run instead, when:
 - the save checks the right record on screen and the API step names no
   right-record contract;
 - there's no live browser session (`--backend web` only);
+- in a multi-surface program, the steps it replaces leave their one browser
+  surface, or the session is on another origin (see
+  [In a multi-surface program](#in-a-multi-surface-program));
 - it is a self-repair probe or the resumed run of a repaired bundle.
 
 `Replayer(api_steps=False)` keeps a run on the GUI.

@@ -116,7 +116,7 @@ refuses says it in those words.
 
 | Profile | Result |
 | --- | --- |
-| Default (gated) | Works: an API step inside it runs on the GUI (below) |
+| Default (gated) | Works: an API step inside it runs on its surface (below) |
 | Durable | Works: resume re-binds each surface by identity |
 | Governed | Works |
 | Pinned | Works |
@@ -131,7 +131,7 @@ refuses says it in those words.
 | Pipelined read-back | Works: when the run isn't durable |
 | Self-repair | Refused: self-repair's probes and resumed run exercise the repaired GUI step, and the person approved that step, so its API step doesn't run (the first, ordinary run can use the API step) |
 | Standard changes | Refused: self-repair's probes and resumed run exercise the repaired GUI step, and the person approved that step, so its API step doesn't run (the repaired bundle's test-record run is GUI-only too) |
-| Multi-surface | Refused: a run across several windows or tabs uses the GUI steps |
+| Multi-surface | Works: the steps it replaces stay on one browser surface, on its origin |
 
 ## Evidence
 
@@ -177,4 +177,4 @@ Each cell names the tests that show it. They run in CI.
 - API step / Pipelined read-back: `tests/test_api_step_readback_repair.py::test_an_api_save_reads_back_while_the_next_item_runs`
 - API step / Self-repair: `tests/test_api_step_readback_repair.py::test_a_probe_or_resumed_run_never_sends_the_api_step`
 - API step / Standard changes: `tests/test_api_step_readback_repair.py::test_a_standard_change_test_record_run_is_gui_only`
-- API step / Multi-surface: `tests/test_compatibility_matrix.py::test_api_step_refuses_in_a_multi_surface_run`
+- API step / Multi-surface: `tests/test_api_step_multi_surface.py::test_the_api_step_runs_on_its_surface_in_a_governed_multi_surface_run`, `tests/test_api_step_multi_surface.py::test_the_session_must_be_on_the_surfaces_origin`, `tests/test_api_step_multi_surface.py::test_a_span_that_leaves_its_surface_runs_on_the_gui`

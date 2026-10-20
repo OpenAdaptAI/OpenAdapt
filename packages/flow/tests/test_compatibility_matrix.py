@@ -231,14 +231,6 @@ def test_api_step_refuses_where_the_matrix_says(tmp_path, profile):
     assert report.results[0].api_fallback == reason
 
 
-def test_api_step_refuses_in_a_multi_surface_run(tmp_path):
-    run = Run(tmp_path, "default")
-    replayer = run.replayer()
-    replayer._surface_router = object()
-    _end, _save, why = replayer._web_form_span_at(run.workflow, 0, durable=False)
-    assert why == matrix.API_MULTI_SURFACE
-
-
 def test_the_repair_reason_is_the_runtimes():
     from openadapt_flow.repair.self_repair import REPAIR_GUI_ONLY
 
