@@ -77,7 +77,9 @@ _ISO_SECONDS = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
 _B64 = r"^[A-Za-z0-9+/]+={0,2}$"
 _OUTCOME = r"^[A-Z][A-Z_]{0,31}$"
 _RUN_ID = re.compile(r"[^A-Za-z0-9._:-]")
-_SCOPE_ITEM = r"^[A-Za-z0-9._-]{1,64}$"
+# A short label (a lower-case prefix and a number, "r3"); never free text such
+# as a record number. The authorization lists which labels are allowed.
+_SCOPE_ITEM = r"^[a-z]{1,8}[0-9]{1,6}$"
 _OPTIONAL_FIELDS = ("authorization_sha256", "scope_item")
 
 SubjectKind = Literal["run-report", "record", "export", "file"]
@@ -167,11 +169,12 @@ class LocalSealVerification:
     anchor: Optional["AnchorVerification"] = None
     # Set with reason="revoked_key" once the signature itself has verified.
     revoked_at: Optional[str] = None
-    # With an authorization: when the log recorded it, against the run's own
-    # started_at. "before_run" / "after_run"; "not_anchored" when the
-    # authorization has no checked anchor or the run states no start time.
-    # Re-sealing a run under an authorization signed later never makes it
-    # "before_run": the run's own time decides.
+    # With an authorization: "before_run" only when both anchors are checked
+    # and auth log time < the run's started_at <= the Seal's log time (a
+    # started_at after the Seal was logged is not believed). "after_run" for
+    # any other order with both anchors; "not_anchored" when either anchor is
+    # missing or the run states no start time. Re-sealing never makes a later
+    # authorization "before_run".
     authorization_timing: Optional[str] = None
     # Secondary: the authorization's log time against this Seal's log time,
     # "before_seal" / "after_seal" (None without both anchors).
@@ -377,7 +380,7 @@ def seal_run(
     report_path = run_dir / "report.json"
     try:
         raw = report_path.read_bytes()
-        report = json.loads(raw.decode("utf-8"))
+        report = loads_strict(raw.decode("utf-8"))
     except (OSError, UnicodeDecodeError, ValueError) as exc:
         raise LocalSealError("report_unreadable", str(report_path)) from exc
     if not isinstance(report, dict):
@@ -577,7 +580,7 @@ def _check_authorization(
     from openadapt_flow.run_authorization import check_run
 
     try:
-        report = json.loads(report_path.read_bytes())  # the bytes the Seal covers
+        report = loads_strict(report_path.read_bytes())  # the bytes the Seal covers
     except (OSError, ValueError):
         return dataclasses.replace(found, ok=False, reason="malformed")
     problem = check_run(LocalSealV1.model_validate(seal).wire(), report, auth)
@@ -585,13 +588,12 @@ def _check_authorization(
         return dataclasses.replace(found, ok=False, reason=problem)  # type: ignore[arg-type]
     timing, vs_seal = "not_anchored", None
     auth_time = getattr(auth.anchor, "integrated_time", None) if auth.anchor else None
-    if auth_time is not None:
+    seal_time = found.anchor.integrated_time if found.anchor is not None else None
+    if auth_time is not None and seal_time is not None:
+        vs_seal = "before_seal" if auth_time <= seal_time else "after_seal"
         started = _started_epoch(report.get("started_at"))
         if started is not None:
-            timing = "before_run" if auth_time < started else "after_run"
-        if found.anchor is not None:
-            seal_time = found.anchor.integrated_time or 0
-            vs_seal = "before_seal" if auth_time <= seal_time else "after_seal"
+            timing = "before_run" if auth_time < started <= seal_time else "after_run"
     return dataclasses.replace(
         found, authorization_timing=timing, authorization_vs_seal=vs_seal
     )

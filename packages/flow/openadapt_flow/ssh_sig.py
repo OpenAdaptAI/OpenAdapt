@@ -18,9 +18,10 @@ import base64
 import hashlib
 import re
 import struct
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 MAGIC = b"SSHSIG"
 _BEGIN = "-----BEGIN SSH SIGNATURE-----"
@@ -237,13 +238,37 @@ def github_keys_url(user: str) -> str:
     return f"https://{GITHUB_HOST}/{user}.keys"
 
 
-def fetch_github_keys(user: str) -> list[str]:
-    """The key lines GitHub publishes for ``user`` (all types; callers filter)."""
-    request = urllib.request.Request(
-        github_keys_url(user), headers={"Accept": "text/plain"}
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        raise SshSigError(f"github.com answered with a redirect ({code}); not followed")
+
+
+def _github_opener() -> urllib.request.OpenerDirector:
+    """HTTPS to github.com only: no proxy (whatever the environment says), no redirects."""
+    import ssl
+
+    return urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        _NoRedirect(),
+        urllib.request.HTTPSHandler(context=ssl.create_default_context()),
     )
-    with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:  # noqa: S310
-        text = response.read().decode("utf-8", "replace")
+
+
+def fetch_github_keys(user: str, opener: Optional[Any] = None) -> list[str]:
+    """The key lines GitHub publishes for ``user`` (all types; callers filter).
+
+    Fetches ``https://github.com/<user>.keys`` with certificate checks, no
+    proxy and no redirects, and refuses any answer that isn't from that URL.
+    """
+    url = github_keys_url(user)
+    request = urllib.request.Request(url, headers={"Accept": "text/plain"})
+    with (opener or _github_opener()).open(request, timeout=_TIMEOUT) as response:
+        final = urllib.parse.urlsplit(response.geturl())
+        if final.scheme != "https" or final.hostname != GITHUB_HOST:
+            raise SshSigError(f"answer came from {response.geturl()}, not {url}")
+        if getattr(response, "status", 200) != 200:
+            raise SshSigError(f"github.com answered {response.status}")
+        text = response.read(1_000_000).decode("utf-8", "replace")
     return [line.strip() for line in text.splitlines() if line.strip()]
 
 

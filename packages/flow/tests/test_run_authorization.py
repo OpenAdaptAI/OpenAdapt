@@ -14,6 +14,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -146,7 +147,10 @@ def test_create_writes_statement_and_github_snapshot(tmp_path):
         "items": ["r3", "r4", "r5", "r6"],
         "profile": "standard",
         "seal_key_ids": [signer.key_id],
+        "reusable": False,
     }
+    # The signer's key is inside what gets signed.
+    assert data["signer_fingerprint"] == ssh_sig.fingerprint(person.raw)
     assert len(data["nonce"]) == 64 and data["bundle_content_digest"] == BUNDLE
     snapshot = (tmp_path / "auth" / SIGNERS_FILE).read_text()
     assert f"https://github.com/{USER}.keys" in snapshot
@@ -172,15 +176,82 @@ def test_signed_authorization_verifies_offline(tmp_path, monkeypatch):
     result = verify(tmp_path / "auth")
     assert result.ok, result.reason
     assert result.signer_fingerprint == ssh_sig.fingerprint(person.raw)
-    assert result.signers_source == "the stored GitHub snapshot"
+    # Offline, the identity is only what the files claim.
+    assert not result.identity_verified
+    assert result.signers_source == f"not verified (self-asserted github:{USER})"
+    assert verify(tmp_path / "auth", live=person.github).identity_verified
 
 
 def test_wrong_key_is_refused(tmp_path):
     person, stranger = Person(), Person()
     _, _, statement, _ = _setup(tmp_path, person)
-    stranger.sign(statement)  # a valid signature, by a key GitHub doesn't list
+    stranger.sign(statement)  # a valid signature, by a key the statement doesn't name
     result = verify(statement)
-    assert result.reason == "auth_unknown_signer"
+    assert result.reason == "auth_signer_mismatch"
+
+
+def test_a_forged_snapshot_never_verifies_an_identity(tmp_path, rekor):
+    """The review's attack: a runner writes its own snapshot naming its key as the victim."""
+    victim, runner = Person(), Person()
+    home = tmp_path / "home"
+    signer = signer_for(home)
+    # The runner builds a statement for its own key, claiming github:<victim>.
+    statement = create(
+        tmp_path / "auth",
+        bundle_content_digest=BUNDLE,
+        items=["r3"],
+        profile="standard",
+        authorizer=f"github:{USER}",
+        seal_key_ids=[signer.key_id],
+        fetch_keys=lambda user: [ssh_sig.key_line(runner.raw)],  # its own "GitHub"
+    )
+    runner.sign(statement)
+    registry = parse_key_registry([signer.registry_entry()])
+    anchor(tmp_path / "auth", signer, log_keys=[rekor.log], submit=rekor.submit, env={})
+    plain = verify(statement)
+    anchored = verify(
+        statement, registry=registry, require_anchor=True, log_keys=[rekor.log]
+    )
+    for result in (plain, anchored):
+        assert result.ok and not result.identity_verified
+        assert "self-asserted" in str(result.signers_source)
+    # Against GitHub itself (the victim's real keys) it is refused.
+    assert verify(statement, live=victim.github).reason == "auth_not_on_github"
+    # And the operator profile never links the claimed identity.
+    run = _run(tmp_path, "r3")
+    seal_authorized(run, tmp_path / "auth", "r3", signer, home=home)
+    anchor_seal(
+        run / SEAL_FILE, signer, log_keys=[rekor.log], submit=rekor.submit, env={}
+    )
+    profile = build_profile(
+        [run], registry, log_keys=[rekor.log], authorizations=[plain]
+    )
+    assert "linked_identity" not in profile["operators"][signer.key_id]
+
+
+def test_create_needs_a_named_key_when_github_lists_several(tmp_path):
+    one, two = Person(), Person()
+    keys = [ssh_sig.key_line(one.raw), ssh_sig.key_line(two.raw)]
+    with pytest.raises(AuthorizationError) as exc:
+        _setup(tmp_path, one, fetch_keys=lambda user: keys)
+    assert exc.value.code == "auth_signer_ambiguous"
+    _, _, statement, _ = _setup(
+        tmp_path,
+        one,
+        fetch_keys=lambda user: keys,
+        signer_fingerprint=ssh_sig.fingerprint(two.raw),
+    )
+    assert json.loads(statement.read_text())[
+        "signer_fingerprint"
+    ] == ssh_sig.fingerprint(two.raw)
+    with pytest.raises(AuthorizationError) as exc:
+        _setup(
+            tmp_path / "x",
+            one,
+            fetch_keys=lambda user: keys,
+            signer_fingerprint=ssh_sig.fingerprint(Person().raw),
+        )
+    assert exc.value.code == "auth_not_on_github"
 
 
 def test_key_no_longer_on_github_is_refused_live(tmp_path):
@@ -257,7 +328,8 @@ def test_pinned_allowed_signers_replace_the_snapshot(tmp_path):
         ssh_sig.allowed_signers_line(f"github:{USER}", NAMESPACE, person.raw) + "\n"
     )
     ok = verify(statement, allowed_signers=mine)
-    assert ok.ok and ok.signers_source == "pinned allowed signers"
+    assert ok.ok and ok.identity_verified
+    assert ok.signers_source == f"pinned allowed signers {mine}"
 
 
 @pytest.mark.skipif(shutil.which("ssh-keygen") is None, reason="needs ssh-keygen")
@@ -433,41 +505,75 @@ def test_verify_checks_reference_scope_and_bundle(
     assert verify_run(run, registry, authorization=auth).reason == reason
 
 
+T0 = 1_800_000_000  # the authorization's log time in these tests
+
+
+def _iso(seconds: int) -> str:
+    from datetime import datetime, timezone
+
+    return datetime.fromtimestamp(seconds, timezone.utc).isoformat()
+
+
 @pytest.mark.parametrize(
-    ("started_at", "timing"),
+    ("started", "timing"),
     [
-        ("2026-10-19T12:00:00+00:00", "after_run"),  # signed after the run
-        ("2999-01-01T00:00:00+00:00", "before_run"),  # signed before the run
+        (T0 + 60, "before_run"),  # authorized, then the run, then the Seal logged
+        (T0 - 60, "after_run"),  # the run came first
+        (T0 + 7200, "after_run"),  # a start after the Seal was logged is not believed
+        (T0 + 10**9, "after_run"),  # a far-future start_at can't buy "before"
     ],
 )
-def test_timing_is_judged_against_the_runs_own_start(
-    tmp_path, rekor, started_at, timing
+def test_timing_needs_both_anchors_and_a_believable_start(
+    tmp_path, rekor, monkeypatch, started, timing
 ):
     person = Person()
     home, signer, statement, registry = _setup(tmp_path, person)
     person.sign(statement)
-    # Authorization logged first, then the run sealed under it and logged.
+    monkeypatch.setattr(time, "time", lambda: T0)
     anchor(tmp_path / "auth", signer, log_keys=[rekor.log], submit=rekor.submit, env={})
     run = _run(tmp_path, "r3")
     report = json.loads((run / "report.json").read_text())
-    report["started_at"] = started_at
+    report["started_at"] = _iso(started)
     (run / "report.json").write_text(json.dumps(report))
     seal_authorized(run, tmp_path / "auth", "r3", signer, home=home)
-    anchor_seal(
-        run / SEAL_FILE, signer, log_keys=[rekor.log], submit=rekor.submit, env={}
-    )
     auth = verify(
         tmp_path / "auth", registry=registry, require_anchor=True, log_keys=[rekor.log]
+    )
+    # The Seal not anchored yet: nothing independent about the order.
+    unanchored = verify_run(run, registry, authorization=auth)
+    assert unanchored.ok and unanchored.authorization_timing == "not_anchored"
+    monkeypatch.setattr(time, "time", lambda: T0 + 3600)
+    anchor_seal(
+        run / SEAL_FILE, signer, log_keys=[rekor.log], submit=rekor.submit, env={}
     )
     result = verify_run(
         run, registry, require_anchor=True, log_keys=[rekor.log], authorization=auth
     )
-    # Valid either way; re-sealing after signing never turns "after" into "before".
     assert result.ok and result.authorization_timing == timing
     assert result.authorization_vs_seal == "before_seal"
-    # Without the authorization's anchor nothing independent is known.
-    plain = verify_run(run, registry, authorization=verify(tmp_path / "auth"))
-    assert plain.ok and plain.authorization_timing == "not_anchored"
+
+
+def test_the_authorization_anchor_key_must_be_in_scope(tmp_path, rekor):
+    person = Person()
+    home, signer, statement, registry = _setup(tmp_path, person)
+    person.sign(statement)
+    outsider = seal_keys.SoftwareSigner(Ed25519PrivateKey.generate(), "file")
+    # Anchored by a pinned key that the statement's scope does not name.
+    from openadapt_flow.run_authorization import _record_fields
+    from openadapt_flow.seal_anchor import anchor_record
+
+    auth = verify(statement)
+    anchor_record(
+        _record_fields(str(auth.sha256), str(auth.signature_sha256)),
+        tmp_path / "auth" / "run-authorization.anchor.json",
+        outsider,
+        log_keys=[rekor.log],
+        submit=rekor.submit,
+        env={},
+    )
+    both = parse_key_registry([signer.registry_entry(), outsider.registry_entry()])
+    result = verify(statement, registry=both, require_anchor=True, log_keys=[rekor.log])
+    assert result.reason == "anchor_key_mismatch"
 
 
 def test_authorization_anchor_must_be_by_a_pinned_key(tmp_path, rekor):
@@ -578,7 +684,12 @@ def test_profile_counts_only_anchored_seals_and_shows_every_outcome(tmp_path, re
     anchor(tmp_path / "auth", signer, log_keys=[rekor.log], submit=rekor.submit, env={})
 
     profile = build_profile(runs + [tampered], registry, log_keys=[rekor.log])
-    assert profile["excluded"] == {"unanchored": 1, "not_valid": 1}
+    assert profile["excluded"] == {
+        "unanchored": 1,
+        "not_valid": 1,
+        "duplicate": 0,
+        "item_reused": 0,
+    }
     [op] = profile["operators"].values()
     assert op["seal_key_id"] == signer.key_id
     assert op["runs"] == 4
@@ -607,7 +718,14 @@ def test_profile_counts_only_anchored_seals_and_shows_every_outcome(tmp_path, re
     assert op["first_anchored_at"] <= op["last_anchored_at"]
     assert "linked_identity" not in op  # no authorization passed: pseudonymous
 
-    auth = verify(tmp_path / "auth")
+    # Offline only: the handle is self-asserted, so no identity is linked.
+    offline = verify(tmp_path / "auth")
+    plain = build_profile(
+        runs, registry, log_keys=[rekor.log], authorizations=[offline]
+    )
+    assert "linked_identity" not in plain["operators"][signer.key_id]
+    # Checked against GitHub (here a stand-in): linked.
+    auth = verify(tmp_path / "auth", live=person.github)
     linked = build_profile(runs, registry, log_keys=[rekor.log], authorizations=[auth])
     [op] = linked["operators"].values()
     assert op["linked_identity"] == [
@@ -616,7 +734,7 @@ def test_profile_counts_only_anchored_seals_and_shows_every_outcome(tmp_path, re
             "provider": "ssh-github",
             "ssh_key_fingerprint": ssh_sig.fingerprint(person.raw),
             "run_authorization_sha256": auth.sha256,
-            "checked_against": "the stored GitHub snapshot",
+            "checked_against": f"https://github.com/{USER}.keys now",
         }
     ]
     text = json.dumps(linked)
@@ -701,6 +819,22 @@ def test_cli_run_verify_authorize_and_profile(tmp_path, rekor):
     assert refused.returncode == 1 and "auth_scope_mismatch" in refused.stderr
     _anchor_all(run, tmp_path / "auth", signer, rekor)
     log = ["--log-key", str(log_pem), "--log-origin", "rekor.example"]
+    pinned = tmp_path / "my-allowed-signers"
+    pinned.write_text(
+        ssh_sig.allowed_signers_line(f"github:{USER}", NAMESPACE, person.raw) + "\n"
+    )
+    unverified = _cli(
+        tmp_path,
+        "authorize",
+        "verify",
+        auth_dir,
+        "--keys",
+        str(keys),
+        "--require-anchor",
+        *log,
+    )
+    assert unverified.returncode == 0, unverified.stderr
+    assert f"identity not verified (self-asserted github:{USER}" in unverified.stdout
     shown = _cli(
         tmp_path,
         "authorize",
@@ -709,6 +843,8 @@ def test_cli_run_verify_authorize_and_profile(tmp_path, rekor):
         "--keys",
         str(keys),
         "--require-anchor",
+        "--allowed-signers",
+        str(pinned),
         *log,
     )
     assert shown.returncode == 0, shown.stderr
@@ -722,6 +858,8 @@ def test_cli_run_verify_authorize_and_profile(tmp_path, rekor):
         "--require-anchor",
         "--authorization",
         auth_dir,
+        "--allowed-signers",
+        str(pinned),
         *log,
     )
     assert ok.returncode == 0, ok.stderr
@@ -735,6 +873,8 @@ def test_cli_run_verify_authorize_and_profile(tmp_path, rekor):
         str(keys),
         "--authorization",
         auth_dir,
+        "--allowed-signers",
+        str(pinned),
         "--out",
         str(out),
         *log,
@@ -751,3 +891,145 @@ def test_cli_run_verify_authorize_and_profile(tmp_path, rekor):
         tmp_path, "authorize", "verify", auth_dir, "--live", OPENADAPT_NO_OUTBOUND="1"
     )
     assert held.returncode == 1 and "auth_live_unavailable" in held.stderr
+
+
+def test_profile_and_verify_refuse_duplicates_and_reused_items(tmp_path, rekor):
+    import shutil as _shutil
+
+    person = Person()
+    home, signer, statement, registry = _setup(tmp_path, person)
+    person.sign(statement)
+    first = _run(tmp_path, "first")
+    seal_authorized(first, tmp_path / "auth", "r3", signer, home=home)
+    anchor_seal(
+        first / SEAL_FILE, signer, log_keys=[rekor.log], submit=rekor.submit, env={}
+    )
+    copy = tmp_path / "runs" / "copy"
+    _shutil.copytree(first, copy)  # the same Seal and log entry, given twice
+    second = _run(tmp_path, "second", outcome="FAILED", transaction="FAILED_PLATFORM")
+    seal_authorized(second, tmp_path / "auth", "r3", signer, home=home)  # r3 again
+    anchor_seal(
+        second / SEAL_FILE, signer, log_keys=[rekor.log], submit=rekor.submit, env={}
+    )
+    auth = verify(tmp_path / "auth")
+    profile = build_profile(
+        [first, copy, second], registry, log_keys=[rekor.log], authorizations=[auth]
+    )
+    assert profile["excluded"]["duplicate"] == 1
+    assert profile["excluded"]["item_reused"] == 1
+    assert profile["operators"][signer.key_id]["runs"] == 1
+    # verify over several runs refuses the reuse too.
+    keys = tmp_path / "keys.json"
+    keys.write_text(json.dumps({"keys": [signer.registry_entry()]}))
+    res = _cli(
+        tmp_path,
+        "verify",
+        str(first),
+        str(second),
+        "--keys",
+        str(keys),
+        "--authorization",
+        str(tmp_path / "auth"),
+    )
+    assert res.returncode == 1 and "auth_item_reused" in res.stderr
+
+
+def test_a_reusable_authorization_allows_many_runs_per_item(tmp_path, rekor):
+    person = Person()
+    home, signer, statement, registry = _setup(tmp_path, person, reusable=True)
+    person.sign(statement)
+    runs = []
+    for name in ("a", "b"):
+        run = _run(tmp_path, name)
+        seal_authorized(run, tmp_path / "auth", "r3", signer, home=home)
+        anchor_seal(
+            run / SEAL_FILE, signer, log_keys=[rekor.log], submit=rekor.submit, env={}
+        )
+        runs.append(run)
+    profile = build_profile(
+        runs, registry, log_keys=[rekor.log], authorizations=[verify(statement)]
+    )
+    assert profile["operators"][signer.key_id]["runs"] == 2
+
+
+@pytest.mark.parametrize("item", ["MRN0042", "r3 ", "patient-smith", "r", "3", "r3-x"])
+def test_scope_items_are_short_labels_never_free_text(tmp_path, item):
+    with pytest.raises(Exception):
+        _setup(tmp_path, Person(), items=[item])
+    run = _run(tmp_path, "run")
+    with pytest.raises(Exception):
+        sign_subject(
+            "run-report",
+            "a" * 64,
+            "run",
+            authorization_sha256="b" * 64,
+            scope_item=item,
+            home=tmp_path / "home",
+        )
+    assert run.exists()
+
+
+def test_reports_with_repeated_keys_are_refused(tmp_path):
+    person = Person()
+    home, signer, statement, _ = _setup(tmp_path, person)
+    person.sign(statement)
+    run = _run(tmp_path, "r3")
+    text = (run / "report.json").read_text()
+    (run / "report.json").write_text(
+        text.replace(
+            '"execution_profile": "standard"',
+            '"execution_profile": "demo", "execution_profile": "standard"',
+        )
+    )
+    with pytest.raises(LocalSealError) as exc:
+        seal_authorized(run, tmp_path / "auth", "r3", signer, home=home)
+    assert exc.value.code == "report_unreadable"
+    with pytest.raises(LocalSealError):
+        seal_run(run, home=home, enqueue=False)
+
+
+def test_github_fetch_refuses_redirects_proxies_and_other_hosts(monkeypatch):
+    import io
+
+    class Answer(io.BytesIO):
+        def __init__(self, url, body=b"", status=200):
+            super().__init__(body)
+            self._url, self.status = url, status
+
+        def geturl(self):
+            return self._url
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    class Opener:
+        def __init__(self, answer):
+            self.answer, self.asked = answer, []
+
+        def open(self, request, timeout=None):
+            self.asked.append(request.full_url)
+            return self.answer
+
+    good = Opener(Answer(f"https://github.com/{USER}.keys", b"ssh-ed25519 AAAA\n"))
+    assert ssh_sig.fetch_github_keys(USER, opener=good) == ["ssh-ed25519 AAAA"]
+    assert good.asked == [f"https://github.com/{USER}.keys"]
+    elsewhere = Opener(Answer("https://evil.example/keys", b"ssh-ed25519 AAAA\n"))
+    with pytest.raises(ssh_sig.SshSigError):
+        ssh_sig.fetch_github_keys(USER, opener=elsewhere)
+    # The real opener ignores proxy settings and follows no redirect.
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")
+    opener = ssh_sig._github_opener()
+    handlers = {type(h).__name__ for h in opener.handlers}
+    assert "_NoRedirect" in handlers
+    # No handler routes through a proxy, whatever HTTPS_PROXY says.
+    assert not any(
+        type(h).__name__ == "ProxyHandler" and getattr(h, "proxies", None)
+        for h in opener.handlers
+    )
+    with pytest.raises(ssh_sig.SshSigError):
+        ssh_sig._NoRedirect().redirect_request(
+            None, None, 302, "Found", {}, "https://x"
+        )

@@ -11,13 +11,18 @@ on GitHub::
     ssh-keygen -Y sign -n openadapt-run-authorization -f ~/.ssh/id_ed25519 \\
         run-authorization.json
 
-Next to the statement sit its signature (``run-authorization.json.sig``) and
-a snapshot of the signer's keys, taken from ``https://github.com/<user>.keys``
-when the statement was made, in ``ssh-keygen`` allowed-signers form
-(``run-authorization.allowed_signers``). Verification is offline against
-that snapshot, or against allowed signers the verifier pins. ``--live``
-re-reads the keys from github.com (the host is fixed; nothing in the files
-chooses where to fetch from) and refuses a key GitHub no longer lists.
+The statement names the signer's key (``signer_fingerprint``), so the
+signature is checked against a key the person themselves signed for. Next
+to the statement sit its signature (``run-authorization.json.sig``) and a
+copy of the user's GitHub keys from when the statement was made
+(``run-authorization.allowed_signers``, for ``ssh-keygen -Y verify``).
+
+Whose key it is gets checked in one of two ways. ``--live`` reads
+``https://github.com/<user>.keys`` (fixed host, HTTPS, no redirects, no
+proxy); ``--allowed-signers`` uses a file the verifier pins themself.
+Otherwise the identity is reported as not verified, self-asserted
+``github:<user>``. The stored copy can't vouch for identity: whoever writes
+the files can write it.
 
 Each Seal sealed under an authorization names its SHA-256 and the scope item
 it claims (``authorization_sha256``, ``scope_item``), signed by the Seal key.
@@ -47,7 +52,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Final, Literal, Mapping, Optional, Sequence
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictStr,
+    field_validator,
+)
 
 from openadapt_flow import ssh_sig
 
@@ -60,7 +72,10 @@ ANCHOR_FILE = "run-authorization.anchor.json"
 # Handle scheme -> identity provider. Only ssh-github is built so far.
 PROVIDERS: Final = {"github": "ssh-github"}
 _HEX64 = r"^[a-f0-9]{64}$"
-_ITEM = r"^[A-Za-z0-9._-]{1,64}$"
+# Item labels are short: a lower-case prefix and a number ("r3"), never free
+# text such as a record number or a name.
+_ITEM = r"^[a-z]{1,8}[0-9]{1,6}$"
+_FINGERPRINT = r"^SHA256:[A-Za-z0-9+/]{43}$"
 _KEY_ID = r"^seal-ed25519-[a-f0-9]{16}$"
 _PROFILE = r"^[a-z][a-z0-9_-]{0,31}$"
 _HANDLE = r"^github:[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$"
@@ -71,6 +86,7 @@ AuthorizationRefusal = Literal[
     "auth_malformed",
     "auth_unsigned",
     "auth_bad_signature",
+    "auth_signer_mismatch",
     "auth_unknown_signer",
     "auth_not_on_github",
     "auth_live_unavailable",
@@ -78,6 +94,7 @@ AuthorizationRefusal = Literal[
     "auth_reference_mismatch",
     "auth_scope_mismatch",
     "auth_bundle_mismatch",
+    "auth_item_reused",
 ]
 
 
@@ -93,6 +110,8 @@ class Scope(BaseModel):
     items: list[StrictStr] = Field(min_length=1, max_length=1000)
     profile: StrictStr = Field(pattern=_PROFILE)
     seal_key_ids: list[StrictStr] = Field(min_length=1, max_length=100)
+    # False: each item may be sealed once under this statement.
+    reusable: StrictBool = False
 
     @field_validator("items")
     @classmethod
@@ -100,7 +119,9 @@ class Scope(BaseModel):
         import re
 
         if len(set(value)) != len(value) or not all(re.match(_ITEM, v) for v in value):
-            raise ValueError("items are unique names of [A-Za-z0-9._-]")
+            raise ValueError(
+                "items are unique short labels: a lower-case prefix and a number, e.g. r3"
+            )
         return value
 
     @field_validator("seal_key_ids")
@@ -124,6 +145,7 @@ class RunAuthorizationV1(BaseModel):
     bundle_content_digest: StrictStr = Field(pattern=_HEX64)
     scope: Scope
     authorizer: StrictStr = Field(pattern=_HANDLE)
+    signer_fingerprint: StrictStr = Field(pattern=_FINGERPRINT)
     issued_at: StrictStr = Field(pattern=_ISO_SECONDS)
     nonce: StrictStr = Field(pattern=_HEX64)
 
@@ -143,7 +165,10 @@ class AuthorizationVerification:
     sha256: Optional[str] = None  # of run-authorization.json's exact bytes
     signature_sha256: Optional[str] = None
     signer_fingerprint: Optional[str] = None
-    signers_source: Optional[str] = None  # what the signer was checked against
+    signers_source: Optional[str] = None  # what the identity was checked against
+    # True only when the key was checked against github.com live or against
+    # allowed signers the verifier pinned; never from the stored copy.
+    identity_verified: bool = False
     anchor: Any = None
     detail: str = field(default="")
 
@@ -182,6 +207,8 @@ def create(
     authorizer: str,
     seal_key_ids: Sequence[str],
     fetch_keys: Callable[[str], list[str]] = ssh_sig.fetch_github_keys,
+    signer_fingerprint: Optional[str] = None,
+    reusable: bool = False,
     now: Optional[datetime] = None,
     env: Optional[Mapping[str, str]] = None,
 ) -> Path:
@@ -193,20 +220,9 @@ def create(
     """
     from openadapt_flow import no_outbound
 
-    statement = RunAuthorizationV1.model_validate(
-        {
-            "schema": SCHEMA,
-            "bundle_content_digest": bundle_content_digest,
-            "scope": {
-                "items": list(items),
-                "profile": profile,
-                "seal_key_ids": list(seal_key_ids),
-            },
-            "authorizer": authorizer,
-            "issued_at": _utc_seconds(now),
-            "nonce": secrets.token_hex(32),
-        }
-    )
+    if not str(authorizer).startswith("github:"):
+        raise AuthorizationError("auth_malformed", "authorizer is github:<user>")
+    user = str(authorizer).split(":", 1)[1]
     out_dir = Path(out_dir)
     path, _, signers_path, _ = _paths(out_dir / STATEMENT_FILE)
     if path.exists() or signers_path.exists():
@@ -215,13 +231,42 @@ def create(
         raise AuthorizationError(
             "held_no_outbound", "reading GitHub's keys needs the network"
         )
-    user = statement.github_user()
     keys = ssh_sig.ed25519_keys(fetch_keys(user))
     if not keys:
         raise AuthorizationError(
             "auth_no_ed25519_key",
             f"{ssh_sig.github_keys_url(user)} lists no ssh-ed25519 key",
         )
+    prints = [ssh_sig.fingerprint(k) for k in keys]
+    if signer_fingerprint is None:
+        if len(prints) != 1:
+            raise AuthorizationError(
+                "auth_signer_ambiguous",
+                f"GitHub lists {len(prints)} Ed25519 keys; name one with "
+                f"--signer-fingerprint ({', '.join(prints)})",
+            )
+        signer_fingerprint = prints[0]
+    elif signer_fingerprint not in prints:
+        raise AuthorizationError(
+            "auth_not_on_github",
+            f"{signer_fingerprint} is not among {ssh_sig.github_keys_url(user)}",
+        )
+    statement = RunAuthorizationV1.model_validate(
+        {
+            "schema": SCHEMA,
+            "bundle_content_digest": bundle_content_digest,
+            "scope": {
+                "items": list(items),
+                "profile": profile,
+                "seal_key_ids": list(seal_key_ids),
+                "reusable": bool(reusable),
+            },
+            "authorizer": authorizer,
+            "signer_fingerprint": signer_fingerprint,
+            "issued_at": _utc_seconds(now),
+            "nonce": secrets.token_hex(32),
+        }
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
     when = _utc_seconds(now)
     lines = [
@@ -249,16 +294,19 @@ def verify(
     require_anchor: bool = False,
     log_keys: Optional[Sequence[Any]] = None,
 ) -> AuthorizationVerification:
-    """Verify a run authorization offline; optionally re-read GitHub and the anchor.
+    """Verify a run authorization; say plainly whether the identity was checked.
 
-    ``allowed_signers`` pins the verifier's own allowed-signers file instead
-    of the snapshot stored next to the statement. ``live`` re-reads the
-    authorizer's keys from github.com. With ``require_anchor``, the anchor
-    must verify against the pinned Seal-key ``registry``.
+    The signature must verify and come from the key the statement names. The
+    identity (that the key is ``github:<user>``'s) is verified only by
+    ``live`` (reads github.com now) or ``allowed_signers`` (a file the
+    verifier pins). Without either the result can still be ``ok``, with
+    ``identity_verified`` False. With ``require_anchor``, the anchor must
+    verify against the pinned Seal-key ``registry`` and come from a Seal key
+    in the authorization's scope.
     """
     from openadapt_flow.offline_seal import loads_strict
 
-    statement_path, sig_path, snapshot_path, anchor_file = _paths(Path(target))
+    statement_path, sig_path, _, anchor_file = _paths(Path(target))
     try:
         raw = statement_path.read_bytes()
     except FileNotFoundError:
@@ -285,62 +333,69 @@ def verify(
     except ssh_sig.SshSigError as exc:
         return dataclasses.replace(base, reason="auth_bad_signature", detail=str(exc))
     fp = ssh_sig.fingerprint(signer)
-    signers_path = Path(allowed_signers) if allowed_signers else snapshot_path
-    try:
-        signers = ssh_sig.parse_allowed_signers(
-            signers_path.read_text(encoding="utf-8")
-        )
-    except (OSError, UnicodeDecodeError, ssh_sig.SshSigError) as exc:
+    base = dataclasses.replace(base, signer_fingerprint=fp)
+    if fp != statement.signer_fingerprint:
         return dataclasses.replace(
             base,
-            reason="auth_unknown_signer",
-            signer_fingerprint=fp,
-            detail=f"no usable allowed signers at {signers_path}: {exc}",
+            reason="auth_signer_mismatch",
+            detail=f"signed by {fp}, the statement names {statement.signer_fingerprint}",
         )
-    if not ssh_sig.is_allowed(signers, statement.authorizer, NAMESPACE, signer):
-        return dataclasses.replace(
-            base,
-            reason="auth_unknown_signer",
-            signer_fingerprint=fp,
-            detail=f"{fp} is not an allowed signer for {statement.authorizer}",
-        )
-    source = (
-        "pinned allowed signers" if allowed_signers else "the stored GitHub snapshot"
-    )
+    user = statement.github_user()
+    verified, source = False, f"not verified (self-asserted {statement.authorizer})"
+    if allowed_signers is not None:
+        try:
+            pinned = ssh_sig.parse_allowed_signers(
+                Path(allowed_signers).read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeDecodeError, ssh_sig.SshSigError) as exc:
+            return dataclasses.replace(
+                base,
+                reason="auth_unknown_signer",
+                detail=f"no usable allowed signers at {allowed_signers}: {exc}",
+            )
+        if not ssh_sig.is_allowed(pinned, statement.authorizer, NAMESPACE, signer):
+            return dataclasses.replace(
+                base,
+                reason="auth_unknown_signer",
+                detail=f"{fp} is not an allowed signer for {statement.authorizer}",
+            )
+        verified, source = True, f"pinned allowed signers {allowed_signers}"
     if live is not None:
-        user = statement.github_user()
         try:
             listed = ssh_sig.ed25519_keys(live(user))
         except Exception as exc:  # network, HTTP or decoding errors: closed reason
             return dataclasses.replace(
-                base,
-                reason="auth_live_unavailable",
-                signer_fingerprint=fp,
-                detail=type(exc).__name__,
+                base, reason="auth_live_unavailable", detail=type(exc).__name__
             )
         if signer not in listed:
             return dataclasses.replace(
                 base,
                 reason="auth_not_on_github",
-                signer_fingerprint=fp,
-                detail=f"{ssh_sig.github_keys_url(user)} no longer lists {fp}",
+                detail=f"{ssh_sig.github_keys_url(user)} does not list {fp}",
             )
-        source += f" and {ssh_sig.github_keys_url(user)} now"
+        live_source = f"{ssh_sig.github_keys_url(user)} now"
+        source = f"{source} and {live_source}" if verified else live_source
+        verified = True
     anchor = None
     if require_anchor:
         anchor = verify_anchor(
-            sha, sig_sha, anchor_file, registry or [], log_keys=log_keys
+            sha,
+            sig_sha,
+            anchor_file,
+            registry or [],
+            log_keys=log_keys,
+            scope_key_ids=statement.scope.seal_key_ids,
         )
         if not anchor.ok:
             return dataclasses.replace(
-                base,
-                reason=anchor.reason,
-                signer_fingerprint=fp,
-                signers_source=source,
-                anchor=anchor,
+                base, reason=anchor.reason, signers_source=source, anchor=anchor
             )
     return dataclasses.replace(
-        base, ok=True, signer_fingerprint=fp, signers_source=source, anchor=anchor
+        base,
+        ok=True,
+        signers_source=source,
+        identity_verified=verified,
+        anchor=anchor,
     )
 
 
@@ -355,8 +410,9 @@ def verify_anchor(
     registry: Sequence[Any],
     *,
     log_keys: Optional[Sequence[Any]] = None,
+    scope_key_ids: Optional[Sequence[str]] = None,
 ) -> Any:
-    """The authorization's transparency-log anchor, signed by a pinned Seal key."""
+    """The authorization's anchor, signed by a pinned Seal key that is in scope."""
     import base64
 
     from openadapt_flow.seal_anchor import (
@@ -369,6 +425,8 @@ def verify_anchor(
     if anchor is None:
         return AnchorVerification(False, reason="anchor_missing")
     key_id = anchor.get("key_id")
+    if scope_key_ids is not None and key_id not in scope_key_ids:
+        return AnchorVerification(False, reason="anchor_key_mismatch")
     keys = [k for k in registry if k.key_id == key_id and k.status == "active"]
     if len(keys) != 1:
         return AnchorVerification(False, reason="anchor_key_mismatch")
@@ -441,6 +499,35 @@ def check_run(
     return None
 
 
+def reused_items(
+    seals: Sequence[Mapping[str, Any]], auth: AuthorizationVerification
+) -> set[str]:
+    """Seal SHA-256s that claim an item already claimed under the same statement.
+
+    An item is single-use unless the statement says ``reusable``. The first
+    Seal (by ``issued_at``, then digest) keeps the item; the rest are reuse.
+    """
+    from openadapt_flow.offline_seal import LocalSealV1, seal_sha256
+
+    if auth.statement is None or auth.statement.scope.reusable:
+        return set()
+    seen: dict[str, str] = {}
+    reused: set[str] = set()
+    ordered = sorted(
+        (LocalSealV1.model_validate(s).wire() for s in seals),
+        key=lambda w: (w["issued_at"], seal_sha256(w)),
+    )
+    for wire in ordered:
+        if wire.get("authorization_sha256") != auth.sha256:
+            continue
+        item = str(wire.get("scope_item"))
+        if item in seen:
+            reused.add(seal_sha256(wire))
+        else:
+            seen[item] = seal_sha256(wire)
+    return reused
+
+
 def seal_authorized(
     run_dir: Path,
     target: Path,
@@ -462,8 +549,10 @@ def seal_authorized(
     auth = verify(target)
     if not auth.ok:
         raise LocalSealError(str(auth.reason), auth.detail)
+    from openadapt_flow.offline_seal import loads_strict
+
     try:
-        report = json.loads((Path(run_dir) / "report.json").read_text(encoding="utf-8"))
+        report = loads_strict((Path(run_dir) / "report.json").read_bytes())
     except (OSError, ValueError) as exc:
         raise LocalSealError("report_unreadable", str(run_dir)) from exc
     if not isinstance(report, dict):

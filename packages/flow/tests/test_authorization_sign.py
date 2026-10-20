@@ -133,7 +133,7 @@ def test_summary_shows_who_what_and_what_is_not_allowed(tmp_path):
     key = tmp_path / "id_ed25519"
     raw = _write_pub_only(key)
     statement = _statement(tmp_path, bundle, raw)
-    summary, on_github = prepare(statement, key, [bundle])
+    summary, on_github, _ = prepare(statement, key, [bundle])
     assert on_github
     lines = summary.splitlines()
     assert lines[0] == "You are authorizing OpenAdapt to run this program"
@@ -232,14 +232,38 @@ def test_yes_signs_with_ssh_keygen_and_verifies(tmp_path):
     assert "auth_already_signed" in out[-1]
 
 
+def test_a_key_other_than_the_named_one_is_refused_before_any_prompt(tmp_path):
+    bundle = _bundle(tmp_path)
+    named = _write_pub_only(
+        tmp_path / "named"
+    )  # the key GitHub lists and the statement names
+    statement = _statement(tmp_path, bundle, named)
+    other = tmp_path / "other"
+    _write_pub_only(other)
+    asked: list[str] = []
+    out: list[str] = []
+    assert sign(statement, other, [bundle], ask=asked.append, say=out.append) == 1
+    assert asked == [] and "auth_signer_mismatch" in out[-1]
+
+
 @pytest.mark.skipif(not HAS_SSH_KEYGEN, reason="needs ssh-keygen")
-def test_key_not_on_github_warns_and_needs_yes_typed(tmp_path):
+def test_key_missing_from_the_stored_copy_warns_and_needs_yes_typed(tmp_path):
     bundle = _bundle(tmp_path)
     key = tmp_path / "id_ed25519"
-    _ssh_key(key)
-    github_key = _write_pub_only(tmp_path / "someone-else")  # what GitHub lists
-    statement = _statement(tmp_path, bundle, github_key)
-    summary, on_github = prepare(statement, key, [bundle])
+    raw = _ssh_key(key)
+    statement = _statement(tmp_path, bundle, raw)
+    # The copy of the GitHub keys next to the statement no longer lists it.
+    signers = tmp_path / "auth" / "run-authorization.allowed_signers"
+    signers.write_text(
+        "# copy\n"
+        + ssh_sig.allowed_signers_line(
+            "github:synthetic-operator",
+            "openadapt-run-authorization",
+            _write_pub_only(tmp_path / "x"),
+        )
+        + "\n"
+    )
+    summary, on_github, _ = prepare(statement, key, [bundle])
     assert (
         not on_github
         and "✗ NOT listed on github.com/synthetic-operator.keys" in summary
@@ -259,9 +283,81 @@ def test_key_not_on_github_warns_and_needs_yes_typed(tmp_path):
     assert any("WARNING" in line for line in out)
     assert not (tmp_path / "auth" / SIGNATURE_FILE).exists()
     assert sign(statement, key, [bundle], ask=ask("yes"), say=out.append) == 0
-    assert (tmp_path / "auth" / SIGNATURE_FILE).exists()
-    assert verify(statement).reason == "auth_unknown_signer"
-    assert "does not verify: auth_unknown_signer" in out[-1]
+    assert verify(statement).ok
+
+
+@pytest.mark.skipif(not HAS_SSH_KEYGEN, reason="needs ssh-keygen")
+def test_an_edit_during_the_prompt_is_never_signed(tmp_path):
+    bundle = _bundle(tmp_path)
+    key = tmp_path / "id_ed25519"
+    raw = _ssh_key(key)
+    statement = _statement(tmp_path, bundle, raw)
+
+    def ask(question: str) -> str:
+        # Someone swaps the scope while the person reads the summary.
+        statement.write_text(statement.read_text().replace('"r4"', '"r9"'))
+        return "y"
+
+    out: list[str] = []
+    assert sign(statement, key, [bundle], ask=ask, say=out.append) == 1
+    assert "changed while you were reviewing" in out[-1]
+    assert not (tmp_path / "auth" / SIGNATURE_FILE).exists()
+
+
+def test_ssh_keygen_gets_a_private_copy_after_double_dash(tmp_path):
+    import stat
+
+    bundle = _bundle(tmp_path)
+    key = tmp_path / "id_ed25519"
+    raw = _write_pub_only(key)
+    statement = _statement(tmp_path, bundle, raw)
+    shown = statement.read_bytes()
+    seen: dict = {}
+
+    def run(cmd, **kwargs):
+        seen["cmd"] = cmd
+        copy = Path(cmd[-1])
+        seen["mode"] = stat.S_IMODE(copy.stat().st_mode)
+        seen["bytes"] = copy.read_bytes()
+        copy.with_name(copy.name + ".sig").write_text("not a signature")
+
+        class Done:
+            returncode = 0
+
+        return Done()
+
+    out: list[str] = []
+    code = sign(statement, key, [bundle], ask=lambda q: "y", say=out.append, run=run)
+    assert seen["cmd"][-2] == "--" and seen["cmd"][-1] != str(statement)
+    assert seen["mode"] == 0o600 and seen["bytes"] == shown
+    # A signature that does not verify makes sign fail.
+    assert code == 1 and "does not verify" in out[-1]
+
+
+def test_control_characters_never_reach_the_terminal(tmp_path):
+    bundle = _bundle(tmp_path)
+    wf = Workflow.model_validate_json((bundle / "workflow.json").read_text())
+    wf.steps[1].field_label = "First\x1b[2J\x1b]0;owned\x07Name\u202e"
+    (bundle / "workflow.json").write_text(wf.model_dump_json())
+    (bundle.parent / "QUALIFICATION.md").write_text(
+        QUALIFICATION.replace("clinical-write", "clinical\x1b[31m-write")
+    )
+    key = tmp_path / "id_ed25519"
+    raw = _write_pub_only(key)
+    statement = _statement(tmp_path, bundle, raw)
+    summary, _, _ = prepare(statement, key, [bundle])
+    assert "\x1b" not in summary and "\x07" not in summary and "\u202e" not in summary
+    assert "FirstName" in summary
+
+
+def test_qualification_beside_the_bundle_is_marked_unbound(tmp_path):
+    bundle = _bundle(tmp_path)
+    key = tmp_path / "id_ed25519"
+    raw = _write_pub_only(key)
+    statement = _statement(tmp_path, bundle, raw)
+    summary, _, _ = prepare(statement, key, [bundle])
+    assert "not covered by its digest" in summary
+    assert "Each item   one run only" in summary
 
 
 def test_qualification_line_without_a_report(tmp_path):

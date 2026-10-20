@@ -14,6 +14,7 @@ list for the authorizer gets a warning and needs "yes" typed out.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from dataclasses import dataclass
@@ -28,6 +29,19 @@ from openadapt_flow.run_authorization import (
 )
 
 _WRITE_RISKS = {"irreversible", "consequential"}
+
+
+_ANSI = re.compile(
+    r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])"
+)
+
+
+def clean(value: Any) -> str:
+    """Text safe to print: ANSI escapes and every control or format character removed."""
+    import unicodedata
+
+    text = _ANSI.sub("", str(value))
+    return "".join(ch for ch in text if not unicodedata.category(ch).startswith("C"))
 
 
 class SignRefused(RuntimeError):
@@ -155,11 +169,38 @@ def outline(bundle_dir: Path) -> ProgramOutline:
 
 def qualification_line(bundle_dir: Path) -> str:
     """'certified clinical-write · 6/6 cases · real-duplicate case halts (3/3)'."""
+    line, _ = qualification(bundle_dir)
+    return line
+
+
+def qualification(bundle_dir: Path) -> tuple[str, bool]:
+    """The qualification summary, and whether the bundle digest covers its report."""
     for folder in (Path(bundle_dir), Path(bundle_dir).parent):
         report = folder / "QUALIFICATION.md"
         if report.is_file():
-            return _parse_qualification(report.read_text(encoding="utf-8"))
-    return "no qualification report next to the bundle"
+            return (
+                _parse_qualification(report.read_text(encoding="utf-8")),
+                _covered_by_digest(Path(bundle_dir), report),
+            )
+    return "no qualification report next to the bundle", False
+
+
+def _covered_by_digest(bundle_dir: Path, report: Path) -> bool:
+    """True only when the report's exact bytes are a hashed file of the bundle."""
+    import hashlib
+
+    from openadapt_flow.bundle_validation import compute_file_hashes
+    from openadapt_flow.ir import Workflow
+
+    try:
+        rel = report.resolve().relative_to(bundle_dir.resolve()).as_posix()
+        wf = Workflow.model_validate_json(
+            (bundle_dir / "workflow.json").read_text("utf-8")
+        )
+        hashes = compute_file_hashes(wf, bundle_dir)
+    except (ValueError, OSError):
+        return False
+    return hashes.get(rel) == hashlib.sha256(report.read_bytes()).hexdigest()
 
 
 def _table(lines: list[str], header_start: str) -> list[list[str]]:
@@ -241,31 +282,47 @@ def render(
     listed = "listed on" if on_github else "NOT listed on"
     digest = statement.bundle_content_digest
     scope = statement.scope
-    width = max([len(n) for n, _ in prog.sections] + [12])
+    sections = [(clean(n), c) for n, c in prog.sections]
+    width = max([len(n) for n, _ in sections] + [12])
+    qual, bound = qualification(bundle_dir)
     lines = [
         "You are authorizing OpenAdapt to run this program",
         f"  Authorizer   {statement.authorizer}",
-        f"  Signing key  ED25519 {ssh_sig.fingerprint(key_raw)}",
-        f"               {tick} {listed} github.com/{user}.keys (snapshot {snapshot_time})",
+        f"  Signing key  ED25519 {ssh_sig.fingerprint(key_raw)} (the key the statement names)",
+        f"               {tick} {listed} github.com/{user}.keys "
+        f"(copy taken {clean(snapshot_time)})",
         "",
-        f"Program        {prog.name}",
-        f"  App          {prog.app}",
+        f"Program        {clean(prog.name)}",
+        f"  App          {clean(prog.app)}",
         f"  Bundle       {digest[:12]}…{digest[-4:]} ({prog.steps} steps)",
-        f"  Qualified    {qualification_line(bundle_dir)}",
+        f"  Qualified    {clean(qual)}",
+        *(
+            []
+            if bound
+            else [
+                "               (QUALIFICATION.md beside the bundle; not covered by its digest)"
+            ]
+        ),
         "",
         "Outline",
         *(
             f"  {name:<{width}}  {n} step{'s' if n != 1 else ''}"
-            for name, n in prog.sections
+            for name, n in sections
         ),
-        *(f"  ▶ writes: {w}" for w in prog.writes),
-        *(["  stops if: " + " · ".join(prog.stops)] if prog.stops else []),
+        *(f"  ▶ writes: {clean(w)}" for w in prog.writes),
+        *(
+            ["  stops if: " + " · ".join(clean(x) for x in prog.stops)]
+            if prog.stops
+            else []
+        ),
         "",
         "Scope",
         f"  Items        {', '.join(scope.items)}",
         f"  Profile      {scope.profile}",
         f"  Seal keys    {', '.join(scope.seal_key_ids)}",
         f"  Issued at    {statement.issued_at}",
+        "  Each item   "
+        + ("may be used for many runs" if scope.reusable else "one run only"),
         "  Not allowed  any other bundle, item, profile or Seal key",
         "",
         f"Statement      sha256 {statement_sha256}",
@@ -280,8 +337,8 @@ def prepare(
     bundles: Sequence[Path],
     *,
     run: Callable[..., Any] = subprocess.run,
-) -> tuple[str, bool]:
-    """Return ``(summary, key_on_github)``; refuse anything that can't be shown truthfully."""
+) -> tuple[str, bool, bytes]:
+    """``(summary, key_on_github, statement bytes shown)``; refuse what can't be shown truthfully."""
     import hashlib
 
     from openadapt_flow.offline_seal import loads_strict
@@ -304,6 +361,12 @@ def prepare(
             f"(checked {checked}); pass the bundle with --bundle",
         )
     key_raw = key_public_raw(Path(key_path), run=run)
+    if ssh_sig.fingerprint(key_raw) != statement.signer_fingerprint:
+        raise SignRefused(
+            "auth_signer_mismatch",
+            f"this statement names key {statement.signer_fingerprint}; "
+            f"{key_path} is {ssh_sig.fingerprint(key_raw)}",
+        )
     try:
         signers, when = _snapshot(statement_path)
     except (OSError, ssh_sig.SshSigError):
@@ -318,7 +381,7 @@ def prepare(
         on_github,
         when,
     )
-    return summary, on_github
+    return summary, on_github, raw
 
 
 def sign(
@@ -336,7 +399,7 @@ def sign(
 
     statement_path, sig_path, _, _ = _paths(Path(statement_path))
     try:
-        summary, on_github = prepare(statement_path, key_path, bundles, run=run)
+        summary, on_github, shown = prepare(statement_path, key_path, bundles, run=run)
     except SignRefused as exc:
         say(f"not signed: {exc}")
         return 1
@@ -349,31 +412,62 @@ def sign(
         agreed = answer in ("y", "yes")
     else:
         say(
-            "\nWARNING: this key is not listed for the authorizer in the GitHub "
-            "snapshot. The signature will not verify as theirs."
+            "\nWARNING: the copy of the GitHub keys next to this statement does not "
+            "list this key for the authorizer."
         )
         agreed = ask('Type "yes" to sign anyway: ').strip() == "yes"
     if not agreed:
         say("not signed")
         return 1
-    done = run(
-        [
-            "ssh-keygen",
-            "-Y",
-            "sign",
-            "-n",
-            NAMESPACE,
-            "-f",
-            str(key_path),
-            str(statement_path),
-        ]
-    )
-    if getattr(done, "returncode", 1) != 0 or not sig_path.is_file():
+    # Sign exactly the bytes shown, from a private copy, so an edit to the
+    # file during the prompt can't be what gets signed.
+    signature = _sign_copy(shown, key_path, run)
+    if signature is None:
         say("not signed: ssh-keygen did not write a signature")
         return 1
+    if statement_path.read_bytes() != shown:
+        say("not signed: the statement changed while you were reviewing it")
+        return 1
+    try:
+        fd = os.open(sig_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    except FileExistsError:
+        say(f"not signed: {sig_path} appeared while you were reviewing")
+        return 1
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(signature)
     result = verify(statement_path)
-    if result.ok:
-        say(f"signed: {sig_path} (verifies against {result.signers_source})")
-    else:
+    if not result.ok:
         say(f"signed: {sig_path}, but it does not verify: {result.reason}")
+        return 1
+    say(f"signed: {sig_path} (signature by {result.signer_fingerprint} verifies)")
     return 0
+
+
+def _sign_copy(
+    shown: bytes, key_path: Path, run: Callable[..., Any]
+) -> Optional[bytes]:
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="openadapt-sign-") as tmp:
+        os.chmod(tmp, 0o700)
+        copy = Path(tmp) / "run-authorization.json"
+        fd = os.open(copy, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(shown)
+        done = run(
+            [
+                "ssh-keygen",
+                "-Y",
+                "sign",
+                "-n",
+                NAMESPACE,
+                "-f",
+                str(key_path),
+                "--",
+                str(copy),
+            ]
+        )
+        sig = copy.with_name(copy.name + ".sig")
+        if getattr(done, "returncode", 1) != 0 or not sig.is_file():
+            return None
+        return sig.read_bytes()

@@ -17,9 +17,14 @@ For each key it states:
   can look each one up.
 * ``run_list``: one line per counted Seal (its SHA-256, scope item, outcome
   codes, app, program, issue time and log entry), so a reader can recount.
-* ``linked_identity``, only when a run authorization signed by the person's
-  GitHub key verifies, names this Seal key in its scope, and the key's Seals
-  reference it.
+* ``linked_identity``, only when a run authorization verifies, its signing
+  key was checked against GitHub live (``--live``) or against allowed
+  signers the verifier pinned, it names this Seal key in its scope, and the
+  key's Seals reference it. A handle checked only against the copy stored
+  with the authorization is self-asserted and never linked.
+
+The same Seal or Rekor entry given twice counts once. An item used by two
+Seals under a single-use authorization counts once, for the first Seal.
 
 Only Seals that verify against the pinned keys *and* carry a valid
 transparency-log anchor count. Everything else is counted under
@@ -35,7 +40,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -107,10 +111,13 @@ def build_profile(
         seal_sha256,
         verify_run,
     )
-    from openadapt_flow.run_authorization import check_run
+    from openadapt_flow.run_authorization import check_run, reused_items
 
     operators: dict[str, dict[str, Any]] = {}
-    excluded = {"unanchored": 0, "not_valid": 0}
+    excluded = {"unanchored": 0, "not_valid": 0, "duplicate": 0, "item_reused": 0}
+    valid: list[tuple[Any, dict[str, Any], dict[str, Any], str]] = []
+    seen_seals: set[str] = set()
+    seen_entries: set[str] = set()
     for run_dir in run_dirs:
         run_dir = Path(run_dir)
         result = verify_run(run_dir, registry, require_anchor=True, log_keys=log_keys)
@@ -118,8 +125,27 @@ def build_profile(
             key = "unanchored" if result.reason == "anchor_missing" else "not_valid"
             excluded[key] += 1
             continue
-        seal = loads_strict((run_dir / SEAL_FILE).read_text(encoding="utf-8"))
-        report = json.loads((run_dir / "report.json").read_bytes())
+        seal = LocalSealV1.model_validate(
+            loads_strict((run_dir / SEAL_FILE).read_text(encoding="utf-8"))
+        ).wire()
+        digest = seal_sha256(seal)
+        uuid = str(result.anchor.uuid)
+        # The same Seal (or the same log entry) counted twice is one run.
+        if digest in seen_seals or uuid in seen_entries:
+            excluded["duplicate"] += 1
+            continue
+        seen_seals.add(digest)
+        seen_entries.add(uuid)
+        report = loads_strict((run_dir / "report.json").read_bytes())
+        valid.append((result, seal, report, digest))
+    reused: set[str] = set()
+    for auth in authorizations:
+        if auth.ok:
+            reused |= reused_items([seal for _, seal, _, _ in valid], auth)
+    for result, seal, report, digest in valid:
+        if digest in reused:
+            excluded["item_reused"] += 1
+            continue
         key_id = str(result.key_id)
         op = operators.get(key_id)
         if op is None:
@@ -154,7 +180,7 @@ def build_profile(
                 op[bucket].add(value)
         op["run_list"].append(
             {
-                "seal_sha256": seal_sha256(LocalSealV1.model_validate(seal).wire()),
+                "seal_sha256": digest,
                 "scope_item": seal.get("scope_item"),
                 "outcome": category,
                 "execution_outcome": _code(report.get("execution_outcome")),
@@ -173,8 +199,11 @@ def build_profile(
             (int(result.anchor.integrated_time or 0), int(result.anchor.log_index or 0))
         )
         for auth in authorizations:
+            # Only a verified identity (github.com live, or pinned allowed
+            # signers) is linked; a self-asserted handle never is.
             if (
                 auth.ok
+                and auth.identity_verified
                 and auth.statement is not None
                 and check_run(seal, report, auth) is None
             ):

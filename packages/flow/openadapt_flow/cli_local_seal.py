@@ -187,9 +187,6 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     from openadapt_flow import no_outbound
     from openadapt_flow.offline_seal import (
         LocalSealError,
-        check_anchor,
-        verify_local_seal,
-        verify_run,
     )
     from openadapt_flow.seal_anchor import fetch_entry
 
@@ -202,24 +199,65 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     _tsa_trusted(args)
     fetch = None
     if args.live:
-        if not args.require_anchor:
-            print("--live needs --require-anchor", file=sys.stderr)
+        if not (args.require_anchor or args.authorization):
+            print("--live needs --require-anchor or --authorization", file=sys.stderr)
             return 2
         if no_outbound.enabled():
             print("not checked live: strict no-outbound mode is on", file=sys.stderr)
             return 1
-        fetch = fetch_entry
-    target = Path(args.target)
-    _check_verify_inputs(args, target)
+        if args.require_anchor:
+            fetch = fetch_entry
+    targets = [Path(t) for t in args.target]
+    if len(targets) > 1 and (args.seal or not all(t.is_dir() for t in targets)):
+        print(
+            "several targets must all be run directories (no --seal)", file=sys.stderr
+        )
+        return 2
+    for target in targets:
+        _check_verify_inputs(args, target)
     auth = None
     if args.authorization:
-        if not target.is_dir():
+        if not all(t.is_dir() for t in targets):
             print("--authorization applies to a run directory", file=sys.stderr)
             return 2
         auth = _verify_authorization(args, registry, log_keys)
         if not auth.ok:
             print(f"not valid: {auth.reason} {auth.detail}".rstrip(), file=sys.stderr)
             return 1
+    seals: dict[Path, Any] = {}
+    for target in targets:
+        code = _verify_one(args, target, registry, log_keys, fetch, auth)
+        if code:
+            return code
+        if target.is_dir():
+            seals[target] = _input_json(target / "seal.json")
+    if auth is not None and len(seals) > 1:
+        from openadapt_flow.offline_seal import seal_sha256
+        from openadapt_flow.run_authorization import reused_items
+
+        reused = reused_items(list(seals.values()), auth)
+        for target, seal in seals.items():
+            if seal_sha256(seal) in reused:
+                print(
+                    f"not valid: auth_item_reused ({target}: item "
+                    f"{seal.get('scope_item')} was already sealed under this "
+                    "single-use authorization)",
+                    file=sys.stderr,
+                )
+                return 1
+    return 0
+
+
+def _verify_one(
+    args: argparse.Namespace,
+    target: Path,
+    registry: Any,
+    log_keys: Any,
+    fetch: Any,
+    auth: Any,
+) -> int:
+    from openadapt_flow.offline_seal import check_anchor, verify_local_seal, verify_run
+
     if target.is_dir():
         result = verify_run(
             target,
@@ -435,7 +473,11 @@ def _verify_authorization(
 
 
 def _timing_line(result: Any, auth: Any) -> str:
-    who = auth.statement.authorizer if auth.statement else "the authorizer"
+    who = (
+        auth.statement.authorizer
+        if auth.statement is not None and auth.identity_verified
+        else "an unverified key"
+    )
     when = _utc(auth.anchor.integrated_time) if auth.anchor is not None else None
     if result.authorization_timing == "before_run":
         return (
@@ -452,10 +494,20 @@ def _timing_line(result: Any, auth: Any) -> str:
 
 def _authorized_line(auth: Any) -> str:
     st = auth.statement
+    if auth.identity_verified:
+        who = (
+            f"authorized by {st.authorizer} (SSH key {auth.signer_fingerprint}, "
+            f"identity checked against {auth.signers_source})"
+        )
+    else:
+        who = (
+            f"authorized by SSH key {auth.signer_fingerprint}: identity not verified "
+            f"(self-asserted {st.authorizer}; pass --live or --allowed-signers)"
+        )
     line = (
-        f"authorized by {st.authorizer} (SSH key {auth.signer_fingerprint}, "
-        f"checked against {auth.signers_source}) at {st.issued_at}, "
-        f"for {', '.join(st.scope.items)} under the {st.scope.profile} profile"
+        f"{who} at {st.issued_at}, for {', '.join(st.scope.items)} under the "
+        f"{st.scope.profile} profile"
+        + ("" if st.scope.reusable else ", one run per item")
     )
     if auth.anchor is not None and auth.anchor.ok:
         line += (
@@ -477,6 +529,8 @@ def _cmd_authorize_create(args: argparse.Namespace) -> int:
             profile=args.profile,
             authorizer=args.authorizer,
             seal_key_ids=key_ids,
+            signer_fingerprint=args.signer_fingerprint,
+            reusable=args.reusable,
         )
     except Exception as exc:  # validation, network and file errors: one line
         code = getattr(exc, "code", type(exc).__name__)
@@ -862,7 +916,7 @@ def register(sub: Any) -> None:
     f.set_defaults(func=_guarded(_cmd_file))
 
     v = s.add_parser("verify", help="Verify a run directory, or a file with --seal")
-    v.add_argument("target")
+    v.add_argument("target", nargs="+", help="Run directories, or one file with --seal")
     v.add_argument("--seal", default=None)
     v.add_argument("--keys", default=None, help="Pinned key registry JSON")
     v.add_argument(
@@ -951,6 +1005,16 @@ def register(sub: Any) -> None:
         default=[],
         help="Seal key allowed to seal under it (default: the configured key)",
     )
+    zc.add_argument(
+        "--signer-fingerprint",
+        default=None,
+        help="SHA256:... of the GitHub key that will sign (needed when GitHub lists several)",
+    )
+    zc.add_argument(
+        "--reusable",
+        action="store_true",
+        help="Allow more than one run per item (default: one run per item)",
+    )
     zc.set_defaults(func=_guarded(_cmd_authorize_create))
     zg = zs.add_parser(
         "sign",
@@ -1005,8 +1069,13 @@ def register(sub: Any) -> None:
     pr.add_argument("--allowed-signers", default=None)
     pr.add_argument("--log-key", action="append", default=[])
     pr.add_argument("--out", default=None, help="Default ./operator-profile.json")
+    pr.add_argument(
+        "--live",
+        action="store_true",
+        help="Check each authorization's key against github.com now (links an identity)",
+    )
     _log_args(pr)
-    pr.set_defaults(func=_guarded(_cmd_profile), live=False, require_anchor=False)
+    pr.set_defaults(func=_guarded(_cmd_profile), require_anchor=False)
 
     k = s.add_parser("key", help="Print the Seal key's public half for pinning")
     k.set_defaults(func=_guarded(_cmd_key))

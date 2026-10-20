@@ -247,117 +247,152 @@ holds:
 | Field | Meaning |
 |---|---|
 | `bundle_content_digest` | The compiled program the person authorizes |
-| `scope.items` | The work items, for example `r3`, `r4` |
+| `scope.items` | The work items: short labels, a lower-case prefix and a number (`r3`, `r4`), never names or record numbers |
 | `scope.profile` | The execution profile the runs must use, for example `standard` |
-| `scope.seal_key_ids` | The Seal keys allowed to seal runs under it |
+| `scope.seal_key_ids` | The Seal keys allowed to seal runs under it, and to anchor it |
+| `scope.reusable` | `false` (the default): one run per item. `true`: many |
 | `authorizer` | The person's public handle, `github:<user>` |
+| `signer_fingerprint` | The `SHA256:` fingerprint of the SSH key that must sign it |
 | `issued_at`, `nonce` | When, and 32 random bytes |
 
 ```bash
-# 1. Write the statement and a snapshot of https://github.com/<user>.keys.
+# 1. Write the statement; it names the key GitHub lists for the user.
 openadapt-flow local-seal authorize create --out auth/ --bundle-digest <digest> \
     --item r3,r4,r5,r6 --profile standard --authorizer github:<user>
 
-# 2. The person reviews what it allows, then signs with their own GitHub SSH key.
+# 2. The person reviews what it allows, then signs with that key.
 openadapt-flow local-seal authorize sign auth/run-authorization.json \
     --key ~/.ssh/id_ed25519 --bundle path/to/bundle
 
 # 3. Seal each run under it, naming its item.
 openadapt-flow local-seal run runs/r3 --authorization auth/ --item r3
 
-# 4. Optional: anchor the authorization in the transparency log, as a Seal.
+# 4. Optional: anchor and timestamp the authorization.
 openadapt-flow local-seal authorize anchor auth/
+openadapt-flow local-seal timestamp auth/
 ```
 
-`authorize sign` prints a plain-text summary of about 30 lines, then asks
-`Sign this authorization? [y/N]`. Only a "y" answer runs
-`ssh-keygen -Y sign -n openadapt-run-authorization`. The summary shows:
+`authorize create` reads `https://github.com/<user>.keys` once. It writes the
+fingerprint of the user's Ed25519 key into the statement; when GitHub lists
+several, pass `--signer-fingerprint`. It also keeps a copy of those keys as
+`run-authorization.allowed_signers`, for `ssh-keygen -Y verify`.
 
-- who is signing, the key's fingerprint, and whether the GitHub snapshot
-  lists that key (✓ or ✗);
-- the program: its name, app, short bundle digest, step count, and the
-  qualification result from a `QUALIFICATION.md` next to the bundle;
-- an outline, one line per section (compiled sections, or else one per
-  field the steps fill), the consequential write and its record read-backs,
-  and the stop rules;
-- the scope, and what the authorization does not allow;
+`authorize sign` prints a plain-text summary of about 30 lines, then asks
+`Sign this authorization? [y/N]`. The summary shows:
+
+- the authorizer, the signing key, and whether the stored copy of the
+  GitHub keys lists it (✓ or ✗);
+- the program: its name, app, short bundle digest and step count;
+- the qualification result from a `QUALIFICATION.md` next to the bundle,
+  marked "not covered by its digest" unless the bundle digest covers that
+  file;
+- an outline: one line per section (compiled sections, or else one per
+  field the steps fill), the consequential write and its record
+  read-backs, and the stop rules;
+- the scope, whether each item is one run only, and what the authorization
+  does not allow;
 - the statement's SHA-256 and path.
 
-The program is read from the bundle given with `--bundle` (default: a
-`bundle/` folder next to the statement). Its content digest is recomputed
-from its files, and a bundle that doesn't match `bundle_content_digest` is
-refused before anything is shown. For a key the snapshot doesn't list,
-`sign` warns and asks you to type "yes". `--dry-run` prints the summary
-and signs nothing. Running `ssh-keygen -Y sign` yourself also works.
+Control characters and terminal escape codes are removed from everything
+it prints.
 
-`authorize create` reads `https://github.com/<user>.keys` once and stores the
-Ed25519 keys it lists in `run-authorization.allowed_signers`, in the format
-`ssh-keygen -Y verify` reads. OpenAdapt never holds the person's private
-key; only the person runs step 2.
+The bundle given with `--bundle` (default: `bundle/` next to the statement)
+must have a recomputed content digest equal to `bundle_content_digest`, or
+`sign` refuses before showing anything. It also refuses a key other than
+the one the statement names. For a key missing from the stored copy, it
+warns and asks you to type "yes".
 
-`local-seal run --authorization` refuses to seal unless the authorization's
-signature verifies, the run's report has the authorized bundle digest and
-profile, the item is in scope, and the Seal key is in scope. The Seal then
-records `authorization_sha256` (the SHA-256 of `run-authorization.json`) and
-`scope_item`, signed by the Seal key. Seals without an authorization don't
-have these fields and keep their exact bytes. A Seal that was already
-written, for example by the run hook, is re-signed only with
-`--replace-unanchored`, and only if it has never been anchored.
+On "y", it signs a private copy of exactly the bytes it showed: a 0600 file
+in a new private folder, passed to `ssh-keygen` after `--`. It writes the
+signature only if the statement on disk still has those bytes. It exits
+non-zero if the new signature doesn't verify. `--dry-run` prints the
+summary and signs nothing. Running `ssh-keygen -Y sign` yourself also
+works.
+
+`local-seal run --authorization` refuses to seal unless:
+
+- the authorization's signature verifies;
+- the run's report has the authorized bundle digest and profile;
+- the item is in scope;
+- the Seal key is in scope.
+
+The Seal then records `authorization_sha256` (the SHA-256 of
+`run-authorization.json`) and `scope_item`, signed by the Seal key. Seals
+without an authorization don't have these fields and keep their exact
+bytes. A Seal that was already written, for example by the run hook, is
+re-signed only with `--replace-unanchored`, and only if it has never been
+anchored.
 
 Verify:
 
 ```bash
-openadapt-flow local-seal authorize verify auth/
-openadapt-flow local-seal verify runs/r3 --keys site-keys.json --require-anchor --authorization auth/
+openadapt-flow local-seal authorize verify auth/ --live
+openadapt-flow local-seal verify runs/r3 runs/r4 --keys site-keys.json --require-anchor --authorization auth/ --live
 ```
 
-The verifier checks offline:
+The verifier checks:
 
-- the person's signature over the exact statement bytes, in the
-  `openadapt-run-authorization` namespace;
-- that the signing key is listed for the `authorizer` in the stored GitHub
-  snapshot, or in your own file passed with `--allowed-signers`;
+- the signature over the exact statement bytes, in the
+  `openadapt-run-authorization` namespace, by the key `signer_fingerprint`
+  names;
 - that the Seal names this authorization and an item in its scope;
 - that the run's profile, bundle digest and Seal key match the scope;
-- with `--require-anchor`, the authorization's anchor.
+- for a single-use authorization, that no item is sealed twice among the
+  runs given (`auth_item_reused`);
+- with `--require-anchor`, the authorization's anchor, made by a Seal key
+  in its scope.
+
+### Whose key it is
+
+The signature proves that the key named in the statement signed it. It
+proves nothing about who owns that key unless you check the key yourself:
+
+- `--live` reads `https://github.com/<user>.keys` now. It fetches over
+  HTTPS from github.com only, follows no redirects, ignores proxy settings,
+  and refuses a key GitHub doesn't list (`auth_not_on_github`).
+- `--allowed-signers FILE` checks against a file you pinned yourself.
+
+Without either, the result reads "identity not verified (self-asserted
+github:<user>)". The stored `run-authorization.allowed_signers` copy is
+never used as proof: whoever wrote the statement can write that file too.
+`local-seal profile` links an identity only when one of the two checks
+passed.
+
+### Before or after the run
 
 The person can sign before the runs or after them. Either way the
-authorization is valid, and the verifier states which it was, comparing the
-time the transparency log recorded the authorization with the run's own
-`started_at`:
+authorization is valid, and the verifier states what can be shown. The
+verifier reports `before_run` only when the authorization and the Seal are
+both anchored and
+
+> authorization's log time < the run's `started_at` ≤ the Seal's log time
 
 - `before_run`: "Authorized by @user before this run".
 - `after_run`: "Authorization signed by @user on <date>, after this run".
-- `not_anchored`: the authorization has no anchor (or the run states no
-  start time), so nothing is said about order.
+  This is reported for any other order with both anchors, including a
+  `started_at` later than the Seal's own log time, which isn't believed.
+- `not_anchored`: either anchor is missing, or the run states no start
+  time.
 
-Re-sealing a run under an authorization signed later does not change this:
-the run's own start time decides, never the time of the new Seal.
-`started_at` is in the sealed report, so it can't change after sealing, but
-it is the runner's own record. The Seal's log time is an upper bound on it.
-The verifier also reports the authorization's log time against the Seal's
-(`before_seal` / `after_seal`).
+Re-sealing a run under a later authorization never makes it `before_run`.
+`started_at` is the runner's own record, inside the sealed report.
 
-`--live` also re-reads `https://github.com/<user>.keys` and refuses a key
-GitHub no longer lists (`auth_not_on_github`). The host is always
-github.com; nothing in the files chooses where to fetch from.
-
-You can check the signature with OpenSSH alone:
+You can check the signature with OpenSSH alone (this proves the signature,
+not the identity):
 
 ```bash
 ssh-keygen -Y verify -f auth/run-authorization.allowed_signers -I github:<user> \
     -n openadapt-run-authorization -s auth/run-authorization.json.sig < auth/run-authorization.json
 ```
 
-What the snapshot proves: that the key listed for the user at the time of
-the snapshot signed the statement. It doesn't prove who controls the GitHub
-account. Pin your own allowed-signers file, or use `--live`, when that
-matters.
+Refusal reasons:
 
-Refusal reasons: `auth_missing`, `auth_malformed` (including a repeated JSON
-key), `auth_unsigned`, `auth_bad_signature`, `auth_unknown_signer`,
-`auth_not_on_github`, `auth_live_unavailable`, `auth_not_referenced`,
-`auth_reference_mismatch`, `auth_scope_mismatch`, `auth_bundle_mismatch`.
+- `auth_missing`, `auth_malformed` (including a repeated JSON key) and
+  `auth_unsigned`;
+- `auth_bad_signature`, `auth_signer_mismatch`, `auth_unknown_signer`,
+  `auth_not_on_github` and `auth_live_unavailable`;
+- `auth_not_referenced`, `auth_reference_mismatch`, `auth_scope_mismatch`,
+  `auth_bundle_mismatch` and `auth_item_reused`.
 
 ## Operator profile
 
@@ -378,14 +413,17 @@ keyed by Seal key ID. For each key it lists:
 - `run_list`: one line per counted Seal, so a reader can recount. Each line
   holds the Seal's SHA-256, its scope item, the outcome codes, app, program,
   issue time and Rekor entry.
-- `linked_identity`, only when an authorization signed with the person's
-  GitHub key verifies, names this Seal key in its scope, and the Seals
-  reference it. It names the handle, the identity provider (`ssh-github`)
-  and the SSH key fingerprint.
+- `linked_identity`, only when an authorization verifies with its key
+  checked by `--live` or `--allowed-signers`, names this Seal key in its
+  scope, and the Seals reference it. It names the handle, the identity
+  provider (`ssh-github`), the SSH key fingerprint and what it was checked
+  against.
 
 Only Seals that verify against the pinned keys and have a valid anchor are
-counted. The rest are counted under `excluded` as `unanchored` or
-`not_valid`, without detail.
+counted. The same Seal or Rekor entry given twice counts once. A second
+Seal for an item under a single-use authorization isn't counted. The rest
+appear under `excluded` as `unanchored`, `not_valid`, `duplicate` or
+`item_reused`, without detail.
 
 The profile holds no report content: no patient names, parameters, record
 IDs, run IDs or folder names.
