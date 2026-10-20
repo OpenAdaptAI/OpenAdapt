@@ -49,6 +49,8 @@ from openadapt.quickstart.view import Marks, PlainView, RichView, make_view
 
 SNAPSHOT = Path(__file__).parent / "snapshots" / "quickstart_plain.snapshot"
 
+SCREEN_TEXT = "Encounter saved — Synthetic follow-up in two weeks"
+
 DEMO = [
     ("Click Open", 0.4),
     ("Click New Encounter", 0.7),
@@ -101,7 +103,7 @@ def _broken(root: Path, **overrides) -> BreakFacts:
         execution_outcome="HALTED",
         transaction_outcome="RECONCILIATION_REQUIRED",
         screen_showed_success=True,
-        screen_text="Encounter saved — Synthetic follow-up in two weeks",
+        screen_text=SCREEN_TEXT,
         screenshot=None,
         new_records=0,
         effects_required=2,
@@ -185,7 +187,12 @@ class FakeEngine:
 
     def break_it(self):
         self.calls.append("break")
-        return _broken(self.root, **self._broken)
+        broken = dict(self._broken)
+        self._screen = broken.pop("screen_text", SCREEN_TEXT)
+        return _broken(self.root, **broken)
+
+    def read_screen(self, broken):
+        return self._screen
 
     def seal(self, runs):
         self.calls.append("seal")
@@ -247,17 +254,18 @@ def test_plain_output_matches_the_snapshot(root):
 def test_plain_output_runs_the_three_acts_in_order(root):
     engine = FakeEngine(root)
     output, _ = _plain(engine)
-    assert engine.calls == [
+    # Signing runs on a thread during Act 3, after the five runs.
+    assert [call for call in engine.calls if call != "seal"] == [
         "enter",
         "start workers",
         "record",
         "compile",
         *(f"run {index}" for index in range(1, 6)),
         "break",
-        "seal",
         "page",
         "exit",
     ]
+    assert engine.calls.index("seal") > engine.calls.index("run 5")
     acts = [output.index(f"\n{n}  ") for n in (1, 2, 3)]
     assert acts == sorted(acts)
     assert "\x1b[" not in output

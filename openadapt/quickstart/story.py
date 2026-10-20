@@ -71,6 +71,8 @@ class Engine(Protocol):
 
     def break_it(self) -> BreakFacts: ...
 
+    def read_screen(self, broken: BreakFacts) -> Optional[str]: ...
+
     def seal(self, runs: list[RunFacts]) -> Optional[SealFacts]: ...
 
     def write_page(self, first: RunFacts, broken: BreakFacts) -> Optional[Path]: ...
@@ -236,8 +238,11 @@ def run_story(
             engine.run_all(RUN_NOTES, finished)
         outcome.act2_seconds = clock() - act_start
         view.runs_total(outcome)
+        # Sign the checked runs' reports while Act 3 runs; the finale waits.
+        sealing = _in_background(lambda: engine.seal(list(outcome.runs)))
 
         # Act 3: break it.
+        paging = None
         if break_it:
             view.act(3, "Break it", "the next save fails silently")
             view.break_setup()
@@ -248,13 +253,21 @@ def run_story(
                 paused += clock() - waited
             with view.breaking():
                 outcome.broken = engine.break_it()
+                broken = outcome.broken
+                if outcome.runs:
+                    # The page needs only the runs; build it while the
+                    # screenshot is read.
+                    paging = _in_background(
+                        lambda: engine.write_page(outcome.runs[0], broken)
+                    )
+                broken.screen_text = engine.read_screen(broken)
             view.break_result(outcome.broken)
             if verbose:
                 view.detail(_engine_detail_break(outcome.broken))
 
-        outcome.seal = engine.seal(outcome.runs)
-        if outcome.broken is not None and outcome.runs:
-            outcome.page = engine.write_page(outcome.runs[0], outcome.broken)
+        outcome.seal = sealing.result()
+        if paging is not None:
+            outcome.page = paging.result()
             if outcome.page is not None and open_page is not None:
                 outcome.page_opened = bool(open_page(outcome.page))
     finally:
@@ -262,6 +275,17 @@ def run_story(
     outcome.total_seconds = clock() - started - paused
     view.finale(outcome, next_steps(outcome))
     return outcome
+
+
+def _in_background(work: Callable[[], Any]) -> Any:
+    """Start ``work`` on a thread; ``.result()`` waits and re-raises."""
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="quickstart")
+    future = executor.submit(work)
+    executor.shutdown(wait=False)
+    return future
 
 
 def _act2_subtitle(total: int, varied: bool, parallel: int) -> str:

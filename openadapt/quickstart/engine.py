@@ -286,6 +286,50 @@ def run_program(
     )
 
 
+class EarlyScreenRead:
+    """Read a screenshot on a thread as soon as it appears on disk.
+
+    :meth:`text_for` returns the text only for the same file with the same
+    bytes as were read; anything else is read again by the caller.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+        self._stop = threading.Event()
+        self._digest: Optional[str] = None
+        self._text: Optional[str] = None
+        self._thread = threading.Thread(target=self._loop, name="quickstart-screen")
+        self._thread.daemon = True
+        self._thread.start()
+
+    def _loop(self) -> None:
+        while not self._stop.wait(_TICK_S):
+            if self._path.is_file():
+                time.sleep(_TICK_S)  # let the writer finish the file
+                digest = _sha256(self._path)
+                self._text = read_screen_text(self._path)
+                self._digest = digest
+                return
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def text_for(self, path: Path) -> Optional[str]:
+        self._thread.join(timeout=10)
+        if self._digest is None or Path(path).resolve() != self._path.resolve():
+            return None
+        return self._text if _sha256(Path(path)) == self._digest else None
+
+
+def _sha256(path: Path) -> Optional[str]:
+    import hashlib
+
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
 class FlowEngine:
     """The bundled tutorial, one stage per call, inside one browser process."""
 
@@ -299,6 +343,7 @@ class FlowEngine:
         self._stack = contextlib.ExitStack()
         self._base_url: Optional[str] = None
         self._pool: Any = None
+        self._starter: Any = None
 
     # -- lifetime ---------------------------------------------------------
 
@@ -394,18 +439,46 @@ class FlowEngine:
     def start_workers(self) -> None:
         """Start the worker processes for Act 2 while Act 1 is still running."""
 
-        from openadapt.quickstart.workers import WorkerPool, worker_count
+        import threading
+
+        from openadapt.quickstart.workers import (
+            WorkerPool,
+            worker_browser,
+            worker_count,
+        )
 
         count = worker_count()
-        if count > 1 and self._pool is None:
-            self._pool = WorkerPool(count, visible=self.visible)
-            self._stack.callback(self._pool.close)
+        if count <= 1 or self._starter is not None:
+            return
+
+        def start() -> None:
+            # Checking for the bundled browser takes about a second, so it
+            # happens here, off the main thread, once for every worker.
+            browser = worker_browser(self.visible)
+            if browser is not None:
+                self._pool = WorkerPool(count, visible=self.visible, browser=browser)
+
+        self._starter = threading.Thread(target=start, name="quickstart-workers")
+        self._starter.start()
+        self._stack.callback(self._close_pool)
+
+    def _close_pool(self) -> None:
+        if self._starter is not None:
+            self._starter.join()
+        if self._pool is not None:
+            self._pool.close()
+
+    def _started_pool(self) -> Any:
+        if self._starter is not None:
+            self._starter.join()
+        return self._pool
 
     @property
     def parallel(self) -> int:
         """How many runs can go at once: the workers that didn't give up."""
 
-        return max(1, self._pool.usable()) if self._pool is not None else 1
+        pool = self._started_pool()
+        return max(1, pool.usable()) if pool is not None else 1
 
     def run_all(
         self, notes: Sequence[str], on_finish: Callable[[RunFacts], None]
@@ -425,13 +498,16 @@ class FlowEngine:
             for index, note in enumerate(notes, 1)
         ]
         leftover = jobs
-        if self._pool is not None:
-            leftover = self._pool.run(
+        pool = self._started_pool()
+        if pool is not None:
+            leftover = pool.run(
                 jobs,
                 bundle_dir=self.bundle_dir,
                 root=self.root,
                 on_finish=on_finish,
             )
+            # Act 2 is their only job: let them shut down during Act 3.
+            pool.release()
         for index, note, folder in leftover:
             on_finish(self.run(index, note, folder))
 
@@ -453,21 +529,29 @@ class FlowEngine:
         """Rerun the same program while the database rejects the save."""
 
         from openadapt_flow.demo_proof import _final_frame, _load_report
-        from openadapt_flow.tutorial import _run_break_it
+        from openadapt_flow.tutorial import _run_break_it, consequential_step
 
         assert self.workflow is not None
+        run_dir = self.root / "run-broken"
+        save = consequential_step(self.workflow).id
+        # The save step's screenshot lands before the engine's wait on the
+        # database, so it can be read during that wait.
+        self._early = EarlyScreenRead(run_dir / "steps" / f"{save}_after.png")
         started = time.monotonic()
-        result = _run_break_it(
-            workflow=self.workflow,
-            bundle_dir=self.bundle_dir,
-            run_dir=self.root / "run-broken",
-            headed=self.visible,
-            say=lambda message: None,
-        )
+        try:
+            result = _run_break_it(
+                workflow=self.workflow,
+                bundle_dir=self.bundle_dir,
+                run_dir=run_dir,
+                headed=self.visible,
+                say=lambda message: None,
+            )
+        finally:
+            self._early.stop()
         seconds = time.monotonic() - started
         report = _load_report(Path(result.run_dir))
         screenshot = _final_frame(Path(result.run_dir), report) if report else None
-        screen_text = read_screen_text(screenshot) if screenshot else None
+        screen_text = None  # read by read_screen(), alongside the page
         return BreakFacts(
             run_dir=Path(result.run_dir),
             fault=result.fault,
@@ -484,6 +568,18 @@ class FlowEngine:
             seconds=seconds,
             result=result,
         )
+
+    def read_screen(self, broken: BreakFacts) -> Optional[str]:
+        """What the halted run's screenshot says (see :func:`read_screen_text`)."""
+
+        if broken.screenshot is None:
+            return None
+        early = getattr(self, "_early", None)
+        if early is not None:
+            text = early.text_for(broken.screenshot)
+            if text is not None:
+                return text
+        return read_screen_text(broken.screenshot)
 
     # -- finale -----------------------------------------------------------
 

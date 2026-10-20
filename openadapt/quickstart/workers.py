@@ -42,6 +42,12 @@ READY_TIMEOUT_S = 120.0
 #: it) and the run is repeated in the main process, in a new run folder.
 STALL_S = 45.0
 
+#: How much lower than the main process a worker's CPU priority is.
+WORKER_NICENESS = 10
+
+#: The OCR engine's thread count (read once, when the engine loads).
+OCR_THREADS_ENV = "OPENADAPT_FLOW_OCR_THREADS"
+
 #: One job: run number, note (None replays the demonstrated note), and the
 #: name of its run folder under the quickstart's output directory.
 Job = tuple[int, Optional[str], str]
@@ -54,32 +60,46 @@ def worker_count(cpus: Optional[int] = None) -> int:
     return max(1, min(MAX_WORKERS, cpus // 2))
 
 
-def _use_bundled_browser(visible: bool) -> bool:
-    """Point this worker at Playwright's own Chromium; False when it's absent."""
+def worker_browser(visible: bool) -> Optional[str]:
+    """The browser setting workers should use, or None when they shouldn't run.
+
+    Checked once, in the main process: ``""`` keeps the person's own
+    ``OPENADAPT_FLOW_BROWSER`` (or ``auto``, which means the bundled build on
+    a computer without Chrome or Edge); ``"bundled"`` points workers at
+    Playwright's own Chromium, already on disk. None means only an installed
+    Chrome or Edge is available, so the runs go one after another.
+    """
 
     from openadapt_flow import _browser_setup as setup
 
     if os.environ.get(setup.BROWSER_ENV):
-        return True  # the person chose a browser; respect it
+        return ""
     if setup.installed_browser_channel() is None:
-        return True  # "auto" already means the bundled build here
+        return ""
     try:
         present = setup._bundled_present(only_shell=not visible)
-    except Exception:  # noqa: BLE001 - unknown means don't start a worker
+    except Exception:  # noqa: BLE001 - unknown means run one after another
         present = False
-    if present:
-        os.environ[setup.BROWSER_ENV] = "bundled"
-    return present
+    return "bundled" if present else None
 
 
-def _worker_main(conn: Connection, visible: bool) -> None:
+def _worker_main(conn: Connection, visible: bool, browser: str = "") -> None:
     """One worker: get ready, then run the program for each job it is sent."""
 
+    # Five engines at once: two OCR threads each, as Flow's parallel workers
+    # use, so they don't crowd out the main process's compile.
+    os.environ.setdefault(OCR_THREADS_ENV, "2")
+    if browser:
+        os.environ["OPENADAPT_FLOW_BROWSER"] = browser
+    # Workers get ready while the main process demonstrates and compiles.
+    # Lower priority keeps them on spare cores then; in Act 2 the main
+    # process only waits, so the workers have the computer to themselves.
+    if hasattr(os, "nice"):
+        try:
+            os.nice(WORKER_NICENESS)
+        except OSError:
+            pass
     try:
-        if not _use_bundled_browser(visible):
-            conn.send(("broken", "Playwright's own Chromium isn't installed"))
-            return
-
         from openadapt_flow import _prewarm
         from openadapt_flow.backends._browser_process import shared_browser
         from openadapt_flow.ir import Workflow
@@ -165,13 +185,16 @@ class WorkerPool:
         size: int,
         *,
         visible: bool,
-        target: Callable[[Connection, bool], None] = _worker_main,
+        browser: str = "",
+        target: Callable[..., None] = _worker_main,
     ) -> None:
         context = multiprocessing.get_context("spawn")
         self._workers: dict[Connection, Any] = {}
         for _ in range(size):
             parent, child = context.Pipe()
-            process = context.Process(target=target, args=(child, visible), daemon=True)
+            process = context.Process(
+                target=target, args=(child, visible, browser), daemon=True
+            )
             process.start()
             child.close()
             self._workers[parent] = process
@@ -283,12 +306,17 @@ class WorkerPool:
                     self._drop(conn)
         return sorted(back + pending)
 
-    def close(self) -> None:
-        for conn, process in self._workers.items():
+    def release(self) -> None:
+        """Tell every worker to shut down, without waiting for it."""
+
+        for conn in self._workers:
             try:
                 conn.send(("close",))
             except (BrokenPipeError, OSError):
                 pass
+
+    def close(self) -> None:
+        self.release()
         for conn, process in self._workers.items():
             process.join(timeout=10)
             if process.is_alive():
@@ -302,4 +330,11 @@ def _again(job: Job) -> Job:
     return (index, note, f"{folder}-again")
 
 
-__all__ = ["MAX_WORKERS", "STALL_S", "Job", "WorkerPool", "worker_count"]
+__all__ = [
+    "MAX_WORKERS",
+    "STALL_S",
+    "Job",
+    "WorkerPool",
+    "worker_browser",
+    "worker_count",
+]

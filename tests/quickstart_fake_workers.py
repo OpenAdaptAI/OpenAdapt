@@ -39,11 +39,11 @@ def _serve(conn, behave) -> None:
         behave(conn, index, note, run_dir)
 
 
-def good(conn, visible) -> None:
+def good(conn, visible, browser="") -> None:
     _serve(conn, lambda c, i, n, d: c.send(("done", _facts(i, n, d))))
 
 
-def stalls_on_run_2(conn, visible) -> None:
+def stalls_on_run_2(conn, visible, browser="") -> None:
     def behave(c, i, n, d):
         if i == 2:
             time.sleep(600)
@@ -52,7 +52,7 @@ def stalls_on_run_2(conn, visible) -> None:
     _serve(conn, behave)
 
 
-def fails_run_3(conn, visible) -> None:
+def fails_run_3(conn, visible, browser="") -> None:
     def behave(c, i, n, d):
         if i == 3:
             c.send(("failed", "TutorialError: the gate refused"))
@@ -62,5 +62,5 @@ def fails_run_3(conn, visible) -> None:
     _serve(conn, behave)
 
 
-def never_ready(conn, visible) -> None:
+def never_ready(conn, visible, browser="") -> None:
     conn.send(("broken", "Playwright's own Chromium isn't installed"))
