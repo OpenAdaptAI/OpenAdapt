@@ -23,6 +23,9 @@ import tempfile
 import time
 from pathlib import Path
 
+#: A run that takes longer than this is recorded as a timeout, not waited on.
+RUN_TIMEOUT_S = 300
+
 COMMANDS = {
     "before": ["flow", "tutorial", "--break-it", "--out"],
     "after": ["quickstart", "--headless", "--out"],
@@ -52,21 +55,26 @@ def main() -> int:
             for name, argv in COMMANDS.items():
                 out = Path(work) / f"{name}-{round_index}"
                 started = time.monotonic()
-                result = subprocess.run(
-                    [launcher, *argv, str(out)],
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                )
+                try:
+                    result = subprocess.run(
+                        [launcher, *argv, str(out)],
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                        timeout=RUN_TIMEOUT_S,
+                    )
+                    code, lines = result.returncode, len(result.stdout.splitlines())
+                except subprocess.TimeoutExpired:
+                    code, lines = "timeout", 0
                 seconds = time.monotonic() - started
                 rows.append(
                     {
                         "command": name,
                         "round": round_index,
-                        "exit_code": result.returncode,
+                        "exit_code": code,
                         "wall_s": round(seconds, 2),
                         "load_1m": round(os.getloadavg()[0], 1),
-                        "lines": len(result.stdout.splitlines()),
+                        "lines": lines,
                     }
                 )
                 print(json.dumps(rows[-1]), flush=True)
