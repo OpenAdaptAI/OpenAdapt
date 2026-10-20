@@ -2769,10 +2769,12 @@ class Replayer:
     ) -> Optional[str]:
         """Why a governed run can't use this API step, or None when it can.
 
-        The run's authorization must have admitted this exact API step. A
-        qualification case runs the path it names, and a managed (Cloud)
-        dispatch or a production qualification admission doesn't bind API
-        steps yet, so those run the GUI steps.
+        The run's authorization must have admitted this exact API step. For a
+        managed (Cloud) dispatch that is Cloud's authorization, whose
+        ``api_steps`` are inside the dispatch binding digest Cloud signs. A
+        qualification case runs the path it names, and a production
+        qualification admission doesn't cover API steps yet, so those run the
+        GUI steps.
         """
 
         authorization = self.governed_authorization
@@ -2782,8 +2784,6 @@ class Replayer:
                 "a qualification case runs the GUI path it names; qualifying "
                 "an API step's path is not supported yet"
             )
-        if self.managed_dispatch_binding is not None:
-            return "a managed dispatch doesn't bind API steps yet"
         if authorization.production_qualification_admission_id is not None:
             return (
                 "a production qualification admission doesn't cover API steps "

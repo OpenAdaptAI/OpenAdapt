@@ -2488,6 +2488,36 @@ class _HashBoundEvidenceRef(Protocol):
     sha256: str
 
 
+def _sealed_evidence_bytes(
+    *,
+    root: Path,
+    candidate: Path,
+    evidence: _HashBoundEvidenceRef,
+) -> tuple[Optional[bytes], Optional[str]]:
+    """Read a file a sealed run directory holds by its logical name.
+
+    A run of a sealed bundle writes a sealed run directory. Its report is
+    bound by the digest of its plaintext; the sealed set authenticates the
+    ciphertext on disk and decrypts it in memory with the run's key.
+    """
+
+    from openadapt_flow import sealed_set
+
+    try:
+        parent = candidate.parent.resolve(strict=True)
+    except OSError:
+        return None, f"evidence file is missing: {evidence.relative_path}"
+    if not parent.is_relative_to(root):
+        return None, f"evidence path leaves its root: {evidence.relative_path}"
+    try:
+        payload = sealed_set.read_bytes(candidate)
+    except Exception:  # noqa: BLE001 - an unreadable sealed file is not evidence
+        return None, f"evidence file is missing: {evidence.relative_path}"
+    if hashlib.sha256(payload).hexdigest() != evidence.sha256:
+        return None, f"evidence hash mismatch: {evidence.relative_path}"
+    return payload, None
+
+
 def _read_evidence_bytes(
     *,
     root: Path,
@@ -2505,7 +2535,7 @@ def _read_evidence_bytes(
     try:
         resolved = candidate.resolve(strict=True)
     except OSError:
-        return None, f"evidence file is missing: {evidence.relative_path}"
+        return _sealed_evidence_bytes(root=root, candidate=candidate, evidence=evidence)
     if not resolved.is_relative_to(root) or candidate.is_symlink():
         return None, f"evidence path leaves its root: {evidence.relative_path}"
     if not resolved.is_file():
