@@ -1,6 +1,6 @@
 """openadapt-flow: record, compile, replay deterministically, heal on drift."""
 
-__version__ = "2.2.0"
+__version__ = "2.3.0"
 
 from openadapt_flow.ir import (  # noqa: F401
     ActionKind,
