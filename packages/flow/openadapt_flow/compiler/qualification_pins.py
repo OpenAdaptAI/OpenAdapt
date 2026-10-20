@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.ir import ActionKind, Step, Workflow
 from openadapt_flow.runtime.effects.effect import Effect
 from openadapt_flow.traversal import iter_workflow_steps
@@ -132,10 +133,10 @@ def load_recording_meta(recording_dir: Path | str | None) -> Optional[dict[str, 
     if recording_dir is None:
         return None
     path = Path(recording_dir) / "meta.json"
-    if not path.is_file():
+    if not _sealed.is_file(path):
         return None
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(_sealed.read_text(path))
     except (OSError, json.JSONDecodeError):
         return None
     return payload if isinstance(payload, dict) else None

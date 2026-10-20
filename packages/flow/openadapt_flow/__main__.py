@@ -304,7 +304,9 @@ def _replay_params(
     if params_file:
         path = Path(params_file)
         try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
+            from openadapt_flow import sealed_set
+
+            raw = json.loads(sealed_set.read_text(path))
         except (OSError, json.JSONDecodeError) as exc:
             raise SystemExit(f"--params-file could not be read as JSON: {exc}") from exc
         if not isinstance(raw, dict):
@@ -637,6 +639,38 @@ def _enforce_surface_binding(
     return None
 
 
+def _recording_encryption_key(args: argparse.Namespace, backend: str) -> Optional[str]:
+    """The passphrase that encrypts this recording, or ``None`` for plaintext.
+
+    An explicit ``OPENADAPT_RECORDING_KEY`` turns encryption on. Where the
+    recorder can encrypt every file from the first frame (the web recorder),
+    a configured ``OPENADAPT_BUNDLE_KEY`` turns it on by default too, so a
+    deployment that seals its bundles does not leave the recordings they come
+    from in plaintext. ``--no-encrypt`` opts out. The desktop recorders write
+    a raw capture session through openadapt-capture that Flow cannot encrypt
+    yet, so an explicit recording key refuses them rather than write
+    plaintext.
+    """
+    import os
+
+    from openadapt_flow import crypto, sealed_set
+
+    if getattr(args, "no_encrypt", False):
+        return None
+    explicit = os.environ.get(sealed_set.RECORDING_ENV_KEY) or None
+    if backend != "web":
+        if explicit:
+            raise SystemExit(
+                f"record: {sealed_set.RECORDING_ENV_KEY} is set, but the "
+                f"{backend} recorder writes its raw capture session (database, "
+                "video) through openadapt-capture, which Flow cannot encrypt "
+                "yet. Nothing was recorded. Record on an encrypted volume and "
+                "pass --no-encrypt, or use --backend web."
+            )
+        return None
+    return explicit or crypto.resolve_key(None)
+
+
 def _stamp_recording_surface(recording_dir: Path, surface: str) -> None:
     """Stamp the recorded surface into ``meta.json`` (additive, Section 5).
 
@@ -650,15 +684,19 @@ def _stamp_recording_surface(recording_dir: Path, surface: str) -> None:
     """
     import json
 
+    from openadapt_flow import sealed_set
+
     meta_path = Path(recording_dir) / "meta.json"
     try:
-        meta = json.loads(meta_path.read_text())
+        meta = json.loads(sealed_set.read_text(meta_path))
+    except sealed_set.SealedSetError:
+        raise
     except (OSError, ValueError):
         return
     if meta.get("surface") == surface:
         return
     meta["surface"] = surface
-    meta_path.write_text(json.dumps(meta, indent=2))
+    sealed_set.write_text(meta_path, json.dumps(meta, indent=2))
 
 
 def _report_backend_kind(kind: object) -> "ExecutionTargetKind":
@@ -1217,11 +1255,17 @@ def _cmd_record(args: argparse.Namespace) -> int:
     if code == 0 and (Path(args.out) / "events.jsonl").is_file():
         _propose_lookup_check(args, from_lookup=from_lookup)
     if code == 0 and with_check:
+        from openadapt_flow import sealed_set
         from openadapt_flow.cli_check import guided_check
         from openadapt_flow.cli_hints import command
 
         recording = Path(args.out)
-        if not (recording / "events.jsonl").is_file():
+        if sealed_set.is_sealed(recording):
+            print(
+                "record --with-check: marking a check in an encrypted recording "
+                "is not available yet; nothing was marked."
+            )
+        elif not (recording / "events.jsonl").is_file():
             print("record: no events.jsonl to mark a check in; skipped")
         elif not sys.stdin.isatty():
             mark = command(
@@ -1239,7 +1283,11 @@ def _recorded_surface(recording: Path) -> Optional[str]:
     import json
 
     try:
-        surface = json.loads((recording / "meta.json").read_text()).get("surface")
+        from openadapt_flow import sealed_set
+
+        surface = json.loads(sealed_set.read_text(recording / "meta.json")).get(
+            "surface"
+        )
     except (OSError, ValueError, AttributeError):
         return None
     return str(surface) if surface else None
@@ -1333,6 +1381,7 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
         getattr(args, "browser_cdp_endpoint", None)
         or getattr(args, "browser_page_url", None)
     )
+    recording_key = _recording_encryption_key(args, backend)
     if backend in ("windows", "macos", "linux", "rdp", "citrix"):
         if getattr(args, "capture_network", False):
             raise SystemExit(
@@ -1397,11 +1446,17 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
             stop_when=_record_until_stop(args),
             surface="web",
             capture_network=bool(getattr(args, "capture_network", False)),
+            encryption_key=recording_key,
         )
     except BrowserAttachError as exc:
         raise SystemExit(f"record: browser attachment refused: {exc}") from exc
     _stamp_recording_surface(out, "web")
     print(f"Recording written to {out}")
+    if recording_key:
+        print(
+            "Encrypted at rest: frames, events, metadata and network capture "
+            "were sealed with AES-256-GCM before they reached the disk."
+        )
     secrets = sorted(args.secret or ())
     if secrets:
         print(
@@ -1426,8 +1481,10 @@ def _recording_privacy_notices(recording_dir: Path) -> list[str]:
     """
     import json
 
+    from openadapt_flow import sealed_set
+
     try:
-        meta = json.loads((Path(recording_dir) / "meta.json").read_text())
+        meta = json.loads(sealed_set.read_text(Path(recording_dir) / "meta.json"))
     except (OSError, ValueError):
         return []
     notices: list[str] = []
@@ -1967,29 +2024,43 @@ def _cmd_compile(args: argparse.Namespace) -> int:
 
 
 def _cmd_induce(args: argparse.Namespace) -> int:
-    from openadapt_flow.compiler.induction import induce_program, validate_held_out
-    from openadapt_flow.ir import Workflow
-
     # Accept both RECORDING directories (compiled via the single-trace
     # bootstrap by induce_program) and already-compiled BUNDLE directories
     # (a dir containing workflow.json -> loaded as a Workflow). Detecting the
     # bundle case CLI-side keeps induce usable on artifacts the operator
     # already has, without touching the library API.
+    from openadapt_flow import sealed_set
+    from openadapt_flow.compiler.induction import induce_program, validate_held_out
+    from openadapt_flow.ir import Workflow
+
     traces: list = []
+    sealed_inputs = False
     for d in args.recording:
         path = Path(d)
-        if (path / "workflow.json").is_file():
+        sealed_inputs = sealed_inputs or sealed_set.is_sealed(path)
+        if (path / "workflow.json").is_file() or (path / "workflow.json.enc").is_file():
             traces.append(Workflow.load(path))
         else:
             traces.append(path)
+    if sealed_inputs and (args.report or args.probe_on):
+        # Both write the induced program (or probe bundles) outside any
+        # sealed set; refuse rather than write plaintext.
+        print(
+            "induce REFUSED: --report and --probe-on are not available for "
+            "encrypted inputs yet. Nothing was written."
+        )
+        return 2
 
+    spoken = _induce_narration_args(args)
+    if isinstance(spoken, int):
+        return spoken
     if args.probe_on:
-        probed = _induce_with_probes(args, traces)
+        probed = _induce_with_probes(args, traces, spoken)
         if isinstance(probed, int):
             return probed
         result = probed
     else:
-        result = induce_program(traces)
+        result = induce_program(traces, **spoken)
     print(result.render())
     if args.report:
         report_path = Path(args.report)
@@ -2013,7 +2084,14 @@ def _cmd_induce(args: argparse.Namespace) -> int:
     if args.name:
         workflow = workflow.model_copy(update={"name": args.name})
     out = Path(args.out)
-    workflow.save(out)
+    if sealed_inputs:
+        # Encrypted demonstrations induce an encrypted program.
+        passphrase = sealed_set.passphrase_for("bundle") or sealed_set.recording_key()
+        assert passphrase is not None  # the CLI guard refused a missing key
+        with sealed_set.writing(out, "bundle", passphrase):
+            workflow.save(out)
+    else:
+        workflow.save(out)
     print(
         f"\nCERTIFIED — induced program bundle written to {out} "
         f"(workflow: {workflow.name!r}, "
@@ -2023,7 +2101,53 @@ def _cmd_induce(args: argparse.Namespace) -> int:
     return 0
 
 
-def _induce_with_probes(args: argparse.Namespace, traces: list) -> Any:
+def _induce_narration_args(args: argparse.Namespace) -> Any:
+    """Narration arguments for induce: each trace's narration.json, the
+    narrated guards a person accepted, and the opt-in compile-time model."""
+    from openadapt_flow.compiler.narration_rules import (
+        AnthropicNarrationInterpreter,
+        recording_screen_texts,
+    )
+    from openadapt_flow.narration import NarrationRefused, load_narration
+
+    narration = []
+    for d in args.recording:
+        try:
+            narration.append(load_narration(Path(d)))
+        except (NarrationRefused, ValueError) as exc:
+            print(f"Narration not used for {d}: {exc}")
+            narration.append(None)
+    accepted = {}
+    if args.accept_narrated:
+        if not (args.accepted_by or "").strip():
+            print("--accept-narrated needs --accepted-by NAME (who accepted it)")
+            return 2
+        unpinned = [loc for loc in args.accept_narrated if "@" not in loc]
+        if unpinned:
+            print(
+                "--accept-narrated takes LOCATION@GUARD_ID as the report prints "
+                f"it (got {', '.join(unpinned)}), so it accepts that exact guard"
+            )
+            return 2
+        accepted = {loc: args.accepted_by.strip() for loc in args.accept_narrated}
+    frames = {
+        i: Path(d)
+        for i, d in enumerate(args.recording)
+        if (Path(d) / "frames").is_dir()
+    }
+    return {
+        "narration": narration,
+        "screen_texts": recording_screen_texts(frames) if frames else None,
+        "interpreter": AnthropicNarrationInterpreter()
+        if args.narration_model
+        else None,
+        "accepted_narration": accepted or None,
+    }
+
+
+def _induce_with_probes(
+    args: argparse.Namespace, traces: list, spoken: Optional[dict] = None
+) -> Any:
     """``induce --probe-on``: refuse a non-test target, else probe and induce.
 
     Returns the InductionResult, or an exit code when the target is refused.
@@ -2070,7 +2194,11 @@ def _induce_with_probes(args: argparse.Namespace, traces: list) -> Any:
         target = probing.DeploymentProbeTarget(cfg)
         print(f"Probing on declared test copy {cfg.name!r} (read-back: {contract})")
         return probing.probe_and_induce(
-            probe_traces, target=target, reward_contract=contract, work_dir=work
+            probe_traces,
+            target=target,
+            reward_contract=contract,
+            work_dir=work,
+            **(spoken or {}),
         )
 
     if args.probe_work_dir:
@@ -2079,6 +2207,55 @@ def _induce_with_probes(args: argparse.Namespace, traces: list) -> Any:
         return _run(work)
     with tempfile.TemporaryDirectory(prefix="induce-probe-") as tmp:
         return _run(Path(tmp))
+
+
+def _cmd_narration_attach(args: argparse.Namespace) -> int:
+    import json
+
+    from openadapt_flow.narration import (
+        NarrationRefused,
+        attach_narration,
+        sentences_from_transcript,
+        transcribe_audio,
+    )
+
+    recording = Path(args.recording)
+    try:
+        from openadapt_flow.narration import require_scrubber
+
+        scrubber = require_scrubber()  # refuse before any transcription
+        if args.audio:
+            result = transcribe_audio(
+                args.audio, model=args.model, backend=args.backend
+            )
+        else:
+            result = json.loads(Path(args.transcript).read_text(encoding="utf-8"))
+        path = attach_narration(
+            recording,
+            sentences_from_transcript(result, offset=args.offset),
+            scrubber=scrubber,
+        )
+    except (NarrationRefused, FileNotFoundError, ValueError, ImportError) as exc:
+        print(f"Narration not written: {exc}")
+        return 2
+    print(f"Scrubbed narration written to {path}")
+    return _cmd_narration_show(args)
+
+
+def _cmd_narration_show(args: argparse.Namespace) -> int:
+    from openadapt_flow.narration import NarrationRefused, load_narration
+
+    try:
+        narration = load_narration(Path(args.recording))
+    except NarrationRefused as exc:
+        print(str(exc))
+        return 2
+    if narration is None:
+        print(f"No narration.json in {args.recording}")
+        return 1
+    for line in narration.lines:
+        print(f"[{line.t_start:7.2f}s] {line.step_id or '-':>9}  {line.text}")
+    return 0
 
 
 def _cmd_for_each(args: argparse.Namespace) -> int:
@@ -4774,6 +4951,7 @@ def _cmd_seal(args: argparse.Namespace) -> int:
         return 2
     print(f"Sealed bundle: {sealed.path}")
     print(f"Content digest: sha256:{sealed.content_digest}")
+    print(f"Sealed file set: sha256:{sealed.set_digest}")
     if sealed.certification_invalidated:
         print(
             "Prior certification invalidated: certify the sealed destination "
@@ -5225,12 +5403,13 @@ def _qualification_drill_driver(args: argparse.Namespace, workflow, params):
 
 def _retain_drill_evidence(run_dir: Path, driver) -> None:
     """Keep the drill's receipt and mutation record next to its report."""
+    from openadapt_flow import sealed_set
     from openadapt_flow.ir import RunReport
     from openadapt_flow.qualification_drills import write_drill_evidence
 
     try:
         report = RunReport.model_validate_json(
-            (run_dir / "report.json").read_text(encoding="utf-8")
+            sealed_set.read_text(run_dir / "report.json")
         )
     except (OSError, ValueError):
         report = None
@@ -5775,6 +5954,18 @@ def _cmd_qualify_proposal(args: argparse.Namespace) -> int:
         workflow = Workflow.load(bundle)
     except (OSError, ValueError) as exc:
         raise SystemExit(f"could not load bundle: {exc}") from exc
+    from openadapt_flow import sealed_set
+
+    out_arg = getattr(args, "out", None)
+    if (
+        out_arg
+        and sealed_set.is_sealed_path(bundle)
+        and not sealed_set.is_sealed_path(Path(out_arg))
+    ):
+        raise SystemExit(
+            f"qualify {verb} REFUSED: the bundle is encrypted, so --out must be "
+            "inside it (or omitted). Nothing was written."
+        )
 
     if verb == "propose":
         try:
@@ -5868,7 +6059,9 @@ def _cmd_qualify_proposal(args: argparse.Namespace) -> int:
             if args.out
             else bundle / "qualification-admission.local-dev.json"
         )
-        out.write_text(local.model_dump_json(indent=2), encoding="utf-8")
+        from openadapt_flow import sealed_set
+
+        sealed_set.write_text(out, local.model_dump_json(indent=2))
         print(local.model_dump_json(indent=2))
         return 0
 
@@ -7795,6 +7988,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--no-encrypt",
+        action="store_true",
+        help=(
+            "Write the recording in plaintext even when OPENADAPT_BUNDLE_KEY "
+            "or OPENADAPT_RECORDING_KEY is set (web recordings are encrypted "
+            "by default when a key is configured)"
+        ),
+    )
+    p.add_argument(
         "--capture-network",
         action="store_true",
         help=(
@@ -8030,7 +8232,73 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Write the induction report (JSON, every probe run included) here",
     )
+    p.add_argument(
+        "--accept-narrated",
+        action="append",
+        default=[],
+        metavar="LOCATION@GUARD_ID",
+        help=(
+            "Accept the guard narration proposed at LOCATION, pinned by its "
+            "GUARD_ID, exactly as the report prints it (e.g. opt_2@3fa9c1d2e4b5). "
+            "A guard any recording contradicts stays refused. Repeatable; "
+            "needs --accepted-by"
+        ),
+    )
+    p.add_argument(
+        "--accepted-by",
+        default=None,
+        help="Who accepted the narrated guard(s); recorded in the program",
+    )
+    p.add_argument(
+        "--narration-model",
+        action="store_true",
+        help=(
+            "Let a compile-time model (your own Anthropic key) read narrated "
+            "sentences the built-in parser cannot. Its answer is a flagged "
+            "proposal, checked like any other; never used at run time. The "
+            "sentence is scrubbed before it is sent. See docs/NARRATION.md"
+        ),
+    )
     p.set_defaults(func=_cmd_induce)
+
+    p = sub.add_parser(
+        "narration",
+        help=(
+            "Spoken narration for a recording: transcribe on this machine, "
+            "scrub, line up with the steps (narration.json), or show it"
+        ),
+    )
+    nsub = p.add_subparsers(dest="narration_cmd", required=True)
+    pa = nsub.add_parser(
+        "attach",
+        help=(
+            "Transcribe audio on this machine (or read a transcript), scrub it "
+            "with openadapt-privacy, and line it up with the recording's steps"
+        ),
+    )
+    pa.add_argument("recording", help="Recording directory (events.jsonl)")
+    src = pa.add_mutually_exclusive_group(required=True)
+    src.add_argument("--audio", help="16 kHz audio file (WAV, or FLAC with soundfile)")
+    src.add_argument(
+        "--transcript",
+        help="Whisper-style JSON transcript ({'segments': [{start, end, text}]})",
+    )
+    pa.add_argument(
+        "--offset",
+        type=float,
+        default=0.0,
+        help="Seconds after the recording started that the audio starts (default 0)",
+    )
+    pa.add_argument("--model", default="base", help="Whisper model (default: base)")
+    pa.add_argument(
+        "--backend",
+        default="auto",
+        help="On-device backend: auto | faster-whisper | openai-whisper",
+    )
+    pa.set_defaults(func=_cmd_narration_attach)
+    ps = nsub.add_parser("show", help="Print a recording's narration by step")
+    ps.add_argument("recording", help="Recording or bundle directory")
+    ps.set_defaults(func=_cmd_narration_show)
 
     p = sub.add_parser(
         "for-each",
@@ -9161,9 +9429,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "seal",
         help=(
-            "Copy a bundle to a new path, encrypt its workflow and template "
-            "evidence with OPENADAPT_BUNDLE_KEY, verify integrity, and publish "
-            "it atomically"
+            "Encrypt every file of a bundle that can hold patient data with "
+            "OPENADAPT_BUNDLE_KEY, bind the whole file set to one sealed "
+            "index, verify it, and publish it atomically at a new path"
         ),
     )
     p.add_argument("source", help="Existing workflow bundle directory")
@@ -10996,6 +11264,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_compile_agent_parser(sub)
 
+    from openadapt_flow.agent_guard.cli import add_parser as _add_guard_parser
+
+    _add_guard_parser(sub)
+
     from openadapt_flow.cli_fleet import register_fleet_parser
 
     register_fleet_parser(sub)
@@ -11417,6 +11689,82 @@ def _qualify_default_form(argv: list[str]) -> list[str]:
 _PREWARM_SKIP_FLAGS = frozenset({"-h", "--help", "--version"})
 
 
+#: Commands that read sealed bundles and encrypted recordings in memory and
+#: keep what they write sealed (docs/phi_at_rest.md). Any other command given
+#: a sealed path refuses before it reads anything, rather than decrypt to disk
+#: or misread the ciphertext. Keyed by ``module:function``.
+_SEALED_READY_COMMANDS: frozenset[str] = frozenset(
+    {
+        "openadapt_flow.__main__:_cmd_seal",
+        "openadapt_flow.__main__:_cmd_certify",
+        "openadapt_flow.__main__:_cmd_record",
+        "openadapt_flow.__main__:_cmd_compile",
+        "openadapt_flow.__main__:_cmd_induce",
+        "openadapt_flow.__main__:_cmd_scaffold_verifier",
+        "openadapt_flow.__main__:_cmd_run",
+        "openadapt_flow.__main__:_cmd_replay",
+        "openadapt_flow.__main__:_cmd_resume",
+        "openadapt_flow.__main__:_cmd_approve",
+        "openadapt_flow.__main__:_cmd_qualify",
+        "openadapt_flow.cli_admit:cmd_admit_run",
+        "openadapt_flow.cli_admit:cmd_admit_decide",
+        "openadapt_flow.cli_admit:cmd_admit_status",
+        "openadapt_flow.cli_undo:_cmd_undo_declare",
+        "openadapt_flow.cli_undo:_cmd_undo_list",
+        "openadapt_flow.cli_undo:_cmd_undo_approve",
+        "openadapt_flow.cli_undo:_cmd_undo_run",
+    }
+)
+
+
+def _sealed_paths_in(args: argparse.Namespace) -> list[Path]:
+    from openadapt_flow import sealed_set
+
+    found: list[Path] = []
+    for name, value in vars(args).items():
+        if name == "func":
+            continue
+        values = value if isinstance(value, (list, tuple)) else [value]
+        for item in values:
+            if not isinstance(item, (str, Path)) or not str(item):
+                continue
+            text = str(item)
+            if "://" in text or "\n" in text or len(text) > 4096:
+                continue
+            path = Path(text)
+            root = path if sealed_set.is_sealed(path) else sealed_set.sealed_root(path)
+            if root is not None and root not in found:
+                found.append(root)
+    return found
+
+
+def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
+    """Refuse a sealed path in a command that cannot keep it sealed, and a
+    sealed path whose key is not configured, before the command runs."""
+    from openadapt_flow import sealed_set
+
+    sealed = _sealed_paths_in(args)
+    if not sealed:
+        return None
+    func = getattr(args, "func", None)
+    command = f"{getattr(func, '__module__', '')}:{getattr(func, '__name__', '')}"
+    if command not in _SEALED_READY_COMMANDS:
+        root = sealed[0]
+        kind = sealed_set.header_kind(root)
+        return (
+            f"{root} is an encrypted {kind}, and this command does not read "
+            "encrypted input yet. Flow will not decrypt it to disk for this "
+            "command. Commands that read sealed input: record, compile, "
+            "induce, scaffold-verifier, seal, certify, qualify, admit, run, "
+            "replay, approve, resume and undo."
+        )
+    for root in sealed:
+        kind = sealed_set.header_kind(root)
+        if not sealed_set.passphrase_for(kind):
+            return sealed_set.missing_key_message(root, kind)
+    return None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code."""
     raw = list(sys.argv[1:] if argv is None else argv)
@@ -11440,6 +11788,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     no_outbound.enforce_from_env()
     args = build_parser().parse_args(argv)
+    from openadapt_flow import sealed_set
+
+    try:
+        refusal = _sealed_input_refusal(args)
+    except sealed_set.SealedSetError as exc:
+        refusal = str(exc)
+    if refusal is not None:
+        print(f"REFUSED: {refusal}", file=sys.stderr)
+        return 2
     try:
         code = args.func(args)
         if getattr(args, "command", None) in ("run", "replay"):
@@ -11452,6 +11809,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             if note:
                 print(note, file=sys.stderr)
         return code
+    except sealed_set.SealedSetError as exc:
+        # A sealed bundle or encrypted recording that is missing its key,
+        # was changed after sealing, or holds an unknown file: fail closed.
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
     except BrowserSupportMissing as exc:
         # Missing optional browser support is a setup decision, not a crash.
         print(f"Browser setup required:\n{exc}", file=sys.stderr)

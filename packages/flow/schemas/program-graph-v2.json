@@ -224,6 +224,19 @@
           "default": null,
           "description": "Guard summary for a branch edge",
           "title": "Guard"
+        },
+        "guard_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The scrubbed spoken sentence that suggested this branch",
+          "title": "Guard Reason"
         }
       },
       "required": [
@@ -408,6 +421,32 @@
           "default": null,
           "description": "halt|skip when guard unmet",
           "title": "Guard On Unmet"
+        },
+        "guard_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The scrubbed spoken sentence that suggested this guard",
+          "title": "Guard Reason"
+        },
+        "guard_certified_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "recordings_agree|probe|person: what certified a narrated guard",
+          "title": "Guard Certified By"
         },
         "wait_until": {
           "anyOf": [

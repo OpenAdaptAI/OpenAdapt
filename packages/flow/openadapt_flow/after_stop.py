@@ -35,10 +35,11 @@ import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional
 
 from pydantic import BaseModel, Field
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.ir import (
     ChangeLedgerEffect,
     ChangeLedgerEntry,
@@ -170,7 +171,9 @@ def build_change_ledger(
     steps_by_id = {step.id: step for step in iter_workflow_steps(workflow)}
     undo_by_target: dict[str, str] = {}
     for undo in workflow.undo_steps:
-        undo_by_target.setdefault(undo.undoes, undo.id)
+        # A proposal no person has approved is not an undo yet.
+        if not undo.awaiting_approval:
+            undo_by_target.setdefault(undo.undoes, undo.id)
 
     ledger: list[ChangeLedgerEntry] = []
     position = 0
@@ -468,7 +471,7 @@ class UndoOffer(BaseModel):
     undo_id: str
     undoes: str
     intent: str
-    source: Literal["demonstration", "hand_written"]
+    source: Literal["demonstration", "hand_written", "synthesized"]
     #: The ledger entry that makes this undo relevant.
     ledger_entry: ChangeLedgerEntry
     #: SHA-256 of the run's report.json bytes.
@@ -522,9 +525,9 @@ def _canonical(payload: Any) -> bytes:
 
 def _load_report(run_dir: Path) -> tuple[RunReport, str]:
     path = run_dir / "report.json"
-    if not path.is_file():
+    if not _sealed.is_file(path):
         raise UndoNotOffered(f"{run_dir} holds no report.json")
-    raw = path.read_bytes()
+    raw = _sealed.read_bytes(path)
     return RunReport.model_validate_json(raw), hashlib.sha256(raw).hexdigest()
 
 
@@ -550,10 +553,10 @@ _LINEAGE_SCHEMA = "openadapt.undo-lineage/v1"
 
 def _read_lineage(bundle_dir: Path) -> list[str]:
     path = bundle_dir / LINEAGE_FILENAME
-    if not path.is_file():
+    if not _sealed.is_file(path):
         return []
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = json.loads(_sealed.read_text(path))
     except (OSError, json.JSONDecodeError):
         return []
     if not isinstance(raw, dict) or raw.get("schema") != _LINEAGE_SCHEMA:
@@ -568,11 +571,11 @@ def _record_lineage(bundle_dir: Path, prior_digest: str) -> None:
     digests = _read_lineage(bundle_dir)
     if prior_digest not in digests:
         digests.append(prior_digest)
-    (bundle_dir / LINEAGE_FILENAME).write_text(
+    _sealed.write_text(
+        bundle_dir / LINEAGE_FILENAME,
         json.dumps(
             {"schema": _LINEAGE_SCHEMA, "prior_content_digests": digests}, indent=2
         ),
-        encoding="utf-8",
     )
 
 
@@ -648,7 +651,14 @@ def offer_undos(
     for entry in sorted(report.change_ledger, key=lambda e: -e.position):
         if not entry.may_need_undo or runs_per_step[entry.step_id] > 1:
             continue
-        undo = next((u for u in workflow.undo_steps if u.undoes == entry.step_id), None)
+        undo = next(
+            (
+                u
+                for u in workflow.undo_steps
+                if u.undoes == entry.step_id and not u.awaiting_approval
+            ),
+            None,
+        )
         if undo is None:
             continue
         digest = hashlib.sha256(
@@ -693,13 +703,21 @@ def _find_offer(
             why
             if why
             else "the run finished, the workflow has a loop, the system of "
-            "record proved the step's change absent, or the bundle declares no "
-            "such undo"
+            "record proved the step's change absent, the bundle declares no "
+            "such undo, or it is a proposal no person has approved yet "
+            "(openadapt-flow undo accept)"
         )
     )
 
 
 def _write_once(path: Path, payload: str) -> None:
+    if _sealed.is_sealed_path(path):
+        # The run of a sealed bundle: the record is encrypted in memory. The
+        # existence check and the write are not one atomic step here.
+        if _sealed.exists(path):
+            raise FileExistsError(str(path))
+        _sealed.write_text(path, payload)
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -726,7 +744,7 @@ def approve_undo(
     run_dir = Path(run_dir)
     offer = _find_offer(run_dir, workflow, undo_id, bundle_dir)
     undo_dir = _undo_dir(run_dir, undo_id)
-    if (undo_dir / CLAIM_FILENAME).exists():
+    if _sealed.exists(undo_dir / CLAIM_FILENAME):
         raise UndoAlreadyRun(f"undo {undo_id!r} was already run; it runs once")
     approval = UndoApproval(
         undo_id=undo_id,
@@ -739,11 +757,14 @@ def approve_undo(
     existing = read_undo_approval(run_dir, undo_id)
     if existing is not None and existing.offer_digest == offer.offer_digest:
         raise UndoRefused(f"undo {undo_id!r} is already approved for this offer")
-    if existing is None and not path.exists():
+    if existing is None and not _sealed.exists(path):
         try:
             _write_once(path, approval.model_dump_json(indent=2))
         except FileExistsError as exc:
             raise UndoRefused(f"undo {undo_id!r} already has an approval") from exc
+        return approval
+    if _sealed.is_sealed_path(path):
+        _sealed.write_text(path, approval.model_dump_json(indent=2))
         return approval
     # A stale or unreadable approval that was never used: replace it whole.
     staging = undo_dir / f".{APPROVAL_FILENAME}.{os.getpid()}"
@@ -754,19 +775,19 @@ def approve_undo(
 
 def read_undo_approval(run_dir: Path | str, undo_id: str) -> Optional[UndoApproval]:
     path = _undo_dir(Path(run_dir), undo_id) / APPROVAL_FILENAME
-    if not path.is_file():
+    if not _sealed.is_file(path):
         return None
     try:
-        return UndoApproval.model_validate_json(path.read_text(encoding="utf-8"))
+        return UndoApproval.model_validate_json(_sealed.read_text(path))
     except ValueError:
         return None
 
 
 def read_undo_result(run_dir: Path | str, undo_id: str) -> Optional[UndoResult]:
     path = _undo_dir(Path(run_dir), undo_id) / RESULT_FILENAME
-    if not path.is_file():
+    if not _sealed.is_file(path):
         return None
-    return UndoResult.model_validate_json(path.read_text(encoding="utf-8"))
+    return UndoResult.model_validate_json(_sealed.read_text(path))
 
 
 @dataclass(frozen=True)
@@ -798,30 +819,209 @@ def undo_workflow(workflow: Workflow, undo: UndoStep) -> Workflow:
     )
 
 
+# ---------------------------------------------------------------------------
+# Values kept before the save, for an undo that locates or restores
+# ---------------------------------------------------------------------------
+
+PRIOR_DIRNAME = "prior"
+_PRIOR_SCHEMA = "openadapt.undo-prior/v1"
+
+RecordsReader = Callable[[], Optional[list[dict[str, Any]]]]
+
+
+def _resolved_selector(
+    match: dict[str, Any], params: Mapping[str, Any]
+) -> Optional[dict[str, str]]:
+    """``match`` bound to ``params``; None when a value is missing."""
+    from openadapt_flow.runtime.effects.effect import Effect, EffectKind
+
+    effect = Effect(kind=EffectKind.RECORD_WRITTEN, match=match)
+    out: dict[str, str] = {}
+    for key, expr in effect.match.items():
+        value = expr.resolve(params)
+        if value is None:
+            return None
+        out[key] = value
+    return out
+
+
+def _matching(
+    records: list[dict[str, Any]], selector: dict[str, str]
+) -> list[dict[str, Any]]:
+    from openadapt_flow.runtime.effects.effect import record_matches
+
+    return [r for r in records if record_matches(r, selector)]
+
+
+def prior_state_path(run_dir: Path | str, step_id: str) -> Path:
+    digest = hashlib.sha256(step_id.encode("utf-8")).hexdigest()[:16]
+    return Path(run_dir) / UNDO_DIRNAME / PRIOR_DIRNAME / f"{digest}.json"
+
+
+def keep_prior_state(
+    workflow: Workflow,
+    step: Step,
+    records: Optional[list[dict[str, Any]]],
+    params: Mapping[str, Any],
+    run_dir: Path | str,
+) -> Optional[Path]:
+    """Keep what an undo of ``step`` needs, read just before the save.
+
+    Called by the replayer with the system-of-record records it read for the
+    step's pre-action baseline. Writes only when the bundle has an undo for
+    ``step`` that locates or restores. For ``locate``: the ids of records
+    that already matched, so the undo can tell the new one. For
+    ``restore``: the old values of the named fields, from the one matching
+    record. The file holds record values, like ``params.json``: it is
+    created owner-only and never copied into the report.
+
+    Never raises: a run is not stopped because an undo can't be prepared.
+    The undo then refuses, and a person repairs the record by hand.
+    """
+    undos = [
+        u
+        for u in workflow.undo_steps
+        if u.undoes == step.id and (u.locate is not None or u.restore is not None)
+    ]
+    if not undos or records is None:
+        return None
+    try:
+        payload: dict[str, Any] = {"schema": _PRIOR_SCHEMA, "step_id": step.id}
+        existing: dict[str, list[str]] = {}
+        restored: dict[str, dict[str, Any]] = {}
+        for undo in undos:
+            if undo.locate is not None:
+                selector = _resolved_selector(undo.locate.match, params)
+                if selector is not None:
+                    existing[undo.id] = sorted(
+                        str(r.get(undo.locate.field))
+                        for r in _matching(records, selector)
+                    )
+            if undo.restore is not None:
+                selector = _resolved_selector(undo.restore.match, params)
+                rows = _matching(records, selector) if selector is not None else []
+                if len(rows) == 1:
+                    restored[undo.id] = {
+                        name: rows[0].get(name) for name in undo.restore.fields
+                    }
+        payload["existing_ids"] = existing
+        payload["restore"] = restored
+        path = prior_state_path(run_dir, step.id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        staging = path.with_name(f".{path.name}.{os.getpid()}")
+        fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+        os.replace(staging, path)
+        return path
+    except Exception:  # noqa: BLE001 - never stop a run over undo bookkeeping
+        return None
+
+
+def read_prior_state(run_dir: Path | str, step_id: str) -> Optional[dict[str, Any]]:
+    path = prior_state_path(run_dir, step_id)
+    if not path.is_file():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(raw, dict) or raw.get("schema") != _PRIOR_SCHEMA:
+        return None
+    return raw
+
+
+def needs_records(undo: UndoStep) -> bool:
+    """Whether running ``undo`` needs a fresh read of the system of record."""
+    return undo.locate is not None
+
+
+def resolve_undo_params(
+    undo: UndoStep,
+    run_dir: Path | str,
+    params: Mapping[str, Any],
+    read_records: Optional[RecordsReader] = None,
+) -> dict[str, Any]:
+    """The run's params plus what ``undo.locate`` and ``undo.restore`` bind.
+
+    Raises :class:`UndoRefused` when a value can't be found: no values were
+    kept before the save, the record the save created can't be told apart,
+    or the system of record can't be read. Nothing has run at that point.
+    """
+    out = dict(params)
+    if undo.locate is None and undo.restore is None:
+        return out
+    prior = read_prior_state(run_dir, undo.undoes)
+    if prior is None:
+        raise UndoRefused(
+            f"the run kept no values before step {undo.undoes!r} for undo "
+            f"{undo.id!r} (the step ran without a record read-back, or before "
+            "this undo was in the bundle); repair the record by hand"
+        )
+    if undo.restore is not None:
+        values = (prior.get("restore") or {}).get(undo.id)
+        if not isinstance(values, dict) or set(values) != set(undo.restore.fields):
+            raise UndoRefused(
+                f"the run could not read one record's old values before step "
+                f"{undo.undoes!r}; undo {undo.id!r} has nothing to restore"
+            )
+        for field_name, param in undo.restore.fields.items():
+            value = values[field_name]
+            out[param] = "" if value is None else str(value)
+    if undo.locate is not None:
+        existing = (prior.get("existing_ids") or {}).get(undo.id)
+        selector = _resolved_selector(undo.locate.match, params)
+        if not isinstance(existing, list) or selector is None:
+            raise UndoRefused(
+                f"the run kept no record list before step {undo.undoes!r}; "
+                f"undo {undo.id!r} can't tell which record the step created"
+            )
+        records = read_records() if read_records is not None else None
+        if records is None:
+            raise UndoRefused(
+                "the system of record could not be read, so the record the "
+                f"step {undo.undoes!r} created can't be found; nothing ran"
+            )
+        new = [
+            r
+            for r in _matching(records, selector)
+            if str(r.get(undo.locate.field)) not in set(existing)
+        ]
+        if len(new) != 1:
+            raise UndoRefused(
+                f"{len(new)} record(s) match step {undo.undoes!r}'s record and "
+                "were not there before it ran; undo "
+                f"{undo.id!r} needs exactly one. Repair the record by hand"
+            )
+        out[undo.locate.param] = str(new[0].get(undo.locate.field))
+    return out
+
+
 def prepare_undo_run(
     run_dir: Path | str,
     workflow: Workflow,
     undo_id: str,
     *,
     bundle_dir: Optional[Path | str] = None,
+    read_records: Optional[RecordsReader] = None,
 ) -> PreparedUndo:
     """Check the approval and claim it. Raises :class:`UndoRefused` otherwise.
 
     The claim is written with exclusive create, so an approval is used at
-    most once even when two processes race.
+    most once even when two processes race. An undo that locates or restores
+    resolves its values first (``read_records`` reads the system of record),
+    so a refusal there leaves the approval unused.
     """
     run_dir = Path(run_dir)
     offer = _find_offer(run_dir, workflow, undo_id, bundle_dir)
     approval_path = _undo_dir(run_dir, undo_id) / APPROVAL_FILENAME
-    if not approval_path.is_file():
+    if not _sealed.is_file(approval_path):
         raise UndoNotApproved(
             f"undo {undo_id!r} has no approval. A person must review and "
             "approve it first; Flow never runs an undo on its own"
         )
     try:
-        approval = UndoApproval.model_validate_json(
-            approval_path.read_text(encoding="utf-8")
-        )
+        approval = UndoApproval.model_validate_json(_sealed.read_text(approval_path))
     except ValueError as exc:
         raise UndoNotApproved(f"undo {undo_id!r} approval is unreadable") from exc
     if approval.undo_id != undo_id or approval.offer_digest != offer.offer_digest:
@@ -830,6 +1030,9 @@ def prepare_undo_run(
             "offer (the report, bundle or undo changed since); a person must "
             "approve it again"
         )
+    undo = next(u for u in workflow.undo_steps if u.id == undo_id)
+    report, _ = _load_report(run_dir)
+    params = resolve_undo_params(undo, run_dir, report.params, read_records)
     started = _now()
     try:
         _write_once(
@@ -841,14 +1044,12 @@ def prepare_undo_run(
             f"undo {undo_id!r} was already run with this approval; check "
             f"{_undo_dir(run_dir, undo_id) / RESULT_FILENAME}"
         ) from exc
-    undo = next(u for u in workflow.undo_steps if u.id == undo_id)
-    report, _ = _load_report(run_dir)
     return PreparedUndo(
         offer=offer,
         approval=approval,
         undo=undo,
         workflow=undo_workflow(workflow, undo),
-        params=dict(report.params),
+        params=params,
         undo_run_dir=_undo_dir(run_dir, undo_id) / UNDO_RUN_DIRNAME,
         started_at=started,
     )
@@ -857,12 +1058,23 @@ def prepare_undo_run(
 def _judge_undo(
     prepared: PreparedUndo, report: Optional[RunReport]
 ) -> tuple[bool, str]:
+    return judge_undo_report(prepared.undo, report)
+
+
+def judge_undo_report(undo: UndoStep, report: Optional[RunReport]) -> tuple[bool, str]:
+    """Whether ``report`` shows ``undo`` ran in full and was confirmed.
+
+    Every undo step must have run and succeeded, and every step that
+    declares an effect must be confirmed by an independent read of the
+    system of record. ``undo propose`` judges its test-copy runs with this
+    same function.
+    """
     from openadapt_flow.transaction import _effect_evidence_has_exact_coverage
 
     if report is None:
         return False, "the undo run left no report"
     by_id = {result.step_id: result for result in report.results}
-    for step in prepared.undo.steps:
+    for step in undo.steps:
         result = by_id.get(step.id)
         if result is None:
             return False, f"undo step {step.id!r} did not run"
@@ -917,10 +1129,28 @@ def finish_undo_run(
             for line in r.effect_results
         ],
     )
-    (_undo_dir(Path(run_dir), prepared.undo.id) / RESULT_FILENAME).write_text(
-        result.model_dump_json(indent=2), encoding="utf-8"
+    _sealed.write_text(
+        _undo_dir(Path(run_dir), prepared.undo.id) / RESULT_FILENAME,
+        result.model_dump_json(indent=2),
     )
     return result
+
+
+def records_reader(verifier: Any) -> Optional[RecordsReader]:
+    """Read every record through an effect verifier's own read path."""
+    if verifier is None or not callable(getattr(verifier, "capture_pre_state", None)):
+        return None
+
+    def read() -> Optional[list[dict[str, Any]]]:
+        try:
+            state = verifier.capture_pre_state()
+        except Exception:  # noqa: BLE001 - an unreadable store is not a guess
+            return None
+        if getattr(state, "reachable", False) is not True:
+            return None
+        return [dict(r) for r in state.records]
+
+    return read
 
 
 def run_undo(
@@ -937,7 +1167,13 @@ def run_undo(
     approval was already used. The undo runs through the normal runtime, so
     identity checks, the risk gate and effect verification all apply.
     """
-    prepared = prepare_undo_run(run_dir, workflow, undo_id, bundle_dir=bundle_dir)
+    prepared = prepare_undo_run(
+        run_dir,
+        workflow,
+        undo_id,
+        bundle_dir=bundle_dir,
+        read_records=records_reader(getattr(replayer, "effect_verifier", None)),
+    )
     report: Optional[RunReport] = None
     try:
         report = replayer.run(
@@ -1024,8 +1260,6 @@ def declare_undo(
     needs certifying again), and approvals bound to the old digest no longer
     match.
     """
-    from openadapt_flow.bundle_sealing import _invalidate_prior_certification
-
     bundle_dir = Path(bundle_dir)
     workflow = Workflow.load(bundle_dir)
     if any(existing.id == undo.id for existing in workflow.undo_steps):
@@ -1039,19 +1273,44 @@ def declare_undo(
     if problems:
         raise ValueError(f"undo {undo.id!r} {problems[0]}")
     for rel in assets or {}:
-        if (bundle_dir / rel).exists():
+        if _sealed.exists(bundle_dir / rel):
             raise ValueError(f"the bundle already has {rel}")
     for rel, source in (assets or {}).items():
+        if _sealed.is_sealed(bundle_dir):
+            # The crop joins the in-memory map; save() seals it below.
+            workflow._decrypted_templates[rel] = Path(source).read_bytes()
+            continue
         (bundle_dir / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, bundle_dir / rel)
+    return save_undo_steps(
+        bundle_dir,
+        workflow,
+        [*workflow.undo_steps, undo],
+        reason="an undo step was declared after certification",
+    )
+
+
+def save_undo_steps(
+    bundle_dir: Path | str,
+    workflow: Workflow,
+    undo_steps: list[UndoStep],
+    *,
+    reason: str,
+) -> Workflow:
+    """Replace the bundle's undo steps and re-seal it.
+
+    Runs made with the bundle as it was still match it afterwards (the old
+    digest goes into ``undo-lineage.json``). A prior certification is marked
+    expired with ``reason``.
+    """
+    from openadapt_flow.bundle_sealing import _invalidate_prior_certification
+
+    bundle_dir = Path(bundle_dir)
     if workflow.manifest is not None and workflow.manifest.content_digest:
-        # Runs made with the bundle as it was still match it afterwards.
         _record_lineage(bundle_dir, workflow.manifest.content_digest)
-    workflow.undo_steps = [*workflow.undo_steps, undo]
+    workflow.undo_steps = list(undo_steps)
     if workflow.manifest is not None:
-        _invalidate_prior_certification(
-            workflow, reason="an undo step was declared after certification"
-        )
+        _invalidate_prior_certification(workflow, reason=reason)
         # The template is rebuilt from the certification on every load; with
         # the certification gone it can't be, so it goes too.
         workflow.manifest.provenance.governed_authorization_template = None
@@ -1076,6 +1335,13 @@ __all__ = [
     "change_ledger_lines",
     "declare_undo",
     "finish_undo_run",
+    "judge_undo_report",
+    "keep_prior_state",
+    "needs_records",
+    "prior_state_path",
+    "read_prior_state",
+    "records_reader",
+    "resolve_undo_params",
     "offer_undos",
     "prepare_undo_run",
     "LINEAGE_FILENAME",
@@ -1083,6 +1349,7 @@ __all__ = [
     "read_undo_approval",
     "read_undo_result",
     "run_undo",
+    "save_undo_steps",
     "steps_from_demonstration",
     "undo_declaration_problems",
     "undo_workflow",

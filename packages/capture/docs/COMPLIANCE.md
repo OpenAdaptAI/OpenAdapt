@@ -96,9 +96,19 @@ for egress. These boundaries are in code:
 - The HTML viewer doesn't embed audio by default, because that file is
   self-contained and easy to forward.
 - `--audio` prints a microphone notice before recording starts.
+- The transcript is scrubbed with openadapt-privacy before it is stored, in
+  the database and in `narration.json`. `--audio` and `capture transcribe`
+  refuse when openadapt-privacy is not installed, so there is no unscrubbed
+  fallback.
+- Word-level text and timings are not stored. A name spoken one word at a
+  time can't be recognized by a text scrubber, so only whole sentences are
+  kept.
 
-Transcript text is unscrubbed free text. Treat it as at least as sensitive as
-the rest of the capture. Nothing downstream reads it today.
+Scrubbing is automatic and can miss things, so treat the scrubbed transcript
+as sensitive, like the rest of the capture. OpenAdapt Flow reads
+`narration.json` to propose branch conditions; it never sends the sentences
+anywhere unless you opt in to `induce --narration-model`, which scrubs them
+again first.
 
 ## Recorder control channel
 

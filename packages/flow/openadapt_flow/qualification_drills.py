@@ -831,8 +831,10 @@ def write_drill_evidence(run_dir: Path, driver: Any, report: Any) -> dict[str, A
     """Keep a drill's signed receipt and mutation record next to its report.
 
     Desktop records them as the ``fault_receipt`` and ``fault_mutation``
-    evidence of the case result. Returns a PHI-free summary.
+    evidence of the case result. Returns a PHI-free summary. Sealed in memory
+    when the run directory is encrypted (the run of a sealed bundle).
     """
+    from openadapt_flow import sealed_set as _sealed
 
     folder = Path(run_dir) / "qualification-fault"
     receipts = list(getattr(report, "qualification_fault_mutations", None) or [])
@@ -844,17 +846,17 @@ def write_drill_evidence(run_dir: Path, driver: Any, report: Any) -> dict[str, A
     folder.mkdir(mode=0o700, parents=True, exist_ok=True)
     if receipts:
         receipt = receipts[0]
-        (folder / "receipt.json").write_bytes(receipt.artifact_bytes())
+        _sealed.write_bytes(folder / "receipt.json", receipt.artifact_bytes())
         summary["receipt"] = "qualification-fault/receipt.json"
         summary["receipt_sha256"] = receipt.receipt_sha256()
         mutation_bytes = getattr(driver, "mutation_bytes", None)
         artifact = mutation_bytes(receipt) if callable(mutation_bytes) else None
         if artifact is not None:
-            (folder / "mutation.json").write_bytes(artifact)
+            _sealed.write_bytes(folder / "mutation.json", artifact)
             summary["mutation"] = "qualification-fault/mutation.json"
             summary["mutation_sha256"] = hashlib.sha256(artifact).hexdigest()
-    (folder / "status.json").write_text(
-        json.dumps(summary, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    _sealed.write_text(
+        folder / "status.json", json.dumps(summary, sort_keys=True, indent=2) + "\n"
     )
     return summary
 

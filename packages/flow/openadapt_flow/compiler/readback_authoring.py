@@ -71,6 +71,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.compiler.effect_mining import _commit_labels
 from openadapt_flow.ir import ActionKind, Step, Workflow
 from openadapt_flow.runtime.effects.effect import (
@@ -222,15 +223,15 @@ def write_check(
         start_event=start_event, fields=fields, reset=reset, prompt=prompt
     )
     path = Path(recording_dir) / CHECK_FILE
-    path.write_text(marks.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    _sealed.write_text(path, marks.model_dump_json(indent=2) + "\n")
     return path
 
 
 def load_check(recording_dir: Path | str) -> Optional[CheckMarks]:
     path = Path(recording_dir) / CHECK_FILE
-    if not path.is_file():
+    if not _sealed.is_file(path):
         return None
-    return CheckMarks.model_validate_json(path.read_text(encoding="utf-8"))
+    return CheckMarks.model_validate_json(_sealed.read_text(path))
 
 
 def _event_index(step: Step) -> Optional[int]:
@@ -328,7 +329,7 @@ def _marked_frame(recording_dir: Path, marks: CheckMarks, n_events: int) -> Path
     last = n_events - 1
     candidates = [frames / f"{last:04d}_after.png", frames / f"{last:04d}_before.png"]
     for path in candidates:
-        if path.is_file():
+        if _sealed.is_file(path):
             return path
     raise CheckError(
         "the recording has no frame of the screen the fields were marked on"
@@ -336,7 +337,7 @@ def _marked_frame(recording_dir: Path, marks: CheckMarks, n_events: int) -> Path
 
 
 def _count_events(recording_dir: Path) -> int:
-    lines = (recording_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    lines = _sealed.read_text(recording_dir / "events.jsonl").splitlines()
     return sum(1 for line in lines if line.strip())
 
 
@@ -419,7 +420,7 @@ def apply_check(
 
         vision = vision_module
     png = (
-        _marked_frame(recording, marks, _count_events(recording)).read_bytes()
+        _sealed.read_bytes(_marked_frame(recording, marks, _count_events(recording)))
         if not all(f.structure_matched for f in marks.fields)
         else b""
     )
@@ -540,7 +541,9 @@ def _demonstrated_by(recording: Path) -> Optional[str]:
     """``demonstrated_by`` from the recording's ``meta.json``, if it says."""
 
     try:
-        meta = json.loads((recording / "meta.json").read_text(encoding="utf-8"))
+        meta = json.loads(_sealed.read_text(recording / "meta.json"))
+    except _sealed.SealedSetError:
+        raise
     except (OSError, ValueError):
         return None
     value = meta.get("demonstrated_by") if isinstance(meta, dict) else None

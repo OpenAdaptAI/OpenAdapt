@@ -683,6 +683,34 @@
       "errors": []
     },
     {
+      "id": "server-response-evidence",
+      "claim": "In a browser, the server's answer to a save's own write request is kept on the step and counted on the receipt at check level same_screen, as method, status and media type only. It comes from the same transaction as the save, so on its own it never confirms an effect or makes a run VERIFIED.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Only the browser backend sees server answers. A save that writes to another origin (a separate API host) leaves none. An answer that arrives after the screen postconditions is not kept."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_server_responses.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Only same-origin fetch, XHR and form writes sent after the mark are kept, never beacons, other origins, requests already in flight or service-worker answers, and never a URL, path or body; a real Chromium save produces one; a 201 answer with an unconfirmed read-back still ends RECONCILIATION_REQUIRED and not billable; a redirect counts as not an error; the receipt counts answers without changing its evidence tier; results without answers serialize as before."
+        }
+      ],
+      "errors": []
+    },
+    {
       "id": "substrate-runtime-validation-supported",
       "claim": "Runtime-validation v3 binds Standard and Regulated hosted activation to the exact governed authorization template reproduced from the sealed qualification. It also binds the successful run's resolved target kind (`web|windows|macos|linux|rdp|citrix`), artifact, compiler, parameter schema, strict lint, policy, risk, report, and opaque environment. Web retains its exact HTTPS/host boundary. Native and remote execution emits no app, window, host, readiness, or backend-hint values to Cloud. Local verification retains signed v1 and v2 compatibility.",
       "tier": "supported",

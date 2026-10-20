@@ -1,141 +1,246 @@
-# PHI at rest — the compiled bundle
+# PHI at rest: bundles, recordings and runs
 
-A compiled bundle (`workflow.json` + `templates/*.png` + `workflow.py`) is a
-**persistent record** produced from a recording of a patient screen. In a
-healthcare deployment it is a **HIPAA-designated record** and must be
-classified, access-controlled, retention-managed, and **encrypted at rest** by
-the operator. This page states the current at-rest posture, what each
-remediation does, and the remaining key-management evolution.
+A recording, the bundle compiled from it, and the run directory written when
+the bundle runs are all persistent records of a patient screen. In a
+healthcare deployment each one is a HIPAA-designated record that must be
+classified, access-controlled, retention-managed and encrypted at rest. This
+page states what Flow encrypts, how, what it costs, and what it still leaves
+to the operator.
 
-See also [PRIVACY.md](PRIVACY.md) (the in-flight / scrubbing map),
-[phi_in_transit.md](phi_in_transit.md) (PHI **on the wire** — the win_agent
-control channel is now TLS-encrypted with certificate pinning), and the
-`openadapt_flow.ir.Workflow` manifest fields.
+See also [PRIVACY.md](PRIVACY.md) (what is scrubbed before anything leaves the
+machine), [phi_in_transit.md](phi_in_transit.md) (PHI on the wire) and
+`openadapt_flow.sealed_set` (the implementation).
 
-## What is in a bundle, and how it is protected today
+## Summary
 
-| Artifact | Contents | At-rest protection today |
+With a key configured, these are ciphertext on disk:
+
+- every file of a sealed bundle that can hold patient data
+  (`openadapt-flow seal`, or `compile` of an encrypted recording);
+- every file of a web recording, from the first frame (`record`);
+- every file of the run directory of a sealed bundle: the report, step
+  screenshots, identity and resolution crops, transition evidence,
+  checkpoints, pauses, approvals and undo records.
+
+Flow reads them in memory. The test
+`tests/test_sealed_at_rest.py::test_record_compile_and_governed_run_write_no_plaintext`
+records a demonstration against the synthetic clinic app, compiles it, runs it
+to VERIFIED under the Standard profile and renders the report, while a process
+audit hook checks every file the process writes, renames or deletes, temporary
+files included. It fails if any of them holds plaintext.
+
+What stays readable is listed under [What is not encrypted](#what-is-not-encrypted).
+
+## Keys
+
+| Variable | Used for |
+| --- | --- |
+| `OPENADAPT_BUNDLE_KEY` | Sealed bundles and their run directories. Also turns on encrypted web recording by default. |
+| `OPENADAPT_RECORDING_KEY` | Recordings. When it is unset, recordings use `OPENADAPT_BUNDLE_KEY`. |
+
+The key is a passphrase. Flow stretches it with scrypt (N=2^15, r=8, p=1)
+over a random per-directory salt, once per directory, and seals each file with
+AES-256-GCM under the derived key, a fresh random 96-bit nonce and the file's
+path in the associated data. Both primitives come from the `cryptography`
+package. Key management (KMS, escrow, rotation) is the operator's: Flow reads
+the passphrase from the environment and never writes it.
+
+## Sealed sets
+
+A sealed bundle, an encrypted recording and an encrypted run directory share
+one format, the sealed set:
+
+- `.openadapt-sealed.json` holds the salt, the scrypt parameters and an index
+  sealed with the derived key. The index lists every other file with the
+  SHA-256 of its bytes on disk. The header also repeats the index digest
+  (`set_digest`) for an inventory that has no key; Flow trusts only the copy
+  it recomputes from the authenticated index.
+- Each file that can hold patient data is stored as `<name>.enc`.
+- Opening the set authenticates the index, refuses any file the index does not
+  list and any listed file that is missing, and checks each file's hash before
+  decrypting it. A file cannot be added, dropped, swapped for another file,
+  replaced with an older ciphertext of itself, or moved to another set.
+- Writing into a set refuses a file the inventory below does not know, rather
+  than passing it through.
+- A recording that stopped before it finished has no index, and every reader
+  refuses it as unfinished.
+
+`openadapt-flow seal ./bundle --out ./bundle-sealed` prints the content digest
+(the workflow and its plaintext crops) and the sealed file-set digest:
+
+```bash
+export OPENADAPT_BUNDLE_KEY='<inject from your secret manager>'
+openadapt-flow seal ./bundle-v2 --out ./bundle-prod
+openadapt-flow certify ./bundle-prod --policy clinical-write
+```
+
+`seal` never modifies the source and never overwrites a destination. It reads
+the source into memory, encrypts it into a private staging directory, reopens
+the result as a reader would, and publishes it with an atomic no-replace
+rename. Because encryption changes the artifact contract, sealing expires any
+prior certification; certify the sealed destination.
+
+## Inventory
+
+`openadapt_flow.sealed_set.BUNDLE_FILES` and `RECORDING_FILES` are the source
+of truth; a test keeps this table in step with them.
+
+### Bundle
+
+| File | Holds | At rest |
 | --- | --- | --- |
-| `workflow.json` identity band | **Salted-hash `identity_template`** — no plaintext name/DOB/MRN (REM-2) | One-way hash + governance guard + operator disk encryption |
-| `workflow.json` postconditions | `TEXT_PRESENT` assertions; identifier-bearing ones **dropped** when the Presidio scrub is active (REM-2/GAP-3) | Compile-time scrub (optional) + governance guard |
-| `workflow.json` landmarks | `anchor.landmarks[].ocr_text` — nearby ROW text used by the geometry rung, often the patient name; identifier-bearing ones **dropped** when the Presidio scrub is active | Compile-time scrub (optional) + governance guard |
-| `workflow.json` labels/typed text | `anchor.ocr_text`, literal `Step.text` — may echo an identifier that is **load-bearing** for replay (the target label / the typed search value) | **Not scrubbed** (scrubbing would break resolution/typing); governance guard flags it; **parameterize** the typed identifier (`entity_ref`) so it is supplied at run time and never stored |
-| `templates/*.png` | Pixel crops of the recorded screen — **image PHI** | **Sealed with AES-256-GCM** in an encrypted bundle (`save(encrypt=True)` → `templates/*.png.enc`, no cleartext crop on disk); governance guards + operator disk encryption otherwise |
-| `workflow.py` | Human-readable rendering; identity band is now a PHI-free note (REM-2) | Same as `workflow.json` |
+| `workflow.json` | The program: target labels, typed literals, landmark text, selectors, URLs, effect values, data-source rows, parameter defaults, window titles | Encrypted |
+| `templates/*` | Crops of the recorded screen (targets, expected regions, drag ends, identifier crops) and the layout fingerprint | Encrypted |
+| `manifest.json` | SHA-256 digests, compiler version, certification provenance | Plaintext (structural) |
+| `workflow.py` | A readable rendering of `workflow.json` | Encrypted |
+| `compile_notes.json`, `param_hygiene.json`, `param_proposals.json`, `annotations.json`, `api_proposal.json` | Compiler sidecars; they quote labels, masked or raw example values and screen text | Encrypted |
+| `effect_contract.yaml` | A scaffolded effect contract with observed values | Encrypted |
+| `undo-lineage.json`, `record-check-binding.json` | Prior digests; record-check coverage | Encrypted |
+| `qualification-proposal.json`, `qualification-proposal.draft.json`, `qualification-admission.local-dev.json`, `qualification/*` | Qualification pins, cases and reports | Encrypted |
+| `admission-decision.json`, `admission.json`, `admit.json`, `jit_draft.json` | Admission records; some carry read-back values or a login name | Encrypted |
+| `openadapt-card.json`, `repair/*`, `evidence/*` | Operator card, repair candidates with anchor text, copied evidence | Encrypted |
+| Anything else | Unknown | `seal` refuses |
 
-### The identity template is NOT encryption
+### Recording
 
-`identity_template` removes **plaintext** PHI: no grep-visible, human-readable,
-log-leakable, git-committable identifier remains, and the wrong-patient guard
-still runs against the hashes. But a salted hash of a **low-entropy** identifier
-(a name, a DOB) is **brute-forceable** by anyone who holds **both** the bundle
-and the salt. So the template is a real reduction in exposure, **not a
-cryptographic control**.
+| File | Holds | At rest |
+| --- | --- | --- |
+| `events.jsonl` | Every action: typed text, field labels, structural locators, page URL and title, system-of-record rows when a reader was attached | Encrypted |
+| `frames/*` | Before and after screenshots of every action | Encrypted |
+| `meta.json` | App URL, parameter example values, window title, identifier region | Encrypted |
+| `network.jsonl` | Request URLs, form fields and bodies, response bodies (`--capture-network`) | Encrypted |
+| `sor_snapshots.json`, `verify.proposed.yaml` | System-of-record rows read by `record --verify`, and the effects proposed from them | Encrypted |
+| `check.json`, `check.proposed.json`, `readback.proposed.yaml`, `record_check.proposed.yaml`, `record_check.proof.json`, `identity.proposed.json`, `effect_contract.yaml` | Checks and proposals derived from the recording | Encrypted |
+| `distill.json`, `.openadapt-approval.json`, `.openadapt-sanitization.json` | Derived reports and approvals | Encrypted |
+| Anything else | Unknown | Refused |
 
-To raise the bar today, set `OPENADAPT_FLOW_IDENTITY_SALT` at **both** compile
-and replay: the salt is then kept **out of the bundle**, so the hashes are
-one-way to anyone without the external secret. Manage that secret like any other
-(OS keychain / KMS / CI secret).
+### Run directory of a sealed bundle
 
-## Governance (REM-1, shipped)
+Every file is encrypted except these structural ones: `.durable_run.claim`
+(run id and namespace), the empty `*.lock` files, `.attended_action.lease`
+(nonce digests and times) and `.attended_capability.key` (a random per-run
+secret, no recorded data). The durable store's checkpoints, pauses and
+approvals are sealed under the same key with their own AES-256-GCM containers,
+and the run set adopts them as ciphertext. A file written in plaintext by any
+other component makes the run refuse to seal its index.
 
-- `.gitignore` excludes bundle output dirs; the committed
-  `docs/showcase-openemr/bundle` is an explicit **synthetic-data** exception.
-- Manifest fields on `workflow.json`: `contains_phi`, `phi_scrubbed`,
-  `encrypted` — for a compliance inventory.
-- Pre-commit / CI guard (`scripts/check_bundle_phi.py`) **blocks** committing a
-  bundle whose steps carry a plaintext identity band (always), and — with the
-  `privacy` extra installed — an identifier-bearing postcondition / label.
+## Recording encrypted from the start
 
-## Shipped: profile-enforced AEAD encryption (REM-1 crypto)
+```bash
+export OPENADAPT_RECORDING_KEY='<inject from your secret manager>'
+openadapt-flow record --backend web --url https://app.example --out ./rec
+```
 
-Encryption-at-rest remains opt-in for Demo, low-level embedding, and Standard
-deployments whose qualified storage boundary already supplies it. Regulated
-requires application-level sealing and refuses before actuation when it is
-absent. When Standard uses an application-sealed bundle, the runtime also
-requires encrypted durable state rather than silently mixing protection modes:
+The web recorder seals every frame, event line, the metadata and the network
+capture in memory and writes only ciphertext, from the first frame. The event
+log is resealed whole on each append, so the file on disk is always one
+complete ciphertext. The recording is finalized (indexed) when it finishes.
+`record --verify` keeps its system-of-record reads inside it, encrypted;
+`record --with-check` says it cannot mark a check in an encrypted recording
+yet and marks nothing.
 
-- **Bundle.** The production CLI path is:
+Encryption is on by default where it is safe: when `OPENADAPT_BUNDLE_KEY` is
+set, a deployment that seals its bundles also encrypts its web recordings.
+`--no-encrypt` opts out. The desktop recorders (`--backend
+windows/macos/linux/rdp/citrix`) write a raw capture session (a SQLite
+database and video) through openadapt-capture, which Flow cannot encrypt yet.
+With `OPENADAPT_RECORDING_KEY` set they refuse to record; with only the bundle
+key set they record in plaintext as before.
 
-  ```bash
-  export OPENADAPT_BUNDLE_KEY='<inject from your secret manager>'
-  openadapt-flow seal ./bundle-v2 --out ./bundle-prod
-  openadapt-flow certify ./bundle-prod --policy clinical-write
-  ```
+### Cost
 
-  It preserves the source, refuses symlinks and existing destinations, stages
-  the complete copy privately, verifies the resulting integrity digest, and
-  atomically publishes the encrypted bundle. Because encryption changes the
-  artifact contract, sealing expires prior certification with an explicit
-  provenance reason; certify the sealed destination, and run any versioned
-  qualification cases against that destination before `qualify certify`. This
-  command seals `workflow.json` and files under `templates/`; other bundle files
-  are copied unchanged and must not be assumed encrypted. The library primitive
-  `Workflow.save(bundle_dir, encrypt=True, key=…)` seals the
-  serialized `workflow.json` with **AES-256-GCM** and writes it as
-  `workflow.json.enc` (no plaintext `workflow.json` on disk), **and seals every
-  `templates/*.png` image crop the same way** — each becomes
-  `templates/*.png.enc` (under a distinct `TEMPLATE_AAD` domain so a crop
-  ciphertext can't be swapped for the workflow-json one) with its plaintext
-  removed, so an encrypted bundle leaves **no cleartext PHI-bearing screenshot**
-  on disk. `Workflow.load(bundle_dir, key=…)` decrypts both `workflow.json` and
-  the crops **in memory** (the resolver reads a decrypted crop via
-  `Workflow.decrypted_template(rel)`; nothing is rewritten as cleartext). The
-  passphrase comes from the `key` argument or the **`OPENADAPT_BUNDLE_KEY`**
-  environment variable; a per-bundle random salt + scrypt KDF stretches it to the
-  256-bit data key.
-- **Durable checkpoints.** `CheckpointStore(run_dir, key=…)` (wired through
-  `Replayer(checkpoint_key=…)` and `resume(…, key=…)`) seals every checkpoint /
-  pending-escalation / run-manifest / Phase-2 interpreter checkpoint the same
-  way (`…​.json.enc`), so a resumable run's persisted params + effect contracts
-  are ciphertext at rest. The `run` CLI resolves `OPENADAPT_BUNDLE_KEY` once for
-  the encrypted bundle and reuses it for Regulated durable state and for any
-  application-sealed Standard bundle; a library caller must pass the same key
-  to `Replayer(checkpoint_key=…)`.
-- **Integrity preserved.** The schema-v2 manifest (content digest + per-asset
-  SHA-256 + provenance) is sealed over the **plaintext** content *before*
-  encryption — including the template crops, whose digests stay over the
-  **plaintext** PNG — so a decrypted load still verifies integrity end-to-end
-  (the crop check runs against the decrypted bytes in memory). The
-  `encrypted: true` manifest flag is now live (mirrored on `Workflow.encrypted`)
-  and now covers **both** `workflow.json` and the crops, and the `manifest.json`
-  sidecar stays plaintext so a compliance inventory can read it without the key.
-- **Fails loud + safe.** A **wrong or missing key**, or a **tampered ciphertext**
-  (a flipped byte breaks the GCM tag — of `workflow.json` *or* a crop), raises
-  `crypto.DecryptionError` / `crypto.MissingKeyError`; a **missing** or
-  **swapped** crop ciphertext raises `BundleIntegrityError`. Never a partial or
-  silent load.
+Measured on 2026-10-19 with `benchmark/at_rest/run.py` (results in
+[`benchmark/at_rest/results.json`](../benchmark/at_rest/results.json),
+summary in [`benchmark/at_rest/RESULTS.md`](../benchmark/at_rest/RESULTS.md)):
 
-**Scope / done:** both `workflow.json` **and** the `templates/*.png` image crops
-are now sealed into AES-256-GCM containers in an encrypted bundle — no cleartext
-PHI-bearing screenshot is left on disk. (The COMPLIANCE.md at-rest line for
-`templates/` can therefore flip from "operator-disk-encryption only" to "sealed";
-that file is owned by a separate PR.)
+| | Plaintext | Encrypted |
+| --- | --- | --- |
+| Persist one 1280x800 frame (median) | 0.12 ms | 0.25 ms |
+| Record one action: two frames, one event (median) | 5.2 ms | 5.8 ms |
+| Same, actions 136-150 of 150 (median) | 5.1 ms | 6.1 ms |
+| Key derivation, once per recording | none | 183 ms |
+| Disk for a 150-action recording (26 MB) | | +62.6 KB (0.24%) |
 
-The live resolver consumes the keyed load's in-memory decrypted crops and does
-not materialize plaintext PNGs on disk. Deployment-time **key management** (OS
-keychain / KMS / envelope keys, escrow, and rotation) is still the operator's
-responsibility: the passphrase is supplied via environment or library argument.
-This provides the AEAD substrate, not a KMS.
+The disk overhead is 44 bytes per file plus the sealed index (one SHA-256 per
+file). The settle wait was disabled for these numbers; with it, a real action
+takes tens to hundreds of milliseconds, so encryption adds about 1% or less.
 
-### Future key-management design (envelope keys / whole container)
+## Commands on sealed input
 
-1. **Sealed container.** Serialize `workflow.json` + `templates/` into a single
-   encrypted container (e.g. an [age](https://github.com/FiloSottile/age) /
-   libsodium sealed archive). The bundle on disk is ciphertext; nothing readable
-   without the key.
-2. **Envelope keys.** A per-bundle data key (DEK) encrypts the container; the
-   DEK is wrapped by a deployment key (KEK) held in the operator's KMS / OS
-   keychain. Rotating the KEK re-wraps DEKs without re-encrypting bundles.
-3. **Decrypt only in memory at replay.** `Workflow.load` gains a decrypt path
-   that unwraps the DEK from the configured key provider and materializes the
-   bundle **in memory only**; plaintext never lands on disk.
-4. **Manifest.** `encrypted: true` plus the key id / wrapping metadata (never the
-   key). The governance guard treats an `encrypted: true` bundle as opaque.
-5. **Fail closed.** A compliance-pinned deployment (`OPENADAPT_FLOW_SCRUB=on`)
-   refuses to write an **un**encrypted bundle once the key provider is
-   configured.
+`record`, `compile`, `induce`, `scaffold-verifier`, `seal`, `certify`,
+`qualify`, `admit`, `run`, `replay`, `approve`, `resume` and `undo` read
+sealed bundles and encrypted recordings in memory, given the key, and keep
+what they write sealed:
 
-Even with bundle sealing enabled, treat every bundle as PHI, keep it off public
-or unmanaged shared storage and git, and use **full-disk encryption** on the
-machines that hold it.
+- `compile` of an encrypted recording writes a sealed bundle, under
+  `OPENADAPT_BUNDLE_KEY` or, when that is unset, the recording's key. It
+  refuses an existing plaintext output directory.
+- `induce` of encrypted inputs writes a sealed program. `--report` and
+  `--probe-on` refuse, because they write outside a sealed set.
+- `scaffold-verifier` writes its drafts inside the encrypted source. `--out`
+  and `--prove` refuse.
+- `qualify` reseals the bundle; `--out` must be inside it.
+- `admit` compiles into sealed bundles and merges crops in memory. The
+  pending and decision records at the admission root stay plaintext; they hold
+  digests, counts, the workflow name and the decider.
+- `run`, `replay` and `resume` write a sealed run directory, and `approve`
+  writes its approval into it encrypted. A run with an
+  approval gate, an attended draft or a business-decision state refuses before
+  it acts, because those stores still write plaintext state.
+- `undo` keeps its approval, claim, parameters and result in the sealed run
+  directory; the undo run is a sealed set of its own inside it.
+
+Without the key, each of these refuses before it reads anything and names the
+variable to set. Any other command given a sealed path refuses with a message
+that lists the commands above, rather than decrypt to disk. A bare
+`Workflow.save()` into a sealed bundle keeps it sealed.
+
+## What is not encrypted
+
+- Data in memory. Decrypted frames, crops and the workflow live in process
+  memory while a command runs, and can reach swap or a crash dump. Use
+  encrypted swap and full-disk encryption.
+- The application itself. The browser profile and cache of the app being
+  recorded or driven, and the app's own storage, are outside Flow.
+- Terminal output. Commands print what they always printed (paths, outcomes,
+  `induce` summaries); redirecting it to a file writes plaintext.
+- Names and sizes. File names (`templates/step_003.png.enc`), file counts and
+  ciphertext sizes show the number of steps and frames and roughly how large
+  each image is.
+- Structural files: `manifest.json`, the sealed-set headers, and the run
+  directory's claim, lock and lease files.
+- Desktop recordings, as above.
+- The admission root's `admission-pending.json` and
+  `admission-decision.json`.
+- Bundles encrypted with the older `Workflow.save(encrypt=True)` library call
+  and no `seal`: only `workflow.json` and `templates/` are encrypted there.
+- The offline Seal of a run (`local-seal`) is not written for an encrypted
+  run directory yet; the run says so on stderr.
+- Commands outside the list above, such as `visualize`, `explain`, `teach`,
+  `emit-skill` and `push`, refuse sealed input rather than read it.
+
+## The identity template is not encryption
+
+`identity_template` removes plaintext identifiers from `workflow.json`: no
+readable, greppable name, DOB or MRN remains, and the wrong-patient check
+still runs against the hashes. But a salted hash of a low-entropy identifier
+can be brute-forced by anyone holding the bundle and the salt. Set
+`OPENADAPT_FLOW_IDENTITY_SALT` at both compile and replay to keep the salt out
+of the bundle. In a sealed bundle the template is encrypted as well.
+
+## Governance
+
+- `.gitignore` excludes bundle output directories; the committed
+  `docs/showcase-openemr/bundle` is a synthetic-data exception.
+- `workflow.json` carries `contains_phi`, `phi_scrubbed` and `encrypted` for a
+  compliance inventory; `manifest.json` mirrors `encrypted` without the key.
+- `scripts/check_bundle_phi.py` blocks committing a bundle with a plaintext
+  identity band, and, with the `privacy` extra, identifier-bearing
+  postconditions and labels.
+- Profiles: Regulated requires an application-sealed bundle and refuses before
+  actuation without one; Standard with a sealed bundle requires encrypted
+  durable state.
+
+Even with everything above, treat every bundle, recording and run directory as
+PHI, keep it off public or unmanaged storage and out of git, and use full-disk
+encryption on the machines that hold it.

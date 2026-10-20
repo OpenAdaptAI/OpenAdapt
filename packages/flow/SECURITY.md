@@ -33,6 +33,10 @@ details** and asks a maintainer to open a private channel with you.
 - **Identity crops to the on-prem VLM appliance** are deliberately not scrubbed;
   the control there is on-prem-only + no-retention. Reports of retention or
   off-prem transmission are in scope.
+- **Prompt injection against a teaching or repairing agent.** The threat
+  model and its known gaps are in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+  A way for page content to widen what a scoped teach run may type, reach or
+  write is in scope; the gaps listed there are known.
 - **Supply chain.** GitHub Actions are pinned by commit SHA and dependency
   updates flow through Dependabot; reports of a pinning gap are welcome.
 

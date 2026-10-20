@@ -106,10 +106,8 @@ jit.run(note="Recheck knee in ten days")  # the program runs: 0 model calls, sav
 ```
 
 [Compile a computer-use agent's run](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT.md) has the full
-example. This path runs web apps today. On Windows, RDP and Citrix, an agent can
-already drive a recording through the MCP server's recording tools (on `main`,
-not yet released), and the same compile path for those surfaces is being
-built.
+example. The same path compiles an agent's run in web apps and in Windows,
+macOS, Linux, RDP and Citrix apps.
 
 ### Call programs from your agent
 
@@ -176,10 +174,9 @@ database read-back:
 
 Both were equally correct here, and the agent matched or beat OpenAdapt in
 three other tests. [Every result](https://openadapt.ai/compare/computer-use-agents)
-is published. The program was only about a fifth faster because it still drives
-every page, as the agent does; direct API steps compiled from the recording's
-network traffic are in review
-([#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269)). OpenAdapt isn't
+is published. That program was only about a fifth faster because it drove every
+page, as the agent does; the API step compiled from the recording's network
+traffic removes the page steps for single-form saves. OpenAdapt isn't
 affiliated with the OpenEMR project.
 
 ## Every backend
@@ -242,8 +239,7 @@ the right record is on screen, makes the entry, and reads the record back.
 - **Works as a safety layer under any agent**: MCP tools, a guarded save, Agent Skills and a CLI.
 - **Runs locally**: no model calls on healthy runs, patient data redacted, signed receipts.
 
-[CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) has the status, evidence and code for each,
-including the few still being merged.
+[CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) has the evidence and code for each.
 
 ## What your agent gets back
 
