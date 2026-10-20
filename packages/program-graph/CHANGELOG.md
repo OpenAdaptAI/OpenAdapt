@@ -25,5 +25,6 @@
   projection by Flow's builder rules.
 - Dark and light themes from `--opg-*` CSS variables; the layout follows the
   workbench's own width.
-- The OpenEMR referral fixture: a compiled program and a recorded run, both on
-  synthetic data.
+- The OpenEMR referral fixture: the certified referral program and its four
+  certified runs (three VERIFIED, one HALTED_BEFORE_EFFECT), with their Seals,
+  all on synthetic data.

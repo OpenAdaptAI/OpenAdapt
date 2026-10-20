@@ -10,7 +10,7 @@ run stopped and why.
 OpenAdapt Desktop, app.openadapt.ai and openadapt.ai render the same graph
 with this package.
 
-![The referral program, stopped on the fourth referral](docs/referral-stopped.png)
+![The referral program, stopped on the fourth referral, with its Seal](docs/referral-stopped.png)
 
 ## What it shows
 
@@ -167,29 +167,31 @@ typed.
 [`fixtures/openemr-referral/`](fixtures/openemr-referral/) holds a real
 compiled program and a real recorded run, both on synthetic data:
 
-- `spec.json`: Flow's `openemr/new-referral` bundle (41 steps, compiled from
-  one recorded referral on a local OpenEMR test copy with made-up patients),
-  wrapped in a loop over `worklist.csv`, in the public projection, which
-  carries no recorded text or values.
-- `folds.json`: the five form sections the steps fill, and the save
-  section's stop rules.
+- `spec.json`: the OpenEMR referral bundle certified for clinical-write (29
+  steps, compiled from one recorded referral on a local OpenEMR test copy with
+  made-up patients; its content digest is in `folds.json`), wrapped in a loop
+  over `worklist.csv`, in the public projection, which carries no recorded
+  text or values.
+- `folds.json`: the five form sections the steps fill, and the save step's
+  stop rule.
 - `media.json` and `media/`: the bundle's recorded target crop for each click
   step, and the screen after each step of the first and the fourth referral,
   640 px wide. Synthetic data only. `media/` is in the vendored copy, not in
   the npm package. With `withMedia(spec, media)` and a `resolveMedia` that maps
   each reference to where the host serves `media/`, the inspector and the
   player show them.
-- `trace.json`: four referrals from block 2 of the benchmark scoreboard's
-  OpenEMR referral study, played in recorded order. The first three save and
-  read back all 11 fields. On the fourth, OpenEMR finds a matching chart, the
-  screen check after "Create New Patient" fails, and the run stops before it
-  confirms a new chart. `source` names the scoreboard rows and the sha256 of
-  each engine report. The trace ends with a run record that links the
-  scoreboard rows; these runs used Flow's demo profile, which does not mint
-  a Seal.
+- `trace.json`: the four certified runs of that bundle (standard profile, no
+  model calls), played in run order. Referrals 1 to 3 end VERIFIED: a
+  separate read of OpenEMR confirmed all 11 saved fields. On referral 4,
+  OpenEMR finds a matching chart, the screen check after "Create New Patient"
+  fails, and the run stops before it saves anything (HALTED_BEFORE_EFFECT).
+  Each run has a Seal signed with the demo key over its report; the builder
+  checks each Seal against its report and each report against the bundle
+  digest. The trace ends with referral 4's Seal, and `source` links every
+  run's Seal.
 
 [`scripts/build_openemr_fixture.py`](scripts/build_openemr_fixture.py)
-regenerates all three from the bundle and the run reports.
+regenerates all of them from the bundle and the certified runs.
 
 ## Install
 

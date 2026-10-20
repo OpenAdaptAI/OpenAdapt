@@ -72,13 +72,13 @@ describe("ProgramWorkbench", () => {
 
   it("folds a long program into sections and unfolds one on request", () => {
     render(<ProgramWorkbench spec={referral.spec} folds={referral.folds} />);
-    expect(screen.getByText("43 nodes · 43 exact edges · 7 cards")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Steps 40–42, 3 steps: Create the chart/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Show the 3 steps" }));
-    const member = screen.getByRole("button", { name: /^step 40, action:/ });
+    expect(screen.getByText("31 nodes · 31 exact edges · 7 cards")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Steps 29–30, 2 steps: Create the chart/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Show the 2 steps" }));
+    const member = screen.getByRole("button", { name: /^step 29, action:/ });
     expect(document.activeElement).toBe(member);
     fireEvent.click(screen.getByRole("button", { name: /Fold into “Create the chart”/ }));
-    expect(screen.getByRole("button", { name: /Steps 40–42/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Steps 29–30/ })).toBeTruthy();
   });
 
   it("plays a recorded run: steps light up, the loop counts, the stop shows where and why", () => {
@@ -109,7 +109,7 @@ describe("ProgramWorkbench", () => {
     }
     expect(screen.getByText(/Run stopped/)).toBeTruthy();
     expect(screen.getByText(/Referral 4 of 4/)).toBeTruthy();
-    const save = screen.getByRole("button", { name: /Steps 40–42/ });
+    const save = screen.getByRole("button", { name: /Steps 29–30/ });
     expect(save.getAttribute("data-run")).toBe("halted");
     expect(save.getAttribute("aria-label")).toMatch(/This run: stopped here/);
     const loop = screen.getByRole("button", { name: /Repeat the bounded steps/ });

@@ -26,7 +26,7 @@ describe("compact stage", () => {
 
   it("keeps explicit folds, and null means no folds", () => {
     const { container } = render(<ProgramWorkbench spec={referral.spec} compact folds={null} />);
-    expect(container.querySelectorAll(".opg-node").length).toBe(43);
+    expect(container.querySelectorAll(".opg-node").length).toBe(31);
   });
 });
 
@@ -43,18 +43,18 @@ describe("media", () => {
     const pictures = within(inspector).getAllByRole("img");
     expect(pictures.map((img) => img.getAttribute("src"))).toEqual([
       "/media/recorded-crop/recorded/step_039.webp",
-      "/media/live/run/item-204/step_039.webp",
+      "/media/live/run/r4/step_039.webp",
     ]);
     for (const img of pictures) expect(img.getAttribute("loading")).toBe("lazy");
     expect(inspector.textContent).toContain("This run, iteration 4");
-    expect(resolve).toHaveBeenCalledWith("run/item-204/step_039.webp", {
+    expect(resolve).toHaveBeenCalledWith("run/r4/step_039.webp", {
       node: "for_each::s::step_039",
       kind: "live",
       iteration: 4,
     });
     // The player shows the live frame of the step the run is at.
     expect(screen.getByRole("img", { name: "The screen in this run now" }).getAttribute("src")).toBe(
-      "/media/live/run/item-204/step_039.webp",
+      "/media/live/run/r4/step_039.webp",
     );
   });
 
@@ -70,11 +70,11 @@ describe("receipt", () => {
   it("appears when playback reaches the end, with its link", () => {
     vi.useFakeTimers();
     render(<ProgramWorkbench spec={referral.spec} trace={referral.trace} initialCursor={end - 1} />);
-    expect(screen.queryByRole("region", { name: "Run record" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Seal" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Step forward" }));
-    const card = screen.getByRole("region", { name: "Run record" });
-    expect(card.textContent).toContain("stopped");
-    expect(within(card).getByRole("link", { name: "Open the run record" }).getAttribute("href")).toMatch(/scoreboard/);
+    const card = screen.getByRole("region", { name: "Seal" });
+    expect(card.textContent).toContain("HALTED_BEFORE_EFFECT");
+    expect(within(card).getByRole("link", { name: "Open the Seal" }).getAttribute("href")).toMatch(/4-r6-rosa-delgado\/engine\/seal\.json$/);
     vi.useRealTimers();
   });
 });
@@ -96,7 +96,7 @@ describe("tour", () => {
     const { container } = render(
       <ProgramWorkbench spec={referral.spec} folds={referral.folds} trace={referral.trace} tour onTourEnd={onTourEnd} iterationNoun="referral" />,
     );
-    const tour = () => screen.getByRole("region", { name: /Recorded once|One step|The loop|right-record|A stop|run record/ });
+    const tour = () => screen.getByRole("region", { name: /Recorded once|One step|The loop|right-record|A stop|The Seal/ });
     expect(tour().textContent).toContain("1 of 6");
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
@@ -109,7 +109,7 @@ describe("tour", () => {
     expect(tour().textContent).toContain("A stop");
     expect(screen.getByLabelText("Selected program step").textContent).toContain("OpenEMR found a matching chart");
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.getByRole("region", { name: "Run record" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Seal" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(onTourEnd).toHaveBeenCalledWith("done");
     expect(screen.getByRole("button", { name: "Take the tour" })).toBeTruthy();
@@ -126,5 +126,12 @@ describe("tour", () => {
       fireEvent.keyDown(heading, { key: "Escape" });
     });
     expect(onTourEnd).toHaveBeenCalledWith("skipped");
+  });
+});
+
+describe("receipt status", () => {
+  it("marks a stopped run's Seal as a stop", () => {
+    render(<ProgramWorkbench spec={referral.spec} trace={referral.trace} initialCursor={end} />);
+    expect(screen.getByRole("region", { name: "Seal" }).getAttribute("data-status")).toBe("halted_before_effect");
   });
 });

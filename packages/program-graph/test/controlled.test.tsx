@@ -52,7 +52,7 @@ describe("host-driven workbench", () => {
     expect(container.querySelector('.opg-edges g[data-back-edge="true"][data-run="latest"]')).toBeTruthy();
     unmount();
     const stopped = at({ node: "for_each::s::step_039", iteration: 4, status: "stopped", reason: "A matching chart exists." });
-    expect(screen.getByRole("button", { name: /Steps 40–42/ }).getAttribute("data-run")).toBe("halted");
+    expect(screen.getByRole("button", { name: /Steps 29–30/ }).getAttribute("data-run")).toBe("halted");
     expect(stopped.container.querySelector('.opg-edges g[data-kind="exception"][data-run="latest"]')).toBeTruthy();
     expect(screen.getByLabelText("Selected program step").textContent).toContain("A matching chart exists.");
   });
@@ -85,19 +85,19 @@ describe("host-driven workbench", () => {
     expect(screen.getByRole("table")).toBeTruthy();
     cleanup();
     render(<StopRules spec={referral.spec} trace={referral.trace} plainStopRules />);
-    expect(screen.getByText(/this run stopped at step 41/)).toBeTruthy();
+    expect(screen.getByText(/this run stopped at step 29/)).toBeTruthy();
   });
 });
 
 describe("numbering", () => {
-  it("numbers only the actions 1 to 41 and labels the loop", () => {
+  it("numbers only the actions 1 to 29 and labels the loop", () => {
     render(<ProgramWorkbench spec={referral.spec} folds={referral.folds} numbering="actions" trace={referral.trace} initialCursor={referral.trace.events.length} />);
     expect(screen.getByRole("button", { name: /^loop: / }).textContent).toContain("LOOP");
-    expect(screen.getByRole("button", { name: /^Steps 01–09, 9 steps: Name/ })).toBeTruthy();
-    const save = screen.getByRole("button", { name: /^Steps 39–41, 3 steps: Create the chart/ });
+    expect(screen.getByRole("button", { name: /^Steps 01–06, 6 steps: Name/ })).toBeTruthy();
+    const save = screen.getByRole("button", { name: /^Steps 28–29, 2 steps: Create the chart/ });
     expect(save.getAttribute("data-run")).toBe("halted");
     fireEvent.click(screen.getByRole("tab", { name: "Stop rules" }));
-    expect(screen.getByText(/this run stopped at step 40/)).toBeTruthy();
+    expect(screen.getByText(/this run stopped at step 28/)).toBeTruthy();
   });
 
   it("keeps Desktop's numbering by default", () => {

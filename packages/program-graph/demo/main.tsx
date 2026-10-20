@@ -41,7 +41,7 @@ const referral = (
     initialView={view}
     theme={theme}
     titleFor={(node) =>
-      node.kind === "loop" ? "For each referral in the list" : node.kind === "terminal" && node.index < 43 ? "List done" : node.title
+      node.kind === "loop" ? "For each referral in the list" : node.id === "__loop_done__" ? "List done" : node.title
     }
   />
 );

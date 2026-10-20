@@ -55,12 +55,12 @@ describe("rankNodes", () => {
     });
   });
 
-  it("ranks the 41-step referral body in program order", () => {
+  it("ranks the 29-step referral body in program order", () => {
     const ranks = rankNodes(referral.spec);
     expect(ranks.get("for_each")).toBe(0);
     expect(ranks.get("for_each::s::step_000")).toBe(1);
-    expect(ranks.get("for_each::s::step_040")).toBe(41);
-    expect(ranks.get("__loop_done__")).toBe(42);
+    expect(ranks.get("for_each::s::step_040")).toBe(29);
+    expect(ranks.get("__loop_done__")).toBe(30);
   });
 });
 

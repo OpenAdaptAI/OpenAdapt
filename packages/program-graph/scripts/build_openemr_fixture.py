@@ -3,41 +3,40 @@
 
 Everything here is compiled or recorded by OpenAdapt Flow, on synthetic data:
 
-1. spec.json: Flow's registry bundle ``openemr/new-referral``
-   (packages/flow/registry/bundles/openemr/new-referral), compiled from one
-   recorded referral on a local OpenEMR test copy with made-up patients,
-   wrapped by ``openadapt-flow for-each`` in a loop over worklist.csv (three
-   synthetic referrals), then emitted by ``openadapt-flow visualize --format
-   json --profile public-synthetic``. The public projection carries no
-   recorded text or values.
+1. spec.json: the certified OpenEMR referral bundle (clinical-write; content
+   digest in folds.json), compiled from one recorded referral on a local
+   OpenEMR test copy with made-up patients, wrapped by ``openadapt-flow
+   for-each`` in a loop over worklist.csv (three synthetic referrals), then
+   emitted by ``openadapt-flow visualize --format json --profile
+   public-synthetic``. The public projection carries no recorded text or
+   values.
 2. folds.json: the field section each loop-body step fills, derived from the
    operator-local spec by the parameter each step types. Parameter names only.
-3. trace.json: one recorded run from the benchmark scoreboard
-   (packages/flow/benchmark/scoreboard/raw/openemr_referral/program/
-   study-main-0c642bc0, block 2). The engine ran the same bundle (the content
-   digest is checked) once per referral; the trace plays the block's first
-   referrals in recorded order as loop iterations, up to and including the
-   first one that stopped. Per step it keeps the step id, duration, the rung
-   that found the target, and the check verdicts; never a typed value. The
-   trace ends with a run record (not a Seal: these runs used the demo
-   profile, which mints none) that links the scoreboard rows.
+3. trace.json: the four certified runs of that bundle (standard profile, no
+   model calls), committed under ``CERTIFIED_PATH``, played in run order as
+   loop iterations. Referrals 1-3 are VERIFIED; referral 4 stops
+   (HALTED_BEFORE_EFFECT) on OpenEMR's duplicate-patient match. Each run's
+   digest is checked against the bundle and each Seal against the report it
+   signs. Per step the trace keeps the step id, duration, the rung that found
+   the target, and the check verdicts; never a typed value. It ends with the
+   stopped referral's Seal.
 4. media.json and media/: references and pictures for the site, all from
-   synthetic data. `recorded/step_NNN.webp` is the bundle's recorded target
-   crop (templates/step_NNN.png) for each click step; `run/item-NNN/
-   step_NNN.webp` is the screen after each step of the first and the last
-   referral of the trace, scaled to 640 px wide. The trace's `frame` fields
-   and media.json hold references only; a host resolves them to URLs.
+   synthetic data. ``recorded/step_NNN.webp`` is the bundle's recorded target
+   crop (templates/step_NNN.png) for each click step; ``run/rN/step_NNN.webp``
+   is the screen after each step of referral 1 and of the stopped referral,
+   640 px wide. The trace's ``frame`` fields and media.json hold references
+   only; a host resolves them to URLs.
 
 Run from the repository root with a Python that has openadapt-flow installed:
 
     python packages/program-graph/scripts/build_openemr_fixture.py \\
-        --runs ~/oa/scratch/benchmark/runs/main-0c642bc0/replay-main-warm/block-02
+        --bundle ~/oa/scratch/qualify-referral/qual10/bundle \\
+        --runs ~/oa/scratch/qualify-referral/certified-referrals-qual10
 """
 
 from __future__ import annotations
 
 import argparse
-import csv
 import hashlib
 import json
 import shutil
@@ -51,15 +50,11 @@ REPO = PKG.parents[1]
 FLOW = REPO / "packages" / "flow"
 OUT = PKG / "fixtures" / "openemr-referral"
 BUNDLE = FLOW / "registry" / "bundles" / "openemr" / "new-referral"
-SCOREBOARD = (
-    FLOW / "benchmark" / "scoreboard" / "raw" / "openemr_referral" / "program" / "study-main-0c642bc0"
-)
-BLOCK = 2
-# The scoreboard file the receipt links, pinned to the commit that added it.
-SCOREBOARD_URL = (
-    "https://github.com/OpenAdaptAI/OpenAdapt/blob/7304357be6376ac106d26fbb9142b9fd1955398a/"
-    "packages/flow/benchmark/scoreboard/raw/openemr_referral/program/study-main-0c642bc0/items.csv"
-)
+# The committed copy of the certified runs (reports, Seals, key; no pictures).
+# Seal links pin to the commit that added it.
+CERTIFIED_PATH = "packages/flow/benchmark/scoreboard/raw/openemr_referral/certified/2026-10-20"
+CERTIFIED_COMMIT = "d23eeb6a6"
+CERTIFIED_URL = f"https://github.com/OpenAdaptAI/OpenAdapt/blob/{CERTIFIED_COMMIT}/{CERTIFIED_PATH}"
 FRAME_WIDTH = 640
 
 # Field sections, in the order the form asks for them. Keys are the bundle's
@@ -157,32 +152,43 @@ def recorded_media(spec: dict) -> dict:
 
 
 def trace(spec: dict, runs: Path, digest: str) -> dict:
+    """The certified runs, played in order as loop iterations.
+
+    ``runs`` holds summary.json and one directory per referral
+    (``<n>-<ref>/`` with engine/report.json, engine/seal.json, result.json and
+    engine/steps/*.png). Each run is checked against the bundle digest and its
+    Seal against the report it signs.
+    """
     ids = {n["id"] for n in spec["nodes"]}
     loop = next(n["id"] for n in spec["nodes"] if n["kind"] == "loop")
     prefix = f"{loop}::s::"
-    with (SCOREBOARD / "items.csv").open(newline="") as fh:
-        rows = [r for r in csv.DictReader(fh) if f" block {BLOCK} " in r["detail"]]
-    rows.sort(key=lambda r: int(r["item"]))
-    block = json.loads((runs / "block.json").read_text())
-    dirs = {p.name.split("-", 1)[1]: p for p in runs.iterdir() if p.is_dir()}
+    summary = json.loads((runs / "summary.json").read_text())
+    assert summary["bundle_content_digest"] == digest, "the runs used a different bundle"
+    rows = sorted(summary["runs"], key=lambda r: r["n"])
 
     events: list[dict] = []
     sources: list[dict] = []
     clock = 0.0
     with_frames = {1}
-    for iteration, row in enumerate(rows, start=1):
-        ref = row["detail"].split()[0]
-        run = dirs[ref]
+    for row in rows:
+        iteration = row["n"]
+        run = runs / f"{row['n']}-{row['ref']}"
         report_path = run / "engine" / "report.json"
         result_path = run / "result.json"
+        seal_path = run / "engine" / "seal.json"
         report = json.loads(report_path.read_text())
         result = json.loads(result_path.read_text())
-        assert report["bundle_content_digest"] == digest, f"{ref} ran a different bundle"
-        assert report["execution_outcome"] in row["detail"], f"{ref} outcome differs from the scoreboard"
+        seal = json.loads(seal_path.read_text())
+        assert report["bundle_content_digest"] == digest, f"{row['ref']} ran a different bundle"
+        assert report["execution_outcome"] == row["execution_outcome"]
+        assert report["model_calls"] == 0
+        assert seal["subject_sha256"] == sha256(report_path) == row["report_sha256"], f"{row['ref']}: the Seal signs another report"
+        assert seal["outcome"] == report["execution_outcome"]
         by_step = {r["step_id"]: r for r in report["results"]}
         events.append({"node": loop, "status": "ok", "iteration": iteration, "at_ms": round(clock), "duration_ms": 0})
         halted = False
-        for step_id, _intent, ms in result["steps"]:
+        for timing in result["steps"]:
+            step_id, ms = timing["step_id"], timing["elapsed_ms"]
             r = by_step[step_id]
             node = prefix + step_id
             assert node in ids, f"{node} is not in the spec"
@@ -208,31 +214,34 @@ def trace(spec: dict, runs: Path, digest: str) -> dict:
             frame_src = run / "engine" / "steps" / f"{step_id}_after.png"
             if frame_src.exists():
                 event["frame_src"] = frame_src
-                event["frame"] = f"run/item-{row['item']}/{step_id}.webp"
+                event["frame"] = f"run/r{iteration}/{step_id}.webp"
             if not r["ok"]:
-                assert r.get("safety_halt") and report["halt"]["state_id"] == step_id
+                assert report["halt"]["state_id"] == step_id
                 assert "No matches were found." in report["halt"]["reason"]
+                assert report["transaction_outcome"] == "HALTED_BEFORE_EFFECT"
                 event["reason"] = (
                     "The screen check after this step failed: OpenEMR found a matching chart "
                     "instead of showing that no match exists. The run stopped before it "
-                    "confirmed a new chart, so it created no duplicate."
+                    "saved anything, so it created no duplicate."
                 )
                 halted = True
             events.append(event)
             clock += ms
         sources.append(
             {
-                "scoreboard_item": int(row["item"]),
-                "outcome": report["execution_outcome"],
-                "fault": row["fault"],
-                "report_sha256": sha256(report_path),
-                "result_sha256": sha256(result_path),
+                "referral": iteration,
+                "execution_outcome": report["execution_outcome"],
+                "transaction_outcome": report["transaction_outcome"],
+                "new_charts": row["new_charts"],
+                "report_sha256": row["report_sha256"],
+                "seal": f"{CERTIFIED_URL}/{row['n']}-{row['ref']}/engine/seal.json",
+                "seal_outcome": seal["outcome"],
             }
         )
         if halted:
             with_frames.add(iteration)
             break
-    assert events[-1]["status"] == "halted", "expected the block to include a stopped referral"
+    assert events[-1]["status"] == "halted", "expected the runs to end with the stopped referral"
     # Frames for the first referral and the one that stopped; references only.
     for event in events:
         src = event.pop("frame_src", None)
@@ -242,6 +251,8 @@ def trace(spec: dict, runs: Path, digest: str) -> dict:
             webp(src, OUT / "media" / event["frame"], FRAME_WIDTH)
         else:
             event.pop("frame")
+    last = sources[-1]
+    verified = [s for s in sources if s["seal_outcome"] == "VERIFIED"]
     return {
         "trace_version": 1,
         "outcome": "halted",
@@ -249,27 +260,27 @@ def trace(spec: dict, runs: Path, digest: str) -> dict:
         "total_ms": round(clock),
         "events": events,
         "receipt": {
-            "kind": "record",
-            "status": "stopped",
-            "label": "Run record",
+            "kind": "seal",
+            "status": last["transaction_outcome"],
+            "label": "Seal",
             "summary": (
-                f"Referrals 1 to {len(sources) - 1} saved and read back all 11 fields. "
-                f"Referral {len(sources)} stopped before it confirmed a new chart, and the "
-                "engine asked a person to check the record. The test setup's own read of "
-                "OpenEMR found no new chart for it."
+                f"Referral {last['referral']} stopped before it saved anything "
+                f"({last['transaction_outcome']}): OpenEMR showed a matching chart, so no duplicate was "
+                f"created. Referrals 1 to {len(verified)} each have a VERIFIED Seal: a separate read of "
+                "OpenEMR confirmed all 11 saved fields. Each Seal signs its run's report with the demo key."
             ),
-            "href": SCOREBOARD_URL,
+            "href": last["seal"],
         },
         "source": {
-            "scoreboard": str(SCOREBOARD.relative_to(REPO)) + "/items.csv",
-            "block": BLOCK,
-            "engine_sha": block["engine_sha"],
+            "runs_path": CERTIFIED_PATH,
+            "commit": CERTIFIED_COMMIT,
             "bundle_content_digest": digest,
+            "profile": "standard",
+            "model_calls": 0,
             "runs": sources,
             "note": (
-                "Each iteration is one recorded engine run of the referral body, "
-                "played in the block's recorded order; the trace stops with the "
-                "first referral that stopped."
+                "Each iteration is one certified engine run of the referral body, in run order. "
+                "The trace ends with the referral that stopped."
             ),
         },
     }
@@ -278,7 +289,7 @@ def trace(spec: dict, runs: Path, digest: str) -> dict:
 def main() -> int:
     global BUNDLE, OUT
     ap = argparse.ArgumentParser()
-    ap.add_argument("--runs", type=Path, help="the study's block-02 run directory; without it, no trace is written")
+    ap.add_argument("--runs", type=Path, help="the certified runs (summary.json and one directory per referral)")
     ap.add_argument("--bundle", type=Path, default=BUNDLE, help="the compiled referral bundle the runs used")
     ap.add_argument("--out", type=Path, default=OUT, help="fixture directory (default: fixtures/openemr-referral)")
     args = ap.parse_args()
@@ -306,7 +317,13 @@ def main() -> int:
         folds = fold(json.loads(local.read_text()))
     (OUT / "spec.json").write_text(json.dumps(spec, indent=2) + "\n")
     folds["source"] = {
-        "body_bundle": str(BUNDLE.relative_to(REPO)) if BUNDLE.is_relative_to(REPO) else BUNDLE.name,
+        # A bundle outside the repository is named by what it is; its content
+        # digest below identifies it exactly.
+        "body_bundle": (
+            str(BUNDLE.relative_to(REPO))
+            if BUNDLE.is_relative_to(REPO)
+            else "openemr/new-referral, certified for clinical-write"
+        ),
         "body_content_digest": manifest["content_digest"],
         "source_recording_sha256": manifest["provenance"]["source_recording_sha256"],
         "loop": "openadapt-flow for-each --records fixtures/openemr-referral/worklist.csv",

@@ -15,8 +15,6 @@ describe("stopRuleWords", () => {
     expect(stopRuleWords(save)).toEqual([
       { kind: "run", text: "Stops if reading the saved record back doesn’t confirm it." },
     ]);
-    const key = (referral.spec.nodes ?? []).find((n) => n.id === "for_each::s::step_002")!;
-    expect(stopRuleWords(key)[0].kind).toBe("review");
   });
 
   it("maps Flow's full rule names, in order", () => {

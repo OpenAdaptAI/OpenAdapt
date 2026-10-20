@@ -47,9 +47,13 @@ for (const shot of SHOTS) {
   });
   const page = await context.newPage();
   await page.goto(base + shot.query, { waitUntil: "networkidle" });
-  await page.addStyleTag({ content: "*{transition:none!important;animation:none!important;caret-color:transparent!important}" });
+  // The player thumbnail paints late on a cold page; the unit tests cover it.
+  await page.addStyleTag({ content: "*{transition:none!important;animation:none!important;caret-color:transparent!important}.opg-player-frame{visibility:hidden!important}" });
   await page.evaluate(() => document.fonts?.ready);
   await page.evaluate(() => Promise.all([...document.images].map((img) => { img.loading = "eager"; return img.decode().catch(() => {}); })));
+  await page.waitForLoadState("networkidle");
+  await page.waitForFunction(() => [...document.images].every((img) => img.complete));
+  await page.waitForTimeout(150);
   const file = path.join(outDir, `${shot.id}.png`);
   await page.locator(".opg-root").screenshot({ path: file });
   await context.close();

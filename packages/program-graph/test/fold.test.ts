@@ -25,7 +25,7 @@ describe("folds", () => {
       "for_each>__loop_done__:sequence",
     ]);
     const save = display.folds.get("save")!;
-    expect([save.first, save.last, save.members.length]).toEqual([40, 42, 3]);
+    expect([save.first, save.last, save.members.length]).toEqual([29, 30, 2]);
     const card = (display.spec.nodes ?? []).find((n) => n.id === "save")!;
     expect(card.effects).toHaveLength(11);
     expect(display.ownerOf.get("for_each::s::step_040")).toBe("save");
@@ -53,8 +53,8 @@ describe("folds", () => {
 
   it("foldSequences folds long straight runs only", () => {
     const folds = foldSequences(referral.spec, { minLength: 6, maxLength: 10 });
-    expect(folds.groups.length).toBe(5);
-    expect(folds.groups.flatMap((g) => g.nodes)).toHaveLength(41);
+    expect(folds.groups.length).toBe(3);
+    expect(folds.groups.flatMap((g) => g.nodes)).toHaveLength(29);
     expect(validateFolds(referral.spec, folds)).toEqual([]);
     expect(foldSequences(processRecords).groups).toEqual([]);
   });

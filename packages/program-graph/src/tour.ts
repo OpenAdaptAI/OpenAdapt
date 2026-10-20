@@ -84,7 +84,9 @@ export function defaultTourStops(
     });
   }
 
-  const check = actions.find((node) => node.identity?.armed);
+  // Prefer a step the tour has not shown yet.
+  const check =
+    actions.find((node) => node.identity?.armed && node.id !== step?.id) ?? actions.find((node) => node.identity?.armed);
   if (check) {
     stops.push({
       id: "right-record",

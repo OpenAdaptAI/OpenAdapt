@@ -293,7 +293,8 @@
   border-left: 3px solid var(--opg-ok);
 }
 .opg-receipt[data-status="stopped"],
-.opg-receipt[data-status="halted"] {
+.opg-receipt[data-status^="halted"],
+.opg-receipt[data-status="reconciliation_required"] {
   border-left-color: var(--opg-attention);
 }
 .opg-receipt > div {
