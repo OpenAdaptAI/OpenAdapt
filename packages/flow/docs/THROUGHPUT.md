@@ -96,14 +96,36 @@ starts.
 - If a read-back fails, the run stops on every worker. The report names the
   items, at most K per worker, that the same worker wrote after the failed
   one. Each of those still gets its own read-back.
-- It needs `items_independent: true`. Durable and idempotency-ledger runs
-  verify inline, because their terminal state is written once; the Standard
-  and Regulated profiles are durable, so for them the window has no effect.
-  The worker's item detail records why (`readback: inline (durable runs
-  verify inline)`). Deferring a durable save would mean committing its
-  checkpoint and the run's terminal state from the side thread, after the
-  next item has taken the browser, which the durable runtime doesn't
-  support. Workers still run in parallel under those profiles.
+- It needs `items_independent: true`. Idempotency-ledger runs verify inline,
+  because the ledger's terminal outcome is written once.
+
+### Under durable and governed runs
+
+The Standard and Regulated profiles are durable, and the window works there
+too. Before the side thread gets the check, the run writes it into the
+durable pause. The pause holds:
+
+- the snapshot of the system of record taken before the save;
+- the save's result as sent;
+- `delivery_uncertainty`, so an ordinary resume can never repeat the save.
+
+Then one of these happens:
+
+- **The check confirms the save.** The save's checkpoint is written, the pause
+  is consumed, and `report.json` reads `VERIFIED`.
+- **The check fails.** The pause becomes a reconciliation pause, and it still
+  carries `delivery_uncertainty`.
+- **The process stops before the check settles.** `openadapt-flow resume`
+  re-runs only the check, against the stored snapshot, with the run's record
+  checker. A confirmed check finishes the run; anything else leaves the
+  reconciliation pause. The save is never sent again.
+
+A durable run defers only its last step's check, so nothing else in the item
+waits on it. The checkpoint store must be encrypted, because the snapshot
+holds record rows. Otherwise the check runs inline, and the worker's item
+detail records why (for example, `readback: inline (a durable run defers only
+its last step's record check; this one verifies inline)`). A resumed leg also
+verifies inline.
 
 ## One entry, faster
 

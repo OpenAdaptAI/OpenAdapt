@@ -135,7 +135,6 @@ API_QUALIFIED = (
     "a production qualification admission doesn't cover API steps yet, so the "
     "qualified GUI path runs"
 )
-DURABLE_INLINE = "durable runs verify inline"
 POOL_LOCAL_ONLY = (
     "--workers and --readback-window apply to local runs, not a managed dispatch "
     "or a qualification case"
@@ -228,20 +227,22 @@ CELLS: tuple[Cell, ...] = (
     Cell(
         "pipelined_readback",
         "durable",
-        "refused",
-        reason=DURABLE_INLINE,
-        note="the record check runs before the next item",
+        "works",
+        note="the durable pause holds the deferred check, so a crash resumes the check and never resends",
         evidence=(
+            "tests/test_durable_pipelined_readback.py::test_a_durable_run_defers_its_last_record_check_and_settles_it",
+            "tests/test_durable_pipelined_readback.py::test_a_crash_mid_window_resumes_the_check_and_never_resends",
             "tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says",
         ),
     ),
     Cell(
         "pipelined_readback",
         "governed",
-        "refused",
-        reason=DURABLE_INLINE,
-        note="Standard and Regulated are durable",
+        "works",
+        note="the last step's record check, with an encrypted checkpoint store",
         evidence=(
+            "tests/test_durable_pipelined_readback.py::test_a_durable_run_defers_its_last_record_check_and_settles_it",
+            "tests/test_durable_pipelined_readback.py::test_a_crash_mid_window_resumes_the_check_and_never_resends",
             "tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says",
         ),
     ),
@@ -249,7 +250,6 @@ CELLS: tuple[Cell, ...] = (
         "pipelined_readback",
         "pinned",
         "works",
-        note="when the run isn't durable",
         evidence=(
             "tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says",
         ),
@@ -257,10 +257,11 @@ CELLS: tuple[Cell, ...] = (
     Cell(
         "pipelined_readback",
         "qualified",
-        "refused",
-        reason=DURABLE_INLINE,
-        note="Standard and Regulated are durable",
+        "works",
+        note="as governed",
         evidence=(
+            "tests/test_durable_pipelined_readback.py::test_a_durable_run_defers_its_last_record_check_and_settles_it",
+            "tests/test_durable_pipelined_readback.py::test_a_crash_mid_window_resumes_the_check_and_never_resends",
             "tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says",
         ),
     ),
@@ -504,7 +505,7 @@ COMBINATIONS: tuple[Cell, ...] = (
         "api_step",
         "pipelined_readback",
         "works",
-        note="when the run isn't durable",
+        note="durable runs too, where the API save is the last step",
         evidence=(
             "tests/test_api_step_readback_repair.py::test_an_api_save_reads_back_while_the_next_item_runs",
         ),
@@ -586,8 +587,9 @@ def render_markdown() -> str:
         "workers, using the API step for an admitted save, is the combination",
         "where the most work together: each worker's item sends one request a",
         "person approved, checks it with the system-of-record read-back, and",
-        "reads `VERIFIED`. In that run the read-back runs inline (durable), and",
-        "self-repair runs through the Python API under the Standard contract.",
+        "reads `VERIFIED`. Its record check runs alongside the next item, held",
+        "in the durable pause until it settles, and self-repair runs through",
+        "the Python API under the Standard contract.",
         "Under a signed qualification admission (what `openadapt-flow run`",
         "requires for Standard and Regulated actuation) the API step and",
         "self-repair are still refused, each with its reason below.",

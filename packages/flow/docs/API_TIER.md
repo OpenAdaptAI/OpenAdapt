@@ -263,8 +263,10 @@ Not yet covered, so the GUI steps run with that reason:
 - **Workers** (`--workers`): each item has its own run, authorization and
   approval gate, so the API step runs in each, as in a single run.
 - **Pipelined read-back** (`--readback-window`): an API save's record check
-  is deferred like a GUI save's (same check, later timing). Durable runs
-  verify inline and say why ([THROUGHPUT.md](THROUGHPUT.md)).
+  is deferred like a GUI save's (same check, later timing). In a durable run
+  the durable pause holds the check until it settles, so a crash re-runs the
+  check and never resends the save
+  ([THROUGHPUT.md](THROUGHPUT.md#under-durable-and-governed-runs)).
 - **Self-repair**: the first run can use the API step. A repaired bundle's
   probes and resumed run use the GUI steps, because the repair and the
   person's approval are about the GUI step ([SELF_REPAIR.md](SELF_REPAIR.md)).
