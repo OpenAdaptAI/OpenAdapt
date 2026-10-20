@@ -1,0 +1,1494 @@
+/* The Seal page (components/seal/SealPage.js): its own dark chrome, edge to
+   edge, independent of the site theme. */
+
+.page {
+    --bg: #030507;
+    --ink: #eaf0f6;
+    --muted: #8d9aa8;
+    --faint: rgba(255, 255, 255, 0.08);
+    --tone: #4cf0b8;
+    --tone-soft: #b9fbe5;
+    --tone-glow: rgba(76, 240, 184, 0.12);
+    --fail: #ff5a74;
+    --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    position: relative;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: clip;
+    color: var(--ink);
+    background:
+        radial-gradient(1100px 760px at 72% 42%, var(--tone-glow), transparent 64%),
+        radial-gradient(900px 600px at 10% 110%, rgba(92, 207, 255, 0.05), transparent 70%),
+        var(--bg);
+    font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-feature-settings: 'tnum' 1;
+}
+.page[data-tone='halt'] {
+    --tone: #ffbf55;
+    --tone-soft: #ffe2ad;
+    --tone-glow: rgba(255, 170, 64, 0.1);
+}
+.page[data-phase='broken'] {
+    --tone-glow: rgba(255, 77, 106, 0.1);
+}
+.page a {
+    color: inherit;
+}
+.page :focus-visible {
+    outline: 2px solid var(--tone-soft);
+    outline-offset: 3px;
+    border-radius: 6px;
+}
+/* A focused step shows on the ring itself (SealArt.module.css), not as a box. */
+.page svg :focus-visible {
+    outline: none;
+}
+
+.grid {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.2px);
+    background-size: 30px 30px;
+    -webkit-mask: radial-gradient(900px 700px at 70% 42%, #000 0%, transparent 70%);
+    mask: radial-gradient(900px 700px at 70% 42%, #000 0%, transparent 70%);
+    opacity: 0.6;
+}
+
+.skip {
+    position: absolute;
+    left: 16px;
+    top: -60px;
+    z-index: 10;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: #fff;
+    color: #000;
+}
+.skip:focus {
+    top: 12px;
+}
+
+/* Top bar: the mark, and the other runs. */
+.top {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 20px;
+    padding: 20px clamp(16px, 4vw, 56px) 0;
+}
+.home {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    color: var(--muted) !important;
+    text-decoration: none;
+    transition: color 200ms ease;
+}
+.home:hover {
+    color: var(--ink) !important;
+}
+.mark {
+    width: 22px;
+    height: 22px;
+    color: var(--ink);
+}
+.runs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.run {
+    --rt: #4cf0b8;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px 4px 4px;
+    border: 1px solid var(--faint);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.02);
+    text-decoration: none;
+    font-size: 12.5px;
+    color: var(--muted) !important;
+    transition:
+        border-color 200ms ease,
+        color 200ms ease,
+        background 200ms ease;
+}
+.run[data-tone='halt'] {
+    --rt: #ffbf55;
+}
+.run:hover,
+.run[aria-current='page'] {
+    color: var(--ink) !important;
+    border-color: color-mix(in srgb, var(--rt) 55%, transparent);
+    background: color-mix(in srgb, var(--rt) 7%, transparent);
+}
+.runSeal {
+    display: block;
+    width: 26px;
+    height: 26px;
+}
+.runText {
+    display: inline-flex;
+    gap: 6px;
+    align-items: baseline;
+}
+.runText b {
+    font-family: var(--mono);
+    font-weight: 600;
+    color: var(--rt);
+}
+@media (max-width: 760px) {
+    .runText span {
+        display: none;
+    }
+    .run {
+        padding-right: 10px;
+    }
+}
+
+/* The hero: the words, and the Seal. */
+.hero {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: clamp(20px, 3vw, 56px);
+    padding: clamp(12px, 3vw, 40px) clamp(16px, 4vw, 56px) clamp(40px, 6vw, 72px);
+}
+@media (min-width: 1040px) {
+    .hero {
+        grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+        align-items: start;
+        min-height: calc(100vh - 150px);
+    }
+}
+
+.text {
+    min-width: 0;
+    max-width: 640px;
+}
+@media (max-width: 1039px) {
+    .text {
+        order: 2;
+        margin: 0 auto;
+        width: 100%;
+    }
+}
+
+.kicker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.kicker span:first-child::before {
+    content: '';
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 10px;
+    border-radius: 50%;
+    background: var(--tone);
+    box-shadow: 0 0 12px var(--tone);
+    vertical-align: 1px;
+}
+.outcome {
+    margin: 16px 0 0;
+    font-size: clamp(50px, min(7vw, 11.5vh), 112px);
+    font-weight: 260;
+    line-height: 0.94;
+    letter-spacing: -0.048em;
+    text-wrap: balance;
+    background: linear-gradient(175deg, #ffffff 25%, var(--tone-soft) 75%, var(--tone) 130%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+.reason {
+    margin: 14px 0 0;
+    font-size: clamp(18px, 1.6vw, 22px);
+    color: var(--tone);
+}
+.meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 0;
+    margin: 18px 0 0;
+    font-size: clamp(16px, 1.3vw, 18px);
+    color: #c8d2dd;
+}
+.meta span:not(:last-child)::after {
+    content: '·';
+    margin: 0 10px;
+    color: var(--muted);
+}
+.line {
+    max-width: 48ch;
+    margin: 10px 0 0;
+    font-size: 15.5px;
+    line-height: 1.55;
+    color: var(--muted);
+}
+.by {
+    margin: 10px 0 0;
+    font-size: 15px;
+}
+.by a {
+    color: var(--tone-soft) !important;
+}
+
+.legend {
+    display: grid;
+    gap: 0 18px;
+    margin: 22px 0 0;
+    padding: 0;
+    list-style: none;
+}
+@media (min-width: 560px) {
+    .legend {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+.legend li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 8px 5px 0;
+    line-height: 1.3;
+    border-radius: 8px;
+    font-size: 15px;
+    color: var(--muted);
+    transition: color 200ms ease;
+}
+.legend li:hover {
+    color: var(--ink);
+}
+.legend b {
+    white-space: nowrap;
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 14.5px;
+    color: var(--ink);
+}
+.swatch {
+    flex: none;
+    width: 22px;
+    height: 12px;
+    display: inline-block;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+.legend li[data-ring='steps'] .swatch {
+    background: linear-gradient(var(--tone), var(--tone)) center / 22px 6px no-repeat;
+    border-radius: 1px;
+}
+.legend li[data-ring='checks'] .swatch {
+    background: repeating-linear-gradient(90deg, var(--tone-soft) 0 1.5px, transparent 1.5px 5px) center / 22px 12px no-repeat;
+}
+.legend li[data-ring='readbacks'] .swatch {
+    background: radial-gradient(circle, var(--tone) 0 3.5px, transparent 4px) center / 12px 12px no-repeat;
+}
+.legend li[data-ring='identity'] .swatch {
+    background: linear-gradient(var(--tone), var(--tone)) center / 14px 3px no-repeat;
+}
+.legend li[data-ring='calls'] .swatch {
+    background: radial-gradient(circle, transparent 0 3px, var(--muted) 3.5px 4.5px, transparent 5px) center / 12px 12px no-repeat;
+}
+.clock {
+    font-family: var(--mono);
+    color: var(--ink);
+}
+
+/* The proof: the digest the browser computed, the digest the Seal signed, the verdict. */
+.proof {
+    display: grid;
+    gap: 10px;
+    margin: 24px 0 0;
+    padding: 16px 18px;
+    border: 1px solid var(--faint);
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012));
+}
+.hashRow,
+.signed {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+.proofLabel {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.proofLabel b {
+    font-weight: 600;
+    color: var(--tone);
+}
+.hashRow[data-state='differs'] .proofLabel b {
+    color: var(--fail);
+}
+.hex {
+    display: block;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.5;
+    letter-spacing: 0.04em;
+    word-break: break-all;
+    color: #dbe4ee;
+}
+.hashRow[data-state='running'] .hex {
+    color: color-mix(in srgb, var(--tone) 70%, #7d8a97);
+}
+.hex span[data-diff] {
+    color: var(--fail);
+    background: rgba(255, 90, 116, 0.16);
+    border-radius: 2px;
+}
+.signed .hex {
+    color: var(--muted);
+}
+.verdict {
+    margin: 4px 0 0;
+    font-size: 15.5px;
+    line-height: 1.5;
+    color: #c8d2dd;
+}
+.verdict b {
+    font-weight: 600;
+}
+.verdict[data-verdict='valid'] b {
+    color: var(--tone);
+}
+.verdict[data-verdict='fails'] b {
+    color: var(--fail);
+}
+.pending {
+    color: var(--muted);
+}
+.pending::after {
+    content: '';
+    display: inline-block;
+    width: 1.4em;
+    text-align: left;
+    animation: dots 1.2s steps(4, end) infinite;
+}
+@keyframes dots {
+    0% {
+        content: '';
+    }
+    25% {
+        content: '.';
+    }
+    50% {
+        content: '..';
+    }
+    75% {
+        content: '...';
+    }
+}
+.code {
+    margin-left: 6px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgba(255, 90, 116, 0.12);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--fail);
+}
+.change {
+    margin: 0;
+    font-size: 14px;
+    color: var(--muted);
+}
+.change code {
+    font-family: var(--mono);
+    color: var(--ink);
+}
+.change del {
+    color: var(--fail);
+}
+.change ins {
+    text-decoration: none;
+    color: var(--ink);
+}
+
+.witnesses {
+    display: grid;
+    gap: 10px;
+    margin: 14px 0 0;
+    padding: 0;
+    list-style: none;
+}
+.witnesses li {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--faint);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.015);
+    transition: border-color 500ms ease;
+}
+.witnesses li[data-state='pass'] {
+    border-color: color-mix(in srgb, var(--tone) 30%, transparent);
+}
+.witnesses li[data-state='fail'] {
+    border-color: rgba(255, 90, 116, 0.4);
+}
+.wMark {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 255, 255, 0.3);
+    background: #070b10;
+    transition: all 500ms ease;
+}
+.witnesses li[data-state='pass'] .wMark {
+    border-color: var(--tone);
+    background: color-mix(in srgb, var(--tone) 22%, #070b10);
+    box-shadow: 0 0 14px color-mix(in srgb, var(--tone) 45%, transparent);
+}
+.witnesses li[data-state='fail'] .wMark {
+    border-color: var(--fail);
+}
+.wName {
+    margin: 2px 0 2px;
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--ink);
+}
+.wLine {
+    margin: 2px 0 0;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--muted);
+}
+.wLine code {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: #c8d2dd;
+}
+.wLine b {
+    font-weight: 600;
+    color: var(--tone);
+}
+.wLine a {
+    color: var(--tone-soft) !important;
+}
+.wLine .wBad {
+    color: var(--fail);
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 20px 0 0;
+}
+.primary,
+.ghost,
+.quiet {
+    min-height: 44px;
+    padding: 0 20px;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        transform 160ms ease,
+        background 200ms ease,
+        border-color 200ms ease,
+        color 200ms ease,
+        box-shadow 300ms ease;
+}
+.primary {
+    border: 0;
+    color: #03110b;
+    background: linear-gradient(180deg, var(--tone-soft), var(--tone));
+    box-shadow: 0 0 0 0 transparent;
+}
+.page[data-tone='halt'] .primary {
+    color: #1a1002;
+}
+.primary:hover:not(:disabled) {
+    box-shadow: 0 8px 30px -8px var(--tone);
+    transform: translateY(-1px);
+}
+.ghost {
+    border: 1px solid color-mix(in srgb, var(--fail) 55%, transparent);
+    color: #ffc2cc;
+    background: rgba(255, 90, 116, 0.06);
+}
+.ghost:hover {
+    background: rgba(255, 90, 116, 0.14);
+}
+.quiet {
+    border: 1px solid var(--faint);
+    color: var(--muted);
+    background: transparent;
+}
+.quiet:hover {
+    color: var(--ink);
+}
+.primary:disabled,
+.chip:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.tamper {
+    margin: 14px 0 0;
+    padding: 14px;
+    border: 1px dashed rgba(255, 90, 116, 0.3);
+    border-radius: 14px;
+    background: rgba(255, 90, 116, 0.03);
+    animation: unfold 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.tamper[hidden] {
+    display: none;
+}
+.tamperHead {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--muted);
+}
+.chips {
+    display: grid;
+    gap: 8px;
+}
+.chip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 12px;
+    min-height: 44px;
+    padding: 8px 14px;
+    border: 1px solid var(--faint);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14.5px;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        border-color 200ms ease,
+        background 200ms ease;
+}
+.chip:hover:not(:disabled),
+.chip[aria-pressed='true'] {
+    border-color: rgba(255, 90, 116, 0.6);
+    background: rgba(255, 90, 116, 0.08);
+}
+.chip code {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: #ffb3c0;
+}
+
+.fields {
+    margin: 18px 0 0;
+    border-top: 1px solid var(--faint);
+}
+.fields summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 0;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+    list-style: none;
+}
+.fields summary::-webkit-details-marker {
+    display: none;
+}
+.fields summary::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform 240ms ease;
+}
+.fields[open] summary::before {
+    transform: rotate(45deg);
+}
+.fields summary:hover {
+    color: var(--ink);
+}
+.fields[open] > :not(summary) {
+    animation: unfold 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes unfold {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+}
+.fields dl {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.025);
+}
+.fields dl div {
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 12px;
+}
+@media (max-width: 520px) {
+    .fields dl div {
+        grid-template-columns: 1fr;
+        gap: 2px;
+    }
+}
+.fields dt {
+    font-size: 12.5px;
+    color: var(--muted);
+}
+.fields dd {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.5;
+    word-break: break-all;
+    color: #d3dce6;
+}
+.fileLinks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin: 12px 0 0;
+    font-family: var(--mono);
+    font-size: 12.5px;
+}
+.fileLinks a {
+    color: var(--tone-soft) !important;
+}
+.cmdLabel {
+    margin: 16px 0 6px;
+    font-size: 13px;
+    color: var(--muted);
+}
+.cmds {
+    margin: 0;
+    padding: 12px 14px;
+    overflow-x: auto;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--faint);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: #c8d2dd;
+}
+
+/* The stage: the Seal, its inspector, and a replay. */
+.stage {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 6px;
+    min-width: 0;
+}
+@media (min-width: 1040px) {
+    .stage {
+        position: sticky;
+        top: 12px;
+    }
+}
+.tilt {
+    width: min(100%, 48vh, 640px);
+    transform: perspective(1600px) rotateX(calc(var(--py, 0) * -5deg)) rotateY(calc(var(--px, 0) * 6deg));
+    will-change: transform;
+}
+@media (max-width: 1039px) {
+    .tilt {
+        width: min(100%, 78vh, 640px);
+    }
+}
+/* Under the Seal: the verdict and a hint, or the step being inspected. A fixed
+   height on wide screens, so nothing moves when a step opens. */
+.dock {
+    display: grid;
+    justify-items: center;
+    align-content: start;
+    gap: 8px;
+    width: min(100%, 580px);
+}
+@media (min-width: 1040px) {
+    .dock {
+        min-height: 230px;
+    }
+}
+.stamp {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin: 4px 0 0;
+    padding: 8px 16px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--tone) 40%, transparent);
+    background: color-mix(in srgb, var(--tone) 8%, transparent);
+    font-size: 14.5px;
+    color: var(--tone-soft);
+    animation: unfold 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.stamp[data-verdict='fails'] {
+    border-color: rgba(255, 90, 116, 0.5);
+    background: rgba(255, 90, 116, 0.1);
+    color: #ffc2cc;
+}
+.stamp span {
+    font-weight: 700;
+}
+.hint {
+    min-height: 1.6em;
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    text-align: center;
+}
+@media (hover: none) {
+    .hint {
+        visibility: hidden;
+    }
+}
+.replay {
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding: 6px 10px;
+    border: 1px solid var(--faint);
+    border-radius: 999px;
+    background: rgba(3, 5, 7, 0.6);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+}
+@media (max-width: 1039px) {
+    .replay {
+        position: static;
+    }
+}
+.replay:hover:not(:disabled) {
+    color: var(--ink);
+}
+.replay:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.inspector {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 16px;
+    width: min(100%, 560px);
+    padding: 14px 16px;
+    border: 1px solid var(--faint);
+    border-radius: 16px;
+    background: rgba(7, 11, 15, 0.86);
+    box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+    animation: unfold 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.inKicker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 12px;
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.inName {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+}
+.inChecks {
+    display: grid;
+    gap: 4px;
+    margin: 2px 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 14px;
+    color: #c8d2dd;
+}
+.inChecks li {
+    position: relative;
+    padding-left: 16px;
+}
+.inChecks li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.5em;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--tone);
+}
+.inChecks li[data-result='halt']::before {
+    background: #ffbf55;
+}
+.inChecks li[data-result='ghost']::before {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.reads {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+.reads span {
+    padding: 1px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--faint);
+    font-size: 12px;
+    color: var(--muted);
+}
+.reads span[data-result='passed'] {
+    color: var(--tone-soft);
+    border-color: color-mix(in srgb, var(--tone) 35%, transparent);
+}
+.reads span[data-on] {
+    background: color-mix(in srgb, var(--tone) 18%, transparent);
+    color: #fff;
+}
+.shots {
+    grid-column: 2;
+    grid-row: 1 / span 4;
+    display: grid;
+    gap: 8px;
+    align-content: start;
+    margin: 0;
+}
+.shots figure {
+    margin: 0;
+    display: grid;
+    gap: 3px;
+}
+.shots img {
+    display: block;
+    width: 150px;
+    height: auto;
+    border-radius: 6px;
+    border: 1px solid var(--faint);
+    background: #0b1016;
+}
+.shots figcaption {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+@media (max-width: 520px) {
+    .inspector {
+        grid-template-columns: 1fr;
+    }
+    .shots {
+        grid-column: 1;
+        grid-row: auto;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .shots img {
+        width: 100%;
+    }
+}
+.inspector[data-pinned] .shots {
+    margin-top: 26px;
+}
+.inClose {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.foot {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 10px;
+    padding: 28px clamp(16px, 4vw, 56px) 40px;
+    border-top: 1px solid var(--faint);
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--muted);
+}
+.foot p {
+    max-width: 78ch;
+    margin: 0;
+}
+.footLinks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+}
+.footLinks a {
+    color: var(--ink) !important;
+}
+
+/* The words arrive with the Seal. */
+.kicker,
+.outcome,
+.reason,
+.meta,
+.line,
+.legend,
+.proof,
+.actions {
+    animation: rise 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.outcome {
+    animation-delay: 80ms;
+}
+.reason,
+.meta {
+    animation-delay: 160ms;
+}
+.line {
+    animation-delay: 220ms;
+}
+.legend {
+    animation-delay: 300ms;
+}
+.proof,
+.actions {
+    animation-delay: 380ms;
+}
+@keyframes rise {
+    from {
+        opacity: 0;
+        transform: translateY(14px);
+        filter: blur(6px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .page *,
+    .page *::before,
+    .page *::after {
+        animation: none !important;
+        transition: none !important;
+    }
+    .tilt {
+        transform: none;
+    }
+}
+
+/* ---- The stat grid: four counts, aligned. ---- */
+.stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 26px 0 0;
+    border: 1px solid var(--faint);
+    border-radius: 14px;
+    overflow: hidden;
+}
+.stats > div {
+    display: flex;
+    flex-direction: column-reverse;
+    justify-content: flex-end;
+    gap: 6px;
+    padding: 14px 14px 12px;
+    background: rgba(255, 255, 255, 0.015);
+    transition: background 200ms ease;
+}
+.stats > div + div {
+    border-left: 1px solid var(--faint);
+}
+.stats > div:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+.stats dt {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 12.5px;
+    line-height: 1.3;
+    color: var(--muted);
+}
+.stats dd {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: clamp(20px, 2vw, 26px);
+    letter-spacing: -0.02em;
+    color: var(--ink);
+}
+.stats .swatch {
+    width: 14px;
+}
+.stats [data-ring='steps'] .swatch {
+    background: linear-gradient(var(--tone), var(--tone)) center / 14px 5px no-repeat;
+}
+.stats [data-ring='checks'] .swatch {
+    background: repeating-linear-gradient(90deg, var(--tone-soft) 0 1.5px, transparent 1.5px 4px) center / 14px 10px no-repeat;
+}
+.stats [data-ring='readbacks'] .swatch {
+    background: radial-gradient(circle, var(--tone) 0 3px, transparent 3.5px) center / 10px 10px no-repeat;
+}
+.stats [data-ring='identity'] .swatch {
+    background: linear-gradient(var(--tone), var(--tone)) center / 10px 3px no-repeat;
+}
+@media (max-width: 560px) {
+    .stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .stats > div:nth-child(3) {
+        border-left: 0;
+    }
+    .stats > div:nth-child(n + 3) {
+        border-top: 1px solid var(--faint);
+    }
+}
+.calls {
+    margin: 10px 0 0;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--muted);
+}
+
+/* ---- Play the run: the page's first invitation. ---- */
+.playCta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    margin: 22px 0 0;
+    padding: 12px 18px 12px 12px;
+    border: 1px solid color-mix(in srgb, var(--tone) 45%, transparent);
+    border-radius: 16px;
+    background:
+        linear-gradient(90deg, color-mix(in srgb, var(--tone) 14%, transparent), transparent 70%),
+        rgba(255, 255, 255, 0.02);
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        border-color 200ms ease,
+        background 200ms ease;
+}
+.playCta:hover:not(:disabled) {
+    border-color: var(--tone);
+}
+.playCta:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+.playIcon {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, var(--tone-soft), var(--tone));
+    color: #03110b;
+    font-size: 15px;
+    box-shadow: 0 0 24px -4px var(--tone);
+}
+.playCta b {
+    display: block;
+    font-size: 16.5px;
+    font-weight: 600;
+}
+.playCta small {
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+/* ---- The player under the Seal. ---- */
+.player {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: min(100%, 580px);
+    margin-top: 2px;
+    padding: 6px 8px;
+    border: 1px solid var(--faint);
+    border-radius: 999px;
+    background: rgba(5, 8, 12, 0.8);
+}
+.player[data-active] {
+    border-color: color-mix(in srgb, var(--tone) 35%, transparent);
+}
+.pBtn {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--ink);
+    font-size: 12px;
+    cursor: pointer;
+}
+.pBtn:first-child {
+    background: linear-gradient(180deg, var(--tone-soft), var(--tone));
+    color: #03110b;
+}
+.pBtn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+.scrub {
+    flex: 1;
+    min-width: 60px;
+    accent-color: var(--tone);
+}
+.pTime {
+    flex: none;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+}
+.speeds {
+    display: inline-flex;
+    flex: none;
+    border: 1px solid var(--faint);
+    border-radius: 999px;
+    overflow: hidden;
+}
+.speeds button {
+    padding: 4px 8px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+}
+.speeds button[aria-pressed='true'] {
+    background: color-mix(in srgb, var(--tone) 22%, transparent);
+    color: var(--ink);
+}
+@media (max-width: 520px) {
+    .pTime {
+        display: none;
+    }
+}
+
+/* ---- The step line and the step table. ---- */
+.stepLine {
+    min-height: 1.5em;
+    margin: 4px 0 0;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--tone-soft);
+    text-align: center;
+}
+.inMain {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+}
+.kv {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+}
+.kv th {
+    width: 108px;
+    padding: 5px 12px 5px 0;
+    font-weight: 500;
+    text-align: left;
+    vertical-align: top;
+    color: var(--muted);
+}
+.kv td {
+    padding: 5px 0;
+    color: var(--ink);
+}
+.kv tr + tr :is(th, td) {
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.kv tr[data-tone='halt'] td {
+    color: #ffd08a;
+}
+.kv tr[data-tone='ghost'] td {
+    color: var(--muted);
+}
+.kv tr[data-spot] td,
+.kv tr[data-spot] th {
+    color: var(--tone-soft);
+    background: color-mix(in srgb, var(--tone) 8%, transparent);
+}
+.spotNote {
+    margin: 0;
+    padding: 10px 12px;
+    border-left: 2px solid #ffbf55;
+    background: rgba(255, 191, 85, 0.06);
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: #ffe2ad;
+}
+.readTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+}
+.readTable caption {
+    caption-side: bottom;
+    padding-top: 6px;
+    font-size: 11.5px;
+    text-align: left;
+    color: var(--muted);
+}
+.readTable th {
+    padding: 4px 8px 4px 0;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-align: left;
+    color: var(--muted);
+}
+.readTable td {
+    padding: 3px 8px 3px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--ink);
+    transition:
+        opacity 300ms ease,
+        color 300ms ease,
+        background 300ms ease;
+}
+.readTable td:last-child {
+    width: 18px;
+    color: var(--tone);
+    font-weight: 700;
+}
+.readTable tr[data-done='0'] td {
+    opacity: 0.35;
+}
+.readTable tr[data-new] td {
+    background: color-mix(in srgb, var(--tone) 12%, transparent);
+}
+
+/* ---- The signed record: signed fields and outside witnesses. ---- */
+.record {
+    margin: 22px 0 0;
+}
+.recordH {
+    margin: 0 0 8px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.recordTable {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid var(--faint);
+    border-radius: 12px;
+    font-size: 13.5px;
+}
+.recordTable th {
+    width: 132px;
+    padding: 9px 12px;
+    font-weight: 500;
+    text-align: left;
+    vertical-align: top;
+    color: var(--muted);
+    white-space: nowrap;
+}
+.recordTable td {
+    padding: 9px 12px 9px 0;
+    line-height: 1.5;
+    color: var(--ink);
+    word-break: break-word;
+}
+.recordTable tr + tr :is(th, td) {
+    border-top: 1px solid var(--faint);
+}
+.recordTable code {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: #d3dce6;
+}
+.recordTable a {
+    color: var(--tone-soft) !important;
+}
+.recordTable .wMark {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 8px;
+    vertical-align: -1px;
+    border-width: 1.5px;
+}
+.recordTable tr[data-state='pass'] .wMark {
+    border-color: var(--tone);
+    background: color-mix(in srgb, var(--tone) 40%, #070b10);
+}
+.recordTable tr[data-state='fail'] :is(.wMark) {
+    border-color: var(--fail);
+}
+.recordTable tr[data-state='fail'] td {
+    color: #ffc2cc;
+}
+@media (max-width: 520px) {
+    .recordTable th {
+        width: auto;
+        white-space: normal;
+    }
+}
+
+/* ---- The program map under the Seal. ---- */
+.mapBand {
+    position: relative;
+    z-index: 1;
+    padding: 8px clamp(16px, 4vw, 56px) 48px;
+}
+.mapHead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px 20px;
+    margin-bottom: 14px;
+}
+.mapHead h2 {
+    margin: 0;
+    font-size: clamp(20px, 2vw, 26px);
+    font-weight: 400;
+    letter-spacing: -0.02em;
+}
+.mapLink {
+    font-size: 14.5px;
+    color: var(--tone-soft) !important;
+}
+.map {
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid var(--faint);
+}
+
+/* The step panel: details and pictures on the left, the read-backs on the right. */
+.inspector {
+    grid-template-columns: minmax(0, 1fr);
+    width: min(100%, 720px);
+    align-items: start;
+}
+.inspector:has(.readTable) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    gap: 6px 22px;
+}
+.inspector > .inMain {
+    grid-column: 1;
+}
+.inspector .shots {
+    grid-column: auto;
+    grid-row: auto;
+    grid-template-columns: repeat(2, minmax(0, 120px));
+    margin-top: 2px;
+}
+.inspector .shots img {
+    width: 100%;
+}
+.dock {
+    width: min(100%, 720px);
+}
+@media (max-width: 640px) {
+    .inspector:has(.readTable) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+.inspector > .readTable {
+    grid-column: 2;
+    grid-row: 1;
+}
+.readTable td {
+    padding-top: 1px;
+    padding-bottom: 1px;
+    line-height: 1.3;
+}
+.inspector:has(.readTable) .kv th {
+    width: 96px;
+}
+@media (max-width: 640px) {
+    .inspector > .readTable {
+        grid-column: 1;
+        grid-row: auto;
+    }
+}
+
+/* The Seal's step on the program map. */
+.map :global(.opg-node[data-seal-anchor]) {
+    box-shadow:
+        0 0 0 2px rgba(76, 240, 184, 0.6),
+        0 0 22px -4px rgba(76, 240, 184, 0.6);
+}
+.map :global(.opg-node[data-seal-anchor='stop']) {
+    box-shadow:
+        0 0 0 2px rgba(255, 191, 85, 0.7),
+        0 0 22px -4px rgba(255, 191, 85, 0.6);
+}
+.map :global(.opg-node[data-seal-anchor])::after {
+    content: 'SEALED HERE';
+    position: absolute;
+    top: -9px;
+    right: 10px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: #4cf0b8;
+    color: #03110b;
+    font: 600 9px/1.4 ui-monospace, 'SFMono-Regular', Menlo, monospace;
+    letter-spacing: 0.1em;
+}
+.map :global(.opg-node[data-seal-anchor='stop'])::after {
+    background: #ffbf55;
+    color: #1a1002;
+}
