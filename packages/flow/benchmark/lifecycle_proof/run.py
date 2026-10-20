@@ -526,8 +526,13 @@ def _context(out: Path, keys_dir: Path, ledger: Ledger) -> dict[str, Any]:
         ctx["pinned_digest"] = doc["pinned_digest"]
         ctx["bundle"] = Path(doc["bundle"])
         ctx["environment_digest"] = doc["environment_digest"]
-        ctx["switch_record"] = SwitchRecord.model_validate(doc["switch_record"])
-        ctx["switch_log"] = SwitchLog(out / "switch" / "log.jsonl")
+    switch = out / "switch" / "switch.json"
+    if switch.exists():
+        from openadapt_flow.approval_mode.switch import SwitchLog, SwitchRecord
+
+        state = _read(switch)
+        ctx["switch_record"] = SwitchRecord.model_validate(state["record"])
+        ctx["switch_log"] = SwitchLog(Path(state["log"]))
     current = out / "current-bundle.json"
     if current.exists():
         ctx["bundle"] = Path(_read(current)["bundle"])
@@ -535,11 +540,8 @@ def _context(out: Path, keys_dir: Path, ledger: Ledger) -> dict[str, Any]:
 
 
 def phase_admit(ctx: dict[str, Any], source: Path, trials: int) -> None:
-    from openadapt_flow.approval_mode.gate import dedicated_user_reference
-    from openadapt_flow.approval_mode.switch import SwitchLog, SwitchRecord
     from openadapt_flow.ir import Workflow
     from openadapt_flow.qualify.campaign import qualify
-    from openadapt_flow.qualify.result import verifier_identity_of
 
     out, ledger = ctx["out"], ctx["ledger"]
     t0 = time.time()
@@ -600,47 +602,100 @@ def phase_admit(ctx: dict[str, Any], source: Path, trials: int) -> None:
     )
     if not (qual.passed and qual.certified):
         raise SystemExit("qualification did not certify the sealed bundle")
-    verifier = ctx["hooks"].make_verifier({})
     environment = qual.environment_digest or ""
     if not environment.startswith("sha256:"):
         environment = "sha256:" + environment
+    _write(
+        adm / "admission.json",
+        {
+            "pinned_digest": digest,
+            "bundle": str(bundle),
+            "qualification_dir": str(adm / "qualification"),
+            "policy": POLICY,
+            "profile": "regulated",
+            "environment_digest": environment,
+            "qualification_trials": trials,
+            "qualification_result": qual.result,
+        },
+    )
+    ctx.update(pinned_digest=digest, bundle=bundle, environment_digest=environment)
+    ledger.add("admit", pinned_digest=digest, seconds=round(time.time() - t0, 1))
+
+
+def _passing_screen_facts(qualification_dir: Path) -> tuple[dict, dict]:
+    """The rung floor and dialog dismissals of the passing cases.
+
+    What Cloud records on a switch: per step, the weakest resolution rung a
+    VERIFIED representative case used, and the dialogs it dismissed.
+    """
+
+    from openadapt_flow.approval_mode.switch import RUNG_ORDER
+    from openadapt_flow.ir import RunReport
+
+    floor: dict[str, str] = {}
+    dialogs: dict[str, set[str]] = {}
+    pattern = "cases/representative/trial-*/run/report.json"
+    for path in sorted(qualification_dir.glob(pattern)):
+        report = RunReport.model_validate_json(path.read_text())
+        if report.execution_outcome != "VERIFIED":
+            continue
+        for result in report.results:
+            for resolution in (result.resolution, result.drag_end_resolution):
+                if resolution is None or resolution.rung == "grounder":
+                    continue
+                prior = floor.get(result.step_id)
+                if prior is None or RUNG_ORDER.index(
+                    resolution.rung
+                ) > RUNG_ORDER.index(prior):
+                    floor[result.step_id] = resolution.rung
+            for action in result.interstitial_actions:
+                dialogs.setdefault(result.step_id, set()).add(action.interstitial)
+    return floor, {k: tuple(sorted(v)) for k, v in dialogs.items()}
+
+
+def phase_switch(ctx: dict[str, Any]) -> None:
+    """Open the problems-only switch record for the admitted bundle."""
+
+    from openadapt_flow.approval_mode.gate import dedicated_user_reference
+    from openadapt_flow.approval_mode.switch import SwitchLog, SwitchRecord
+    from openadapt_flow.qualify.result import verifier_identity_of
+
+    out = ctx["out"]
+    doc = _read(out / "admission" / "admission.json")
+    floor, dialogs = _passing_screen_facts(Path(doc["qualification_dir"]))
+    verifier = ctx["hooks"].make_verifier({})
+    digest = doc["pinned_digest"]
+    opened = int(time.time())
     record = SwitchRecord(
-        switch_id=f"switch-lifecycle-proof-{digest[:12]}",
+        switch_id=f"switch-lifecycle-proof-{digest[:12]}-{opened}",
         org_id="org-lifecycle-proof",
         workflow_id="workflow-openemr-referral",
         runner_id=RUNNER_ID,
         bundle_content_digest=digest,
-        environment_digest=environment,
+        environment_digest=doc["environment_digest"],
         verifier_identities=(
             verifier_identity_of(ctx["config"].verifier.verifier, verifier),
         ),
         dedicated_user_ref=dedicated_user_reference(
             DEDICATED_USER, bytes.fromhex(ctx["keys"]["user_hmac_key"])
         ),
+        rung_floor=floor,
+        allowed_interstitials=dialogs,
     )
-    log = SwitchLog.open_new(out / "switch" / "log.jsonl", record)
+    log_path = out / "switch" / f"log-{opened}.jsonl"
+    log = SwitchLog.open_new(log_path, record)
     _write(
-        adm / "admission.json",
-        {
-            "pinned_digest": digest,
-            "bundle": str(bundle),
-            "policy": POLICY,
-            "profile": "regulated",
-            "environment_digest": environment,
-            "switch_record": record.model_dump(mode="json"),
-            "switch_record_sha256": record.digest(),
-            "qualification_trials": trials,
-            "qualification_result": qual.result,
-        },
+        out / "switch" / "switch.json",
+        {"record": record.model_dump(mode="json"), "log": str(log_path)},
     )
-    ctx.update(
-        pinned_digest=digest,
-        bundle=bundle,
-        environment_digest=environment,
-        switch_record=record,
-        switch_log=log,
+    ctx.update(switch_record=record, switch_log=log)
+    ctx["ledger"].add(
+        "switch.open",
+        switch_id=record.switch_id,
+        bundle=digest,
+        rung_floor=floor,
+        dialogs=dialogs,
     )
-    ledger.add("admit", pinned_digest=digest, seconds=round(time.time() - t0, 1))
 
 
 def _oracle(ctx: dict[str, Any], key: str) -> int:
@@ -959,6 +1014,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         choices=(
             "up",
             "admit",
+            "switch",
             "batch",
             "crash",
             "drift",
@@ -995,12 +1051,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     phases = (
         [args.phase]
         if args.phase != "all"
-        else ["admit", "batch", "crash", "drift", "continue"]
+        else ["admit", "switch", "batch", "crash", "drift", "continue"]
     )
     for phase in phases:
         ledger.add("phase.start", phase=phase)
         if phase == "admit":
             phase_admit(ctx, args.source, args.trials)
+        elif phase == "switch":
+            phase_switch(ctx)
         elif phase == "batch":
             phase_batch(ctx, BATCH, "batch")
         elif phase == "crash":
