@@ -36,6 +36,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -253,6 +254,15 @@ class GateVerdict:
                 "Nothing was retried."
             )
         return f"{ITEM_APPROVAL_PAUSE_MARKER}{detail}. Nothing was retried."
+
+
+#: Items whose save passed every pre-check and whose record check still runs
+#: alongside the next item (pipelined read-back), by run reference. The next
+#: item's gate does not read such an open item as interrupted. Process-local:
+#: after a restart the set is empty, so an item that never finished reads as
+#: interrupted and the switch turns off.
+_READBACK_IN_FLIGHT: set[str] = set()
+_READBACK_IN_FLIGHT_LOCK = threading.Lock()
 
 
 class ApprovalGate:
@@ -934,13 +944,17 @@ class ApprovalGate:
             return fail("switch_log_for_other_record")
         if state.is_off:
             return fail("switched_off")
+        with _READBACK_IN_FLIGHT_LOCK:
+            in_flight = set(_READBACK_IN_FLIGHT)
         if any(
-            ref != self._run_ref or not self._item_started_logged
+            (ref != self._run_ref or not self._item_started_logged)
+            and ref not in in_flight
             for ref in state.open_items
         ):
             # An item started without a person and never finished. Only this
             # gate's own ``item_started`` may be open: a run that reuses an
-            # interrupted run's id must not hide it.
+            # interrupted run's id must not hide it. An earlier item of this
+            # process whose record check is still running is not interrupted.
             return fail("interrupted_item", OffReason.UNCERTAIN_RESULT)
         if self._runner_id is None:
             # A caller that didn't say which runner this is proves nothing.
@@ -1251,7 +1265,29 @@ class ApprovalGate:
         )
 
     # -- after the run -----------------------------------------------------------
+    def hold_for_readback(self) -> None:
+        """The item's save passed and its record check runs alongside the next item.
+
+        The item stays open in the switch log until :meth:`finish_item` decides
+        it from the settled record check; until then the next item's gate
+        doesn't read it as interrupted.
+        """
+
+        if self._run_ref is not None and self._item_started_logged:
+            with _READBACK_IN_FLIGHT_LOCK:
+                _READBACK_IN_FLIGHT.add(self._run_ref)
+
     def finish_item(self, report: "RunReport") -> ApprovalModeItemEvidence:
+        """Decide the item; see :meth:`_finish_item`."""
+
+        try:
+            return self._finish_item(report)
+        finally:
+            if self._run_ref is not None:
+                with _READBACK_IN_FLIGHT_LOCK:
+                    _READBACK_IN_FLIGHT.discard(self._run_ref)
+
+    def _finish_item(self, report: "RunReport") -> ApprovalModeItemEvidence:
         """Decide the item, write the switch log, and return the evidence block.
 
         Safe to call again for the same run (for example after a late

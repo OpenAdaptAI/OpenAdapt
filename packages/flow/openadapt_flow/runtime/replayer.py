@@ -3075,7 +3075,15 @@ class Replayer:
         if (variant_route := current_variant_route()) is not None:
             report.variant_route = variant_route
         self._stamp_execution_outcome(report, workflow, run_dir)
-        self._stamp_approval(report)
+        hold = getattr(self.approval_gate, "hold_for_readback", None)
+        if handed_off and callable(hold):
+            # The item's approval decision waits for its record check: the
+            # settled verdict decides it (_settle_pipelined_readback). Deciding
+            # now, on the held report, would read a save still being checked
+            # as an uncertain result and switch problems_only off.
+            hold()
+        else:
+            self._stamp_approval(report)
         if persist:
             persisted_path = report.save(run_dir)
             # The evidence file must exist before the terminal projection.  A
