@@ -103,7 +103,11 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as exc:
         print(f"not valid: unusable key registry ({exc})", file=sys.stderr)
         return 1
-    log_keys = _log_keys(args)
+    try:
+        log_keys = _log_keys(args)
+    except (OSError, ValueError) as exc:
+        print(f"not valid: unusable log key ({exc})", file=sys.stderr)
+        return 1
     fetch = None
     if args.live:
         if not args.require_anchor:
@@ -121,6 +125,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
             strict=args.strict,
             require_anchor=args.require_anchor,
             log_keys=log_keys,
+            log_url=args.log_url,
             fetch=fetch,
         )
     else:
@@ -136,7 +141,13 @@ def _cmd_verify(args: argparse.Namespace) -> int:
         result = verify_local_seal(seal, digest, registry)
         if args.require_anchor:
             result = check_anchor(
-                seal, Path(args.seal), result, registry, log_keys=log_keys, fetch=fetch
+                seal,
+                Path(args.seal),
+                result,
+                registry,
+                log_keys=log_keys,
+                log_url=args.log_url,
+                fetch=fetch,
             )
     if result.ok:
         where = target / result.subject_file if result.subject_file else target
@@ -159,11 +170,14 @@ def _cmd_verify(args: argparse.Namespace) -> int:
 
 
 def _log_keys(args: argparse.Namespace) -> Any:
+    from urllib.parse import urlparse
+
     from openadapt_flow.seal_anchor import LogKey, default_log_keys
 
     if not args.log_key:
         return default_log_keys()
-    return [LogKey.from_pem(Path(p).read_bytes()) for p in args.log_key]
+    origin = args.log_origin or urlparse(args.log_url).hostname or ""
+    return [LogKey.from_pem(Path(p).read_bytes(), origin=origin) for p in args.log_key]
 
 
 def _utc(seconds: Any) -> str:
@@ -185,7 +199,7 @@ def _cmd_anchor(args: argparse.Namespace) -> int:
         anchor = anchor_seal(
             seal_path, signer, log_url=args.log_url, log_keys=_log_keys(args)
         )
-    except (LocalSealError, AnchorError) as exc:
+    except (LocalSealError, AnchorError, OSError, ValueError) as exc:
         print(f"not anchored: {exc}", file=sys.stderr)
         return 1
     entry = anchor["entry"]
@@ -291,7 +305,8 @@ def _cmd_key_revoke(args: argparse.Namespace) -> int:
         return 1
     print(
         f"revoked {args.key_id} at {at}; every Seal it signed is now refused, "
-        "because a Seal's own issued_at can't prove it came first"
+        "unless a transparency-log anchor shows the log recorded it before then "
+        "(verify --require-anchor)"
     )
     return 0
 
@@ -343,6 +358,19 @@ def _cmd_proof(args: argparse.Namespace) -> int:
         return 1
     print(json.dumps(found, indent=2, sort_keys=True))
     return 0 if found["verified_inclusion"] else 1
+
+
+def _log_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--log-url",
+        default="https://rekor.sigstore.dev",
+        help="The transparency log's URL (default the public Sigstore Rekor)",
+    )
+    p.add_argument(
+        "--log-origin",
+        default=None,
+        help="Checkpoint origin name for --log-key (default the --log-url host)",
+    )
 
 
 def register(sub: Any) -> None:
@@ -399,8 +427,9 @@ def register(sub: Any) -> None:
     v.add_argument(
         "--live",
         action="store_true",
-        help="Also fetch the entry from the log and compare (needs network)",
+        help="Also fetch the entry from the log at --log-url and compare (needs network)",
     )
+    _log_args(v)
     v.set_defaults(func=_cmd_verify)
 
     a = s.add_parser(
@@ -412,16 +441,12 @@ def register(sub: Any) -> None:
     )
     a.add_argument("target", help="A run directory, or a .seal.json file")
     a.add_argument(
-        "--log-url",
-        default="https://rekor.sigstore.dev",
-        help="Rekor URL (default the public Sigstore instance)",
-    )
-    a.add_argument(
         "--log-key",
         action="append",
         default=[],
         help="The log's public key PEM, to check its answer (default: Sigstore Rekor)",
     )
+    _log_args(a)
     a.set_defaults(func=_cmd_anchor)
 
     k = s.add_parser("key", help="Print the Seal key's public half for pinning")

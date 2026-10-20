@@ -90,10 +90,10 @@ Seals from both keys keep verifying.
 Revoke a key only when it may be compromised. After `revoke`, every Seal
 that key signed is refused with `revoked_key`, including Seals whose
 `issued_at` is earlier than the revocation. `issued_at` is written by
-whoever holds the key, so someone with a stolen key can backdate it. A
-Seal from a revoked key verifies again only with a transparency-log
-anchor recorded before the revocation time. A registry that lists one key
-ID twice is refused.
+whoever holds the key, so someone with a stolen key can backdate it. The
+exception is a Seal with a transparency-log anchor that the log recorded
+before `revoked_at` (see [Verify an anchor](#verify-an-anchor)). A
+registry that lists one key ID twice is refused.
 
 ## Seal records and exports
 
@@ -179,7 +179,12 @@ changes nothing. If the connection drops before the answer arrives, run it
 again: it re-sends the same digest and picks up the existing entry.
 
 The Seal key signs the anchor. With a PKCS#11 key, the token signs with
-CKM_EDDSA and the prehash flag.
+CKM_EDDSA and the prehash flag. With a key file or keychain key, OpenAdapt
+computes the Ed25519ph signature itself in pure Python, because the
+`cryptography` library has no Ed25519ph. That code isn't constant time:
+someone who can time many signatures closely on the same machine might learn
+something about the key. Anchoring makes one signature per Seal, on demand.
+Where that matters, use a PKCS#11 key.
 
 ### Verify an anchor
 
@@ -189,22 +194,35 @@ openadapt-flow local-seal verify runs/job-0007 --keys site-keys.json --require-a
 
 `--require-anchor` checks, offline, from the stored file:
 
-1. the Seal itself, against the pinned keys, as without the flag;
+1. the Seal itself, against the pinned keys, and against `report.json` only
+   (`--require-anchor` implies `--strict`);
 2. that the anchored digest is the digest of this Seal with the stored nonce;
 3. that the entry is signed by the same pinned key that verified the Seal;
 4. the log's signed entry timestamp, against the log's public key;
 5. the inclusion proof, from the entry up to the root in the log's signed
-   checkpoint.
+   checkpoint;
+6. that the checkpoint's origin line and signature line name the pinned log,
+   and that the entry ID starts with the checkpoint's tree ID.
+
+A Seal from a revoked key passes only when the log recorded it before the
+key's `revoked_at`. That uses the log's time, which the key's holder can't
+change.
 
 The log key for the public Sigstore instance is built in (log ID
-`c0d23d6a…801d`). Pass `--log-key PEM` to pin another log. `--live` also
-fetches the entry from the log and compares it; it is optional and needs
-network access. Offline verification works in strict no-outbound mode.
+`c0d23d6a…801d`, origin `rekor.sigstore.dev`). To pin another log, pass
+`--log-key PEM`, `--log-url URL` and, when its checkpoints name another
+origin than the URL's host, `--log-origin NAME`.
+
+`--live` also fetches the entry from the log and compares it. It is optional
+and needs network access. It fetches from `--log-url` (default the public
+Rekor), never from a URL written in the anchor file. Offline verification
+works in strict no-outbound mode.
 
 Refusal reasons are closed: `anchor_missing`, `anchor_malformed`,
 `anchor_mismatch`, `anchor_key_mismatch`, `anchor_bad_signature`,
 `anchor_unknown_log`, `anchor_bad_timestamp`, `anchor_bad_inclusion`,
-`anchor_bad_checkpoint`, `anchor_live_mismatch`.
+`anchor_bad_checkpoint`, `anchor_live_mismatch`, `anchor_live_unavailable`.
+An anchor file in the wrong shape, at any field, is `anchor_malformed`.
 
 Cloud Seals are unchanged and remain the hosted option.
 

@@ -32,6 +32,7 @@ SHA-512 digest, so the anchor signature uses :mod:`openadapt_flow.ed25519ph`
 from __future__ import annotations
 
 import base64
+import dataclasses
 import hashlib
 import json
 import os
@@ -60,6 +61,9 @@ kBbmLSGtks4L3qX6yYY0zufBnhC8Ur/iy55GhWP/9A/bY2LhC30M9+RYtw==
 -----END PUBLIC KEY-----
 """
 _HEX64 = re.compile(r"^[a-f0-9]{64}$")
+# Rekor v1 entry UUID: 16 hex of the tree ID, then the 64-hex leaf hash.
+_UUID = re.compile(r"^(?:[a-f0-9]{16})?[a-f0-9]{64}$")
+REKOR_ORIGIN = "rekor.sigstore.dev"
 _TIMEOUT = 30
 
 AnchorRefusal = Literal[
@@ -73,6 +77,7 @@ AnchorRefusal = Literal[
     "anchor_bad_inclusion",
     "anchor_bad_checkpoint",
     "anchor_live_mismatch",
+    "anchor_live_unavailable",
 ]
 
 
@@ -142,9 +147,10 @@ class LogKey:
 
     key: Any  # cryptography EllipticCurvePublicKey (or Ed25519PublicKey)
     log_id: str  # hex SHA-256 of the DER SubjectPublicKeyInfo
+    origin: str = REKOR_ORIGIN  # the checkpoint's origin name
 
     @classmethod
-    def from_pem(cls, pem: bytes | str) -> "LogKey":
+    def from_pem(cls, pem: bytes | str, origin: str = REKOR_ORIGIN) -> "LogKey":
         from cryptography.hazmat.primitives import serialization
 
         data = pem.encode("ascii") if isinstance(pem, str) else pem
@@ -153,7 +159,7 @@ class LogKey:
             serialization.Encoding.DER,
             serialization.PublicFormat.SubjectPublicKeyInfo,
         )
-        return cls(key=key, log_id=hashlib.sha256(der).hexdigest())
+        return cls(key=key, log_id=hashlib.sha256(der).hexdigest(), origin=origin)
 
     def verify(self, signature: bytes, payload: bytes) -> bool:
         from cryptography.exceptions import InvalidSignature
@@ -218,10 +224,15 @@ class Checkpoint:
     origin: str
     size: int
     root: bytes
+    tree_id: Optional[int] = None
 
 
 def verify_checkpoint(text: str, keys: Sequence[LogKey]) -> Optional[Checkpoint]:
-    """Parse a signed note and check one signature against a pinned log key."""
+    """Parse a signed note and check one signature against a pinned log key.
+
+    The note's origin line must name the key's log (``ORIGIN - TREE_ID`` for
+    Rekor v1), and so must the signature line.
+    """
     body, sep, sigs = text.partition("\n\n")
     if not sep:
         return None
@@ -234,6 +245,12 @@ def verify_checkpoint(text: str, keys: Sequence[LogKey]) -> Optional[Checkpoint]
         root = base64.b64decode(lines[2], validate=True)
     except ValueError:
         return None
+    name, dash, tree = lines[0].partition(" - ")
+    tree_id: Optional[int] = None
+    if dash:
+        if not tree.isdigit():
+            return None
+        tree_id = int(tree)
     for line in sigs.splitlines():
         if not line.startswith("— "):
             continue
@@ -246,18 +263,38 @@ def verify_checkpoint(text: str, keys: Sequence[LogKey]) -> Optional[Checkpoint]
             continue
         hint, signature = blob[:4], blob[4:]
         for key in keys:
+            if name != key.origin or parts[0] != key.origin:
+                continue
             if bytes.fromhex(key.log_id)[:4] == hint and key.verify(signature, signed):
-                return Checkpoint(origin=lines[0], size=size, root=root)
+                return Checkpoint(
+                    origin=lines[0], size=size, root=root, tree_id=tree_id
+                )
     return None
 
 
 # --- verification ------------------------------------------------------------
 
 
+def _loads_strict(data: bytes) -> Any:
+    from openadapt_flow.offline_seal import loads_strict
+
+    return loads_strict(data)
+
+
 def _seal_digest(seal: Mapping[str, Any]) -> str:
     from openadapt_flow.offline_seal import seal_sha256
 
     return seal_sha256(seal)
+
+
+_MALFORMED = (
+    KeyError,
+    TypeError,
+    ValueError,
+    AttributeError,
+    IndexError,
+    OverflowError,
+)
 
 
 def verify_entry(
@@ -267,14 +304,37 @@ def verify_entry(
     public_raw: bytes,
     log_keys: Sequence[LogKey],
 ) -> AnchorVerification:
-    """Check one stored Rekor entry offline: body, signature, timestamp, inclusion."""
+    """Check one stored Rekor entry offline: body, signature, timestamp, inclusion.
+
+    Anything the file holds in the wrong shape is ``anchor_malformed``.
+    """
+    try:
+        return _verify_entry(
+            entry,
+            statement_sha512=statement_sha512,
+            public_raw=public_raw,
+            log_keys=log_keys,
+        )
+    except _MALFORMED:
+        return AnchorVerification(False, reason="anchor_malformed")
+
+
+def _verify_entry(
+    entry: Mapping[str, Any],
+    *,
+    statement_sha512: str,
+    public_raw: bytes,
+    log_keys: Sequence[LogKey],
+) -> AnchorVerification:
     from openadapt_flow.ed25519ph import verify_prehashed
 
+    if not isinstance(entry, Mapping):
+        return AnchorVerification(False, reason="anchor_malformed")
     try:
         uuid = str(entry["uuid"])
         body_b64 = str(entry["body"])
         body_bytes = base64.b64decode(body_b64, validate=True)
-        body = json.loads(body_bytes)
+        body = _loads_strict(body_bytes)
         integrated_time = int(entry["integratedTime"])
         log_id = str(entry["logID"])
         log_index = int(entry["logIndex"])
@@ -288,6 +348,8 @@ def verify_entry(
             spec["signature"]["publicKey"]["content"], validate=True
         )
     except (KeyError, TypeError, ValueError):
+        return AnchorVerification(False, reason="anchor_malformed")
+    if not _UUID.match(uuid):
         return AnchorVerification(False, reason="anchor_malformed")
 
     def refuse(reason: AnchorRefusal) -> AnchorVerification:
@@ -343,6 +405,10 @@ def verify_entry(
         or checkpoint.size != int(proof["treeSize"])
     ):
         return refuse("anchor_bad_checkpoint")
+    # A Rekor v1 UUID starts with the tree ID the checkpoint names.
+    if len(uuid) == 80 and checkpoint.tree_id is not None:
+        if uuid[:16] != f"{checkpoint.tree_id:016x}":
+            return refuse("anchor_bad_checkpoint")
     return AnchorVerification(
         True, uuid=uuid, log_index=log_index, integrated_time=integrated_time
     )
@@ -354,13 +420,16 @@ def verify_anchor(
     public_raw: bytes,
     *,
     log_keys: Optional[Sequence[LogKey]] = None,
+    log_url: Optional[str] = None,
     fetch: Optional[Callable[[str, str], Mapping[str, Any]]] = None,
 ) -> AnchorVerification:
     """Check that ``anchor`` anchors exactly ``seal``, signed by ``public_raw``.
 
     ``public_raw`` is the pinned key the Seal itself verified against, so
     the anchor proves nothing about a key the verifier did not pin. With
-    ``fetch``, the entry is also read back from the log and compared.
+    ``fetch``, the entry is also read back from ``log_url`` (the verifier's
+    pinned log; default the public Rekor) and compared. The anchor file's
+    own ``log_url`` is never used for that.
     """
     if anchor is None:
         return AnchorVerification(False, reason="anchor_missing")
@@ -370,15 +439,14 @@ def verify_anchor(
         nonce = str(anchor["nonce"])
         seal_hex = str(anchor["seal_sha256"])
         entry = anchor["entry"]
-        log_url = str(anchor.get("log_url") or REKOR_URL)
         if not (_HEX64.match(nonce) and _HEX64.match(seal_hex)):
             raise ValueError("format")
-    except (KeyError, TypeError, ValueError):
+    except _MALFORMED:
         return AnchorVerification(False, reason="anchor_malformed")
     if seal_hex != _seal_digest(seal):
         return AnchorVerification(False, reason="anchor_mismatch")
     digest = hashlib.sha512(statement(seal_hex, nonce)).hexdigest()
-    if anchor.get("statement_sha512") not in (None, digest):
+    if anchor.get("statement_sha512") != digest:
         return AnchorVerification(False, reason="anchor_mismatch")
     result = verify_entry(
         entry,
@@ -388,25 +456,25 @@ def verify_anchor(
     )
     if not result.ok or fetch is None:
         return result
-    live = fetch(log_url, str(entry["uuid"]))
-    if any(
-        live.get(k) != entry.get(k)
-        for k in ("body", "integratedTime", "logID", "logIndex")
-    ):
-        return AnchorVerification(
-            False,
-            reason="anchor_live_mismatch",
-            uuid=result.uuid,
-            log_index=result.log_index,
-            integrated_time=result.integrated_time,
+    try:
+        live = fetch(log_url or REKOR_URL, str(result.uuid))
+        same = isinstance(live, Mapping) and all(
+            live.get(k) == entry.get(k)
+            for k in ("body", "integratedTime", "logID", "logIndex")
         )
+    except (AnchorError, OSError, *_MALFORMED):
+        return dataclasses.replace(result, ok=False, reason="anchor_live_unavailable")
+    if not same:
+        return dataclasses.replace(result, ok=False, reason="anchor_live_mismatch")
     return result
 
 
 def load_anchor(seal_path: Path) -> Optional[dict[str, Any]]:
+    from openadapt_flow.offline_seal import loads_strict
+
     path = anchor_path(seal_path)
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = loads_strict(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return None
     except (OSError, ValueError):
@@ -448,6 +516,8 @@ def _one_entry(answer: Any) -> dict[str, Any]:
 
 
 def fetch_entry(log_url: str, uuid: str) -> dict[str, Any]:
+    if not _UUID.match(uuid):
+        raise AnchorError("anchor_malformed", "not a Rekor entry UUID")
     status, answer, _ = _http("GET", f"{log_url.rstrip('/')}/api/v1/log/entries/{uuid}")
     if status != 200:
         raise AnchorError("log_unavailable", f"GET entry returned {status}")

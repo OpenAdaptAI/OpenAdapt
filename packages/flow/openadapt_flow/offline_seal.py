@@ -43,6 +43,7 @@ back to a generated key. Nothing here touches the network or calls a model.
 from __future__ import annotations
 
 import base64
+import dataclasses
 import hashlib
 import json
 import os
@@ -99,6 +100,7 @@ LocalSealRefusal = Literal[
     "anchor_bad_inclusion",
     "anchor_bad_checkpoint",
     "anchor_live_mismatch",
+    "anchor_live_unavailable",
 ]
 
 
@@ -140,6 +142,8 @@ class LocalSealVerification:
     reason: Optional[LocalSealRefusal] = None
     subject_file: Optional[str] = None
     anchor: Optional["AnchorVerification"] = None
+    # Set with reason="revoked_key" once the signature itself has verified.
+    revoked_at: Optional[str] = None
 
 
 def mode_enabled(env: Optional[Mapping[str, str]] = None) -> bool:
@@ -424,9 +428,6 @@ def verify_local_seal(
     if len(matches) > 1:
         return LocalSealVerification(False, reason="ambiguous_key")
     key = matches[0]
-    if key.status == "revoked":
-        # issued_at is the signer's own claim; a revoked key can backdate it.
-        return LocalSealVerification(False, reason="revoked_key")
     if parsed.public_key != key.public_key:
         return LocalSealVerification(False, reason="key_mismatch")
     from cryptography.exceptions import InvalidSignature
@@ -438,7 +439,18 @@ def verify_local_seal(
         )
     except (InvalidSignature, ValueError):
         return LocalSealVerification(False, reason="bad_signature")
+    if key.status == "revoked":
+        # issued_at is the signer's own claim; a revoked key can backdate it.
+        # Only a transparency-log time before revoked_at (check_anchor) helps.
+        return LocalSealVerification(
+            False, key_id=key.key_id, reason="revoked_key", revoked_at=key.revoked_at
+        )
     return LocalSealVerification(True, key_id=key.key_id)
+
+
+def _epoch(iso_seconds: str) -> int:
+    when = datetime.strptime(iso_seconds, "%Y-%m-%dT%H:%M:%SZ")
+    return int(when.replace(tzinfo=timezone.utc).timestamp())
 
 
 def check_anchor(
@@ -448,15 +460,21 @@ def check_anchor(
     registry: Sequence[SealPublicKey],
     *,
     log_keys: Optional[Sequence["LogKey"]] = None,
+    log_url: Optional[str] = None,
     fetch: Any = None,
 ) -> LocalSealVerification:
     """Require a transparency-log anchor next to a Seal that already verified.
 
     The anchor must be signed by the same pinned key that verified the Seal.
+    A Seal from a revoked key passes only when the log recorded it before the
+    key's ``revoked_at``: the log's time is independent of the key's holder.
+    ``fetch`` reads the entry back from ``log_url``, the verifier's pinned
+    log, never from a URL in the anchor file.
     """
     from openadapt_flow.seal_anchor import load_anchor, verify_anchor
 
-    if not result.ok:
+    revoked = result.reason == "revoked_key" and result.revoked_at is not None
+    if not (result.ok or revoked):
         return result
     key = next(k for k in registry if k.key_id == result.key_id)
     anchor = verify_anchor(
@@ -464,16 +482,24 @@ def check_anchor(
         load_anchor(seal_path),
         base64.b64decode(key.public_key),
         log_keys=log_keys,
+        log_url=log_url,
         fetch=fetch,
     )
+    refused = LocalSealVerification(
+        False,
+        key_id=result.key_id,
+        reason=anchor.reason or "revoked_key",
+        subject_file=result.subject_file,
+        anchor=anchor,
+        revoked_at=result.revoked_at,
+    )
     if not anchor.ok:
-        return LocalSealVerification(
-            False,
-            key_id=result.key_id,
-            reason=anchor.reason,
-            subject_file=result.subject_file,
-            anchor=anchor,
-        )
+        return refused
+    if revoked and not (
+        anchor.integrated_time is not None
+        and anchor.integrated_time < _epoch(str(result.revoked_at))
+    ):
+        return refused
     return LocalSealVerification(
         True, key_id=result.key_id, subject_file=result.subject_file, anchor=anchor
     )
@@ -486,6 +512,7 @@ def verify_run(
     strict: bool = False,
     require_anchor: bool = False,
     log_keys: Optional[Sequence["LogKey"]] = None,
+    log_url: Optional[str] = None,
     fetch: Any = None,
 ) -> LocalSealVerification:
     """Verify ``run_dir/seal.json`` against the run's report.
@@ -497,7 +524,7 @@ def verify_run(
     ``report.json`` changed after sealing is refused even if a
     ``report.pre-seal.json`` matches.
     With ``require_anchor``, ``seal.anchor.json`` must also prove the Seal
-    was logged in the transparency log.
+    was logged in the transparency log, and ``strict`` is implied.
     """
     run_dir = Path(run_dir)
     try:
@@ -507,24 +534,25 @@ def verify_run(
     except (OSError, ValueError):
         return LocalSealVerification(False, reason="malformed")
     result = LocalSealVerification(False, reason="subject_mismatch")
+    strict = strict or require_anchor
     for name in ("report.json",) if strict else ("report.json", "report.pre-seal.json"):
         path = run_dir / name
         if not path.is_file():
             continue
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         result = verify_local_seal(seal, digest, registry)
-        if result.ok:
-            found = LocalSealVerification(True, key_id=result.key_id, subject_file=name)
-            if not require_anchor:
-                return found
-            return check_anchor(
-                seal,
-                run_dir / SEAL_FILE,
-                found,
-                registry,
-                log_keys=log_keys,
-                fetch=fetch,
-            )
-        if result.reason != "subject_mismatch":
-            return result
+        if result.reason == "subject_mismatch":
+            continue
+        found = dataclasses.replace(result, subject_file=name)
+        if not require_anchor:
+            return found
+        return check_anchor(
+            seal,
+            run_dir / SEAL_FILE,
+            found,
+            registry,
+            log_keys=log_keys,
+            log_url=log_url,
+            fetch=fetch,
+        )
     return result

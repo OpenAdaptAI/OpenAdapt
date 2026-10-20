@@ -81,7 +81,7 @@ class FakeRekor:
         self.pem = self.key.public_key().public_bytes(
             serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
         )
-        self.log = LogKey.from_pem(self.pem)
+        self.log = LogKey.from_pem(self.pem, origin="rekor.example")
         self.bodies: list[bytes] = [
             json.dumps({"filler": i}).encode() for i in range(prefill)
         ]
@@ -91,10 +91,13 @@ class FakeRekor:
     def _sign(self, payload: bytes) -> bytes:
         return self.key.sign(payload, ec.ECDSA(hashes.SHA256()))
 
-    def checkpoint(self, size: int, root: bytes) -> str:
-        body = f"rekor.example - {self.TREE_ID}\n{size}\n{base64.b64encode(root).decode()}\n"
+    def checkpoint(
+        self, size: int, root: bytes, origin: str = "rekor.example", signer: str = ""
+    ) -> str:
+        body = f"{origin} - {self.TREE_ID}\n{size}\n{base64.b64encode(root).decode()}\n"
         blob = bytes.fromhex(self.log.log_id)[:4] + self._sign(body.encode())
-        return body + "\n— rekor.example " + base64.b64encode(blob).decode() + "\n"
+        name = signer or origin
+        return body + f"\n\u2014 {name} " + base64.b64encode(blob).decode() + "\n"
 
     def submit(
         self, log_url: str, digest: str, signature: bytes, public_raw: bytes
@@ -141,7 +144,7 @@ class FakeRekor:
                 "checkpoint": self.checkpoint(len(leaves), root),
             },
         }
-        uuid = "24296fb24b8ad77a" + leaves[index].hex()
+        uuid = f"{int(self.TREE_ID):016x}" + leaves[index].hex()
         self.entries[uuid] = entry
         return {"uuid": uuid, **copy.deepcopy(entry)}
 
@@ -632,6 +635,7 @@ def test_http_client_submits_and_handles_conflict(tmp_path, rekor, rekor_server)
         registry,
         require_anchor=True,
         log_keys=[rekor.log],
+        log_url=rekor_server,
         fetch=seal_anchor.fetch_entry,
     ).ok
 
@@ -692,6 +696,8 @@ def test_cli_anchor_and_verify_require_anchor(tmp_path, rekor, rekor_server):
         rekor_server,
         "--log-key",
         str(log_pem),
+        "--log-origin",
+        "rekor.example",
     )
     assert anchored.returncode == 0, anchored.stderr
     assert "log index" in anchored.stdout
@@ -704,6 +710,8 @@ def test_cli_anchor_and_verify_require_anchor(tmp_path, rekor, rekor_server):
         "--require-anchor",
         "--log-key",
         str(log_pem),
+        "--log-origin",
+        "rekor.example",
     )
     assert ok.returncode == 0, ok.stderr
     assert "anchored in the transparency log" in ok.stdout
@@ -717,6 +725,8 @@ def test_cli_anchor_and_verify_require_anchor(tmp_path, rekor, rekor_server):
         "--require-anchor",
         "--log-key",
         str(log_pem),
+        "--log-origin",
+        "rekor.example",
         OPENADAPT_NO_OUTBOUND="1",
     )
     assert offline.returncode == 0, offline.stderr
@@ -742,6 +752,8 @@ def test_cli_anchors_a_file_seal(tmp_path, rekor, rekor_server):
         rekor_server,
         "--log-key",
         str(log_pem),
+        "--log-origin",
+        "rekor.example",
     )
     assert done.returncode == 0, done.stderr
     assert (tmp_path / "export.csv.seal.anchor.json").is_file()
@@ -754,6 +766,8 @@ def test_cli_anchors_a_file_seal(tmp_path, rekor, rekor_server):
         "--require-anchor",
         "--log-key",
         str(log_pem),
+        "--log-origin",
+        "rekor.example",
     )
     assert ok.returncode == 0, ok.stderr
 
@@ -764,3 +778,216 @@ def test_default_log_key_is_the_public_rekor_key():
         "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d"
     )
     assert LocalSealV1  # imported for the schema; keeps the module import honest
+
+
+# --- review fixes: revocation, pinned live URL, malformed input, origin ---------
+
+
+def _revoked(registry_entry: dict, revoked_at: str) -> list:
+    return parse_key_registry(
+        [dict(registry_entry, status="revoked", revoked_at=revoked_at)]
+    )
+
+
+def test_revoked_key_needs_an_anchor_logged_before_the_revocation(tmp_path, rekor):
+    run, signer, _, anchor = _anchored(tmp_path, rekor)
+    entry = signer.registry_entry()
+    later = _revoked(entry, "2999-01-01T00:00:00Z")
+    earlier = _revoked(entry, "2000-01-01T00:00:00Z")
+    # Without an anchor requirement a revoked key's Seal is refused outright.
+    assert verify_run(run, later).reason == "revoked_key"
+    # The log recorded it before the revocation: the log's time, not issued_at.
+    ok = verify_run(run, later, require_anchor=True, log_keys=[rekor.log])
+    assert ok.ok, ok.reason
+    refused = verify_run(run, earlier, require_anchor=True, log_keys=[rekor.log])
+    assert refused.reason == "revoked_key"
+    # A revoked key with no anchor at all stays refused.
+    (run / "seal.anchor.json").unlink()
+    gone = verify_run(run, later, require_anchor=True, log_keys=[rekor.log])
+    assert gone.reason == "anchor_missing"
+
+
+def test_revoked_key_with_a_bad_signature_is_still_bad_signature(tmp_path, rekor):
+    run, signer, _, _ = _anchored(tmp_path, rekor)
+    seal = json.loads((run / SEAL_FILE).read_text())
+    seal["signature"] = base64.b64encode(bytes(64)).decode()
+    (run / SEAL_FILE).write_text(json.dumps(seal))
+    later = _revoked(signer.registry_entry(), "2999-01-01T00:00:00Z")
+    result = verify_run(run, later, require_anchor=True, log_keys=[rekor.log])
+    assert result.reason == "bad_signature"
+
+
+def test_live_fetch_uses_the_pinned_log_url_not_the_file(tmp_path, rekor):
+    run, _, registry, _ = _anchored(tmp_path, rekor)
+    _tamper(run, lambda a: a.__setitem__("log_url", "https://attacker.example"))
+    asked: list[str] = []
+
+    def fetch(url, uuid):
+        asked.append(url)
+        return rekor.fetch(url, uuid)
+
+    ok = verify_run(
+        run,
+        registry,
+        require_anchor=True,
+        log_keys=[rekor.log],
+        log_url="https://rekor.example",
+        fetch=fetch,
+    )
+    assert ok.ok and asked == ["https://rekor.example"]
+    verify_run(run, registry, require_anchor=True, log_keys=[rekor.log], fetch=fetch)
+    assert asked[-1] == seal_anchor.REKOR_URL
+
+
+def test_live_fetch_errors_are_a_closed_reason(tmp_path, rekor):
+    run, _, registry, _ = _anchored(tmp_path, rekor)
+    for error in (OSError("down"), AnchorError("log_unavailable"), ValueError("json")):
+
+        def fetch(url, uuid, error=error):
+            raise error
+
+        result = verify_run(
+            run, registry, require_anchor=True, log_keys=[rekor.log], fetch=fetch
+        )
+        assert result.reason == "anchor_live_unavailable"
+    junk = verify_run(
+        run,
+        registry,
+        require_anchor=True,
+        log_keys=[rekor.log],
+        fetch=lambda url, uuid: ["not", "an", "entry"],
+    )
+    assert junk.reason == "anchor_live_mismatch"
+
+
+def test_malformed_uuid_is_refused_and_never_fetched(tmp_path, rekor):
+    run, _, registry, _ = _anchored(tmp_path, rekor)
+    _tamper(run, lambda a: a["entry"].__setitem__("uuid", "../../log/publicKey"))
+
+    def fetch(url, uuid):
+        raise AssertionError("must not fetch")
+
+    result = verify_run(
+        run, registry, require_anchor=True, log_keys=[rekor.log], fetch=fetch
+    )
+    assert result.reason == "anchor_malformed"
+    with pytest.raises(AnchorError):
+        seal_anchor.fetch_entry("https://rekor.example", "../x")
+
+
+def _paths(value, prefix=()):
+    yield prefix
+    if isinstance(value, dict):
+        for k, v in value.items():
+            yield from _paths(v, prefix + (k,))
+    elif isinstance(value, list):
+        for i, v in enumerate(value):
+            yield from _paths(v, prefix + (i,))
+
+
+def _set(doc, path, value):
+    if not path:
+        return value
+    out = copy.deepcopy(doc)
+    node = out
+    for step in path[:-1]:
+        node = node[step]
+    node[path[-1]] = value
+    return out
+
+
+def test_every_field_with_the_wrong_type_is_refused_without_a_traceback(
+    tmp_path, rekor
+):
+    run, signer, _, anchor = _anchored(tmp_path, rekor)
+    seal = json.loads((run / SEAL_FILE).read_text())
+    for path in _paths(anchor):
+        if path in (("key_id",), ("log_url",)):
+            continue  # informational; the verifier uses its own pinned values
+        for wrong in (None, 7, -1, "x", "", [], {}, [1], {"a": 1}, True, 1e308):
+            bad = _set(anchor, path, wrong)
+            if bad == anchor:
+                continue
+            result = verify_anchor(seal, bad, signer.public_raw(), log_keys=[rekor.log])
+            assert not result.ok, (path, wrong)
+            assert result.reason and result.reason.startswith("anchor_"), (path, wrong)
+    # A body that decodes to something other than a Rekor entry.
+    for body in (b"[]", b"null", b'{"spec": 1}', b"\xff\xfe", b'{"a":1,"a":2}'):
+        bad = copy.deepcopy(anchor)
+        bad["entry"]["body"] = base64.b64encode(body).decode()
+        result = verify_anchor(seal, bad, signer.public_raw(), log_keys=[rekor.log])
+        assert result.reason == "anchor_malformed", body
+
+
+def test_unreadable_anchor_file_is_malformed(tmp_path, rekor):
+    run, _, registry, _ = _anchored(tmp_path, rekor)
+    for text in ("{not json", "[]", '{"schema": 1, "schema": 2}'):
+        (run / "seal.anchor.json").write_text(text)
+        result = verify_run(run, registry, require_anchor=True, log_keys=[rekor.log])
+        assert result.reason == "anchor_malformed", text
+
+
+@pytest.mark.parametrize(
+    ("origin", "signer"),
+    [
+        ("rekor.attacker", ""),
+        ("rekor.example", "rekor.attacker"),
+        ("rekor.example x", ""),
+    ],
+)
+def test_checkpoint_origin_must_name_the_pinned_log(tmp_path, rekor, origin, signer):
+    run, _, registry, _ = _anchored(tmp_path, rekor)
+
+    def edit(anchor):
+        p = _proof(anchor)
+        # Right root, size and key: only the origin or signer name is wrong.
+        p["checkpoint"] = rekor.checkpoint(
+            p["treeSize"], bytes.fromhex(p["rootHash"]), origin=origin, signer=signer
+        )
+
+    _tamper(run, edit)
+    result = verify_run(run, registry, require_anchor=True, log_keys=[rekor.log])
+    assert result.reason == "anchor_bad_checkpoint"
+
+
+def test_uuid_tree_id_must_match_the_checkpoint(tmp_path, rekor):
+    run, _, registry, _ = _anchored(tmp_path, rekor)
+    _tamper(
+        run,
+        lambda a: a["entry"].__setitem__("uuid", "0" * 16 + a["entry"]["uuid"][16:]),
+    )
+    result = verify_run(run, registry, require_anchor=True, log_keys=[rekor.log])
+    assert result.reason == "anchor_bad_checkpoint"
+
+
+def test_require_anchor_refuses_the_pre_seal_fallback(tmp_path, rekor):
+    run, _, registry, _ = _anchored(tmp_path, rekor)
+    (run / "report.json").rename(run / "report.pre-seal.json")
+    (run / "report.json").write_text('{"edited": true}')
+    assert verify_run(run, registry).subject_file == "report.pre-seal.json"
+    result = verify_run(run, registry, require_anchor=True, log_keys=[rekor.log])
+    assert result.reason == "subject_mismatch"
+
+
+def test_cli_malformed_seal_file_and_log_key(tmp_path):
+    export = tmp_path / "export.csv"
+    export.write_text("id\nSYNTH-1\n")
+    seal = tmp_path / "export.csv.seal.json"
+    seal.write_text("{broken")
+    bad = _cli(tmp_path, "verify", str(export), "--seal", str(seal), "--require-anchor")
+    assert bad.returncode == 1 and "malformed" in bad.stderr
+    assert "Traceback" not in bad.stderr
+    assert _cli(tmp_path, "file", str(export)).returncode == 0
+    junk_pem = tmp_path / "junk.pem"
+    junk_pem.write_text("not a key")
+    out = _cli(
+        tmp_path,
+        "verify",
+        str(export),
+        "--seal",
+        str(seal),
+        "--require-anchor",
+        "--log-key",
+        str(junk_pem),
+    )
+    assert out.returncode == 1 and "Traceback" not in out.stderr
