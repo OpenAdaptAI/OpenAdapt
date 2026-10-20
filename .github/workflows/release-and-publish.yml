@@ -125,9 +125,10 @@ jobs:
           fi
 
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          current_main="$(git rev-parse refs/remotes/origin/main)"
-          if [ "$current_main" != "$GITHUB_SHA" ]; then
-            echo "The dispatched commit is stale. main=$current_main dispatch=$GITHUB_SHA." >&2
+          # The merge queue keeps moving main, so the dispatched commit only has
+          # to be on main's history. The tag still names this exact commit.
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "The dispatched commit $GITHUB_SHA is not on main's history." >&2
             exit 1
           fi
 
@@ -191,9 +192,8 @@ jobs:
           git config user.email "openadapt-release[bot]@users.noreply.github.com"
 
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          current_main="$(git rev-parse refs/remotes/origin/main)"
-          if [ "$current_main" != "$GITHUB_SHA" ]; then
-            echo "main advanced before the tag push. main=$current_main candidate=$GITHUB_SHA." >&2
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "The candidate $GITHUB_SHA left main's history before the tag push." >&2
             exit 1
           fi
 
@@ -524,14 +524,15 @@ jobs:
             --repository "$GITHUB_REPOSITORY" \
             --tag "$RELEASE_TAG"
 
-          release_url="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG"
-          release_status="$(curl --silent --show-error \
-            --output /tmp/github-release.json \
-            --write-out '%{http_code}' \
-            --header "Accept: application/vnd.github+json" \
-            --header "Authorization: Bearer $GH_TOKEN" \
-            --header "X-GitHub-Api-Version: 2026-03-10" \
-            "$release_url")"
+          # GitHub's get-by-tag endpoint never returns a draft, so the release
+          # is found in the release list, which includes drafts for this token.
+          fetch_release() {
+            "$GH_CLI" api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq "[.[] | select(.tag_name == \"$RELEASE_TAG\")] | first // empty" \
+              > /tmp/github-release.json
+            if [ -s /tmp/github-release.json ]; then echo 200; else echo 404; fi
+          }
+          release_status="$(fetch_release)"
 
           if [ "$release_status" = "404" ]; then
             "$GH_CLI" release create "$RELEASE_TAG" \
@@ -541,13 +542,7 @@ jobs:
               --verify-tag \
               --title "$RELEASE_TAG" \
               --notes-file /tmp/release-notes.md
-            release_status="$(curl --silent --show-error \
-              --output /tmp/github-release.json \
-              --write-out '%{http_code}' \
-              --header "Accept: application/vnd.github+json" \
-              --header "Authorization: Bearer $GH_TOKEN" \
-              --header "X-GitHub-Api-Version: 2026-03-10" \
-              "$release_url")"
+            release_status="$(fetch_release)"
           fi
           if [ "$release_status" != "200" ]; then
             echo "GitHub returned HTTP $release_status for the exact release." >&2
@@ -589,13 +584,7 @@ jobs:
                 --repo "$GITHUB_REPOSITORY"
             done < /tmp/missing-release-assets.txt
 
-            release_status="$(curl --silent --show-error \
-              --output /tmp/github-release.json \
-              --write-out '%{http_code}' \
-              --header "Accept: application/vnd.github+json" \
-              --header "Authorization: Bearer $GH_TOKEN" \
-              --header "X-GitHub-Api-Version: 2026-03-10" \
-              "$release_url")"
+            release_status="$(fetch_release)"
             if [ "$release_status" != "200" ]; then
               echo "GitHub returned HTTP $release_status for the completed draft." >&2
               exit 1
@@ -617,13 +606,7 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --draft=false
 
-            release_status="$(curl --silent --show-error \
-              --output /tmp/github-release.json \
-              --write-out '%{http_code}' \
-              --header "Accept: application/vnd.github+json" \
-              --header "Authorization: Bearer $GH_TOKEN" \
-              --header "X-GitHub-Api-Version: 2026-03-10" \
-              "$release_url")"
+            release_status="$(fetch_release)"
             if [ "$release_status" != "200" ]; then
               echo "GitHub returned HTTP $release_status after publication." >&2
               exit 1
