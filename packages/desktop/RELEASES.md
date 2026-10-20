@@ -17,24 +17,63 @@ launcher's.
    or `perf` commit under `packages/desktop` that keeps the version, and prints
    the command above. It also requires every version source, native included,
    to carry the one version.
-3. When the bump merges, `.github/workflows/desktop-release.yml` waits for that
-   exact commit's Packages run (its desktop test and build jobs must have
-   passed), then builds the wheel, the sdist and every installer and
-   smoke-tests them. The `native-release` environment's reviewer approves the
-   signing jobs. It attests the exact bytes and writes the channel, which binds
-   `SHA256SUMS` and the provenance by hash, states each platform's signing
-   mode, and names the previous release's channel by hash.
+3. When the bump merges and its Packages run on main succeeds,
+   `.github/workflows/desktop-release.yml` starts (see "How a release starts"
+   below). It requires that run's desktop test and build jobs to have passed,
+   then builds the wheel, the sdist and every installer and smoke-tests them.
+   The signing jobs run in the `native-release` environment, which holds the
+   signing secrets. The workflow attests the exact bytes and writes the
+   channel, which binds `SHA256SUMS` and the provenance by hash, states each
+   platform's signing mode, and names the previous release's channel by hash.
 4. The openadapt-release App creates the tag and a draft release with every
    asset and verifies the draft's bytes. PyPI then gets the same wheel and sdist
    through Trusted Publishing, and the draft is published once. If any build
    fails, nothing is published. A later failure resumes by re-running the
    failed jobs of the same run; a new run refuses a half-published version.
+   One state resumes from a new run instead: PyPI serves the version, the tag
+   exists, and the release is still a draft. Dispatch the workflow on main
+   (`gh workflow run desktop-release.yml --ref main`). It builds nothing; the
+   publish job downloads the draft, reverifies every file against
+   `SHA256SUMS` and its attestations for the tag's commit, requires PyPI to
+   serve the attested wheel and sdist, and publishes the draft.
 5. Signing is stated, never implied. macOS DMGs are ad-hoc signed until
    Developer ID credentials exist. Windows goes through SignPath when the four
    `SIGNPATH_*` secrets are set in `native-release`: one request deep-signs the
    MSI and the program files in it and signs the NSIS setup. Otherwise Windows
    ships unsigned. File names, the website manifest, the channel and the
    release notes all carry each mode.
+
+### How a release starts
+
+A release starts from `workflow_run`: Packages completing with success for a
+push to main. Time that Packages spends queued behind other CI can't fail a
+release, because the release doesn't start until Packages has finished.
+
+- **Subject.** The Packages run's head commit (`workflow_run.head_sha`) is the
+  subject. Its checks decide the release; the gate reads that run back and
+  requires it to be this repository's successful push run on main for that
+  commit, with successful `desktop test / ` and `desktop build / ` jobs.
+- **Built commit.** GitHub runs a `workflow_run` workflow, and signs its
+  attestations, at main's tip (`github.sha`). The release builds and tags that
+  tip, so the provenance's workflow commit and source commit stay equal. The
+  gate requires the tip's `packages/desktop` tree to equal the subject's.
+- **No release.** The run ends quietly, with nothing built, when the subject
+  doesn't change `packages/desktop`, when main changed `packages/desktop`
+  again after the subject (that newer commit's Packages run starts its own
+  release), or when the version is already released. When Packages fails, the
+  gate is skipped.
+- **Order.** Every Packages run on main starts a Desktop release run, and most
+  end as no release. The `desktop-release` concurrency group queues runs
+  (`queue: max`) instead of letting a newer pending run cancel an older one.
+
+A manual run (`gh workflow run desktop-release.yml --ref main`) builds the tip
+and takes as its subject the newest commit on main's first-parent history that
+changed `packages/desktop`. It waits for that commit's Packages push run: up to
+four hours while the run is queued, then up to 60 minutes once it starts.
+
+Every other gate applies to both triggers: version, changelog and tag order,
+the release App identity for tagging, and a refusal to rebuild a partly
+published version.
 
 Consumers pick the newest valid `openadapt-desktop-v*` release; there is no
 standing channel release, and nothing is mirrored between releases.
