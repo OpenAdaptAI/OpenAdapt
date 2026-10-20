@@ -538,6 +538,7 @@ def seal_authorized(
     *,
     home: Optional[Path] = None,
     replace_unanchored: bool = False,
+    allow_unredacted: bool = False,
     now: Optional[datetime] = None,
 ) -> Any:
     """Seal ``run_dir`` under the authorization at ``target`` as scope ``item``.
@@ -574,4 +575,5 @@ def seal_authorized(
         now=now,
         authorization=(str(auth.sha256), item),
         replace_unanchored=replace_unanchored,
+        allow_unredacted=allow_unredacted,
     )

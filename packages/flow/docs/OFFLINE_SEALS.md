@@ -35,6 +35,13 @@ machine that ran the work also signed the statement. It shows the report has
 not changed since it was sealed. It does not grade the run and grants no
 authority.
 
+A Seal is only written over a report with no session tokens or credentials
+in it. Reports are redacted when they are written, and `local-seal run`
+refuses a report that still holds one unless `--allow-unredacted` is passed.
+For a run written before redaction existed, run
+`openadapt-flow redact-report RUN_DIR`, then seal again. See
+[`REPORT_REDACTION.md`](REPORT_REDACTION.md).
+
 ## Customer-held keys
 
 In production, sign with a key you control instead of the key the runner

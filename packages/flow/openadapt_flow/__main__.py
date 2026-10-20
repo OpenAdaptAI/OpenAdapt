@@ -8924,6 +8924,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _register_local_seal(sub)
 
+    from openadapt_flow.cli_redact_report import register as _register_redact_report
+
+    _register_redact_report(sub)
+
     from openadapt_flow.cli_no_outbound import register as _register_no_outbound
 
     _register_no_outbound(sub)

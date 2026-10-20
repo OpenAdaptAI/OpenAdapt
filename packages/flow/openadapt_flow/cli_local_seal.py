@@ -152,9 +152,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 _signer(args),
                 home=_home(args),
                 replace_unanchored=args.replace_unanchored,
+                allow_unredacted=args.allow_unredacted,
             )
         else:
-            seal = seal_run(Path(args.run_dir), home=_home(args), signer=_signer(args))
+            seal = seal_run(
+                Path(args.run_dir),
+                home=_home(args),
+                signer=_signer(args),
+                allow_unredacted=args.allow_unredacted,
+            )
     except LocalSealError as exc:
         return _refused(exc)
     print(json.dumps(seal.wire(), indent=2, sort_keys=True))
@@ -913,6 +919,14 @@ def register(sub: Any) -> None:
         "--replace-unanchored",
         action="store_true",
         help="Re-sign an existing, never-anchored Seal over the same report",
+    )
+    r.add_argument(
+        "--allow-unredacted",
+        action="store_true",
+        help=(
+            "Seal a report that still holds a session token or credential "
+            "(default: refuse; run redact-report first)"
+        ),
     )
     r.set_defaults(func=_guarded(_cmd_run))
 
