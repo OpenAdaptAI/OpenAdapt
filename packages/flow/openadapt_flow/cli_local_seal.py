@@ -85,12 +85,15 @@ def _cmd_file(args: argparse.Namespace) -> int:
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
+    from openadapt_flow import no_outbound
     from openadapt_flow.offline_seal import (
         LocalSealError,
+        check_anchor,
         loads_strict,
         verify_local_seal,
         verify_run,
     )
+    from openadapt_flow.seal_anchor import fetch_entry
 
     try:
         registry = _registry(args)
@@ -100,9 +103,31 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as exc:
         print(f"not valid: unusable key registry ({exc})", file=sys.stderr)
         return 1
+    try:
+        log_keys = _log_keys(args)
+    except (OSError, ValueError) as exc:
+        print(f"not valid: unusable log key ({exc})", file=sys.stderr)
+        return 1
+    fetch = None
+    if args.live:
+        if not args.require_anchor:
+            print("--live needs --require-anchor", file=sys.stderr)
+            return 2
+        if no_outbound.enabled():
+            print("not checked live: strict no-outbound mode is on", file=sys.stderr)
+            return 1
+        fetch = fetch_entry
     target = Path(args.target)
     if target.is_dir():
-        result = verify_run(target, registry, strict=args.strict)
+        result = verify_run(
+            target,
+            registry,
+            strict=args.strict,
+            require_anchor=args.require_anchor,
+            log_keys=log_keys,
+            log_url=args.log_url,
+            fetch=fetch,
+        )
     else:
         if not args.seal:
             print("verify FILE needs --seal FILE.seal.json", file=sys.stderr)
@@ -114,6 +139,16 @@ def _cmd_verify(args: argparse.Namespace) -> int:
             return 1
         digest = hashlib.sha256(target.read_bytes()).hexdigest()
         result = verify_local_seal(seal, digest, registry)
+        if args.require_anchor:
+            result = check_anchor(
+                seal,
+                Path(args.seal),
+                result,
+                registry,
+                log_keys=log_keys,
+                log_url=args.log_url,
+                fetch=fetch,
+            )
     if result.ok:
         where = target / result.subject_file if result.subject_file else target
         print(f"valid offline Seal over {where}, key {result.key_id}")
@@ -122,9 +157,58 @@ def _cmd_verify(args: argparse.Namespace) -> int:
                 "note: report.json differs from what was sealed; the Seal covers "
                 "report.pre-seal.json, the copy attach-seal kept (--strict refuses this)"
             )
+        if result.anchor is not None:
+            when = _utc(result.anchor.integrated_time)
+            how = "checked live and offline" if fetch else "checked offline"
+            print(
+                f"anchored in the transparency log at {when}: entry "
+                f"{result.anchor.uuid}, log index {result.anchor.log_index} ({how})"
+            )
         return 0
     print(f"not valid: {result.reason}", file=sys.stderr)
     return 1
+
+
+def _log_keys(args: argparse.Namespace) -> Any:
+    from urllib.parse import urlparse
+
+    from openadapt_flow.seal_anchor import LogKey, default_log_keys
+
+    if not args.log_key:
+        return default_log_keys()
+    origin = args.log_origin or urlparse(args.log_url).hostname or ""
+    return [LogKey.from_pem(Path(p).read_bytes(), origin=origin) for p in args.log_key]
+
+
+def _utc(seconds: Any) -> str:
+    from datetime import datetime, timezone
+
+    return datetime.fromtimestamp(int(seconds), timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+
+def _cmd_anchor(args: argparse.Namespace) -> int:
+    from openadapt_flow.offline_seal import SEAL_FILE, LocalSealError
+    from openadapt_flow.seal_anchor import AnchorError, anchor_path, anchor_seal
+
+    target = Path(args.target)
+    seal_path = target / SEAL_FILE if target.is_dir() else target
+    try:
+        signer = _signer(args)
+        anchor = anchor_seal(
+            seal_path, signer, log_url=args.log_url, log_keys=_log_keys(args)
+        )
+    except (LocalSealError, AnchorError, OSError, ValueError) as exc:
+        print(f"not anchored: {exc}", file=sys.stderr)
+        return 1
+    entry = anchor["entry"]
+    print(f"anchored: {anchor_path(seal_path)}")
+    print(
+        f"entry {entry['uuid']}, log index {entry['logIndex']}, at {_utc(entry['integratedTime'])}"
+    )
+    print(f"{args.log_url.rstrip('/')}/api/v1/log/entries/{entry['uuid']}")
+    return 0
 
 
 def _cmd_key(args: argparse.Namespace) -> int:
@@ -221,7 +305,8 @@ def _cmd_key_revoke(args: argparse.Namespace) -> int:
         return 1
     print(
         f"revoked {args.key_id} at {at}; every Seal it signed is now refused, "
-        "because a Seal's own issued_at can't prove it came first"
+        "unless a transparency-log anchor shows the log recorded it before then "
+        "(verify --require-anchor)"
     )
     return 0
 
@@ -275,6 +360,19 @@ def _cmd_proof(args: argparse.Namespace) -> int:
     return 0 if found["verified_inclusion"] else 1
 
 
+def _log_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--log-url",
+        default="https://rekor.sigstore.dev",
+        help="The transparency log's URL (default the public Sigstore Rekor)",
+    )
+    p.add_argument(
+        "--log-origin",
+        default=None,
+        help="Checkpoint origin name for --log-key (default the --log-url host)",
+    )
+
+
 def register(sub: Any) -> None:
     p = sub.add_parser(
         "local-seal",
@@ -315,7 +413,41 @@ def register(sub: Any) -> None:
         action="store_true",
         help="Require the Seal to match report.json itself, not report.pre-seal.json",
     )
+    v.add_argument(
+        "--require-anchor",
+        action="store_true",
+        help="Also require a transparency-log anchor (seal.anchor.json), checked offline",
+    )
+    v.add_argument(
+        "--log-key",
+        action="append",
+        default=[],
+        help="Pinned log public key PEM (default: the public Sigstore Rekor key)",
+    )
+    v.add_argument(
+        "--live",
+        action="store_true",
+        help="Also fetch the entry from the log at --log-url and compare (needs network)",
+    )
+    _log_args(v)
     v.set_defaults(func=_cmd_verify)
+
+    a = s.add_parser(
+        "anchor",
+        help=(
+            "Log a Seal's digest in Sigstore Rekor (opt-in; sends a digest and "
+            "the public key, never report content)"
+        ),
+    )
+    a.add_argument("target", help="A run directory, or a .seal.json file")
+    a.add_argument(
+        "--log-key",
+        action="append",
+        default=[],
+        help="The log's public key PEM, to check its answer (default: Sigstore Rekor)",
+    )
+    _log_args(a)
+    a.set_defaults(func=_cmd_anchor)
 
     k = s.add_parser("key", help="Print the Seal key's public half for pinning")
     k.set_defaults(func=_cmd_key)

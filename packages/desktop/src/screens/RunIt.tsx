@@ -80,6 +80,9 @@ export function RunIt({
   const idPrefix = useId();
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [inputs, setInputs] = useState<QualificationParameter[] | null>(null);
+  // Values Check it said are the same on every item. The engine fills them
+  // in; Run it doesn't ask for them.
+  const [fixed, setFixed] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState("");
   const [target, setTarget] = useState<ExecutionTarget | null>(null);
   const [deploymentConfig, setDeploymentConfig] = useState("");
@@ -118,7 +121,9 @@ export function RunIt({
         setInputs([]);
         return;
       }
-      setInputs((details.inputs ?? []).filter((item) => !item.secret));
+      const same = details.fixed_values ?? {};
+      setFixed(same);
+      setInputs((details.inputs ?? []).filter((item) => !item.secret && !(item.name in same)));
       setTarget(details.target ?? { backend: "web" });
     })();
   }, [workflowId]);
@@ -354,6 +359,16 @@ export function RunIt({
           <h2 id={`${idPrefix}-items`}>Items</h2>
           <SegControl options={sources} value={source} onChange={setSource} />
         </div>
+        {Object.keys(fixed).length > 0 && (
+          <p className="input-chips">
+            <span>Same on every item:</span>
+            {Object.entries(fixed).map(([name, value]) => (
+              <span className="chip-plain" key={name}>
+                {sentenceCase(humanizeInput(name))}: {value}
+              </span>
+            ))}
+          </p>
+        )}
         {declared.length > 0 && (
           <p className="input-chips">
             <span>Each item needs:</span>

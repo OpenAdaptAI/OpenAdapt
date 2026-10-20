@@ -287,6 +287,11 @@ class EngineDispatcher:
             "retry_run_persistence": self.retry_run_persistence,
             # simple operator surface: inputs, items, the inbox, results
             "get_task_inputs": self.get_task_inputs,
+            # Check it, pre-filled from the recording: three questions. The
+            # local agent socket serves these too; approval stays a person's.
+            "get_check_setup": self.get_check_setup,
+            "answer_check_setup": self.answer_check_setup,
+            "run_check_cases": self.run_check_cases,
             "run_item": self.run_item,
             "list_attention_items": self.list_attention_items,
             "resolve_attention_item": self.resolve_attention_item,
@@ -1397,6 +1402,9 @@ class EngineDispatcher:
                 target, deployment_config = self._execution_target(params)
             except ValueError as exc:
                 return self._pre_action_refusal(str(exc))
+            if deployment_config is None:
+                # The record check a person said yes to in Check it.
+                deployment_config = self._learned_record_check_config(str(workflow_id))
         if target is not None:
             from openadapt_desktop.capabilities import CapabilityError, ensure_backend_capability
 
@@ -2755,6 +2763,11 @@ class EngineDispatcher:
                 policy_source=policy,
                 bundle_key=bundle_key,
                 replace_first_replay_draft=replace_first_replay_draft,
+                environment_observer=(
+                    {str(k): str(v) for k, v in params["environment_observer"].items()}
+                    if isinstance(params.get("environment_observer"), dict)
+                    else None
+                ),
             )
             result["draft_environment"] = False
             self.services.db.update_bundle(workflow_id, status="qualification_pending")
@@ -2897,6 +2910,17 @@ class EngineDispatcher:
                 verification_tier=int(params.get("verification_tier", 3)),
                 policy_source=policy,
                 bundle_key=self._qualification_bundle_key(workflow_id),
+                extra_match=(
+                    dict(params["extra_match"])
+                    if isinstance(params.get("extra_match"), dict)
+                    else None
+                ),
+                idempotency_literal=(
+                    str(params["idempotency_literal"])
+                    if params.get("idempotency_literal") is not None
+                    else None
+                ),
+                forbid_collateral_loss=bool(params.get("forbid_collateral_loss", False)),
             )
             self.services.db.update_bundle(
                 workflow_id,
@@ -3690,6 +3714,9 @@ class EngineDispatcher:
                     else "qualification_pending"
                 ),
             )
+            from openadapt_desktop.check_setup import carry_to_sealed
+
+            carry_to_sealed(self.config.data_dir, workflow_id, new_id)
             return {
                 "ok": True,
                 "workflow_id": new_id,
@@ -3989,6 +4016,98 @@ class EngineDispatcher:
             bundle_key=self._qualification_bundle_key(workflow_id),
         )
 
+    def _fixed_values(self, workflow_id: str) -> dict[str, str]:
+        from openadapt_desktop.check_setup import CheckSetupError, SetupStore
+
+        try:
+            return dict(SetupStore(self.config.data_dir).load(workflow_id)["fixed_values"])
+        except CheckSetupError:
+            return {}
+
+    def _learned_record_check_config(self, workflow_id: str) -> Path | None:
+        from openadapt_desktop.check_setup import CheckSetupError, SetupStore
+
+        try:
+            return SetupStore(self.config.data_dir).record_check_config(workflow_id)
+        except CheckSetupError:
+            return None
+
+    def get_check_setup(self, **params: Any) -> dict:
+        """What Check it can fill in from the recording, and what's still a question."""
+
+        from openadapt_desktop.check_setup import get_check_setup
+
+        workflow_id = str(params.get("workflow_id") or "")
+        try:
+            return get_check_setup(self, workflow_id)
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def answer_check_setup(self, **params: Any) -> dict:
+        """Answer one Check it question: ``record_check`` (yes) or ``values``.
+
+        ``answered_by`` is ``person`` (the window) or ``agent`` (the local
+        agent socket). There is no answer for approval here: a person
+        approves in the window.
+        """
+
+        from openadapt_desktop.check_setup import (
+            CheckSetupError,
+            accept_record_check,
+            answer_values,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        question = str(params.get("question") or "")
+        answered_by = str(params.get("answered_by") or "person")
+        try:
+            if question == "record_check":
+                if params.get("answer") != "yes":
+                    raise CheckSetupError(
+                        "Only yes is answered here. To change the record check, use the "
+                        "form in Check it."
+                    )
+                result = accept_record_check(self, workflow_id, answered_by=answered_by)
+            elif question == "values":
+                changes = params.get("changes")
+                if not isinstance(changes, list) or not all(isinstance(n, str) for n in changes):
+                    raise CheckSetupError("changes must be a list of value names")
+                result = answer_values(self, workflow_id, changes, answered_by=answered_by)
+            else:
+                raise CheckSetupError("question must be record_check or values")
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+        self.emit(
+            "check_setup",
+            {"workflow_id": workflow_id, "question": question, "answered_by": answered_by},
+        )
+        return result
+
+    def run_check_cases(self, **params: Any) -> dict:
+        """The practice item on the recorded values, then the drills.
+
+        The practice save still waits for a person in the window. Used by
+        the person's agent; the window runs the same cases itself.
+        """
+
+        from openadapt_desktop.check_setup import run_checks
+
+        workflow_id = str(params.get("workflow_id") or "")
+        try:
+            result = run_checks(self, workflow_id)
+        except Exception as exc:
+            result = {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+        # The window shows the results without a click.
+        self.emit(
+            "check_setup",
+            {
+                "workflow_id": result.get("workflow_id") or workflow_id,
+                "question": "checks",
+                "answered_by": "agent",
+            },
+        )
+        return result
+
     def get_task_inputs(self, **params: Any) -> dict:
         """Return the inputs one run of a task needs and where it was recorded.
 
@@ -4003,6 +4122,8 @@ class EngineDispatcher:
                 "workflow_id": workflow_id,
                 "inputs": self._task_inputs(workflow_id),
                 "target": self._task_target(workflow_id),
+                # Values Check it said stay the same; Run it doesn't ask.
+                "fixed_values": self._fixed_values(workflow_id),
             }
         except Exception as exc:
             return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
@@ -4276,8 +4397,14 @@ class EngineDispatcher:
             return self._pre_action_refusal(
                 "Desktop couldn't read the inputs this task needs."
             )
+        raw_inputs = params.get("inputs")
+        fixed = self._fixed_values(workflow_id)
+        if fixed and isinstance(raw_inputs, dict):
+            # A value Check it marked as the same on every item is filled in
+            # with its recorded value; a value the caller gives still wins.
+            raw_inputs = {**fixed, **raw_inputs}
         try:
-            values = validate_inputs(params.get("inputs"), declared)
+            values = validate_inputs(raw_inputs, declared)
         except WorkItemError as exc:
             return self._pre_action_refusal(str(exc))
 

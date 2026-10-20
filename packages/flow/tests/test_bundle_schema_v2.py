@@ -211,8 +211,8 @@ def _pre_frame_path_content(wf: Workflow, shape: str) -> dict:
         assert effect.pop("new_records") == []
         assert effect.pop("identity_field") == "id"
         # Reviewed v2 omission: the collateral-change check postdates these
-        # seals (#1375).
-        assert effect.pop("forbid_collateral_change") is False
+        # seals (#1375). Effect no longer serializes its False default at all.
+        assert "forbid_collateral_change" not in effect
     return content
 
 

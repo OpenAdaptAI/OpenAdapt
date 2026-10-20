@@ -100,10 +100,39 @@ class WebEnvironmentObserver:
         )
 
 
+def observe_web_environment(
+    url: str, *, application_version: str, headless: bool = True
+) -> dict[str, str]:
+    """Open ``url`` once, read its environment, and close it.
+
+    For binding a qualification project to the generic web observer before
+    the first case runs: the digest is the one a governed run of the same
+    browser on this machine observes. Nothing on the page is clicked or typed.
+    """
+
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    backend, close = PlaywrightBackend.launch(url, headless=headless)
+    try:
+        observed = WebEnvironmentObserver(
+            application_version=application_version, headless=headless
+        ).observe(backend, "web")
+    finally:
+        close()
+    return {
+        "environment_observer_id": WEB_OBSERVER_ID,
+        "environment_observer_contract_sha256": WEB_OBSERVER_CONTRACT_SHA256,
+        "application_identity": observed.application_identity,
+        "application_version": observed.application_version,
+        "environment_digest": observed.environment_digest,
+    }
+
+
 __all__ = [
     "WEB_OBSERVER_CONTRACT_SHA256",
     "WEB_OBSERVER_ID",
     "WebEnvironmentObserver",
+    "observe_web_environment",
     "web_environment_digest",
     "web_environment_payload",
 ]

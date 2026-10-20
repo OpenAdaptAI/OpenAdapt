@@ -3622,7 +3622,11 @@ class PlaywrightBackend:
                 close()
                 raise
         page.goto(url)
-        return cls(page), close
+        backend = cls(page)
+        # Read by the generic web environment observer: the environment
+        # digest of a headless and a headed browser differ.
+        backend.headless = headless
+        return backend, close
 
 
 from openadapt_flow.backends._browser_process import (  # noqa: E402

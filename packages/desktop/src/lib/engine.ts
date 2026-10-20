@@ -56,6 +56,9 @@ export const CMD = {
   RUN_SAMPLE: "run_sample",
   GET_QUALIFICATION: "get_qualification",
   EDIT_PROGRAM_SECTIONS: "edit_program_sections",
+  // Check it pre-filled from the recording; answered by a person or their agent.
+  GET_CHECK_SETUP: "get_check_setup",
+  ANSWER_CHECK_SETUP: "answer_check_setup",
   INITIALIZE_QUALIFICATION: "initialize_qualification",
   PROPOSE_QUALIFICATION_FROM_DEMO: "propose_qualification_from_demo",
   SET_QUALIFICATION_RISK: "set_qualification_risk",
@@ -170,6 +173,9 @@ export const EVT = {
   // {workflow_id, state: "watching" | "closed"}: a run that may stop before a
   // save for a person's approval started or ended. Never carries a value.
   ITEM_APPROVAL: "item_approval",
+  // {workflow_id, question, answered_by}: a Check it question was answered,
+  // in this window or by the person's agent over the local socket.
+  CHECK_SETUP: "check_setup",
   // Shadow mode status (see src/lib/shadowMode.ts). Never carries an event.
   SHADOW_STATE: "shadow_state",
   // {motif_id, count, title, body, actions}: generic text only.

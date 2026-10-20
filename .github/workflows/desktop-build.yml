@@ -160,11 +160,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # PRs prove the frozen-engine contract on Linux and macOS (macOS freezes
-        # the PyObjC wheels, whose license notices the build must find). Main
-        # repeats the complete matrix for dependency, toolchain, packaging, and
-        # native changes. Immutable native release tags rebuild every supported OS.
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04", "macos-14"]' || '["ubuntu-22.04", "macos-14", "windows-latest"]') }}
+        # PRs prove the frozen-engine contract on Linux. The merge queue and
+        # main add macOS (which freezes the PyObjC wheels, whose license
+        # notices the build must find) and Windows. Immutable native release
+        # tags rebuild every supported OS.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04"]' || '["ubuntu-22.04", "macos-14", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -268,6 +268,16 @@ jobs:
           targets: ${{ matrix.target }}
           components: rustfmt
 
+      # Compiled dependencies under src-tauri/target, one cache per target.
+      # Only main writes the cache, so a pull request can read main's cache but
+      # never seed one that main or a release would use. desktop-release.yml
+      # builds without any cache.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: packages/desktop/src-tauri -> target
+          key: ${{ matrix.target }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
@@ -278,6 +288,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.11.29"
+          enable-cache: true
+          cache-dependency-glob: packages/desktop/uv.lock
+
       - name: Install locked Tauri CLI
         run: npm ci --ignore-scripts
 
@@ -285,7 +301,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --disable-pip-version-check uv==0.11.29
           python scripts/sync_frozen_dependencies.py
           uv run python scripts/build_frozen_engine.py
           uv run python scripts/verify_build_artifact.py sidecar

@@ -1071,8 +1071,16 @@ def initialize_qualification(
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
     bundle_key: str | None = None,
     replace_first_replay_draft: bool = False,
+    environment_observer: dict[str, str] | None = None,
 ) -> dict:
-    """Attach the canonical v1 project to an existing compiled workflow."""
+    """Attach the canonical v1 project to an existing compiled workflow.
+
+    ``environment_observer`` binds the project to an observer Flow builds at
+    run time (``environment_observer_id``, ``..._contract_sha256``, and the
+    ``application_identity`` it observed). Without it the backend's own
+    marker observer applies, which a web app without OpenAdapt markers can't
+    satisfy.
+    """
 
     if target_kind not in {"web", "windows", "macos", "linux", "rdp", "citrix"}:
         raise QualificationError("target_kind is not a supported execution surface")
@@ -1097,6 +1105,7 @@ def initialize_qualification(
             "This workflow already has a qualification project; reopen it to continue."
         )
     try:
+        observer = dict(environment_observer or {})
         environment = api["EnvironmentBoundary"](
             target_kind=target_kind,
             application=application,
@@ -1104,6 +1113,15 @@ def initialize_qualification(
             environment_digest=environment_digest,
             runtime_version=_runtime_version(),
             required_capabilities=required_capabilities or [],
+            **{
+                key: observer[key]
+                for key in (
+                    "environment_observer_id",
+                    "environment_observer_contract_sha256",
+                    "application_identity",
+                )
+                if observer.get(key)
+            },
         )
         api["init_project"](
             workflow,
@@ -1655,8 +1673,19 @@ def bind_action_effect(
     verification_tier: int = 3,
     policy_source: str = DEFAULT_QUALIFICATION_POLICY,
     bundle_key: str | None = None,
+    extra_match: dict[str, dict[str, str]] | None = None,
+    idempotency_literal: str | None = None,
+    forbid_collateral_loss: bool = False,
 ) -> dict:
-    """Bind an executable Flow effect and its canonical evidence-strength policy."""
+    """Bind an executable Flow effect and its canonical evidence-strength policy.
+
+    ``extra_match`` adds selector fields beyond ``match_field`` (each
+    ``{"param": name}`` or ``{"literal": value}``), ``idempotency_literal`` is
+    a fixed key the app itself sends with the save, and
+    ``forbid_collateral_loss`` refuses a save that made another record
+    disappear. Each one only narrows what the check accepts. The record is
+    still selected through ``match_param``, a run parameter.
+    """
 
     if kind not in ("record_written", "field_equals"):
         raise QualificationError("kind must be record_written or field_equals")
@@ -1676,7 +1705,24 @@ def bind_action_effect(
     step = _resolve_action(workflow, step_id)
     secrets = set(workflow.secret_params)
     parameters = set(workflow.params) | set(workflow.param_specs) | secrets
-    requested = {name for name in (match_param, value_param, idempotency_param) if name is not None}
+    extra_match = dict(extra_match or {})
+    extra_params: set[str] = set()
+    for field_name, expr in extra_match.items():
+        if not str(field_name).strip() or str(field_name).strip() == match_field.strip():
+            raise QualificationError("extra_match fields must be named and differ from match_field")
+        if not isinstance(expr, dict) or len(expr) != 1 or not (
+            set(expr) <= {"param", "literal"}
+        ):
+            raise QualificationError(
+                "each extra_match value must be {param: ...} or {literal: ...}"
+            )
+        if "param" in expr:
+            extra_params.add(str(expr["param"]))
+    if idempotency_param is not None and idempotency_literal is not None:
+        raise QualificationError("an idempotency key is a parameter or a literal, not both")
+    requested = {
+        name for name in (match_param, value_param, idempotency_param) if name is not None
+    } | extra_params
     unknown = sorted(requested - parameters)
     if unknown:
         raise QualificationError(
@@ -1695,15 +1741,29 @@ def bind_action_effect(
     if count_new_only and kind != "record_written":
         raise QualificationError("count_new_only applies only to record_written")
 
+    match = {match_field.strip(): ValueExpr(param=match_param)}
+    for field_name, expr in sorted(extra_match.items()):
+        match[str(field_name).strip()] = (
+            ValueExpr(param=str(expr["param"]))
+            if "param" in expr
+            else ValueExpr(literal=str(expr["literal"]))
+        )
+    if idempotency_param:
+        idempotency_key = ValueExpr(param=idempotency_param)
+    elif idempotency_literal is not None and str(idempotency_literal).strip():
+        idempotency_key = ValueExpr(literal=str(idempotency_literal))
+    else:
+        idempotency_key = None
     effect = Effect(
         kind=EffectKind(kind),
-        match={match_field.strip(): ValueExpr(param=match_param)},
+        match=match,
         field=field.strip() if field else None,
         value=ValueExpr(param=value_param) if value_param else None,
         expected_count=expected_count,
-        idempotency_key=(ValueExpr(param=idempotency_param) if idempotency_param else None),
+        idempotency_key=idempotency_key,
         key_field=key_field.strip(),
         count_new_only=count_new_only,
+        forbid_collateral_loss=forbid_collateral_loss,
         risk=step.risk,
         needs_operator_confirmation=False,
     )
@@ -1886,10 +1946,30 @@ def set_local_qualification_case_scope(
             not in executable_actuation_paths(fault_step)
         ):
             raise QualificationError("Fault target is outside the executable case scope")
+    from openadapt_flow.qualification import qualification_action_requirements
+
+    # The case proves Flow's required actions: every step not confirmed as
+    # only reading (an unreviewed step stays required), plus the fault target.
+    # A step a person confirmed read-only isn't a qualified action, as in
+    # Flow's own qualify campaign.
+    required_actions, _required_identity = qualification_action_requirements(workflow)
+    scoped = {
+        step_id
+        for step_id, step in steps.items()
+        if executable_actuation_paths(step)
+        and (
+            step_id in required_actions
+            or (selected_fault_target is not None and selected_fault_target.step_id == step_id)
+        )
+    }
+    if not scoped:
+        # Nothing is required (every step only reads): the case still runs
+        # every executable step.
+        scoped = {step_id for step_id, step in steps.items() if executable_actuation_paths(step)}
     targets = []
     for step_id, step in sorted(steps.items()):
         paths = executable_actuation_paths(step)
-        if not paths:
+        if not paths or step_id not in scoped:
             continue
         if selected_fault_target is not None and selected_fault_target.step_id == step_id:
             path = selected_fault_target.actuation_path
@@ -2124,6 +2204,11 @@ def seal_qualification_bundle(
         provenance.certified = False
         provenance.certification_status = "expired"
         provenance.expires_at = datetime.now(timezone.utc).isoformat()
+    if provenance is not None and getattr(provenance, "governed_authorization_template", None):
+        # Derived from the certification cleared above. Left in place, the
+        # sealed copy can't be loaded: Flow rebuilds the template from the
+        # certification on load and refuses when it can't.
+        provenance.governed_authorization_template = None
 
     try:
         copy_bundle_version(source, destination)
