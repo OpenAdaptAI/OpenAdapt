@@ -490,6 +490,65 @@ def judge_run_frame(
     )
 
 
+def _target_record(
+    effects: Sequence[Effect], verdicts: Sequence[EffectVerdict]
+) -> Optional[dict[str, Any]]:
+    """The one record every confirmed write/read-back effect matched, if any."""
+
+    from openadapt_flow.runtime.effects.effect import stable_id
+
+    found: Optional[dict[str, Any]] = None
+    for effect, verdict in zip(effects, verdicts):
+        if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
+            continue
+        if effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0:
+            continue  # a guard: "nothing here"
+        if not verdict.confirmed or len(verdict.matched_records) != 1:
+            return None
+        record = verdict.matched_records[0]
+        if found is not None and stable_id(found) != stable_id(record):
+            return None
+        found = record
+    return found
+
+
+def _judge_source(
+    provenance: Optional[Any],
+    documents: Mapping[str, Any],
+    second: Optional[Any],
+    params: Mapping[str, object],
+    effects: Sequence[Effect],
+    verdicts: Sequence[EffectVerdict],
+    delta_held: bool,
+) -> tuple[str, dict[str, Any]]:
+    """``checked.source`` and its evidence (counts and names, no values)."""
+
+    from openadapt_flow.provenance import (
+        bound_fields,
+        default_extractor,
+        round_trip,
+    )
+
+    if provenance is None or not provenance.has_documents():
+        return "instruction", {"status": "instruction"}
+    differ = provenance.matches(params)
+    if differ:
+        # The values checked are not the values the source provenance records.
+        return "refuted", {
+            "status": "refuted",
+            "params_differ_from_provenance": differ,
+        }
+    extractor = second or default_extractor(provenance)
+    record = _target_record(effects, verdicts) if delta_held else None
+    result = round_trip(provenance, record, bound_fields(effects), documents, extractor)
+    evidence = result.summary()
+    evidence["first_extractors"] = sorted(
+        {p.extractor for p in provenance.params.values()}
+    )
+    evidence["documents"] = len(provenance.documents())
+    return result.status, evidence
+
+
 def _part(verdict: EffectVerdictLabel, proved: bool) -> str:
     if proved:
         return "held"
@@ -832,6 +891,9 @@ def verify_run(
     correlation_id: Optional[str] = None,
     write_attempted: bool = False,
     coverage: Optional[CoverageRecord] = None,
+    provenance: Optional[Any] = None,
+    documents: Optional[Mapping[str, Any]] = None,
+    second_extractor: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Read the system of record and return ``{"receipt", "evidence"}``.
 
@@ -1040,12 +1102,24 @@ def verify_run(
         and strong_enough
         and oracle_tier in (2, 3)
     )
-    # Inputs come from whoever authorized the task (``--params``): the
-    # instruction is their source.
+    # The source part: with provenance, the record as read back must match
+    # the source document (a round trip). Without it the inputs are the
+    # authorized instruction itself (``--params``).
+    source_status, source_evidence = _judge_source(
+        provenance,
+        documents or {},
+        second_extractor,
+        params,
+        # Unbound: the field each parameter was written to is named by its
+        # ``{param: ...}`` reference, which binding replaces with the value.
+        list(cfg.effects),
+        verdicts,
+        read_proves_write,
+    )
     checked: dict[str, Any] = {
         "delta": _part(delta_verdict, read_proves_write),
         "frame": frame.status,
-        "source": "instruction",
+        "source": source_status,
     }
     admitted = True
     if cfg.admission is not None:
@@ -1135,6 +1209,7 @@ def verify_run(
             "effects": rows,
         },
         "frame": frame.evidence(frame_spec),
+        "source": source_evidence,
         "checked": checked,
         "verifier": {
             "name": "openadapt-flow verify-run",

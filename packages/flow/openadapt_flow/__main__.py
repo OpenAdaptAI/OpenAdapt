@@ -3317,6 +3317,27 @@ def _cmd_attach_seal(args: argparse.Namespace) -> int:
     return 1
 
 
+def _verify_run_sources(args: argparse.Namespace) -> dict[str, Any]:
+    """``--provenance`` and ``--source`` for verify-run's round trip."""
+
+    from openadapt_flow.verify_run import VerifyRunError
+
+    path = getattr(args, "provenance", None)
+    sources = list(getattr(args, "source", None) or [])
+    if not path:
+        if sources:
+            raise VerifyRunError("--source needs --provenance")
+        return {}
+    from openadapt_flow.provenance import load_provenance, read_sources
+
+    try:
+        provenance = load_provenance(path)
+        documents = read_sources([Path(p) for p in sources])
+    except (OSError, ValueError) as exc:
+        raise VerifyRunError(f"cannot read the provenance or a source: {exc}") from exc
+    return {"provenance": provenance, "documents": documents}
+
+
 def _cmd_verify_run(args: argparse.Namespace) -> int:
     """``verify-run``: judge an effect another executor claims, from the store."""
     from openadapt_flow.verify_run import (
@@ -3379,6 +3400,7 @@ def _cmd_verify_run(args: argparse.Namespace) -> int:
             approver=_json(args.approver) if args.approver else None,
             remediates=args.remediates,
             correlation_id=args.correlation_id,
+            **_verify_run_sources(args),
         )
     except VerifyRunError as exc:
         print(f"verify-run REFUSED: {exc}", file=sys.stderr)
@@ -8996,6 +9018,23 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="JSON",
         help="Read the store now and write a private baseline, then exit",
+    )
+    p.add_argument(
+        "--provenance",
+        default=None,
+        metavar="JSON",
+        help=(
+            "Where each parameter came from (openadapt.param-provenance/v1, as "
+            "intake writes it). The saved record is then compared with the "
+            "source document, not only with --params"
+        ),
+    )
+    p.add_argument(
+        "--source",
+        action="append",
+        default=None,
+        metavar="FILE",
+        help="A source document the provenance cites (repeatable)",
     )
     p.add_argument(
         "--out", default=None, metavar="DIR", help="Directory for effect-receipt.json"

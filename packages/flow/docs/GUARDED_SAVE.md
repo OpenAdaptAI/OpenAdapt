@@ -157,6 +157,32 @@ directly inside it, the paired phone also shows the request. The receipt binds t
 `evidence.authorization.approver` names a person, and `self_approved` is
 `false`.
 
+## Values with a source document
+
+A task can say where its values came from. Add `provenance` (the
+`params.provenance.json` intake writes, as an object) and `sources` (paths to
+the documents it cites, relative to the task file):
+
+```json
+{
+  "schema_version": "openadapt.guard-task/v1",
+  "task_id": "referral-0001",
+  "expected_record": {"patient_id": "p1"},
+  "intended_fields": {"note": "Referral to orthopedics for knee pain"},
+  "provenance": {"schema_version": "openadapt.param-provenance/v1", "params": {"note": {"value": "Referral to orthopedics for knee pain", "source": {"kind": "document", "sha256": "sha256:...", "line": 3, "label": "Note"}, "extractor": "intake:agent"}}},
+  "sources": ["referral.pdf"]
+}
+```
+
+`begin` reads each source a second time with the deterministic label parse.
+If that reading does not confirm a value (a different value, no value, or a
+value that the label parse itself produced, which is not a second reading),
+the save goes to a person under any approval mode, and the approval request
+names the fields. `confirm` then compares the saved record with the source
+document, not only with the task, so a misread value that was saved
+correctly is still refuted. A task whose values differ from its own
+provenance is refused.
+
 ## The receipt
 
 `confirm` writes an `openadapt.effect-receipt/v1` file, the same format
