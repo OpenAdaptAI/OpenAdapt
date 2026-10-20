@@ -159,6 +159,26 @@ def record_effects(config: VerifyConfig) -> list[Any]:
         written.idempotency_key = record.expr(record.duplicate_key)
         written.key_field = record.duplicate_key
     effects = [written]
+    if record.exact_new_set:
+        # Exactly these records were added since the snapshot before the
+        # save, and nothing else, read by every declared field.
+        selector_all = {
+            name: record.expr(name) for name in [*record.match, *record.fields]
+        }
+        effects.append(
+            Effect(
+                kind=EffectKind.EXACT_NEW_SET,
+                new_records=[dict(selector_all)] * record.expected_count,
+                expected_count=record.expected_count,
+                identity_field=record.identity_field,
+                risk="reversible",
+                probe=(
+                    f"exactly {record.expected_count} new {record.name} record(s) "
+                    "added, and nothing else"
+                ),
+                timeout_s=record.timeout_s,
+            )
+        )
     for name in record.fields:
         if name in record.match:
             continue

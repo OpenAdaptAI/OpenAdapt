@@ -101,3 +101,47 @@ def test_verify_yaml_declares_the_map_and_coverage_reads_the_input():
     expr = config.record.expr("state")
     assert expr == ValueExpr(param="state_label", map=STATES)
     assert "state_label" in _effect_read_params(_effect(expr))
+
+
+def test_verify_yaml_can_require_exactly_the_new_record():
+    from openadapt_flow.approval_mode.coverage import save_contract_problems
+    from openadapt_flow.ir import ActionKind, Step
+    from openadapt_flow.qualify import parse_verify_config
+    from openadapt_flow.qualify.campaign import record_effects
+
+    config = parse_verify_config(
+        {
+            "schema_version": "openadapt.verify/v1",
+            "app": {"name": "Demo", "version": "1", "url": "http://127.0.0.1:9301/"},
+            "verifier": {
+                "kind": "rest",
+                "base_url": "http://127.0.0.1:9300",
+                "records_path": "/api/patient",
+                "records_key": "data",
+            },
+            "record": {
+                "name": "patient",
+                "match": ["email"],
+                "duplicate_key": "email",
+                "exact_new_set": True,
+                "identity_field": "uuid",
+                "fields": {
+                    "email": "email",
+                    "state": {"param": "state_label", "map": STATES},
+                },
+            },
+        },
+        env={},
+    )
+    effects = record_effects(config)
+    exact = [e for e in effects if e.kind is EffectKind.EXACT_NEW_SET]
+    assert len(exact) == 1
+    assert exact[0].identity_field == "uuid"
+    assert exact[0].new_records == [
+        {
+            "email": ValueExpr(param="email"),
+            "state": ValueExpr(param="state_label", map=STATES),
+        }
+    ]
+    save = Step(id="save", intent="save", action=ActionKind.CLICK, effects=effects)
+    assert "update_needs_field_delta_check" not in save_contract_problems(save)
