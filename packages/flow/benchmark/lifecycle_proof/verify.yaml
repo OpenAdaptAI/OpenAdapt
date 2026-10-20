@@ -35,6 +35,9 @@ record:
   name: patient
   match: [email, lname]
   duplicate_key: email   # OpenEMR has no idempotency column; one chart per email
+  # The save adds exactly this chart and nothing else (problems_only needs it).
+  exact_new_set: true
+  identity_field: uuid
   fields:
     email: email
     lname: lname
