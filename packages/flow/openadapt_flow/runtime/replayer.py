@@ -7283,6 +7283,21 @@ class Replayer:
         if missed is not None and missed[0] == step.id:
             self._scroll_missed_target = None
             target_missed = missed[1]
+        if step.target_param is not None:
+            # A record-selecting click acts on the run's record: look for the
+            # run's value; the identity check verifies the row (param mode).
+            from openadapt_flow.runtime.target_param import bind_target_param
+
+            step, refusal = bind_target_param(step, params, workflow)
+            if refusal is not None:
+                return StepResult(
+                    step_id=step.id,
+                    intent=step.intent,
+                    ok=False,
+                    error=refusal,
+                    safety_halt=True,
+                    failure_category="safety_halt",
+                )
         router = self._surface_router
         if router is None:
             if step.action is ActionKind.SWITCH_SURFACE:
@@ -17784,6 +17799,10 @@ class Replayer:
         workflow: Optional[Workflow] = None,
     ) -> Optional[bytes]:
         """Return the verified run snapshot for governed asset consumers."""
+        if not rel:
+            # No crop: a record-selecting click rebound to another record
+            # (runtime.target_param) carries none.
+            return None
         if self.governed_authorization is not None:
             data = self._governed_asset_snapshot.get(rel)
             expected = self._governed_asset_hashes.get(rel)
