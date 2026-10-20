@@ -42,6 +42,17 @@ from typing import Any, Callable, Optional
 __all__ = ["add_parser", "cmd_compile_agent"]
 
 
+def _write_adapter(ref: Optional[str]) -> Any:
+    if not ref:
+        return None
+    from openadapt_flow.teach_scope import load_write_adapter
+
+    try:
+        return load_write_adapter(ref)
+    except (ImportError, AttributeError, ValueError) as exc:
+        raise SystemExit(f"--write-adapter: {exc}") from None
+
+
 def _pairs(items: Optional[list[str]], flag: str) -> dict[str, str]:
     out: dict[str, str] = {}
     for item in items or []:
@@ -106,6 +117,34 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         action="append",
         metavar="TEXT",
         help="the record's identity as the screen shows it; checked before every save",
+    )
+    p.add_argument(
+        "--allow-origin",
+        action="append",
+        default=[],
+        metavar="URL",
+        help=(
+            "another origin run 1's browser may reach (a sign-in host, a CDN); "
+            "every origin but the app's is refused otherwise"
+        ),
+    )
+    p.add_argument(
+        "--allow-text",
+        action="append",
+        default=[],
+        metavar="TEXT",
+        help=(
+            "more text the agent may type in run 1 (a test user name); it may "
+            "always type the inputs, the --expect values and the --on-screen text"
+        ),
+    )
+    p.add_argument(
+        "--write-adapter",
+        metavar="MODULE:ATTR",
+        help=(
+            "the app's write adapter (openadapt_flow.teach_scope.WriteAdapter): "
+            "run 1's writes are read before they are sent"
+        ),
     )
     p.add_argument(
         "--agent",
@@ -352,6 +391,9 @@ def cmd_compile_agent(
         key_dir=args.key_dir,
         model_key=model_key,
         headless=not args.show_browser,
+        allow_origins=args.allow_origin,
+        constants=args.allow_text,
+        write_adapter=_write_adapter(args.write_adapter),
     )
     out = result.to_dict()
     if result.status == "draft" and not tty:

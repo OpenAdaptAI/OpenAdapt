@@ -267,6 +267,35 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--teach-tasks",
+        default=None,
+        metavar="DIR",
+        help=(
+            "With --teach: folder of <task_id>.json task files the operator "
+            "wrote (openadapt.guard-task/v1). teach_start must then name one, "
+            "and its record and inputs come from the file, not the agent."
+        ),
+    )
+    p.add_argument(
+        "--teach-allow-origin",
+        action="append",
+        default=[],
+        metavar="URL",
+        help=(
+            "With --teach: another origin run 1's browser may reach (a sign-in "
+            "host, a CDN); every origin but the app's is refused otherwise"
+        ),
+    )
+    p.add_argument(
+        "--teach-write-adapter",
+        default=None,
+        metavar="MODULE:ATTR",
+        help=(
+            "With --teach: the app's write adapter, so run 1's writes are read "
+            "before they are sent (openadapt_flow.teach_scope.WriteAdapter)"
+        ),
+    )
+    p.add_argument(
         "--guard-tasks",
         default=None,
         metavar="DIR",
@@ -1019,6 +1048,14 @@ def _teach_app(args: argparse.Namespace) -> tuple[Optional[str], Any]:
     return None, section
 
 
+def _teach_write_adapter(ref: Optional[str]) -> Any:
+    if not ref:
+        return None
+    from openadapt_flow.teach_scope import load_write_adapter
+
+    return load_write_adapter(ref)
+
+
 def _serve_teach(args: argparse.Namespace, serve) -> int:
     """Serve the teach tools next to the workflow tools over local stdio."""
     from openadapt_flow.agent.bridge import AgentBridge
@@ -1076,6 +1113,13 @@ def _serve_teach(args: argparse.Namespace, serve) -> int:
             hold=args.teach_hold,
             headless=not args.headed,
             screens=args.teach_screens,
+            tasks_dir=(
+                Path(args.teach_tasks).expanduser().resolve()
+                if args.teach_tasks
+                else None
+            ),
+            allow_origins=tuple(args.teach_allow_origin),
+            write_adapter=_teach_write_adapter(args.teach_write_adapter),
         )
     except Exception as exc:  # noqa: BLE001 - every setup problem is a refusal
         print(f"serve: {exc}", file=sys.stderr)

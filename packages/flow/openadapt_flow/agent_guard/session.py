@@ -72,6 +72,13 @@ class GuardRun:
     def blocked(self) -> list[dict[str, Any]]:
         return list(self.summary.get("blocked") or [])
 
+    @property
+    def left_scope(self) -> bool:
+        """The tab sent or tried a request outside the task's teach scope.
+        Such a run is never handed off as a draft."""
+
+        return bool(self.summary.get("scope_blocked"))
+
 
 def _connect(
     cfg: GuardConfig,
@@ -163,6 +170,27 @@ class _RecorderThread:
         return self.recording
 
 
+def task_scope(cfg: GuardConfig, task: GuardTask) -> Any:
+    """The task's teach scope: the app's origin and the operator's other
+    origins, the task's record and values, and the app's write adapter."""
+
+    from openadapt_flow.teach_scope import TeachScope, load_write_adapter
+
+    origins = [
+        cfg.app_origin,
+        *cfg.allow_origins,
+        *(rule.origin for rule in cfg.not_saves if rule.origin),
+    ]
+    return TeachScope.from_guard_task(
+        task,
+        origins=origins,
+        constants=cfg.allow_text,
+        write_adapter=(
+            load_write_adapter(cfg.write_adapter) if cfg.write_adapter else None
+        ),
+    )
+
+
 def guard_task(
     cfg: GuardConfig,
     task: GuardTask,
@@ -216,7 +244,10 @@ def guard_task(
     recorder: Optional[_RecorderThread] = None
     ended = "stopped"
     try:
-        page = CdpGuardPage(tab, screen_selector=cfg.screen_selector)
+        scope = task_scope(cfg, task)
+        page = CdpGuardPage(
+            tab, screen_selector=cfg.screen_selector, all_resources=True
+        )
         guard = CommitGuard(
             guarded,
             task,
@@ -227,6 +258,7 @@ def guard_task(
             agent_id=agent_id,
             response_wait_s=cfg.response_wait_s,
             events_path=out / "guard_events.jsonl",
+            scope=scope,
         )
         if record:
             recorder = _RecorderThread(

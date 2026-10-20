@@ -433,6 +433,9 @@ It works on a web app (`--url`) and on the app a deployment file's `backend:` se
 | `--teach-key PEM`, `--teach-policy JSON` | The registered agent's encrypted key (passphrase in `OPENADAPT_JIT_KEY_PASSPHRASE`) and the signed admission policy. Only an agent key under a policy; an admitter key admits from CI with `openadapt-flow jit admit`. |
 | `--key-dir DIR` | The JIT key directory (default `OPENADAPT_JIT_KEY_DIR` or `~/.openadapt/jit`). |
 | `--teach-hold` | On the web, a person also approves every save in the first run. Without it, your agent names the identity the save gate checks (`on_screen`); a value every form shows proves nothing, and then only the record check after the run and the person confirming it catch a wrong record. |
+| `--teach-tasks DIR` | Run 1's record and inputs come from the operator's task files (`openadapt.guard-task/v1`); `teach_start` names one with `task_file`. Without it, your agent declares them at `teach_start`, before it reads the app. |
+| `--teach-allow-origin URL` | Another origin run 1's browser may reach. Every origin but the app's is refused otherwise. |
+| `--teach-write-adapter MODULE:ATTR` | The app's write adapter: each write in run 1 is read before it is sent, and one to another record, field or value is refused. |
 | `--teach-screens scrubbed` | Adds `teach_screen`: the app's screen with identifiers scrubbed, and nothing shared if scrubbing fails. `unscrubbed` skips scrubbing. Off by default. |
 | `--mode production --bundles DIR` | Serves your other workflows next to the taught ones. |
 

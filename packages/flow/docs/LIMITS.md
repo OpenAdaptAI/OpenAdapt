@@ -660,15 +660,18 @@ rely on the agent ignoring it. The full analysis is in
 
 What is enforced:
 
-- With a declared teach scope (`compile_agent(..., teach_scope=...)`), the
-  agent can type only declared values, can't follow a link or submit a form to
+- Every teach path runs under a teach scope declared before the agent reads
+  the app: `compile_agent`, `compile-agent`, teach over MCP and the airbag
+  guard. The agent can type only declared values, can't follow a link or submit a form to
   an undeclared origin, and can't make the browser reach an undeclared origin.
   With a write adapter for the app, a write to another record, an undeclared
   field or an undeclared value is aborted before it is sent. After the run,
   Flow reads the system of record and refuses the draft unless it shows
   exactly the declared write. On MockMed, every injected instruction in the
-  test suite (5 places by 4 goals) is blocked or caught this way, with a
-  scripted agent that obeys all of them.
+  test suite (5 places by 4 goals, and each goal through each path) is
+  blocked or caught this way, with a scripted agent that obeys all of them.
+  The airbag guard can't refuse keystrokes in the agent's own browser; it
+  blocks requests and saves instead.
 - Self-repair refuses a proposed control that leads to another origin.
 - A save approval shows who asked, the agent's own reason (as a quote), the
   screen text it saw, and any of that text that reads like an instruction to
@@ -676,9 +679,11 @@ What is enforced:
 
 What is not:
 
-- The scope is wired into `openadapt_flow.jit` only. `compile-agent` from a
-  prompt (on main) does not pass one yet; teach over MCP and the airbag guard
-  are separate pull requests that must pass a scope when they land.
+- Over MCP without `--teach-tasks`, the agent declares the record at
+  `teach_start`; after reading the app, a hijacked agent can start again with
+  another record. The person confirming the record check sees it.
+- The airbag guard sees requests, not keystrokes; without a write adapter, a
+  save's values are judged by the read-back after it lands.
 - A self-repair bridge may type text that the screen shows, so injected text
   can become a typed value in a proposed repair. The person approving sees it.
 - A steered agent can still read other records in the same app and send what

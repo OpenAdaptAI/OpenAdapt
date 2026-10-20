@@ -67,6 +67,7 @@ from openadapt_flow.compile_agent.harness import (
 )
 from openadapt_flow.compile_agent.sandbox import Sandbox, ShellRefused
 from openadapt_flow.jit.adapters import UnsupportedAction
+from openadapt_flow.teach_scope import ScopeViolation
 
 __all__ = [
     "COMMANDS",
@@ -870,6 +871,9 @@ class CodeActionTool:
             gates = self.harness.stats.gate_checks
             try:
                 text, image = self._line(line)
+            except ScopeViolation:
+                # Outside the task's declared scope: run 1 ends, no draft.
+                raise
             except (ScriptError, ShellRefused, UnsupportedAction, LookupError) as exc:
                 self.trace.errors += 1
                 chunks.append(f"$ {line}\nerror: {self._out(str(exc))}")

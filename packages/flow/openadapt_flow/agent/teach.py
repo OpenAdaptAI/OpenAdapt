@@ -66,6 +66,8 @@ TAUGHT_PREFIX = "taught_"
 
 _TASK_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _NAME = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+#: An operator task file's id (``openadapt.guard-task/v1``).
+_TASK_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$")
 
 _READ_ONLY = {
     "readOnlyHint": True,
@@ -130,6 +132,15 @@ class TeachConfig:
     open_backend: Optional[Callable[[Any], Any]] = None
     #: How long a taught run waits for run 1 or a canary to finish.
     app_wait_s: float = 600.0
+    #: Operator task files (``openadapt.guard-task/v1``). When set,
+    #: ``teach_start`` names one, and run 1's record and inputs come from it:
+    #: the agent can't declare them, so page text read before a later
+    #: ``teach_start`` can't change them either.
+    tasks_dir: Optional[Path] = None
+    #: More origins run 1's browser may reach besides the app's.
+    allow_origins: tuple[str, ...] = ()
+    #: The app's write adapter: run 1's writes are read before they are sent.
+    write_adapter: Any = None
 
     #: One writer at a time on the app: run 1, the canaries and taught runs
     #: would otherwise count each other's records in their checks.
@@ -294,8 +305,26 @@ class TeachBridge:
                             "pattern": _NAME.pattern,
                             "description": "Short name for the workflow (a-z, 0-9, _).",
                         },
+                        **(
+                            {
+                                "task_file": {
+                                    "type": "string",
+                                    "pattern": _TASK_FILE.pattern,
+                                    "description": (
+                                        "The operator's task file for this run; "
+                                        "its record and inputs are used."
+                                    ),
+                                }
+                            }
+                            if self.config.tasks_dir is not None
+                            else {}
+                        ),
                     },
-                    ["task", "inputs", "record_fields", "on_screen"],
+                    (
+                        ["task", "task_file", "on_screen"]
+                        if self.config.tasks_dir is not None
+                        else ["task", "inputs", "record_fields", "on_screen"]
+                    ),
                 ),
                 annotations=_ACTS,
             ),
@@ -592,10 +621,46 @@ class TeachBridge:
         except RunEnded as exc:
             raise BridgeError(f"{exc}; call teach_finish for the result") from None
 
+    def _declared(
+        self, args: Mapping[str, Any]
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        """Run 1's inputs and record fields: the operator's task file when
+        the server has ``tasks_dir``, else what the agent declared at
+        ``teach_start``, before it read the app."""
+
+        inputs = {str(k): str(v) for k, v in (args.get("inputs") or {}).items()}
+        record = {str(k): str(v) for k, v in (args.get("record_fields") or {}).items()}
+        if self.config.tasks_dir is None:
+            if args.get("task_file"):
+                raise BridgeError("this server has no operator task files")
+            return inputs, record
+        from openadapt_flow.guard import GuardRefused, load_task
+
+        task_id = str(args.get("task_file") or "")
+        if not _TASK_FILE.fullmatch(task_id):
+            raise BridgeError(
+                "this server takes run 1's record and inputs from the operator's "
+                "task files: name one with task_file"
+            )
+        try:
+            task = load_task(self.config.tasks_dir / f"{task_id}.json")
+        except GuardRefused as exc:
+            raise BridgeError(f"task_file {task_id}: {exc.message}") from None
+        if task.task_id != task_id:
+            raise BridgeError("the task file names a different task_id")
+        filed_inputs = {k: str(v) for k, v in task.intended_fields.items()}
+        filed_record = {k: str(v) for k, v in task.expected_record.items()}
+        if (inputs and inputs != filed_inputs) or (record and record != filed_record):
+            raise BridgeError(
+                "inputs and record_fields come from the operator's task file; "
+                "leave them out or send exactly its values"
+            )
+        return filed_inputs, filed_record
+
     def _compiler_for(self, args: Mapping[str, Any]) -> Any:
         from openadapt_flow.compile_agent import FirstRunCompiler
 
-        inputs = {str(k): str(v) for k, v in (args.get("inputs") or {}).items()}
+        inputs, record = self._declared(args)
         for key in inputs:
             if not _NAME.fullmatch(key):
                 raise BridgeError(f"input names are a-z, 0-9 and _ ({key!r})")
@@ -608,7 +673,7 @@ class TeachBridge:
                 surface=self.config.surface,
                 open_backend=self.config.open_backend,
                 verify=self.config.verify,
-                expect=dict(args["record_fields"]),
+                expect=record,
                 on_screen=list(args["on_screen"]),
                 task_id=f"taught.{name}" if name else None,
                 policy=self.config.policy,
@@ -617,6 +682,8 @@ class TeachBridge:
                 reset=self.config.reset,
                 headless=self.config.headless,
                 on_warning=lambda text: None,
+                allow_origins=self.config.allow_origins,
+                write_adapter=self.config.write_adapter,
             ), inputs
         except ValueError as exc:
             raise BridgeError(str(exc)) from None

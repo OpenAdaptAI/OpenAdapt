@@ -37,6 +37,7 @@ from typing import Any, ClassVar, Mapping, Optional, Sequence
 from openadapt_flow.compile_agent.harness import GateRefused, Harness, StaleRef
 from openadapt_flow.jit.adapters import UnsupportedAction
 from openadapt_flow.jit.compile_agent import TaskRequest
+from openadapt_flow.teach_scope import ScopeViolation
 
 __all__ = [
     "AgentLedger",
@@ -580,7 +581,9 @@ class ClaudeAgent:
                 result["content"] = self._selective(name, args, harness)
             else:
                 result["content"] = self._computer(name, args, harness)
-        except GateRefused:
+        except (GateRefused, ScopeViolation):
+            # A refused save, or an action outside the task's declared scope:
+            # run 1 ends here with no draft.
             raise
         except (StaleRef, UnsupportedAction, LookupError, ValueError) as exc:
             # Nothing in the action was performed; the model can try another.

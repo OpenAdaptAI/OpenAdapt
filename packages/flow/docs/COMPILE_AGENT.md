@@ -30,7 +30,14 @@ no key. `--agent steps.json` runs a scripted agent with no model calls.
 
 1. **Run 1, in the harness.** The agent does the task while
    `openadapt_flow.jit` records every action, exactly as for any other JIT
-   capture ([JIT.md](JIT.md)).
+   capture ([JIT.md](JIT.md)). Run 1 runs under the task's teach scope
+   ([THREAT_MODEL.md](THREAT_MODEL.md)), built from what the command
+   declares before the agent reads a page: the agent may type only the
+   inputs, the `--expect` values, the `--on-screen` text and `--allow-text`;
+   its browser reaches only the app's origin and `--allow-origin`; with
+   `--write-adapter`, each write is read before it is sent; and the system of
+   record is read back after the run. Anything outside it ends run 1 with no
+   draft.
 2. **The record check.** The system of record is read when run 1 starts and
    after it ends. Run 1 passes only when exactly one record appeared, no other
    record changed or disappeared, the new record has every `--expect` field
@@ -254,6 +261,8 @@ object with `messages.create`; the tests pass a fake.
 | `refused_by_hold` | The hold said no; nothing was saved. |
 | `record_check_failed` | The system of record did not show exactly the record the task named. |
 | `canary_failed` | A canary did not end VERIFIED, or its receipt did not. |
+| `scope_refused` | Run 1 went outside the task's teach scope (typed text, a link or request to another origin, an undeclared write); nothing past that point was done, and there is no draft. |
+| `readback_refused` | After run 1, the system of record did not show exactly the declared write. |
 | `capture_failed`, `unsupported` | The agent failed or used an action the recording can't hold. |
 
 ## Files
