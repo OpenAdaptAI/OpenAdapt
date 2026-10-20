@@ -243,6 +243,37 @@ class LocalStatusAuthority:
         )
 
 
+class OpenEMRSignedInUser:
+    """P2 for OpenEMR: the signed-in user's login, from the app's own session.
+
+    OpenEMR shows only the display name, and only at wide windows. Its tab
+    shell holds the login in ``app_view_model.application_data.user()``.
+    This check reads that login from the live page; the frame is not used.
+    """
+
+    kind = "login_id"
+
+    def __init__(self, page: Any, expected: str) -> None:
+        self._page = page
+        self._expected = expected
+
+    def reference(self, key: bytes) -> str:
+        from openadapt_flow.approval_mode.gate import dedicated_user_reference
+
+        return dedicated_user_reference(self._expected, key)
+
+    def check(self, frame_png: bytes) -> str:
+        try:
+            login = self._page.evaluate(
+                "() => app_view_model.application_data.user().username()"
+            )
+        except Exception:  # noqa: BLE001 - an unreadable session is not a match
+            return "unreadable"
+        if not isinstance(login, str) or not login:
+            return "unreadable"
+        return "match" if login == self._expected else "mismatch"
+
+
 class LabelAgent:
     """A rule-based stand-in for the repair model; it calls no model.
 
@@ -308,11 +339,8 @@ class Item:
         self.pipeline = pipeline
         self.verifier_wrapper = verifier_wrapper
 
-    def approval_gate(self, bundle: Path) -> Any:
-        from openadapt_flow.approval_mode.gate import (
-            ApprovalGate,
-            ScreenTextSignedInUser,
-        )
+    def approval_gate(self, bundle: Path, page: Any) -> Any:
+        from openadapt_flow.approval_mode.gate import ApprovalGate
         from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
         from openadapt_flow.approval_mode.model import (
             DESKTOP_LIST_WITH_HEADER,
@@ -322,7 +350,6 @@ class Item:
         ctx = self.ctx
         store = ItemApprovalStore(self.run_dir)
         ctx["person"].watch(store)
-        from openadapt_flow import vision
 
         return ApprovalGate(
             "problems_only",
@@ -332,7 +359,7 @@ class Item:
             fetch_status=LocalStatusAuthority(ctx["keys"]["status_private"]),
             environment_digest=lambda: ctx["environment_digest"],
             runner_id=RUNNER_ID,
-            signed_in_user=ScreenTextSignedInUser(vision, DEDICATED_USER),
+            signed_in_user=OpenEMRSignedInUser(page, DEDICATED_USER),
             dedicated_user_key=bytes.fromhex(ctx["keys"]["user_hmac_key"]),
             item=ItemContext(
                 channel=DESKTOP_LIST_WITH_HEADER,
@@ -422,7 +449,7 @@ class Item:
                 backend,
                 effect_verifier=verifier,
                 governed_authorization=self.authorization(workflow, bundle, verifier),
-                approval_gate=self.approval_gate(bundle),
+                approval_gate=self.approval_gate(bundle, backend.page),
                 readback_pipeline=self.pipeline,
                 **self.replayer_kwargs(workflow),
             )
@@ -510,7 +537,6 @@ def _context(out: Path, keys_dir: Path, ledger: Ledger) -> dict[str, Any]:
 def phase_admit(ctx: dict[str, Any], source: Path, trials: int) -> None:
     from openadapt_flow.approval_mode.gate import dedicated_user_reference
     from openadapt_flow.approval_mode.switch import SwitchLog, SwitchRecord
-    from openadapt_flow.bundle_sealing import seal_bundle
     from openadapt_flow.ir import Workflow
     from openadapt_flow.qualify.campaign import qualify
     from openadapt_flow.qualify.result import verifier_identity_of
@@ -519,21 +545,31 @@ def phase_admit(ctx: dict[str, Any], source: Path, trials: int) -> None:
     t0 = time.time()
     adm = out / "admission"
     adm.mkdir(parents=True, exist_ok=True)
-    sealed = adm / "sealed"
+    sealed = adm / "encrypted"
     if not sealed.exists():
-        # Only the program's own files are sealed; a benchmark harness's notes
-        # next to them (``benchmark-contract.json``) stay out.
-        staged = adm / "source"
-        shutil.rmtree(staged, ignore_errors=True)
+        # Encrypted at rest for the Regulated profile: workflow.json and every
+        # template are encrypted with the bundle key. A whole-bundle sealed set
+        # (``openadapt-flow seal``) can't run with an approval gate yet, since
+        # the approval requests the person sees are written for the approval
+        # surface to read; see this directory's README. A benchmark harness's
+        # notes next to the program (``benchmark-contract.json``) stay out.
+        from openadapt_flow.bundle_sealing import _invalidate_prior_certification
+
         shutil.copytree(
-            source, staged, ignore=shutil.ignore_patterns("benchmark-contract.json")
+            source, sealed, ignore=shutil.ignore_patterns("benchmark-contract.json")
         )
-        result = seal_bundle(staged, sealed)
+        workflow = Workflow.load(sealed)
+        invalidated = _invalidate_prior_certification(
+            workflow, reason="encrypted at rest for the Regulated profile"
+        )
+        workflow.save(sealed, encrypt=True, key=ctx["keys"]["bundle_key"])
+        encrypted = Workflow.load(sealed, key=ctx["keys"]["bundle_key"])
         ledger.add(
-            "admit.seal",
+            "admit.encrypt",
             source_digest=Workflow.load(source).manifest.content_digest,
-            sealed_digest=result.content_digest,
-            certification_invalidated=result.certification_invalidated,
+            encrypted_digest=encrypted.manifest.content_digest,
+            encrypted=encrypted.encrypted,
+            certification_invalidated=invalidated,
         )
     ctx["app"].fx.reset()
     qual = qualify(
@@ -554,7 +590,10 @@ def phase_admit(ctx: dict[str, Any], source: Path, trials: int) -> None:
         certified=qual.certified,
         digest=digest,
         rows=[
-            {k: r.get(k) for k in ("case", "trial", "expected", "observed")}
+            {
+                k: r.get(k)
+                for k in ("case_id", "trial", "expected", "transaction_outcome")
+            }
             for r in qual.rows
         ],
         seconds=round(time.time() - t0, 1),
@@ -825,7 +864,7 @@ class ProofTarget:
                 governed_authorization=item.authorization(
                     workflow, bundle_dir, verifier
                 ),
-                approval_gate=item.approval_gate(bundle_dir),
+                approval_gate=item.approval_gate(bundle_dir, session.backend.page),
                 **item.replayer_kwargs(workflow),
             )
             return replayer.run(
