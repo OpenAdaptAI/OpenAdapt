@@ -17,7 +17,7 @@ And will coding agents call such a tool?
 | Test | Result | Go / no-go |
 | --- | --- | --- |
 | 1. OS-level fill | 20 of 20 sign-ins (10 by keyboard, 10 by mouse). 6 of 7 with Chrome behind another window; the miss was a fail-closed refusal with no input sent. | **Go**, after three small backend fixes |
-| 2. No secret in recordings | 0 password hits in 38 artifacts from 4 recordings (event databases, video frames by OCR, logs, screenshots). AX returns the field masked, but exposes its length. | **Go** for the secret. The recorder itself is a no-go for this flow until fixed. |
+| 2. No secret in recordings | 0 password hits in 38 artifacts from 4 recordings (event databases, video frames by OCR, logs, screenshots). AX returns the field masked, but exposes its length. | **Go** for the secret. The recorder is a no-go for this flow until fixed: it cannot finish the recording, and window-scoped capture also stores keys typed into other apps (known blocker). |
 | 3. Site binding | Refused before any input on a second port and on a look-alike page with the taught title. Chrome also offers no saved login on another port. | **Go** |
 | 4. Agent acceptance | Claude Code called the tool in every run (12 of 12, no refusals) and signed in end to end 3 of 4 times on a ready window. Codex chose the tool on its own; `codex exec` then cancelled the call under its non-interactive approval policy. | **Go** for Claude Code. **Likely go** for Codex, not shown end to end. |
 
@@ -188,6 +188,20 @@ recorder:
   the Touch ID sheet are other windows, so the video never shows the step the
   person actually takes.
 
+- **Known blocker: window-scoped capture records keys typed into other apps.**
+  The coordinating session's realism audit found that window-scoped recording
+  does not check keyboard focus. Keys typed into any other app are stored as
+  actions on the target window. Both teach recordings here show it. Nobody
+  typed into Chrome, but the person's take stored 21 key presses: Cmd+Tab,
+  arrows, Backspace, Return and 7 printable characters. The driven take stored
+  27, including 10 Cmd+Tab app switches. These came from the person switching
+  to and typing in other windows during the recording. The scan did not print
+  the stored characters. The password search covered every file in every
+  recording directory, `.capture/` included, and none of the stored keys was
+  the password. But a person who types a password anywhere else during a
+  recording would have it stored. Until this is fixed, keep Chrome focused for
+  the whole recording and type nowhere else.
+
 A sign-in step does not need a general recording to be taught. See the design
 below.
 
@@ -308,7 +322,9 @@ explore.
   keys can land in the wrong place. The backend's exact-window checks limit
   this but cannot prevent it.
 - **Recorder gaps** (test 2): title-bound window capture across navigation,
-  shutdown sealing, and full-desktop start-up time.
+  shutdown sealing, full-desktop start-up time, and keys from other apps stored
+  in a window-scoped recording (a known blocker for teaching anything near a
+  password by recording).
 - **Failure messages steer agents.** A vague tool error led Claude to offer to
   take the password.
 - **Password length** is exposed through `AXNumberOfCharacters`.
@@ -348,6 +364,8 @@ explore.
   Window Server cursor window, small Chrome helper windows).
 - Fix window-scoped capture across navigation (bind by window id or AX URL) and
   the "terminal frame did not seal" shutdown failure.
+- Make window-scoped capture drop keyboard input while the target window does
+  not have focus (the realism audit's finding, reproduced here).
 - Try Codex interactively, or with an MCP approval setting, for an end-to-end
   Codex sign-in.
 - Measure Chrome's reauthentication grace period.
