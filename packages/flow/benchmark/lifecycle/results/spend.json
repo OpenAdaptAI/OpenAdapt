@@ -1,0 +1,109 @@
+{
+ "total_usd": 0.197869,
+ "entries": [
+  {
+   "label": "agent_tools smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.010536,
+   "at": 1792519974.601
+  },
+  {
+   "label": "agent_tools smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.012466,
+   "at": 1792519979.772
+  },
+  {
+   "label": "agent_tools smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.004311,
+   "at": 1792519982.069
+  },
+  {
+   "label": "agent_tools smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.01595,
+   "at": 1792519988.41
+  },
+  {
+   "label": "agent_tools smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.005594,
+   "at": 1792519990.27
+  },
+  {
+   "label": "agent_tools smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.001708,
+   "at": 1792519992.301
+  },
+  {
+   "label": "agent_tools smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.013946,
+   "at": 1792519999.452
+  },
+  {
+   "label": "agent_tools smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.009487,
+   "at": 1792520004.187
+  },
+  {
+   "label": "agent_tools smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.004696,
+   "at": 1792520006.769
+  },
+  {
+   "label": "agent_tools smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.005658,
+   "at": 1792520010.822
+  },
+  {
+   "label": "cua_alone smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.029151,
+   "at": 1792520014.776
+  },
+  {
+   "label": "cua_alone smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.014294,
+   "at": 1792520020.17
+  },
+  {
+   "label": "cua_alone smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.012412,
+   "at": 1792520027.385
+  },
+  {
+   "label": "cua_alone smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.016812,
+   "at": 1792520033.757
+  },
+  {
+   "label": "cua_alone smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.013893,
+   "at": 1792520042.877
+  },
+  {
+   "label": "cua_alone smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.012149,
+   "at": 1792520049.21
+  },
+  {
+   "label": "cua_alone smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.014806,
+   "at": 1792520056.244
+  }
+ ],
+ "cap_usd": 30.0,
+ "prices_as_of": "2026-10-20"
+}
