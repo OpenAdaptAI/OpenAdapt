@@ -163,7 +163,7 @@ def test_reconcile_finds_the_saved_record_and_finishes_without_saving_again(
         run_dir,
         AttendedActionRequest(
             capability_digest=capability.digest,
-            idempotency_key="reconcile-landed-save-0001",
+            idempotency_key="reconcile-test-0001",
             action="reconcile",
             disposition="reconciliation_requested",
         ),
