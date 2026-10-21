@@ -606,10 +606,9 @@ class MacOSBackend(RemoteDisplayBackend):
     def _resolve_window(self, *, refresh: bool = False) -> WindowInfo:
         if self._window is not None and not refresh:
             return self._window
-        candidates = self._mac_client.find_windows(
-            self._owner_substr, self._title_substr
-        )
+        candidates = self._target_candidates(self._mac_client)
         if not candidates:
+            self._pinned_window_closed(MacOSBackendError)
             raise MacOSBackendError(
                 "no native macOS window matching app "
                 f"{self._owner_substr!r} title {self._title_substr!r}"
@@ -624,8 +623,7 @@ class MacOSBackend(RemoteDisplayBackend):
                 f"{len(candidates)} windows ({summary}); provide a unique "
                 "macos_window_title. Refusing first-match input."
             )
-        self._window = candidates[0]
-        return candidates[0]
+        return self._pin_target(candidates[0], MacOSBackendError)
 
     def _window_focus_matches(self, window: WindowInfo) -> bool:
         """Use authoritative CG+AX focus; NSWorkspace may lag after AXRaise."""
@@ -1127,13 +1125,11 @@ class MacOSBackend(RemoteDisplayBackend):
     def _scoped_to_target(self, element: MacElement) -> bool:
         """Whether an element belongs to THIS backend's exact app/window."""
         window = self._resolve_window()
+        # ``window`` is the pinned window under its current title, so the
+        # configured title selector is not checked again here.
         return (
             element.app_pid == window.pid
             and element.window_title == window.title
-            and (
-                self._title_substr is None
-                or self._title_substr.casefold() in element.window_title.casefold()
-            )
             and self._owner_substr.casefold() in window.owner.casefold()
         )
 

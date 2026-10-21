@@ -611,6 +611,9 @@ class RemoteDisplayBackend:
             )
         self._session_identity_observer = session_identity_observer
         self._window: Optional[WindowInfo] = None
+        # The window the owner/title selectors matched first. Later lookups
+        # find this exact window id, whatever its title becomes.
+        self._pinned_window: Optional[WindowInfo] = None
         self._viewport: Optional[tuple[int, int]] = None
         self._scale: float = 1.0
         self._scale_x: float = 1.0
@@ -632,16 +635,59 @@ class RemoteDisplayBackend:
 
     # -- window resolution ---------------------------------------------------
 
+    def _target_candidates(self, client: Any) -> list[WindowInfo]:
+        """Return the windows that can be the target, pinned after one match.
+
+        The owner/title selectors choose the window once. Later lookups find
+        that exact window id by owner and ignore the title: an application
+        (a browser above all) retitles its window as its content changes,
+        and a title lookup would lose the window or find another window that
+        now carries the old title.
+        """
+        pinned = self._pinned_window
+        if pinned is None:
+            return client.find_windows(self._owner_substr, self._title_substr)
+        return [
+            window
+            for window in client.find_windows(self._owner_substr, None)
+            if window.window_id == pinned.window_id
+        ]
+
+    def _pin_target(
+        self, window: WindowInfo, error: type[RemoteDisplayError]
+    ) -> WindowInfo:
+        """Pin the first unique match; refuse a different owning process."""
+        pinned = self._pinned_window
+        if pinned is None:
+            self._pinned_window = window
+        elif window.window_id != pinned.window_id or window.pid != pinned.pid:
+            raise error(
+                "the process that owns the pinned target window exited or "
+                "restarted; refusing input to a window it did not bind"
+            )
+        self._window = window
+        return window
+
+    def _pinned_window_closed(self, error: type[RemoteDisplayError]) -> None:
+        """Fail closed when the pinned target window is gone."""
+        if self._pinned_window is not None:
+            raise error(
+                "the pinned target window closed or is no longer listed; "
+                "refusing to rebind to another window"
+            )
+
     def _resolve_window(self, *, refresh: bool = False) -> WindowInfo:
         """Locate (and cache) the target client window.
 
         Raises:
-            RemoteDisplayError: If no matching window is on screen.
+            RemoteDisplayError: If no matching window is on screen, or the
+                pinned window closed or its process restarted.
         """
         if self._window is not None and not refresh:
             return self._window
-        matches = self._client.find_windows(self._owner_substr, self._title_substr)
+        matches = self._target_candidates(self._client)
         if not matches:
+            self._pinned_window_closed(RemoteDisplayError)
             raise RemoteDisplayError(
                 "no window exactly matching the configured remote-display "
                 "target; is the client window open and visible?"
@@ -652,8 +698,7 @@ class RemoteDisplayBackend:
                 f"match, found {len(matches)}; target identities are withheld "
                 "because window titles can contain sensitive record data"
             )
-        self._window = matches[0]
-        return matches[0]
+        return self._pin_target(matches[0], RemoteDisplayError)
 
     def ensure_foreground(self, *, retries: int = 10, settle_s: float = 0.4) -> None:
         """Un-hide + activate the client window and wait until it is on screen.
@@ -719,7 +764,8 @@ class RemoteDisplayBackend:
             try:
                 png, px_w, px_h = self._client.capture(win.window_id)
             except RemoteDisplayError:
-                # The window id may be stale (window reopened); re-resolve once.
+                # Retry a transient capture failure once. The lookup stays
+                # pinned, so a reopened window fails closed here.
                 win = self._resolve_window(refresh=True)
                 png, px_w, px_h = self._client.capture(win.window_id)
             if not png or px_w <= 0 or px_h <= 0:

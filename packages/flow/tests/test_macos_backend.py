@@ -463,19 +463,29 @@ def test_click_refreshes_moved_window_before_mapping() -> None:
 
 
 @pytest.mark.parametrize(
-    "replacement",
+    ("replacement", "refusal"),
     [
-        WindowInfo(41, "TextEdit", "oa-trial.txt", 9001, (10, 20, 500, 300)),
-        WindowInfo(99, "TextEdit", "oa-trial.txt", 9001, (10, 20, 400, 300)),
+        (
+            WindowInfo(41, "TextEdit", "oa-trial.txt", 9001, (10, 20, 500, 300)),
+            "resized, reopened, or retitled",
+        ),
+        # A reopened window has a new id. The pinned window is gone, so the
+        # backend refuses instead of rebinding to the new window.
+        (
+            WindowInfo(99, "TextEdit", "oa-trial.txt", 9001, (10, 20, 400, 300)),
+            "pinned target window closed",
+        ),
     ],
 )
-def test_click_refuses_resized_or_reopened_window_after_capture(replacement) -> None:
+def test_click_refuses_resized_or_reopened_window_after_capture(
+    replacement, refusal
+) -> None:
     client = FakeMacClient()
     target = backend(client)
     target.screenshot()
     client.windows = [replacement]
 
-    with pytest.raises(MacOSBackendError, match="resized, reopened, or retitled"):
+    with pytest.raises(MacOSBackendError, match=refusal):
         target.click(100, 200)
     assert not any(call[0] in {"move", "mouse"} for call in client.calls)
 
@@ -586,7 +596,12 @@ def test_input_raises_exact_target_above_same_process_sibling() -> None:
     assert any(call[0] == "key" for call in client.calls)
 
 
-def test_title_disappearing_during_raise_refuses_input() -> None:
+def test_retitle_during_raise_keeps_the_pinned_window() -> None:
+    """A retitle (a browser navigating) keeps the window the selector chose.
+
+    A new window that takes over the old title is never targeted.
+    """
+
     class TitleRaceClient(FakeMacClient):
         def raise_window(self, window):
             self.calls.append(("raise", window.window_id))
@@ -597,13 +612,44 @@ def test_title_disappearing_during_raise_refuses_input() -> None:
                     "renamed.txt",
                     window.pid,
                     window.bounds,
-                )
+                ),
+                WindowInfo(77, "TextEdit", "oa-trial.txt", 9001, (500, 20, 400, 300)),
             ]
             return True
 
     client = TitleRaceClient()
-    with pytest.raises(MacOSBackendError, match="no native macOS window"):
-        backend(client).press("Enter")
+    backend(client).press("Enter")
+
+    assert ("key", 36, True, ()) in client.calls
+    targeted = {call[1] for call in client.calls if call[0] in {"raise", "capture"}}
+    assert targeted == {41}
+
+
+def test_pinned_window_closing_refuses_input_even_if_its_title_returns() -> None:
+    client = FakeMacClient()
+    target = backend(client)
+    target.screenshot()
+    client.windows = [
+        WindowInfo(77, "TextEdit", "oa-trial.txt", 9001, (10, 20, 400, 300))
+    ]
+    client.calls.clear()
+
+    with pytest.raises(MacOSBackendError, match="pinned target window closed"):
+        target.press("Enter")
+    assert not any(call[0] in {"key", "unicode", "mouse"} for call in client.calls)
+
+
+def test_pinned_window_owned_by_a_restarted_process_refuses_input() -> None:
+    client = FakeMacClient()
+    target = backend(client)
+    target.screenshot()
+    client.windows = [
+        WindowInfo(41, "TextEdit", "oa-trial.txt", 9100, (10, 20, 400, 300))
+    ]
+    client.calls.clear()
+
+    with pytest.raises(MacOSBackendError, match="exited or restarted"):
+        target.screenshot()
     assert not any(call[0] in {"key", "unicode", "mouse"} for call in client.calls)
 
 
