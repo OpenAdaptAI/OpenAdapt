@@ -130,13 +130,15 @@ How it works:
   reaches Flow only through the child process's environment. Flow re-checks
   the answer, re-reads the form and runs the right-record check again before
   it saves.
-- Set the key up once per computer with `openadapt-desktop approver-key
-  setup`. It writes the encrypted key to `~/.openadapt/approver/` (owner-only)
-  and keeps its random passphrase in the OS keychain, then prints the public
-  key and the command a person runs at a terminal to register it:
-  `openadapt-flow jit register --role approver --principal NAME --public-key
-  KEY`. Until a key is set up and registered, Desktop sends no answer, and Run
-  it shows the person what to do.
+- Set the key up once per computer, at a terminal. With
+  `OPENADAPT_JIT_KEY_PASSPHRASE` set, run `openadapt-flow jit keygen --out
+  ~/.openadapt/approver/desktop-approver.pem`, then a person registers the
+  public key it prints: `openadapt-flow jit register --role approver
+  --principal NAME --public-key HEX`. Desktop then needs the same
+  passphrase in its environment. `openadapt-desktop approver-key setup` does
+  the keygen step instead and keeps a random passphrase in the OS keychain;
+  the register step is the same. Until a key is set up and registered,
+  Desktop sends no answer, and Run it shows these steps.
 - A late answer (the run already stopped waiting) is never turned into a
   save: Desktop doesn't resume the run, and says to run the item again.
 - Before the practice item runs, Desktop calls `openadapt-flow qualify drills

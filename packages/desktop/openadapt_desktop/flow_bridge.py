@@ -1119,7 +1119,10 @@ class FlowBridge:
             args += ["--reason", str(reason)]
         elif reason is not None:
             raise ValueError("An approval has no reason")
-        from openadapt_desktop.approver_key import approver_key_environment
+        from openadapt_desktop.approver_key import (
+            approver_key_environment,
+            setup_instructions,
+        )
 
         key = approver_key_environment()
         if key is None:
@@ -1128,9 +1131,7 @@ class FlowBridge:
                 "code": "human_answer_unsigned",
                 "message": (
                     "This computer has no approver key, so nothing was approved. "
-                    "Run openadapt-desktop approver-key setup, then have a person "
-                    "register the key it prints with openadapt-flow jit register "
-                    "--role approver."
+                    + setup_instructions()
                 ),
             }
         key_path, key_env = key

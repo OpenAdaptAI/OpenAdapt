@@ -155,10 +155,31 @@ def approver_key_environment(
     path = approver_key_path(route)
     if not path.is_file():
         return None
-    passphrase = _store._kr_get(_store._keyring(), _ROUTES[route][1])
+    # The keychain holds the passphrase of a key Desktop created. A key made
+    # at a terminal with ``openadapt-flow jit keygen`` uses the passphrase in
+    # Desktop's own environment, as the Flow CLI does.
+    passphrase = _store._kr_get(_store._keyring(), _ROUTES[route][1]) or os.environ.get(
+        PASSPHRASE_ENV
+    )
     if not passphrase:
         return None
     return path, {PASSPHRASE_ENV: passphrase}
+
+
+def setup_instructions(route: Route = "desktop") -> str:
+    """The one-time terminal steps that make this computer's answers count."""
+
+    path = approver_key_path(route)
+    name = _ROUTES[route][2]
+    return (
+        "Set up the approver key once, at a terminal: with "
+        f"{PASSPHRASE_ENV} set, run `openadapt-flow jit keygen --out {path}`, "
+        "then have a person register the public key it prints with "
+        f"`openadapt-flow jit register --role approver --principal {name} "
+        "--public-key <hex>`. Start Desktop with the same "
+        f"{PASSPHRASE_ENV}, or run `openadapt-desktop approver-key setup` "
+        "instead of keygen to keep the passphrase in this computer's keychain."
+    )
 
 
 def portal_approver_environment() -> dict[str, str]:
@@ -182,4 +203,5 @@ __all__ = [
     "approver_key_path",
     "portal_approver_environment",
     "setup_approver_key",
+    "setup_instructions",
 ]

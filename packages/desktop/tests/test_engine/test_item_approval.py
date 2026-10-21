@@ -590,8 +590,41 @@ def test_bridge_sends_no_answer_without_an_approver_key(monkeypatch, tmp_path: P
     )
     assert answer["ok"] is False
     assert answer["code"] == "human_answer_unsigned"
-    assert "approver-key setup" in answer["message"]
+    message = answer["message"]
+    key_path = str(module.approver_key_path())
+    assert f"openadapt-flow jit keygen --out {key_path}" in message
+    assert "OPENADAPT_JIT_KEY_PASSPHRASE" in message
+    assert "openadapt-flow jit register --role approver --principal" in message
+    assert "--public-key" in message
     assert calls == []  # never an unsigned answer
+
+
+def test_a_key_made_with_flow_keygen_signs_with_desktops_passphrase(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A key a person made at a terminal with jit keygen, not with Desktop."""
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from openadapt_desktop import approver_key as module
+
+    monkeypatch.setattr(module, "KEY_DIR", tmp_path / "approver")
+    monkeypatch.setenv("OPENADAPT_JIT_KEY_PASSPHRASE", "synthetic-terminal-passphrase")
+    path = module.approver_key_path()
+    path.parent.mkdir(parents=True)
+    path.write_bytes(
+        Ed25519PrivateKey.generate().private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.BestAvailableEncryption(b"synthetic-terminal-passphrase"),
+        )
+    )
+    found = module.approver_key_environment()
+    assert found == (
+        path,
+        {"OPENADAPT_JIT_KEY_PASSPHRASE": "synthetic-terminal-passphrase"},
+    )
 
 
 def test_approver_key_setup_is_encrypted_private_and_stable(
