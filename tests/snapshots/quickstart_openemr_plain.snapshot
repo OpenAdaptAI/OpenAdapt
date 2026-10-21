@@ -1,0 +1,39 @@
+OpenAdapt quickstart: show a task once in OpenEMR, run it, then watch it stop before saving a duplicate chart.
+Synthetic data only. Files go to openadapt-quickstart
+   restoring the synthetic baseline
+   ✓ OpenEMR 8.0.0.3 at http://127.0.0.1:9741: reused the running copy 5.7s
+
+1  Show it once · a referral as it was demonstrated once in OpenEMR 8.0.0.3
+   ✓ Title: "Ms."                             2.1s
+   ✓ First name: "OpenAdapt"                  5.2s
+   ✓ Click Create New Patient                 34.5s
+   ✓ Click Confirm Create New Patient         36.8s
+   The program compiled from it: 29 steps, certified under clinical-write. 0.5s
+
+2  Run it · the program on 5 new referrals, all at once
+   1/5  Ines Carvalho                      ✓ checked in OpenEMR's record  30.1s
+   2/5  Theo Lindqvist                     ✓ checked in OpenEMR's record  30.2s
+   3/5  Grace Adeyemi                      ✓ checked in OpenEMR's record  30.3s
+   4/5  Arlo Whitcombe                     ✓ checked in OpenEMR's record  30.4s
+   5/5  Priya Raman                        ✓ checked in OpenEMR's record  30.5s
+   5 of 5 saved and checked · 0 AI calls · $0.00 · 0.5s
+
+3  Break it · a referral that matches an existing chart
+   OpenEMR already has a chart for Rosa Delgado. The next referral is a Rosa Delgado with another birth date.
+   What the screen showed:        "a matching chart: Delgado, Rosa, born 1958-03-27"
+   What OpenEMR's record showed:  0 new charts
+   OpenAdapt:                     ■ Stopped before saving: possible duplicate  24.5s
+   Why: OpenEMR's duplicate check found an existing chart. The program saves only when it finds none, so it stopped before saving.
+
+The demonstration clicked Confirm Create New Patient here. Replaying those clicks would have saved a possible duplicate. OpenAdapt stopped.
+
+Receipt
+  Program    openemr-create-synthetic-patient · 29 steps
+  Runs       5 of 5 saved and checked in OpenEMR's record
+  Cost       0 AI calls · $0.00 · 2.5s in all
+  Seal       seal-ed25519-0123456789abcdef · 5 reports signed
+See real Seals from OpenEMR runs: https://openadapt.ai/seals
+Check it: openadapt seal verify openadapt-quickstart
+Details: openadapt-quickstart, one REPORT.md per run
+Try it on your own app: openadapt flow record --backend web --url https://your-app.example --out my-task
+Give your agent this as a tool: openadapt agent serve --bundles openadapt-quickstart/bundle

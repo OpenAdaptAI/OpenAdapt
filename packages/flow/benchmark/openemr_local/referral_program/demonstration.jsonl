@@ -1,0 +1,41 @@
+{"i": 0, "t": 1.306, "kind": "click", "selector": "#form_title"}
+{"i": 1, "t": 2.104, "kind": "type", "param": "title", "text": "Ms.", "field_label": "form_title"}
+{"i": 2, "t": 2.855, "kind": "key", "key": "Enter"}
+{"i": 3, "t": 3.638, "kind": "click", "selector": "#form_fname"}
+{"i": 4, "t": 4.405, "kind": "key", "key": "Control+a"}
+{"i": 5, "t": 5.171, "kind": "type", "param": "fname", "text": "OpenAdapt", "field_label": "First Name"}
+{"i": 6, "t": 5.972, "kind": "click", "selector": "#form_lname"}
+{"i": 7, "t": 6.723, "kind": "key", "key": "Control+a"}
+{"i": 8, "t": 7.547, "kind": "type", "param": "lname", "text": "LoanParity", "field_label": "Last Name"}
+{"i": 9, "t": 8.907, "kind": "click", "selector": "#form_DOB"}
+{"i": 10, "t": 9.672, "kind": "key", "key": "Control+a"}
+{"i": 11, "t": 10.476, "kind": "type", "param": "DOB", "text": "1985-02-03", "field_label": "form_DOB"}
+{"i": 12, "t": 11.331, "kind": "click", "selector": "#form_sex"}
+{"i": 13, "t": 12.155, "kind": "type", "param": "sex", "text": "Female", "field_label": "form_sex"}
+{"i": 14, "t": 12.905, "kind": "key", "key": "Enter"}
+{"i": 15, "t": 13.67, "kind": "scroll", "dx": 0, "dy": 300}
+{"i": 16, "t": 14.855, "kind": "click", "name": "Contact"}
+{"i": 17, "t": 15.619, "kind": "scroll", "dx": 0, "dy": 600}
+{"i": 18, "t": 16.403, "kind": "click", "selector": "#form_street"}
+{"i": 19, "t": 17.153, "kind": "key", "key": "Control+a"}
+{"i": 20, "t": 17.954, "kind": "type", "param": "street", "text": "101 SYNTHETIC WAY", "field_label": "form_street"}
+{"i": 21, "t": 18.756, "kind": "click", "selector": "#form_city"}
+{"i": 22, "t": 19.504, "kind": "key", "key": "Control+a"}
+{"i": 23, "t": 20.344, "kind": "type", "param": "city", "text": "EXAMPLETON", "field_label": "form_city"}
+{"i": 24, "t": 21.286, "kind": "click", "selector": "#form_state"}
+{"i": 25, "t": 22.07, "kind": "type", "param": "state_label", "text": "Massachusetts", "field_label": "form_state"}
+{"i": 26, "t": 22.821, "kind": "key", "key": "Enter"}
+{"i": 27, "t": 23.622, "kind": "click", "selector": "#form_postal_code"}
+{"i": 28, "t": 24.37, "kind": "key", "key": "Control+a"}
+{"i": 29, "t": 25.156, "kind": "type", "param": "postal_code", "text": "02139", "field_label": "form_postal_code"}
+{"i": 30, "t": 26.32, "kind": "click", "selector": "#form_phone_home"}
+{"i": 31, "t": 27.093, "kind": "key", "key": "Control+a"}
+{"i": 32, "t": 27.905, "kind": "type", "param": "phone_home", "text": "555-0107", "field_label": "form_phone_home"}
+{"i": 33, "t": 29.136, "kind": "click", "selector": "#form_email"}
+{"i": 34, "t": 29.886, "kind": "key", "key": "Control+a"}
+{"i": 35, "t": 30.686, "kind": "type", "param": "email", "text": "openadapt.loan-parity@example.invalid", "field_label": "form_email"}
+{"i": 36, "t": 31.471, "kind": "click", "selector": "#form_country_code"}
+{"i": 37, "t": 32.237, "kind": "type", "param": "country_code", "text": "USA", "field_label": "form_country_code"}
+{"i": 38, "t": 32.985, "kind": "key", "key": "Enter"}
+{"i": 39, "t": 34.503, "kind": "click", "selector": "#create"}
+{"i": 40, "t": 36.805, "kind": "click", "selector": "#confirmCreate", "name": "Create New Patient"}
