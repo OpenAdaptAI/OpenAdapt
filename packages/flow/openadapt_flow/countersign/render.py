@@ -81,6 +81,32 @@ _CHECKED_HOW_TEXT = {
 }
 
 
+_PART_TEXT = {
+    "delta": "the declared change",
+    "frame": "nothing else in the slice changed",
+    "source": "the inputs match their source",
+}
+
+
+def checked_line(checked: dict[str, Any]) -> str:
+    """One clause per part of the claim, in the receipt's own words."""
+
+    out = []
+    for part in ("delta", "frame", "source"):
+        state = str(checked.get(part))
+        if part == "source" and state == "instruction":
+            out.append("source: the inputs were the authorized instruction")
+        else:
+            out.append(f"{part} ({_PART_TEXT[part]}): {state}")
+    cover = checked.get("coverage")
+    if isinstance(cover, dict):
+        out.append(
+            f"fault coverage: {cover.get('killed')} of {cover.get('applicable')} "
+            f"faults caught, admission policy {cover.get('policy')}"
+        )
+    return "; ".join(out)
+
+
 def tier_line(report: CountersignReport) -> str:
     if report.receipt_schema == EXECUTE_RECEIPT_SCHEMA:
         return f"not stated by Execute v1 (oracle_tier {report.oracle_tier})"
@@ -161,6 +187,11 @@ def render_report(report: CountersignReport, *, show_names: bool = True) -> str:
         *(
             [("Checked how", _CHECKED_HOW_TEXT.get(report.checked_how, "unrecognized"))]
             if report.checked_how is not None
+            else []
+        ),
+        *(
+            [("Checked", checked_line(report.checked))]
+            if report.checked is not None
             else []
         ),
         ("Effect verdict", str(report.effect_verdict or "not stated (Execute v1)")),

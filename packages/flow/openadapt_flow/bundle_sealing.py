@@ -244,6 +244,11 @@ def _invalidate_prior_certification(
         provenance.expires_at = invalidated_at
         provenance.certification_invalidated_at = invalidated_at
         provenance.certification_invalidation_reason = reason
+        # The governed authorization template is rebuilt from the accepted
+        # certification on every load. With the certification gone it can't
+        # be, so the template goes too: the new contract carries no authority
+        # until it is certified again.
+        provenance.governed_authorization_template = None
     return True
 
 

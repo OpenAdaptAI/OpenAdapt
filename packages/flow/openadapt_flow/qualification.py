@@ -29,6 +29,7 @@ from typing import (
     Final,
     Iterable,
     Literal,
+    Mapping,
     Optional,
     Protocol,
 )
@@ -133,6 +134,28 @@ def qualification_run_id_sha256(run_id: str) -> str:
     """Return the canonical digest used to bind one qualification run."""
 
     return _qualification_identifier_sha256(run_id, kind="run")
+
+
+def api_folded_step_ids(
+    workflow: "Workflow", action_paths: Mapping[str, str]
+) -> set[str]:
+    """The steps an API step folds on the path a case names for its save.
+
+    An API step (a ``web_form`` binding) stands for the GUI steps it
+    replaces. On its API path they are folded, not executed, and the save's
+    own result carries the action and record-check evidence. On any other
+    path nothing is folded.
+    """
+
+    return {
+        step_id
+        for save in workflow.steps
+        if save.api_binding is not None
+        and save.api_binding.kind == "web_form"
+        and save.api_binding.web_form is not None
+        and action_paths.get(save.id) == "api"
+        for step_id in save.api_binding.web_form.replaces_steps[:-1]
+    }
 
 
 def _qualification_actuation_path(
@@ -2488,6 +2511,36 @@ class _HashBoundEvidenceRef(Protocol):
     sha256: str
 
 
+def _sealed_evidence_bytes(
+    *,
+    root: Path,
+    candidate: Path,
+    evidence: _HashBoundEvidenceRef,
+) -> tuple[Optional[bytes], Optional[str]]:
+    """Read a file a sealed run directory holds by its logical name.
+
+    A run of a sealed bundle writes a sealed run directory. Its report is
+    bound by the digest of its plaintext; the sealed set authenticates the
+    ciphertext on disk and decrypts it in memory with the run's key.
+    """
+
+    from openadapt_flow import sealed_set
+
+    try:
+        parent = candidate.parent.resolve(strict=True)
+    except OSError:
+        return None, f"evidence file is missing: {evidence.relative_path}"
+    if not parent.is_relative_to(root):
+        return None, f"evidence path leaves its root: {evidence.relative_path}"
+    try:
+        payload = sealed_set.read_bytes(candidate)
+    except Exception:  # noqa: BLE001 - an unreadable sealed file is not evidence
+        return None, f"evidence file is missing: {evidence.relative_path}"
+    if hashlib.sha256(payload).hexdigest() != evidence.sha256:
+        return None, f"evidence hash mismatch: {evidence.relative_path}"
+    return payload, None
+
+
 def _read_evidence_bytes(
     *,
     root: Path,
@@ -2505,7 +2558,7 @@ def _read_evidence_bytes(
     try:
         resolved = candidate.resolve(strict=True)
     except OSError:
-        return None, f"evidence file is missing: {evidence.relative_path}"
+        return _sealed_evidence_bytes(root=root, candidate=candidate, evidence=evidence)
     if not resolved.is_relative_to(root) or candidate.is_symlink():
         return None, f"evidence path leaves its root: {evidence.relative_path}"
     if not resolved.is_file():
@@ -3573,7 +3626,17 @@ def _case_run_report_integrity_error(
             and report.results[-1].step_id == "<terminal>"
             else report.results
         )
-        prior_action_results = action_results[:-1]
+        api_folded_ids = api_folded_step_ids(workflow, expected_action_paths)
+        prior_action_results = [
+            item
+            for item in action_results[:-1]
+            if not (
+                item.actuation == "api_folded"
+                and item.skipped
+                and item.step_id in api_folded_ids
+                and item.step_id not in expected_action_paths
+            )
+        ]
         if any(
             item.step_id in expected_action_paths
             and expected_action_paths[item.step_id]
