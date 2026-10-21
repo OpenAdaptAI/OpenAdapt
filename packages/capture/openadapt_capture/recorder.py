@@ -21,6 +21,7 @@ Usage:
 
 import hashlib
 import io
+import json
 import math
 import multiprocessing
 import os
@@ -90,6 +91,7 @@ from openadapt_capture.window_capture import (
     WindowCaptureError,
     WindowCapturePermissionError,
     WindowCaptureScope,
+    WindowInputNotOnTarget,
     build_window_scope,
     prepare_macos_window_capture_runtime,
 )
@@ -286,6 +288,7 @@ class _JournalEntry:
     event: Event | None = None
     error: BaseException | None = None
     ready: bool = False
+    discarded: bool = False
 
 
 class EventReservation:
@@ -331,6 +334,16 @@ class EventReservation:
             self._finished = True
             self._journal._condition.notify_all()
 
+    def discard(self) -> None:
+        """Release this position without an event; the consumer skips it."""
+        if self._finished:
+            raise RuntimeError("the event journal reservation is already complete")
+        with self._journal._condition:
+            self._entry.discarded = True
+            self._entry.ready = True
+            self._finished = True
+            self._journal._condition.notify_all()
+
 
 class WindowActionReservation:
     """A source position and the exact published geometry at native receipt."""
@@ -340,10 +353,36 @@ class WindowActionReservation:
         reservation: EventReservation,
         window_scope: WindowCaptureScope,
         geometry: tuple[Any, float, float, tuple[int, int, int, int], int],
+        keyboard_focus_at_receipt: Any = None,
     ) -> None:
         self._reservation = reservation
         self._window_scope = window_scope
         self._geometry = geometry
+        self._keyboard_focus_at_receipt = keyboard_focus_at_receipt
+        self._admitted = False
+
+    def admit(self, point: tuple[float, float] | None) -> None:
+        """Accept input only if the target window received it.
+
+        Raises:
+            WindowInputNotOnTarget: The input went to another window.
+        """
+        if point is None:
+            self._window_scope.assert_input_on_target(
+                self._geometry[0],
+                keyboard_focus_at_receipt=self._keyboard_focus_at_receipt,
+            )
+        else:
+            self._window_scope.assert_input_on_target(self._geometry[0], point=point)
+        self._admitted = True
+
+    def admit_continuation(self) -> None:
+        """Accept the release or drag of a press the target already received."""
+        self._admitted = True
+
+    def discard(self) -> None:
+        """Drop this input: its journal position completes without an event."""
+        self._reservation.discard()
 
     @property
     def source_ordinal(self) -> int:
@@ -359,6 +398,10 @@ class WindowActionReservation:
         y: float | None,
     ) -> tuple[float, float, int] | int:
         """Bind normalized input to geometry reserved at native receipt."""
+        if not self._admitted:
+            raise EventJournalOrderingError(
+                "window-scoped input must be admitted as on-target before binding"
+            )
         if x is not None and y is not None:
             return self._window_scope.translate_reserved_geometry(
                 self._geometry,
@@ -412,6 +455,94 @@ class _SuppressedInputReservation:
         del error
 
 
+WINDOW_INPUT_GAPS_FILENAME = "window-input-gaps.jsonl"
+WINDOW_INPUT_GAP_SCHEMA_VERSION = "openadapt.capture.window-input-gap/v1"
+_WINDOW_INPUT_GAP_POINT_GRID = 10.0
+
+
+class WindowInputGapLog:
+    """Markers for input dropped because it did not go to the target window.
+
+    One ``focus_left_target`` marker opens each run of dropped input (and a
+    new one is written when the reason changes); ``focus_returned_to_target``
+    closes it at the next accepted input. A marker holds a reason code, the
+    input kind, a timestamp and, for pointer input, a point rounded to a
+    coarse grid. It never holds key identity or text.
+
+    Markers are appended to ``window-input-gaps.jsonl`` in the capture
+    directory, created only when input is dropped, and kept in ``records``.
+    """
+
+    def __init__(self, capture_dir: str | os.PathLike[str] | None = None) -> None:
+        self._path = (
+            None if capture_dir is None else os.path.join(capture_dir, WINDOW_INPUT_GAPS_FILENAME)
+        )
+        self._lock = threading.Lock()
+        self._active_reason: str | None = None
+        self.records: list[dict[str, Any]] = []
+
+    def _append_locked(self, record: dict[str, Any]) -> None:
+        self.records.append(record)
+        if self._path is None:
+            return
+        line = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        fd = os.open(
+            self._path,
+            os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_BINARY", 0),
+            0o600,
+        )
+        try:
+            os.write(fd, line)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+    def left_target(
+        self,
+        reason: str,
+        input_kind: str,
+        timestamp: float | None,
+        point: tuple[float, float] | None = None,
+    ) -> None:
+        """Open (or re-reason) a run of dropped input."""
+        with self._lock:
+            if self._active_reason == reason:
+                return
+            self._active_reason = reason
+            record: dict[str, Any] = {
+                "schema_version": WINDOW_INPUT_GAP_SCHEMA_VERSION,
+                "event": "focus_left_target",
+                "reason": reason,
+                "input": input_kind,
+                "timestamp": timestamp,
+            }
+            if point is not None:
+                grid = _WINDOW_INPUT_GAP_POINT_GRID
+                record["coarse_point"] = [
+                    round(point[0] / grid) * grid,
+                    round(point[1] / grid) * grid,
+                ]
+            self._append_locked(record)
+        logger.info(
+            "window-scoped input dropped: it did not go to the target window (reason={})",
+            reason,
+        )
+
+    def returned(self, timestamp: float | None) -> None:
+        """Close the current run of dropped input, if any."""
+        with self._lock:
+            if self._active_reason is None:
+                return
+            self._active_reason = None
+            self._append_locked(
+                {
+                    "schema_version": WINDOW_INPUT_GAP_SCHEMA_VERSION,
+                    "event": "focus_returned_to_target",
+                    "timestamp": timestamp,
+                }
+            )
+
+
 class OrderedEventJournal:
     """A causal FIFO journal with pre-observation reservations."""
 
@@ -463,6 +594,12 @@ class OrderedEventJournal:
                         )
                     else:
                         binding = window_scope.generation_for_action()
+                except WindowInputNotOnTarget:
+                    entry.discarded = True
+                    entry.ready = True
+                    reservation._finished = True
+                    self._condition.notify_all()
+                    raise
                 except BaseException as exc:
                     entry.error = exc
                     entry.ready = True
@@ -480,6 +617,9 @@ class OrderedEventJournal:
         timestamp = float(timestamp)
         if not math.isfinite(timestamp):
             raise EventJournalOrderingError("event timestamps must be finite")
+        # Read keyboard focus first, as close to native receipt as possible:
+        # delivery can lag long enough for focus to return to the target.
+        keyboard_focus = window_scope.keyboard_focus_at_receipt()
         with window_scope.observation_boundary():
             with self._condition:
                 entry = self._reserve_locked(timestamp)
@@ -492,7 +632,7 @@ class OrderedEventJournal:
                     reservation._finished = True
                     self._condition.notify_all()
                     raise
-        return WindowActionReservation(reservation, window_scope, geometry)
+        return WindowActionReservation(reservation, window_scope, geometry, keyboard_focus)
 
     def put(self, event: Event, block: bool = True, timeout: float | None = None) -> int:
         del block, timeout
@@ -535,6 +675,8 @@ class OrderedEventJournal:
             while True:
                 if self._entries and self._entries[0].ready:
                     entry = self._entries.popleft()
+                    if entry.discarded:
+                        continue
                     if entry.error is not None:
                         raise EventJournalReservationError(
                             "an ordered event producer failed after reservation"
@@ -556,6 +698,8 @@ class OrderedEventJournal:
 
     def empty(self) -> bool:
         with self._condition:
+            while self._entries and self._entries[0].ready and self._entries[0].discarded:
+                self._entries.popleft()
             return not self._entries
 
     def qsize(self) -> int:
@@ -2441,6 +2585,90 @@ def create_recording(
     return recording, db_path
 
 
+def _key_identity(event: ObservedKey) -> tuple[str | None, str | None, str | None]:
+    """Pair a key release with its press, in memory only."""
+    return (event.key_vk, event.key_name, event.canonical_key_name)
+
+
+class _WindowInputAdmission:
+    """Decide, per native input, whether the target window received it.
+
+    Keys and pointer presses, scrolls and moves are probed. A release (or a
+    move while a button is held) continues a press the target accepted and is
+    admitted without a probe, so programs keep matched press/release pairs.
+    A release whose press was dropped is dropped too.
+
+    Runs on the single input delivery thread.
+    """
+
+    def __init__(self, scope: WindowCaptureScope, gap_log: WindowInputGapLog) -> None:
+        self._scope = scope
+        self._gap_log = gap_log
+        self._held_keys: set[tuple[str | None, str | None, str | None]] = set()
+        self._held_buttons: set[str] = set()
+
+    @staticmethod
+    def _discard(reservation: object | None) -> None:
+        if isinstance(reservation, WindowActionReservation):
+            reservation.discard()
+
+    def dropped(self, event: ObservedInput, reason: str) -> None:
+        """Record a marker for dropped input, never its content."""
+        if isinstance(event, ObservedMouseMove):
+            return  # moves off the target are routine; they open no gap
+        if isinstance(event, ObservedKey):
+            self._gap_log.left_target(reason, "keyboard", event.timestamp)
+        else:
+            self._gap_log.left_target(reason, "pointer", event.timestamp, (event.x, event.y))
+
+    def admit(self, event: ObservedInput, reservation: object | None) -> bool:
+        """Return whether to record ``event``; a dropped event is discarded."""
+        continuation = False
+        if isinstance(event, ObservedKey) and not event.pressed:
+            identity = _key_identity(event)
+            if identity not in self._held_keys:
+                self._discard(reservation)
+                return False
+            self._held_keys.discard(identity)
+            continuation = True
+        elif isinstance(event, ObservedMouseButton) and not event.pressed:
+            if event.button not in self._held_buttons:
+                self._discard(reservation)
+                return False
+            self._held_buttons.discard(event.button)
+            continuation = True
+        elif isinstance(event, ObservedMouseMove) and self._held_buttons:
+            continuation = True
+
+        if continuation:
+            if isinstance(reservation, WindowActionReservation):
+                reservation.admit_continuation()
+            return True
+
+        point = None if isinstance(event, ObservedKey) else (event.x, event.y)
+        try:
+            if isinstance(reservation, WindowActionReservation):
+                reservation.admit(point)
+            else:
+                window = self._scope.reserve_action_geometry()[0]
+                if point is None:
+                    self._scope.assert_input_on_target(window)
+                else:
+                    self._scope.assert_input_on_target(window, point=point)
+        except WindowInputNotOnTarget as exc:
+            self._discard(reservation)
+            self.dropped(event, exc.reason)
+            return False
+
+        if isinstance(event, ObservedKey):
+            self._held_keys.add(_key_identity(event))
+        elif isinstance(event, ObservedMouseButton):
+            self._held_buttons.add(event.button)
+        if not isinstance(event, ObservedMouseMove):
+            self._gap_log.returned(event.timestamp)
+        return True
+
+
 def read_input_events(
     event_q: queue.Queue,
     terminate_processing: multiprocessing.Event,
@@ -2453,12 +2681,43 @@ def read_input_events(
     terminal_frame_finished: threading.Event | None = None,
     terminal_frame_cancelled: threading.Event | None = None,
     authentication: AuthenticationHandoffController | None = None,
+    input_gap_log: WindowInputGapLog | None = None,
 ) -> None:
-    """Read globally ordered keyboard and mouse events from one native observer."""
+    """Read globally ordered keyboard and mouse events from one native observer.
+
+    In window-scoped mode each input is admitted only if it went to the
+    target window (see :func:`_admit_window_input`). Other input is dropped
+    before logging, structural observation, or persistence, and
+    ``input_gap_log`` records a marker without the input's content.
+    """
     stop_sequences = [sequence for sequence in config.STOP_SEQUENCES if sequence]
     stop_sequence_indices = [0 for _ in stop_sequences]
+    window_admission = (
+        _WindowInputAdmission(coordinate_scope, input_gap_log or WindowInputGapLog())
+        if isinstance(coordinate_scope, WindowCaptureScope)
+        else None
+    )
 
     def on_observed(
+        event: ObservedInput,
+        reservation: EventReservation | WindowActionReservation | None = None,
+    ) -> None:
+        if window_admission is None:
+            dispatch_observed(event, reservation)
+            return
+        if getattr(event, "injected", False):
+            dispatch_observed(event, reservation)
+            return
+        if not window_admission.admit(event, reservation):
+            return
+        try:
+            dispatch_observed(event, reservation)
+        except WindowInputNotOnTarget as exc:
+            # Only the legacy unreserved path re-probes after admission; its
+            # journal position was already discarded.
+            window_admission.dropped(event, exc.reason)
+
+    def dispatch_observed(
         event: ObservedInput,
         reservation: EventReservation | WindowActionReservation | None = None,
     ) -> None:
@@ -3209,6 +3468,7 @@ def record(
             terminal_frame_finished,
             terminal_frame_cancelled,
             authentication,
+            WindowInputGapLog(capture_dir) if window_scope is not None else None,
         )
         input_event_reader = threading.Thread(
             target=_run_task_fail_loud,
