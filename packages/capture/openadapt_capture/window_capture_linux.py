@@ -500,19 +500,29 @@ def resolve_window_linux(
     client_factory: Callable[[], AbstractContextManager[_X11ClientProtocol]] | None = None,
     process_identity: Callable[[int], tuple[str, float]] | None = None,
 ) -> "TargetWindow | None":
-    """Resolve the largest matching, fully on-screen EWMH client window."""
+    """Resolve the one matching, fully on-screen EWMH client window.
+
+    An exact owner/title match wins over substring matches. More than one
+    remaining candidate raises ``WindowCaptureAmbiguousError``, as on macOS.
+
+    With ``target.window_id`` set (a pinned window) only that exact X11
+    window matches and the title is ignored.
+    """
     _require_x11_session()
-    from openadapt_capture.window_capture import TargetWindow
+    from openadapt_capture.window_capture import TargetWindow, _unique_window_match
 
     factory = client_factory or X11CompositeClient
     identity_reader = process_identity or _default_process_identity
     owner_text = target.owner.casefold() if target.owner else None
-    title_text = target.title.casefold() if target.title else None
-    matches: list[tuple[int, TargetWindow]] = []
+    pinned_id = target.window_id
+    title_text = target.title.casefold() if target.title and pinned_id is None else None
+    matches: list[TargetWindow] = []
     try:
         with factory() as client:
             root_bounds = client.root_bounds
-            for stacking_index, window_id in enumerate(client.window_ids()):
+            for window_id in client.window_ids():
+                if pinned_id is not None and window_id != pinned_id:
+                    continue
                 record = client.window_record(window_id)
                 if (
                     record is None
@@ -530,18 +540,15 @@ def resolve_window_linux(
                 if not owner or owner_text is not None and owner_text not in owner.casefold():
                     continue
                 matches.append(
-                    (
-                        stacking_index,
-                        TargetWindow(
-                            window_id=record.window_id,
-                            owner=owner,
-                            title=record.title,
-                            pid=record.pid,
-                            bounds=tuple(float(value) for value in record.bounds),
-                            on_screen=True,
-                            process_start_time=process_start_time,
-                            coordinate_source="x11-root-physical-pixels",
-                        ),
+                    TargetWindow(
+                        window_id=record.window_id,
+                        owner=owner,
+                        title=record.title,
+                        pid=record.pid,
+                        bounds=tuple(float(value) for value in record.bounds),
+                        on_screen=True,
+                        process_start_time=process_start_time,
+                        coordinate_source="x11-root-physical-pixels",
                     )
                 )
     except LinuxWindowCaptureError:
@@ -550,13 +557,7 @@ def resolve_window_linux(
         raise LinuxWindowCaptureError("X11 window resolution failed") from exc
     if not matches:
         return None
-    return max(
-        matches,
-        key=lambda item: (
-            item[1].bounds[2] * item[1].bounds[3],
-            item[0],
-        ),
-    )[1]
+    return _unique_window_match(matches, target, title_text is not None)
 
 
 def capture_window_linux(
