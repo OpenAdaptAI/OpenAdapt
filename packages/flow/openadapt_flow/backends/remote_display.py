@@ -647,6 +647,13 @@ class RemoteDisplayBackend:
         pinned = self._pinned_window
         if pinned is None:
             return client.find_windows(self._owner_substr, self._title_substr)
+        # A client that tracks a unique input target (the Win32 client) needs
+        # the lookup itself to be by id: an owner-only query would see every
+        # window of a multi-window client (RemoteApp seamless windows, a
+        # browser) and refuse input as ambiguous.
+        find_pinned = getattr(client, "find_pinned_window", None)
+        if find_pinned is not None:
+            return list(find_pinned(self._owner_substr, pinned.window_id))
         return [
             window
             for window in client.find_windows(self._owner_substr, None)
@@ -1930,6 +1937,14 @@ class MacWindowClient:
                 )
             )
         return matches
+
+    def find_pinned_window(self, owner: str, window_id: int) -> list[WindowInfo]:
+        """Return the one window with ``window_id``, whatever its title now is."""
+        return [
+            window
+            for window in self.find_windows(owner, None)
+            if window.window_id == window_id
+        ]
 
     def find_window(self, owner: str, title: Optional[str]) -> Optional[WindowInfo]:
         """Compatibility helper over the exact, ambiguity-visible candidate API."""
