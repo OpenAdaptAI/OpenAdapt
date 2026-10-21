@@ -102,8 +102,12 @@ class AppState:
     deployment_lane: str = LANE_CLOUD
 
     def can_start_recording(self) -> bool:
-        """Check if recording can be started."""
-        return self.state == TrayState.IDLE
+        """Check if recording can be started.
+
+        ERROR is terminal (nothing is in flight), so a new recording may start
+        from it. Otherwise one failure disabled Start until a restart.
+        """
+        return self.state in (TrayState.IDLE, TrayState.ERROR)
 
     def can_stop_recording(self) -> bool:
         """Check if recording can be stopped."""

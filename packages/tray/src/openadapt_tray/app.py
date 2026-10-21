@@ -7,6 +7,12 @@ The tray is a lightweight status mirror + launcher. It owns no business logic:
 * the **break badge** is polled from the hosted control plane's
   needs-attention count endpoint;
 * the desktop app is the source of truth for all state — the tray renders it.
+
+When the desktop app is not connected, the tray also watches local Capture
+recorders (see :mod:`openadapt_tray.capture_watch`), so a recording started by
+``openadapt-flow record`` or ``capture record`` still shows in the menu bar.
+On macOS, Start Recording then runs ``openadapt-flow record`` itself
+(:mod:`openadapt_tray.local_record`).
 """
 
 import sys
@@ -15,6 +21,8 @@ import webbrowser
 
 import pystray
 
+from openadapt_tray import capture_watch
+from openadapt_tray.capture_watch import CaptureEvent, CaptureWatcher
 from openadapt_tray.config import ConfigLoadError, TrayConfig
 from openadapt_tray.desktop import DesktopLaunchError, launch_native_desktop
 from openadapt_tray.hosted import (
@@ -25,6 +33,7 @@ from openadapt_tray.hosted import (
 )
 from openadapt_tray.icons import IconManager
 from openadapt_tray.ipc import IPCClient, IPCMessageType
+from openadapt_tray.local_record import LocalRecorder, LocalRecordError
 from openadapt_tray.menu import MenuBuilder
 from openadapt_tray.notifications import NotificationManager
 from openadapt_tray.platform import get_platform_handler
@@ -88,6 +97,14 @@ class TrayApplication:
             set_offline=self._on_hosted_offline,
         )
 
+        # Local recorders started without the desktop app (started in run()).
+        self.capture_watch = CaptureWatcher(self._on_capture_event)
+        self.local_recorder = LocalRecorder()
+        # The local recorder session the tray is showing, if any.
+        self._watched_session: str | None = None
+        # True once the tray-owned recording's capture was saved and verified.
+        self._local_capture_saved = False
+
         # Create tray icon
         self.icon = pystray.Icon(
             name="openadapt",
@@ -101,6 +118,7 @@ class TrayApplication:
 
         # Register state change handler
         self._last_notified_tray_state = self.state.current.state
+        self._previous_tray_state = self.state.current.state
         self.state.add_listener(self._on_state_change)
 
         # Register IPC handlers
@@ -166,21 +184,50 @@ class TrayApplication:
         """
         # Update icon (with break badge when automations need attention).
         self.icon.icon = self.icons.get(state.state, break_count=state.break_count)
+        self.icon.title = self._icon_title(state)
 
         # Update menu
         self.icon.menu = self.menu_builder.build()
 
         # Show notification if appropriate
+        previous = self._previous_tray_state
+        self._previous_tray_state = state.state
         if self.config.show_notifications:
-            self._show_state_notification(state)
+            self._show_state_notification(state, previous=previous)
 
-    def _show_state_notification(self, state: AppState) -> None:
+    @staticmethod
+    def _icon_title(state: AppState) -> str:
+        """Return the icon tooltip for the recording lifecycle."""
+        titles = {
+            TrayState.RECORDING_STARTING: "OpenAdapt: starting the recorder",
+            TrayState.RECORDING: "OpenAdapt: recording",
+            TrayState.RECORDING_STOPPING: "OpenAdapt: saving the recording",
+            TrayState.COMPILING: "OpenAdapt: compiling",
+            TrayState.ERROR: "OpenAdapt: recording problem",
+        }
+        return titles.get(state.state, "OpenAdapt")
+
+    def _show_state_notification(
+        self, state: AppState, previous: TrayState | None = None
+    ) -> None:
         """Show notification for recording-lifecycle transitions.
 
         Args:
             state: Current application state.
+            previous: The lifecycle state before this one, when known.
         """
         if state.state == self._last_notified_tray_state:
+            return
+
+        # IDLE after a start that never reached RECORDING is not a saved
+        # capture. Saying "Capture saved" there was a false success.
+        if state.state == TrayState.IDLE and previous not in (
+            None,
+            TrayState.RECORDING,
+            TrayState.RECORDING_STOPPING,
+            TrayState.COMPILING,
+        ):
+            self._last_notified_tray_state = state.state
             return
 
         messages = {
@@ -192,7 +239,12 @@ class TrayApplication:
                 "Compiling",
                 f"Building a workflow from: {state.current_capture or 'recording'}",
             ),
-            TrayState.IDLE: ("Recording Stopped", "Capture saved"),
+            TrayState.IDLE: (
+                "Recording Stopped",
+                f"Saved: {state.current_capture}"
+                if state.current_capture
+                else "Capture saved",
+            ),
             TrayState.ERROR: ("Error", state.error_message or "An error occurred"),
         }
 
@@ -223,7 +275,7 @@ class TrayApplication:
 
     # --- desktop connection -------------------------------------------------
 
-    def ensure_desktop_connection(self) -> bool:
+    def ensure_desktop_connection(self, report_missing: bool = True) -> bool:
         """Ensure the tray is connected to the desktop loopback socket.
 
         If the desktop app is not running (no discovery file / unreachable),
@@ -240,7 +292,7 @@ class TrayApplication:
             return True
 
         # Desktop not running — launch it, then poll for the discovery file.
-        if not self._launch_desktop_app():
+        if not self._launch_desktop_app(report_missing=report_missing):
             return False
         for _ in range(20):  # ~10s
             if self.ipc.refresh_from_discovery() and self.ipc.connect():
@@ -249,15 +301,16 @@ class TrayApplication:
 
         return False
 
-    def _launch_desktop_app(self) -> bool:
+    def _launch_desktop_app(self, report_missing: bool = True) -> bool:
         """Launch the installed native desktop application."""
         try:
             launch_native_desktop()
         except DesktopLaunchError as e:
-            self.notifications.show(
-                "Desktop app not found",
-                "Install the OpenAdapt desktop app to record and manage workflows.",
-            )
+            if report_missing:
+                self.notifications.show(
+                    "Desktop app not found",
+                    "Install the OpenAdapt desktop app to record and manage workflows.",
+                )
             print(f"Failed to launch desktop app: {e}")
             return False
         except Exception as e:
@@ -318,8 +371,16 @@ class TrayApplication:
         ).start()
 
     def _dispatch_start_recording(self, name: str) -> None:
-        """Ensure the desktop is up and send the start-recording command."""
-        if not self.ensure_desktop_connection():
+        """Ensure the desktop is up and send the start-recording command.
+
+        Without the desktop app, record locally with ``openadapt-flow record``
+        when this platform supports it.
+        """
+        local = self._can_record_locally()
+        if not self.ensure_desktop_connection(report_missing=not local):
+            if local:
+                self._start_local_recording(name)
+                return
             self.state.transition(
                 TrayState.ERROR,
                 error_message="Could not reach the desktop app to start recording.",
@@ -333,17 +394,159 @@ class TrayApplication:
         # The desktop confirms via a RECORDING_STARTED event.
 
     def stop_recording(self) -> None:
-        """Stop the current capture session via the desktop app."""
+        """Stop the current capture session.
+
+        A tray-owned ``openadapt-flow record`` gets Ctrl-C (SIGINT). Another
+        local recorder is stopped through its control channel. Otherwise the
+        desktop app is asked to stop.
+        """
         if not self.state.current.can_stop_recording():
             return
 
         self.state.transition(TrayState.RECORDING_STOPPING)
+        if self.local_recorder.is_running():
+            try:
+                self.local_recorder.stop()
+            except LocalRecordError as e:
+                self.state.transition(TrayState.ERROR, error_message=str(e))
+            # The capture watcher reports the outcome.
+            return
+        if self._watched_session is not None and not self.ipc.is_connected():
+            threading.Thread(
+                target=self._stop_watched_session,
+                args=(self._watched_session,),
+                daemon=True,
+            ).start()
+            return
         if not self.ipc.send_stop_recording():
             self.state.transition(
                 TrayState.ERROR,
                 error_message="Failed to send stop-recording command.",
             )
         # The desktop confirms via RECORDING_STOPPED (then COMPILE_PROGRESS).
+
+    # --- local recorders (no desktop app) -----------------------------------
+
+    def _can_record_locally(self) -> bool:
+        """Return True when Start Recording can run ``openadapt-flow record``.
+
+        The watcher must be available too: without it the tray could start a
+        recording but never say when it is ready.
+        """
+        return (
+            self.config.watch_local_recorders
+            and self.capture_watch.available()
+            and self.local_recorder.available()
+        )
+
+    def _start_local_recording(self, name: str) -> None:
+        """Run ``openadapt-flow record`` and reap it on a background thread."""
+        try:
+            output_dir = self.local_recorder.start(
+                name, self.config.get_captures_path()
+            )
+        except (LocalRecordError, OSError) as e:
+            self.state.transition(TrayState.ERROR, error_message=str(e))
+            return
+        self._local_capture_saved = False
+        print(f"Recording with openadapt-flow into {output_dir}")
+        self.state.transition(
+            TrayState.RECORDING_STARTING, current_capture=output_dir.name
+        )
+        threading.Thread(target=self._reap_local_recording, daemon=True).start()
+
+    def _reap_local_recording(self) -> None:
+        """Report a tray-owned ``openadapt-flow record`` that exits badly.
+
+        The watcher reports the capture's own outcome. This catches what it
+        cannot see: a command that fails before the recorder starts, or a
+        conversion that fails after the capture was saved.
+        """
+        code = self.local_recorder.wait()
+        # Report the capture's own outcome first. The process has exited, so
+        # one more poll sees its recorder end (or crash), and a conversion
+        # failure below is not overwritten by a late "saved".
+        self.capture_watch.poll_and_dispatch()
+        if code == 0:
+            if self.state.current.state == TrayState.RECORDING_STARTING:
+                self.state.transition(TrayState.IDLE)
+            return
+        if self.state.current.state == TrayState.ERROR:
+            return
+        if self._local_capture_saved:
+            message = (
+                "The capture was saved, but openadapt-flow could not convert "
+                f"it (exit code {code}). See {self.local_recorder.log_path}."
+            )
+        else:
+            message = (
+                f"openadapt-flow record exited with code {code}. "
+                f"See {self.local_recorder.log_path}."
+            )
+        self.state.transition(TrayState.ERROR, error_message=message)
+
+    def _stop_watched_session(self, session_id: str) -> None:
+        """Stop a recorder the tray did not start, via its control channel."""
+        try:
+            self.capture_watch.stop_session(session_id)
+        except Exception as e:
+            self.state.transition(
+                TrayState.ERROR,
+                error_message=f"The recorder did not stop cleanly: {e}",
+            )
+        # Success is reported by the watcher's ENDED event.
+
+    def _on_capture_event(self, event: CaptureEvent) -> None:
+        """Show a local recorder's lifecycle when the desktop is not connected.
+
+        The desktop app reports its own recordings over IPC, so its recorder
+        is not shown twice. While the tray runs its own ``openadapt-flow
+        record``, only that recording is shown. Otherwise, with several local
+        recorders, the first one seen is shown until it ends.
+        """
+        if self.ipc.is_connected():
+            return
+        if self.local_recorder.is_running() and not self.local_recorder.owns(
+            event.capture_dir
+        ):
+            return
+        if self._watched_session not in (None, event.session_id):
+            return
+
+        if event.kind == capture_watch.ENDED:
+            self._watched_session = None
+            if event.outcome == capture_watch.OUTCOME_COMPLETE:
+                if self.local_recorder.owns(event.capture_dir):
+                    self._local_capture_saved = True
+                self.state.transition(TrayState.IDLE, current_capture=event.name)
+            elif event.outcome == capture_watch.OUTCOME_FAILED:
+                self.state.transition(
+                    TrayState.ERROR,
+                    current_capture=event.name,
+                    error_message=(
+                        f"Recording {event.name} was not saved ({event.error_code})."
+                    ),
+                )
+            else:
+                self.state.transition(
+                    TrayState.ERROR,
+                    current_capture=event.name,
+                    error_message=(
+                        f"Recording {event.name} ended, but its result could "
+                        f"not be read ({event.error_code})."
+                    ),
+                )
+            return
+
+        self._watched_session = event.session_id
+        lifecycle = {
+            capture_watch.STARTING: TrayState.RECORDING_STARTING,
+            capture_watch.READY: TrayState.RECORDING,
+            capture_watch.STOPPING: TrayState.RECORDING_STOPPING,
+        }
+        new_state = lifecycle.get(event.kind)
+        if new_state is not None and new_state != self.state.current.state:
+            self.state.transition(new_state, current_capture=event.name)
 
     # --- quick actions ------------------------------------------------------
 
@@ -662,6 +865,13 @@ class TrayApplication:
         # Start the cloud needs-attention poller.
         self.hosted.start()
 
+        # Watch recorders started without the desktop app.
+        if self.config.watch_local_recorders and not self.capture_watch.start():
+            print(
+                "openadapt-capture is not installed in the tray's environment; "
+                "recordings started outside the desktop app will not show."
+            )
+
         # Run the tray icon (blocks)
         self.icon.run()
 
@@ -673,6 +883,7 @@ class TrayApplication:
 
         # Cleanup components
         self.hosted.stop()
+        self.capture_watch.stop()
         self.hotkeys.stop()
         self.ipc.close()
         self.notifications.cleanup()
