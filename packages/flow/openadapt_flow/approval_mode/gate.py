@@ -36,6 +36,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -253,6 +254,21 @@ class GateVerdict:
                 "Nothing was retried."
             )
         return f"{ITEM_APPROVAL_PAUSE_MARKER}{detail}. Nothing was retried."
+
+
+#: Items whose save passed every pre-check and whose record check still runs
+#: alongside the next item (pipelined read-back): run reference to the
+#: monotonic deadline of its check. The next item's gate does not read such an
+#: open item as interrupted. Process-local: after a restart the map is empty,
+#: so an item that never finished reads as interrupted and the switch turns
+#: off.
+_READBACK_IN_FLIGHT: dict[str, float] = {}
+_READBACK_IN_FLIGHT_LOCK = threading.Lock()
+
+#: How many held record checks the exemption may cover: the read-back
+#: pipeline holds one hand-off at a time. More held items than this means
+#: something outside the window is running, so none of them is exempt.
+READBACK_WINDOW = 1
 
 
 class ApprovalGate:
@@ -888,17 +904,47 @@ class ApprovalGate:
         self._pre_checks.append(check)
         return GateVerdict(proceed=True, decision=None, checks=(check,))
 
-    @staticmethod
-    def _is_save(ctx: SaveContext | StepContext) -> bool:
-        """Whether this step is a consequential save (the static classifier).
+    def _certifying_policy(self) -> Any:
+        """The policy the bundle is certified under, when the gate names one."""
 
-        The same fail-closed classifier the record-check coverage uses for its
-        windows, so the gate and coverage agree on which steps are saves.
+        if not self._policy_name:
+            return None
+        cached = getattr(self, "_policy_cache", None)
+        if cached is None:
+            from openadapt_flow.policy import load_policy
+
+            try:
+                cached = load_policy(self._policy_name)
+            except Exception:  # noqa: BLE001 - an unknown policy proves nothing
+                cached = False
+            self._policy_cache = cached
+        return cached or None
+
+    def _is_consequential(self, step: Any, workflow: Any) -> bool:
+        """The run gate's fail-closed consequential-step classifier.
+
+        Given the certifying policy, an operator's qualified risk
+        classification counts only while the bundle's certification under
+        that policy is current, exactly as in the run gate. Without it the
+        conservative heuristic decides, so a step the qualification
+        classified as reversible can still be treated as a save.
         """
 
         from openadapt_flow.run_gate import is_consequential
 
-        return is_consequential(ctx.step, ctx.workflow)
+        return is_consequential(
+            step, workflow, certifying_policy=self._certifying_policy()
+        )
+
+    def _is_save(self, ctx: SaveContext | StepContext) -> bool:
+        """Whether this step is a consequential save.
+
+        The same classifier the run gate uses, which the record-check coverage
+        uses for its windows too, so the gate and coverage agree on which
+        steps are saves.
+        """
+
+        return self._is_consequential(ctx.step, ctx.workflow)
 
     # -- P1 --------------------------------------------------------------------
     def _check_switch_on(
@@ -934,13 +980,24 @@ class ApprovalGate:
             return fail("switch_log_for_other_record")
         if state.is_off:
             return fail("switched_off")
+        now = time.monotonic()
+        with _READBACK_IN_FLIGHT_LOCK:
+            # A check past its deadline is not exempt, and neither is any held
+            # item when more are held than the window allows.
+            in_flight = {
+                ref for ref, deadline in _READBACK_IN_FLIGHT.items() if deadline > now
+            }
+            if len(_READBACK_IN_FLIGHT) > READBACK_WINDOW:
+                in_flight = set()
         if any(
-            ref != self._run_ref or not self._item_started_logged
+            (ref != self._run_ref or not self._item_started_logged)
+            and ref not in in_flight
             for ref in state.open_items
         ):
             # An item started without a person and never finished. Only this
             # gate's own ``item_started`` may be open: a run that reuses an
-            # interrupted run's id must not hide it.
+            # interrupted run's id must not hide it. An earlier item of this
+            # process whose record check is still running is not interrupted.
             return fail("interrupted_item", OffReason.UNCERTAIN_RESULT)
         if self._runner_id is None:
             # A caller that didn't say which runner this is proves nothing.
@@ -1221,7 +1278,11 @@ class ApprovalGate:
             ctx.step
         ):
             return fail("approved_unverified_write")
-        coverage = save_coverage(ctx.workflow, ctx.step)
+        coverage = save_coverage(
+            ctx.workflow,
+            ctx.step,
+            is_save=lambda step: self._is_consequential(step, ctx.workflow),
+        )
         if not coverage.covered:
             return fail(coverage.problems[0])
         contract = save_contract_problems(ctx.step)
@@ -1251,7 +1312,30 @@ class ApprovalGate:
         )
 
     # -- after the run -----------------------------------------------------------
+    def hold_for_readback(self, deadline_s: float) -> None:
+        """The item's save passed and its record check runs alongside the next item.
+
+        The item stays open in the switch log until :meth:`finish_item` decides
+        it from the settled record check. Until then, and for at most
+        ``deadline_s`` seconds, the next item's gate doesn't read it as
+        interrupted.
+        """
+
+        if self._run_ref is not None and self._item_started_logged:
+            with _READBACK_IN_FLIGHT_LOCK:
+                _READBACK_IN_FLIGHT[self._run_ref] = time.monotonic() + deadline_s
+
     def finish_item(self, report: "RunReport") -> ApprovalModeItemEvidence:
+        """Decide the item; see :meth:`_finish_item`."""
+
+        try:
+            return self._finish_item(report)
+        finally:
+            if self._run_ref is not None:
+                with _READBACK_IN_FLIGHT_LOCK:
+                    _READBACK_IN_FLIGHT.pop(self._run_ref, None)
+
+    def _finish_item(self, report: "RunReport") -> ApprovalModeItemEvidence:
         """Decide the item, write the switch log, and return the evidence block.
 
         Safe to call again for the same run (for example after a late

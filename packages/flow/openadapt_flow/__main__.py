@@ -2840,6 +2840,12 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     )
 
 
+def _pinned_lineage(args: argparse.Namespace, cfg: Any) -> Any:
+    from openadapt_flow.cli_self_repair import pinned_lineage
+
+    return pinned_lineage(args, cfg)
+
+
 #: The run-authorization fields a managed dispatch must agree on with the
 #: authorization this runner builds for the same bundle and inputs.
 MANAGED_SAFETY_FIELDS = (
@@ -3345,6 +3351,27 @@ def _cmd_attach_seal(args: argparse.Namespace) -> int:
     return 1
 
 
+def _verify_run_sources(args: argparse.Namespace) -> dict[str, Any]:
+    """``--provenance`` and ``--source`` for verify-run's round trip."""
+
+    from openadapt_flow.verify_run import VerifyRunError
+
+    path = getattr(args, "provenance", None)
+    sources = list(getattr(args, "source", None) or [])
+    if not path:
+        if sources:
+            raise VerifyRunError("--source needs --provenance")
+        return {}
+    from openadapt_flow.provenance import load_provenance, read_sources
+
+    try:
+        provenance = load_provenance(path)
+        documents = read_sources([Path(p) for p in sources])
+    except (OSError, ValueError) as exc:
+        raise VerifyRunError(f"cannot read the provenance or a source: {exc}") from exc
+    return {"provenance": provenance, "documents": documents}
+
+
 def _cmd_verify_run(args: argparse.Namespace) -> int:
     """``verify-run``: judge an effect another executor claims, from the store."""
     from openadapt_flow.verify_run import (
@@ -3407,6 +3434,7 @@ def _cmd_verify_run(args: argparse.Namespace) -> int:
             approver=_json(args.approver) if args.approver else None,
             remediates=args.remediates,
             correlation_id=args.correlation_id,
+            **_verify_run_sources(args),
         )
     except VerifyRunError as exc:
         print(f"verify-run REFUSED: {exc}", file=sys.stderr)
@@ -3619,6 +3647,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         require_encryption=not bool(getattr(args, "allow_unencrypted", False)),
         pinned_content_digest=getattr(args, "pin_digest", None),
         pinned_compiler_version=getattr(args, "pin_version", None),
+        pinned_lineage=_pinned_lineage(args, cfg),
         profile_contract=profile,
         effective_durable=effective_durable if profile is not None else None,
         effective_require_settled=(
@@ -4843,6 +4872,7 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
         recording=optional_path("recording"),
         bundle=optional_path("bundle"),
         complete_read=bool(getattr(args, "complete_read", False)),
+        fault_gate=bool(getattr(args, "fault_gate", False)),
     )
     if built is not None:
         print(built.summary)
@@ -9011,6 +9041,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Read the store now and write a private baseline, then exit",
     )
     p.add_argument(
+        "--provenance",
+        default=None,
+        metavar="JSON",
+        help=(
+            "Where each parameter came from (openadapt.param-provenance/v1, as "
+            "intake writes it). The saved record is then compared with the "
+            "source document, not only with --params"
+        ),
+    )
+    p.add_argument(
+        "--source",
+        action="append",
+        default=None,
+        metavar="FILE",
+        help="A source document the provenance cites (repeatable)",
+    )
+    p.add_argument(
         "--out", default=None, metavar="DIR", help="Directory for effect-receipt.json"
     )
     p.add_argument(
@@ -9422,6 +9469,15 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Declare that the reads return everything the save can change "
             "(one store, no other tables). Recorded as declared, not proven"
+        ),
+    )
+    p.add_argument(
+        "--fault-gate",
+        action="store_true",
+        help=(
+            "With --db: write each bad save to a copy of the database and let "
+            "the check read it through its own read (the fault gate). A fault "
+            "the read can't see keeps the check a draft"
         ),
     )
     p.add_argument(

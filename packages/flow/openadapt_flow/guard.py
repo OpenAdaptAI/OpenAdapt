@@ -15,6 +15,12 @@ The guard does three things around that one write and makes no model calls:
   ``VERIFIED``, ``REFUTED`` or ``RECONCILIATION_REQUIRED`` with an
   ``openadapt.effect-receipt/v1`` receipt.
 
+When the task says where its values came from (``provenance`` and the
+``sources`` it cites), :meth:`GuardedSave.begin` reads the sources a second,
+independent way. A value the second reading does not confirm sends the save
+to a person, whatever the approval mode, and :meth:`Guard.confirm` compares
+the saved record with the source document, not only with the task.
+
 Once a task has been committed it is never committed again. ``VERIFIED`` means
 it is done; any other verdict means a person must look at the record, and
 :meth:`GuardedSave.begin` refuses the task until they do.
@@ -51,7 +57,7 @@ ApprovalSetting = Literal["each_item", "not_gated"]
 
 _OPAQUE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$")
 _TASK_KEYS = {"schema_version", "task_id", "expected_record", "intended_fields"}
-_TASK_OPTIONAL = {"authorization_ref"}
+_TASK_OPTIONAL = {"authorization_ref", "provenance", "sources"}
 
 
 class GuardVerdict(str, Enum):
@@ -90,6 +96,10 @@ class GuardTask:
     expected_record: Mapping[str, str]
     intended_fields: Mapping[str, Any]
     authorization_ref: str = ""
+    #: Where each value came from (``openadapt.param-provenance/v1``).
+    provenance: Optional[Any] = None
+    #: The source documents the provenance cites, by ``sha256:`` of their bytes.
+    documents: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not isinstance(self.task_id, str) or not _OPAQUE.match(self.task_id):
@@ -139,12 +149,39 @@ def load_task(path: str | Path) -> GuardTask:
         raise GuardRefused(
             "task_invalid", "expected_record and intended_fields are objects"
         )
-    return GuardTask(
+    provenance = None
+    documents: dict[str, Any] = {}
+    if "provenance" in raw:
+        from openadapt_flow.provenance import ProvenanceFile, read_sources
+
+        try:
+            provenance = ProvenanceFile.model_validate(raw["provenance"])
+            sources = raw.get("sources") or []
+            if not isinstance(sources, list):
+                raise ValueError("sources must be a list of paths")
+            base = Path(path).resolve().parent
+            documents = read_sources([base / str(p) for p in sources])
+        except (OSError, ValueError) as exc:
+            raise GuardRefused(
+                "task_invalid", f"provenance or a source can't be read: {exc}"
+            ) from exc
+    elif "sources" in raw:
+        raise GuardRefused("task_invalid", "sources needs provenance")
+    task = GuardTask(
         task_id=raw["task_id"],
         expected_record=dict(raw["expected_record"]),
         intended_fields=dict(raw["intended_fields"]),
         authorization_ref=str(raw.get("authorization_ref") or ""),
+        provenance=provenance,
+        documents=documents,
     )
+    if provenance is not None and provenance.matches(task.params):
+        raise GuardRefused(
+            "task_invalid",
+            "the task's values differ from the values its provenance records: "
+            + ", ".join(provenance.matches(task.params)),
+        )
+    return task
 
 
 def check_identity(
@@ -317,6 +354,16 @@ class GuardedSave:
             )
         guard_id = f"guard-{secrets.token_hex(16)}"
         guard = Guard(self, task, guard_id, agent_id=agent_id)
+        if task.provenance is not None and task.provenance.has_documents():
+            # A second, independent reading of the sources. A value it does
+            # not confirm goes to a person before anything is written.
+            from openadapt_flow.provenance import cross_check, default_extractor
+
+            check = cross_check(
+                task.provenance, task.documents, default_extractor(task.provenance)
+            )
+            guard.source_check = check.status
+            guard.source_held_fields = check.disagreements
         status, missing = check_identity(task.expected_record, screen_text)
         guard.identity = status
         if status != "verified":
@@ -358,6 +405,9 @@ class Guard:
     state: str = "new"
     identity: str = "unchecked"
     approval: Optional[dict[str, str]] = None
+    #: ``agree`` | ``hold`` | ``instruction``, or None without provenance.
+    source_check: Optional[str] = None
+    source_held_fields: list[str] = field(default_factory=list)
     result: Optional[GuardResult] = None
     _request: Any = field(default=None, repr=False)
     _approver: Optional[dict[str, str]] = field(default=None, repr=False)
@@ -378,6 +428,8 @@ class Guard:
             "identity": self.identity,
             "approval_mode": self.owner.approval,
             "approval": self.approval,
+            "source_check": self.source_check,
+            "source_held_fields": list(self.source_held_fields),
             "params_sha256": _sha256_hex(self.task.params),
             "verdict": self.result.verdict.value if self.result else None,
             "outcome": self.result.outcome if self.result else None,
@@ -424,7 +476,7 @@ class Guard:
                     + (f" (not found: {', '.join(missing)})" if missing else "")
                     + "; nothing may be written",
                 )
-        if self.owner.approval == "each_item":
+        if self.owner.approval == "each_item" or self.source_check == "hold":
             waiting = self._await_approval(
                 screenshot_png, wait_s, reason=reason, screen_text=screen_text
             )
@@ -480,7 +532,17 @@ class Guard:
                     workflow_name="guarded-save",
                     step_id="save",
                     step_index=0,
-                    step_intent="Save " + ", ".join(sorted(self.task.intended_fields)),
+                    step_intent=(
+                        "Save "
+                        + ", ".join(sorted(self.task.intended_fields))
+                        + (
+                            ". A second reading of the source did not confirm: "
+                            + ", ".join(self.source_held_fields)
+                            + ". Compare them with the source document"
+                            if self.source_check == "hold"
+                            else ""
+                        )
+                    ),
                     mode=ApprovalMode.EACH_ITEM,
                     bundle_content_digest=None,
                     runtime_inputs_digest=_sha256_hex(self.task.params),
@@ -574,6 +636,8 @@ class Guard:
                 approver=self._approver,
                 correlation_id=self.guard_id,
                 write_attempted=True,
+                provenance=self.task.provenance,
+                documents=self.task.documents,
             )
             receipt_path = str(write_result(receipt_doc, self.dir))
         except Exception as exc:  # unreadable store, timeout, bad config

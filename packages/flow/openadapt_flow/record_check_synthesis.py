@@ -884,6 +884,26 @@ def reads_from_sqlite(
                     scope=sorted(set(scope.values())),
                 )
             )
+            if scope:
+                # The scoped read can't see another subject's rows in the same
+                # table, so an edit there would pass. Read the table whole too:
+                # the frame then sees every row the save didn't declare.
+                search.surfaces.append(
+                    Surface(
+                        name=_unique_name(f"{table}_all", search.taken),
+                        config={
+                            "kind": "sql",
+                            "sqlite_database": str(db_path),
+                            "sql_query": query,
+                        },
+                        after=rows,
+                        before=_minus(rows, row),
+                        before_recorded=False,
+                        source=f"table {table}, every row",
+                        target=row,
+                        bound=bound,
+                    )
+                )
     finally:
         conn.close()
     if complete:
@@ -1419,6 +1439,10 @@ class Proposal:
     faults: list[FaultResult]
     live: Optional[dict[str, Any]] = None
     identity: Optional[dict[str, Any]] = None
+    #: The fault gate's coverage record (``openadapt_flow/fault_gate.py``):
+    #: on a copy of the database with ``fault_gate``, else mapped from the
+    #: recorded-state faults above.
+    coverage: Optional[Any] = None
 
     @property
     def misses(self) -> list[str]:
@@ -1432,6 +1456,14 @@ class Proposal:
         out += [f"read: {item}" for item in self.search.problems]
         if self.live is not None:
             out += [f"live {m}" for m in self.live.get("misses", [])]
+        if self.coverage is not None and self.coverage.test_copy != "recorded_states":
+            if not self.coverage.clean_pass:
+                out.append("fault gate: the clean save did not verify on the copy")
+            out += [
+                f"fault gate {case['fault']}: {case['detail']} ({case['result']})"
+                for case in self.coverage.cases
+                if case["applicable"] and case["result"] != "killed"
+            ]
         return out
 
     @property
@@ -1481,6 +1513,16 @@ class Proposal:
             "misses": self.misses,
             "notes": list(self.search.notes),
             "identity": self.identity,
+            "coverage": (
+                None
+                if self.coverage is None
+                else {
+                    "test_copy": self.coverage.test_copy,
+                    "killed": self.coverage.killed,
+                    "applicable": self.coverage.applicable,
+                    "sha256": self.coverage.digest(),
+                }
+            ),
         }
 
 
@@ -1491,6 +1533,7 @@ def synthesize(
     db_path: Optional[Path] = None,
     verifier: Optional[Mapping[str, Any]] = None,
     complete_read: bool = False,
+    fault_gate: bool = False,
 ) -> Proposal:
     """Find the read, build the check, and run the recorded-state fault test.
 
@@ -1549,7 +1592,144 @@ def synthesize(
         params,
         closed_world=search.closed_world,
     )
-    return Proposal(params, search, effects, section, faults)
+    proposal = Proposal(params, search, effects, section, faults)
+    cfg = gate_config(proposal)
+    if fault_gate and db_path is not None:
+        proposal.coverage = gate_on_database(proposal, Path(db_path), cfg)
+    if proposal.coverage is None and cfg is not None:
+        proposal.coverage = coverage_from_recorded(proposal.faults, cfg)
+    return proposal
+
+
+# ---------------------------------------------------------------------------
+# The fault gate (docs/VERIFICATION_COVERAGE.md section 2)
+# ---------------------------------------------------------------------------
+
+#: Recorded-state fault -> fault-gate class.
+_RECORDED_CLASS = {
+    "no_persist": "missing",
+    "partial": "partial",
+    "duplicate": "duplicate",
+    "wrong_record": "wrong_record",
+    "stale": "unrelated_edit",
+    "changed": "unrelated_edit",
+    "deleted": "unrelated_edit",
+    "collateral_unaudited": "unrelated_edit",
+}
+
+
+def gate_config(proposal: Proposal) -> Optional[Any]:
+    """The proposed check as ``verify-run`` would read it once confirmed."""
+
+    from openadapt_flow.verify_run import VerifyRunError, parse_verify_config
+
+    if not proposal.effects or not proposal.verifier:
+        return None
+    try:
+        return parse_verify_config(
+            {
+                "schema_version": "openadapt.verify/v1",
+                "verifier": proposal.verifier,
+                "effects": [
+                    e.model_copy(
+                        update={"needs_operator_confirmation": False}
+                    ).model_dump(mode="json", exclude_defaults=True)
+                    for e in proposal.effects
+                ],
+            }
+        )
+    except VerifyRunError:
+        return None
+
+
+def coverage_from_recorded(faults: list[FaultResult], cfg: Any) -> Any:
+    """Coverage of the recorded-state faults, in the fault gate's format.
+
+    A recorded state can't hold a wrong value written on top of the right
+    record or a write that lands late, so ``wrong_value`` and ``delayed``
+    count as applicable and not killed. An admission policy refuses this
+    kind by default.
+    """
+
+    from openadapt_flow.fault_gate import (
+        SUITE_ID,
+        SUITE_VERSION,
+        ClassCoverage,
+        CoverageRecord,
+        check_digest,
+    )
+
+    classes = {
+        name: ClassCoverage()
+        for name in (
+            "wrong_value",
+            "wrong_record",
+            "unrelated_edit",
+            "partial",
+            "duplicate",
+            "missing",
+            "delayed",
+        )
+    }
+    for name in ("wrong_value", "delayed"):
+        classes[name].applicable = 1
+    cases: list[dict[str, Any]] = []
+    clean_pass = True
+    for result in faults:
+        if result.correct:
+            clean_pass = clean_pass and result.ok
+            continue
+        mapped = _RECORDED_CLASS.get(result.fault)
+        if mapped is None:
+            continue
+        classes[mapped].applicable += 1
+        if result.ok:
+            classes[mapped].killed += 1
+        cases.append(
+            {
+                "fault": mapped,
+                "detail": result.detail,
+                "applicable": True,
+                "result": "killed" if result.ok else result.as_dict()["result"],
+                "outcome": "",
+                "checked": {},
+            }
+        )
+    return CoverageRecord(
+        check_sha256=check_digest(cfg),
+        suite={"id": SUITE_ID, "version": SUITE_VERSION},
+        test_copy="recorded_states",
+        claims=["delta", "frame"],
+        clean_pass=clean_pass,
+        classes=classes,
+        killed=sum(c.killed for c in classes.values()),
+        applicable=sum(c.applicable for c in classes.values()),
+        cases=cases,
+    )
+
+
+def gate_on_database(proposal: Proposal, db_path: Path, cfg: Any) -> Optional[Any]:
+    """Run the fault gate on a copy of ``db_path``, the saved row removed.
+
+    Needs a target table whose rows carry an ``id``; otherwise the gate
+    can't address the saved row and the recorded-state coverage stands.
+    """
+
+    from openadapt_flow.fault_gate import SqliteCopy, run_gate
+
+    if cfg is None:
+        return None
+    target = next((s for s in proposal.search.surfaces if s.is_target), None)
+    if (
+        target is None
+        or not target.source.startswith("table ")
+        or not target.target
+        or "id" not in target.target
+    ):
+        return None
+    table = target.source.split(" ", 1)[1].split(",", 1)[0]
+    copy_ = SqliteCopy(db_path, table, target.target, saved_key=target.target["id"])
+    return run_gate(cfg, proposal.params, copy_)
 
 
 # ---------------------------------------------------------------------------
@@ -1606,7 +1786,10 @@ def render(proposal: Proposal) -> str:
 
 
 def write(proposal: Proposal, out_dir: Path) -> tuple[Path, Path]:
-    """Write the proposed check and its proof; return both paths."""
+    """Write the proposed check and its proof; return both paths.
+
+    The fault gate's coverage record goes beside them (``check_coverage.json``).
+    """
 
     out_dir.mkdir(parents=True, exist_ok=True)
     check = out_dir / PROPOSED_NAME
@@ -1617,6 +1800,16 @@ def write(proposal: Proposal, out_dir: Path) -> tuple[Path, Path]:
         proof,
         json.dumps(proposal.proof(), indent=2, sort_keys=True, default=str) + "\n",
     )
+    if proposal.coverage is not None:
+        from openadapt_flow.fault_gate import COVERAGE_FILE
+
+        _sealed.write_text(
+            out_dir / COVERAGE_FILE,
+            json.dumps(
+                proposal.coverage.model_dump(mode="json"), indent=2, sort_keys=True
+            )
+            + "\n",
+        )
     return check, proof
 
 

@@ -1184,3 +1184,73 @@ def test_agent_drives_remote_session_recording_from_pixels(tmp_path, kind) -> No
     assert meta["coordinate_space"] == "window_pixels"
     assert meta["authoring"] == {"input": "remote_client_window", "screen_only": True}
     assert meta["backend_hints"]["backend"] == kind
+
+
+def _retitled(window: WindowInfo, title: str, **changes) -> WindowInfo:
+    fields = {
+        "window_id": window.window_id,
+        "owner": window.owner,
+        "title": title,
+        "pid": window.pid,
+        "bounds": window.bounds,
+        "on_screen": window.on_screen,
+    }
+    fields.update(changes)
+    return WindowInfo(**fields)
+
+
+def _titled_backend() -> tuple[RemoteDisplayBackend, FakeClient]:
+    client = FakeClient()
+    return (
+        RemoteDisplayBackend(client=client, title_substr="Windows 11", settle_s=0.0),
+        client,
+    )
+
+
+def test_retitled_window_stays_the_pinned_target() -> None:
+    """The title selector picks the window once; a retitle keeps it."""
+    backend, client = _titled_backend()
+    backend.screenshot()
+    client.window = _retitled(client.window, "Windows 11 - signed in")
+    # A second window from the same client now carries the old title.
+    decoy = _retitled(client.window, "Windows 11", window_id=2)
+    client.windows = [client.window, decoy]
+
+    backend.screenshot()
+    backend.click(10, 10)
+
+    assert backend._frame_window is not None
+    assert backend._frame_window.window_id == 1
+    assert backend._frame_window.title == "Windows 11 - signed in"
+    assert any(call[0] == "mouse" for call in client.calls)
+
+
+def test_closed_pinned_window_fails_closed() -> None:
+    backend, client = _titled_backend()
+    backend.screenshot()
+    client.windows = [_retitled(client.window, "Windows 11", window_id=2)]
+
+    with pytest.raises(RemoteDisplayError, match="pinned target window closed"):
+        backend.screenshot()
+
+
+def test_restarted_client_process_fails_closed() -> None:
+    backend, client = _titled_backend()
+    backend.screenshot()
+    client.window = _retitled(client.window, "Windows 11", pid=100)
+    client.windows = [client.window]
+
+    with pytest.raises(RemoteDisplayError, match="exited or restarted"):
+        backend.screenshot()
+    assert not any(call[0] == "mouse" for call in client.calls)
+
+
+def test_ambiguous_title_selector_is_refused_before_pinning() -> None:
+    backend, client = _titled_backend()
+    client.windows = [
+        client.window,
+        _retitled(client.window, "Windows 11", window_id=2),
+    ]
+
+    with pytest.raises(RemoteDisplayError, match="ambiguous"):
+        backend.screenshot()
