@@ -111,7 +111,10 @@ UI_CHANGE = {
 
 
 def fixture() -> OpenIMISFixture:
-    return OpenIMISFixture()
+    # A second copy runs on its own ports (OPENIMIS_HTTP_PORT, OPENIMIS_DB_PORT)
+    # and compose project (OPENIMIS_COMPOSE_PROJECT); the defaults are unchanged.
+    port = os.environ.get("OPENIMIS_HTTP_PORT")
+    return OpenIMISFixture(http_port=int(port)) if port else OpenIMISFixture()
 
 
 def claim_form_url(fx: Optional[OpenIMISFixture] = None) -> str:
