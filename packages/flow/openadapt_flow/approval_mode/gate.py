@@ -904,17 +904,47 @@ class ApprovalGate:
         self._pre_checks.append(check)
         return GateVerdict(proceed=True, decision=None, checks=(check,))
 
-    @staticmethod
-    def _is_save(ctx: SaveContext | StepContext) -> bool:
-        """Whether this step is a consequential save (the static classifier).
+    def _certifying_policy(self) -> Any:
+        """The policy the bundle is certified under, when the gate names one."""
 
-        The same fail-closed classifier the record-check coverage uses for its
-        windows, so the gate and coverage agree on which steps are saves.
+        if not self._policy_name:
+            return None
+        cached = getattr(self, "_policy_cache", None)
+        if cached is None:
+            from openadapt_flow.policy import load_policy
+
+            try:
+                cached = load_policy(self._policy_name)
+            except Exception:  # noqa: BLE001 - an unknown policy proves nothing
+                cached = False
+            self._policy_cache = cached
+        return cached or None
+
+    def _is_consequential(self, step: Any, workflow: Any) -> bool:
+        """The run gate's fail-closed consequential-step classifier.
+
+        Given the certifying policy, an operator's qualified risk
+        classification counts only while the bundle's certification under
+        that policy is current, exactly as in the run gate. Without it the
+        conservative heuristic decides, so a step the qualification
+        classified as reversible can still be treated as a save.
         """
 
         from openadapt_flow.run_gate import is_consequential
 
-        return is_consequential(ctx.step, ctx.workflow)
+        return is_consequential(
+            step, workflow, certifying_policy=self._certifying_policy()
+        )
+
+    def _is_save(self, ctx: SaveContext | StepContext) -> bool:
+        """Whether this step is a consequential save.
+
+        The same classifier the run gate uses, which the record-check coverage
+        uses for its windows too, so the gate and coverage agree on which
+        steps are saves.
+        """
+
+        return self._is_consequential(ctx.step, ctx.workflow)
 
     # -- P1 --------------------------------------------------------------------
     def _check_switch_on(
@@ -1248,7 +1278,11 @@ class ApprovalGate:
             ctx.step
         ):
             return fail("approved_unverified_write")
-        coverage = save_coverage(ctx.workflow, ctx.step)
+        coverage = save_coverage(
+            ctx.workflow,
+            ctx.step,
+            is_save=lambda step: self._is_consequential(step, ctx.workflow),
+        )
         if not coverage.covered:
             return fail(coverage.problems[0])
         contract = save_contract_problems(ctx.step)
