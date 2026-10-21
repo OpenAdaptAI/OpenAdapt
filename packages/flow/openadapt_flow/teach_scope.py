@@ -208,6 +208,14 @@ class TeachScope:
         allowed_write_paths: URL paths on a declared origin that may take a
             write the adapter does not attribute (a sign-in form). Exact
             match; no prefixes.
+        forbidden_actions: Actions the agent may never take, from
+            :data:`~openadapt_flow.teach_authorization.FORBIDDEN_ACTIONS`
+            (paste is always refused).
+        forbidden_controls: Labels of controls the agent may never click
+            (compared after whitespace and case normalization).
+        authorization: The signed teach authorization this scope was bound
+            from (:func:`openadapt_flow.teach_authorization.record`), or
+            ``None`` for a scope nobody signed.
     """
 
     task_id: str
@@ -218,6 +226,9 @@ class TeachScope:
     expected_rows: int = 1
     write_adapter: Optional[WriteAdapter] = field(default=None, compare=False)
     allowed_write_paths: tuple[str, ...] = ()
+    forbidden_actions: frozenset[str] = frozenset()
+    forbidden_controls: tuple[str, ...] = ()
+    authorization: Optional[Mapping[str, Any]] = field(default=None, compare=False)
 
     def __post_init__(self) -> None:
         if not self.task_id:
@@ -246,6 +257,27 @@ class TeachScope:
         for path in self.allowed_write_paths:
             if not path.startswith("/"):
                 raise ValueError(f"allowed write path must start with '/': {path!r}")
+        from openadapt_flow.teach_authorization import FORBIDDEN_ACTIONS
+
+        unknown = set(self.forbidden_actions) - set(FORBIDDEN_ACTIONS)
+        if unknown:
+            raise ValueError("unknown forbidden actions: " + ", ".join(sorted(unknown)))
+        object.__setattr__(self, "forbidden_actions", frozenset(self.forbidden_actions))
+        object.__setattr__(
+            self,
+            "forbidden_controls",
+            tuple(normalize_structured(c) for c in self.forbidden_controls if c),
+        )
+        if self.authorization is not None:
+            object.__setattr__(
+                self, "authorization", MappingProxyType(dict(self.authorization))
+            )
+
+    @property
+    def authorized(self) -> bool:
+        """True when a person signed this scope (it was bound from an authorization)."""
+
+        return self.authorization is not None
 
     @classmethod
     def from_guard_task(
@@ -326,6 +358,8 @@ class TeachScope:
             return None
         if not self.allows_origin(url):
             return "egress_origin_not_declared"
+        if method == "DELETE" and "delete_request" in self.forbidden_actions:
+            return "forbidden_action"
         if method not in WRITE_METHODS or self.write_adapter is None:
             return None
         try:
@@ -394,6 +428,11 @@ class TeachScope:
             if self.write_adapter is not None
             else None,
             "allowed_write_paths": list(self.allowed_write_paths),
+            "forbidden_actions": sorted(self.forbidden_actions),
+            "forbidden_controls": len(self.forbidden_controls),
+            "authorization": dict(self.authorization)
+            if self.authorization is not None
+            else None,
         }
 
     def describe(self) -> str:
@@ -413,6 +452,7 @@ class ScopeViolation(UnsupportedAction):
     """An action or request went outside the declared scope. ``code`` is closed.
 
     Codes: ``typed_value_not_declared``, ``paste_refused``,
+    ``forbidden_action``, ``control_forbidden``,
     ``link_origin_not_declared``, ``egress_origin_not_declared``,
     ``navigated_off_scope``, ``write_wrong_record``,
     ``write_field_not_declared``, ``write_value_not_declared``,
@@ -469,6 +509,27 @@ _LINK_PROBE = """([x, y]) => {
 }"""
 
 
+_CONTROL_LABEL = """([x, y]) => {
+  const el = document.elementFromPoint(x, y);
+  if (!el) return null;
+  const c = el.closest('button, a, input, select, [role], label, summary') || el;
+  const text = c.getAttribute('aria-label') || c.getAttribute('title') ||
+    (c.tagName === 'INPUT' ? (c.value || c.getAttribute('placeholder') || '') : '') ||
+    c.innerText || c.textContent || '';
+  return text.trim().slice(0, 300);
+}"""
+
+
+def control_label_at(page: Any, x: int, y: int) -> Optional[str]:
+    """The accessible label of the control under ``(x, y)``, or ``None``."""
+
+    try:
+        label = page.evaluate(_CONTROL_LABEL, [int(x), int(y)])
+    except Exception:  # noqa: BLE001 - no page script, no label
+        return None
+    return str(label) if label else None
+
+
 def link_target_at(page: Any, x: int, y: int) -> Optional[dict[str, str]]:
     """The link or form submit under ``(x, y)``: ``{"kind", "url"}``, or ``None``.
 
@@ -512,6 +573,24 @@ class TeachGuard:
 
         self._page = page
         page.context.route("**/*", self._route)
+        forbidden = self.scope.forbidden_actions
+        if "new_window" in forbidden:
+            page.context.on(
+                "page",
+                lambda _p: self._violate(
+                    "forbidden_action", "the page opened a new window or tab"
+                ),
+            )
+        if "download" in forbidden:
+            page.on(
+                "download",
+                lambda _d: self._violate("forbidden_action", "a download started"),
+            )
+        if "file_upload" in forbidden:
+            page.on(
+                "filechooser",
+                lambda _f: self._violate("forbidden_action", "a file chooser opened"),
+            )
 
     def _route(self, route: Any) -> None:
         request = route.request
@@ -562,7 +641,27 @@ class TeachGuard:
         """Refuse an action before any of it runs. Raises :class:`ScopeViolation`."""
 
         typeable = self.scope.typeable
+        forbidden = self.scope.forbidden_actions
         for op in ops:
+            if op.kind in ("drag", "right_click") and op.kind in forbidden:
+                self._raise(
+                    "forbidden_action",
+                    f"the authorization forbids {op.kind.replace('_', ' ')}",
+                )
+            if (
+                op.kind in ("click", "double_click", "right_click")
+                and page is not None
+                and self.scope.forbidden_controls
+            ):
+                at = (op.x, op.y) if op.x is not None and op.y is not None else pointer
+                label = control_label_at(page, at[0], at[1]) if at else None
+                if label is not None and normalize_structured(
+                    label
+                ) in self.scope.forbidden_controls:
+                    self._raise(
+                        "control_forbidden",
+                        "the clicked control is one the authorization forbids",
+                    )
             if op.kind == "type":
                 if (op.text or "") not in typeable:
                     self._raise(
