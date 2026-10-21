@@ -505,6 +505,29 @@ def cmd_cleanup(args: argparse.Namespace, engine: types.SimpleNamespace) -> None
     print(f"  Freed:    {_format_bytes(actions['bytes_freed'])}")
 
 
+def cmd_approver_key(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
+    """Create this computer's approver key and print how to register it."""
+    from openadapt_desktop.approver_key import ApproverKeyError, setup_approver_key
+
+    labels = {"desktop": "Run it", "portal": "the paired phone (decision portal)"}
+    for route in ("desktop", "portal"):
+        try:
+            setup = setup_approver_key(route)
+        except ApproverKeyError as exc:
+            print(f"Approver key setup failed: {exc}")
+            sys.exit(1)
+        state = "Created" if setup.created else "Found"
+        print(f"{state} the approver key for {labels[route]}: {setup.key_path}")
+        print(f"  Public key: {setup.public_key}")
+        principal = args.principal if route == "desktop" else None
+        print(f"  Register it: {setup.register_command(principal)}")
+        engine.audit.log("approver_key_setup", route=route, created=setup.created)
+    print(
+        "A person runs the register commands at a terminal. Until then, Flow "
+        "refuses answers from this computer."
+    )
+
+
 def cmd_config(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     """Show current configuration."""
     print(engine.config.model_dump_json(indent=2))
@@ -868,6 +891,7 @@ _COMMANDS = {
     "config": cmd_config,
     "capabilities": cmd_capabilities,
     "doctor": cmd_doctor,
+    "approver-key": cmd_approver_key,
 }
 
 
@@ -1007,6 +1031,18 @@ def main(argv: list[str] | None = None) -> None:
 
     # doctor
     subparsers.add_parser("doctor", help="Check dependencies and configuration")
+
+    # approver-key
+    p = subparsers.add_parser(
+        "approver-key",
+        help="Set up the key that signs a person's answers to saves",
+    )
+    p.add_argument("action", choices=["setup"])
+    p.add_argument(
+        "--principal",
+        default="desktop-approver",
+        help="The approver name to show in the register command",
+    )
 
     args = parser.parse_args(argv)
 

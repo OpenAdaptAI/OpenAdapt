@@ -173,6 +173,13 @@ def test_deployment_runtime_bad_effects_config_exits() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _approve(run: Path, approver) -> int:
+    """``approve`` as a person: signed with the registered approver key."""
+
+    key_path, _signer = approver
+    return main(["approve", str(run), "--approver-key", str(key_path)])
+
+
 def _paused_run(
     tmp_path: Path,
     *,
@@ -254,12 +261,17 @@ def _paused_run(
     return run
 
 
-def test_approve_flips_status_and_is_idempotent(tmp_path: Path, capsys) -> None:
+def test_approve_flips_status_and_is_idempotent(
+    tmp_path: Path, capsys, approver
+) -> None:
     run = _paused_run(tmp_path)
-    assert main(["approve", str(run)]) == 0
+    # Without the person's approver key nothing is approved (no OS-user default).
+    assert main(["approve", str(run)]) == 1
+    assert CheckpointStore(run).read_pending().status != "approved"
+    assert _approve(run, approver) == 0
     assert CheckpointStore(run).read_pending().status == "approved"
     # Second approve is a no-op success.
-    assert main(["approve", str(run)]) == 0
+    assert _approve(run, approver) == 0
     assert "already approved" in capsys.readouterr().out
 
 
@@ -286,10 +298,10 @@ def test_resume_require_approval_refuses_pending(tmp_path: Path, capsys) -> None
     assert "without --require-approval" not in output
 
 
-def test_resume_without_url_exits(tmp_path: Path) -> None:
+def test_resume_without_url_exits(tmp_path: Path, approver) -> None:
     run = _paused_run(tmp_path)
     # Approved + no --url and no backend.url -> a clear config error.
-    main(["approve", str(run)])
+    assert _approve(run, approver) == 0
     with pytest.raises(SystemExit, match="needs the target app URL"):
         main(["resume", str(run), "--require-approval"])
 
@@ -542,24 +554,24 @@ def test_resume_parser_has_backend_flags() -> None:
     assert args.agent_url == "http://a:5001"
 
 
-def test_resume_web_backend_still_requires_url(tmp_path: Path) -> None:
+def test_resume_web_backend_still_requires_url(tmp_path: Path, approver) -> None:
     # The web default is unchanged: with no --url and no backend.url the web
     # path still fails loud on the missing target URL (it must launch a browser
     # and navigate a page). --backend web is the explicit form of the default.
     run = _paused_run(tmp_path)
-    main(["approve", str(run)])
+    assert _approve(run, approver) == 0
     with pytest.raises(SystemExit, match="needs the target app URL"):
         main(["resume", str(run), "--require-approval", "--backend", "web"])
 
 
 def test_resume_web_default_builds_playwright_backend(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, approver
 ) -> None:
     # The default (web / no --backend) still drives the browser: it launches
     # Playwright, builds the PlaywrightBackend via the factory, and hands it to
     # the durable resume entrypoint — byte-for-byte the historical path.
     run = _paused_run(tmp_path)
-    main(["approve", str(run)])
+    assert _approve(run, approver) == 0
 
     captured: dict = {}
     _install_fake_browser(monkeypatch, captured)
@@ -592,11 +604,11 @@ def test_resume_web_default_builds_playwright_backend(
 
 
 def test_resume_wires_all_configured_appliance_tiers(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, approver
 ) -> None:
     """Resume uses the shared deployment constructor, including VLM handles."""
     run = _paused_run(tmp_path)
-    main(["approve", str(run)])
+    assert _approve(run, approver) == 0
     config = tmp_path / "deployment.yaml"
     config.write_text("runtime:\n  allow_model_grounding: true\n")
 
@@ -649,10 +661,12 @@ def test_resume_wires_all_configured_appliance_tiers(
     assert captured["ctor"]["durable"] is True
 
 
-def test_managed_resume_refuses_model_grounding_profile(tmp_path: Path, capsys) -> None:
+def test_managed_resume_refuses_model_grounding_profile(
+    tmp_path: Path, capsys, approver
+) -> None:
     """A managed resume preserves its local-only evidence contract."""
     run = _paused_run(tmp_path, managed=True)
-    main(["approve", str(run)])
+    assert _approve(run, approver) == 0
     config = tmp_path / "deployment.yaml"
     config.write_text("runtime:\n  allow_model_grounding: true\n")
     manifest = CheckpointStore(run).read_manifest()
@@ -694,12 +708,12 @@ def test_managed_resume_refuses_model_grounding_profile(tmp_path: Path, capsys) 
 
 
 def test_resume_windows_config_builds_windows_backend(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, approver
 ) -> None:
     # A windows-kind resume builds a real WindowsBackend from the factory with
     # NO browser and NO --url, and hands it to the durable resume entrypoint.
     run = _paused_run(tmp_path)
-    main(["approve", str(run)])
+    assert _approve(run, approver) == 0
 
     captured: dict = {}
 
@@ -741,7 +755,7 @@ def test_resume_windows_config_builds_windows_backend(
 
 
 def test_resume_uses_recorded_citrix_target_and_readiness(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, approver
 ) -> None:
     run = _paused_run(
         tmp_path,
@@ -752,7 +766,7 @@ def test_resume_uses_recorded_citrix_target_and_readiness(
             rdp_readiness_text="Claims queue",
         ),
     )
-    main(["approve", str(run)])
+    assert _approve(run, approver) == 0
 
     captured: dict = {}
 
@@ -795,10 +809,10 @@ def test_resume_uses_recorded_citrix_target_and_readiness(
 
 
 def test_resume_refuses_blank_citrix_readiness_before_backend(
-    tmp_path: Path, monkeypatch, capsys
+    tmp_path: Path, monkeypatch, capsys, approver
 ) -> None:
     run = _paused_run(tmp_path)
-    main(["approve", str(run)])
+    assert _approve(run, approver) == 0
     config = tmp_path / "citrix.yaml"
     config.write_text(
         "backend:\n  kind: citrix\n  rdp_window: wfica32\n  rdp_readiness_text: '   '\n"
@@ -829,10 +843,10 @@ def test_resume_refuses_blank_citrix_readiness_before_backend(
 
 
 def test_resume_bundle_load_refusal_has_safe_constant_guidance(
-    tmp_path: Path, capsys
+    tmp_path: Path, capsys, approver
 ) -> None:
     run = _paused_run(tmp_path)
-    main(["approve", str(run)])
+    assert _approve(run, approver) == 0
     (tmp_path / "b" / "workflow.json").unlink()
 
     assert main(["resume", str(run), "--require-approval"]) == 3
@@ -861,10 +875,10 @@ def test_version_flag_prints_version_and_exits_zero(capsys) -> None:
 
 
 def test_resume_refuses_another_surface_than_the_bundle_was_recorded_on(
-    tmp_path: Path, monkeypatch, capsys
+    tmp_path: Path, monkeypatch, capsys, approver
 ) -> None:
     run = _paused_run(tmp_path, surface="macos")
-    main(["approve", str(run)])
+    assert _approve(run, approver) == 0
 
     import openadapt_flow.backends.factory as factory
 
@@ -890,9 +904,11 @@ def test_resume_refuses_another_surface_than_the_bundle_was_recorded_on(
     assert "Nothing was executed" in out
 
 
-def test_resume_with_a_surface_override_records_it(tmp_path: Path, monkeypatch) -> None:
+def test_resume_with_a_surface_override_records_it(
+    tmp_path: Path, monkeypatch, approver
+) -> None:
     run = _paused_run(tmp_path, surface="macos")
-    main(["approve", str(run)])
+    assert _approve(run, approver) == 0
 
     import openadapt_flow.backends.factory as factory
     import openadapt_flow.report as report_mod

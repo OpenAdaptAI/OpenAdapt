@@ -29,11 +29,14 @@ import urllib.request
 import zlib
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from openadapt_flow.guard import GuardedSave, GuardRefused, GuardTask
 from openadapt_flow.mockmed.chart_pages import READER_PASSWORD, READER_USERNAME
 from openadapt_flow.verify_run import parse_verify_config
+
+if TYPE_CHECKING:
+    from openadapt_flow.approval_mode.human_attestation import ApproverSigner
 
 NOTE = "Referral to orthopedics for knee pain"
 
@@ -149,8 +152,20 @@ class FakeAgent:
         self._send(url, json.dumps(body).encode(), "application/json")
 
 
-def person_approves(run_dir: str, request_id: str, request_sha256: str) -> None:
-    """What ``openadapt-flow item-approval approve`` does for a person."""
+def person_approves(
+    run_dir: str,
+    request_id: str,
+    request_sha256: str,
+    *,
+    signer: "ApproverSigner",
+    key_dir: Optional[Path] = None,
+) -> None:
+    """What ``openadapt-flow item-approval approve`` does for a person.
+
+    ``signer`` is the person's registered approver key; the answer counts only
+    because it signs it. ``key_dir`` is where that key is registered (the
+    guard's own ``key_dir``).
+    """
 
     from openadapt_flow.approval_mode.item_approval import (
         ItemApprovalStore,
@@ -158,7 +173,7 @@ def person_approves(run_dir: str, request_id: str, request_sha256: str) -> None:
     )
     from openadapt_flow.approval_mode.model import ITEM_APPROVAL_ROUTE
 
-    store = ItemApprovalStore(Path(run_dir))
+    store = ItemApprovalStore(Path(run_dir), key_dir=key_dir)
     request = store.read_request(request_id)
     if request.digest() != request_sha256:
         raise ValueError("not the request the person saw")
@@ -171,6 +186,7 @@ def person_approves(run_dir: str, request_id: str, request_sha256: str) -> None:
             approver_id=None,
             auth_method="none",
             policy=store.context(),
+            signer=signer,
         )
     )
 
@@ -180,9 +196,14 @@ def run_case(
     guard: GuardedSave,
     agent: FakeAgent,
     *,
+    signer: "ApproverSigner",
     task_id: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Run one demo case and return what happened, step by step."""
+    """Run one demo case and return what happened, step by step.
+
+    ``signer`` is the simulated person's approver key, registered in
+    ``guard.key_dir``.
+    """
 
     task = referral_task(task_id or f"demo-{case}-0001")
     opened = "p2" if case == "wrong_patient" else "p1"
@@ -208,6 +229,8 @@ def run_case(
             commit.approval_run_dir,
             commit.approval_request_id,
             commit.approval_request_sha256 or "",
+            signer=signer,
+            key_dir=guard.key_dir,
         )
         steps.append("person approved the save")
         commit = g.commit()
@@ -237,13 +260,24 @@ def main(argv: Optional[list[str]] = None) -> int:
     try:
         base = url.rstrip("/")
         with tempfile.TemporaryDirectory() as tmp:
+            from openadapt_flow.approval_mode.demo_approver import demo_approver
+
+            # The demo plays the person on made-up data, so it registers a
+            # throwaway approver key in its own temporary key directory and
+            # points the guard there. Real use registers a person's key at a
+            # terminal (jit register --role approver).
+            key_dir = Path(tmp) / "demo-keys"
+            signer = demo_approver(key_dir)
             guard = GuardedSave(
-                parse_verify_config(verify_yaml(base)), Path(tmp), approval="each_item"
+                parse_verify_config(verify_yaml(base)),
+                Path(tmp) / "state",
+                approval="each_item",
+                key_dir=key_dir,
             )
             agent = FakeAgent(base)
             for case in ("correct", "wrong_patient", "dropped"):
                 before = len(db.snapshot()["records"])
-                out = run_case(case, guard, agent)
+                out = run_case(case, guard, agent, signer=signer)
                 after = len(db.snapshot()["records"])
                 print(f"== {case}")
                 for step in out["steps"]:

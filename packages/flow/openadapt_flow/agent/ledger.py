@@ -274,9 +274,19 @@ class TaskLedger:
     ``<runs>/task-ledger``), so questions show on the phone and in Desktop.
     """
 
-    def __init__(self, root: Path | str, *, question_ttl_s: float = 4 * 3600.0):
+    def __init__(
+        self,
+        root: Path | str,
+        *,
+        question_ttl_s: float = 4 * 3600.0,
+        key_dir: Optional[Path | str] = None,
+    ):
         self.root = Path(root)
         self.question_ttl_s = question_ttl_s
+        #: Where a person's registered approver keys are read to check their
+        #: signed answers. ``None``: ``$OPENADAPT_JIT_KEY_DIR`` or
+        #: ``~/.openadapt/jit``.
+        self.key_dir = Path(key_dir) if key_dir is not None else None
         self._lock = threading.RLock()
         #: guard_id -> task_id, from guard_begin results this process saw.
         self._guards: dict[str, str] = {}
@@ -706,7 +716,7 @@ class TaskLedger:
         from openadapt_flow.approval_mode.model import ApprovalMode
 
         question_id = "q-" + uuid.uuid4().hex[:16]
-        store = ItemApprovalStore(self._question_dir(question_id))
+        store = ItemApprovalStore(self._question_dir(question_id), key_dir=self.key_dir)
         # Person-only, pinned before anything is asked. The ledger is the
         # initiator, so no delegate grant can let an agent answer it.
         store.write_policy(DEFAULT_APPROVER_POLICY)
@@ -760,7 +770,9 @@ class TaskLedger:
 
         if question["status"] != "waiting":
             return False
-        store = ItemApprovalStore(self._question_dir(question["question_id"]))
+        store = ItemApprovalStore(
+            self._question_dir(question["question_id"]), key_dir=self.key_dir
+        )
         try:
             request = store.read_request(question["request_id"])
             if request.digest() != question["request_sha256"]:

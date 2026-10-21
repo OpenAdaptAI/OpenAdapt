@@ -9,6 +9,7 @@ person use this throwaway key directory; agents in real use never hold it.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -25,6 +26,7 @@ from openadapt_flow.jit.authority import (
 from openadapt_flow.jit.lifecycle import KEY_DIR_ENV
 
 PASSPHRASE = "approver-test-passphrase"
+_CURRENT: list[ApproverSigner] = []
 
 
 def provision(
@@ -58,4 +60,28 @@ def approver(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     key_path, signer = provision(key_dir)
     portal_path, _portal = provision(key_dir, "decision-portal", method="portal_key")
     monkeypatch.setenv(PORTAL_KEY_ENV, str(portal_path))
-    return key_path, signer
+    _CURRENT.append(signer)
+    yield key_path, signer
+    _CURRENT.remove(signer)
+
+
+def person_signer() -> ApproverSigner:
+    """The Desktop approver key the active ``approver`` fixture registered.
+
+    For helpers that play the person deep inside a run (a fake ``sleep``
+    that answers each request). Use the fixture in the test or module.
+    """
+
+    if not _CURRENT:
+        raise RuntimeError("use the approver fixture to answer as a person")
+    return _CURRENT[-1]
+
+
+def answer_as_person(store: Any, request: Any, **fields: Any) -> Any:
+    """``make_answer`` signed by the registered Desktop approver key."""
+
+    from openadapt_flow.approval_mode.item_approval import make_answer
+
+    fields.setdefault("policy", store.context())
+    fields.setdefault("signer", person_signer())
+    return make_answer(request, **fields)

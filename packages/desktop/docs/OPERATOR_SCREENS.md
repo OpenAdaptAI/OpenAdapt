@@ -122,10 +122,21 @@ How it works:
   holds the command queue (`openadapt_desktop/ipc.py` `CONCURRENT_COMMANDS`). They read
   and answer only a run this engine started and hasn't finished, and only a
   request that is waiting now, for the exact digest the person saw.
-- Desktop has no person-level sign-in (its Cloud credential belongs to the
-  organization), so each answer is recorded with `--unauthenticated` and
-  `--route desktop_run_it`. Flow re-checks the answer, re-reads the form and
-  runs the right-record check again before it saves.
+- Desktop signs each answer with this computer's approver key, and Flow
+  counts it as a person's only because of that signature. Desktop has no
+  person-level sign-in (its Cloud credential belongs to the organization),
+  so the answer names no Cloud user (`--unauthenticated`, `--route
+  desktop_run_it`); it passes `--approver-key`, and the key's passphrase
+  reaches Flow only through the child process's environment. Flow re-checks
+  the answer, re-reads the form and runs the right-record check again before
+  it saves.
+- Set the key up once per computer with `openadapt-desktop approver-key
+  setup`. It writes the encrypted key to `~/.openadapt/approver/` (owner-only)
+  and keeps its random passphrase in the OS keychain, then prints the public
+  key and the command a person runs at a terminal to register it:
+  `openadapt-flow jit register --role approver --principal NAME --public-key
+  KEY`. Until a key is set up and registered, Desktop sends no answer, and Run
+  it shows the person what to do.
 - A late answer (the run already stopped waiting) is never turned into a
   save: Desktop doesn't resume the run, and says to run the item again.
 - Before the practice item runs, Desktop calls `openadapt-flow qualify drills
