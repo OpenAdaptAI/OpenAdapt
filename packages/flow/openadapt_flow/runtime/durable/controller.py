@@ -199,6 +199,61 @@ def verified_checkpoint(
     )
 
 
+_RECONCILE_OPTIONS = (
+    "Reconcile the live application and independently verify whether "
+    "the effect landed; the attended Continue path can checkpoint the "
+    "verified outcome without repeating the action",
+    "If reconciliation proves a retry is necessary, record a fresh "
+    "approval explicitly authorizing one uncertain-delivery retry",
+)
+
+
+def _without_plain_resume(options: list[str]) -> list[str]:
+    """Swap a plain "approve and resume" option for the reconcile options.
+
+    The step may already have written its record, so an ordinary resume is
+    refused; offering it would point the operator at a dead end.
+    """
+
+    kept = [option for option in options if not option.startswith("Approve and RESUME")]
+    at = len(kept) - 1 if kept and kept[-1].startswith("Abort") else len(kept)
+    return kept[:at] + list(_RECONCILE_OPTIONS) + kept[at:]
+
+
+def post_delivery_uncertainty(
+    step: Step, result: StepResult
+) -> Optional[ActionDeliveryUncertainty]:
+    """Uncertainty for a consequential step that halted after its delivery.
+
+    ``delivery_uncertainty`` is otherwise set only when the delivery itself
+    raised. A save that was sent cleanly and then failed its record check
+    (timed out, refuted, unreadable) can still have landed, so retrying it on
+    an ordinary resume can write the record twice. A step counts as
+    consequential when it carries a record check or is marked irreversible.
+    A step that positively never sent its action (``delivery_attempted`` is
+    False) or that ended verified is not affected.
+    """
+
+    if result.ok or result.skipped or result.delivery_attempted is False:
+        return None
+    if not step.effects and step.risk != "irreversible":
+        return None
+    from openadapt_flow.transaction import _reached_delivery
+
+    if result.delivery_attempted is not True and not _reached_delivery(result):
+        return None
+    return ActionDeliveryUncertainty(
+        operation=step.action.value,
+        native=False,
+        observed_at=_utc_now(),
+        cause_type="post_delivery_unverified",
+        verification_attempted=result.effect_verified is not None
+        or result.postconditions_ok is not None,
+        postconditions_confirmed=result.postconditions_ok,
+        effects_confirmed=result.effect_verified,
+    )
+
+
 def _utc_now() -> str:
     from datetime import datetime, timezone
 
@@ -259,14 +314,7 @@ def classify_halt(step: Optional[Step], result: StepResult) -> tuple[str, list[s
         ]
 
     if result.delivery_uncertainty is not None:
-        return "delivery_uncertain", [
-            "Reconcile the live application and independently verify whether "
-            "the effect landed; the attended Continue path can checkpoint the "
-            "verified outcome without repeating the action",
-            "If reconciliation proves a retry is necessary, record a fresh "
-            "approval explicitly authorizing one uncertain-delivery retry",
-            abort,
-        ]
+        return "delivery_uncertain", [*_RECONCILE_OPTIONS, abort]
 
     # CAPTCHA, MFA, and re-authentication are human-presence requirements.
     # OpenAdapt only halts and leaves the live application to the operator.
@@ -619,11 +667,20 @@ class DurableRun:
             # pause so the winning Reject request can make it terminal.
             return
 
+        # A consequential step that was delivered but did not end verified
+        # may have written its record (the read-back timed out, or refuted a
+        # write that landed late). Mark the pause delivery-uncertain so an
+        # ordinary resume reconciles instead of sending the save again.
+        category, options = classify_halt(step, result)
+        if result.delivery_uncertainty is None:
+            result.delivery_uncertainty = post_delivery_uncertainty(step, result)
+            if result.delivery_uncertainty is not None:
+                options = _without_plain_resume(options)
+
         # HALT: durably pause instead of just dying. Resume from the last
         # verified checkpoint (0 when nothing verified yet).
         last = self.store.last_checkpoint()
         resume_from = last.next_step_index if last is not None else 0
-        category, options = classify_halt(step, result)
         pending = PendingEscalation(
             run_id=self.run_id,
             workflow_name=self.workflow_name,
