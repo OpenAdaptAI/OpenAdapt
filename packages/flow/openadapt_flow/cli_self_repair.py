@@ -448,8 +448,11 @@ def cmd_run_self_repair(
                 + command(
                     f"item-approval approve {run_dir} --request-id {request_id} "
                     f"--request-sha256 {request_sha256} --decided-by human "
-                    "--route desktop_run_it --unauthenticated"
-                ),
+                    "--route desktop_run_it --unauthenticated "
+                    "--approver-key YOUR_APPROVER_KEY.pem"
+                )
+                + "\n(with OPENADAPT_JIT_KEY_PASSPHRASE set; the key is registered "
+                "with jit register --role approver)",
                 flush=True,
             )
 

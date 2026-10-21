@@ -1080,9 +1080,15 @@ class FlowBridge:
     ) -> dict:
         """Answer one waiting request as the person at this computer.
 
+        Flow counts the answer as a person's only when Desktop's approver key
+        signs it (:mod:`openadapt_desktop.approver_key`), so Desktop passes
+        ``--approver-key`` and puts the key's passphrase in the Flow child's
+        environment, never on its command line. Without a key, nothing is sent
+        and the answer is ``{"ok": False, "code": "human_answer_unsigned"}``.
         Desktop has no person-level sign-in (its Cloud credential belongs to
-        the organization), so every answer is recorded as ``--unauthenticated``:
-        Flow keeps it without anyone's name. Returns Flow's answer
+        the organization), so the answer carries no Cloud name
+        (``--unauthenticated``); the signature names the registered approver.
+        Returns Flow's answer
         (``{"ok": True, "decision", "answer_sha256", "resume_required"}``) or
         its refusal (``{"ok": False, "code", "message"}``).
         """
@@ -1113,7 +1119,24 @@ class FlowBridge:
             args += ["--reason", str(reason)]
         elif reason is not None:
             raise ValueError("An approval has no reason")
-        result = self._run(args, timeout=60)
+        from openadapt_desktop.approver_key import (
+            approver_key_environment,
+            setup_instructions,
+        )
+
+        key = approver_key_environment()
+        if key is None:
+            return {
+                "ok": False,
+                "code": "human_answer_unsigned",
+                "message": (
+                    "This computer has no approver key, so nothing was approved. "
+                    + setup_instructions()
+                ),
+            }
+        key_path, key_env = key
+        args += ["--approver-key", str(key_path)]
+        result = self._run(args, timeout=60, env_overrides=key_env)
         try:
             answer = json.loads(result.stdout)
         except json.JSONDecodeError:

@@ -4078,6 +4078,24 @@ def _cmd_resume(args: argparse.Namespace) -> int:
                 "Nothing was executed."
             )
             return 3
+    elif pending.category != "business_decision":
+        # An item's authority is its signed answer, checked above and again by
+        # the run; a business decision carries its own signed receipt. Any
+        # other stored approval must be signed by a registered approver key:
+        # approval.json is a file any process could write.
+        from openadapt_flow.jit.lifecycle import default_key_dir
+        from openadapt_flow.runtime.durable.approval import stored_approval_refusal
+
+        stored = store.read_approval()
+        if stored is not None:
+            code = stored_approval_refusal(stored, default_key_dir())
+            if code is not None:
+                print(
+                    f"Resume REFUSED ({code}): the approval isn't signed by a "
+                    "registered approver key. Approve with openadapt flow approve "
+                    "--approver-key. Nothing was executed."
+                )
+                return 3
     resume_mode = _resume_approval_mode(args, manifest.governed_authorization)
     if isinstance(resume_mode, int):
         return resume_mode
@@ -4361,6 +4379,35 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     return 0 if report.success else 1
 
 
+def _approver_signer(args: argparse.Namespace, *, method: str) -> Any:
+    """The registered approver key from ``--approver-key``, or ``None`` after
+    printing why. A person's approval is signed with it; nothing else counts."""
+
+    from openadapt_flow.approval_mode.human_attestation import (
+        AttestationRefused,
+        load_signer,
+    )
+    from openadapt_flow.jit.lifecycle import default_key_dir
+
+    key_path = getattr(args, "approver_key", None)
+    if not key_path:
+        print(
+            "A person's approval is signed with their registered approver key: "
+            "pass --approver-key (with OPENADAPT_JIT_KEY_PASSPHRASE set). "
+            "Create one with jit keygen, and register it at a terminal with "
+            "jit register --role approver."
+        )
+        return None
+    key_dir = (
+        Path(args.key_dir) if getattr(args, "key_dir", None) else default_key_dir()
+    )
+    try:
+        return load_signer(key_path, key_dir, method=method)  # type: ignore[arg-type]
+    except AttestationRefused as exc:
+        print(f"Approval refused ({exc.code}): {exc}")
+        return None
+
+
 def _cmd_approve(args: argparse.Namespace) -> int:
     """Record an AUTHENTICATED approval for a durably-paused run (P0-5).
 
@@ -4370,8 +4417,6 @@ def _cmd_approve(args: argparse.Namespace) -> int:
     approval is refused). Also flips the pending escalation's ``status`` to
     ``approved`` for the audit trail / back-compat.
     """
-    import getpass
-
     from openadapt_flow import crypto
     from openadapt_flow.runtime.durable.approval import (
         ResumeRefused,
@@ -4421,9 +4466,18 @@ def _cmd_approve(args: argparse.Namespace) -> int:
         )
         return 1
 
-    # The approver identity defaults to the invoking OS user (a resume with a
-    # blank approver is refused by the durable library); --approver overrides.
-    approver = args.approver or getpass.getuser()
+    # The approver is whoever the registered approver key belongs to. A name
+    # on the command line, or the OS user, is a claim any process can make.
+    signer = _approver_signer(args, method="person_key")
+    if signer is None:
+        return 1
+    if args.approver and args.approver != signer.principal_id:
+        print(
+            f"--approver {args.approver!r} doesn't match the approver key, which "
+            f"is registered as {signer.principal_id!r}."
+        )
+        return 1
+    approver = signer.principal_id
     try:
         bundle_ver = bundle_version(manifest.bundle_dir)
     except OSError:
@@ -4460,6 +4514,11 @@ def _cmd_approve(args: argparse.Namespace) -> int:
         run_id=manifest.run_id,
         run_dir=run_dir,
         authorize_uncertain_retry=authorize_uncertain_retry,
+    )
+    from openadapt_flow.approval_mode.human_attestation import RESUME_DOMAIN
+
+    approval = approval.model_copy(
+        update={"attestation": signer.attest(RESUME_DOMAIN, approval.signed_payload())}
     )
     # Bind the exact authority and pause-state transition in one filesystem
     # transaction. A concurrent resume cannot replace the retained approver or
@@ -4502,7 +4561,8 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
 
     verb = args.item_approval_cmd
     run_dir = Path(args.run_dir)
-    store = ItemApprovalStore(run_dir)
+    key_dir = getattr(args, "key_dir", None)
+    store = ItemApprovalStore(run_dir, key_dir=Path(key_dir) if key_dir else None)
     if verb == "show":
         rows = [request_summary(store, request) for request in store.requests()]
         if not args.all:
@@ -4567,6 +4627,29 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
             "approver_invalid",
             "a Cloud approver needs --auth-method cloud_aal2 or cloud_aal1",
         )
+    signer = None
+    if delegate is None:
+        from openadapt_flow.approval_mode.human_attestation import (
+            ROUTE_METHOD,
+            AttestationRefused,
+            load_signer,
+        )
+
+        method = ROUTE_METHOD.get(args.route)
+        if method is None:
+            return refuse("route_not_allowed", "a person answers from desktop_run_it")
+        if not getattr(args, "approver_key", None):
+            return refuse(
+                "human_answer_unsigned",
+                "a person's answer is signed with the Desktop approver key: pass "
+                "--approver-key. --decided-by human on its own proves nothing",
+            )
+        try:
+            signer = load_signer(
+                args.approver_key, store.key_directory(), method=method
+            )
+        except AttestationRefused as exc:
+            return refuse(exc.code, str(exc))
     try:
         request = store.read_request(args.request_id)
         if args.request_sha256 != request.digest():
@@ -4593,6 +4676,7 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
             decline_reason=getattr(args, "reason", None),
             approver=delegate,
             policy=store.context(),
+            signer=signer,
         )
         store.write_answer(answer)
     except ItemApprovalRefused as exc:
@@ -7508,6 +7592,25 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_approver_key_flags(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--approver-key",
+        default=None,
+        help=(
+            "The person's encrypted approver key (jit keygen; registered with "
+            "jit register --role approver). Its passphrase comes from "
+            "OPENADAPT_JIT_KEY_PASSPHRASE. A person's approval is signed with "
+            "it; without it the approval is refused"
+        ),
+    )
+    p.add_argument(
+        "--key-dir",
+        default=None,
+        help="Key directory with principals.json (default $OPENADAPT_JIT_KEY_DIR "
+        "or ~/.openadapt/jit)",
+    )
+
+
 def _add_approval_flags(p: argparse.ArgumentParser) -> None:
     """Add the per-item approval flags to ``run``, ``resume`` and ``run-case``."""
 
@@ -9197,8 +9300,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--approver",
         default=None,
         help=(
-            "Approver identity recorded on the approval (defaults to the "
-            "invoking OS user; a blank identity is refused at resume)"
+            "Optional check: the approver id the --approver-key must be "
+            "registered as. The approval names the key's registered approver"
         ),
     )
     p.add_argument(
@@ -9217,6 +9320,7 @@ def build_parser() -> argparse.ArgumentParser:
             "retry of the possibly dispatched step (ordinary approval refuses)"
         ),
     )
+    _add_approver_key_flags(p)
     p.set_defaults(func=_cmd_approve)
 
     p = sub.add_parser(
@@ -9295,6 +9399,7 @@ def build_parser() -> argparse.ArgumentParser:
             action="store_true",
             help="Desktop was signed out: record the answer without a name",
         )
+        _add_approver_key_flags(q)
         if verb == "decline":
             q.add_argument(
                 "--reason",

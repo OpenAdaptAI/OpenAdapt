@@ -306,11 +306,17 @@ class GuardedSave:
     verify: VerifyConfig
     state_dir: Path
     approval: ApprovalSetting = "each_item"
+    #: Where registered approver keys (``principals.json``) are read to check
+    #: a person's signed answer. ``None``: ``$OPENADAPT_JIT_KEY_DIR`` or
+    #: ``~/.openadapt/jit``. Keep it away from the agent this guard governs.
+    key_dir: Optional[Path] = None
 
     def __post_init__(self) -> None:
         if self.approval not in APPROVAL_MODES:
             raise ValueError("approval must be each_item or not_gated")
         self.state_dir = Path(self.state_dir)
+        if self.key_dir is not None:
+            self.key_dir = Path(self.key_dir)
 
     @classmethod
     def from_file(
@@ -514,7 +520,7 @@ class Guard:
         from openadapt_flow.approval_mode.model import ApprovalMode
         from openadapt_flow.approval_mode.switch import canonical_json
 
-        store = ItemApprovalStore(self.dir)
+        store = ItemApprovalStore(self.dir, key_dir=self.owner.key_dir)
         if self._request is None:
             if not screenshot_png:
                 raise GuardRefused(
@@ -589,7 +595,9 @@ class Guard:
         }
         self._approver = {
             "kind": "person",
-            "id": answer.approver_id or "unauthenticated-person",
+            "id": answer.approver_id
+            or (answer.attestation.signer if answer.attestation else None)
+            or "unauthenticated-person",
             "policy_ref": self._policy_ref,
         }
         return None

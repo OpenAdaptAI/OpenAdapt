@@ -358,6 +358,15 @@ def decide_save_approval(
             "a decline needs exactly one reason; an approval takes none",
         )
     store = ItemApprovalStore(run_dir)
+    from openadapt_flow.approval_mode.human_attestation import (
+        AttestationRefused,
+        portal_signer,
+    )
+
+    try:
+        signer = portal_signer(store.key_directory())
+    except AttestationRefused as exc:
+        raise SaveApprovalRefused(exc.code, str(exc)) from exc
     try:
         answer = make_answer(
             request,
@@ -368,6 +377,7 @@ def decide_save_approval(
             auth_method="none",
             decline_reason=payload.decline_reason,
             policy=store.context(),
+            signer=signer,
         )
         store.write_answer(answer)
     except ItemApprovalRefused as exc:

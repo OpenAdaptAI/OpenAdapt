@@ -332,11 +332,14 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     common(p, program=False)
     p.add_argument("--out", required=True)
     p = verbs.add_parser(
-        "register", help="Register a key as a policy signer, admitter key or agent"
+        "register",
+        help="Register a key as a policy signer, admitter key, agent or approver",
     )
     common(p, program=False)
     p.add_argument(
-        "--role", required=True, choices=["policy_signer", "admitter_key", "agent"]
+        "--role",
+        required=True,
+        choices=["policy_signer", "admitter_key", "agent", "approver"],
     )
     p.add_argument("--principal", required=True)
     p.add_argument("--public-key", required=True, help="hex, from jit keygen")

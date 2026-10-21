@@ -23,13 +23,11 @@ import json
 import urllib.parse as up
 from typing import Any, Optional
 
+import pytest
 import requests
 
 from openadapt_flow.approval_mode.gate import ApprovalGate
-from openadapt_flow.approval_mode.item_approval import (
-    ItemApprovalStore,
-    make_answer,
-)
+from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
 from openadapt_flow.approval_mode.model import ItemDecisionKind
 from openadapt_flow.compiler.api_proposal import admit_api_step
 from openadapt_flow.ir import WebFormField, Workflow
@@ -37,15 +35,19 @@ from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.actuators.web_form import WebFormActuator
 from openadapt_flow.runtime.effects import RestRecordVerifier
 from openadapt_flow.runtime.replayer import Replayer
+from tests._approver_keys import answer_as_person
 from tests.test_api_tier_web_form import TARGET, EnterWritesBackend, _span_workflow
 from tests.test_replayer import FakeVision
+
+# Every person in these tests signs with a registered Desktop approver key.
+pytestmark = pytest.mark.usefixtures("approver")
 
 APPROVE: dict[str, Any] = dict(
     decision="approve",
     decided_by="human",
     route="desktop_run_it",
-    approver_id="cloud-user-0001",
-    auth_method="cloud_aal2",
+    approver_id=None,
+    auth_method="none",
 )
 PARAMS = {"lname": "Marsh"}
 FORM = """<html><body><form action='/save.php'>
@@ -108,7 +110,9 @@ class Person:
             self.seen.append(request.request_id)
             decision = self.decisions.pop(0) if self.decisions else None
             if decision is not None:
-                self.store.write_answer(make_answer(request, **decision))
+                self.store.write_answer(
+                    answer_as_person(self.store, request, **decision)
+                )
 
 
 def _workflow() -> Workflow:
