@@ -2104,6 +2104,8 @@ def _resolve_window_windows(target: WindowTarget) -> TargetWindow | None:
     def _enum_cb(hwnd: int, _lparam: int) -> bool:
         if not user32.IsWindowVisible(hwnd):
             return True
+        if user32.IsIconic(hwnd) or _window_cloaked(hwnd):
+            return True  # minimized, or hidden by DWM (another virtual desktop)
         length = user32.GetWindowTextLengthW(hwnd)
         buf = ctypes.create_unicode_buffer(length + 1)
         user32.GetWindowTextW(hwnd, buf, length + 1)
@@ -2149,6 +2151,31 @@ def _resolve_window_windows(target: WindowTarget) -> TargetWindow | None:
     if not matches:
         return None
     return max(matches, key=lambda m: m.bounds[2] * m.bounds[3])
+
+
+def _window_cloaked(hwnd: int) -> bool:
+    """Return whether DWM cloaks ``hwnd``; an unreadable state counts as cloaked.
+
+    A cloaked window (on another virtual desktop, or a suspended UWP frame)
+    passes ``IsWindowVisible`` but shows no pixels, so a region grab of its
+    bounds would capture whatever else is on screen there.
+    """
+    import ctypes
+    import ctypes.wintypes as wintypes
+
+    try:
+        dwmapi = ctypes.windll.dwmapi
+    except (AttributeError, OSError):  # pragma: no cover - supported Windows has DWM
+        return True
+    DWMWA_CLOAKED = 14
+    cloaked = wintypes.DWORD()
+    res = dwmapi.DwmGetWindowAttribute(
+        wintypes.HWND(hwnd),
+        wintypes.DWORD(DWMWA_CLOAKED),
+        ctypes.byref(cloaked),
+        ctypes.sizeof(cloaked),
+    )
+    return res != 0 or cloaked.value != 0
 
 
 def _window_rect(hwnd: int) -> tuple[int, int, int, int] | None:
