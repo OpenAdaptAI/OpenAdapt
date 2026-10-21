@@ -1,0 +1,42 @@
+{
+  "id": "tr-ticket-resolve",
+  "app": "trac",
+  "intent": "Find a ticket by number and close it with the given resolution; when the resolution is 'duplicate', also comment which ticket it duplicates.",
+  "shape": "conditional",
+  "batch_run": false,
+  "inputs": [
+    "ticket",
+    "resolution",
+    "duplicate_of"
+  ],
+  "keys": [
+    "ticket"
+  ],
+  "policy": "permissive",
+  "second_installation": "signed in as 'triager', a non-admin role with TICKET_MODIFY only",
+  "second_kind": "role",
+  "viewport": {
+    "first": [
+      1280,
+      900
+    ],
+    "second": [
+      1280,
+      900
+    ]
+  },
+  "device_scale": {
+    "first": 1.0,
+    "second": 1.0
+  },
+  "verify_yaml": {
+    "first": "schema_version: openadapt.verify/v1\napp:\n  name: Trac service desk (local test copy)\n  url: http://127.0.0.1:9485/\n  version: trac@1.6\n  session: benchmark.onboarding_effort.hooks:open_session\n  reset:\n    python: benchmark.onboarding_effort.hooks:reset\nverifier:\n  kind: sql\n  sqlite_database: /Users/abrichr/oa/scratch/onboarding-effort/trac-db/trac.db\n  sql_query: \"SELECT '#' || id AS ticket, status, resolution FROM ticket\"\neffects:\n  - kind: field_equals\n    match: {ticket: {param: ticket}}\n    field: resolution\n    value: {param: resolution}\n  - kind: field_equals\n    match: {ticket: {param: ticket}}\n    field: status\n    value: {literal: closed}\nsave_step: auto\ninputs:\n  source: recorded\ncampaign:\n  id: onboarding-tr-ticket-resolve-first\n  trials: 3\n  policy: permissive\n",
+    "second": "schema_version: openadapt.verify/v1\napp:\n  name: Trac service desk (local test copy)\n  url: http://127.0.0.1:9485/\n  version: trac@1.6\n  session: benchmark.onboarding_effort.hooks:open_session\n  reset:\n    python: benchmark.onboarding_effort.hooks:reset\nverifier:\n  kind: sql\n  sqlite_database: /Users/abrichr/oa/scratch/onboarding-effort/trac-db/trac.db\n  sql_query: \"SELECT '#' || id AS ticket, status, resolution FROM ticket\"\neffects:\n  - kind: field_equals\n    match: {ticket: {param: ticket}}\n    field: resolution\n    value: {param: resolution}\n  - kind: field_equals\n    match: {ticket: {param: ticket}}\n    field: status\n    value: {literal: closed}\nsave_step: auto\ninputs:\n  source: recorded\ncampaign:\n  id: onboarding-tr-ticket-resolve-second\n  trials: 3\n  policy: permissive\n"
+  },
+  "oracle_source_sha256": "0c09211426ac186f15c0d2f8c2859e00e3deb672fd6685424125ceef74760582",
+  "heldout_items_sha256": {
+    "first": "50014e35716ade3408dad1dcb1c96a41545403fae23b74161486dff54dbe6d49",
+    "second": "44a82706393fe1adae19e088d1cbd8ed16c256a826168952b1773232982b7a4c"
+  },
+  "heldout_n": 25
+}
