@@ -9,6 +9,7 @@ import anyio
 import pytest
 
 from openadapt_flow.agent.guard_tools import GuardBridge
+from openadapt_flow.approval_mode.demo_approver import demo_approver
 from openadapt_flow.agent.mcp import build_server
 from openadapt_flow.guard import GUARD_TASK_SCHEMA, GuardedSave
 from openadapt_flow.guard_demo import (
@@ -45,7 +46,10 @@ def _server(base, tmp_path, approval="each_item"):
         )
     )
     guarded = GuardedSave(
-        parse_verify_config(verify_yaml(base)), tmp_path / "state", approval=approval
+        parse_verify_config(verify_yaml(base)),
+        tmp_path / "state",
+        approval=approval,
+        key_dir=tmp_path / "keys",
     )
     return build_server(guard=GuardBridge(guarded, tasks))
 
@@ -65,6 +69,9 @@ def test_guarded_save_over_mcp(mockmed, tmp_path, mcp_client):
     base, db = mockmed
     server = _server(base, tmp_path)
     agent = FakeAgent(base)
+    # The test plays the person: a throwaway approver key registered in the
+    # guard's own key directory signs the answer.
+    signer = demo_approver(tmp_path / "keys")
 
     async def call(client, name, args):
         result = await client.call_tool(name, args)
@@ -92,6 +99,8 @@ def test_guarded_save_over_mcp(mockmed, tmp_path, mcp_client):
                 waiting["approval_run_dir"],
                 waiting["approval_request_id"],
                 waiting["approval_request_sha256"],
+                signer=signer,
+                key_dir=tmp_path / "keys",
             )
             go = await call(client, "guard_commit", {"guard_id": begun["guard_id"]})
             agent.click_save("p1", NOTE, fault="no_persist")

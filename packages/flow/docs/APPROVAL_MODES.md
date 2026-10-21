@@ -48,19 +48,25 @@ Desktop reads the requests and answers one of them:
 
 ```bash
 openadapt-flow item-approval show RUN_DIR            # JSON; waiting requests
-openadapt-flow item-approval approve RUN_DIR \
+OPENADAPT_JIT_KEY_PASSPHRASE=... openadapt-flow item-approval approve RUN_DIR \
   --request-id ID --request-sha256 SHA256 \
-  --decided-by human --route desktop_run_it \
-  --approver-id CLOUD_USER_ID --auth-method cloud_aal2   # or --unauthenticated
+  --decided-by human --route desktop_run_it --unauthenticated \
+  --approver-key APPROVER_KEY.pem
 openadapt-flow item-approval decline RUN_DIR ... --reason wrong_values
 ```
 
-- An answer names the request digest the person saw. A person answers with
-  `--decided-by human` from the `desktop_run_it` route, or from their phone
-  on the runner's decision portal (`decision_portal`; see
+- An answer names the request digest the person saw. A person answers from
+  the `desktop_run_it` route, or from their phone on the runner's decision
+  portal (`decision_portal`; see
   [`APPROVAL_AND_VERIFICATION.md`](APPROVAL_AND_VERIFICATION.md)), which
   echoes the signed task for that exact request. A decline carries
   one closed reason: `wrong_values`, `wrong_record` or `screen_problem`.
+- A person's answer counts only when a registered approver key signs it
+  (below). `--decided-by human`, the route, `--unauthenticated` and a
+  Cloud user id are claims any process could make, so on their own they are
+  refused (`human_answer_unsigned`). A claimed Cloud sign-in
+  (`--auth-method cloud_aal2` or `cloud_aal1`) is refused too
+  (`auth_method_unverified`): nothing on the runner can check it.
 - Answers are created once and never replaced. The run checks every answer
   itself, so an answer file written around the command is held to the same
   rules. An approval is used for exactly one save; a loop that reaches the
@@ -87,6 +93,39 @@ openadapt-flow item-approval decline RUN_DIR ... --reason wrong_values
   nothing, and the approval is spent. Start the item again instead. A resume
   in a signed-in browser the run attached to, where the form is still open,
   checks the form against the approved request before the save.
+
+### The approver key
+
+A person's answer carries an Ed25519 signature over the whole answer, by a
+key registered under `approvers` in the key directory's `principals.json`
+(`$OPENADAPT_JIT_KEY_DIR`, default `~/.openadapt/jit`). The run checks the
+signature on every answer, including an answer file written around the
+command. Each route signs with its own key:
+
+- Desktop's Run it signs with the Desktop approver key. Desktop creates it
+  with `openadapt-desktop approver-key setup`, which keeps the encrypted key
+  in an owner-only file and its passphrase in the OS keychain, and prints the
+  public key.
+- The decision portal signs with the key at `OPENADAPT_PORTAL_APPROVER_KEY`
+  after the person answered on their phone. Without it, the portal records
+  no answer.
+- At a terminal, a person passes their own key with `--approver-key`. The
+  key's passphrase comes from `OPENADAPT_JIT_KEY_PASSPHRASE`, never from the
+  command line.
+
+Create a key with `openadapt-flow jit keygen --out KEY.pem` (with the
+passphrase variable set) and have a person register it at a terminal:
+
+```bash
+openadapt-flow jit register --role approver --principal front-desk \
+  --public-key PUBLIC_KEY_HEX
+```
+
+An approver key holds no other role, and an approver id that names an agent
+or model is refused. The run refuses an answer signed by an unregistered key,
+an agent's key, or the other route's key, an answer changed after it was
+signed, and an answer signed by whoever started the run. Keep the key
+directory and the approver keys away from the agents the run governs.
 
 The report's `approval` block lists every answer as codes and digests: no
 values, no screenshot and no form state. An item is `approved` only when a

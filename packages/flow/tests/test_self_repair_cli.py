@@ -30,6 +30,10 @@ from tests.test_self_repair import (  # noqa: F401 - the shared MockMed fixture
 
 pytest.importorskip("playwright.sync_api")
 
+# The phone portal records the person's tap signed with its registered
+# approver key (OPENADAPT_PORTAL_APPROVER_KEY); without one it records nothing.
+pytestmark = pytest.mark.usefixtures("approver")
+
 #: Set by the test before the CLI loads the agent.
 TARGET: Optional[tuple[int, int]] = None
 
@@ -139,6 +143,8 @@ def test_run_self_repair_cli_resumes_after_one_phone_tap(
     out = capsys.readouterr().out
     assert answered, out
     assert "item-approval approve" in out
+    # The printed Run it command signs with the person's approver key.
+    assert "--approver-key" in out
     assert "Self-repair: resumed" in out
     resumed = RunReport.model_validate_json(
         (run_dir / "self-repair" / "resume" / "report.json").read_text()

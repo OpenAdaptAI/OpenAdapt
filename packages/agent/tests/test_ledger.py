@@ -17,6 +17,7 @@ from openadapt_flow.agent.ledger import (
 from openadapt_flow.agent.ledger_demo import WORKFLOW, SyntheticReferralApp, measure
 from openadapt_flow.agent.mcp import build_server
 from openadapt_flow.agent.runner import RunnerConfig
+from openadapt_flow.approval_mode.demo_approver import demo_approver
 from openadapt_flow.approval_mode.item_approval import ItemApprovalStore, make_answer
 from openadapt_flow.approval_mode.model import ITEM_APPROVAL_ROUTE
 from openadapt_flow.console.save_approvals import (
@@ -37,14 +38,34 @@ RULES = [
 ]
 
 
+#: The person's approver key for each test's runs folder. The tests play the
+#: person, so a throwaway key registered in the test's own key directory
+#: signs every answer; the ledger reads that directory.
+_PERSON: dict = {}
+
+
+def _person(runs):
+    """(key_dir, signer) for this runs folder: the test's registered person."""
+    key_dir = runs.with_name(runs.name + "-approver-keys")
+    if runs not in _PERSON:
+        _PERSON[runs] = (key_dir, demo_approver(key_dir))
+    return _PERSON[runs]
+
+
 @pytest.fixture
 def world(tmp_path):
     runs = tmp_path / "runs"
     runs.mkdir()
     app = SyntheticReferralApp()
     bridge = AgentBridge(None, RunnerConfig(runs_dir=runs), sandbox=app, mode="sandbox")
-    ledger = TaskLedger(runs / "task-ledger")
-    return runs, app, build_server(bridge, ledger=ledger), ledger
+    key_dir, _signer = _person(runs)
+    ledger = TaskLedger(runs / "task-ledger", key_dir=key_dir)
+    yield runs, app, build_server(bridge, ledger=ledger), ledger
+    _PERSON.pop(runs, None)
+
+
+def _store(runs, run_dir):
+    return ItemApprovalStore(run_dir, key_dir=_person(runs)[0])
 
 
 def _inputs(item="R01", clinic="north", **extra):
@@ -61,7 +82,7 @@ def answer(runs, decision="approve", *, decided_by="human", route=ITEM_APPROVAL_
     """A person answers every waiting question, as the phone or Run it does."""
     answered = 0
     for run_dir, request in _waiting(runs):
-        store = ItemApprovalStore(run_dir)
+        store = _store(runs, run_dir)
         store.write_answer(
             make_answer(
                 request,
@@ -72,6 +93,7 @@ def answer(runs, decision="approve", *, decided_by="human", route=ITEM_APPROVAL_
                 approver_id=None,
                 auth_method="none",
                 policy=store.context(),
+                signer=_person(runs)[1] if decided_by == "human" else None,
             )
         )
         answered += 1
@@ -293,7 +315,7 @@ def test_an_agent_answer_never_counts(world, mcp_client):
         answer(runs, route="local_cli")
     # A forged answer file is read and refused by the ledger's own check.
     ((run_dir, request),) = _waiting(runs)
-    store = ItemApprovalStore(run_dir)
+    store = _store(runs, run_dir)
     forged = make_answer(
         request,
         decision="approve",
@@ -302,6 +324,7 @@ def test_an_agent_answer_never_counts(world, mcp_client):
         approver_id=None,
         auth_method="none",
         policy=store.context(),
+        signer=_person(runs)[1],
     ).model_copy(update={"decided_by": "automation"})
     store.write_answer(forged)
     view = ledger.get_answer(job["job_id"], asked["question_id"], 0)
@@ -371,7 +394,7 @@ def test_an_unconfirmed_save_asks_a_person_to_check_the_record(world, mcp_client
     assert len(list_save_approvals(runs)) == 2
     # The person says R11 saved and R26 didn't.
     for run_dir, request in _waiting(runs):
-        store = ItemApprovalStore(run_dir)
+        store = _store(runs, run_dir)
         decision = "approve" if "R11" in request.step_intent else "decline"
         store.write_answer(
             make_answer(
@@ -383,6 +406,7 @@ def test_an_unconfirmed_save_asks_a_person_to_check_the_record(world, mcp_client
                 approver_id=None,
                 auth_method="none",
                 policy=store.context(),
+                signer=_person(runs)[1],
             )
         )
     after = ledger.summary(job["job_id"])
@@ -598,7 +622,7 @@ def test_polling_a_stopped_run_asks_only_once(world):
 
 
 def test_an_unanswered_question_keeps_the_item_waiting_for_a_person(tmp_path):
-    ledger = TaskLedger(tmp_path / "task-ledger", question_ttl_s=1)
+    ledger = TaskLedger(tmp_path / "task-ledger", question_ttl_s=1, key_dir=_person(tmp_path)[0])
     job = ledger.open_job("Synthetic work.", [], [{"item_id": "R01"}])
     ledger.ask_user(job["job_id"], "R01: north or south?", "R01", 0)
     import time
@@ -614,3 +638,4 @@ def test_an_unanswered_question_keeps_the_item_waiting_for_a_person(tmp_path):
     assert ledger.get_answer(job["job_id"], asked["question_id"], 0)["status"] == "yes"
     ledger.check_run({"request_id": job["job_id"] + ".R01", "inputs": {}})
     assert ledger.summary(job["job_id"])["counts"] == {"pending": 1}
+    _PERSON.pop(tmp_path, None)

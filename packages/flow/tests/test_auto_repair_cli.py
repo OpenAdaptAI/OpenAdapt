@@ -29,6 +29,10 @@ from tests.test_self_repair import (  # noqa: F401 - the shared MockMed fixture
 
 pytest.importorskip("playwright.sync_api")
 
+# The phone portal records the person's tap signed with its registered
+# approver key (OPENADAPT_PORTAL_APPROVER_KEY); without one it records nothing.
+pytestmark = pytest.mark.usefixtures("approver")
+
 
 def _config(tmp_path: Path, base_url: str, *, auto: bool = True) -> Path:
     store = tmp_path / "repair-store"
