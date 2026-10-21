@@ -2075,8 +2075,9 @@ def _resolve_window_windows(target: WindowTarget) -> TargetWindow | None:
 
     ``owner`` matches the owning process's executable name (e.g. ``prl_client``
     for Parallels Client, ``wfica32`` for Citrix Workspace); ``title`` matches
-    the window title. Both case-insensitive substrings; the largest visible
-    match wins (parity with the macOS resolver). With ``target.window_id`` set
+    the window title. Both case-insensitive substrings. An exact owner/title
+    match wins over substring matches, and more than one remaining candidate
+    is refused (parity with the macOS resolver). With ``target.window_id`` set
     (a pinned window) only that exact HWND matches and the title is ignored. Bounds prefer the DWM
     extended frame (excludes the invisible resize border GetWindowRect
     includes) so captured pixels align with the visible window.
@@ -2143,7 +2144,37 @@ def _resolve_window_windows(target: WindowTarget) -> TargetWindow | None:
     user32.EnumWindows(_enum_cb, 0)
     if not matches:
         return None
-    return max(matches, key=lambda m: m.bounds[2] * m.bounds[3])
+    return _unique_window_match(matches, target, title_l is not None)
+
+
+def _unique_window_match(
+    matches: list[TargetWindow],
+    target: WindowTarget,
+    match_title: bool,
+) -> TargetWindow:
+    """Return the one match, preferring exact selectors; refuse ambiguity.
+
+    The selectors choose the window that the session then pins, so picking
+    one of several candidates (the largest, the frontmost) could pin the
+    wrong window for the whole recording.
+    """
+    exact = [
+        match
+        for match in matches
+        if (target.owner is None or match.owner.casefold() == target.owner.casefold())
+        and (
+            not match_title
+            or target.title is None
+            or match.title.casefold() == target.title.casefold()
+        )
+    ]
+    candidates = exact or matches
+    if len(candidates) != 1:
+        raise WindowCaptureAmbiguousError(
+            f"window selectors matched {len(candidates)} capturable windows; "
+            "provide the complete window title"
+        )
+    return candidates[0]
 
 
 def _window_rect(hwnd: int) -> tuple[int, int, int, int] | None:

@@ -2564,6 +2564,43 @@ def test_macos_resolver_finds_a_pinned_window_by_number_after_retitle(monkeypatc
     )
 
 
+def _candidate(window_id: int, owner: str, title: str) -> TargetWindow:
+    return TargetWindow(
+        window_id=window_id,
+        owner=owner,
+        title=title,
+        pid=100 + window_id,
+        bounds=(0.0, 0.0, 100.0 * window_id, 100.0),
+        process_start_time=1.0,
+    )
+
+
+def test_windows_resolver_refuses_several_matches_instead_of_the_largest():
+    """The Windows resolver used to pin the largest match without saying so."""
+    matches = [
+        _candidate(1, "chrome.exe", "Spike Login"),
+        _candidate(2, "chrome.exe", "Spike Login - Profile 2"),
+    ]
+
+    with pytest.raises(WindowCaptureAmbiguousError, match="matched 2"):
+        window_capture_module._unique_window_match(
+            matches, WindowTarget(owner="chrome", title="Spike"), True
+        )
+
+
+def test_windows_resolver_prefers_the_exact_owner_and_title_match():
+    matches = [
+        _candidate(1, "chrome.exe", "Spike Login"),
+        _candidate(2, "chrome.exe", "Spike Login - Profile 2"),
+    ]
+
+    chosen = window_capture_module._unique_window_match(
+        matches, WindowTarget(owner="chrome.exe", title="Spike Login"), True
+    )
+
+    assert chosen.window_id == 1
+
+
 class TestWindowConfigPlumbing:
     """The window spec flows through config the same way other options do."""
 
