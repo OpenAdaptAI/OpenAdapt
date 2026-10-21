@@ -51,6 +51,7 @@ from openadapt_capture.window_capture import (
     build_window_scope,
     translate_point,
 )
+from openadapt_capture.window_input_focus import FocusOwner
 
 
 def test_record_closes_window_scope_when_startup_fails(monkeypatch, tmp_path):
@@ -776,6 +777,7 @@ def test_input_observation_precedes_an_in_flight_window_frame(fake):
         WindowTarget(owner="FakeApp"),
         resolver=fake.resolver,
         capturer=capturer,
+        focus_probe=fake,
     )
     scope.bind_display_topology(
         {
@@ -2068,18 +2070,45 @@ class TestWindowTarget:
 # ---------------------------------------------------------------------------
 
 
+TARGET = "target"
+
+
 class FakePlatform:
-    """Injectable resolver/capturer simulating a movable Retina window."""
+    """Injectable resolver/capturer/focus probe simulating a movable Retina window.
+
+    ``keyboard_owner`` and ``pointer_owner`` model which window receives
+    input: ``TARGET`` (the fake window), a ``FocusOwner`` for another
+    window, ``None`` (unknown), or an exception instance to raise.
+    """
 
     def __init__(self, bounds=(300.0, 150.0, 800.0, 600.0), scale=2.0):
         self.bounds = bounds
         self.scale = scale
         self.window_id = 42
+        self.pid = 1234
         self.title = "Fake Window"
         self.missing = False
         self.on_screen = True
         self.visibility_independent = False
         self.process_start_time = 123.5
+        self.keyboard_owner = TARGET
+        self.pointer_owner = TARGET
+        self.receipt_keyboard_owner = None  # None: same as keyboard_owner
+
+    def _owner(self, value):
+        if value == TARGET:
+            return FocusOwner(window_id=self.window_id, pid=self.pid)
+        if isinstance(value, BaseException):
+            raise value
+        return value
+
+    def keyboard_focus(self, *, at_receipt=False):
+        if at_receipt and self.receipt_keyboard_owner is not None:
+            return self._owner(self.receipt_keyboard_owner)
+        return self._owner(self.keyboard_owner)
+
+    def window_at(self, x, y):
+        return self._owner(self.pointer_owner)
 
     def resolver(self, target: WindowTarget):
         if self.missing:
@@ -2088,7 +2117,7 @@ class FakePlatform:
             window_id=self.window_id,
             owner="FakeApp",
             title=self.title,
-            pid=1234,
+            pid=self.pid,
             bounds=self.bounds,
             on_screen=self.on_screen,
             visibility_independent=self.visibility_independent,
@@ -2113,6 +2142,7 @@ def scope(fake):
         WindowTarget(owner="FakeApp"),
         resolver=fake.resolver,
         capturer=fake.capturer,
+        focus_probe=fake,
     )
     result.bind_display_topology(
         {
@@ -2144,6 +2174,7 @@ class TestWindowCaptureScope:
             WindowTarget(owner="FakeApp"),
             resolver=fake.resolver,
             capturer=capturer,
+            focus_probe=fake,
         )
         capture_scope.bind_display_topology(
             {
@@ -2208,6 +2239,7 @@ class TestWindowCaptureScope:
             WindowTarget(owner="FakeApp"),
             resolver=fake.resolver,
             capturer=lambda _window: next(images),
+            focus_probe=fake,
         )
         scope.bind_display_topology(
             {
