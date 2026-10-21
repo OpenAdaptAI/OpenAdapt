@@ -20,10 +20,13 @@ from openadapt.quickstart.engine import (
     DemoStep,
     RunFacts,
     SealFacts,
+    SealPages,
 )
 
 #: The placeholder app address in the "try it on your own app" command.
 YOUR_APP_URL = "https://your-app.example"
+#: Where the finale points for Seals of real runs, after the person's own.
+REAL_SEALS_URL = "https://openadapt.ai/seals"
 
 
 def display_path(path: Path, cwd: Optional[Path] = None) -> Path:
@@ -75,6 +78,13 @@ class Engine(Protocol):
 
     def seal(self, runs: list[RunFacts]) -> Optional[SealFacts]: ...
 
+    def seal_pages(
+        self,
+        runs: list[RunFacts],
+        broken: Optional[BreakFacts],
+        command: Optional[Callable[[Path], str]] = None,
+    ) -> SealPages: ...
+
     def write_page(self, first: RunFacts, broken: BreakFacts) -> Optional[Path]: ...
 
 
@@ -90,6 +100,8 @@ class NextSteps:
     #: Under ``uvx`` only: a warning when the shell's ``openadapt`` is another
     #: version, which the plain commands would reach instead.
     shadow: Optional[str] = None
+    #: The command that checks one run folder, for its Seal page.
+    verify_run: Optional[Callable[[Path], str]] = None
 
 
 @dataclass
@@ -105,6 +117,9 @@ class Outcome:
     act2_seconds: float = 0.0
     broken: Optional[BreakFacts] = None
     seal: Optional[SealFacts] = None
+    #: The Seal pages (``seal.html``) of the first checked run and the stopped run.
+    seal_pages: SealPages = field(default_factory=SealPages)
+    seal_page_opened: bool = False
     page: Optional[Path] = None
     page_opened: bool = False
     total_seconds: float = 0.0
@@ -268,13 +283,32 @@ def run_story(
         outcome.seal = sealing.result()
         if paging is not None:
             outcome.page = paging.result()
-            if outcome.page is not None and open_page is not None:
-                outcome.page_opened = bool(open_page(outcome.page))
     finally:
         engine.__exit__(None, None, None)
+    steps = next_steps(outcome)
+    if outcome.seal is not None:
+        _write_seal_pages(engine, outcome, steps)
+        # The person's own Seal opens; the side-by-side page stays a path.
+        page = outcome.seal_pages.verified
+        if page is not None and open_page is not None:
+            outcome.seal_page_opened = bool(open_page(page))
     outcome.total_seconds = clock() - started - paused
-    view.finale(outcome, next_steps(outcome))
+    view.finale(outcome, steps)
     return outcome
+
+
+def _write_seal_pages(engine: Engine, outcome: Outcome, steps: NextSteps) -> None:
+    """Write the Seal pages; a page that can't be written leaves no Seal line."""
+
+    try:
+        outcome.seal_pages = engine.seal_pages(
+            list(outcome.runs), outcome.broken, steps.verify_run
+        )
+    except Exception:  # noqa: BLE001 - the runs and their Seals stand without a page
+        outcome.seal_pages = SealPages()
+        return
+    if outcome.seal is not None and outcome.seal_pages.broken is not None:
+        outcome.seal = SealFacts(outcome.seal.key_id, outcome.seal.sealed + 1)
 
 
 def _in_background(work: Callable[[], Any]) -> Any:
@@ -312,6 +346,7 @@ __all__ = [
     "Engine",
     "NextSteps",
     "Outcome",
+    "REAL_SEALS_URL",
     "View",
     "run_story",
 ]

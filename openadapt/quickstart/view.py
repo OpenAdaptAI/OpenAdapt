@@ -16,7 +16,12 @@ from pathlib import Path
 from typing import IO, Any, Iterator, Mapping, Optional
 
 from openadapt.quickstart.engine import BreakFacts, DemoStep, RunFacts
-from openadapt.quickstart.story import NextSteps, Outcome, display_path
+from openadapt.quickstart.story import (
+    REAL_SEALS_URL,
+    NextSteps,
+    Outcome,
+    display_path,
+)
 
 #: Width of the step and note column, so times line up.
 _LABEL_WIDTH = 40
@@ -152,6 +157,18 @@ def details_line(outcome: Outcome) -> str:
         if outcome.page_opened:
             line += ", opened in your browser"
     return line
+
+
+def seal_lines(outcome: Outcome) -> list[tuple[str, str]]:
+    """The person's own Seal page, then where the Seals of real runs are."""
+
+    page = outcome.seal_pages.verified
+    if page is None:
+        return []
+    return [
+        ("Your Seal", str(display_path(page))),
+        ("See real Seals from OpenEMR runs", REAL_SEALS_URL),
+    ]
 
 
 def next_step_lines(steps: NextSteps) -> list[str]:
@@ -290,6 +307,8 @@ class PlainView:
         self._say("Receipt")
         for name, value in receipt_rows(outcome, self.marks):
             self._say(f"  {name:<9}  {value}")
+        for name, value in seal_lines(outcome):
+            self._say(f"{name}: {value}")
         if steps.verify:
             self._say(f"Check it: {steps.verify}")
         self._say(details_line(outcome))
@@ -503,6 +522,9 @@ class RichView:
         self.console.print(
             Panel(table, title="Receipt", title_align="left", expand=False)
         )
+        for name, value in seal_lines(outcome):
+            style = "bold green" if name == "Your Seal" else "cyan"
+            self.console.print(f"{name}: [{style}]{_escape(value)}[/]")
         if steps.verify:
             self.console.print(f"[dim]Check it:[/] [bold]{_escape(steps.verify)}[/]")
         self.console.print(f"[dim]{_escape(details_line(outcome))}[/]")
@@ -535,5 +557,6 @@ __all__ = [
     "RichView",
     "aha_line",
     "make_view",
+    "seal_lines",
     "wants_plain",
 ]

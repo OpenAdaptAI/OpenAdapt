@@ -34,6 +34,7 @@ from openadapt.quickstart.engine import (
     DemoStep,
     RunFacts,
     SealFacts,
+    SealPages,
     StepTicker,
     demo_step_label,
 )
@@ -200,6 +201,15 @@ class FakeEngine:
             return None
         return SealFacts(self._seal.key_id, sum(1 for run in runs if run.checked))
 
+    def seal_pages(self, runs, broken, command=None):
+        self.calls.append("seal pages")
+        self.seal_command = command(self.root / "run-1") if command else None
+        first = next((run for run in runs if run.checked), None)
+        return SealPages(
+            verified=first.run_dir / "seal.html" if first else None,
+            broken=broken.run_dir / "seal.html" if broken else None,
+        )
+
     def write_page(self, first, broken):
         self.calls.append("page")
         return self.root / "index.html" if self._page else None
@@ -264,6 +274,7 @@ def test_plain_output_runs_the_three_acts_in_order(root):
         "break",
         "page",
         "exit",
+        "seal pages",
     ]
     assert engine.calls.index("seal") > engine.calls.index("run 5")
     acts = [output.index(f"\n{n}  ") for n in (1, 2, 3)]
@@ -348,7 +359,8 @@ def test_numbers_follow_the_runs(root):
     assert "4 of 5 saved and checked · 3 AI calls · $0.04" in output
     assert "5 of 5" not in output
     assert "0 AI calls" not in output
-    assert "Seal       seal-ed25519-0123456789abcdef · 4 reports signed" in output
+    # Four checked runs and the stopped one.
+    assert "Seal       seal-ed25519-0123456789abcdef · 5 reports signed" in output
     assert "Cost       3 AI calls · $0.04 · " in output
     assert outcome.checked == 4
 
@@ -395,9 +407,41 @@ def test_act_two_says_how_many_run_at_once(root, parallel, subtitle):
 
 
 def test_no_seal_means_no_seal_line_and_no_verify_command(root):
-    output, _ = _plain(FakeEngine(root, seal=None))
+    engine = FakeEngine(root, seal=None)
+    output, _ = _plain(engine)
     assert "Seal" not in output
     assert "seal verify" not in output
+    assert "seal pages" not in engine.calls
+
+
+def test_the_finale_names_the_persons_own_seal_then_the_real_ones(root):
+    engine = FakeEngine(root)
+    opened = []
+    output, outcome = _plain(engine, open_page=lambda page: opened.append(page) or True)
+    finale = output[output.index("\nReceipt\n") + 1 :].splitlines()
+    at = finale.index("Your Seal: openadapt-quickstart/run-1/seal.html")
+    assert finale[at + 1] == (
+        "See real Seals from OpenEMR runs: https://openadapt.ai/seals"
+    )
+    # The person's own Seal opens; the side-by-side page does not.
+    assert opened == [root / "run-1" / "seal.html"]
+    assert outcome.seal_page_opened
+    assert outcome.seal_pages.broken == root / "run-broken" / "seal.html"
+    assert "opened in your browser" not in output
+    # The page's own command checks that run folder.
+    assert engine.seal_command == "openadapt seal verify openadapt-quickstart/run-1"
+
+
+def test_a_seal_page_that_fails_leaves_the_seal_and_no_page_line(root):
+    class NoPages(FakeEngine):
+        def seal_pages(self, runs, broken, command=None):
+            raise RuntimeError("no viewer")
+
+    output, outcome = _plain(NoPages(root), open_page=lambda page: True)
+    assert "Your Seal" not in output
+    assert "openadapt.ai/seals" not in output
+    assert "Seal       seal-ed25519-0123456789abcdef · 5 reports signed" in output
+    assert not outcome.seal_page_opened
 
 
 def test_quickstart_exit_code_follows_the_runs(monkeypatch, tmp_path):
@@ -850,3 +894,38 @@ def test_real_quickstart(tmp_path, monkeypatch):
         report = json.loads((root / f"run-{index}" / "report.json").read_text())
         assert report["execution_outcome"] == "VERIFIED"
         assert report["params"]["note"] in output
+
+
+def test_the_seal_pages_are_run_ones_and_the_stopped_runs(tmp_path, monkeypatch):
+    """Runs finish in any order; the page the finale opens is the first run's."""
+
+    from openadapt import seal_view
+    from openadapt.quickstart.engine import FlowEngine
+
+    sealed, written = [], []
+    monkeypatch.setattr(seal_view, "bundle_graph", lambda bundle: {"nodes": []})
+    monkeypatch.setattr(
+        seal_view,
+        "write_seal_page",
+        lambda run_dir, **kw: (
+            written.append((run_dir.name, kw["about"]["kicker"]))
+            or run_dir / "seal.html"
+        ),
+    )
+    monkeypatch.setattr(
+        "openadapt_flow.offline_seal.seal_run",
+        lambda run_dir, **kw: sealed.append(run_dir.name),
+    )
+    runs = [_run(tmp_path, index) for index in (3, 2, 1, 5, 4)]
+    for run in runs:
+        run.run_dir.mkdir(parents=True)
+        (run.run_dir / "seal.json").write_text("{}")
+    engine = FlowEngine(tmp_path, visible=False)
+    pages = engine.seal_pages(runs, _broken(tmp_path))
+    assert pages.verified == tmp_path / "run-1" / "seal.html"
+    assert pages.broken == tmp_path / "run-broken" / "seal.html"
+    assert written == [
+        ("run-1", "Run 1 of 5"),
+        ("run-broken", "The run with the failed save"),
+    ]
+    assert sealed == ["run-broken"]

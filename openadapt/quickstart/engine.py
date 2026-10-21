@@ -114,6 +114,16 @@ class SealFacts:
     sealed: int
 
 
+@dataclass
+class SealPages:
+    """The offline Seal pages the finale wrote (``seal.html`` in a run folder)."""
+
+    #: The first checked run's page: the one the finale opens.
+    verified: Optional[Path] = None
+    #: The stopped run's page, when Act 3 ran.
+    broken: Optional[Path] = None
+
+
 def demo_step_label(event: dict[str, Any]) -> Optional[str]:
     """A short label for one recorded action, from what the recorder logged."""
 
@@ -610,6 +620,57 @@ class FlowEngine:
             key_id = str(seal.key_id)
         return SealFacts(key_id=key_id, sealed=len(checked))
 
+    def seal_pages(
+        self,
+        runs: list[RunFacts],
+        broken: Optional[BreakFacts],
+        command: Optional[Callable[[Path], str]] = None,
+    ) -> SealPages:
+        """Write the Seal pages: the first checked run's and the stopped run's.
+
+        The stopped run is sealed here too: its Seal says the report is the
+        one the run wrote, stop and all. Each page is the offline viewer with
+        that run's files in it (:mod:`openadapt.seal_view`); nothing leaves
+        this computer. Engines without offline Seals get no pages.
+        """
+
+        try:
+            from openadapt_flow.offline_seal import seal_home, seal_run
+
+            from openadapt.seal_view import bundle_graph, write_seal_page
+        except ImportError:
+            return SealPages()
+        program = bundle_graph(self.bundle_dir)
+        about = {"app": "MockMed, a synthetic clinic app", "job": "Add a triage note"}
+
+        def page(run_dir: Path, kicker: str) -> Path:
+            return write_seal_page(
+                run_dir,
+                program=program,
+                about={**about, "kicker": kicker},
+                host={
+                    "footer": (
+                        "A run of the program you compiled, on this computer, in "
+                        "MockMed with synthetic data. Signed with this computer's "
+                        "Seal key. This page makes no network requests; nothing "
+                        "was uploaded."
+                    ),
+                },
+                commands=command(run_dir) if command else None,
+            )
+
+        pages = SealPages()
+        # Runs finish in any order; the page is run 1's when it checked.
+        first = min(
+            (run for run in runs if run.checked), key=lambda r: r.index, default=None
+        )
+        if first is not None and (first.run_dir / "seal.json").is_file():
+            pages.verified = page(first.run_dir, f"Run {first.index} of {len(runs)}")
+        if broken is not None:
+            seal_run(broken.run_dir, home=seal_home(), enqueue=False)
+            pages.broken = page(broken.run_dir, "The run with the failed save")
+        return pages
+
     def write_page(self, first: RunFacts, broken: BreakFacts) -> Optional[Path]:
         """Write the side-by-side page (``openadapt flow demo``'s page)."""
 
@@ -708,6 +769,7 @@ __all__ = [
     "FlowEngine",
     "RunFacts",
     "SealFacts",
+    "SealPages",
     "StepTicker",
     "demo_step_label",
     "display_available",
