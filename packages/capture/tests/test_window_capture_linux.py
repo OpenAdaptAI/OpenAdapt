@@ -108,6 +108,30 @@ def test_resolver_binds_process_and_root_pixel_coordinates(x11_environment) -> N
     )
 
 
+def test_resolver_finds_a_pinned_window_by_id_after_retitle(x11_environment) -> None:
+    client = FakeX11Client(
+        [_record(41, title="Remote session"), _record(42, title="Signed in")]
+    )
+
+    window = resolve_window_linux(
+        WindowTarget(owner="citrix", window_id=42),
+        client_factory=lambda: client,
+        process_identity=lambda _pid: ("citrix-workspace", 100.0),
+    )
+
+    assert window is not None
+    assert window.window_id == 42
+    assert window.title == "Signed in"
+    assert (
+        resolve_window_linux(
+            WindowTarget(owner="citrix", window_id=43),
+            client_factory=lambda: client,
+            process_identity=lambda _pid: ("citrix-workspace", 100.0),
+        )
+        is None
+    )
+
+
 @pytest.mark.parametrize(
     "record",
     [

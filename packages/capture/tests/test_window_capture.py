@@ -20,6 +20,7 @@ import sys
 import threading
 import time
 from contextlib import contextmanager
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -2347,6 +2348,220 @@ class TestWindowCaptureScope:
 # ---------------------------------------------------------------------------
 # Config plumbing (Recorder(window=...) -> RecordingConfig -> Settings)
 # ---------------------------------------------------------------------------
+
+
+class FakeDesktop:
+    """Several windows and a resolver that filters like the platform ones.
+
+    Selectors match case-insensitive substrings and refuse more than one
+    match. A ``window_id`` lookup returns that exact window and ignores the
+    title, as the macOS, Windows and X11 resolvers do.
+    """
+
+    def __init__(self) -> None:
+        self.windows: dict[int, TargetWindow] = {}
+        self.lookups: list[WindowTarget] = []
+
+    def open(self, window_id: int, title: str, *, pid: int = 1234, start: float = 50.0):
+        self.windows[window_id] = TargetWindow(
+            window_id=window_id,
+            owner="Google Chrome",
+            title=title,
+            pid=pid,
+            bounds=(100.0, 80.0, 800.0, 600.0),
+            process_start_time=start,
+            coordinate_source="test-screen-points",
+        )
+
+    def retitle(self, window_id: int, title: str) -> None:
+        self.windows[window_id] = replace(self.windows[window_id], title=title)
+
+    def move(self, window_id: int, bounds: tuple[float, float, float, float]) -> None:
+        self.windows[window_id] = replace(self.windows[window_id], bounds=bounds)
+
+    def resolver(self, target: WindowTarget):
+        self.lookups.append(target)
+        if target.window_id is not None:
+            return self.windows.get(target.window_id)
+        matches = [
+            window
+            for window in self.windows.values()
+            if (not target.owner or target.owner.casefold() in window.owner.casefold())
+            and (not target.title or target.title.casefold() in window.title.casefold())
+        ]
+        if len(matches) > 1:
+            raise WindowCaptureAmbiguousError("selectors matched more than one window")
+        return matches[0] if matches else None
+
+    @staticmethod
+    def capturer(window: TargetWindow) -> Image.Image:
+        return Image.new("RGB", (int(window.bounds[2]), int(window.bounds[3])))
+
+
+class TestPinnedWindowIdentity:
+    """The selectors choose the window once; its identity is then pinned."""
+
+    @pytest.fixture
+    def desktop(self):
+        desktop = FakeDesktop()
+        desktop.open(7, "Spike Login")
+        return desktop
+
+    @pytest.fixture
+    def pinned_scope(self, desktop):
+        scope = WindowCaptureScope(
+            WindowTarget(owner="Chrome", title="Spike Login"),
+            resolver=desktop.resolver,
+            capturer=desktop.capturer,
+        )
+        scope.bind_display_topology(
+            {
+                "schema_version": "openadapt.capture.display-topology/v1",
+                "topology_sha256": "a" * 64,
+            },
+            lambda **_kwargs: None,
+        )
+        return scope
+
+    def test_title_change_keeps_capturing_the_same_window(self, pinned_scope, desktop):
+        pinned_scope.capture_frame()
+        first = pinned_scope.window_event_data()
+        assert first["state"]["pinned_title"] == "Spike Login"
+        assert first["state"]["title_change"] is None
+
+        desktop.retitle(7, "Protected")
+        _image, changed = pinned_scope.capture_frame()
+
+        assert changed
+        event = pinned_scope.window_event_data()
+        assert event["window_id"] == "7"
+        assert event["title"] == "Protected"
+        assert event["state"]["pinned_title"] == "Spike Login"
+        assert event["state"]["title_change"] == {"from": "Spike Login", "to": "Protected"}
+        # The retained frame metadata still passes the closed schema.
+        WindowCaptureStateV2.model_validate(event["state"])
+        # Input keeps binding to the pinned window after the retitle.
+        pinned_scope.publish_frame(pinned_scope.current_generation())
+        assert pinned_scope.translate(110.0, 90.0) == (10.0, 10.0)
+        # After the first lookup, every lookup is by window id alone.
+        assert desktop.lookups[0].title == "Spike Login"
+        assert all(
+            lookup.window_id == 7 and lookup.title is None
+            for lookup in desktop.lookups[1:]
+        )
+
+        pinned_scope.capture_frame()
+        assert pinned_scope.window_event_data()["state"]["title_change"] is None
+
+    def test_pinned_window_still_follows_moves(self, pinned_scope, desktop):
+        pinned_scope.capture_frame()
+        desktop.retitle(7, "Protected")
+        desktop.move(7, (300.0, 200.0, 800.0, 600.0))
+
+        pinned_scope.capture_frame()
+
+        assert pinned_scope.window_event_data()["state"]["bounds"] == [
+            300.0,
+            200.0,
+            800.0,
+            600.0,
+        ]
+
+    def test_new_window_with_the_old_title_is_not_picked(self, pinned_scope, desktop):
+        pinned_scope.capture_frame()
+        desktop.retitle(7, "Protected")
+        desktop.open(8, "Spike Login")
+
+        pinned_scope.capture_frame()
+
+        assert pinned_scope.window_event_data()["window_id"] == "7"
+
+    def test_closed_window_fails_closed(self, pinned_scope, desktop):
+        pinned_scope.capture_frame()
+        del desktop.windows[7]
+        desktop.open(8, "Spike Login")
+
+        with pytest.raises(WindowCaptureError, match="pinned target window 7 closed"):
+            pinned_scope.capture_frame()
+
+    def test_restarted_process_with_the_same_title_fails_closed(self, pinned_scope, desktop):
+        pinned_scope.capture_frame()
+        # The browser restarts: a new window with the same title, and an id
+        # the platform may recycle for the new process.
+        del desktop.windows[7]
+        desktop.open(9, "Spike Login", pid=5678, start=99.0)
+        with pytest.raises(WindowCaptureError, match="closed"):
+            pinned_scope.capture_frame()
+
+        desktop.open(7, "Spike Login", pid=5678, start=99.0)
+        with pytest.raises(WindowCaptureError, match="exited or restarted"):
+            pinned_scope.capture_frame()
+
+    def test_same_pid_with_a_new_start_time_fails_closed(self, pinned_scope, desktop):
+        pinned_scope.capture_frame()
+        desktop.open(7, "Spike Login", start=51.0)
+
+        with pytest.raises(WindowCaptureError, match="exited or restarted"):
+            pinned_scope.capture_frame()
+
+    def test_ambiguous_selectors_are_refused_at_start(self, desktop):
+        desktop.open(8, "Spike Login - second profile")
+        scope = WindowCaptureScope(
+            WindowTarget(owner="Chrome", title="Spike Login"),
+            resolver=desktop.resolver,
+            capturer=desktop.capturer,
+        )
+
+        with pytest.raises(WindowCaptureAmbiguousError):
+            scope.resolve()
+
+    def test_action_time_revalidation_uses_the_pinned_window(self, pinned_scope, desktop):
+        pinned_scope.capture_frame()
+        pinned_scope.publish_frame(pinned_scope.current_generation())
+        desktop.retitle(7, "Protected")
+
+        pinned_scope.assert_current()
+
+        del desktop.windows[7]
+        with pytest.raises(WindowCaptureError, match="closed"):
+            pinned_scope.assert_current()
+
+
+def test_macos_resolver_finds_a_pinned_window_by_number_after_retitle(monkeypatch):
+    windows = [
+        {
+            "kCGWindowOwnerName": "Google Chrome",
+            "kCGWindowName": title,
+            "kCGWindowLayer": 0,
+            "kCGWindowIsOnscreen": True,
+            "kCGWindowBounds": {"X": 0, "Y": 0, "Width": 1512, "Height": 944},
+            "kCGWindowOwnerPID": 100,
+            "kCGWindowNumber": window_id,
+        }
+        for window_id, title in ((95, "Spike Login"), (19373, "Protected"))
+    ]
+    quartz = SimpleNamespace(
+        kCGWindowListOptionAll=1,
+        kCGNullWindowID=0,
+        CGWindowListCopyWindowInfo=lambda *_args: windows,
+    )
+    monkeypatch.setitem(sys.modules, "Quartz", quartz)
+    monkeypatch.setattr(window_capture_module, "_process_start_time", lambda _pid: 123.0)
+    monkeypatch.setattr(window_capture_module, "_screen_capture_kit_available", lambda: True)
+
+    resolved = window_capture_module._resolve_window_macos(
+        WindowTarget(owner="Google Chrome", window_id=19373)
+    )
+
+    assert resolved is not None
+    assert resolved.window_id == 19373
+    assert resolved.title == "Protected"
+    assert (
+        window_capture_module._resolve_window_macos(
+            WindowTarget(owner="Google Chrome", window_id=4)
+        )
+        is None
+    )
 
 
 class TestWindowConfigPlumbing:

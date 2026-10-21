@@ -500,19 +500,26 @@ def resolve_window_linux(
     client_factory: Callable[[], AbstractContextManager[_X11ClientProtocol]] | None = None,
     process_identity: Callable[[int], tuple[str, float]] | None = None,
 ) -> "TargetWindow | None":
-    """Resolve the largest matching, fully on-screen EWMH client window."""
+    """Resolve the largest matching, fully on-screen EWMH client window.
+
+    With ``target.window_id`` set (a pinned window) only that exact X11
+    window matches and the title is ignored.
+    """
     _require_x11_session()
     from openadapt_capture.window_capture import TargetWindow
 
     factory = client_factory or X11CompositeClient
     identity_reader = process_identity or _default_process_identity
     owner_text = target.owner.casefold() if target.owner else None
-    title_text = target.title.casefold() if target.title else None
+    pinned_id = target.window_id
+    title_text = target.title.casefold() if target.title and pinned_id is None else None
     matches: list[tuple[int, TargetWindow]] = []
     try:
         with factory() as client:
             root_bounds = client.root_bounds
             for stacking_index, window_id in enumerate(client.window_ids()):
+                if pinned_id is not None and window_id != pinned_id:
+                    continue
                 record = client.window_record(window_id)
                 if (
                     record is None
