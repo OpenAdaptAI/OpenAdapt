@@ -56,6 +56,15 @@ from openadapt_flow.approval_mode.approver import (
     StepClass,
     WebhookRefused,
 )
+from openadapt_flow.approval_mode.human_attestation import (
+    ANSWER_DOMAIN,
+    ROUTE_METHOD,
+    ApproverSigner,
+    HumanAttestation,
+)
+from openadapt_flow.approval_mode.human_attestation import (
+    refusal as attestation_refusal,
+)
 from openadapt_flow.approval_mode.model import (
     DECISION_PORTAL_ROUTE,
     ITEM_APPROVAL_ROUTE,
@@ -305,16 +314,28 @@ class ItemApprovalAnswer(BaseModel):
     #: for a person, whose older fields above already name them. Left out of
     #: the file when absent, so earlier answers keep their digest.
     approver: Optional[ApproverIdentityV1] = None
+    #: A registered approver key's signature over the rest of the answer.
+    #: Required for a person's answer (:mod:`.human_attestation`).
+    attestation: Optional[HumanAttestation] = None
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         data: dict[str, Any] = handler(self)
         if self.approver is None:
             data.pop("approver", None)
+        if self.attestation is None:
+            data.pop("attestation", None)
         return data
 
     def digest(self) -> str:
         return _digest(self)
+
+    def signed_payload(self) -> dict[str, Any]:
+        """What an approver key signs: the answer without its signature."""
+
+        data = self.model_dump(mode="json")
+        data.pop("attestation", None)
+        return data
 
     def approver_identity(self) -> ApproverIdentityV1:
         """Who decided, for the audit trail."""
@@ -362,6 +383,9 @@ class ApproverContext:
     grant_refusal: Optional[str] = None
     initiator: Optional[str] = None
     initiator_known: bool = False
+    #: Where registered approver keys are looked up. ``None`` means a
+    #: person's answer can't be verified, so it is refused.
+    key_dir: Optional[Path] = None
 
 
 def _as_context(
@@ -408,6 +432,39 @@ def _delegate_refusal(
     return None
 
 
+def _person_refusal(
+    answer: ItemApprovalAnswer, context: ApproverContext
+) -> Optional[str]:
+    """Why this answer isn't a verified person's, or ``None``.
+
+    ``decided_by``, the route, ``--unauthenticated`` and a named sign-in are
+    claims anyone who can run the CLI could make. Only a registered approver
+    key's signature, for the route's own method, makes the answer a
+    person's. A Cloud sign-in can't be verified here, so claiming one is
+    refused rather than trusted. Self-approval is refused whoever claims to
+    have answered.
+    """
+
+    if answer.auth_method != "none":
+        return "auth_method_unverified"
+    refusal_code = attestation_refusal(
+        answer.attestation,
+        domain=ANSWER_DOMAIN,
+        payload=answer.signed_payload(),
+        key_dir=context.key_dir,
+        method=ROUTE_METHOD.get(answer.route),
+    )
+    if refusal_code is not None:
+        return refusal_code
+    signer = answer.attestation.signer if answer.attestation else ""
+    if answer.approver_id is not None and answer.approver_id != signer:
+        return "answer_fields_inconsistent"
+    initiator = (context.initiator or "").lower()
+    if initiator and initiator in {signer.lower(), (answer.approver_id or "").lower()}:
+        return "self_approval"
+    return None
+
+
 def answer_refusal(
     request: ItemApprovalRequest,
     answer: ItemApprovalAnswer,
@@ -439,7 +496,12 @@ def answer_refusal(
             return "route_not_allowed"
         if approver is not None and approver.auth.value != answer.approver_kind:
             return "answer_fields_inconsistent"
+        refusal_code = _person_refusal(answer, context)
+        if refusal_code is not None:
+            return refusal_code
     else:
+        if answer.attestation is not None:
+            return "answer_fields_inconsistent"
         if answer.decided_by != "automation":
             return "answer_fields_inconsistent"
         if answer.route not in DELEGATED_ROUTES:
@@ -665,6 +727,11 @@ class ItemApprovalStore:
             return False, None
         return True, value
 
+    def key_directory(self) -> Path:
+        """Where this run's registered keys (``principals.json``) are read."""
+
+        return self._key_directory()
+
     def _key_directory(self) -> Path:
         if self._key_dir is not None:
             return self._key_dir
@@ -685,6 +752,7 @@ class ItemApprovalStore:
             return ApproverContext(
                 initiator=initiator,
                 initiator_known=known,
+                key_dir=self._key_directory(),
                 **fields,
             )
 
@@ -1100,8 +1168,13 @@ def make_answer(
     now: Optional[datetime] = None,
     approver: Optional[ApproverIdentityV1] = None,
     policy: "ApproverPolicyV1 | ApproverContext | None" = None,
+    signer: Optional[ApproverSigner] = None,
 ) -> ItemApprovalAnswer:
     """Build and check one answer. Raises :class:`ItemApprovalRefused`.
+
+    A person's answer must be signed: ``signer`` is the Desktop or decision
+    portal approver key (:func:`.human_attestation.load_signer`). Without it,
+    the answer is refused (``human_answer_unsigned``).
 
     ``approver`` names an agent or system; it is refused unless ``policy``
     (``store.context()``) holds a verified, person-signed grant that names it
@@ -1139,6 +1212,12 @@ def make_answer(
         raise ItemApprovalRefused(
             "answer_fields_invalid", "the answer's fields are not valid"
         ) from exc
+    if signer is not None:
+        answer = answer.model_copy(
+            update={
+                "attestation": signer.attest(ANSWER_DOMAIN, answer.signed_payload())
+            }
+        )
     refusal = answer_refusal(request, answer, now=now, policy=context)
     if refusal is not None:
         raise ItemApprovalRefused(refusal, f"the answer was refused ({refusal})")
