@@ -96,6 +96,8 @@ def stop_cause(row: dict[str, Any]) -> str:
     )
     if "no_duplicate_candidate" in halt or "No matches were found" in halt:
         return "duplicate check listed a chart"
+    if "waiting for a person to approve" in halt and "switched_off" in halt:
+        return "problems_only switch off; stopped unasked"
     if "Identity check failed" in halt:
         return "identity check failed (relabeled control)"
     if "Missing" in halt or "missing" in halt and "param" in halt:

@@ -423,7 +423,7 @@ def readmit(
         )
     except ReadmissionRefused as exc:
         timings["requalify_s"] = round(clock() - t0, 1)
-        result = captured.get("result")
+        result: Any = captured.get("result")
         if (
             "fresh admission" not in str(exc)
             or not getattr(result, "passed", False)
