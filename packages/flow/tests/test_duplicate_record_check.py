@@ -289,6 +289,8 @@ def test_the_replayer_asks_the_record_when_a_channel_is_configured() -> None:
     table.records.append(rec("Rosalind", "Okafor", "1990-04-09", "8"))
     passed, why = _replayer_check(table, WANT)
     assert passed is False
+    # #1517 classes "failed: no_duplicate_candidate" as an item-input stop.
+    assert why.startswith("no_duplicate_candidate ")
     assert "record check via table: close" in why
     assert "close record 8 (same date of birth and first name" in why
 
