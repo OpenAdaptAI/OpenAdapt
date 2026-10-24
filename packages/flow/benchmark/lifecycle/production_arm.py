@@ -149,6 +149,9 @@ class ProductionArm:
         #: Admit a version whose date of birth is a typed ``date`` parameter,
         #: so a date written another way is refused before any step.
         self.typed_dob = bool(options.get("typed_dob", False))
+        #: Convert each item's date parameters to ISO as intake does before
+        #: the run (the referral writes dates however its sender writes them).
+        self.intake_dates = bool(options.get("intake_dates", False))
         self.recovery = str(options.get("recovery", "none"))
         if self.recovery not in ("none", "relabel"):
             raise ValueError(f"unknown recovery {self.recovery!r}")
@@ -180,6 +183,7 @@ class ProductionArm:
             "policy": proof.POLICY,
             "recovery": self.recovery,
             "typed_dob": self.typed_dob,
+            "intake_dates": self.intake_dates,
             "duplicate_check": (
                 "no_duplicate_candidate on step_039 (rows tr.oneresult; a row "
                 "with the item's last name or date of birth stops the item)"
@@ -321,6 +325,8 @@ class ProductionArm:
         t0 = time.time()
         run_dir = self._run_dir(item)
         detail: dict[str, Any] = {"run_dir": str(run_dir.relative_to(env.workdir))}
+        if self.intake_dates:
+            item = self._intake_dates(item, detail)
         phases: list[dict[str, Any]] = []
         try:
             report = self._execute(item, run_dir)
@@ -388,6 +394,38 @@ class ProductionArm:
             if summary["transaction_outcome"] == "VERIFIED" and resumed.success:
                 return self._result(item, "done", summary, t0, detail, phases)
         return self._result(item, "stopped", summary, t0, detail, phases)
+
+    def _intake_dates(self, item: WorkItem, detail: dict[str, Any]) -> WorkItem:
+        """Each date parameter as intake converts it, with the conversion kept.
+
+        A date whose order can't be told (or that doesn't exist) is left as
+        written: the run's own ISO check then refuses it before any step.
+        """
+
+        import dataclasses
+
+        from openadapt_flow.intake.extract import normalize_date
+        from openadapt_flow.ir import ParamKind, Workflow
+
+        specs = Workflow.load(Path(self.ctx["bundle"])).param_specs
+        params = dict(item.params)
+        notes = {}
+        for name, spec in specs.items():
+            if spec.type is not ParamKind.DATE or not params.get(name):
+                continue
+            iso, error, conversion = normalize_date(params[name])
+            if error:
+                notes[name] = {"raw": params[name], "error": error}
+            elif conversion:
+                notes[name] = {
+                    "raw": params[name],
+                    "value": iso,
+                    "conversion": conversion,
+                }
+                params[name] = str(iso)
+        if notes:
+            detail["intake_dates"] = notes
+        return dataclasses.replace(item, params=params)
 
     def _resumable(self, run_dir: Path) -> bool:
         from openadapt_flow.runtime.durable import CheckpointStore
