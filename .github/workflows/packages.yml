@@ -395,11 +395,74 @@ jobs:
             | LC_ALL=C sort | awk -v s="$SHARD" 'NR % 4 == s % 4' > "$RUNNER_TEMP/shard.txt"
           wc -l < "$RUNNER_TEMP/shard.txt"
       - name: Test
+        env:
+          # Each shard keeps its coverage data; flow-coverage combines them.
+          COVERAGE_FILE: runs/coverage-shard-${{ matrix.shard }}.data
         run: |
           set -euo pipefail
           mkdir -p runs
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
-          pytest -vv --durations=20 --basetemp=runs/ci "${files[@]}"
+          pytest -vv --durations=20 --basetemp=runs/ci \
+            --cov --cov-report= "${files[@]}"
+      - name: Upload coverage data
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flow-coverage-shard-${{ matrix.shard }}
+          path: packages/flow/runs/coverage-shard-${{ matrix.shard }}.data
+          if-no-files-found: warn
+          retention-days: 14
+
+  flow-coverage:
+    # Measures safety-path coverage and reports it in the job summary. It does
+    # not gate yet: the floor is set at the measured value once it is known
+    # (docs/design/DECOMPOSITION.md, section 9). Keep the include list in sync
+    # with the strict mypy list above and CODEOWNERS.
+    name: flow safety-path coverage (reported, not gating)
+    needs: [scope, flow-unit]
+    if: always() && needs.scope.outputs.flow == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: packages/flow
+    env:
+      SAFETY_PATH: >-
+        openadapt_flow/compiler/*,openadapt_flow/identity_signals.py,openadapt_flow/runtime/identity*,openadapt_flow/runtime/replayer.py,openadapt_flow/runtime/replay/*,openadapt_flow/runtime/resolver.py,openadapt_flow/submit_binding.py,openadapt_flow/policy.py,openadapt_flow/qualification.py,openadapt_flow/runtime/effects/*
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install coverage
+        run: pip install 'coverage[toml]>=7'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: flow-coverage-shard-*
+          path: packages/flow/runs/coverage
+          merge-multiple: true
+      - name: Combine and report
+        run: |
+          set -euo pipefail
+          ls runs/coverage
+          coverage combine --keep runs/coverage/*.data
+          {
+            echo "## Flow safety-path coverage (reported, not gating)"
+            echo
+            echo '```'
+            coverage report --include="$SAFETY_PATH" --skip-covered --sort=cover | tail -40
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          coverage report --include="$SAFETY_PATH" --format=total
+          coverage json --include="$SAFETY_PATH" -o runs/safety-path-coverage.json
+      - name: Upload the report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flow-safety-path-coverage
+          path: packages/flow/runs/safety-path-coverage.json
+          retention-days: 30
 
   flow-critical:
     name: flow core critical (golden VERIFIED, zero model calls)
