@@ -109,6 +109,7 @@ from openadapt_flow.compiler.disambiguation import (
 )
 from openadapt_flow.ir import (
     ActionKind,
+    Anchor,
     Guard,
     GuardSource,
     LoopSpec,
@@ -1643,11 +1644,11 @@ def _emit_loop(
                 "row's record",
                 record_field=click_field,
             )
-        anchors = {
-            k: step_at(q, k).anchor
-            for k in positions[q].at
-            if step_at(q, k).anchor is not None
-        }
+        anchors: dict[int, Anchor] = {}
+        for k in positions[q].at:
+            anchor = step_at(q, k).anchor
+            if anchor is not None:
+                anchors[k] = anchor
         bi = band_identity(
             column=hit,
             template_iter=src_k(q),
