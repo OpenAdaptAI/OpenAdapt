@@ -1,0 +1,27 @@
+[
+ {
+  "turn": 1,
+  "calls": [
+   {
+    "name": "read_screen",
+    "input": {}
+   },
+   {
+    "name": "read_records",
+    "input": {}
+   }
+  ]
+ },
+ {
+  "turn": 2,
+  "calls": [
+   {
+    "name": "finish",
+    "input": {
+     "saved": false,
+     "summary": "Jane Sample has no referral on the Referral Tasks screen. Only Alex Testcase and Sam Specimen are listed. I didn't save anything. The system of record was empty before I stopped."
+    }
+   }
+  ]
+ }
+]

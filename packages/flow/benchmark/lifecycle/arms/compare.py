@@ -126,6 +126,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     p.add_argument("--arms-json", type=Path, help="a JSON list of [name, module:factory, options]")
     p.add_argument("--app", default="openemr")
     p.add_argument("--report-only", action="store_true")
+    p.add_argument("--drift", action="append", default=None, metavar="KIND@SEQ",
+                   help="replace the drift schedule, as lifecycle.run --drift (e.g. relabel_save@26)")
     args = p.parse_args(argv)
 
     from ..cost_model import V1
@@ -139,11 +141,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         arms = [a for a in arms if a[0] in args.only]
 
     plan = {"seed": args.seed, "items": args.items, "days": args.days, "existing": args.existing,
-            "app": args.app, "arms": arms}
+            "app": args.app, "drift": args.drift, "arms": arms}
     plan_path = out / "plan.json"
     if plan_path.is_file():
         old = json.loads(plan_path.read_text())
-        same = {k: old.get(k) for k in ("seed", "items", "days", "existing", "app")}
+        same = {k: old.get(k) for k in ("seed", "items", "days", "existing", "app", "drift")}
         if same != {k: plan[k] for k in same}:
             raise SystemExit(f"{out} was started with a different stream {same}; use a new --out")
     else:
@@ -151,6 +153,12 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if not args.report_only:
         workload = generate(args.seed, args.items, args.days, args.existing)
+        if args.drift is not None:
+            by_seq = {i.seq: i for i in workload.items}
+            workload.drift = [
+                {"day": by_seq[int(seq)].day, "kind": kind, "first_seq": int(seq)}
+                for kind, _, seq in (spec.partition("@") for spec in args.drift)
+            ]
         wl = out / "workload.jsonl"
         text = "".join(json.dumps(r, sort_keys=True) + "\n" for r in workload.ledger_rows())
         if wl.is_file() and wl.read_text() != text:

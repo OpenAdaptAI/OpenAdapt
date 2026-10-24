@@ -1,0 +1,100 @@
+[
+ {
+  "turn": 1,
+  "calls": [
+   {
+    "name": "read_screen",
+    "input": {}
+   },
+   {
+    "name": "read_records",
+    "input": {}
+   }
+  ]
+ },
+ {
+  "turn": 2,
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "0"
+    }
+   }
+  ]
+ },
+ {
+  "turn": 3,
+  "calls": [
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ]
+ },
+ {
+  "turn": 4,
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "0"
+    }
+   }
+  ]
+ },
+ {
+  "turn": 5,
+  "calls": [
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ]
+ },
+ {
+  "turn": 6,
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "2"
+    }
+   },
+   {
+    "name": "fill",
+    "input": {
+     "ref": "0",
+     "text": "Synthetic follow-up note 94: recheck in 17 days"
+    }
+   },
+   {
+    "name": "click",
+    "input": {
+     "ref": "3"
+    }
+   }
+  ]
+ },
+ {
+  "turn": 7,
+  "calls": [
+   {
+    "name": "read_records",
+    "input": {}
+   }
+  ]
+ },
+ {
+  "turn": 8,
+  "calls": [
+   {
+    "name": "finish",
+    "input": {
+     "saved": true,
+     "summary": "Saved one Triage encounter for p1 (Jane Sample) with the exact note. Records were empty before, so nothing else was changed."
+    }
+   }
+  ]
+ }
+]

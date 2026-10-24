@@ -1,5 +1,5 @@
 {
- "total_usd": 0.197869,
+ "total_usd": 1.987128,
  "entries": [
   {
    "label": "agent_tools smoke-mock-1",
@@ -102,6 +102,4902 @@
    "model": "claude-opus-5-5",
    "usd": 0.014806,
    "at": 1792520056.244
+  },
+  {
+   "label": "silent-saves agent-tools item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858582.156
+  },
+  {
+   "label": "silent-saves agent-tools item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792858583.882
+  },
+  {
+   "label": "silent-saves agent-tools item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792858586.108
+  },
+  {
+   "label": "silent-saves agent-tools item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792858589.175
+  },
+  {
+   "label": "silent-saves agent-tools item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792858591.249
+  },
+  {
+   "label": "silent-saves agent-tools item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002173,
+   "at": 1792858593.264
+  },
+  {
+   "label": "silent-saves agent-tools item 2",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858596.082
+  },
+  {
+   "label": "silent-saves agent-tools item 2",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792858597.663
+  },
+  {
+   "label": "silent-saves agent-tools item 2",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792858599.513
+  },
+  {
+   "label": "silent-saves agent-tools item 2",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792858601.928
+  },
+  {
+   "label": "silent-saves agent-tools item 2",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792858603.77
+  },
+  {
+   "label": "silent-saves agent-tools item 2",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002133,
+   "at": 1792858605.629
+  },
+  {
+   "label": "silent-saves agent-tools item 3",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858608.583
+  },
+  {
+   "label": "silent-saves agent-tools item 3",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792858609.955
+  },
+  {
+   "label": "silent-saves agent-tools item 3",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792858611.499
+  },
+  {
+   "label": "silent-saves agent-tools item 3",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792858612.903
+  },
+  {
+   "label": "silent-saves agent-tools item 3",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792858614.839
+  },
+  {
+   "label": "silent-saves agent-tools item 3",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002549,
+   "at": 1792858616.777
+  },
+  {
+   "label": "silent-saves agent-tools item 3",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002344,
+   "at": 1792858618.849
+  },
+  {
+   "label": "silent-saves agent-tools item 3",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002186,
+   "at": 1792858620.872
+  },
+  {
+   "label": "silent-saves agent-script author item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.004653,
+   "at": 1792858641.587
+  },
+  {
+   "label": "silent-saves agent-script author item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001839,
+   "at": 1792858643.987
+  },
+  {
+   "label": "silent-saves agent-script author item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.009668,
+   "at": 1792858651.004
+  },
+  {
+   "label": "silent-saves agent-script author item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.011166,
+   "at": 1792858656.919
+  },
+  {
+   "label": "silent-saves agent-tools item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000735,
+   "at": 1792858693.241
+  },
+  {
+   "label": "silent-saves agent-script author item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000628,
+   "at": 1792858693.552
+  },
+  {
+   "label": "silent-saves agent-tools item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00077,
+   "at": 1792858694.806
+  },
+  {
+   "label": "silent-saves agent-script author item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001168,
+   "at": 1792858695.886
+  },
+  {
+   "label": "silent-saves agent-tools item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792858696.472
+  },
+  {
+   "label": "silent-saves agent-tools item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792858697.817
+  },
+  {
+   "label": "silent-saves agent-tools item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792858699.269
+  },
+  {
+   "label": "silent-saves agent-tools item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792858701.86
+  },
+  {
+   "label": "silent-saves agent-script author item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.011173,
+   "at": 1792858703.362
+  },
+  {
+   "label": "silent-saves agent-tools item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792858703.575
+  },
+  {
+   "label": "silent-saves agent-tools item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792858705.074
+  },
+  {
+   "label": "silent-saves agent-tools item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002163,
+   "at": 1792858707.042
+  },
+  {
+   "label": "silent-saves agent-script author item 1",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.01314,
+   "at": 1792858709.707
+  },
+  {
+   "label": "silent-saves agent-tools item 2",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000735,
+   "at": 1792858710.12
+  },
+  {
+   "label": "silent-saves agent-tools item 2",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00101,
+   "at": 1792858711.68
+  },
+  {
+   "label": "silent-saves agent-tools item 2",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001061,
+   "at": 1792858714.239
+  },
+  {
+   "label": "silent-saves agent-tools item 2",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001984,
+   "at": 1792858716.411
+  },
+  {
+   "label": "silent-saves agent-tools item 2",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001223,
+   "at": 1792858718.336
+  },
+  {
+   "label": "silent-saves agent-tools item 2",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001711,
+   "at": 1792858720.185
+  },
+  {
+   "label": "silent-saves agent-tools item 3",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000735,
+   "at": 1792858723.119
+  },
+  {
+   "label": "silent-saves agent-tools item 3",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00101,
+   "at": 1792858727.046
+  },
+  {
+   "label": "silent-saves agent-tools item 3",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792858729.033
+  },
+  {
+   "label": "silent-saves agent-tools item 3",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003234,
+   "at": 1792858731.509
+  },
+  {
+   "label": "silent-saves agent-tools item 3",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002549,
+   "at": 1792858733.814
+  },
+  {
+   "label": "silent-saves agent-tools item 4",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858736.674
+  },
+  {
+   "label": "silent-saves agent-tools item 4",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792858738.244
+  },
+  {
+   "label": "silent-saves agent-tools item 4",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792858740.169
+  },
+  {
+   "label": "silent-saves agent-tools item 4",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792858742.4
+  },
+  {
+   "label": "silent-saves agent-tools item 4",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792858744.325
+  },
+  {
+   "label": "silent-saves agent-tools item 4",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002163,
+   "at": 1792858746.239
+  },
+  {
+   "label": "silent-saves agent-tools item 5",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858749.209
+  },
+  {
+   "label": "silent-saves agent-tools item 5",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792858750.628
+  },
+  {
+   "label": "silent-saves agent-tools item 5",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792858752.079
+  },
+  {
+   "label": "silent-saves agent-tools item 5",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792858753.709
+  },
+  {
+   "label": "silent-saves agent-tools item 5",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792858755.092
+  },
+  {
+   "label": "silent-saves agent-tools item 5",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792858758.39
+  },
+  {
+   "label": "silent-saves agent-tools item 5",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792858760.165
+  },
+  {
+   "label": "silent-saves agent-tools item 5",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792858761.746
+  },
+  {
+   "label": "silent-saves agent-tools item 5",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002153,
+   "at": 1792858763.684
+  },
+  {
+   "label": "silent-saves agent-tools item 6",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858767.956
+  },
+  {
+   "label": "silent-saves agent-tools item 6",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792858769.606
+  },
+  {
+   "label": "silent-saves agent-tools item 6",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792858771.213
+  },
+  {
+   "label": "silent-saves agent-tools item 6",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792858772.721
+  },
+  {
+   "label": "silent-saves agent-tools item 6",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792858774.273
+  },
+  {
+   "label": "silent-saves agent-tools item 6",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792858776.168
+  },
+  {
+   "label": "silent-saves agent-tools item 6",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792858777.792
+  },
+  {
+   "label": "silent-saves agent-tools item 6",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792858779.345
+  },
+  {
+   "label": "silent-saves agent-tools item 6",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001893,
+   "at": 1792858781.393
+  },
+  {
+   "label": "silent-saves agent-tools item 7",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858784.283
+  },
+  {
+   "label": "silent-saves agent-tools item 7",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792858785.328
+  },
+  {
+   "label": "silent-saves agent-tools item 7",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792858786.435
+  },
+  {
+   "label": "silent-saves agent-tools item 7",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792858787.476
+  },
+  {
+   "label": "silent-saves agent-tools item 7",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792858788.582
+  },
+  {
+   "label": "silent-saves agent-tools item 7",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792858790.091
+  },
+  {
+   "label": "silent-saves agent-tools item 7",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792858791.437
+  },
+  {
+   "label": "silent-saves agent-tools item 7",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792858792.525
+  },
+  {
+   "label": "silent-saves agent-tools item 7",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001843,
+   "at": 1792858793.937
+  },
+  {
+   "label": "silent-saves agent-tools item 8",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858797.101
+  },
+  {
+   "label": "silent-saves agent-tools item 8",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792858798.648
+  },
+  {
+   "label": "silent-saves agent-tools item 8",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792858800.919
+  },
+  {
+   "label": "silent-saves agent-script repair item 46",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.006335,
+   "at": 1792858801.623
+  },
+  {
+   "label": "silent-saves agent-tools item 8",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792858803.225
+  },
+  {
+   "label": "silent-saves agent-script repair item 46",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001484,
+   "at": 1792858803.979
+  },
+  {
+   "label": "silent-saves agent-tools item 8",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792858805.082
+  },
+  {
+   "label": "silent-saves agent-script repair item 46",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002199,
+   "at": 1792858806.583
+  },
+  {
+   "label": "silent-saves agent-tools item 8",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002163,
+   "at": 1792858807.104
+  },
+  {
+   "label": "silent-saves agent-script repair item 46",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002384,
+   "at": 1792858809.7
+  },
+  {
+   "label": "silent-saves agent-tools item 9",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858810.105
+  },
+  {
+   "label": "silent-saves agent-tools item 9",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792858811.758
+  },
+  {
+   "label": "silent-saves agent-tools item 9",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792858813.828
+  },
+  {
+   "label": "silent-saves agent-tools item 9",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003234,
+   "at": 1792858816.372
+  },
+  {
+   "label": "silent-saves agent-script repair item 46",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.012267,
+   "at": 1792858816.902
+  },
+  {
+   "label": "silent-saves agent-tools item 9",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002549,
+   "at": 1792858818.828
+  },
+  {
+   "label": "silent-saves agent-tools item 10",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858822.016
+  },
+  {
+   "label": "silent-saves agent-script repair item 46",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.013848,
+   "at": 1792858823.485
+  },
+  {
+   "label": "silent-saves agent-tools item 10",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792858823.746
+  },
+  {
+   "label": "silent-saves agent-tools item 10",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792858826.026
+  },
+  {
+   "label": "silent-saves agent-tools item 10",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792858828.301
+  },
+  {
+   "label": "silent-saves agent-tools item 10",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792858830.208
+  },
+  {
+   "label": "silent-saves agent-tools item 10",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002163,
+   "at": 1792858832.35
+  },
+  {
+   "label": "silent-saves agent-tools item 11",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858835.1
+  },
+  {
+   "label": "silent-saves agent-tools item 11",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792858836.791
+  },
+  {
+   "label": "silent-saves agent-tools item 11",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792858838.815
+  },
+  {
+   "label": "silent-saves agent-tools item 11",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792858841.057
+  },
+  {
+   "label": "silent-saves agent-tools item 11",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792858843.068
+  },
+  {
+   "label": "silent-saves agent-tools item 11",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002133,
+   "at": 1792858845.09
+  },
+  {
+   "label": "silent-saves agent-tools item 12",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858848.158
+  },
+  {
+   "label": "silent-saves agent-tools item 12",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792858849.852
+  },
+  {
+   "label": "silent-saves agent-tools item 12",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792858851.851
+  },
+  {
+   "label": "silent-saves agent-tools item 12",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792858854.17
+  },
+  {
+   "label": "silent-saves agent-tools item 12",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002641,
+   "at": 1792858856.211
+  },
+  {
+   "label": "silent-saves agent-tools item 12",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002333,
+   "at": 1792858858.172
+  },
+  {
+   "label": "silent-saves agent-tools item 13",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858861.126
+  },
+  {
+   "label": "silent-saves agent-tools item 13",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792858862.769
+  },
+  {
+   "label": "silent-saves agent-tools item 13",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792858864.692
+  },
+  {
+   "label": "silent-saves agent-tools item 13",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792858867.042
+  },
+  {
+   "label": "silent-saves agent-tools item 13",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792858869.089
+  },
+  {
+   "label": "silent-saves agent-tools item 13",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002153,
+   "at": 1792858871.148
+  },
+  {
+   "label": "silent-saves agent-tools item 14",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858874.059
+  },
+  {
+   "label": "silent-saves agent-tools item 14",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792858875.745
+  },
+  {
+   "label": "silent-saves agent-tools item 14",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792858877.657
+  },
+  {
+   "label": "silent-saves agent-tools item 14",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792858879.954
+  },
+  {
+   "label": "silent-saves agent-tools item 14",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792858882.017
+  },
+  {
+   "label": "silent-saves agent-tools item 14",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002163,
+   "at": 1792858884.002
+  },
+  {
+   "label": "silent-saves agent-tools item 15",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858887.107
+  },
+  {
+   "label": "silent-saves agent-tools item 15",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792858888.743
+  },
+  {
+   "label": "silent-saves agent-tools item 15",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792858890.715
+  },
+  {
+   "label": "silent-saves agent-tools item 15",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792858892.823
+  },
+  {
+   "label": "silent-saves agent-tools item 15",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792858894.984
+  },
+  {
+   "label": "silent-saves agent-tools item 15",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002133,
+   "at": 1792858897.192
+  },
+  {
+   "label": "silent-saves agent-tools item 16",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858899.996
+  },
+  {
+   "label": "silent-saves agent-tools item 16",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001888,
+   "at": 1792858901.703
+  },
+  {
+   "label": "silent-saves agent-tools item 16",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001652,
+   "at": 1792858903.896
+  },
+  {
+   "label": "silent-saves agent-tools item 16",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002819,
+   "at": 1792858906.459
+  },
+  {
+   "label": "silent-saves agent-tools item 16",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002367,
+   "at": 1792858908.631
+  },
+  {
+   "label": "silent-saves agent-tools item 16",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002171,
+   "at": 1792858910.866
+  },
+  {
+   "label": "silent-saves agent-tools item 17",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858913.952
+  },
+  {
+   "label": "silent-saves agent-tools item 17",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001648,
+   "at": 1792858916.006
+  },
+  {
+   "label": "silent-saves agent-tools item 17",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000742,
+   "at": 1792858917.709
+  },
+  {
+   "label": "silent-saves agent-tools item 17",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001156,
+   "at": 1792858919.908
+  },
+  {
+   "label": "silent-saves agent-tools item 17",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000786,
+   "at": 1792858921.716
+  },
+  {
+   "label": "silent-saves agent-tools item 17",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002554,
+   "at": 1792858923.833
+  },
+  {
+   "label": "silent-saves agent-tools item 17",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00235,
+   "at": 1792858927.138
+  },
+  {
+   "label": "silent-saves agent-tools item 17",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002185,
+   "at": 1792858930.029
+  },
+  {
+   "label": "silent-saves agent-tools item 18",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858932.932
+  },
+  {
+   "label": "silent-saves agent-tools item 18",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001888,
+   "at": 1792858934.67
+  },
+  {
+   "label": "silent-saves agent-tools item 18",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001652,
+   "at": 1792858937.278
+  },
+  {
+   "label": "silent-saves agent-tools item 18",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002819,
+   "at": 1792858939.714
+  },
+  {
+   "label": "silent-saves agent-tools item 18",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002367,
+   "at": 1792858941.599
+  },
+  {
+   "label": "silent-saves agent-tools item 18",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002151,
+   "at": 1792858943.577
+  },
+  {
+   "label": "silent-saves agent-tools item 19",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858946.715
+  },
+  {
+   "label": "silent-saves agent-tools item 19",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001648,
+   "at": 1792858948.177
+  },
+  {
+   "label": "silent-saves agent-tools item 19",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000742,
+   "at": 1792858949.759
+  },
+  {
+   "label": "silent-saves agent-tools item 19",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001156,
+   "at": 1792858951.099
+  },
+  {
+   "label": "silent-saves agent-tools item 19",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000786,
+   "at": 1792858952.482
+  },
+  {
+   "label": "silent-saves agent-tools item 19",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002314,
+   "at": 1792858954.558
+  },
+  {
+   "label": "silent-saves agent-tools item 19",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001383,
+   "at": 1792858956.091
+  },
+  {
+   "label": "silent-saves agent-tools item 19",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000881,
+   "at": 1792858957.44
+  },
+  {
+   "label": "silent-saves agent-tools item 19",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001821,
+   "at": 1792858959.372
+  },
+  {
+   "label": "silent-saves agent-tools item 20",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858962.304
+  },
+  {
+   "label": "silent-saves agent-tools item 20",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001648,
+   "at": 1792858963.909
+  },
+  {
+   "label": "silent-saves agent-tools item 20",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000742,
+   "at": 1792858965.368
+  },
+  {
+   "label": "silent-saves agent-tools item 20",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001156,
+   "at": 1792858966.794
+  },
+  {
+   "label": "silent-saves agent-tools item 20",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000786,
+   "at": 1792858968.331
+  },
+  {
+   "label": "silent-saves agent-tools item 20",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002554,
+   "at": 1792858970.331
+  },
+  {
+   "label": "silent-saves agent-tools item 20",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00235,
+   "at": 1792858972.422
+  },
+  {
+   "label": "silent-saves agent-tools item 20",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001335,
+   "at": 1792858974.297
+  },
+  {
+   "label": "silent-saves agent-tools item 20",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000948,
+   "at": 1792858975.337
+  },
+  {
+   "label": "silent-saves agent-tools item 20",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001518,
+   "at": 1792858976.903
+  },
+  {
+   "label": "silent-saves agent-tools item 20",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002496,
+   "at": 1792858979.287
+  },
+  {
+   "label": "silent-saves agent-tools item 21",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792858982.242
+  },
+  {
+   "label": "silent-saves agent-tools item 21",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001648,
+   "at": 1792858987.092
+  },
+  {
+   "label": "silent-saves agent-tools item 21",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000742,
+   "at": 1792858988.471
+  },
+  {
+   "label": "silent-saves agent-tools item 21",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001156,
+   "at": 1792858989.929
+  },
+  {
+   "label": "silent-saves agent-tools item 21",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000786,
+   "at": 1792858991.398
+  },
+  {
+   "label": "silent-saves agent-tools item 21",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002554,
+   "at": 1792858993.284
+  },
+  {
+   "label": "silent-saves agent-tools item 21",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00259,
+   "at": 1792858995.324
+  },
+  {
+   "label": "silent-saves agent-tools item 21",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002175,
+   "at": 1792858997.335
+  },
+  {
+   "label": "silent-saves agent-tools item 22",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859000.473
+  },
+  {
+   "label": "silent-saves agent-tools item 22",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001648,
+   "at": 1792859001.905
+  },
+  {
+   "label": "silent-saves agent-tools item 22",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000742,
+   "at": 1792859003.421
+  },
+  {
+   "label": "silent-saves agent-tools item 22",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001156,
+   "at": 1792859005.121
+  },
+  {
+   "label": "silent-saves agent-tools item 22",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000786,
+   "at": 1792859006.709
+  },
+  {
+   "label": "silent-saves agent-tools item 22",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002314,
+   "at": 1792859008.883
+  },
+  {
+   "label": "silent-saves agent-tools item 22",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001383,
+   "at": 1792859010.496
+  },
+  {
+   "label": "silent-saves agent-tools item 22",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000881,
+   "at": 1792859012.082
+  },
+  {
+   "label": "silent-saves agent-tools item 22",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002151,
+   "at": 1792859014.658
+  },
+  {
+   "label": "silent-saves agent-script repair item 76",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.006373,
+   "at": 1792859017.25
+  },
+  {
+   "label": "silent-saves agent-tools item 23",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859017.755
+  },
+  {
+   "label": "silent-saves agent-tools item 23",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001888,
+   "at": 1792859019.358
+  },
+  {
+   "label": "silent-saves agent-script repair item 76",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001857,
+   "at": 1792859019.455
+  },
+  {
+   "label": "silent-saves agent-tools item 23",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001652,
+   "at": 1792859021.355
+  },
+  {
+   "label": "silent-saves agent-script repair item 76",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001625,
+   "at": 1792859021.985
+  },
+  {
+   "label": "silent-saves agent-tools item 23",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002819,
+   "at": 1792859023.475
+  },
+  {
+   "label": "silent-saves agent-tools item 23",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002367,
+   "at": 1792859025.695
+  },
+  {
+   "label": "silent-saves agent-tools item 23",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002141,
+   "at": 1792859027.624
+  },
+  {
+   "label": "silent-saves agent-script repair item 76",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.013695,
+   "at": 1792859030.178
+  },
+  {
+   "label": "silent-saves agent-tools item 24",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859030.549
+  },
+  {
+   "label": "silent-saves agent-tools item 24",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001648,
+   "at": 1792859031.638
+  },
+  {
+   "label": "silent-saves agent-tools item 24",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000742,
+   "at": 1792859032.759
+  },
+  {
+   "label": "silent-saves agent-tools item 24",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001156,
+   "at": 1792859033.97
+  },
+  {
+   "label": "silent-saves agent-tools item 24",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000786,
+   "at": 1792859035.119
+  },
+  {
+   "label": "silent-saves agent-tools item 24",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002314,
+   "at": 1792859036.613
+  },
+  {
+   "label": "silent-saves agent-tools item 24",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001383,
+   "at": 1792859037.89
+  },
+  {
+   "label": "silent-saves agent-script repair item 76",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.015331,
+   "at": 1792859038.782
+  },
+  {
+   "label": "silent-saves agent-tools item 24",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000881,
+   "at": 1792859038.999
+  },
+  {
+   "label": "silent-saves agent-tools item 24",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001821,
+   "at": 1792859040.446
+  },
+  {
+   "label": "silent-saves agent-tools item 25",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859043.395
+  },
+  {
+   "label": "silent-saves agent-tools item 25",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001648,
+   "at": 1792859045.027
+  },
+  {
+   "label": "silent-saves agent-tools item 25",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000742,
+   "at": 1792859046.508
+  },
+  {
+   "label": "silent-saves agent-tools item 25",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001156,
+   "at": 1792859048.09
+  },
+  {
+   "label": "silent-saves agent-tools item 25",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000786,
+   "at": 1792859049.569
+  },
+  {
+   "label": "silent-saves agent-tools item 25",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002314,
+   "at": 1792859051.288
+  },
+  {
+   "label": "silent-saves agent-tools item 25",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001383,
+   "at": 1792859052.797
+  },
+  {
+   "label": "silent-saves agent-tools item 25",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000881,
+   "at": 1792859054.151
+  },
+  {
+   "label": "silent-saves agent-tools item 25",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001641,
+   "at": 1792859055.69
+  },
+  {
+   "label": "silent-saves agent-tools item 26",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859058.754
+  },
+  {
+   "label": "silent-saves agent-tools item 26",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859060.545
+  },
+  {
+   "label": "silent-saves agent-tools item 26",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859062.823
+  },
+  {
+   "label": "silent-saves agent-tools item 26",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859065.236
+  },
+  {
+   "label": "silent-saves agent-tools item 26",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792859067.428
+  },
+  {
+   "label": "silent-saves agent-tools item 26",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002133,
+   "at": 1792859069.464
+  },
+  {
+   "label": "silent-saves agent-tools item 27",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859072.595
+  },
+  {
+   "label": "silent-saves agent-tools item 27",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859074.065
+  },
+  {
+   "label": "silent-saves agent-tools item 27",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859075.462
+  },
+  {
+   "label": "silent-saves agent-tools item 27",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792859076.82
+  },
+  {
+   "label": "silent-saves agent-tools item 27",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792859078.262
+  },
+  {
+   "label": "silent-saves agent-tools item 27",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792859080.104
+  },
+  {
+   "label": "silent-saves agent-script repair item 86",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.006653,
+   "at": 1792859081.11
+  },
+  {
+   "label": "silent-saves agent-tools item 27",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792859081.615
+  },
+  {
+   "label": "silent-saves agent-tools item 27",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859083.003
+  },
+  {
+   "label": "silent-saves agent-script repair item 86",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002169,
+   "at": 1792859084.399
+  },
+  {
+   "label": "silent-saves agent-tools item 27",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001833,
+   "at": 1792859084.723
+  },
+  {
+   "label": "silent-saves agent-script repair item 86",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001706,
+   "at": 1792859087.006
+  },
+  {
+   "label": "silent-saves agent-tools item 28",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859087.583
+  },
+  {
+   "label": "silent-saves agent-tools item 28",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859089.529
+  },
+  {
+   "label": "silent-saves agent-tools item 28",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859091.751
+  },
+  {
+   "label": "silent-saves agent-tools item 28",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859093.984
+  },
+  {
+   "label": "silent-saves agent-script repair item 86",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.013309,
+   "at": 1792859094.858
+  },
+  {
+   "label": "silent-saves agent-tools item 28",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792859095.946
+  },
+  {
+   "label": "silent-saves agent-tools item 28",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002113,
+   "at": 1792859097.967
+  },
+  {
+   "label": "silent-saves agent-tools item 29",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859100.916
+  },
+  {
+   "label": "silent-saves agent-tools item 29",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859102.029
+  },
+  {
+   "label": "silent-saves agent-tools item 29",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859103.254
+  },
+  {
+   "label": "silent-saves agent-script repair item 86",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.015285,
+   "at": 1792859103.789
+  },
+  {
+   "label": "silent-saves agent-tools item 29",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792859104.343
+  },
+  {
+   "label": "silent-saves agent-tools item 29",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792859105.52
+  },
+  {
+   "label": "silent-saves agent-tools item 29",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792859107.038
+  },
+  {
+   "label": "silent-saves agent-tools item 29",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792859108.324
+  },
+  {
+   "label": "silent-saves agent-tools item 29",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859109.465
+  },
+  {
+   "label": "silent-saves agent-tools item 29",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001833,
+   "at": 1792859110.895
+  },
+  {
+   "label": "silent-saves agent-tools item 30",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859114.012
+  },
+  {
+   "label": "silent-saves agent-tools item 30",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859115.825
+  },
+  {
+   "label": "silent-saves agent-tools item 30",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859117.874
+  },
+  {
+   "label": "silent-saves agent-tools item 30",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859120.548
+  },
+  {
+   "label": "silent-saves agent-tools item 30",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792859123.775
+  },
+  {
+   "label": "silent-saves agent-tools item 30",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002863,
+   "at": 1792859127.571
+  },
+  {
+   "label": "silent-saves agent-tools item 31",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859130.605
+  },
+  {
+   "label": "silent-saves agent-tools item 31",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859132.183
+  },
+  {
+   "label": "silent-saves agent-tools item 31",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859134.471
+  },
+  {
+   "label": "silent-saves agent-tools item 31",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859136.953
+  },
+  {
+   "label": "silent-saves agent-tools item 31",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792859138.982
+  },
+  {
+   "label": "silent-saves agent-tools item 31",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002163,
+   "at": 1792859141.175
+  },
+  {
+   "label": "silent-saves agent-tools item 32",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859144.263
+  },
+  {
+   "label": "silent-saves agent-tools item 32",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859145.927
+  },
+  {
+   "label": "silent-saves agent-script repair item 96",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.006688,
+   "at": 1792859146.411
+  },
+  {
+   "label": "silent-saves agent-tools item 32",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859148.154
+  },
+  {
+   "label": "silent-saves agent-script repair item 96",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003639,
+   "at": 1792859150.037
+  },
+  {
+   "label": "silent-saves agent-tools item 32",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859150.543
+  },
+  {
+   "label": "silent-saves agent-tools item 32",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792859152.45
+  },
+  {
+   "label": "silent-saves agent-tools item 32",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002163,
+   "at": 1792859154.468
+  },
+  {
+   "label": "silent-saves agent-tools item 33",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859157.543
+  },
+  {
+   "label": "silent-saves agent-script repair item 96",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.013973,
+   "at": 1792859159.073
+  },
+  {
+   "label": "silent-saves agent-tools item 33",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859159.366
+  },
+  {
+   "label": "silent-saves agent-tools item 33",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859161.283
+  },
+  {
+   "label": "silent-saves agent-tools item 33",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859163.62
+  },
+  {
+   "label": "silent-saves agent-tools item 33",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792859165.731
+  },
+  {
+   "label": "silent-saves agent-tools item 33",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002503,
+   "at": 1792859168.027
+  },
+  {
+   "label": "silent-saves agent-tools item 34",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859171.114
+  },
+  {
+   "label": "silent-saves agent-script repair item 97",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00664,
+   "at": 1792859171.41
+  },
+  {
+   "label": "silent-saves agent-tools item 34",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859172.65
+  },
+  {
+   "label": "silent-saves agent-tools item 34",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859174.268
+  },
+  {
+   "label": "silent-saves agent-script repair item 97",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.004215,
+   "at": 1792859175.06
+  },
+  {
+   "label": "silent-saves agent-tools item 34",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792859175.729
+  },
+  {
+   "label": "silent-saves agent-tools item 34",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792859177.124
+  },
+  {
+   "label": "silent-saves agent-tools item 34",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792859178.823
+  },
+  {
+   "label": "silent-saves agent-tools item 34",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792859180.433
+  },
+  {
+   "label": "silent-saves agent-script repair item 97",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00486,
+   "at": 1792859181.115
+  },
+  {
+   "label": "silent-saves agent-tools item 34",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859181.805
+  },
+  {
+   "label": "silent-saves agent-tools item 34",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001843,
+   "at": 1792859183.47
+  },
+  {
+   "label": "silent-saves agent-script repair item 97",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003979,
+   "at": 1792859184.07
+  },
+  {
+   "label": "silent-saves agent-tools item 35",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859186.071
+  },
+  {
+   "label": "silent-saves agent-tools item 35",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859187.186
+  },
+  {
+   "label": "silent-saves agent-tools item 35",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859188.533
+  },
+  {
+   "label": "silent-saves agent-script repair item 97",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.006661,
+   "at": 1792859188.75
+  },
+  {
+   "label": "silent-saves agent-tools item 35",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859190.187
+  },
+  {
+   "label": "silent-saves agent-tools item 35",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792859191.628
+  },
+  {
+   "label": "silent-saves agent-tools item 35",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002113,
+   "at": 1792859193.022
+  },
+  {
+   "label": "silent-saves agent-tools item 36",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859195.946
+  },
+  {
+   "label": "silent-saves agent-tools item 36",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859197.299
+  },
+  {
+   "label": "silent-saves agent-script repair item 97",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.01492,
+   "at": 1792859198.299
+  },
+  {
+   "label": "silent-saves agent-tools item 36",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859198.704
+  },
+  {
+   "label": "silent-saves agent-tools item 36",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792859200.073
+  },
+  {
+   "label": "silent-saves agent-tools item 36",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792859201.49
+  },
+  {
+   "label": "silent-saves agent-tools item 36",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792859203.285
+  },
+  {
+   "label": "silent-saves agent-tools item 36",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792859204.754
+  },
+  {
+   "label": "silent-saves agent-script repair item 97",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00569,
+   "at": 1792859205.543
+  },
+  {
+   "label": "silent-saves agent-tools item 36",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859206.368
+  },
+  {
+   "label": "silent-saves agent-tools item 36",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001833,
+   "at": 1792859208.048
+  },
+  {
+   "label": "silent-saves agent-tools item 37",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859210.889
+  },
+  {
+   "label": "silent-saves agent-tools item 37",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859211.968
+  },
+  {
+   "label": "silent-saves agent-tools item 37",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859213.166
+  },
+  {
+   "label": "silent-saves agent-script repair item 97",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.014518,
+   "at": 1792859213.85
+  },
+  {
+   "label": "silent-saves agent-tools item 37",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792859214.242
+  },
+  {
+   "label": "silent-saves agent-tools item 37",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792859215.373
+  },
+  {
+   "label": "silent-saves agent-tools item 37",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792859216.813
+  },
+  {
+   "label": "silent-saves agent-tools item 37",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792859218.06
+  },
+  {
+   "label": "silent-saves agent-tools item 37",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859219.225
+  },
+  {
+   "label": "silent-saves agent-tools item 37",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001833,
+   "at": 1792859220.528
+  },
+  {
+   "label": "silent-saves agent-tools item 38",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859223.405
+  },
+  {
+   "label": "silent-saves agent-tools item 38",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859224.482
+  },
+  {
+   "label": "silent-saves agent-tools item 38",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859225.583
+  },
+  {
+   "label": "silent-saves agent-script repair item 98",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.006558,
+   "at": 1792859226.44
+  },
+  {
+   "label": "silent-saves agent-tools item 38",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792859226.642
+  },
+  {
+   "label": "silent-saves agent-tools item 38",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792859227.765
+  },
+  {
+   "label": "silent-saves agent-tools item 38",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792859229.219
+  },
+  {
+   "label": "silent-saves agent-script repair item 98",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003019,
+   "at": 1792859229.466
+  },
+  {
+   "label": "silent-saves agent-tools item 38",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792859230.501
+  },
+  {
+   "label": "silent-saves agent-tools item 38",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859231.826
+  },
+  {
+   "label": "silent-saves agent-tools item 38",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001843,
+   "at": 1792859233.277
+  },
+  {
+   "label": "silent-saves agent-script repair item 98",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00789,
+   "at": 1792859235.679
+  },
+  {
+   "label": "silent-saves agent-tools item 39",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859236.388
+  },
+  {
+   "label": "silent-saves agent-tools item 39",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859237.987
+  },
+  {
+   "label": "silent-saves agent-tools item 39",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859240.036
+  },
+  {
+   "label": "silent-saves agent-tools item 39",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859242.427
+  },
+  {
+   "label": "silent-saves agent-script repair item 98",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003813,
+   "at": 1792859243.15
+  },
+  {
+   "label": "silent-saves agent-tools item 39",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792859244.386
+  },
+  {
+   "label": "silent-saves agent-tools item 39",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002163,
+   "at": 1792859246.661
+  },
+  {
+   "label": "silent-saves agent-tools item 40",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859249.727
+  },
+  {
+   "label": "silent-saves agent-script repair item 98",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.014349,
+   "at": 1792859250.816
+  },
+  {
+   "label": "silent-saves agent-tools item 40",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859251.253
+  },
+  {
+   "label": "silent-saves agent-tools item 40",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859253.325
+  },
+  {
+   "label": "silent-saves agent-tools item 40",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859255.885
+  },
+  {
+   "label": "silent-saves agent-tools item 40",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792859257.956
+  },
+  {
+   "label": "silent-saves agent-tools item 40",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00287,
+   "at": 1792859260.551
+  },
+  {
+   "label": "silent-saves agent-tools item 41",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859263.844
+  },
+  {
+   "label": "silent-saves agent-tools item 41",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859265.429
+  },
+  {
+   "label": "silent-saves agent-tools item 41",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859267.626
+  },
+  {
+   "label": "silent-saves agent-tools item 41",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859269.97
+  },
+  {
+   "label": "silent-saves agent-tools item 41",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792859272.325
+  },
+  {
+   "label": "silent-saves agent-tools item 41",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002163,
+   "at": 1792859274.3
+  },
+  {
+   "label": "silent-saves agent-tools item 42",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859277.565
+  },
+  {
+   "label": "silent-saves agent-tools item 42",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859279.1
+  },
+  {
+   "label": "silent-saves agent-tools item 42",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859280.966
+  },
+  {
+   "label": "silent-saves agent-tools item 42",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792859282.442
+  },
+  {
+   "label": "silent-saves agent-tools item 42",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792859283.902
+  },
+  {
+   "label": "silent-saves agent-tools item 42",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792859285.64
+  },
+  {
+   "label": "silent-saves agent-tools item 42",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792859287.209
+  },
+  {
+   "label": "silent-saves agent-tools item 42",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859288.671
+  },
+  {
+   "label": "silent-saves agent-tools item 42",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001833,
+   "at": 1792859290.33
+  },
+  {
+   "label": "silent-saves agent-tools item 43",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859293.296
+  },
+  {
+   "label": "silent-saves agent-tools item 43",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859294.977
+  },
+  {
+   "label": "silent-saves agent-tools item 43",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859297.758
+  },
+  {
+   "label": "silent-saves agent-tools item 43",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859300.845
+  },
+  {
+   "label": "silent-saves agent-tools item 43",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792859303.525
+  },
+  {
+   "label": "silent-saves agent-tools item 43",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002163,
+   "at": 1792859306.321
+  },
+  {
+   "label": "silent-saves agent-tools item 44",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859309.49
+  },
+  {
+   "label": "silent-saves agent-tools item 44",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859311.109
+  },
+  {
+   "label": "silent-saves agent-tools item 44",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859313.025
+  },
+  {
+   "label": "silent-saves agent-tools item 44",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859315.308
+  },
+  {
+   "label": "silent-saves agent-tools item 44",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792859317.226
+  },
+  {
+   "label": "silent-saves agent-tools item 44",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002163,
+   "at": 1792859319.157
+  },
+  {
+   "label": "silent-saves agent-tools item 45",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859322.13
+  },
+  {
+   "label": "silent-saves agent-tools item 45",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859324.003
+  },
+  {
+   "label": "silent-saves agent-tools item 45",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859325.963
+  },
+  {
+   "label": "silent-saves agent-tools item 45",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859328.379
+  },
+  {
+   "label": "silent-saves agent-tools item 45",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792859330.395
+  },
+  {
+   "label": "silent-saves agent-tools item 45",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002163,
+   "at": 1792859332.407
+  },
+  {
+   "label": "silent-saves agent-tools item 46",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859335.078
+  },
+  {
+   "label": "silent-saves agent-tools item 46",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001538,
+   "at": 1792859336.197
+  },
+  {
+   "label": "silent-saves agent-tools item 46",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002039,
+   "at": 1792859337.496
+  },
+  {
+   "label": "silent-saves agent-tools item 46",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001709,
+   "at": 1792859338.812
+  },
+  {
+   "label": "silent-saves agent-tools item 46",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002868,
+   "at": 1792859340.528
+  },
+  {
+   "label": "silent-saves agent-tools item 46",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002416,
+   "at": 1792859341.944
+  },
+  {
+   "label": "silent-saves agent-tools item 46",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002207,
+   "at": 1792859343.382
+  },
+  {
+   "label": "silent-saves agent-tools item 47",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859346.331
+  },
+  {
+   "label": "silent-saves agent-tools item 47",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001298,
+   "at": 1792859347.789
+  },
+  {
+   "label": "silent-saves agent-tools item 47",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000714,
+   "at": 1792859349.31
+  },
+  {
+   "label": "silent-saves agent-tools item 47",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001543,
+   "at": 1792859350.616
+  },
+  {
+   "label": "silent-saves agent-tools item 47",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000791,
+   "at": 1792859352.004
+  },
+  {
+   "label": "silent-saves agent-tools item 47",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001204,
+   "at": 1792859353.441
+  },
+  {
+   "label": "silent-saves agent-tools item 47",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000834,
+   "at": 1792859354.886
+  },
+  {
+   "label": "silent-saves agent-tools item 47",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002355,
+   "at": 1792859356.657
+  },
+  {
+   "label": "silent-saves agent-tools item 47",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00143,
+   "at": 1792859358.458
+  },
+  {
+   "label": "silent-saves agent-tools item 47",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000928,
+   "at": 1792859360.48
+  },
+  {
+   "label": "silent-saves agent-tools item 47",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001879,
+   "at": 1792859362.318
+  },
+  {
+   "label": "silent-saves agent-tools item 48",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859365.673
+  },
+  {
+   "label": "silent-saves agent-tools item 48",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001298,
+   "at": 1792859367.015
+  },
+  {
+   "label": "silent-saves agent-tools item 48",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000714,
+   "at": 1792859368.367
+  },
+  {
+   "label": "silent-saves agent-tools item 48",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001543,
+   "at": 1792859369.89
+  },
+  {
+   "label": "silent-saves agent-tools item 48",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000791,
+   "at": 1792859371.656
+  },
+  {
+   "label": "silent-saves agent-tools item 48",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001204,
+   "at": 1792859372.984
+  },
+  {
+   "label": "silent-saves agent-tools item 48",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000834,
+   "at": 1792859374.468
+  },
+  {
+   "label": "silent-saves agent-tools item 48",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002355,
+   "at": 1792859376.127
+  },
+  {
+   "label": "silent-saves agent-tools item 48",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00143,
+   "at": 1792859377.707
+  },
+  {
+   "label": "silent-saves agent-tools item 48",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000928,
+   "at": 1792859379.269
+  },
+  {
+   "label": "silent-saves agent-tools item 48",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001879,
+   "at": 1792859381.052
+  },
+  {
+   "label": "silent-saves agent-tools item 49",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859383.876
+  },
+  {
+   "label": "silent-saves agent-tools item 49",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001538,
+   "at": 1792859385.552
+  },
+  {
+   "label": "silent-saves agent-tools item 49",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002039,
+   "at": 1792859387.551
+  },
+  {
+   "label": "silent-saves agent-tools item 49",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001709,
+   "at": 1792859389.515
+  },
+  {
+   "label": "silent-saves agent-tools item 49",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002868,
+   "at": 1792859391.799
+  },
+  {
+   "label": "silent-saves agent-tools item 49",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002416,
+   "at": 1792859393.851
+  },
+  {
+   "label": "silent-saves agent-tools item 49",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002217,
+   "at": 1792859395.857
+  },
+  {
+   "label": "silent-saves agent-tools item 50",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859398.786
+  },
+  {
+   "label": "silent-saves agent-tools item 50",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001298,
+   "at": 1792859400.284
+  },
+  {
+   "label": "silent-saves agent-tools item 50",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000714,
+   "at": 1792859401.775
+  },
+  {
+   "label": "silent-saves agent-tools item 50",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001543,
+   "at": 1792859403.254
+  },
+  {
+   "label": "silent-saves agent-tools item 50",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000791,
+   "at": 1792859404.747
+  },
+  {
+   "label": "silent-saves agent-tools item 50",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001204,
+   "at": 1792859406.098
+  },
+  {
+   "label": "silent-saves agent-tools item 50",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000834,
+   "at": 1792859407.614
+  },
+  {
+   "label": "silent-saves agent-tools item 50",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002355,
+   "at": 1792859409.368
+  },
+  {
+   "label": "silent-saves agent-tools item 50",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00143,
+   "at": 1792859411.069
+  },
+  {
+   "label": "silent-saves agent-tools item 50",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000928,
+   "at": 1792859412.522
+  },
+  {
+   "label": "silent-saves agent-tools item 50",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001869,
+   "at": 1792859414.17
+  },
+  {
+   "label": "silent-saves agent-tools item 51",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859417.451
+  },
+  {
+   "label": "silent-saves agent-tools item 51",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001298,
+   "at": 1792859419.222
+  },
+  {
+   "label": "silent-saves agent-tools item 51",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000714,
+   "at": 1792859420.604
+  },
+  {
+   "label": "silent-saves agent-tools item 51",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001543,
+   "at": 1792859422.016
+  },
+  {
+   "label": "silent-saves agent-tools item 51",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000791,
+   "at": 1792859423.382
+  },
+  {
+   "label": "silent-saves agent-tools item 51",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001204,
+   "at": 1792859424.692
+  },
+  {
+   "label": "silent-saves agent-tools item 51",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000834,
+   "at": 1792859426.1
+  },
+  {
+   "label": "silent-saves agent-tools item 51",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002595,
+   "at": 1792859428.338
+  },
+  {
+   "label": "silent-saves agent-tools item 51",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00255,
+   "at": 1792859430.43
+  },
+  {
+   "label": "silent-saves agent-tools item 51",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002292,
+   "at": 1792859432.385
+  },
+  {
+   "label": "silent-saves agent-tools item 52",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859436.07
+  },
+  {
+   "label": "silent-saves agent-tools item 52",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001298,
+   "at": 1792859437.842
+  },
+  {
+   "label": "silent-saves agent-tools item 52",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000714,
+   "at": 1792859439.335
+  },
+  {
+   "label": "silent-saves agent-tools item 52",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001543,
+   "at": 1792859440.668
+  },
+  {
+   "label": "silent-saves agent-tools item 52",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000791,
+   "at": 1792859442.223
+  },
+  {
+   "label": "silent-saves agent-tools item 52",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001204,
+   "at": 1792859443.692
+  },
+  {
+   "label": "silent-saves agent-tools item 52",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000834,
+   "at": 1792859445.195
+  },
+  {
+   "label": "silent-saves agent-tools item 52",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002355,
+   "at": 1792859446.886
+  },
+  {
+   "label": "silent-saves agent-tools item 52",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00166,
+   "at": 1792859448.826
+  },
+  {
+   "label": "silent-saves agent-tools item 52",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002123,
+   "at": 1792859450.845
+  },
+  {
+   "label": "silent-saves agent-tools item 53",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859453.784
+  },
+  {
+   "label": "silent-saves agent-tools item 53",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001538,
+   "at": 1792859455.371
+  },
+  {
+   "label": "silent-saves agent-tools item 53",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002039,
+   "at": 1792859457.445
+  },
+  {
+   "label": "silent-saves agent-tools item 53",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001709,
+   "at": 1792859459.381
+  },
+  {
+   "label": "silent-saves agent-tools item 53",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002868,
+   "at": 1792859462.908
+  },
+  {
+   "label": "silent-saves agent-tools item 53",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002416,
+   "at": 1792859465.017
+  },
+  {
+   "label": "silent-saves agent-tools item 53",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002197,
+   "at": 1792859467.006
+  },
+  {
+   "label": "silent-saves agent-tools item 54",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859469.968
+  },
+  {
+   "label": "silent-saves agent-tools item 54",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001298,
+   "at": 1792859471.417
+  },
+  {
+   "label": "silent-saves agent-tools item 54",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000714,
+   "at": 1792859473.025
+  },
+  {
+   "label": "silent-saves agent-tools item 54",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001543,
+   "at": 1792859474.417
+  },
+  {
+   "label": "silent-saves agent-tools item 54",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000791,
+   "at": 1792859476.016
+  },
+  {
+   "label": "silent-saves agent-tools item 54",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001204,
+   "at": 1792859477.375
+  },
+  {
+   "label": "silent-saves agent-tools item 54",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000834,
+   "at": 1792859478.942
+  },
+  {
+   "label": "silent-saves agent-tools item 54",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002355,
+   "at": 1792859480.857
+  },
+  {
+   "label": "silent-saves agent-tools item 54",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00143,
+   "at": 1792859482.373
+  },
+  {
+   "label": "silent-saves agent-tools item 54",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000928,
+   "at": 1792859483.837
+  },
+  {
+   "label": "silent-saves agent-tools item 54",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001869,
+   "at": 1792859485.664
+  },
+  {
+   "label": "silent-saves agent-tools item 55",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859488.534
+  },
+  {
+   "label": "silent-saves agent-tools item 55",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001298,
+   "at": 1792859490.018
+  },
+  {
+   "label": "silent-saves agent-tools item 55",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000714,
+   "at": 1792859491.467
+  },
+  {
+   "label": "silent-saves agent-tools item 55",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001543,
+   "at": 1792859492.851
+  },
+  {
+   "label": "silent-saves agent-tools item 55",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000791,
+   "at": 1792859494.212
+  },
+  {
+   "label": "silent-saves agent-tools item 55",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001204,
+   "at": 1792859495.676
+  },
+  {
+   "label": "silent-saves agent-tools item 55",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000834,
+   "at": 1792859506.166
+  },
+  {
+   "label": "silent-saves agent-tools item 55",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002355,
+   "at": 1792859507.929
+  },
+  {
+   "label": "silent-saves agent-tools item 55",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00143,
+   "at": 1792859509.611
+  },
+  {
+   "label": "silent-saves agent-tools item 55",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000928,
+   "at": 1792859511.24
+  },
+  {
+   "label": "silent-saves agent-tools item 55",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001879,
+   "at": 1792859512.932
+  },
+  {
+   "label": "silent-saves agent-tools item 56",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859515.872
+  },
+  {
+   "label": "silent-saves agent-tools item 56",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859517.677
+  },
+  {
+   "label": "silent-saves agent-tools item 56",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001765,
+   "at": 1792859519.602
+  },
+  {
+   "label": "silent-saves agent-tools item 56",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.0015,
+   "at": 1792859521.332
+  },
+  {
+   "label": "silent-saves agent-tools item 56",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001337,
+   "at": 1792859522.998
+  },
+  {
+   "label": "silent-saves agent-tools item 56",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001319,
+   "at": 1792859524.489
+  },
+  {
+   "label": "silent-saves agent-tools item 56",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002741,
+   "at": 1792859526.317
+  },
+  {
+   "label": "silent-saves agent-tools item 56",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00268,
+   "at": 1792859528.409
+  },
+  {
+   "label": "silent-saves agent-tools item 56",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002319,
+   "at": 1792859530.382
+  },
+  {
+   "label": "silent-saves agent-tools item 57",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859533.265
+  },
+  {
+   "label": "silent-saves agent-tools item 57",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859534.363
+  },
+  {
+   "label": "silent-saves agent-tools item 57",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859535.49
+  },
+  {
+   "label": "silent-saves agent-tools item 57",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001508,
+   "at": 1792859536.662
+  },
+  {
+   "label": "silent-saves agent-tools item 57",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001492,
+   "at": 1792859537.97
+  },
+  {
+   "label": "silent-saves agent-tools item 57",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001329,
+   "at": 1792859539.287
+  },
+  {
+   "label": "silent-saves agent-tools item 57",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00201,
+   "at": 1792859541.055
+  },
+  {
+   "label": "silent-saves agent-tools item 57",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003162,
+   "at": 1792859547.732
+  },
+  {
+   "label": "silent-saves agent-tools item 57",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002516,
+   "at": 1792859549.358
+  },
+  {
+   "label": "silent-saves agent-tools item 57",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002318,
+   "at": 1792859551.217
+  },
+  {
+   "label": "silent-saves agent-tools item 58",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859554.164
+  },
+  {
+   "label": "silent-saves agent-tools item 58",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859555.878
+  },
+  {
+   "label": "silent-saves agent-tools item 58",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859557.442
+  },
+  {
+   "label": "silent-saves agent-tools item 58",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001508,
+   "at": 1792859558.843
+  },
+  {
+   "label": "silent-saves agent-tools item 58",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001492,
+   "at": 1792859560.544
+  },
+  {
+   "label": "silent-saves agent-tools item 58",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001329,
+   "at": 1792859562.102
+  },
+  {
+   "label": "silent-saves agent-tools item 58",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00132,
+   "at": 1792859563.639
+  },
+  {
+   "label": "silent-saves agent-tools item 58",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002735,
+   "at": 1792859565.57
+  },
+  {
+   "label": "silent-saves agent-tools item 58",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002692,
+   "at": 1792859567.643
+  },
+  {
+   "label": "silent-saves agent-tools item 58",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002346,
+   "at": 1792859569.835
+  },
+  {
+   "label": "silent-saves agent-tools item 59",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859572.754
+  },
+  {
+   "label": "silent-saves agent-tools item 59",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859574.238
+  },
+  {
+   "label": "silent-saves agent-tools item 59",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859575.709
+  },
+  {
+   "label": "silent-saves agent-tools item 59",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001498,
+   "at": 1792859577.34
+  },
+  {
+   "label": "silent-saves agent-tools item 59",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001489,
+   "at": 1792859578.9
+  },
+  {
+   "label": "silent-saves agent-tools item 59",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001329,
+   "at": 1792859580.471
+  },
+  {
+   "label": "silent-saves agent-tools item 59",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00198,
+   "at": 1792859582.584
+  },
+  {
+   "label": "silent-saves agent-tools item 59",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003155,
+   "at": 1792859589.552
+  },
+  {
+   "label": "silent-saves agent-tools item 59",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002515,
+   "at": 1792859591.635
+  },
+  {
+   "label": "silent-saves agent-tools item 59",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002257,
+   "at": 1792859593.809
+  },
+  {
+   "label": "silent-saves agent-tools item 60",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859596.691
+  },
+  {
+   "label": "silent-saves agent-tools item 60",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859597.84
+  },
+  {
+   "label": "silent-saves agent-tools item 60",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859599.003
+  },
+  {
+   "label": "silent-saves agent-tools item 60",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001548,
+   "at": 1792859600.236
+  },
+  {
+   "label": "silent-saves agent-tools item 60",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001502,
+   "at": 1792859601.521
+  },
+  {
+   "label": "silent-saves agent-tools item 60",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00133,
+   "at": 1792859602.838
+  },
+  {
+   "label": "silent-saves agent-tools item 60",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001321,
+   "at": 1792859604.18
+  },
+  {
+   "label": "silent-saves agent-tools item 60",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002736,
+   "at": 1792859605.802
+  },
+  {
+   "label": "silent-saves agent-tools item 60",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002483,
+   "at": 1792859607.412
+  },
+  {
+   "label": "silent-saves agent-tools item 60",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003177,
+   "at": 1792859609.989
+  },
+  {
+   "label": "silent-saves agent-tools item 61",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859612.868
+  },
+  {
+   "label": "silent-saves agent-tools item 61",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859614.529
+  },
+  {
+   "label": "silent-saves agent-tools item 61",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001645,
+   "at": 1792859616.428
+  },
+  {
+   "label": "silent-saves agent-tools item 61",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00147,
+   "at": 1792859618.115
+  },
+  {
+   "label": "silent-saves agent-tools item 61",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001335,
+   "at": 1792859619.798
+  },
+  {
+   "label": "silent-saves agent-tools item 61",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001846,
+   "at": 1792859621.508
+  },
+  {
+   "label": "silent-saves agent-tools item 61",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003126,
+   "at": 1792859628.485
+  },
+  {
+   "label": "silent-saves agent-tools item 61",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002519,
+   "at": 1792859630.477
+  },
+  {
+   "label": "silent-saves agent-tools item 61",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00233,
+   "at": 1792859632.572
+  },
+  {
+   "label": "silent-saves agent-tools item 62",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859635.86
+  },
+  {
+   "label": "silent-saves agent-tools item 62",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859637.512
+  },
+  {
+   "label": "silent-saves agent-tools item 62",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001765,
+   "at": 1792859639.286
+  },
+  {
+   "label": "silent-saves agent-tools item 62",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00214,
+   "at": 1792859641.18
+  },
+  {
+   "label": "silent-saves agent-tools item 62",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001953,
+   "at": 1792859648.017
+  },
+  {
+   "label": "silent-saves agent-tools item 62",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001434,
+   "at": 1792859649.62
+  },
+  {
+   "label": "silent-saves agent-tools item 62",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001346,
+   "at": 1792859651.113
+  },
+  {
+   "label": "silent-saves agent-tools item 62",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00282,
+   "at": 1792859653.241
+  },
+  {
+   "label": "silent-saves agent-tools item 62",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002806,
+   "at": 1792859655.487
+  },
+  {
+   "label": "silent-saves agent-tools item 62",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002662,
+   "at": 1792859657.705
+  },
+  {
+   "label": "silent-saves agent-tools item 63",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859660.74
+  },
+  {
+   "label": "silent-saves agent-tools item 63",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859662.51
+  },
+  {
+   "label": "silent-saves agent-tools item 63",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001765,
+   "at": 1792859664.385
+  },
+  {
+   "label": "silent-saves agent-tools item 63",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.0015,
+   "at": 1792859666.083
+  },
+  {
+   "label": "silent-saves agent-tools item 63",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001337,
+   "at": 1792859667.591
+  },
+  {
+   "label": "silent-saves agent-tools item 63",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002119,
+   "at": 1792859669.613
+  },
+  {
+   "label": "silent-saves agent-tools item 63",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003196,
+   "at": 1792859676.723
+  },
+  {
+   "label": "silent-saves agent-tools item 63",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002527,
+   "at": 1792859678.784
+  },
+  {
+   "label": "silent-saves agent-tools item 63",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002318,
+   "at": 1792859680.708
+  },
+  {
+   "label": "silent-saves agent-tools item 64",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859683.67
+  },
+  {
+   "label": "silent-saves agent-tools item 64",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859685.418
+  },
+  {
+   "label": "silent-saves agent-tools item 64",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001795,
+   "at": 1792859687.489
+  },
+  {
+   "label": "silent-saves agent-tools item 64",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001507,
+   "at": 1792859689.066
+  },
+  {
+   "label": "silent-saves agent-tools item 64",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001338,
+   "at": 1792859690.642
+  },
+  {
+   "label": "silent-saves agent-tools item 64",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001339,
+   "at": 1792859692.288
+  },
+  {
+   "label": "silent-saves agent-tools item 64",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002746,
+   "at": 1792859694.157
+  },
+  {
+   "label": "silent-saves agent-tools item 64",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002721,
+   "at": 1792859696.322
+  },
+  {
+   "label": "silent-saves agent-tools item 64",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00235,
+   "at": 1792859698.264
+  },
+  {
+   "label": "silent-saves agent-tools item 65",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859701.19
+  },
+  {
+   "label": "silent-saves agent-tools item 65",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859702.371
+  },
+  {
+   "label": "silent-saves agent-tools item 65",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859703.558
+  },
+  {
+   "label": "silent-saves agent-tools item 65",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001498,
+   "at": 1792859704.696
+  },
+  {
+   "label": "silent-saves agent-tools item 65",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001489,
+   "at": 1792859705.997
+  },
+  {
+   "label": "silent-saves agent-tools item 65",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001329,
+   "at": 1792859707.328
+  },
+  {
+   "label": "silent-saves agent-tools item 65",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00111,
+   "at": 1792859708.343
+  },
+  {
+   "label": "silent-saves agent-tools item 65",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002682,
+   "at": 1792859709.943
+  },
+  {
+   "label": "silent-saves agent-tools item 65",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002658,
+   "at": 1792859711.671
+  },
+  {
+   "label": "silent-saves agent-tools item 65",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002334,
+   "at": 1792859713.436
+  },
+  {
+   "label": "silent-saves agent-tools item 66",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859716.499
+  },
+  {
+   "label": "silent-saves agent-tools item 66",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859718.09
+  },
+  {
+   "label": "silent-saves agent-tools item 66",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859720.061
+  },
+  {
+   "label": "silent-saves agent-tools item 66",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859722.431
+  },
+  {
+   "label": "silent-saves agent-tools item 66",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792859724.36
+  },
+  {
+   "label": "silent-saves agent-tools item 66",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002163,
+   "at": 1792859726.446
+  },
+  {
+   "label": "silent-saves agent-tools item 67",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859729.473
+  },
+  {
+   "label": "silent-saves agent-tools item 67",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859731.085
+  },
+  {
+   "label": "silent-saves agent-tools item 67",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859733.069
+  },
+  {
+   "label": "silent-saves agent-tools item 67",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859735.25
+  },
+  {
+   "label": "silent-saves agent-tools item 67",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792859737.145
+  },
+  {
+   "label": "silent-saves agent-tools item 67",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002163,
+   "at": 1792859742.019
+  },
+  {
+   "label": "silent-saves agent-tools item 68",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859745.209
+  },
+  {
+   "label": "silent-saves agent-tools item 68",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859746.946
+  },
+  {
+   "label": "silent-saves agent-tools item 68",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859748.885
+  },
+  {
+   "label": "silent-saves agent-tools item 68",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859751.175
+  },
+  {
+   "label": "silent-saves agent-tools item 68",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002361,
+   "at": 1792859753.302
+  },
+  {
+   "label": "silent-saves agent-tools item 68",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002143,
+   "at": 1792859755.448
+  },
+  {
+   "label": "silent-saves agent-tools item 69",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859758.394
+  },
+  {
+   "label": "silent-saves agent-tools item 69",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859759.919
+  },
+  {
+   "label": "silent-saves agent-tools item 69",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859761.373
+  },
+  {
+   "label": "silent-saves agent-tools item 69",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792859762.702
+  },
+  {
+   "label": "silent-saves agent-tools item 69",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792859764.2
+  },
+  {
+   "label": "silent-saves agent-tools item 69",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792859766.104
+  },
+  {
+   "label": "silent-saves agent-tools item 69",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792859767.73
+  },
+  {
+   "label": "silent-saves agent-tools item 69",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859769.068
+  },
+  {
+   "label": "silent-saves agent-tools item 69",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002133,
+   "at": 1792859771.117
+  },
+  {
+   "label": "silent-saves agent-tools item 70",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859773.937
+  },
+  {
+   "label": "silent-saves agent-tools item 70",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859775.515
+  },
+  {
+   "label": "silent-saves agent-tools item 70",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792859777.457
+  },
+  {
+   "label": "silent-saves agent-tools item 70",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002814,
+   "at": 1792859779.675
+  },
+  {
+   "label": "silent-saves agent-tools item 70",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002641,
+   "at": 1792859782.132
+  },
+  {
+   "label": "silent-saves agent-tools item 70",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002233,
+   "at": 1792859785.707
+  },
+  {
+   "label": "silent-saves agent-tools item 71",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859788.729
+  },
+  {
+   "label": "silent-saves agent-tools item 71",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859790.629
+  },
+  {
+   "label": "silent-saves agent-tools item 71",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859792.074
+  },
+  {
+   "label": "silent-saves agent-tools item 71",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792859794.878
+  },
+  {
+   "label": "silent-saves agent-tools item 71",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792859796.398
+  },
+  {
+   "label": "silent-saves agent-tools item 71",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792859798.237
+  },
+  {
+   "label": "silent-saves agent-tools item 71",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792859799.715
+  },
+  {
+   "label": "silent-saves agent-tools item 71",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859801.17
+  },
+  {
+   "label": "silent-saves agent-tools item 71",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001833,
+   "at": 1792859802.714
+  },
+  {
+   "label": "silent-saves agent-tools item 72",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859805.708
+  },
+  {
+   "label": "silent-saves agent-tools item 72",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859806.802
+  },
+  {
+   "label": "silent-saves agent-tools item 72",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859807.959
+  },
+  {
+   "label": "silent-saves agent-tools item 72",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792859809.055
+  },
+  {
+   "label": "silent-saves agent-tools item 72",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792859810.173
+  },
+  {
+   "label": "silent-saves agent-tools item 72",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792859811.791
+  },
+  {
+   "label": "silent-saves agent-tools item 72",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792859813.208
+  },
+  {
+   "label": "silent-saves agent-tools item 72",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859814.528
+  },
+  {
+   "label": "silent-saves agent-tools item 72",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001833,
+   "at": 1792859815.991
+  },
+  {
+   "label": "silent-saves agent-tools item 73",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859819.008
+  },
+  {
+   "label": "silent-saves agent-tools item 73",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859820.524
+  },
+  {
+   "label": "silent-saves agent-tools item 73",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859822.067
+  },
+  {
+   "label": "silent-saves agent-tools item 73",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792859823.438
+  },
+  {
+   "label": "silent-saves agent-tools item 73",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792859824.853
+  },
+  {
+   "label": "silent-saves agent-tools item 73",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792859826.68
+  },
+  {
+   "label": "silent-saves agent-tools item 73",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792859828.16
+  },
+  {
+   "label": "silent-saves agent-tools item 73",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859829.496
+  },
+  {
+   "label": "silent-saves agent-tools item 73",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002173,
+   "at": 1792859831.319
+  },
+  {
+   "label": "silent-saves agent-tools item 74",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859834.424
+  },
+  {
+   "label": "silent-saves agent-tools item 74",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859835.975
+  },
+  {
+   "label": "silent-saves agent-tools item 74",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859837.361
+  },
+  {
+   "label": "silent-saves agent-tools item 74",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792859838.7
+  },
+  {
+   "label": "silent-saves agent-tools item 74",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792859840.303
+  },
+  {
+   "label": "silent-saves agent-tools item 74",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792859842.143
+  },
+  {
+   "label": "silent-saves agent-tools item 74",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792859843.886
+  },
+  {
+   "label": "silent-saves agent-tools item 74",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859845.621
+  },
+  {
+   "label": "silent-saves agent-tools item 74",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001833,
+   "at": 1792859847.231
+  },
+  {
+   "label": "silent-saves agent-tools item 75",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859850.141
+  },
+  {
+   "label": "silent-saves agent-tools item 75",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859851.494
+  },
+  {
+   "label": "silent-saves agent-tools item 75",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859852.787
+  },
+  {
+   "label": "silent-saves agent-tools item 75",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792859854.086
+  },
+  {
+   "label": "silent-saves agent-tools item 75",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792859855.342
+  },
+  {
+   "label": "silent-saves agent-tools item 75",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002309,
+   "at": 1792859857.019
+  },
+  {
+   "label": "silent-saves agent-tools item 75",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001384,
+   "at": 1792859858.554
+  },
+  {
+   "label": "silent-saves agent-tools item 75",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859859.894
+  },
+  {
+   "label": "silent-saves agent-tools item 75",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001843,
+   "at": 1792859861.682
+  },
+  {
+   "label": "silent-saves agent-tools item 76",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859864.531
+  },
+  {
+   "label": "silent-saves agent-tools item 76",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859865.669
+  },
+  {
+   "label": "silent-saves agent-tools item 76",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859867.128
+  },
+  {
+   "label": "silent-saves agent-tools item 76",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001148,
+   "at": 1792859868.271
+  },
+  {
+   "label": "silent-saves agent-tools item 76",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000787,
+   "at": 1792859869.375
+  },
+  {
+   "label": "silent-saves agent-tools item 76",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002548,
+   "at": 1792859870.967
+  },
+  {
+   "label": "silent-saves agent-tools item 76",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002344,
+   "at": 1792859872.582
+  },
+  {
+   "label": "silent-saves agent-tools item 76",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002135,
+   "at": 1792859874.351
+  },
+  {
+   "label": "silent-saves agent-tools item 77",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859877.341
+  },
+  {
+   "label": "silent-saves agent-tools item 77",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859878.432
+  },
+  {
+   "label": "silent-saves agent-tools item 77",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859879.601
+  },
+  {
+   "label": "silent-saves agent-tools item 77",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001148,
+   "at": 1792859880.693
+  },
+  {
+   "label": "silent-saves agent-tools item 77",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000787,
+   "at": 1792859881.835
+  },
+  {
+   "label": "silent-saves agent-tools item 77",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002308,
+   "at": 1792859883.318
+  },
+  {
+   "label": "silent-saves agent-tools item 77",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001383,
+   "at": 1792859884.758
+  },
+  {
+   "label": "silent-saves agent-tools item 77",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859885.853
+  },
+  {
+   "label": "silent-saves agent-tools item 77",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001822,
+   "at": 1792859887.3
+  },
+  {
+   "label": "silent-saves agent-tools item 78",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859890.375
+  },
+  {
+   "label": "silent-saves agent-tools item 78",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859891.784
+  },
+  {
+   "label": "silent-saves agent-tools item 78",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859893.217
+  },
+  {
+   "label": "silent-saves agent-tools item 78",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001148,
+   "at": 1792859894.602
+  },
+  {
+   "label": "silent-saves agent-tools item 78",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000787,
+   "at": 1792859896.007
+  },
+  {
+   "label": "silent-saves agent-tools item 78",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002308,
+   "at": 1792859898.086
+  },
+  {
+   "label": "silent-saves agent-tools item 78",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001383,
+   "at": 1792859899.861
+  },
+  {
+   "label": "silent-saves agent-tools item 78",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859901.688
+  },
+  {
+   "label": "silent-saves agent-tools item 78",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001832,
+   "at": 1792859903.416
+  },
+  {
+   "label": "silent-saves agent-tools item 79",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859906.348
+  },
+  {
+   "label": "silent-saves agent-tools item 79",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859907.748
+  },
+  {
+   "label": "silent-saves agent-tools item 79",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859910.406
+  },
+  {
+   "label": "silent-saves agent-tools item 79",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001148,
+   "at": 1792859911.784
+  },
+  {
+   "label": "silent-saves agent-tools item 79",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000787,
+   "at": 1792859913.346
+  },
+  {
+   "label": "silent-saves agent-tools item 79",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002308,
+   "at": 1792859915.287
+  },
+  {
+   "label": "silent-saves agent-tools item 79",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001383,
+   "at": 1792859916.815
+  },
+  {
+   "label": "silent-saves agent-tools item 79",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859918.48
+  },
+  {
+   "label": "silent-saves agent-tools item 79",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002052,
+   "at": 1792859920.147
+  },
+  {
+   "label": "silent-saves agent-tools item 80",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859923.118
+  },
+  {
+   "label": "silent-saves agent-tools item 80",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859924.625
+  },
+  {
+   "label": "silent-saves agent-tools item 80",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859925.952
+  },
+  {
+   "label": "silent-saves agent-tools item 80",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001148,
+   "at": 1792859927.294
+  },
+  {
+   "label": "silent-saves agent-tools item 80",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000787,
+   "at": 1792859928.727
+  },
+  {
+   "label": "silent-saves agent-tools item 80",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002308,
+   "at": 1792859930.542
+  },
+  {
+   "label": "silent-saves agent-tools item 80",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001383,
+   "at": 1792859931.993
+  },
+  {
+   "label": "silent-saves agent-tools item 80",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859933.349
+  },
+  {
+   "label": "silent-saves agent-tools item 80",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000942,
+   "at": 1792859934.811
+  },
+  {
+   "label": "silent-saves agent-tools item 80",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001381,
+   "at": 1792859936.54
+  },
+  {
+   "label": "silent-saves agent-tools item 80",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002151,
+   "at": 1792859938.365
+  },
+  {
+   "label": "silent-saves agent-tools item 81",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859941.301
+  },
+  {
+   "label": "silent-saves agent-tools item 81",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859942.937
+  },
+  {
+   "label": "silent-saves agent-tools item 81",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001645,
+   "at": 1792859944.966
+  },
+  {
+   "label": "silent-saves agent-tools item 81",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002813,
+   "at": 1792859947.615
+  },
+  {
+   "label": "silent-saves agent-tools item 81",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00259,
+   "at": 1792859949.659
+  },
+  {
+   "label": "silent-saves agent-tools item 81",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002239,
+   "at": 1792859951.675
+  },
+  {
+   "label": "silent-saves agent-tools item 82",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859954.704
+  },
+  {
+   "label": "silent-saves agent-tools item 82",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859956.494
+  },
+  {
+   "label": "silent-saves agent-tools item 82",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001645,
+   "at": 1792859958.449
+  },
+  {
+   "label": "silent-saves agent-tools item 82",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002813,
+   "at": 1792859960.682
+  },
+  {
+   "label": "silent-saves agent-tools item 82",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00265,
+   "at": 1792859962.883
+  },
+  {
+   "label": "silent-saves agent-tools item 82",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002394,
+   "at": 1792859964.909
+  },
+  {
+   "label": "silent-saves agent-tools item 83",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859967.829
+  },
+  {
+   "label": "silent-saves agent-tools item 83",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792859969.456
+  },
+  {
+   "label": "silent-saves agent-tools item 83",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001645,
+   "at": 1792859971.444
+  },
+  {
+   "label": "silent-saves agent-tools item 83",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002813,
+   "at": 1792859974.214
+  },
+  {
+   "label": "silent-saves agent-tools item 83",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00236,
+   "at": 1792859976.762
+  },
+  {
+   "label": "silent-saves agent-tools item 83",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002132,
+   "at": 1792859978.695
+  },
+  {
+   "label": "silent-saves agent-tools item 84",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859981.66
+  },
+  {
+   "label": "silent-saves agent-tools item 84",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859983.131
+  },
+  {
+   "label": "silent-saves agent-tools item 84",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792859984.673
+  },
+  {
+   "label": "silent-saves agent-tools item 84",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001148,
+   "at": 1792859986.109
+  },
+  {
+   "label": "silent-saves agent-tools item 84",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000787,
+   "at": 1792859987.596
+  },
+  {
+   "label": "silent-saves agent-tools item 84",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002308,
+   "at": 1792859989.69
+  },
+  {
+   "label": "silent-saves agent-tools item 84",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001383,
+   "at": 1792859991.222
+  },
+  {
+   "label": "silent-saves agent-tools item 84",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792859992.56
+  },
+  {
+   "label": "silent-saves agent-tools item 84",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001822,
+   "at": 1792859994.347
+  },
+  {
+   "label": "silent-saves agent-tools item 85",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792859997.373
+  },
+  {
+   "label": "silent-saves agent-tools item 85",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792859998.928
+  },
+  {
+   "label": "silent-saves agent-tools item 85",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792860000.502
+  },
+  {
+   "label": "silent-saves agent-tools item 85",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001148,
+   "at": 1792860002.043
+  },
+  {
+   "label": "silent-saves agent-tools item 85",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000787,
+   "at": 1792860003.88
+  },
+  {
+   "label": "silent-saves agent-tools item 85",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002308,
+   "at": 1792860005.995
+  },
+  {
+   "label": "silent-saves agent-tools item 85",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001383,
+   "at": 1792860007.999
+  },
+  {
+   "label": "silent-saves agent-tools item 85",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000882,
+   "at": 1792860009.619
+  },
+  {
+   "label": "silent-saves agent-tools item 85",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001822,
+   "at": 1792860011.994
+  },
+  {
+   "label": "silent-saves agent-tools item 86",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792860014.991
+  },
+  {
+   "label": "silent-saves agent-tools item 86",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001878,
+   "at": 1792860016.749
+  },
+  {
+   "label": "silent-saves agent-tools item 86",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000761,
+   "at": 1792860018.307
+  },
+  {
+   "label": "silent-saves agent-tools item 86",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001174,
+   "at": 1792860019.73
+  },
+  {
+   "label": "silent-saves agent-tools item 86",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000804,
+   "at": 1792860021.104
+  },
+  {
+   "label": "silent-saves agent-tools item 86",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002325,
+   "at": 1792860022.955
+  },
+  {
+   "label": "silent-saves agent-tools item 86",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.0014,
+   "at": 1792860024.502
+  },
+  {
+   "label": "silent-saves agent-tools item 86",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000898,
+   "at": 1792860025.924
+  },
+  {
+   "label": "silent-saves agent-tools item 86",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001849,
+   "at": 1792860027.581
+  },
+  {
+   "label": "silent-saves agent-tools item 87",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792860030.553
+  },
+  {
+   "label": "silent-saves agent-tools item 87",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002118,
+   "at": 1792860032.392
+  },
+  {
+   "label": "silent-saves agent-tools item 87",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001671,
+   "at": 1792860034.3
+  },
+  {
+   "label": "silent-saves agent-tools item 87",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00283,
+   "at": 1792860036.54
+  },
+  {
+   "label": "silent-saves agent-tools item 87",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002377,
+   "at": 1792860038.747
+  },
+  {
+   "label": "silent-saves agent-tools item 87",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002189,
+   "at": 1792860040.71
+  },
+  {
+   "label": "silent-saves agent-tools item 88",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792860043.797
+  },
+  {
+   "label": "silent-saves agent-tools item 88",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002118,
+   "at": 1792860045.502
+  },
+  {
+   "label": "silent-saves agent-tools item 88",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001671,
+   "at": 1792860047.378
+  },
+  {
+   "label": "silent-saves agent-tools item 88",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00283,
+   "at": 1792860049.755
+  },
+  {
+   "label": "silent-saves agent-tools item 88",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002377,
+   "at": 1792860051.857
+  },
+  {
+   "label": "silent-saves agent-tools item 88",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002179,
+   "at": 1792860053.92
+  },
+  {
+   "label": "silent-saves agent-tools item 89",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792860056.832
+  },
+  {
+   "label": "silent-saves agent-tools item 89",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002118,
+   "at": 1792860058.572
+  },
+  {
+   "label": "silent-saves agent-tools item 89",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001671,
+   "at": 1792860060.37
+  },
+  {
+   "label": "silent-saves agent-tools item 89",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00283,
+   "at": 1792860062.751
+  },
+  {
+   "label": "silent-saves agent-tools item 89",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002377,
+   "at": 1792860064.742
+  },
+  {
+   "label": "silent-saves agent-tools item 89",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002179,
+   "at": 1792860066.92
+  },
+  {
+   "label": "silent-saves agent-tools item 90",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792860070.029
+  },
+  {
+   "label": "silent-saves agent-tools item 90",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002118,
+   "at": 1792860071.881
+  },
+  {
+   "label": "silent-saves agent-tools item 90",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001671,
+   "at": 1792860075.38
+  },
+  {
+   "label": "silent-saves agent-tools item 90",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00283,
+   "at": 1792860077.709
+  },
+  {
+   "label": "silent-saves agent-tools item 90",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002377,
+   "at": 1792860080.104
+  },
+  {
+   "label": "silent-saves agent-tools item 90",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002179,
+   "at": 1792860082.183
+  },
+  {
+   "label": "silent-saves agent-tools item 91",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792860085.197
+  },
+  {
+   "label": "silent-saves agent-tools item 91",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792860086.591
+  },
+  {
+   "label": "silent-saves agent-tools item 91",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792860088.087
+  },
+  {
+   "label": "silent-saves agent-tools item 91",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792860089.611
+  },
+  {
+   "label": "silent-saves agent-tools item 91",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792860091.019
+  },
+  {
+   "label": "silent-saves agent-tools item 91",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002719,
+   "at": 1792860093.155
+  },
+  {
+   "label": "silent-saves agent-tools item 91",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001483,
+   "at": 1792860094.767
+  },
+  {
+   "label": "silent-saves agent-tools item 91",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000892,
+   "at": 1792860096.18
+  },
+  {
+   "label": "silent-saves agent-tools item 91",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002352,
+   "at": 1792860098.19
+  },
+  {
+   "label": "silent-saves agent-tools item 92",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792860101.145
+  },
+  {
+   "label": "silent-saves agent-tools item 92",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792860102.691
+  },
+  {
+   "label": "silent-saves agent-tools item 92",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792860104.172
+  },
+  {
+   "label": "silent-saves agent-tools item 92",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792860106.364
+  },
+  {
+   "label": "silent-saves agent-tools item 92",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792860107.841
+  },
+  {
+   "label": "silent-saves agent-tools item 92",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002649,
+   "at": 1792860109.856
+  },
+  {
+   "label": "silent-saves agent-tools item 92",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001466,
+   "at": 1792860111.652
+  },
+  {
+   "label": "silent-saves agent-tools item 92",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.00089,
+   "at": 1792860113.146
+  },
+  {
+   "label": "silent-saves agent-tools item 92",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002461,
+   "at": 1792860115.39
+  },
+  {
+   "label": "silent-saves agent-tools item 93",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792860118.387
+  },
+  {
+   "label": "silent-saves agent-tools item 93",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792860119.849
+  },
+  {
+   "label": "silent-saves agent-tools item 93",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792860121.372
+  },
+  {
+   "label": "silent-saves agent-tools item 93",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792860122.793
+  },
+  {
+   "label": "silent-saves agent-tools item 93",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792860124.489
+  },
+  {
+   "label": "silent-saves agent-tools item 93",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003149,
+   "at": 1792860126.88
+  },
+  {
+   "label": "silent-saves agent-tools item 93",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001486,
+   "at": 1792860128.791
+  },
+  {
+   "label": "silent-saves agent-tools item 93",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002386,
+   "at": 1792860130.966
+  },
+  {
+   "label": "silent-saves agent-tools item 94",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792860133.845
+  },
+  {
+   "label": "silent-saves agent-tools item 94",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001678,
+   "at": 1792860135.681
+  },
+  {
+   "label": "silent-saves agent-tools item 94",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000745,
+   "at": 1792860137.317
+  },
+  {
+   "label": "silent-saves agent-tools item 94",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001158,
+   "at": 1792860138.752
+  },
+  {
+   "label": "silent-saves agent-tools item 94",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.000788,
+   "at": 1792860140.413
+  },
+  {
+   "label": "silent-saves agent-tools item 94",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003079,
+   "at": 1792860142.786
+  },
+  {
+   "label": "silent-saves agent-tools item 94",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001468,
+   "at": 1792860144.574
+  },
+  {
+   "label": "silent-saves agent-tools item 94",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001814,
+   "at": 1792860146.162
+  },
+  {
+   "label": "silent-saves agent-tools item 95",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792860149.217
+  },
+  {
+   "label": "silent-saves agent-tools item 95",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001918,
+   "at": 1792860150.96
+  },
+  {
+   "label": "silent-saves agent-tools item 95",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.001655,
+   "at": 1792860153.642
+  },
+  {
+   "label": "silent-saves agent-tools item 95",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003554,
+   "at": 1792860156.502
+  },
+  {
+   "label": "silent-saves agent-tools item 95",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002665,
+   "at": 1792860158.955
+  },
+  {
+   "label": "silent-saves agent-tools item 96",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792860162.094
+  },
+  {
+   "label": "silent-saves agent-tools item 96",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002656,
+   "at": 1792860164.095
+  },
+  {
+   "label": "silent-saves agent-tools item 97",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792860167.167
+  },
+  {
+   "label": "silent-saves agent-tools item 97",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002486,
+   "at": 1792860168.835
+  },
+  {
+   "label": "silent-saves agent-tools item 98",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792860171.692
+  },
+  {
+   "label": "silent-saves agent-tools item 98",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002486,
+   "at": 1792860173.653
+  },
+  {
+   "label": "silent-saves agent-tools item 99",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792860176.64
+  },
+  {
+   "label": "silent-saves agent-tools item 99",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002616,
+   "at": 1792860178.802
+  },
+  {
+   "label": "silent-saves agent-tools item 100",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.003343,
+   "at": 1792860181.761
+  },
+  {
+   "label": "silent-saves agent-tools item 100",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.002506,
+   "at": 1792860183.961
   }
  ],
  "cap_usd": 30.0,

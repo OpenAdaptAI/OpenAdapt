@@ -1,0 +1,85 @@
+[
+ {
+  "turn": 1,
+  "calls": [
+   {
+    "name": "read_screen",
+    "input": {}
+   },
+   {
+    "name": "read_records",
+    "input": {}
+   }
+  ]
+ },
+ {
+  "turn": 2,
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "0"
+    }
+   },
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ]
+ },
+ {
+  "turn": 3,
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "0"
+    }
+   },
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ]
+ },
+ {
+  "turn": 4,
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "2"
+    }
+   },
+   {
+    "name": "fill",
+    "input": {
+     "ref": "0",
+     "text": "Synthetic follow-up note 95: recheck in 18 days"
+    }
+   },
+   {
+    "name": "click",
+    "input": {
+     "ref": "3"
+    }
+   },
+   {
+    "name": "read_records",
+    "input": {}
+   }
+  ]
+ },
+ {
+  "turn": 5,
+  "calls": [
+   {
+    "name": "finish",
+    "input": {
+     "saved": true,
+     "summary": "Saved one Triage encounter for p1 (Jane Sample) with the exact note. Records were empty before the save, so nothing earlier was removed or changed."
+    }
+   }
+  ]
+ }
+]

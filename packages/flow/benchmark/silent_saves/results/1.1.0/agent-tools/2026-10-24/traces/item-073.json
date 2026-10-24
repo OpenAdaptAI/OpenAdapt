@@ -1,0 +1,105 @@
+[
+ {
+  "turn": 1,
+  "calls": [
+   {
+    "name": "read_screen",
+    "input": {}
+   },
+   {
+    "name": "read_records",
+    "input": {}
+   }
+  ]
+ },
+ {
+  "turn": 2,
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "1"
+    }
+   }
+  ]
+ },
+ {
+  "turn": 3,
+  "calls": [
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ]
+ },
+ {
+  "turn": 4,
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "0"
+    }
+   }
+  ]
+ },
+ {
+  "turn": 5,
+  "calls": [
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ]
+ },
+ {
+  "turn": 6,
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "1"
+    }
+   },
+   {
+    "name": "fill",
+    "input": {
+     "ref": "0",
+     "text": "Synthetic follow-up note 73: recheck in 10 days"
+    }
+   }
+  ]
+ },
+ {
+  "turn": 7,
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "3"
+    }
+   }
+  ]
+ },
+ {
+  "turn": 8,
+  "calls": [
+   {
+    "name": "read_records",
+    "input": {}
+   }
+  ]
+ },
+ {
+  "turn": 9,
+  "calls": [
+   {
+    "name": "finish",
+    "input": {
+     "saved": true,
+     "summary": "I saved one Triage encounter for Jane Sample (p1) with the note \"Synthetic follow-up note 73: recheck in 10 days\". The records were empty before the save. Afterwards there was exactly one record, and it matched the patient, type and note."
+    }
+   }
+  ]
+ }
+]

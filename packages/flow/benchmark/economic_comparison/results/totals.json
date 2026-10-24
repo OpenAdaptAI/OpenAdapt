@@ -1,0 +1,2166 @@
+{
+ "assumptions": "economic-comparison/2026-10-24.1",
+ "mockmed": [
+  {
+   "arm": "cua_alone",
+   "label": "4. Computer-use agent, screenshots only (Claude Sonnet 5.5)",
+   "kind": "agent",
+   "source": "silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19",
+   "measured": {
+    "items": 100,
+    "verified_of_saveable": 90,
+    "saveable": 90,
+    "silent_wrong": 5,
+    "flagged_wrong": 0,
+    "false_stops": 0,
+    "faults_reported_as_success": 5,
+    "stopped_when_no_save_possible": 5,
+    "model_usd_total": 3.8962,
+    "model_calls_total": 511,
+    "control_median_s": 22.51,
+    "control_median_host_load": 17.0,
+    "control_model_usd_per_item": 0.03863
+   },
+   "setup": {
+    "model_usd": 0,
+    "agent_min": 0.0,
+    "operator_min": 0.0,
+    "engineer_min": 30.0,
+    "usd": 50.0
+   },
+   "steady": {
+    "model_usd": 0.03862666666666666,
+    "operator_s": 0.0,
+    "engineer_s": 0.0,
+    "compute_usd": 0.0014030222222222223
+   },
+   "steady_usd": 0.04002968888888889,
+   "faults": [
+    {
+     "item": 20,
+     "fault": "no_persist",
+     "outcome": "silent_wrong",
+     "excess_usd": 1.7496672555555555,
+     "excess_machine_usd": -0.0003327444444444494,
+     "excess_people_usd": 1.75,
+     "excess_people_min": 3.5
+    },
+    {
+     "item": 30,
+     "fault": "wrong_record",
+     "outcome": "silent_wrong",
+     "excess_usd": 1.7494242,
+     "excess_machine_usd": -0.0005757999999999944,
+     "excess_people_usd": 1.75,
+     "excess_people_min": 3.5
+    },
+    {
+     "item": 40,
+     "fault": "partial",
+     "outcome": "silent_wrong",
+     "excess_usd": 1.7495784222222222,
+     "excess_machine_usd": -0.00042157777777777905,
+     "excess_people_usd": 1.75,
+     "excess_people_min": 3.5
+    },
+    {
+     "item": 60,
+     "fault": "duplicate",
+     "outcome": "silent_wrong",
+     "excess_usd": 1.7429637,
+     "excess_machine_usd": -0.007036299999999995,
+     "excess_people_usd": 1.75,
+     "excess_people_min": 3.5
+    },
+    {
+     "item": 80,
+     "fault": "optimistic",
+     "outcome": "silent_wrong",
+     "excess_usd": 1.7498304777777778,
+     "excess_machine_usd": -0.00016952222222221813,
+     "excess_people_usd": 1.75,
+     "excess_people_min": 3.5
+    }
+   ],
+   "changes": [
+    {
+     "change": "renamed controls",
+     "drift": "rename",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.3474,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.002,
+     "excess_machine_usd": -0.0024891444444444244,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "display scaling",
+     "drift": "zoom",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.322,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.028,
+     "excess_machine_usd": -0.02787225555555556,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "moved controls",
+     "drift": "move",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.347,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.001,
+     "excess_machine_usd": -0.0013365888888888788,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "new interstitial",
+     "drift": "notice",
+     "items": 10,
+     "outcomes": {
+      "correct": 10
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.4552,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.073,
+     "excess_machine_usd": 0.0731377222222222,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "latency",
+     "drift": "slow",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.4469,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.102,
+     "excess_machine_usd": 0.10218618888888886,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "reordered queue",
+     "drift": "sort",
+     "items": 10,
+     "outcomes": {
+      "correct": 10
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.386,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.001,
+     "excess_machine_usd": -0.0010644444444444234,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "renamed and moved New Encounter",
+     "drift": "relink",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.3477,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.002,
+     "excess_machine_usd": -0.001974088888888892,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "look-alike referral",
+     "drift": "lookalike",
+     "items": 5,
+     "outcomes": {
+      "correct": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.1931,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.001,
+     "excess_machine_usd": -0.0009323333333333406,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "relabeled and reordered type",
+     "drift": "typelabel",
+     "items": 5,
+     "outcomes": {
+      "correct": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.1929,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.001,
+     "excess_machine_usd": -0.001077722222222216,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "target referral gone",
+     "drift": "missing",
+     "items": 5,
+     "outcomes": {
+      "safe_stop": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 10.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0933,
+     "excess_people_min": 10.0,
+     "excess_usd": 4.895,
+     "excess_machine_usd": -0.10457955555555554,
+     "excess_people_usd": 5.0
+    }
+   ],
+   "totals": {
+    "10": {
+     "setup_usd": 50.0,
+     "per_item_usd": 0.4,
+     "faults_usd": 0.17,
+     "ui_changes_usd": 0.02,
+     "total_usd": 50.6,
+     "people_min": 30.4,
+     "model_usd": 0.39,
+     "silent_wrong_expected": 0.1
+    },
+    "100": {
+     "setup_usd": 50.0,
+     "per_item_usd": 4.0,
+     "faults_usd": 1.75,
+     "ui_changes_usd": 0.2,
+     "total_usd": 55.95,
+     "people_min": 33.9,
+     "model_usd": 3.86,
+     "silent_wrong_expected": 1.0
+    },
+    "1000": {
+     "setup_usd": 50.0,
+     "per_item_usd": 40.03,
+     "faults_usd": 17.48,
+     "ui_changes_usd": 2.01,
+     "total_usd": 109.53,
+     "people_min": 69.0,
+     "model_usd": 38.63,
+     "silent_wrong_expected": 10.0
+    }
+   },
+   "totals_people_x0.5": {
+    "10": {
+     "setup_usd": 25.0,
+     "per_item_usd": 0.4,
+     "faults_usd": 0.09,
+     "ui_changes_usd": 0.01,
+     "total_usd": 25.5,
+     "people_min": 15.2,
+     "model_usd": 0.39,
+     "silent_wrong_expected": 0.1
+    },
+    "100": {
+     "setup_usd": 25.0,
+     "per_item_usd": 4.0,
+     "faults_usd": 0.87,
+     "ui_changes_usd": 0.1,
+     "total_usd": 29.98,
+     "people_min": 16.9,
+     "model_usd": 3.86,
+     "silent_wrong_expected": 1.0
+    },
+    "1000": {
+     "setup_usd": 25.0,
+     "per_item_usd": 40.03,
+     "faults_usd": 8.73,
+     "ui_changes_usd": 1.01,
+     "total_usd": 74.78,
+     "people_min": 34.5,
+     "model_usd": 38.63,
+     "silent_wrong_expected": 10.0
+    }
+   },
+   "totals_people_x2": {
+    "10": {
+     "setup_usd": 100.0,
+     "per_item_usd": 0.4,
+     "faults_usd": 0.35,
+     "ui_changes_usd": 0.04,
+     "total_usd": 100.79,
+     "people_min": 60.8,
+     "model_usd": 0.39,
+     "silent_wrong_expected": 0.1
+    },
+    "100": {
+     "setup_usd": 100.0,
+     "per_item_usd": 4.0,
+     "faults_usd": 3.5,
+     "ui_changes_usd": 0.4,
+     "total_usd": 107.9,
+     "people_min": 67.8,
+     "model_usd": 3.86,
+     "silent_wrong_expected": 1.0
+    },
+    "1000": {
+     "setup_usd": 100.0,
+     "per_item_usd": 40.03,
+     "faults_usd": 34.98,
+     "ui_changes_usd": 4.01,
+     "total_usd": 179.03,
+     "people_min": 138.0,
+     "model_usd": 38.63,
+     "silent_wrong_expected": 10.0
+    }
+   }
+  },
+  {
+   "arm": "agent_tools",
+   "label": "1. Agent with structured tools and record read-back (Claude Sonnet 5.5)",
+   "kind": "agent",
+   "source": "silent_saves/results/1.1.0/agent-tools/2026-10-24",
+   "measured": {
+    "items": 100,
+    "verified_of_saveable": 90,
+    "saveable": 90,
+    "silent_wrong": 0,
+    "flagged_wrong": 3,
+    "false_stops": 0,
+    "faults_reported_as_success": 0,
+    "stopped_when_no_save_possible": 5,
+    "model_usd_total": 1.4546,
+    "model_calls_total": 756,
+    "control_median_s": 12.12,
+    "control_median_host_load": 149.6,
+    "control_model_usd_per_item": 0.01318
+   },
+   "setup": {
+    "model_usd": 0,
+    "agent_min": 0.0,
+    "operator_min": 0.0,
+    "engineer_min": 60.0,
+    "usd": 100.0
+   },
+   "steady": {
+    "model_usd": 0.0131802,
+    "operator_s": 0.0,
+    "engineer_s": 0.0,
+    "compute_usd": 0.000720762962962963
+   },
+   "steady_usd": 0.013900962962962962,
+   "faults": [
+    {
+     "item": 20,
+     "fault": "no_persist",
+     "outcome": "safe_stop",
+     "excess_usd": 1.006023537037037,
+     "excess_machine_usd": 0.006023537037037039,
+     "excess_people_usd": 1.0,
+     "excess_people_min": 2.0
+    },
+    {
+     "item": 30,
+     "fault": "wrong_record",
+     "outcome": "flagged_wrong",
+     "excess_usd": 2.5019235370370367,
+     "excess_machine_usd": 0.0019235370370370396,
+     "excess_people_usd": 2.5,
+     "excess_people_min": 5.0
+    },
+    {
+     "item": 40,
+     "fault": "partial",
+     "outcome": "flagged_wrong",
+     "excess_usd": 2.501775481481481,
+     "excess_machine_usd": 0.001775481481481482,
+     "excess_people_usd": 2.5,
+     "excess_people_min": 5.0
+    },
+    {
+     "item": 60,
+     "fault": "duplicate",
+     "outcome": "flagged_wrong",
+     "excess_usd": 2.506804259259259,
+     "excess_machine_usd": 0.00680425925925926,
+     "excess_people_usd": 2.5,
+     "excess_people_min": 5.0
+    },
+    {
+     "item": 80,
+     "fault": "optimistic",
+     "outcome": "safe_stop",
+     "excess_usd": 1.0038038148148147,
+     "excess_machine_usd": 0.0038038148148148154,
+     "excess_people_usd": 1.0,
+     "excess_people_min": 2.0
+    }
+   ],
+   "changes": [
+    {
+     "change": "renamed controls",
+     "drift": "rename",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.1289,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.011,
+     "excess_machine_usd": 0.01095416666666671,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "display scaling",
+     "drift": "zoom",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.1281,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.009,
+     "excess_machine_usd": 0.009194111111111125,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "moved controls",
+     "drift": "move",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.1278,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.009,
+     "excess_machine_usd": 0.009121666666666667,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "new interstitial",
+     "drift": "notice",
+     "items": 10,
+     "outcomes": {
+      "correct": 10
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.163,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.033,
+     "excess_machine_usd": 0.03343253703703705,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "latency",
+     "drift": "slow",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.1779,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.062,
+     "excess_machine_usd": 0.06249383333333336,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "reordered queue",
+     "drift": "sort",
+     "items": 10,
+     "outcomes": {
+      "correct": 10
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.1427,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.011,
+     "excess_machine_usd": 0.011379814814814815,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "renamed and moved New Encounter",
+     "drift": "relink",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.129,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.011,
+     "excess_machine_usd": 0.01070122222222225,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "look-alike referral",
+     "drift": "lookalike",
+     "items": 5,
+     "outcomes": {
+      "correct": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0725,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.007,
+     "excess_machine_usd": 0.006629685185185183,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "relabeled and reordered type",
+     "drift": "typelabel",
+     "items": 5,
+     "outcomes": {
+      "correct": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0723,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.007,
+     "excess_machine_usd": 0.006753018518518533,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "target referral gone",
+     "drift": "missing",
+     "items": 5,
+     "outcomes": {
+      "safe_stop": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 10.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0295,
+     "excess_people_min": 10.0,
+     "excess_usd": 4.961,
+     "excess_machine_usd": -0.03893248148148148,
+     "excess_people_usd": 5.0
+    }
+   ],
+   "totals": {
+    "10": {
+     "setup_usd": 100.0,
+     "per_item_usd": 0.14,
+     "faults_usd": 0.19,
+     "ui_changes_usd": 0.02,
+     "total_usd": 100.35,
+     "people_min": 60.4,
+     "model_usd": 0.13,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 100.0,
+     "per_item_usd": 1.39,
+     "faults_usd": 1.9,
+     "ui_changes_usd": 0.2,
+     "total_usd": 103.5,
+     "people_min": 64.2,
+     "model_usd": 1.32,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 100.0,
+     "per_item_usd": 13.9,
+     "faults_usd": 19.04,
+     "ui_changes_usd": 2.05,
+     "total_usd": 134.99,
+     "people_min": 102.0,
+     "model_usd": 13.18,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x0.5": {
+    "10": {
+     "setup_usd": 50.0,
+     "per_item_usd": 0.14,
+     "faults_usd": 0.1,
+     "ui_changes_usd": 0.01,
+     "total_usd": 50.24,
+     "people_min": 30.2,
+     "model_usd": 0.13,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 50.0,
+     "per_item_usd": 1.39,
+     "faults_usd": 0.95,
+     "ui_changes_usd": 0.1,
+     "total_usd": 52.45,
+     "people_min": 32.1,
+     "model_usd": 1.32,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 50.0,
+     "per_item_usd": 13.9,
+     "faults_usd": 9.54,
+     "ui_changes_usd": 1.05,
+     "total_usd": 74.49,
+     "people_min": 51.0,
+     "model_usd": 13.18,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x2": {
+    "10": {
+     "setup_usd": 200.0,
+     "per_item_usd": 0.14,
+     "faults_usd": 0.38,
+     "ui_changes_usd": 0.04,
+     "total_usd": 200.56,
+     "people_min": 120.8,
+     "model_usd": 0.13,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 200.0,
+     "per_item_usd": 1.39,
+     "faults_usd": 3.8,
+     "ui_changes_usd": 0.4,
+     "total_usd": 205.6,
+     "people_min": 128.4,
+     "model_usd": 1.32,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 200.0,
+     "per_item_usd": 13.9,
+     "faults_usd": 38.04,
+     "ui_changes_usd": 4.05,
+     "total_usd": 255.99,
+     "people_min": 204.0,
+     "model_usd": 13.18,
+     "silent_wrong_expected": 0.0
+    }
+   }
+  },
+  {
+   "arm": "agent_script",
+   "label": "2. Agent-written Playwright script with read-back and duplicate guard, agent-maintained",
+   "kind": "script",
+   "source": "silent_saves/results/1.1.0/agent-script/2026-10-24",
+   "measured": {
+    "items": 100,
+    "verified_of_saveable": 90,
+    "saveable": 90,
+    "silent_wrong": 0,
+    "flagged_wrong": 3,
+    "false_stops": 0,
+    "faults_reported_as_success": 0,
+    "stopped_when_no_save_possible": 5,
+    "model_usd_total": 0.264,
+    "model_calls_total": 36,
+    "control_median_s": 0.89,
+    "control_median_host_load": 77.2,
+    "control_model_usd_per_item": 0.0
+   },
+   "setup": {
+    "model_usd": 0.026108,
+    "agent_min": 0.3522666666666667,
+    "operator_min": 0.0,
+    "engineer_min": 30.0,
+    "usd": 50.026108
+   },
+   "steady": {
+    "model_usd": 0.0,
+    "operator_s": 0.0,
+    "engineer_s": 0.0,
+    "compute_usd": 0.00012392962962962963
+   },
+   "steady_usd": 0.00012392962962962963,
+   "faults": [
+    {
+     "item": 20,
+     "fault": "no_persist",
+     "outcome": "safe_stop",
+     "excess_usd": 0.9999222925925926,
+     "excess_machine_usd": -7.77074074074074e-05,
+     "excess_people_usd": 1.0,
+     "excess_people_min": 2.0
+    },
+    {
+     "item": 30,
+     "fault": "wrong_record",
+     "outcome": "flagged_wrong",
+     "excess_usd": 2.4999299592592594,
+     "excess_machine_usd": -7.004074074074075e-05,
+     "excess_people_usd": 2.5,
+     "excess_people_min": 5.0
+    },
+    {
+     "item": 40,
+     "fault": "partial",
+     "outcome": "flagged_wrong",
+     "excess_usd": 2.499924625925926,
+     "excess_machine_usd": -7.537407407407406e-05,
+     "excess_people_usd": 2.5,
+     "excess_people_min": 5.0
+    },
+    {
+     "item": 60,
+     "fault": "duplicate",
+     "outcome": "flagged_wrong",
+     "excess_usd": 2.5004645703703705,
+     "excess_machine_usd": 0.0004645703703703704,
+     "excess_people_usd": 2.5,
+     "excess_people_min": 5.0
+    },
+    {
+     "item": 80,
+     "fault": "optimistic",
+     "outcome": "safe_stop",
+     "excess_usd": 1.0000090703703703,
+     "excess_machine_usd": 9.070370370370379e-06,
+     "excess_people_usd": 1.0,
+     "excess_people_min": 2.0
+    }
+   ],
+   "changes": [
+    {
+     "change": "renamed controls",
+     "drift": "rename",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.001,
+     "excess_machine_usd": -0.0006858666666666668,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "display scaling",
+     "drift": "zoom",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.001,
+     "excess_machine_usd": -0.0006713666666666668,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "moved controls",
+     "drift": "move",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.001,
+     "excess_machine_usd": -0.0006850333333333334,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "new interstitial",
+     "drift": "notice",
+     "items": 10,
+     "outcomes": {
+      "correct": 10
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 10.0,
+     "model_usd": 0.0385,
+     "excess_people_min": 10.0,
+     "excess_usd": 16.706,
+     "excess_machine_usd": 0.03937581481481482,
+     "excess_people_usd": 16.666666666666664
+    },
+    {
+     "change": "latency",
+     "drift": "slow",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.004,
+     "excess_machine_usd": 0.004206244444444444,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "reordered queue",
+     "drift": "sort",
+     "items": 10,
+     "outcomes": {
+      "correct": 10
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.001,
+     "excess_machine_usd": 0.0008796481481481483,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "renamed and moved New Encounter",
+     "drift": "relink",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 10.0,
+     "model_usd": 0.0389,
+     "excess_people_min": 10.0,
+     "excess_usd": 16.707,
+     "excess_machine_usd": 0.04070241111111111,
+     "excess_people_usd": 16.666666666666664
+    },
+    {
+     "change": "look-alike referral",
+     "drift": "lookalike",
+     "items": 5,
+     "outcomes": {
+      "correct": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 10.0,
+     "model_usd": 0.0391,
+     "excess_people_min": 10.0,
+     "excess_usd": 16.708,
+     "excess_machine_usd": 0.04089062962962963,
+     "excess_people_usd": 16.666666666666664
+    },
+    {
+     "change": "relabeled and reordered type",
+     "drift": "typelabel",
+     "items": 5,
+     "outcomes": {
+      "correct": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.0,
+     "excess_machine_usd": 4.207407407407415e-05,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "target referral gone",
+     "drift": "missing",
+     "items": 5,
+     "outcomes": {
+      "safe_stop": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 10.0,
+     "engineer_min": 30.0,
+     "model_usd": 0.1214,
+     "excess_people_min": 40.0,
+     "excess_usd": 55.128,
+     "excess_machine_usd": 0.12781646296296295,
+     "excess_people_usd": 55.0
+    }
+   ],
+   "totals": {
+    "10": {
+     "setup_usd": 50.03,
+     "per_item_usd": 0.0,
+     "faults_usd": 0.19,
+     "ui_changes_usd": 0.42,
+     "total_usd": 50.64,
+     "people_min": 30.7,
+     "model_usd": 0.03,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 50.03,
+     "per_item_usd": 0.01,
+     "faults_usd": 1.9,
+     "ui_changes_usd": 4.21,
+     "total_usd": 56.15,
+     "people_min": 36.6,
+     "model_usd": 0.03,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 50.03,
+     "per_item_usd": 0.12,
+     "faults_usd": 19.0,
+     "ui_changes_usd": 42.1,
+     "total_usd": 111.25,
+     "people_min": 96.0,
+     "model_usd": 0.03,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x0.5": {
+    "10": {
+     "setup_usd": 25.03,
+     "per_item_usd": 0.0,
+     "faults_usd": 0.1,
+     "ui_changes_usd": 0.21,
+     "total_usd": 25.33,
+     "people_min": 15.3,
+     "model_usd": 0.03,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 25.03,
+     "per_item_usd": 0.01,
+     "faults_usd": 0.95,
+     "ui_changes_usd": 2.11,
+     "total_usd": 28.1,
+     "people_min": 18.3,
+     "model_usd": 0.03,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 25.03,
+     "per_item_usd": 0.12,
+     "faults_usd": 9.5,
+     "ui_changes_usd": 21.1,
+     "total_usd": 55.75,
+     "people_min": 48.0,
+     "model_usd": 0.03,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x2": {
+    "10": {
+     "setup_usd": 100.03,
+     "per_item_usd": 0.0,
+     "faults_usd": 0.38,
+     "ui_changes_usd": 0.84,
+     "total_usd": 101.25,
+     "people_min": 61.3,
+     "model_usd": 0.03,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 100.03,
+     "per_item_usd": 0.01,
+     "faults_usd": 3.8,
+     "ui_changes_usd": 8.41,
+     "total_usd": 112.25,
+     "people_min": 73.2,
+     "model_usd": 0.03,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 100.03,
+     "per_item_usd": 0.12,
+     "faults_usd": 38.0,
+     "ui_changes_usd": 84.1,
+     "total_usd": 222.25,
+     "people_min": 192.0,
+     "model_usd": 0.03,
+     "silent_wrong_expected": 0.0
+    }
+   }
+  },
+  {
+   "arm": "openadapt_program",
+   "label": "3. OpenAdapt admitted program, read-back on, no model calls",
+   "kind": "program",
+   "source": "silent_saves/results/1.1.0/openadapt-program/2026-10-24",
+   "measured": {
+    "items": 100,
+    "verified_of_saveable": 71,
+    "saveable": 90,
+    "silent_wrong": 0,
+    "flagged_wrong": 3,
+    "false_stops": 19,
+    "faults_reported_as_success": 0,
+    "stopped_when_no_save_possible": 5,
+    "model_usd_total": 0.0,
+    "model_calls_total": 0,
+    "control_median_s": 26.68,
+    "control_median_host_load": 238.6,
+    "control_model_usd_per_item": 0.0
+   },
+   "setup": {
+    "model_usd": 0,
+    "agent_min": 0.0,
+    "operator_min": 22.0,
+    "engineer_min": 30.0,
+    "usd": 61.0
+   },
+   "steady": {
+    "model_usd": 0.0,
+    "operator_s": 0.0,
+    "engineer_s": 0.0,
+    "compute_usd": 0.0014513296296296298
+   },
+   "steady_usd": 0.0014513296296296298,
+   "faults": [
+    {
+     "item": 20,
+     "fault": "no_persist",
+     "outcome": "safe_stop",
+     "excess_usd": 1.0026920037037037,
+     "excess_machine_usd": 0.002692003703703703,
+     "excess_people_usd": 1.0,
+     "excess_people_min": 2.0
+    },
+    {
+     "item": 30,
+     "fault": "wrong_record",
+     "outcome": "flagged_wrong",
+     "excess_usd": 2.501130448148148,
+     "excess_machine_usd": 0.001130448148148148,
+     "excess_people_usd": 2.5,
+     "excess_people_min": 5.0
+    },
+    {
+     "item": 40,
+     "fault": "partial",
+     "outcome": "flagged_wrong",
+     "excess_usd": 2.500343114814815,
+     "excess_machine_usd": 0.00034311481481481463,
+     "excess_people_usd": 2.5,
+     "excess_people_min": 5.0
+    },
+    {
+     "item": 60,
+     "fault": "duplicate",
+     "outcome": "flagged_wrong",
+     "excess_usd": 2.501498337037037,
+     "excess_machine_usd": 0.001498337037037037,
+     "excess_people_usd": 2.5,
+     "excess_people_min": 5.0
+    },
+    {
+     "item": 80,
+     "fault": "optimistic",
+     "outcome": "safe_stop",
+     "excess_usd": 0.9999588925925926,
+     "excess_machine_usd": -4.1107407407407585e-05,
+     "excess_people_usd": 1.0,
+     "excess_people_min": 2.0
+    }
+   ],
+   "changes": [
+    {
+     "change": "renamed controls",
+     "drift": "rename",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.0,
+     "excess_machine_usd": 0.00014881111111111033,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "display scaling",
+     "drift": "zoom",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.012,
+     "excess_machine_usd": 0.011711699999999999,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "moved controls",
+     "drift": "move",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.005,
+     "excess_machine_usd": 0.004591700000000001,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "new interstitial",
+     "drift": "notice",
+     "items": 10,
+     "outcomes": {
+      "safe_stop": 10
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": false,
+     "people_fix_added": "re-teach",
+     "operator_min": 52.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 52.0,
+     "excess_usd": 26.003,
+     "excess_machine_usd": 0.0029962037037037023,
+     "excess_people_usd": 26.0
+    },
+    {
+     "change": "latency",
+     "drift": "slow",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.008,
+     "excess_machine_usd": 0.007667477777777779,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "reordered queue",
+     "drift": "sort",
+     "items": 10,
+     "outcomes": {
+      "correct": 10
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.007,
+     "excess_machine_usd": 0.007410592592592594,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "renamed and moved New Encounter",
+     "drift": "relink",
+     "items": 9,
+     "outcomes": {
+      "safe_stop": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": false,
+     "people_fix_added": "re-teach",
+     "operator_min": 49.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 49.0,
+     "excess_usd": 24.496,
+     "excess_machine_usd": -0.003620911111111111,
+     "excess_people_usd": 24.5
+    },
+    {
+     "change": "look-alike referral",
+     "drift": "lookalike",
+     "items": 5,
+     "outcomes": {
+      "correct": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.003,
+     "excess_machine_usd": -0.0033223703703703714,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "relabeled and reordered type",
+     "drift": "typelabel",
+     "items": 5,
+     "outcomes": {
+      "correct": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.005,
+     "excess_machine_usd": -0.004878425925925927,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "target referral gone",
+     "drift": "missing",
+     "items": 5,
+     "outcomes": {
+      "safe_stop": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 10.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 10.0,
+     "excess_usd": 4.993,
+     "excess_machine_usd": -0.006515537037037038,
+     "excess_people_usd": 5.0
+    }
+   ],
+   "totals": {
+    "10": {
+     "setup_usd": 61.0,
+     "per_item_usd": 0.01,
+     "faults_usd": 0.19,
+     "ui_changes_usd": 0.22,
+     "total_usd": 61.43,
+     "people_min": 52.8,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 61.0,
+     "per_item_usd": 0.15,
+     "faults_usd": 1.9,
+     "ui_changes_usd": 2.22,
+     "total_usd": 65.27,
+     "people_min": 60.2,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 61.0,
+     "per_item_usd": 1.45,
+     "faults_usd": 19.01,
+     "ui_changes_usd": 22.21,
+     "total_usd": 103.67,
+     "people_min": 134.4,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x0.5": {
+    "10": {
+     "setup_usd": 30.5,
+     "per_item_usd": 0.01,
+     "faults_usd": 0.1,
+     "ui_changes_usd": 0.11,
+     "total_usd": 30.72,
+     "people_min": 26.4,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 30.5,
+     "per_item_usd": 0.15,
+     "faults_usd": 0.95,
+     "ui_changes_usd": 1.11,
+     "total_usd": 32.71,
+     "people_min": 30.1,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 30.5,
+     "per_item_usd": 1.45,
+     "faults_usd": 9.51,
+     "ui_changes_usd": 11.11,
+     "total_usd": 52.57,
+     "people_min": 67.2,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x2": {
+    "10": {
+     "setup_usd": 122.0,
+     "per_item_usd": 0.01,
+     "faults_usd": 0.38,
+     "ui_changes_usd": 0.44,
+     "total_usd": 122.84,
+     "people_min": 105.6,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 122.0,
+     "per_item_usd": 0.15,
+     "faults_usd": 3.8,
+     "ui_changes_usd": 4.44,
+     "total_usd": 130.39,
+     "people_min": 120.5,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 122.0,
+     "per_item_usd": 1.45,
+     "faults_usd": 38.01,
+     "ui_changes_usd": 44.41,
+     "total_usd": 205.87,
+     "people_min": 268.8,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    }
+   }
+  },
+  {
+   "arm": "openadapt_self_repair",
+   "label": "3r. OpenAdapt program with self-repair (engine of 2026-10-19)",
+   "kind": "program",
+   "source": "silent_saves/results/1.1.0/self-repair/2026-10-19",
+   "measured": {
+    "items": 100,
+    "verified_of_saveable": 62,
+    "saveable": 90,
+    "silent_wrong": 0,
+    "flagged_wrong": 2,
+    "false_stops": 28,
+    "faults_reported_as_success": 0,
+    "stopped_when_no_save_possible": 5,
+    "model_usd_total": 0.4767,
+    "model_calls_total": 30,
+    "control_median_s": 7.43,
+    "control_median_host_load": 10.5,
+    "control_model_usd_per_item": 0.0
+   },
+   "setup": {
+    "model_usd": 0,
+    "agent_min": 0.0,
+    "operator_min": 22.0,
+    "engineer_min": 30.0,
+    "usd": 61.0
+   },
+   "steady": {
+    "model_usd": 0.0,
+    "operator_s": 0.0,
+    "engineer_s": 0.0,
+    "compute_usd": 0.0004141740740740741
+   },
+   "steady_usd": 0.0004141740740740741,
+   "faults": [
+    {
+     "item": 20,
+     "fault": "no_persist",
+     "outcome": "safe_stop",
+     "excess_usd": 1.000312548148148,
+     "excess_machine_usd": 0.00031254814814814816,
+     "excess_people_usd": 1.0,
+     "excess_people_min": 2.0
+    },
+    {
+     "item": 30,
+     "fault": "wrong_record",
+     "outcome": "safe_stop",
+     "excess_usd": 1.0000156037037036,
+     "excess_machine_usd": 1.56037037037037e-05,
+     "excess_people_usd": 1.0,
+     "excess_people_min": 2.0
+    },
+    {
+     "item": 40,
+     "fault": "partial",
+     "outcome": "flagged_wrong",
+     "excess_usd": 2.5002997703703707,
+     "excess_machine_usd": 0.0002997703703703705,
+     "excess_people_usd": 2.5,
+     "excess_people_min": 5.0
+    },
+    {
+     "item": 60,
+     "fault": "duplicate",
+     "outcome": "flagged_wrong",
+     "excess_usd": 2.500575714814815,
+     "excess_machine_usd": 0.000575714814814815,
+     "excess_people_usd": 2.5,
+     "excess_people_min": 5.0
+    },
+    {
+     "item": 80,
+     "fault": "optimistic",
+     "outcome": "safe_stop",
+     "excess_usd": 1.0361346037037036,
+     "excess_machine_usd": 0.0361346037037037,
+     "excess_people_usd": 1.0,
+     "excess_people_min": 2.0
+    }
+   ],
+   "changes": [
+    {
+     "change": "renamed controls",
+     "drift": "rename",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.0,
+     "excess_machine_usd": -4.39999999999989e-06,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "display scaling",
+     "drift": "zoom",
+     "items": 9,
+     "outcomes": {
+      "safe_stop": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": false,
+     "people_fix_added": "re-teach",
+     "operator_min": 49.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 49.0,
+     "excess_usd": 24.5,
+     "excess_machine_usd": 0.0002111000000000001,
+     "excess_people_usd": 24.5
+    },
+    {
+     "change": "moved controls",
+     "drift": "move",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.0,
+     "excess_machine_usd": 1.9266666666666737e-05,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "new interstitial",
+     "drift": "notice",
+     "items": 10,
+     "outcomes": {
+      "safe_stop": 10
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": false,
+     "people_fix_added": "re-teach",
+     "operator_min": 52.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.1134,
+     "excess_people_min": 52.0,
+     "excess_usd": 26.118,
+     "excess_machine_usd": 0.11763375925925927,
+     "excess_people_usd": 26.0
+    },
+    {
+     "change": "latency",
+     "drift": "slow",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.006,
+     "excess_machine_usd": 0.006329155555555558,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "reordered queue",
+     "drift": "sort",
+     "items": 10,
+     "outcomes": {
+      "correct": 10
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.0,
+     "excess_machine_usd": 6.42592592592587e-05,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "renamed and moved New Encounter",
+     "drift": "relink",
+     "items": 9,
+     "outcomes": {
+      "safe_stop": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": false,
+     "people_fix_added": "re-teach",
+     "operator_min": 49.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.3274,
+     "excess_people_min": 49.0,
+     "excess_usd": 24.829,
+     "excess_machine_usd": 0.32941971111111107,
+     "excess_people_usd": 24.5
+    },
+    {
+     "change": "look-alike referral",
+     "drift": "lookalike",
+     "items": 5,
+     "outcomes": {
+      "correct": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.0,
+     "excess_machine_usd": -3.964814814814803e-05,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "relabeled and reordered type",
+     "drift": "typelabel",
+     "items": 5,
+     "outcomes": {
+      "correct": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.0,
+     "excess_machine_usd": -1.720370370370374e-05,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "target referral gone",
+     "drift": "missing",
+     "items": 5,
+     "outcomes": {
+      "safe_stop": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 10.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0,
+     "excess_people_min": 10.0,
+     "excess_usd": 4.999,
+     "excess_machine_usd": -0.0013910925925925926,
+     "excess_people_usd": 5.0
+    }
+   ],
+   "totals": {
+    "10": {
+     "setup_usd": 61.0,
+     "per_item_usd": 0.0,
+     "faults_usd": 0.16,
+     "ui_changes_usd": 0.32,
+     "total_usd": 61.49,
+     "people_min": 53.0,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 61.0,
+     "per_item_usd": 0.04,
+     "faults_usd": 1.61,
+     "ui_changes_usd": 3.22,
+     "total_usd": 65.87,
+     "people_min": 61.6,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 61.0,
+     "per_item_usd": 0.41,
+     "faults_usd": 16.07,
+     "ui_changes_usd": 32.18,
+     "total_usd": 109.67,
+     "people_min": 148.0,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x0.5": {
+    "10": {
+     "setup_usd": 30.5,
+     "per_item_usd": 0.0,
+     "faults_usd": 0.08,
+     "ui_changes_usd": 0.16,
+     "total_usd": 30.75,
+     "people_min": 26.5,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 30.5,
+     "per_item_usd": 0.04,
+     "faults_usd": 0.81,
+     "ui_changes_usd": 1.62,
+     "total_usd": 32.97,
+     "people_min": 30.8,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 30.5,
+     "per_item_usd": 0.41,
+     "faults_usd": 8.07,
+     "ui_changes_usd": 16.18,
+     "total_usd": 55.17,
+     "people_min": 74.0,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x2": {
+    "10": {
+     "setup_usd": 122.0,
+     "per_item_usd": 0.0,
+     "faults_usd": 0.32,
+     "ui_changes_usd": 0.64,
+     "total_usd": 122.97,
+     "people_min": 105.9,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 122.0,
+     "per_item_usd": 0.04,
+     "faults_usd": 3.21,
+     "ui_changes_usd": 6.42,
+     "total_usd": 131.67,
+     "people_min": 123.2,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 122.0,
+     "per_item_usd": 0.41,
+     "faults_usd": 32.07,
+     "ui_changes_usd": 64.18,
+     "total_usd": 218.67,
+     "people_min": 296.0,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    }
+   }
+  },
+  {
+   "arm": "cua_plus_openadapt_readback",
+   "label": "4 + OpenAdapt read-back: the same agent runs, each claim gated on verify-run",
+   "kind": "agent",
+   "source": "silent_saves/results/1.1.0/claude-computer-use+readback/2026-10-19",
+   "measured": {
+    "items": 100,
+    "verified_of_saveable": 90,
+    "saveable": 90,
+    "silent_wrong": 0,
+    "flagged_wrong": 3,
+    "false_stops": 0,
+    "faults_reported_as_success": 0,
+    "stopped_when_no_save_possible": 5,
+    "model_usd_total": 3.8962,
+    "model_calls_total": 511,
+    "control_median_s": 22.51,
+    "control_median_host_load": 17.0,
+    "control_model_usd_per_item": 0.03863
+   },
+   "setup": {
+    "model_usd": 0,
+    "agent_min": 0.0,
+    "operator_min": 0.0,
+    "engineer_min": 30.0,
+    "usd": 50.0
+   },
+   "steady": {
+    "model_usd": 0.03862666666666666,
+    "operator_s": 0.0,
+    "engineer_s": 0.0,
+    "compute_usd": 0.0014030222222222223
+   },
+   "steady_usd": 0.04002968888888889,
+   "faults": [
+    {
+     "item": 20,
+     "fault": "no_persist",
+     "outcome": "safe_stop",
+     "excess_usd": 0.9996672555555555,
+     "excess_machine_usd": -0.0003327444444444494,
+     "excess_people_usd": 1.0,
+     "excess_people_min": 2.0
+    },
+    {
+     "item": 30,
+     "fault": "wrong_record",
+     "outcome": "flagged_wrong",
+     "excess_usd": 2.4994242,
+     "excess_machine_usd": -0.0005757999999999944,
+     "excess_people_usd": 2.5,
+     "excess_people_min": 5.0
+    },
+    {
+     "item": 40,
+     "fault": "partial",
+     "outcome": "flagged_wrong",
+     "excess_usd": 2.4995784222222226,
+     "excess_machine_usd": -0.00042157777777777905,
+     "excess_people_usd": 2.5,
+     "excess_people_min": 5.0
+    },
+    {
+     "item": 60,
+     "fault": "duplicate",
+     "outcome": "flagged_wrong",
+     "excess_usd": 2.4929637000000002,
+     "excess_machine_usd": -0.007036299999999995,
+     "excess_people_usd": 2.5,
+     "excess_people_min": 5.0
+    },
+    {
+     "item": 80,
+     "fault": "optimistic",
+     "outcome": "safe_stop",
+     "excess_usd": 0.9998304777777778,
+     "excess_machine_usd": -0.00016952222222221813,
+     "excess_people_usd": 1.0,
+     "excess_people_min": 2.0
+    }
+   ],
+   "changes": [
+    {
+     "change": "renamed controls",
+     "drift": "rename",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.3474,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.002,
+     "excess_machine_usd": -0.0024891444444444244,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "display scaling",
+     "drift": "zoom",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.322,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.028,
+     "excess_machine_usd": -0.02787225555555556,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "moved controls",
+     "drift": "move",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.347,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.001,
+     "excess_machine_usd": -0.0013365888888888788,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "new interstitial",
+     "drift": "notice",
+     "items": 10,
+     "outcomes": {
+      "correct": 10
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.4552,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.073,
+     "excess_machine_usd": 0.0731377222222222,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "latency",
+     "drift": "slow",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.4469,
+     "excess_people_min": 0.0,
+     "excess_usd": 0.102,
+     "excess_machine_usd": 0.10218618888888886,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "reordered queue",
+     "drift": "sort",
+     "items": 10,
+     "outcomes": {
+      "correct": 10
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.386,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.001,
+     "excess_machine_usd": -0.0010644444444444234,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "renamed and moved New Encounter",
+     "drift": "relink",
+     "items": 9,
+     "outcomes": {
+      "correct": 9
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.3477,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.002,
+     "excess_machine_usd": -0.001974088888888892,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "look-alike referral",
+     "drift": "lookalike",
+     "items": 5,
+     "outcomes": {
+      "correct": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.1931,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.001,
+     "excess_machine_usd": -0.0009323333333333406,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "relabeled and reordered type",
+     "drift": "typelabel",
+     "items": 5,
+     "outcomes": {
+      "correct": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 0.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.1929,
+     "excess_people_min": 0.0,
+     "excess_usd": -0.001,
+     "excess_machine_usd": -0.001077722222222216,
+     "excess_people_usd": 0.0
+    },
+    {
+     "change": "target referral gone",
+     "drift": "missing",
+     "items": 5,
+     "outcomes": {
+      "safe_stop": 5
+     },
+     "silent_wrong": 0,
+     "recovered_by_block_end": true,
+     "people_fix_added": "",
+     "operator_min": 10.0,
+     "engineer_min": 0.0,
+     "model_usd": 0.0933,
+     "excess_people_min": 10.0,
+     "excess_usd": 4.895,
+     "excess_machine_usd": -0.10457955555555554,
+     "excess_people_usd": 5.0
+    }
+   ],
+   "totals": {
+    "10": {
+     "setup_usd": 50.0,
+     "per_item_usd": 0.4,
+     "faults_usd": 0.19,
+     "ui_changes_usd": 0.02,
+     "total_usd": 50.61,
+     "people_min": 30.4,
+     "model_usd": 0.39,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 50.0,
+     "per_item_usd": 4.0,
+     "faults_usd": 1.9,
+     "ui_changes_usd": 0.2,
+     "total_usd": 56.1,
+     "people_min": 34.2,
+     "model_usd": 3.86,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 50.0,
+     "per_item_usd": 40.03,
+     "faults_usd": 18.98,
+     "ui_changes_usd": 2.01,
+     "total_usd": 111.03,
+     "people_min": 72.0,
+     "model_usd": 38.63,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x0.5": {
+    "10": {
+     "setup_usd": 25.0,
+     "per_item_usd": 0.4,
+     "faults_usd": 0.09,
+     "ui_changes_usd": 0.01,
+     "total_usd": 25.51,
+     "people_min": 15.2,
+     "model_usd": 0.39,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 25.0,
+     "per_item_usd": 4.0,
+     "faults_usd": 0.95,
+     "ui_changes_usd": 0.1,
+     "total_usd": 30.05,
+     "people_min": 17.1,
+     "model_usd": 3.86,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 25.0,
+     "per_item_usd": 40.03,
+     "faults_usd": 9.48,
+     "ui_changes_usd": 1.01,
+     "total_usd": 75.53,
+     "people_min": 36.0,
+     "model_usd": 38.63,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x2": {
+    "10": {
+     "setup_usd": 100.0,
+     "per_item_usd": 0.4,
+     "faults_usd": 0.38,
+     "ui_changes_usd": 0.04,
+     "total_usd": 100.82,
+     "people_min": 60.8,
+     "model_usd": 0.39,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 100.0,
+     "per_item_usd": 4.0,
+     "faults_usd": 3.8,
+     "ui_changes_usd": 0.4,
+     "total_usd": 108.2,
+     "people_min": 68.4,
+     "model_usd": 3.86,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 100.0,
+     "per_item_usd": 40.03,
+     "faults_usd": 37.98,
+     "ui_changes_usd": 4.01,
+     "total_usd": 182.03,
+     "people_min": 144.0,
+     "model_usd": 38.63,
+     "silent_wrong_expected": 0.0
+    }
+   }
+  }
+ ],
+ "mockmed_missing": []
+}
