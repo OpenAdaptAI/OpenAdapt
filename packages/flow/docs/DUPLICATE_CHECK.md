@@ -28,9 +28,11 @@ opens the search:
 It passes only when the list has loaded and names no real candidate:
 
 - A listed row is a **candidate** when it contains every word of this run's
-  value of any `candidate_params` parameter (case-insensitive). With the
-  example above, a chart with the same last name or the same date of birth
-  stops the item. A chart that shares only a first name doesn't.
+  value of any `candidate_params` parameter (case-insensitive), or, for a
+  date, shows the same date in any format. With the example above, a chart
+  with the same last name or the same date of birth stops the item, even
+  under another last name (a married-name change). A chart that shares only
+  a first name doesn't.
 - An **empty list** passes only when its "no matches" marker (`text`) is
   shown, so a list that hasn't loaded yet never passes.
 - It **fails closed**: an unreadable list (frame missing or ambiguous, or a
@@ -54,8 +56,8 @@ on the OpenEMR referral program, and the soak admits that version afresh
 
 - The list must render its rows together, as OpenEMR's server-rendered list
   does. A list that streams rows in one by one could pass on a partial list.
-- A value is recognized only in the form the run typed it. If the app shows a
-  value in another form (a date as `09/09/1990` for `1990-09-09`), the check
-  misses that candidate and lets the item continue. Name only parameters the
-  list shows exactly as typed, and check this on the real list before
-  admitting the program. OpenEMR's list shows the date of birth as typed.
+- A date (a value that is an ISO date) is compared as a date. Every date the
+  row shows is read the way intake reads dates (`Apr 20, 1944`, `20.04.1944`,
+  `04/20/1944`, ISO), and a row date that reads either way counts when either
+  reading matches. Other values are matched word for word, so name only
+  parameters the list shows as they were typed.
