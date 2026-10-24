@@ -28,6 +28,26 @@ Reported beside it, never folded in:
   (reconcile + re-entry per silent wrong), and the all-manual baseline
   (every item entered by hand).
 
+## The headline
+
+`results.json` (`arms.<arm>.headline`) and the top of `REPORT.md` give, per arm:
+
+- **verified items per operator-minute**: items the oracle judges right that
+  nobody entered by hand, over every charged operator minute (approvals,
+  stops, reconciliations, resumes, repair reviews, items done by hand and
+  maintenance). Shown with and without setup, and at x0.5, x1 and x2 of the
+  cost model;
+- false stops per 100 items, and all stops per 100 items;
+- operator minutes per stopped item;
+- after each app change: the items it false-stopped, the operator minutes of
+  maintenance, and the wall time until the next verified item;
+- stops by cause, and for duplicate-check stops the identity field the item
+  shared with an existing chart.
+
+`--drift KIND@SEQ` replaces the four-change schedule with your own, for
+example `--drift relabel_save@26` (proof-15's change: only the save button is
+relabeled).
+
 ## Files
 
 | File | What it is |
@@ -41,7 +61,8 @@ Reported beside it, never folded in:
 | `metrics.py` | The metric and its parts, from the ledger |
 | `report.py` | `results.json`, `REPORT.md` and `stops.jsonl` from the ledger |
 | `run.py` | The runner |
-| `openadapt_arm.py` | The OpenAdapt arm |
+| `openadapt_arm.py` | The OpenAdapt arm (CLI and Standard governed modes) |
+| `production_arm.py` | The production configuration of `benchmark/lifecycle_proof` (Regulated, `problems_only`, durable, pipelined read-back, repair on) as an arm; `recovery: "relabel"` adds the relabel repair, `duplicate_check: true` admits the program with the match-list duplicate check |
 | `fake.py` | An in-memory app and two toy arms, for tests and for checking a new arm |
 | `results/<run>/` | Committed runs: `ledger.jsonl`, `workload.jsonl`, `results.json`, `REPORT.md`, `stops.jsonl` |
 

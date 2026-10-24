@@ -1,6 +1,11 @@
 """The metric, computed only from the results ledger.
 
-Headline: verified completed items per operator-hour.
+Headline (``headline``): verified completed items per operator-minute, with
+every pause, approval, reconciliation and repair review charged as operator
+time, beside false stops per 100 items, operator minutes per stop, and the
+maintenance minutes each app change cost until the program ran again.
+Verified completed items per operator-hour (``bands``) is the same number
+times 60.
 
 - A *verified completed item* is one whose final state the independent
   oracle judges right (the intended chart exactly once, or no new chart when
@@ -79,6 +84,26 @@ def classify(*, claimed: str, oracle: str, chart_wanted: bool, exception: str) -
             return "data_stop"
         return "false_stop"
     return "silent_wrong" if done else "flagged_wrong"
+
+
+def stop_cause(row: dict[str, Any]) -> str:
+    """Why an item stopped, from the product's own halt text (for root causes)."""
+
+    detail = row.get("detail") or {}
+    first = detail.get("first_run") or {}
+    halt = str(
+        first.get("halt") or detail.get("error") or row.get("product_status") or ""
+    )
+    if "no_duplicate_candidate" in halt or "No matches were found" in halt:
+        return "duplicate check listed a chart"
+    if "waiting for a person to approve" in halt and "switched_off" in halt:
+        return "problems_only switch off; stopped unasked"
+    if "Identity check failed" in halt:
+        return "identity check failed (relabeled control)"
+    if "Missing" in halt or "missing" in halt and "param" in halt:
+        return "missing value"
+    outcome = first.get("transaction_outcome") or ""
+    return f"other: {outcome} {halt[:80]}".strip()
 
 
 def wilson(k: int, n: int, z: float = 1.96) -> Optional[tuple[float, float]]:
@@ -209,6 +234,125 @@ def compute(rows: Iterable[dict[str, Any]], cost: CostModel) -> dict[str, Any]:
             ),
         }
 
+    def headline() -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        stopped_ids = {r["item_id"] for r in items if r["claimed"] != "done"}
+        for factor in BANDS:
+            c = cost.scaled(factor) if factor != 1.0 else cost
+            setup_s = sum(_phase_charge(c, r) for r in setup)
+            maint_s = sum(_phase_charge(c, r) for r in maint) + sum(
+                _charge(c, r) for r in repair_ops
+            )
+            item_s = sum(_charge(c, r) for r in item_ops)
+            run_min = (maint_s + item_s) / 60.0
+            all_min = run_min + setup_s / 60.0
+            stop_s = sum(
+                _charge(c, r)
+                for r in ops
+                if r["kind"] in ("stop", "reconcile")
+                and r.get("item_id") in stopped_ids
+            )
+            drift_rows = []
+            for d in drifts:
+                nxt = [
+                    x["first_seq"] for x in drifts if x["first_seq"] > d["first_seq"]
+                ]
+                end = min(nxt) if nxt else 10**9
+                window = [r for r in items if d["first_seq"] <= r["seq"] < end]
+                # Stops the change caused: clean items that wanted a chart
+                # and stopped with nothing written (a right stop on a
+                # duplicate is not maintenance).
+                ids = {r["item_id"] for r in window if r["outcome"] == "false_stop"}
+                spent = sum(
+                    _charge(c, r)
+                    for r in ops
+                    if (r["kind"] in ("stop", "reconcile") and r.get("item_id") in ids)
+                    or (
+                        r["kind"] == "repair_review"
+                        and d["first_seq"] <= r.get("seq", -1) < end
+                    )
+                ) + sum(
+                    _phase_charge(c, r)
+                    for r in maint
+                    if d["first_seq"] <= r.get("seq", -1) < end
+                )
+                first_done = next((r for r in window if r["claimed"] == "done"), None)
+                drift_rows.append(
+                    {
+                        "kind": d["kind"],
+                        "first_seq": d["first_seq"],
+                        "items_in_window": len(window),
+                        "items_false_stopped": len(ids),
+                        "maintenance_operator_min": round(spent / 60, 2),
+                        "first_verified_seq": first_done["seq"] if first_done else None,
+                        "seconds_to_running_again": (
+                            round(first_done["t"] - d["t"], 1)
+                            if first_done and "t" in d and "t" in first_done
+                            else None
+                        ),
+                    }
+                )
+            out[f"x{factor:g}"] = {
+                "verified_per_operator_minute": (
+                    round(len(completed) / run_min, 3) if run_min else None
+                ),
+                "verified_per_operator_minute_with_setup": (
+                    round(len(completed) / all_min, 3) if all_min else None
+                ),
+                "operator_min_run": round(run_min, 2),
+                "operator_min_setup": round(setup_s / 60, 2),
+                "operator_min_per_stop": (
+                    round(stop_s / 60 / len(stopped_ids), 2) if stopped_ids else None
+                ),
+                "after_app_change": drift_rows,
+            }
+        n = len(items)
+        dup = [
+            r
+            for r in items
+            if r["claimed"] != "done"
+            and stop_cause(r) == "duplicate check listed a chart"
+        ]
+
+        def matched(r: dict[str, Any]) -> str:
+            shares = r.get("shares_with_existing") or {}
+            hit = [k for k in ("lname", "DOB") if shares.get(k)]
+            if hit:
+                return "+".join(hit)
+            return "first name only" if shares.get("fname") else "none at start"
+
+        return {
+            "duplicate_rule_stops": {
+                "items": len(dup),
+                "by_shared_field": dict(Counter(matched(r) for r in dup)),
+                "by_outcome": dict(Counter(r["outcome"] for r in dup)),
+                "by_exception": dict(Counter(r["exception"] for r in dup)),
+                "note": "fields the item shared with a chart that existed when "
+                "it started; charts created during the run by earlier items "
+                "count too",
+            },
+            "stops_by_cause": {
+                outcome: dict(
+                    Counter(stop_cause(r) for r in items if r["outcome"] == outcome)
+                )
+                for outcome in sorted(
+                    {r["outcome"] for r in items if r["claimed"] != "done"}
+                )
+            },
+            "verified_completed": len(completed),
+            "items": n,
+            "false_stops_per_100_items": round(100 * len(false_stops) / n, 2)
+            if n
+            else None,
+            "stops_per_100_items": round(100 * len(stops) / n, 2) if n else None,
+            "manual_entry_min": round(cost.manual_entry_s / 60, 2),
+            "bands": out,
+            "definition": "verified completed items (oracle-correct, not done by "
+            "hand) per operator-minute; operator minutes are every charged "
+            "approval, stop, reconciliation, resume, repair review and item done "
+            "by hand, plus maintenance; *_with_setup also charges admission",
+        }
+
     wall = [r["wall_s"] for r in items if r.get("wall_s") is not None]
     loads = [r["load_1m"] for r in items if r.get("load_1m") is not None]
     return {
@@ -261,6 +405,7 @@ def compute(rows: Iterable[dict[str, Any]], cost: CostModel) -> dict[str, Any]:
             "cost_usd": round(sum(r.get("cost_usd", 0.0) for r in items), 4),
         },
         "bands": bands(),
+        "headline": headline(),
     }
 
 
