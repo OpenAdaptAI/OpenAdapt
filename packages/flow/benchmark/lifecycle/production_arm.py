@@ -152,6 +152,9 @@ class ProductionArm:
         #: Convert each item's date parameters to ISO as intake does before
         #: the run (the referral writes dates however its sender writes them).
         self.intake_dates = bool(options.get("intake_dates", False))
+        #: Offer the operator a signed re-arm of a switched-off
+        #: problems_only switch once the log allows it (10 verified items).
+        self.rearm = bool(options.get("rearm", False))
         self.recovery = str(options.get("recovery", "none"))
         if self.recovery not in ("none", "relabel"):
             raise ValueError(f"unknown recovery {self.recovery!r}")
@@ -184,6 +187,7 @@ class ProductionArm:
             "recovery": self.recovery,
             "typed_dob": self.typed_dob,
             "intake_dates": self.intake_dates,
+            "rearm": "operator signs when offered" if self.rearm else "never",
             "duplicate_check": (
                 "no_duplicate_candidate on step_039 (rows tr.oneresult; a row "
                 "with the item's last name or date of birth stops the item)"
@@ -229,6 +233,9 @@ class ProductionArm:
         from openadapt_flow.runtime.readback_pipeline import ReadbackPipeline
 
         self.pipeline = ReadbackPipeline()
+        if self.rearm:
+            self._approver = self._approver_key()
+            ctx["approver_keys"] = self._approver[1]
         return [
             {
                 "phase": "admit",
@@ -426,6 +433,76 @@ class ProductionArm:
         if notes:
             detail["intake_dates"] = notes
         return dataclasses.replace(item, params=params)
+
+    def _approver_key(self) -> tuple[Any, dict[str, str]]:
+        """A throwaway approver key for the scripted operator (outside the repo)."""
+
+        import base64
+
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+            Ed25519PrivateKey,
+        )
+        from cryptography.hazmat.primitives.serialization import (
+            Encoding,
+            NoEncryption,
+            PrivateFormat,
+            PublicFormat,
+            load_pem_private_key,
+        )
+
+        pem = self.keys_dir / "soak-approver.pem"
+        if not pem.exists():
+            pem.write_bytes(
+                Ed25519PrivateKey.generate().private_bytes(
+                    Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()
+                )
+            )
+            pem.chmod(0o600)
+        private = load_pem_private_key(pem.read_bytes(), password=None)
+        public = private.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)  # type: ignore[union-attr]
+        return private, {"soak-approver": base64.b64encode(public).decode("ascii")}
+
+    def _offer_rearm(self, operator: Any, item: WorkItem) -> Optional[dict[str, Any]]:
+        """After an item: if the switch may be re-armed, the operator signs."""
+
+        from openadapt_flow.approval_mode.switch import (
+            SwitchLogError,
+            rearm,
+            rearm_request,
+            sign_rearm,
+        )
+
+        log = self.ctx.get("switch_log")
+        if log is None:
+            return None
+        keys = self.ctx["approver_keys"]
+        try:
+            if not log.state(approver_keys=keys).is_off:
+                return None
+            request = rearm_request(log, cause="recorded in the arm ledger")
+        except SwitchLogError:
+            return None
+        decision = operator.ask(
+            OperatorRequest(
+                kind="approval",
+                item_id=item.item_id,
+                reason=f"re-arm problems_only after {len(request['clean_run_refs'])} "
+                f"verified items (off: {request['off_reason']})",
+                surface="Desktop: re-arm the switch (one signed tap)",
+                detail={"rearm": True, "off_reason": request["off_reason"]},
+            )
+        )
+        if decision.action != "approve":
+            return {"rearmed": False}
+        evidence = sign_rearm(
+            log,
+            request,
+            approver_id="soak-operator",
+            key_id="soak-approver",
+            private_key=self._approver[0],
+        )
+        event = rearm(log, evidence, approver_keys=keys)
+        return {"rearmed": True, "seq": event.seq, "off_reason": request["off_reason"]}
 
     def _resumable(self, run_dir: Path) -> bool:
         from openadapt_flow.runtime.durable import CheckpointStore
@@ -711,6 +788,10 @@ class ProductionArm:
             if x
         )
         detail["final"] = summary
+        if self.rearm:
+            offered = self._offer_rearm(self.ctx["person"].operator, item)
+            if offered is not None:
+                detail["rearm"] = offered
         return ItemResult(
             item_id=item.item_id,
             claimed=claimed,  # type: ignore[arg-type]

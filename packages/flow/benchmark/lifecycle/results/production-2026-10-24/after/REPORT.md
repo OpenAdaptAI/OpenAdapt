@@ -7,6 +7,14 @@ Protocol `lifecycle/2026-10-20.1`, workload `lifecycle-workload/2026-10-24.1`, s
 - **Verified items per operator-minute: 0.327** (41 verified of 55 items over 125.5 operator minutes; 0.314 with the 5.0 setup minutes). By hand: 0.333 an operator-minute.
 - False stops per 100 items: 16.36; all stops per 100 items: 45.45; operator minutes per stop: 3.72.
 - After the app change `relabel_save` (item 26): 7 of 30 items false-stopped, 42.5 operator minutes of maintenance (stops, repair reviews); first verified item after it: 28, 1370.3 s after the change.
+
+| By hand, minutes per item | Verified per operator-minute | By hand per operator-minute | Ratio |
+|---:|---:|---:|---:|
+| 3 | 0.327 | 0.333 | 0.98 |
+| 5 | 0.267 | 0.2 | 1.34 |
+| 8 | 0.21 | 0.125 | 1.68 |
+| 10 | 0.183 | 0.1 | 1.83 |
+
 - Duplicate-check stops: 18; field shared with an existing chart: {"lname": 9, "DOB": 2, "none at start": 1, "lname+DOB": 5, "first name only": 1}; judged {"false_stop": 9, "right_stop": 8, "fault_stop": 1}; exception kinds {"clean": 2, "shared_dob": 3, "concurrent_same": 2, "dup_resend": 2, "ambiguous_same_person": 1, "common_surname": 4, "dup_existing": 3, "slow_save": 1}.
 - Stops judged `data_stop`, by cause: other: REJECTED_POLICY HALTED / REJECTED_POLICY 2.
 - Stops judged `false_stop`, by cause: duplicate check listed a chart 9.

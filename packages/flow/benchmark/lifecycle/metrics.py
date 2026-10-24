@@ -38,6 +38,7 @@ by-hand fix), crossed with what the arm claimed:
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from collections import Counter, defaultdict
 from typing import Any, Iterable, Optional
@@ -84,6 +85,12 @@ def classify(*, claimed: str, oracle: str, chart_wanted: bool, exception: str) -
             return "data_stop"
         return "false_stop"
     return "silent_wrong" if done else "flagged_wrong"
+
+
+#: Minutes a person takes to enter one item by hand, for the sensitivity
+#: table: the cost model charges 3; a real intake desk with lookups takes
+#: longer. Every other charge stays at x1.
+BY_HAND_MINUTES = (3, 5, 8, 10)
 
 
 def stop_cause(row: dict[str, Any]) -> str:
@@ -306,6 +313,25 @@ def compute(rows: Iterable[dict[str, Any]], cost: CostModel) -> dict[str, Any]:
                 ),
                 "after_app_change": drift_rows,
             }
+        by_hand = []
+        for minutes in BY_HAND_MINUTES:
+            c = dataclasses.replace(cost, manual_entry_s=minutes * 60.0)
+            run_s = (
+                sum(_phase_charge(c, r) for r in maint)
+                + sum(_charge(c, r) for r in repair_ops)
+                + sum(_charge(c, r) for r in item_ops)
+            )
+            rate = len(completed) / (run_s / 60.0) if run_s else None
+            by_hand.append(
+                {
+                    "by_hand_min_per_item": minutes,
+                    "verified_per_operator_minute": round(rate, 3) if rate else None,
+                    "by_hand_per_operator_minute": round(1 / minutes, 3),
+                    "ratio_to_by_hand": round(rate * minutes, 2) if rate else None,
+                    "operator_min_run": round(run_s / 60.0, 1),
+                    "operator_min_stream_by_hand": round(len(items) * minutes, 1),
+                }
+            )
         n = len(items)
         dup = [
             r
@@ -322,6 +348,7 @@ def compute(rows: Iterable[dict[str, Any]], cost: CostModel) -> dict[str, Any]:
             return "first name only" if shares.get("fname") else "none at start"
 
         return {
+            "by_hand_sensitivity": by_hand,
             "duplicate_rule_stops": {
                 "items": len(dup),
                 "by_shared_field": dict(Counter(matched(r) for r in dup)),

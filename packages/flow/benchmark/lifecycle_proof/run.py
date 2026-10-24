@@ -363,6 +363,8 @@ class Item:
             record=ctx["switch_record"],
             log=ctx["switch_log"],
             pinned_status_keys=ctx["keys"]["status_keys"],
+            # A person's signed re-arm counts only with their key pinned.
+            pinned_approver_keys=ctx.get("approver_keys") or None,
             fetch_status=LocalStatusAuthority(ctx["keys"]["status_private"]),
             environment_digest=lambda: ctx["environment_digest"],
             runner_id=RUNNER_ID,
@@ -941,9 +943,7 @@ class ProofTarget:
             # The item's own first run: the problems-only gate and the pin.
             from openadapt_flow.runtime import Replayer
 
-            item = Item(
-                self.ctx, self.item.key, Path(run_dir), params=self.item.params
-            )
+            item = Item(self.ctx, self.item.key, Path(run_dir), params=self.item.params)
             verifier = item.verifier()
             replayer = Replayer(
                 session.backend,
