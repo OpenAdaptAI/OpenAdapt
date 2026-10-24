@@ -19,7 +19,12 @@ rows, an OCR pass over the frame for pixel-only screens) and decides:
   (``retarget``) or, when it cannot move, refuse (``wrong_record``);
 * several rows and no recorded id, or more than one row with the recorded id:
   ``ambiguous``. The step halts before it acts, whatever its risk;
-* the rows could not all be counted: ``uncounted``, which also halts.
+* the rows could not all be counted: ``uncounted``, which also halts;
+* the target is not a row (a standalone control, a form field):
+  ``not_a_row``; the verdict stands;
+* the surface cannot count rows at all (a backend without a census, a pixel
+  identity with no OCR band to read): ``cannot_count``. The runtime halts a
+  step that leads into a consequential write, and records it elsewhere.
 
 A recorded id is required even when the row is unique: a single row with
 another id is a different record that happens to read the same
@@ -31,7 +36,13 @@ from __future__ import annotations
 from typing import Any, Callable, Literal, Mapping, NamedTuple, Optional
 
 CensusVerdict = Literal[
-    "unique", "retarget", "ambiguous", "uncounted", "wrong_record", "unavailable"
+    "unique",
+    "retarget",
+    "ambiguous",
+    "uncounted",
+    "wrong_record",
+    "not_a_row",
+    "cannot_count",
 ]
 
 
@@ -60,14 +71,16 @@ def decide(
     """Turn a backend census into a decision.
 
     Args:
-        census: ``identity_candidates_at``'s result, or None when the backend
-            has no census or the point has no row identity.
+        census: ``identity_candidates_at``'s result: ``{"row": False}`` when
+            the point has no row identity, None when the census failed.
         has_recorded_key: Whether the bundle recorded the row's record id
             (and the identity is not bound to a run parameter).
         key_matches: Whether a live record id equals the recorded one.
     """
     if not isinstance(census, Mapping):
-        return CensusDecision("unavailable")
+        return CensusDecision("cannot_count")
+    if census.get("row") is False:
+        return CensusDecision("not_a_row")
     if census.get("incomplete"):
         return CensusDecision("uncounted")
     raw = census.get("candidates")

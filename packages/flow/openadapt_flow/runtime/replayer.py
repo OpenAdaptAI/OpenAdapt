@@ -10670,6 +10670,11 @@ class Replayer:
                     f"{check.candidate_count} shown rows carry the same "
                     "identity and no recorded record id tells them apart"
                 )
+            elif check.ambiguity_halt == "identity_uncounted":
+                why = (
+                    "this surface cannot count the rows that might share it, "
+                    "and a consequential write follows (identity_uncounted)"
+                )
             else:
                 why = "the rows that could share its identity could not all be counted"
             error = (
@@ -15512,7 +15517,7 @@ class Replayer:
         assert anchor is not None
         getter = getattr(self.backend, "identity_candidates_at", None)
         if getter is None:
-            return census_mod.CensusDecision("unavailable")
+            return census_mod.CensusDecision("cannot_count")
         try:
             census = getter(int(point[0]), int(point[1]))
         except Exception:
@@ -15548,7 +15553,7 @@ class Replayer:
         assert anchor is not None
         tmpl = anchor.identity_template
         if not (anchor.context_text or (tmpl is not None and tmpl.tokens)):
-            return census_mod.CensusDecision("unavailable")
+            return census_mod.CensusDecision("cannot_count")
         today = date.today()
         try:
             lines = [
@@ -15558,7 +15563,7 @@ class Replayer:
                 and not identity_mod.is_volatile_line(line.text, reference_date=today)
             ]
         except Exception:
-            return census_mod.CensusDecision("uncounted")
+            return census_mod.CensusDecision("cannot_count")
         viewport = self.backend.viewport
         px, py = int(resolution.point[0]), int(resolution.point[1])
         ex, ey = (
@@ -15638,11 +15643,27 @@ class Replayer:
             "param",
         ):
             return check
-        decision = self._structured_census(step, resolution.point)
-        if decision.verdict == "unavailable" and check.mode != "structured":
+        if check.mode == "structured":
+            decision = self._structured_census(step, resolution.point)
+        else:
             decision = self._ocr_census(step, resolution, before_png, params, workflow)
-        if decision.verdict == "unavailable":
-            return check
+        tmpl = step.anchor.identity_template if step.anchor is not None else None
+        if (
+            decision.verdict == "cannot_count"
+            and check.mode == "structured"
+            and tmpl is not None
+            and tmpl.structured_row is False
+        ):
+            # Teach time saw no record row here (a form field, a button).
+            decision = census_mod.CensusDecision("not_a_row")
+        if decision.verdict == "not_a_row":
+            return check.model_copy(update={"census_status": "not_a_row"})
+        if decision.verdict == "cannot_count":
+            if not self._leads_into_consequential(step, workflow):
+                return check.model_copy(update={"census_status": "cannot_count"})
+            return check.model_copy(
+                update={"status": "abstain", "ambiguity_halt": "identity_uncounted"}
+            )
         if decision.verdict == "unique":
             return check.model_copy(
                 update={"candidate_count": decision.candidate_count}
@@ -15666,6 +15687,25 @@ class Replayer:
                     else "identical_candidates"
                 ),
             }
+        )
+
+    def _leads_into_consequential(
+        self, step: Step, workflow: Optional[Workflow]
+    ) -> bool:
+        """Whether this step or any step after it is a consequential write.
+
+        A step that picks a record (opening a chart) is not itself a write, but
+        the write that follows lands on whatever it opened. Program graphs and
+        steps not found in the linear list count every step of the workflow.
+        """
+
+        if workflow is None:
+            return is_consequential(step, None)
+        steps = list(workflow.steps)
+        index = next((i for i, item in enumerate(steps) if item.id == step.id), None)
+        following = steps[index:] if index is not None else steps
+        return self._step_is_consequential(step, workflow) or any(
+            self._step_is_consequential(item, workflow) for item in following
         )
 
     def _retarget_by_record_key(

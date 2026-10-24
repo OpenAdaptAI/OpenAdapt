@@ -172,9 +172,16 @@ def _recorder(page, root: Path, url: str) -> Recorder:
     )
 
 
-def _replay(browser, url, bundle_dir: Path, run_dir: Path, params=None):
+class _CannotCountBackend(PlaywrightBackend):
+    """A browser backend without the row census, like the native and remote
+    backends: it reads structured text but cannot count look-alike rows."""
+
+    identity_candidates_at = None
+
+
+def _replay(browser, url, bundle_dir: Path, run_dir: Path, params=None, backend=None):
     page = _page(browser, url)
-    report = Replayer(PlaywrightBackend(page), poll_interval_s=0.05).run(
+    report = Replayer((backend or PlaywrightBackend)(page), poll_interval_s=0.05).run(
         Workflow.load(bundle_dir),
         params=params or {},
         bundle_dir=bundle_dir,
@@ -398,5 +405,48 @@ def test_a_unique_row_among_homonyms_replays_after_a_swap(
         assert report.success, _summary(report)
         assert page.locator("#signed").inner_text() == "Signed chart 1003"
         assert report.results[0].identity.candidate_count == 1
+    finally:
+        page.close()
+
+
+def test_a_backend_that_cannot_count_rows_halts_before_the_sign(
+    worklist_bundle, app_url, browser, tmp_path
+) -> None:
+    """No census on this backend: opening a chart that a sign follows halts."""
+
+    report, page = _replay(
+        browser,
+        app_url + "/worklist.html?order=ba",
+        worklist_bundle,
+        tmp_path / "run",
+        backend=_CannotCountBackend,
+    )
+    try:
+        assert not report.success, _summary(report)
+        first = report.results[0]
+        assert not first.ok and first.safety_halt, _summary(report)
+        assert first.identity.ambiguity_halt == "identity_uncounted"
+        assert page.locator("#status").inner_text() == "No chart open"
+        assert page.locator("#signed").inner_text() == "Nothing signed"
+    finally:
+        page.close()
+
+
+def test_a_backend_that_cannot_count_rows_still_runs_a_plain_form(
+    note_bundle, app_url, browser, tmp_path
+) -> None:
+    """The note form has no rows: the same backend saves it as before."""
+
+    report, page = _replay(
+        browser,
+        app_url + "/form.html",
+        note_bundle,
+        tmp_path / "run",
+        params={"patient": "Ada"},
+        backend=_CannotCountBackend,
+    )
+    try:
+        assert report.success, _summary(report)
+        assert page.locator("#status").inner_text() == "Saved Ada"
     finally:
         page.close()

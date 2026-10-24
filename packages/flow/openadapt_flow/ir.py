@@ -331,6 +331,15 @@ class IdentityTemplate(BaseModel):
             "set, replay acts only on the shown row with the same id."
         ),
     )
+    structured_row: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Whether the structured identity came from a record row at teach "
+            "time. False lets a replay surface that cannot count look-alike "
+            "rows still act on the target (a form field, a button); None "
+            "(unknown) is treated as a row."
+        ),
+    )
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -351,6 +360,8 @@ class IdentityTemplate(BaseModel):
             data.pop("context_params", None)
         if self.record_key is None:
             data.pop("record_key", None)
+        if self.structured_row is None:
+            data.pop("structured_row", None)
         return data
 
 
@@ -418,6 +429,13 @@ class Anchor(BaseModel):
             " ``identity_template.record_key`` and clears this field."
         ),
     )
+    structured_row: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Whether ``structured_identity`` came from a record row (compile-"
+            "time only; moved to ``identity_template.structured_row``)."
+        ),
+    )
     identity_template: Optional[IdentityTemplate] = Field(
         default=None,
         description=(
@@ -471,10 +489,12 @@ class Anchor(BaseModel):
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
-        """Leave an unset ``record_key`` out, so older bundle bytes stay equal."""
+        """Leave unset census metadata out, so older bundle bytes stay equal."""
         data: dict[str, Any] = handler(self)
         if self.record_key is None:
             data.pop("record_key", None)
+        if self.structured_row is None:
+            data.pop("structured_row", None)
         return data
 
 
@@ -3729,14 +3749,24 @@ class IdentityCheck(BaseModel):
         ),
     )
     ambiguity_halt: Optional[
-        Literal["identical_candidates", "candidates_uncounted"]
+        Literal["identical_candidates", "candidates_uncounted", "identity_uncounted"]
     ] = Field(
         default=None,
         description=(
             "Set when the identity matched but does not pick one record: "
             "another shown row has the same identity and no stable record id "
-            "tells them apart, or there were too many rows to count. The "
-            "step halts whatever its risk."
+            "tells them apart (identical_candidates), there were too many rows "
+            "to count (candidates_uncounted), or this surface cannot count the "
+            "rows at all and the step leads into a consequential write "
+            "(identity_uncounted). The step halts whatever its risk."
+        ),
+    )
+    census_status: Optional[Literal["not_a_row", "cannot_count"]] = Field(
+        default=None,
+        description=(
+            "Set when the identity verified without a candidate count: the "
+            "target is not a row (not_a_row), or the surface cannot count rows "
+            "and nothing consequential follows the step (cannot_count)."
         ),
     )
 
@@ -3748,6 +3778,8 @@ class IdentityCheck(BaseModel):
             data.pop("candidate_count", None)
         if self.ambiguity_halt is None:
             data.pop("ambiguity_halt", None)
+        if self.census_status is None:
+            data.pop("census_status", None)
         return data
 
 

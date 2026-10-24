@@ -2280,6 +2280,9 @@ def _compile_recording(
             record_key = (
                 event.get("record_key") or None if structured_identity else None
             )
+            structured_row = event.get("structured_row")
+            if not structured_identity or not isinstance(structured_row, bool):
+                structured_row = None
             # Structural locator (DOM selector / role+name, or UIA identifiers)
             # of the clicked element, captured by the recorder when the
             # recording backend exposed it (StructuralActionBackend). Drives the
@@ -2388,6 +2391,7 @@ def _compile_recording(
                 context_text=context_text,
                 structured_identity=structured_identity,
                 record_key=record_key,
+                structured_row=structured_row,
                 structural=structural,
                 landmarks=anchor_landmarks,
                 identifier_crop=identifier_crop_rel,
@@ -3598,6 +3602,7 @@ def _phi_free_identity(workflow: Workflow) -> None:
             param_examples=workflow.params,
             salt_hex=salt,
             record_key=anchor.record_key,
+            structured_row=anchor.structured_row,
         )
         if template is None:
             continue
@@ -3605,3 +3610,4 @@ def _phi_free_identity(workflow: Workflow) -> None:
         anchor.context_text = None
         anchor.structured_identity = None
         anchor.record_key = None
+        anchor.structured_row = None

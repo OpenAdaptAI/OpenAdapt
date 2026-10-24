@@ -762,8 +762,8 @@ _RECORD_KEY_JS = r"""(row, node) => {
 # Every shown row whose record identity equals the identity of the row under
 # the point, with each row's stable record id and position. The identity is
 # computed exactly as ``structured_text_at`` does, for the cell at the same
-# place in each row. Null when the point has no row identity (a form field
-# group, a standalone control): there is no row to compare.
+# place in each row. ``{row: false}`` when the point has no row identity (a
+# form field group, a standalone control): there is no row to compare.
 _IDENTITY_CANDIDATES_AT_JS = (
     r"""([px, py, cap]) => {
     const el = document.elementFromPoint(px, py);
@@ -775,7 +775,7 @@ _IDENTITY_CANDIDATES_AT_JS = (
     + _RECORD_KEY_JS
     + r""";
     const target = describe(el);
-    if (!target.rowIdentity || !target.row) return null;
+    if (!target.rowIdentity || !target.row) return {row: false};
     const row = target.row;
     const own = el.closest('td, th, [role="cell"], [role="gridcell"]') || el;
     const path = [];
@@ -1787,7 +1787,8 @@ class PlaywrightBackend:
         scan, and one entry per shown row with the same identity (the row
         under the point included, ``self`` true) carrying its record id and
         its offset ``(dx, dy)`` from the row under the point, in viewport CSS
-        pixels. None when the point has no row identity or on any failure.
+        pixels. ``{"row": False}`` when the point has no row identity (a
+        standalone control, a form field); None when the census failed.
         """
         try:
             point = self._frame_point(int(x), int(y))

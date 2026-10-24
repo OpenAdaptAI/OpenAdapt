@@ -235,8 +235,11 @@ class IdentityCandidatesBackend(Protocol):
     Returns a dict ``{"record_key": str | None, "incomplete": bool,
     "candidates": [{"self": bool, "record_key": str | None, "dx": float,
     "dy": float}, ...], "top_level": bool}``, where ``dx``/``dy`` are each
-    row's offset from the row under the point in click coordinates, or None
-    when the point has no row identity or the census failed (never raises).
+    row's offset from the row under the point in click coordinates;
+    ``{"row": False}`` when the point has no row identity (a standalone
+    control); or None when the census failed (never raises). A backend without
+    this method cannot count rows, and the runtime halts a step that leads
+    into a consequential write rather than assume the row is unique.
     """
 
     def identity_candidates_at(self, x: int, y: int) -> Optional[dict[str, Any]]:

@@ -106,7 +106,12 @@ def test_incomplete_or_malformed_census_is_uncounted() -> None:
     assert _decide({"candidates": "x"}, None).verdict == "uncounted"
     # The target must appear exactly once in its own census.
     assert _decide({"candidates": []}, None).verdict == "uncounted"
-    assert _decide(None, None).verdict == "unavailable"
+    assert _decide(None, None).verdict == "cannot_count"
+
+
+def test_a_target_that_is_not_a_row_is_not_counted() -> None:
+    assert _decide({"row": False}, None) == CensusDecision("not_a_row")
+    assert _decide({"row": False}, "data-id=1001") == CensusDecision("not_a_row")
 
 
 def test_record_id_is_stored_hashed_and_only_for_unparameterized_rows() -> None:
