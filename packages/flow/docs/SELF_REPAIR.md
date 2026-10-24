@@ -452,7 +452,7 @@ every other repair.
 On the local OpenEMR referral (proof-15's configuration), a relabeled save
 button stopped every item until a person re-taught the step. The lifecycle
 soak measures this path: see
-[benchmark/lifecycle](../benchmark/lifecycle/README.md).
+the lifecycle soak (`benchmark/lifecycle`).
 
 ## What is recorded
 

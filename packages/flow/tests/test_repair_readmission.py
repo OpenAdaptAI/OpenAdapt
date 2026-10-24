@@ -464,6 +464,13 @@ def test_each_requalification_names_its_runs_afresh(tmp_path, keys):
     root = _certified(tmp_path / "root")
     campaign = Campaign()
     for label in ("Save record", "Store record"):
-        _repair(tmp_path, tmp_path / f"store-{label}", root, keys, label=label, campaign=campaign)
+        _repair(
+            tmp_path,
+            tmp_path / f"store-{label}",
+            root,
+            keys,
+            label=label,
+            campaign=campaign,
+        )
     prefixes = [call["run_id_prefix"] for call in campaign.calls]
     assert len(set(prefixes)) == 2

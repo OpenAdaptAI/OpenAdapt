@@ -94,7 +94,9 @@ def test_a_linear_run_compares_with_its_own_parameters() -> None:
     from tests.test_replayer import FakeVision
 
     # A linear (non-program) run keeps its parameters in _run_params only.
-    replayer = Replayer(_Backend(["3\tOakwood, Rosalind\t1950-04-21"]), vision=FakeVision())
+    replayer = Replayer(
+        _Backend(["3\tOakwood, Rosalind\t1950-04-21"]), vision=FakeVision()
+    )
     replayer._run_params = dict(PARAMS)
     pc = Postcondition(
         kind=PostconditionKind.NO_DUPLICATE_CANDIDATE,
