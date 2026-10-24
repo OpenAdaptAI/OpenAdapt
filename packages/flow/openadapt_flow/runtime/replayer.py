@@ -1881,6 +1881,9 @@ class Replayer:
         # iteration scope from the exact loop cursor below. Hashing ``params``
         # inside a loop would count each row twice and reject valid runs.
         self._governed_base_params = dict(params)
+        # The run's own parameters, for postconditions that compare the screen
+        # with a value (a program run also tracks them per state).
+        self._run_params: dict[str, RuntimeParamScalar] = dict(params)
         # Preserve the exact caller-owned worklist object for last-common-point
         # authorization checks.  A callback that mutates it after admission
         # must invalidate the authorization before any reacquired input edge.
@@ -17665,6 +17668,51 @@ class Replayer:
                 return False
         return True
 
+    def _no_duplicate_candidate(self, pc: Any, frame_png: bytes) -> bool:
+        """The app's possible-duplicate list has loaded and names no candidate.
+
+        A row is a candidate when its words include every word of this run's
+        value of any ``pc.candidate_params`` parameter (case-insensitive).
+        Fails closed: an unreadable list, a missing or empty parameter, or an
+        empty list without its "no matches" marker all fail the check.
+        """
+
+        params = (
+            getattr(self, "_current_params", None)
+            or getattr(self, "_run_params", None)
+            or {}
+        )
+        names = tuple(pc.candidate_params or ())
+        if not pc.candidate_rows or not names or not pc.text:
+            return False
+        reader = getattr(self.backend, "element_texts", None)
+        if not callable(reader):
+            return False
+        rows = reader(pc.candidate_rows, tuple(pc.candidate_frame_path or ()))
+        if rows is None:
+            return False
+
+        def words(value: str) -> list[str]:
+            return re.findall(r"[0-9a-z]+", value.casefold())
+
+        wanted = []
+        for name in names:
+            value = words(runtime_param_text(params[name])) if name in params else []
+            if not value:
+                return False
+            wanted.append(value)
+        if not rows:
+            # Nothing listed: only the list's own "no matches" marker shows
+            # the search finished.
+            if self._dom_text_visible(pc.text):
+                return True
+            return self.vision.text_present(frame_png, pc.text)
+        for row in rows:
+            row_words = set(words(row))
+            if any(all(w in row_words for w in value) for value in wanted):
+                return False
+        return True
+
     def _field_value_shown(self, pc: Any) -> bool:
         """The focused field shows this run's value of ``pc.param``.
 
@@ -17704,6 +17752,9 @@ class Replayer:
             return "local_edit (URL, title, page count and focus unchanged)"
         if kind == "field_value":
             return f"field_value (the focused field shows {{{pc.param}}})"
+        if kind == "no_duplicate_candidate":
+            names = ", ".join(pc.candidate_params or ())
+            return f"no_duplicate_candidate (no listed row has this run's {names})"
         if kind in ("text_present", "text_absent"):
             return f"{kind} {pc.text!r}"
         if kind in ("url_changed", "title_changed", "new_tab_opened"):
@@ -17754,6 +17805,8 @@ class Replayer:
             return self._local_edit_held(pc, start_state or {})
         if kind == "field_value":
             return self._field_value_shown(pc)
+        if kind == "no_duplicate_candidate":
+            return self._no_duplicate_candidate(pc, frame_png)
         if kind in ("url_changed", "title_changed", "new_tab_opened"):
             key = {
                 "url_changed": "url",
