@@ -1,7 +1,7 @@
 # Decomposing the largest files
 
-Status: design for review. No code moves in this pull request. It adds this
-document and the file-size ratchet in section 6.
+Status: design, reviewed and approved on 2026-10-24. Section 9 records the
+review decisions. No code moves in the pull request that adds this document.
 
 This document supersedes [REPLAYER_DECOMPOSITION.md](REPLAYER_DECOMPOSITION.md)
 (August 2026). That plan was never executed. Since then `replayer.py` grew from
@@ -22,7 +22,7 @@ repeat the measurements.
 6. [Size ratchet](#6-size-ratchet)
 7. [Coordination with work in flight](#7-coordination-with-work-in-flight)
 8. [How the numbers were measured](#8-how-the-numbers-were-measured)
-9. [Questions for review](#9-questions-for-review)
+9. [Review decisions](#9-review-decisions)
 
 ## 1. What replayer.py is today
 
@@ -432,7 +432,7 @@ Every pull request also:
 - re-exports every moved module-level name from the old module;
 - retargets test patches of moved module globals in the same commit (the
   script lists them);
-- adds the new modules to strict mypy, CODEOWNERS and (once restored) the
+- adds the new modules to strict mypy, CODEOWNERS and the safety-path
   coverage include list;
 - adds characterization tests before moving any concern whose coverage is
   thin, in a commit before the move;
@@ -445,7 +445,7 @@ Every pull request also:
 
 | PR | Target module group | Contents | Lines out of the big files | Wait for |
 |---|---|---|---:|---|
-| 1 | Safety net | Golden-run harness, scenarios of 3.1, baselines from `main`; characterization tests chosen from the coverage run; `scripts/verify_moved_code.py`; import-surface tests for `replayer`, `__main__`, `qualification` and `ir`; strict mypy and CODEOWNERS entries for the new packages | 0 | — |
+| 1 | Safety net | Size ratchet (section 6); golden-run harness, scenarios of 3.1, baselines from `main`; characterization tests chosen from the coverage run; `scripts/verify_moved_code.py`; import-surface tests for `replayer`, `__main__`, `qualification` and `ir`; safety-path coverage reported as a measured number | 0 | — |
 | 2 | Replayer step pipeline and strategies (`runtime/replay/`) | Move commits for the module helpers, qualification faults, healing and assets, render scale and layout drift, surfaces, effects and read-back, settling and interstitials, confirming the action, identity checks, consequential delivery, API tier and web forms, acting by kind. Seam commits S1 `StepState`, S4 `BackendCapabilities` and action executors, S2 phase pipeline, S3 `Mechanism`, S5 check interfaces | ~9,600 | #1504 (identity, delivery, acting); #1449 (interstitials) |
 | 3 | Run gates (`runtime/replay/` gates, `runtime/program/`) | Move commits for approval and authorization refusals, durable resume and attended revalidation, the program interpreter, report finalization. Seam commits S6 `DeliveryGate` tuple per profile, S7 `ProgramState`, S8 `ReportBuilder` | ~4,600 | #1486, #1500, #1501 (approvals); #1435 (program interpreter); #1463 (lifecycle) |
 | 4 | Command surfaces (`cli/`, Desktop handlers) | `__main__.py` split into `cli/<group>/<verb>.py` (5.1); `dispatch.py` split into handler groups (5.4) | ~16,000 | #1486, #1501, #1447 (`__main__.py`); #1486, #1500 (`dispatch.py`) |
@@ -577,18 +577,19 @@ above. The ratchet keeps them from growing meanwhile.
 
 ## 6. Size ratchet
 
-`scripts/check_file_size_ratchet.py` reads the table between the markers below
-and fails if any listed file has more lines than its budget. The root test
-`tests/test_file_size_ratchet.py` runs it, so it runs in the Python CI
-workflow on every pull request and in the merge queue.
+`scripts/check_file_size_ratchet.py` (added in PR 1) reads the table between
+the markers below and fails if any listed file has more lines than its
+budget. The root test `tests/test_file_size_ratchet.py` runs it, so it runs in
+the Python CI workflow on every pull request and in the merge queue.
 
-When a pull request shrinks a file, it lowers the budget in the same pull
-request; the check prints the new number. Raising a budget is a reviewed edit
-to this table with a reason in the pull request description.
+PR 1 sets each budget to the file's size on `main` when PR 1 merges. After
+that:
 
-Pull requests in flight that add lines to these files fail the check once it
-merges, until they move code out or the budget is raised in review. See
-section 9.
+- A pull request that shrinks a file lowers its budget in the same pull
+  request; the check prints the new number.
+- A pull request that adds net lines to a listed file raises the budget in
+  its own diff, with a one-line reason in the pull request description. The
+  ratchet makes growth visible in review; it does not block feature work.
 
 <!-- size-ratchet:begin -->
 | File | Line budget |
@@ -641,17 +642,17 @@ Open pull requests touching the files in this plan, as of 2026-10-24:
 
 The scripts will be committed with PR 1 so the numbers can be refreshed.
 
-## 9. Questions for review
+## 9. Review decisions
 
-1. **Five pull requests.** Phase 2 is a few large pull requests, one per
-   module group (4.3), each made of move commits proven by AST equality and
-   seam commits read in full. Is that split by module group right?
-2. **When the ratchet merges.** Merging it now makes #1435, #1449, #1463,
-   #1486, #1500, #1501 and #1504 fail if they add net lines to a listed file. Options: merge it now
-   and raise budgets in those pull requests with a reason; or merge it after
-   they land, with budgets reset to `main` at that time.
-3. **Coverage floor.** Restore the 85% safety-path coverage floor in the root
-   workflow as part of PR 1? It may fail at first, because it has not been
-   measured in the monorepo.
-4. **Resolution rungs.** This plan keeps `resolver.resolve()` as one ladder
-   (2.4). Is there a second ladder planned that would justify a registry now?
+Decided in review on 2026-10-24:
+
+1. **Five pull requests by module group** (4.3): approved.
+2. **Ratchet:** lands in PR 1, with budgets set to `main`'s sizes when PR 1
+   merges. Open pull requests that add net lines to a listed file raise the
+   budget in their own diff with a one-line reason (section 6).
+3. **Coverage floor:** PR 1 reports safety-path coverage as a measured number
+   and does not gate on it. After it is measured, the floor is set at the
+   measured value and only rises, instead of a fixed 85%.
+4. **Resolution rungs:** no second ladder is planned, so `resolver.resolve()`
+   stays one ladder. Checking identity against the system of record is a check
+   source (S5), not a ladder.
