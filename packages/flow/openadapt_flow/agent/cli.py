@@ -637,8 +637,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "example-app",
         help=(
-            "Run a small reports portal on 127.0.0.1 to teach a first task on: "
-            "a date-filtered sales report with an Export CSV link."
+            "Run a small reports portal on this computer to teach a first task "
+            "on: a date-filtered sales report with an Export CSV link."
         ),
     )
     p.add_argument("--port", type=int, default=8765, help="Port (default 8765)")

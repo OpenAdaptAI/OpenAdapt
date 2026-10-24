@@ -543,7 +543,7 @@ def _check_file(
         min_rows = checks.get("min_rows")
         if min_rows is not None:
             if len(rows) >= int(min_rows):
-                passed.append(f"it has at least {min_rows} rows ({len(rows)})")
+                passed.append(f"it has {len(rows)} rows, at least {min_rows}")
             else:
                 failed.append(f"it has {len(rows)} rows, fewer than {min_rows}")
         for rule in checks.get("between") or []:
