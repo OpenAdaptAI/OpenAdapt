@@ -406,76 +406,83 @@ three API-step pull requests (#1370, #1371, #1372) each conflicted on
 change the same concern.
 
 **Stage B changes structure without changing behavior.** It introduces the
-seams of section 2.3 one at a time. Each pull request must reproduce the
-golden runs exactly, including the call trace.
+seams of section 2.3. Each seam must reproduce the golden runs exactly,
+including the call trace.
 
 ### 4.2 Rules for every pull request
 
-- One concern per pull request. Move-only pull requests contain no other edit
-  besides imports, the mixin base and re-exports.
-- `scripts/verify_moved_code.py` (added in A0) proves the move: every function
-  and method in the base file has an identical AST somewhere in the head
-  package, and the head adds no new function bodies.
-- `replayer.py` re-exports every moved module-level name.
-- Test patches of moved module globals are retargeted in the same pull
-  request; the script lists them.
-- Strict mypy, CODEOWNERS and (once restored) the coverage include list cover
-  the new module.
-- The full flow suite, ruff, the strict mypy step and the golden runs pass.
-- Lower the budget in the size ratchet (section 6) in the same pull request.
-- Before starting, check `gh pr list` for open pull requests that touch the
-  methods being moved, and check section 7.
+Phase 2 is a few large pull requests, one per group of target modules (4.3),
+rather than one pull request per concern.
+A large pull request is still reviewable when its commits are small and each
+commit is one of two kinds:
 
-### 4.3 Sequence
+- **Move commit.** Relocation only: no edit besides imports, the mixin base
+  and re-exports. `scripts/verify_moved_code.py` (added in PR 1) proves it:
+  every function and method in the base file has an identical AST somewhere
+  in the head package, and the commit adds no new function bodies. A reviewer
+  checks the script output, not the moved lines.
+- **Seam commit.** One seam from section 2.3, behavior-preserving. A reviewer
+  reads it in full.
 
-Stage 0 (safety net):
+Every pull request also:
 
-| PR | Content |
-|---|---|
-| A0a | Golden-run harness, scenarios of 3.1, committed baselines from `main` |
-| A0b | Characterization tests for concerns with thin coverage, chosen from a coverage run of the full suite |
-| A0c | `scripts/verify_moved_code.py`; import-surface test; strict mypy and CODEOWNERS entries for `runtime/replay/` |
-| A0d | Restore the safety coverage floor in the root workflow (separate decision, see section 9) |
+- keeps every commit green on its own (full flow suite, ruff, the strict mypy
+  step and the golden runs), so the pull request can be bisected and, if
+  needed, merged only up to a given commit;
+- re-exports every moved module-level name from the old module;
+- retargets test patches of moved module globals in the same commit (the
+  script lists them);
+- adds the new modules to strict mypy, CODEOWNERS and (once restored) the
+  coverage include list;
+- adds characterization tests before moving any concern whose coverage is
+  thin, in a commit before the move;
+- lowers the size-ratchet budgets (section 6) to the new sizes;
+- rechecks `gh pr list` before starting and before opening, leaves out any
+  concern that an open pull request is changing (section 7), and rebases on
+  fresh `main` without force-pushing a branch someone else has reviewed.
 
-Stage A (move-only), least coupled first. "Wait" names work that must merge
-first (section 7).
+### 4.3 Phase 2: five pull requests
 
-| PR | Concern moved | Lines | Wait |
-|---|---|---:|---|
-| A1 | Module preamble helpers to `replay/_shared.py` | 281 | — |
-| A2 | Qualification fault injection | 515 | — |
-| A3 | Healing, assets, step evidence; render scale and layout drift | 324 | — |
-| A4 | Surfaces and control overlay | 302 | — |
-| A5 | Effect checks and read-back, including pipelined | 836 | — |
-| A6 | Settling and interstitials | 500 | #1449 |
-| A7 | Confirming the action: typed input, selected option, postconditions, step guards | 1,133 | — |
-| A8 | Approval and authorization refusals, execution snapshots | 587 | #1486, cleanup session |
-| A9 | Identity checks | 2,037 | wrong-row identity fix |
-| A10 | Consequential revalidation and delivery | 1,013 | wrong-row identity fix |
-| A11 | API tier and web-form spans | 1,156 | — |
-| A12 | Acting, by action kind | 1,501 | wrong-row identity fix |
-| A13 | Durable resume and attended revalidation | 1,906 | production lifecycle session |
-| A14 | Program interpreter | 1,673 | #1435, production lifecycle session |
+| PR | Target module group | Contents | Lines out of the big files | Wait for |
+|---|---|---|---:|---|
+| 1 | Safety net | Golden-run harness, scenarios of 3.1, baselines from `main`; characterization tests chosen from the coverage run; `scripts/verify_moved_code.py`; import-surface tests for `replayer`, `__main__`, `qualification` and `ir`; strict mypy and CODEOWNERS entries for the new packages | 0 | — |
+| 2 | Replayer step pipeline and strategies (`runtime/replay/`) | Move commits for the module helpers, qualification faults, healing and assets, render scale and layout drift, surfaces, effects and read-back, settling and interstitials, confirming the action, identity checks, consequential delivery, API tier and web forms, acting by kind. Seam commits S1 `StepState`, S4 `BackendCapabilities` and action executors, S2 phase pipeline, S3 `Mechanism`, S5 check interfaces | ~9,600 | #1504 (identity, delivery, acting); #1449 (interstitials) |
+| 3 | Run gates (`runtime/replay/` gates, `runtime/program/`) | Move commits for approval and authorization refusals, durable resume and attended revalidation, the program interpreter, report finalization. Seam commits S6 `DeliveryGate` tuple per profile, S7 `ProgramState`, S8 `ReportBuilder` | ~4,600 | #1486, #1500, #1501 (approvals); #1435 (program interpreter); #1463 (lifecycle) |
+| 4 | Command surfaces (`cli/`, Desktop handlers) | `__main__.py` split into `cli/<group>/<verb>.py` (5.1); `dispatch.py` split into handler groups (5.4) | ~16,000 | #1486, #1501, #1447 (`__main__.py`); #1486, #1500 (`dispatch.py`) |
+| 5 | Schemas and qualification (`ir/`, `qualification/`) | `qualification.py` package with one integrity checker per case kind (5.2); `ir.py` split by domain (5.3) | ~11,000 | #1504, #1449, #1435, #1463 (`ir.py`); none for `qualification.py` |
 
-After A14, `replayer.py` keeps construction, `run`, `_run_unsealed_steps`, the
-step driver and report finalization: about 3,500 lines.
+PR 1 merges first, so the golden baselines come from `main` before any code
+moves. PRs 2, 4 and 5 touch different files and can be reviewed in parallel
+after it. PR 3 goes after PR 2, because the gates wrap the pipeline that PR 2
+creates.
 
-Stage B (seams), each behavior-preserving:
+When a pull request in the "wait for" column is still open, the pull request
+leaves out only the concerns that pull request changes, and a short follow-up
+moves them after it merges. Nothing waits for an unrelated pull request.
 
-| PR | Change | Seam |
-|---|---|---|
-| B1 | `StepState` and `RunState`; hidden `__dict__` state declared | S1 |
-| B2 | `BackendCapabilities` computed at surface activation; `isinstance` checks replaced | S4 |
-| B3 | One `ActionExecutor` per action kind; exhaustiveness test | S4 |
-| B4 | Step phases as functions with `Continue` or failure; fixed-order pipeline | S2 |
-| B5 | `Mechanism` protocol; shared effect setup, delivery authorization and record check for API and GUI | S3 |
-| B6 | `DeliveryGate` tuple per profile; order test | S6 |
-| B7 | `ProgramState`; interpreter and resume package | S7 |
-| B8 | `ReportBuilder` | S8 |
-| B9 | `IdentityCheck` and `OutcomeCheck` interfaces with the screen implementation | S5 |
+After PRs 2 and 3, `replayer.py` keeps construction, `run`,
+`_run_unsealed_steps` and the step driver's entry point: about 4,000 lines,
+mostly the public API and the wiring of the pipeline.
 
-B1 goes first because every later seam needs a place for its values. B5 and
-B9 are the ones that serve contract-first execution directly.
+### 4.4 Commit order inside PR 2
+
+Least coupled first, so each move commit has the fewest cross-references:
+
+1. Module helpers to `replay/_shared.py` (281 lines).
+2. Qualification fault injection (515).
+3. Healing, assets, step evidence; render scale and layout drift (324).
+4. Surfaces and control overlay (302).
+5. Effect checks and read-back, including pipelined (836).
+6. Confirming the action: typed input, selected option, postconditions, step
+   guards (1,133).
+7. Settling and interstitials (500).
+8. API tier and web-form spans (1,156).
+9. Identity checks (2,037), consequential delivery (1,013), acting by kind
+   (1,501).
+10. Seams, in this order: S1 (every later seam needs a place for its values),
+    S4, S2, S3, S5.
+
+S3 and S5 are the seams that serve contract-first execution directly.
 
 ## 5. Plans for the other large files
 
@@ -600,21 +607,18 @@ section 9.
 
 ## 7. Coordination with work in flight
 
-As of 2026-10-24:
+Open pull requests touching the files in this plan, as of 2026-10-24:
 
-| File | Open pull requests | Sessions editing | Safe to move |
-|---|---|---|---|
-| `runtime/replayer.py` | #1463, #1449, #1435 | production lifecycle; wrong-row identity fix | A1–A5, A7, A11 now; others per the "Wait" column in 4.3 |
-| `runtime/identity.py`, resolution rungs | — | wrong-row identity fix | Not moved by this plan |
-| `runtime/durable/` | — | production lifecycle | After that session's pull requests merge |
-| worker pool, approvals | — | cleanup | A8 after that session merges |
-| `__main__.py` | #1486, #1463, #1447 | — | Helpers and leaf commands now |
-| `qualification.py` | — | — | Now |
-| `ir.py` | #1463, #1449, #1435 | — | After those merge |
-| `dispatch.py`, `flow_bridge` | #1486 | in-app approver key | After that session merges |
+| File | Open pull requests | Affects |
+|---|---|---|
+| `runtime/replayer.py` | #1504 (same-identity row halt), #1449, #1435, #1463 | PR 2 (identity, delivery, acting, interstitials), PR 3 (program interpreter, lifecycle) |
+| `runtime/durable/` | #1435, #1463 | PR 3 |
+| `__main__.py` | #1486, #1501, #1463, #1447 | PR 4 |
+| `dispatch.py`, `flow_bridge` | #1486, #1500 | PR 4 |
+| `ir.py` | #1504, #1463, #1449, #1435 | PR 5 |
+| `qualification.py` | — | PR 5 can start now |
 
-Each pull request rechecks `gh pr list` for the files it touches, rebases on
-fresh `main` just before opening, and never force-pushes.
+`runtime/identity.py` and `runtime/resolver.py` are not moved by this plan.
 
 ## 8. How the numbers were measured
 
@@ -635,20 +639,19 @@ fresh `main` just before opening, and never force-pushes.
 - **Mixin typing.** A two-file example (a host class and a mixin) checked
   with mypy 1.11.2 using the strict flags from `packages.yml`.
 
-The scripts will be committed with A0c so the numbers can be refreshed.
+The scripts will be committed with PR 1 so the numbers can be refreshed.
 
 ## 9. Questions for review
 
-1. **Two stages.** Is moving to Protocol-typed mixins first (Stage A), then
-   introducing seams (Stage B), acceptable? The alternative, going straight
-   to seams, gives cleaner pull requests per concern but each is a behavior
-   risk, and none can be verified mechanically the way a move can.
-2. **When the ratchet merges.** Merging it now makes #1435, #1449, #1463 and
-   #1486 fail if they add net lines to a listed file. Options: merge it now
+1. **Five pull requests.** Phase 2 is a few large pull requests, one per
+   module group (4.3), each made of move commits proven by AST equality and
+   seam commits read in full. Is that split by module group right?
+2. **When the ratchet merges.** Merging it now makes #1435, #1449, #1463,
+   #1486, #1500, #1501 and #1504 fail if they add net lines to a listed file. Options: merge it now
    and raise budgets in those pull requests with a reason; or merge it after
    they land, with budgets reset to `main` at that time.
 3. **Coverage floor.** Restore the 85% safety-path coverage floor in the root
-   workflow (A0d)? It may fail at first, because it has not been measured in
-   the monorepo.
+   workflow as part of PR 1? It may fail at first, because it has not been
+   measured in the monorepo.
 4. **Resolution rungs.** This plan keeps `resolver.resolve()` as one ladder
    (2.4). Is there a second ladder planned that would justify a registry now?
