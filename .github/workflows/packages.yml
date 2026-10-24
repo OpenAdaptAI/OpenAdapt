@@ -392,6 +392,7 @@ jobs:
           find tests -name 'test_*.py' -not -path 'tests/e2e/*' \
             -not -path 'tests/test_install_playwright_browser.py' \
             -not -path 'tests/test_qualification_gate_campaign.py' \
+            -not -path 'tests/golden_runs/test_golden_runs.py' \
             | LC_ALL=C sort | awk -v s="$SHARD" 'NR % 4 == s % 4' > "$RUNNER_TEMP/shard.txt"
           wc -l < "$RUNNER_TEMP/shard.txt"
       - name: Test
@@ -506,6 +507,24 @@ jobs:
         run: |
           pytest -vv --durations=20 tests/e2e/test_record_compile_replay.py \
             --basetemp=runs/ci-rcr --junitxml=runs/rcr-junit.xml
+      - name: Golden runs (report, artifacts and actions unchanged)
+        # docs/design/DECOMPOSITION.md, section 3.1. The baselines are Linux
+        # results; OPENADAPT_GOLDEN_WRITE=1 regenerates them (upload below).
+        env:
+          OPENADAPT_GOLDEN_OUT: runs/golden
+        run: |
+          pytest -vv --durations=20 tests/golden_runs \
+            --basetemp=runs/ci-goldens --junitxml=runs/goldens-junit.xml
+      - name: Upload golden-run results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flow-golden-runs
+          path: |
+            packages/flow/runs/golden
+            packages/flow/tests/golden_runs/baselines
+          if-no-files-found: warn
+          retention-days: 14
       - name: Read-back and zero-model-call tests, by name
         run: |
           pytest -vv --durations=20 \
@@ -528,7 +547,7 @@ jobs:
           import sys
           import xml.etree.ElementTree as ET
           bad = False
-          for name in ("golden", "rcr", "critical"):
+          for name in ("golden", "rcr", "goldens", "critical"):
               root = ET.parse(f"runs/{name}-junit.xml").getroot()
               suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
               tests = sum(int(s.get("tests", 0)) for s in suites)
