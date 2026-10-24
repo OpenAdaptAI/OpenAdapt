@@ -105,3 +105,41 @@ def test_a_linear_run_compares_with_its_own_parameters() -> None:
         candidate_params=("lname", "DOB"),
     )
     assert replayer._postcondition_passes(pc, b"", None, {}) is True
+
+
+DOB_PARAMS = {"lname": "Brennan", "fname": "Nadia", "DOB": "1944-04-20"}
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        # A married-name change: another last name, the same date of birth,
+        # shown however the app formats dates.
+        "7\tOkafor, Nadia\tApr 20, 1944\tFemale",
+        "7\tOkafor, Nadia\t04/20/1944\tFemale",
+        "7\tOkafor, Nadia\t20.04.1944\tFemale",
+        "7\tOkafor, Nadia\t20 April 1944\tFemale",
+        # A row date that reads either way counts when either reading matches.
+        "7\tOkafor, Nadia\t04/20/1944 (20/04/1944)\tFemale",
+    ],
+)
+def test_a_shared_date_of_birth_in_any_format_stops(row: str) -> None:
+    assert _check(_Backend([row]), DOB_PARAMS) is False
+
+
+def test_an_ambiguous_row_date_counts_when_either_reading_matches() -> None:
+    params = {**DOB_PARAMS, "DOB": "1970-04-03"}
+    # 03/04/1970 is 4 March or 3 April: the 3 April reading is this patient's.
+    assert _check(_Backend(["7\tOkafor, Nadia\t03/04/1970"]), params) is False
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        "7\tOkafor, Nadia\tApr 21, 1944\tFemale",  # an unrelated date
+        "7\tOkafor, Nadia\t1950-04-21\tFemale",
+        "7\tOkafor, Nadia\tno date shown\tFemale",  # nothing to compare
+    ],
+)
+def test_a_row_with_an_unrelated_date_or_none_proceeds(row: str) -> None:
+    assert _check(_Backend([row]), DOB_PARAMS) is True
