@@ -13,6 +13,10 @@ Subcommands:
   listener. Overlay chrome stays Desktop-only.
 - ``seal verify`` / ``seal keys pin`` — check a Seal offline against keys a
   person pinned (trust on first use, explicit rotation).
+- ``serve --teach-browser`` — read-only teach tools: the agent does a
+  browser task once, and it becomes a ``taught_<name>`` tool that downloads
+  a checked file with no model calls.
+- ``example-app`` — a local reports portal to teach a first task on.
 - ``emit-skill`` — write a PHI-safe Agent Skill for one workflow from its
   card: purpose, inputs, and how to read the four outcomes.
 
@@ -214,6 +218,29 @@ def build_parser() -> argparse.ArgumentParser:
             "Flow checks the saved record through VERIFY_YAML's verifier, "
             "compiles the run, and once it is admitted the agent calls it as a "
             "tool with no model calls. Run 1 makes a real entry: use a test copy."
+        ),
+    )
+    p.add_argument(
+        "--teach-browser",
+        action="store_true",
+        help=(
+            "Serve the read-only teach tools: the agent does a browser task "
+            "once at a URL the person gives, the task ends in a download, and "
+            "it becomes a taught_<name> tool that runs with no model calls. "
+            "The browser sends no POST, PUT, PATCH or DELETE."
+        ),
+    )
+    p.add_argument(
+        "--tools-dir",
+        default=None,
+        help="With --teach-browser: where taught tools live (default ~/.openadapt/tools)",
+    )
+    p.add_argument(
+        "--files-dir",
+        default=None,
+        help=(
+            "With --teach-browser: where downloaded files go "
+            "(default ~/Downloads/OpenAdapt)"
         ),
     )
     p.add_argument(
@@ -608,6 +635,16 @@ def build_parser() -> argparse.ArgumentParser:
     connect.set_defaults(func=_cmd_authoring_connect)
 
     p = sub.add_parser(
+        "example-app",
+        help=(
+            "Run a small reports portal on 127.0.0.1 to teach a first task on: "
+            "a date-filtered sales report with an Export CSV link."
+        ),
+    )
+    p.add_argument("--port", type=int, default=8765, help="Port (default 8765)")
+    p.set_defaults(func=_cmd_example_app)
+
+    p = sub.add_parser(
         "emit-skill",
         help=(
             "Write an Agent Skill for one workflow: what it does, its inputs, and "
@@ -687,6 +724,13 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
     if args.guard:
         return _serve_guard(args, serve)
+    if args.teach_browser:
+        return _serve_teach_browser(args, serve)
+    if args.tools_dir or args.files_dir:
+        print(
+            "serve: --tools-dir and --files-dir need --teach-browser", file=sys.stderr
+        )
+        return 2
     if args.teach:
         return _serve_teach(args, serve)
     if (
@@ -1054,6 +1098,51 @@ def _teach_write_adapter(ref: Optional[str]) -> Any:
     from openadapt_flow.teach_scope import load_write_adapter
 
     return load_write_adapter(ref)
+
+
+def _serve_teach_browser(args: argparse.Namespace, serve) -> int:
+    """Serve only the read-only browser teach tools over local stdio."""
+    from openadapt_flow.agent.browser_teach import BrowserTeachBridge
+
+    if (
+        args.teach
+        or args.authoring
+        or args.tutorial
+        or args.bundles
+        or args.mode
+        or args.url
+        or args.config
+    ):
+        print(
+            "serve: --teach-browser serves only the read-only teach tools; the "
+            "person names the URL to teach on in the chat. It can't be combined "
+            "with --teach, --authoring, --tutorial, --bundles, --mode, --url or "
+            "--config",
+            file=sys.stderr,
+        )
+        return 2
+    bridge = BrowserTeachBridge(
+        Path(args.tools_dir) if args.tools_dir else None,
+        Path(args.files_dir) if args.files_dir else None,
+        headless=not args.headed,
+    )
+    print(
+        f"openadapt-agent {__version__}: read-only browser teach tools over local "
+        f"stdio; {len(bridge.programs)} taught tool(s) in {bridge.tools_dir}; "
+        f"downloads go to {bridge.files_dir}",
+        file=sys.stderr,
+    )
+    try:
+        serve(None, None, None, bridge)
+    finally:
+        bridge.close()
+    return 0
+
+
+def _cmd_example_app(args: argparse.Namespace) -> int:
+    from openadapt_flow.agent.example_app import main as example_main
+
+    return example_main(args.port)
 
 
 def _serve_teach(args: argparse.Namespace, serve) -> int:
