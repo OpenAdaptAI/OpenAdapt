@@ -27,6 +27,13 @@ openadapt-flow run ./new-referral --params-file params.json
    fields, writes nothing, and exits with code 2. Pass `--accept NAME` after
    you have checked a value.
 
+5. Writes `params.provenance.json` beside `params.json`
+   (`openadapt.param-provenance/v1`): for each value, the SHA-256 of the
+   document's bytes, the line it was read from, the label, and who read it
+   (`intake:local`, `intake:agent`, or `person` for a value you typed). A
+   later check uses it to compare the saved record with the document itself
+   ([`VERIFICATION_COVERAGE.md`](VERIFICATION_COVERAGE.md)).
+
 Confidence is a fixed score from the kind of match, not a probability. An
 exact label match scores 0.95; a match on only the last word of the name (for
 example `Name:` for `patient_name`) scores 0.6.

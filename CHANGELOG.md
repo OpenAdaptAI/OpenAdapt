@@ -2,6 +2,41 @@
 
 <!-- version list -->
 
+## v1.18.0 (2026-10-20)
+
+### Breaking Changes
+
+- Require openadapt-flow 2.2 (`>=2.2.0,<3.0.0`). The quickstart uses Flow's
+  offline Seals, shared browser and OCR prewarm, and `openadapt pull` uses
+  `openadapt-flow pull`; none of these are in Flow 2.0 or 2.1. `openadapt
+  doctor` and `openadapt deploy` report an older Flow as unsupported.
+
+### Features
+
+- `openadapt quickstart` is three short acts: show the task in the synthetic
+  clinic app and compile it, run the program on five new notes at once, then
+  make one save fail silently and watch the run stop. It ends with one receipt
+  card, the command to check its Seal, and two next steps
+  ([#1408](https://github.com/OpenAdaptAI/OpenAdapt/pull/1408)).
+- When an older `openadapt` comes first on PATH, the quickstart names it and
+  gives the fix. Under `uvx` it also says how to keep the installed version
+  ([#1408](https://github.com/OpenAdaptAI/OpenAdapt/pull/1408)).
+- `openadapt pull` downloads a packaged workflow from the registry, and
+  `openadapt pull --list` shows what is available
+  ([#1173](https://github.com/OpenAdaptAI/OpenAdapt/pull/1173)).
+
+### Fixes
+
+- Next-step hints repeat the `uvx` form when the launcher runs from a uvx
+  environment, so they reach the same version
+  ([#1404](https://github.com/OpenAdaptAI/OpenAdapt/pull/1404)).
+- The quickstart describes the failing run as a save that didn't reach the
+  record ([#1236](https://github.com/OpenAdaptAI/OpenAdapt/pull/1236)), and
+  `openadapt agent serve` help shows `--bundles DIR --mode production`
+  ([#1238](https://github.com/OpenAdaptAI/OpenAdapt/pull/1238)).
+- CLI help and built-in links point at the docs glossary and the monorepo
+  ([#1200](https://github.com/OpenAdaptAI/OpenAdapt/pull/1200)).
+
 ## v1.17.0 (2026-10-15)
 
 ### Breaking Changes
