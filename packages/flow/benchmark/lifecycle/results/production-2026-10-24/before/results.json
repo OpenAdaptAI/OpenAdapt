@@ -163,6 +163,40 @@
             "verified_per_operator_minute_with_setup": 0.016
           }
         },
+        "by_hand_sensitivity": [
+          {
+            "by_hand_min_per_item": 3,
+            "by_hand_per_operator_minute": 0.333,
+            "operator_min_run": 123.0,
+            "operator_min_stream_by_hand": 81,
+            "ratio_to_by_hand": 0.1,
+            "verified_per_operator_minute": 0.033
+          },
+          {
+            "by_hand_min_per_item": 5,
+            "by_hand_per_operator_minute": 0.2,
+            "operator_min_run": 169.0,
+            "operator_min_stream_by_hand": 135,
+            "ratio_to_by_hand": 0.12,
+            "verified_per_operator_minute": 0.024
+          },
+          {
+            "by_hand_min_per_item": 8,
+            "by_hand_per_operator_minute": 0.125,
+            "operator_min_run": 238.0,
+            "operator_min_stream_by_hand": 216,
+            "ratio_to_by_hand": 0.13,
+            "verified_per_operator_minute": 0.017
+          },
+          {
+            "by_hand_min_per_item": 10,
+            "by_hand_per_operator_minute": 0.1,
+            "operator_min_run": 284.0,
+            "operator_min_stream_by_hand": 270,
+            "ratio_to_by_hand": 0.14,
+            "verified_per_operator_minute": 0.014
+          }
+        ],
         "definition": "verified completed items (oracle-correct, not done by hand) per operator-minute; operator minutes are every charged approval, stop, reconciliation, resume, repair review and item done by hand, plus maintenance; *_with_setup also charges admission",
         "duplicate_rule_stops": {
           "by_exception": {
