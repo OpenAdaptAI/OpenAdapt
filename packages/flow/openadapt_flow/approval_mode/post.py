@@ -322,9 +322,7 @@ _GATE_OFF_REASONS = {
 }
 
 
-def _program_off_reason(
-    report: "RunReport", reason: Optional[str] = None
-) -> OffReason:
+def _program_off_reason(report: "RunReport", reason: Optional[str] = None) -> OffReason:
     """The closed off reason for a program problem that named none."""
 
     if reason in _GATE_OFF_REASONS:
