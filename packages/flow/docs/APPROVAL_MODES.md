@@ -102,10 +102,20 @@ key registered under `approvers` in the key directory's `principals.json`
 signature on every answer, including an answer file written around the
 command. Each route signs with its own key:
 
-- Desktop's Run it signs with the Desktop approver key. Desktop creates it
-  with `openadapt-desktop approver-key setup`, which keeps the encrypted key
-  in an owner-only file and its passphrase in the OS keychain, and prints the
-  public key.
+- Desktop's Run it signs with the Desktop approver key.
+  - On a Mac, a person sets it up in the app, from the approval screen or
+    Settings, with one Touch ID or login-password prompt. The key is sealed
+    to a Secure Enclave key that asks for Touch ID or the password on every
+    use, and Desktop registers its public key under `approvers` itself. Flow
+    never sees the key: Desktop runs `item-approval approve|decline` with
+    `--approver-signer stdio --approver-public-key HEX`, Flow writes the
+    exact bytes to sign on stdout, and Desktop checks that they are the
+    person's answer, asks for Touch ID, and writes the signature back on
+    stdin. A cancelled prompt or any other failure is a refusal, and Flow
+    records nothing.
+  - On Windows and Linux, `openadapt-desktop approver-key setup` creates it,
+    keeps the encrypted key in an owner-only file and its passphrase in the OS
+    keychain, and prints the public key for a person to register.
 - The decision portal signs with the key at `OPENADAPT_PORTAL_APPROVER_KEY`
   after the person answered on their phone. Without it, the portal records
   no answer.

@@ -9,6 +9,10 @@ in the key directory's ``principals.json``
 (:class:`~openadapt_flow.jit.authority.PrincipalRegistry`).
 
 * Desktop's Run it signs with the Desktop approver key (``desktop_key``).
+  Desktop either hands Flow that key's encrypted file (``--approver-key``) or
+  keeps the key itself and signs over a pipe (``--approver-signer stdio``,
+  :func:`stdio_signer`): on macOS the key sits in the Keychain behind Touch
+  ID, and Flow never sees it.
 * The decision portal signs, after the person answered on their phone, with
   the portal's approver key (``portal_key``).
 * ``openadapt-flow approve`` signs a durable resume approval with the
@@ -29,9 +33,12 @@ too, because nothing here can verify it.
 
 from __future__ import annotations
 
+import json
+import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Mapping, Optional
+from typing import IO, Any, Literal, Mapping, Optional, Protocol
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import BaseModel, ConfigDict, Field
@@ -47,6 +54,21 @@ PORTAL_KEY_ENV = "OPENADAPT_PORTAL_APPROVER_KEY"
 ANSWER_DOMAIN = b"openadapt-flow.approval.human-answer/v1\x00"
 RESUME_DOMAIN = b"openadapt-flow.durable.resume-approval/v1\x00"
 _ID = r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$"
+_HEX_KEY = re.compile(r"^[0-9a-f]{64}$")
+#: The one line ``--approver-signer stdio`` writes to stdout, and the one line
+#: it then reads from stdin (:class:`StdioSigning`).
+SIGN_REQUEST_SCHEMA = "openadapt-flow.approver-sign-request/v1"
+SIGN_RESPONSE_SCHEMA = "openadapt-flow.approver-sign-response/v1"
+#: Why the process holding the key didn't sign. Anything else reads as
+#: ``approver_signature_unavailable``.
+SIGN_REFUSALS = frozenset(
+    {
+        "approver_presence_refused",
+        "approver_key_unusable",
+        "approver_key_missing",
+        "approver_payload_refused",
+    }
+)
 
 #: ``desktop_key``: Desktop's Run it. ``portal_key``: the decision portal.
 #: ``person_key``: a person at a terminal (``openadapt-flow approve``).
@@ -69,21 +91,32 @@ class HumanAttestation(BaseModel):
     signature: str = Field(min_length=1, max_length=256)
 
 
+class _Signs(Protocol):
+    def sign(self, data: bytes, /) -> bytes: ...
+
+
 @dataclass(frozen=True)
 class ApproverSigner:
-    """An approver key ready to sign, and who the registry says it is."""
+    """An approver key ready to sign, and who the registry says it is.
+
+    ``signing`` is the key itself, or :class:`StdioSigning` when the process
+    that started this one holds it.
+    """
 
     principal_id: str
     method: AttestationMethod
-    signing: Ed25519PrivateKey
+    signing: "Ed25519PrivateKey | _Signs"
 
     def attest(self, domain: bytes, payload: Any) -> HumanAttestation:
-        from openadapt_flow.jit.authority import _sign
+        from openadapt_flow.jit.authority import _canonical
 
+        # The same bytes and format as ``authority._sign``, for a key held
+        # here or by the process that started this one.
+        raw = self.signing.sign(domain + _canonical(payload))
         return HumanAttestation(
             signer=self.principal_id,
             method=self.method,
-            signature=_sign(self.signing, domain, payload),
+            signature="ed25519:" + raw.hex(),
         )
 
 
@@ -126,6 +159,116 @@ def load_signer(
             "with jit register --role approver",
         )
     return ApproverSigner(principal_id=found[1], method=method, signing=key)
+
+
+class StdioSigning:
+    """Ask the process that started this one to sign one message.
+
+    Writes one :data:`SIGN_REQUEST_SCHEMA` line to ``stdout`` with the exact
+    bytes to sign (the domain, then the canonical answer), and reads one
+    :data:`SIGN_RESPONSE_SCHEMA` line from ``stdin``: a signature, or a
+    refusal (a cancelled Touch ID prompt, a Keychain error). The signature is
+    checked against the registered public key before it is used. Anything
+    else is :class:`AttestationRefused`, so nothing unsigned is written.
+    """
+
+    def __init__(
+        self,
+        public_key_hex: str,
+        *,
+        stdin: Optional[IO[str]] = None,
+        stdout: Optional[IO[str]] = None,
+    ) -> None:
+        self._public = public_key_hex
+        self._stdin = stdin
+        self._stdout = stdout
+
+    def sign(self, data: bytes, /) -> bytes:
+        from openadapt_flow.jit.authority import _public
+
+        out = self._stdout or sys.stdout
+        out.write(
+            json.dumps(
+                {
+                    "schema": SIGN_REQUEST_SCHEMA,
+                    "public_key": self._public,
+                    "message_hex": data.hex(),
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        out.flush()
+        line = (self._stdin or sys.stdin).readline(64 * 1024)
+        try:
+            response = json.loads(line)
+        except ValueError:
+            response = None
+        if not isinstance(response, dict) or response.get("schema") != (
+            SIGN_RESPONSE_SCHEMA
+        ):
+            raise AttestationRefused(
+                "approver_signature_unavailable",
+                "the approver key's holder sent no signature, so nothing was recorded",
+            )
+        signature = response.get("signature")
+        if not isinstance(signature, str):
+            code = str(response.get("refused") or "")
+            if code not in SIGN_REFUSALS:
+                code = "approver_signature_unavailable"
+            message = str(response.get("message") or "")[:500]
+            raise AttestationRefused(
+                code, message or "the approver key's holder didn't sign"
+            )
+        try:
+            raw = bytes.fromhex(signature.removeprefix("ed25519:"))
+            _public(self._public).verify(raw, data)
+        except Exception as exc:
+            raise AttestationRefused(
+                "human_answer_signature_invalid",
+                "the signature the approver key's holder sent doesn't match "
+                "the registered key",
+            ) from exc
+        return raw
+
+
+def stdio_signer(
+    public_key_hex: str,
+    key_dir: Path,
+    *,
+    method: AttestationMethod,
+    stdin: Optional[IO[str]] = None,
+    stdout: Optional[IO[str]] = None,
+) -> ApproverSigner:
+    """A signer for a registered approver key another process holds.
+
+    The principal is the name ``public_key_hex`` is registered under, as in
+    :func:`load_signer`. Raises :class:`AttestationRefused`.
+    """
+
+    from openadapt_flow.jit.authority import PrincipalRegistry
+
+    public = str(public_key_hex or "").lower()
+    if not _HEX_KEY.fullmatch(public):
+        raise AttestationRefused(
+            "approver_key_unusable", "--approver-public-key is 64 hex characters"
+        )
+    try:
+        registry = PrincipalRegistry.load(key_dir)
+    except (OSError, ValueError) as exc:
+        raise AttestationRefused("approver_key_unusable", str(exc)) from exc
+    found = registry.lookup(public)
+    if found is None or found[0] != "approver":
+        raise AttestationRefused(
+            "human_approver_unregistered",
+            "this key isn't registered as an approver; a person registers it "
+            "with jit register --role approver, or sets it up in Desktop",
+        )
+    return ApproverSigner(
+        principal_id=found[1],
+        method=method,
+        signing=StdioSigning(public, stdin=stdin, stdout=stdout),
+    )
 
 
 def refusal(
