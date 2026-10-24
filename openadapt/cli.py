@@ -718,7 +718,11 @@ def _launcher_version(path: str, run=None) -> Optional[str]:
 
     try:
         result = (run or subprocess.run)(
-            [path, "--version"], capture_output=True, text=True, timeout=15
+            [path, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env={**os.environ, _NO_LAUNCHER_CHECK: "1"},
         )
         text = f"{result.stdout} {result.stderr}"
     except Exception:  # noqa: BLE001 - an unrunnable openadapt has no version
@@ -824,7 +828,15 @@ def _launcher_conflicts(launchers=None, run=None) -> list[str]:
     return lines
 
 
+#: Set in the environment of every ``openadapt --version`` this check runs, so
+#: the child never runs the check itself. Without it, two installs that both
+#: carry the check ask each other for their version forever.
+_NO_LAUNCHER_CHECK = "OPENADAPT_NO_LAUNCHER_CHECK"
+
+
 def _warn_about_launcher_conflicts() -> None:
+    if os.environ.get(_NO_LAUNCHER_CHECK):
+        return
     try:
         lines = _launcher_conflicts()
     except Exception:  # noqa: BLE001 - a PATH check must never break a command
@@ -836,8 +848,9 @@ def _warn_about_launcher_conflicts() -> None:
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
 # Flow 1.33 and 1.34 probe four X11 libraries in the wrong case, so on Linux
 # they refuse to download Chromium on hosts that have them. 1.35.0 fixed it.
-# Launcher 1.17 requires Flow 2.
-_SUPPORTED_FLOW_RANGE = ">=2.0.0,<3.0.0"
+# Launcher 1.18 requires Flow 2.2: the quickstart uses its offline Seals,
+# shared browser and OCR prewarm.
+_SUPPORTED_FLOW_RANGE = ">=2.2.0,<3.0.0"
 _RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
@@ -847,7 +860,7 @@ _CHROMIUM_SYSTEM_LIBS_COMMAND = (
 def _supported_flow_version(value: str) -> bool:
     """Return whether a stable Flow version is in the launcher's supported range."""
     parsed = _release_tuple(value)
-    return parsed is not None and (2, 0, 0) <= parsed < (3, 0, 0)
+    return parsed is not None and (2, 2, 0) <= parsed < (3, 0, 0)
 
 
 # The Python modules each native or remote Flow backend imports when its

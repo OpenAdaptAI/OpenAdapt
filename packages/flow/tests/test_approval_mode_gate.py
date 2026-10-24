@@ -890,3 +890,77 @@ def test_an_unknown_runner_or_unsealed_bundle_pauses_without_switching_off(tmp_p
     h2.begin(bundle_content_digest=None)
     assert h2.before_save().checks[0].detail == "bundle_unsealed"
     assert not h2.log.state().is_off
+
+
+def test_the_gate_classifies_saves_as_the_run_gate_does(monkeypatch):
+    # A click a qualification classified as reversible (it opens a
+    # confirmation dialog) whose label reads like a write. With the
+    # certifying policy the gate honors that classification while the
+    # certification is current, as the run gate does; without it the
+    # conservative heuristic treats the click as a save.
+    from types import SimpleNamespace
+
+    from openadapt_flow import qualification
+    from openadapt_flow.ir import ActionKind, Anchor, Step, Workflow
+    from openadapt_flow.qualification import (
+        ActionRiskClass,
+        ActionRiskClassification,
+        EnvironmentBoundary,
+        init_project,
+        set_action_classification,
+    )
+
+    step = Step(
+        id="open_confirm",
+        intent="Create New Patient",
+        action=ActionKind.CLICK,
+        anchor=Anchor(
+            template="templates/create.png",
+            region=(0, 0, 10, 10),
+            click_point=(5, 5),
+            ocr_text="Create New Patient",
+        ),
+        risk="reversible",
+        risk_explanation="operator-qualified override: reversible",
+    )
+    workflow = Workflow(name="register", steps=[step])
+    init_project(
+        workflow,
+        environment=EnvironmentBoundary(
+            target_kind="web",
+            application="Synthetic fixture",
+            application_version="1",
+            environment_digest="e" * 64,
+            runtime_version="test",
+        ),
+    )
+    set_action_classification(
+        workflow,
+        ActionRiskClassification(
+            step_id="open_confirm",
+            classification=ActionRiskClass.READ_ONLY,
+            explanation="opens a confirmation dialog; the save is the next click",
+            operator_confirmed=True,
+        ),
+    )
+    monkeypatch.setattr(
+        qualification,
+        "current_certification_matches",
+        lambda workflow, **kw: kw.get("policy") is not None,
+    )
+    ctx = SimpleNamespace(step=step, workflow=workflow)
+
+    assert (
+        ApprovalGate("problems_only", policy_name="clinical-write")._is_save(ctx)
+        is False
+    )
+    assert ApprovalGate("problems_only")._is_save(ctx) is True
+    # The classification counts only from a current certification under the
+    # bound policy. With the real check this bundle was never certified, so
+    # its classification (or one edited after certifying) is ignored, even
+    # when the gate names the policy.
+    monkeypatch.undo()
+    assert (
+        ApprovalGate("problems_only", policy_name="clinical-write")._is_save(ctx)
+        is True
+    )

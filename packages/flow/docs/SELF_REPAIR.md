@@ -60,7 +60,7 @@ turns the rows into the repair success rate, failures included.
 
 To turn it off for one run, pass `--no-auto-repair`. To turn it off for a
 deployment, set `repair.auto: false`. A run that can't be repaired (for
-example one pinned to `--pin-digest`) is not refused: it runs plainly and
+example one under a signed qualification admission) is not refused: it runs plainly and
 prints why repair is off for it. `--self-repair` still asks for repair
 explicitly, and then such a run is refused.
 
@@ -339,20 +339,58 @@ save, and the resume refuses the save unless the form is the one they saw.
 | `--repair-attempts N` | `attempts` | 3 | Proposals per halt. |
 | `--repair-fault-url URL` | `fault_urls` | none | A fault probe; repeatable. |
 | `--repair-approval-wait SECONDS` | `approval_wait_s` | 900 | How long to wait for the person. |
+| (deployment only) | `requalify` | none | The running bundle's verify.yaml: re-qualify every fix on its test copy, and re-admit it with signed lineage. |
+| (deployment only) | `requalify_trials` | 1 | Trials per case when a fix is re-qualified. |
 
-Repair is off for a run bound to the exact original bundle, and for a
-worklist run (use `WorklistQueue`), because a stop there may come after
-earlier items saved. With `--self-repair` such a run is refused; otherwise it
-runs plainly. The bindings are:
+Repair is off for a worklist run (use `WorklistQueue`), because a stop
+there may come after earlier items saved. It is also off for a run bound to
+an admission that something outside this machine signs, because a repaired
+bundle has a new digest and only that signer can admit it:
 
-- a signed qualification admission (`--qualification-authority-file`);
-- a managed dispatch;
-- a qualification case;
-- `--pin-digest`.
+- a signed qualification admission (`--qualification-authority-file`),
+  which only the qualification authority signs;
+- a managed dispatch, which is Cloud's authorization for one bundle;
+- a qualification case.
 
-In those cases the approved bundle needs its own admission first: a
-repaired bundle has a new digest, and each of these admits only the bundle
-it names.
+With `--self-repair` such a run is refused; otherwise it runs plainly.
+
+### A pinned bundle: re-qualify and re-admit
+
+A run pinned with `--pin-digest` can be repaired once `repair.requalify`
+names the bundle's verify.yaml. The pinned bundle is never modified. A fix
+becomes the next pinned version only after these steps
+(`openadapt_flow/repair/readmission.py`):
+
+1. **Re-qualify.** Before anyone is asked, the fix runs the pinned bundle's
+   own qualification campaign on the test copy that verify.yaml names, with
+   the same certify policy and the same cases (`repair.requalify_trials`
+   trials each). The campaign certifies a copy, so the certified copy is the
+   bundle the probes, the person and the resumed run all see. A fix that
+   fails re-qualification is refused, and nothing is saved.
+2. **Check what stays fixed.** Every step that writes or checks identity
+   keeps its declared effects, its API write target, its risk and identity
+   arming, and the record check. The certified template keeps its policy,
+   effect requirements, and identity and parameter contracts. A repair may
+   re-target a control on screen. Anything that changes what is written,
+   where, or for whom needs a person's fresh admission.
+3. **Sign the lineage.** After the person's one approval, or a signed
+   standard change, a lineage record goes in the repair store under
+   `readmissions/`. It is signed with this machine's local admission key and
+   names:
+   - the pinned bundle and the certified copy;
+   - who approved and how;
+   - both qualification reports.
+4. **Pin through the lineage.** A later run with `--pin-digest` set to the
+   original accepts the certified copy only through a chain of these records
+   back to the pinned bundle. The chain refuses on any of:
+   - more than three repairs;
+   - a cycle;
+   - a signature that doesn't verify;
+   - a key listed in `readmissions/revoked-keys.json`;
+   - a bundle that isn't staged in the store;
+   - a hop that changes the fixed contract.
+
+   A broken chain never falls back to an earlier version.
 
 The first run is the ordinary run, so an admitted API step
 ([API_TIER.md](API_TIER.md)) can run there. The probes and the resumed run of

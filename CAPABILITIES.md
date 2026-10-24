@@ -113,7 +113,6 @@ Evidence:
 - **Real app**: run against a real third-party application, such as a local
   OpenEMR or openIMIS.
 - **Synthetic**: run against OpenAdapt's own test apps (MockMed and fixtures).
-- **Untested**: no run yet.
 
 All patient and claim data in every test and benchmark is synthetic.
 
@@ -202,7 +201,11 @@ improvising or retrying when something is off.
 | Approve an API step's exact request under per-item approval: one digest binds the request bytes, the record and the record check, and a changed request is not sent | On main ([#1355](https://github.com/OpenAdaptAI/OpenAdapt/pull/1355)) | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#under-an-approval-mode) |
 | Run an API step in a durable run: checkpoint the span after the save is sent, never resend or redo a save that may have landed, and reconcile it by reading the record back | On main ([#1358](https://github.com/OpenAdaptAI/OpenAdapt/pull/1358)) | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#in-a-durable-run) |
 | Run an admitted API step under a governed run authorization and the Standard or Regulated profile: the authorization names the API step by digest, the person who admits it names the right-record parameter, and the outcome reads `VERIFIED` | On main ([#1361](https://github.com/OpenAdaptAI/OpenAdapt/pull/1361)) | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#under-governance) |
+| Run an admitted API step under a managed (Cloud) dispatch whose authorization names it: the API step rows are inside the dispatch digest Cloud signs, and each send still needs Cloud's delivery permit | On main | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#under-governance) |
+| Run an admitted API step under a signed production qualification admission when its qualified effect contract names the API path, and let a qualification case run the path its contract names | On main | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#under-governance) |
 | Defer an API save's read-back with pipelined read-back, as for a GUI save, and keep self-repair's probes and resumed run on the repaired GUI step | On main ([#1362](https://github.com/OpenAdaptAI/OpenAdapt/pull/1362)) | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#with-parallel-workers-pipelined-read-back-and-self-repair) |
+| Defer the last record check under durable and governed runs: the durable pause holds the check, so a crash re-runs only the check and never resends the save | On main | Synthetic | [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md#under-durable-and-governed-runs) |
+| Run an admitted API step inside a multi-surface program, bound to its one browser surface and that surface's origin; its folded steps record the surface | On main | Synthetic | [API_TIER.md](packages/flow/docs/API_TIER.md#in-a-multi-surface-program) |
 | Say, for every feature under every run profile, whether it works or is refused and why, checked against the runtime in CI | On main ([#1364](https://github.com/OpenAdaptAI/OpenAdapt/pull/1364)) | Synthetic | [COMPATIBILITY.md](packages/flow/docs/COMPATIBILITY.md) |
 | Run a worklist on several workers at once, one signed-in session each, each item claimed once, with a stop on any worker stopping all | On main ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic patients on a local OpenEMR test copy | `--workers`, [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md) |
 | Read a save back while the next item runs (pipelined read-back, REST, FHIR, GraphQL or SQL record checks) | On main ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic | `--readback-window`, [THROUGHPUT.md](packages/flow/docs/THROUGHPUT.md) |
@@ -221,6 +224,7 @@ improvising or retrying when something is off.
 | Self-repair across several new steps: a bridge of up to three actions for a new required dialog or a control moved into a menu, each new step armed with a record check and probed up to the save, one person approving | On main ([#1325](https://github.com/OpenAdaptAI/OpenAdapt/pull/1325)) | Synthetic (MockMed menu and provider drifts, scripted agent; a real one-shot agent repaired neither, see [benchmark/auto_repair](packages/flow/benchmark/auto_repair/README.md)) | `run --self-repair`, [SELF_REPAIR.md](packages/flow/docs/SELF_REPAIR.md) |
 | Keep pixel-path runs working across display scaling and font smoothing changes | On main ([#1286](https://github.com/OpenAdaptAI/OpenAdapt/pull/1286)) | Synthetic (in-process RDP and canvas renderings: 17 of 24 healthy runs across 100–175%, up from 3; 0 wrong saves) | [benchmark/pixel_scale](packages/flow/benchmark/pixel_scale/README.md) |
 | Pre-approved repairs: a signed policy lists low-risk changes that apply without a person, a test-record run before each queue, and one approval for every item halted the same way | On main ([#1294](https://github.com/OpenAdaptAI/OpenAdapt/pull/1294)) | Synthetic | standard changes |
+| Repair a pinned bundle: the fix runs the pinned bundle's own qualification campaign on a test copy, keeps every write, effect, identity rule and record check, and is re-admitted with signed lineage (at most three repairs, no revoked key) that the pin verifies | On main | Synthetic | [SELF_REPAIR.md](packages/flow/docs/SELF_REPAIR.md#a-pinned-bundle-re-qualify-and-re-admit) |
 | Repair by default: once a repair agent is configured, every stop that wrote nothing goes to it without anyone starting it; a stop after a possible write goes to reconciliation; every stop is a row in a ledger with the funnel from stop to resumed item | On main ([#1360](https://github.com/OpenAdaptAI/OpenAdapt/pull/1360)) | Synthetic (MockMed, 22 drift modes, real Claude agent: 6 of 21 repairable stops resumed and verified, 0 wrong saves in 66 runs); routing over recorded OpenEMR stops; live openIMIS relabel: 3 of 3 reached repair, 0 resumed; silent-saves 1.1.0 UI-change blocks: 18 of 28 items that always stopped now correct, 0 wrong | `run` (on by default, `--no-auto-repair`), `repair:` in `deploy.yaml`, [benchmark/auto_repair](packages/flow/benchmark/auto_repair/README.md) |
 | Fleet drift patches: a verified fix with no patient data, shared across sites under policy | Released, local reference hub | Simulator | `openadapt-flow fleet`, [FLEET_DRIFT_PATCHES.md](packages/flow/docs/FLEET_DRIFT_PATCHES.md) |
 
@@ -255,7 +259,7 @@ improvising or retrying when something is off.
 | Encrypt PHI at rest: every bundle file that can hold patient data under one sealed index (unknown files refused), web recordings from the first frame, and the run directories of sealed bundles; compile, induce, scaffold-verifier, qualify, admit, run, resume and undo read them in memory and refuse without the key | On main | Synthetic (no-plaintext audit-hook test over record, compile and a VERIFIED run; per-frame cost measured) | `openadapt-flow seal`, `record`; [phi_at_rest.md](packages/flow/docs/phi_at_rest.md) |
 | Signed receipts (Seals), countersigned and timestamped, offline by default | Released | Unit tests, real TSA tokens | `openadapt-flow seal`, `countersign`, `local-seal` |
 | Offline Seals signed with a key the customer holds: a key file, the OS keychain, or a PKCS#11 token or HSM; pinned keys with rotation and revocation; no fallback to a generated key | On main ([#1392](https://github.com/OpenAdaptAI/OpenAdapt/pull/1392)) | Unit tests with synthetic data (keychain and PKCS#11 through stand-ins) | `openadapt-flow local-seal --key`, `local-seal key create`, `pin`, `revoke`; `openadapt seal verify FOLDER` checks every sealed run in a folder; [OFFLINE_SEALS.md](packages/flow/docs/OFFLINE_SEALS.md#customer-held-keys) |
-| Anchor an offline Seal in the public Sigstore Rekor transparency log (opt-in; sends one digest and the public key), and verify the anchor offline from the stored inclusion proof | On main ([#1394](https://github.com/OpenAdaptAI/OpenAdapt/pull/1394)) | Unit tests against a simulated Rekor log; Ed25519ph matches the RFC 8032 test vector | `openadapt-flow local-seal anchor`, `local-seal verify --require-anchor`; [OFFLINE_SEALS.md](packages/flow/docs/OFFLINE_SEALS.md#optional-anchor-a-seal-in-a-public-transparency-log) |
+| Anchor an offline Seal in the public Sigstore Rekor transparency log (opt-in; sends one digest and the public key), and verify the anchor offline from the stored inclusion proof | On main ([#1394](https://github.com/OpenAdaptAI/OpenAdapt/pull/1394)) | Unit tests against a simulated Rekor log; real public Rekor entries and Sigstore TSA tokens for the landing demo's referral runs, verified offline in tests; Ed25519ph matches the RFC 8032 test vector | `openadapt-flow local-seal anchor`, `local-seal verify --require-anchor`; [OFFLINE_SEALS.md](packages/flow/docs/OFFLINE_SEALS.md#optional-anchor-a-seal-in-a-public-transparency-log) |
 | Run authorizations signed with the authorizer's GitHub SSH key (`ssh-keygen -Y sign`, after a summary of what it allows), naming the signing key and bound to the bundle digest, items, profile and Seal keys, and referenced by each Seal; the identity checked against github.com (`--live`) or pinned allowed signers; a pseudonymous operator profile counted from anchored Seals only | On main ([#1401](https://github.com/OpenAdaptAI/OpenAdapt/pull/1401)) | Unit tests with synthetic data; signatures checked against OpenSSH's `ssh-keygen` both ways | `openadapt-flow local-seal authorize`, `local-seal run --authorization`, `local-seal profile`; [OFFLINE_SEALS.md](packages/flow/docs/OFFLINE_SEALS.md#run-authorizations-who-authorized-the-runs) |
 | Run reports redacted before they are sealed: session and CSRF tokens, OAuth grants and credential headers become `<redacted>` and are listed in `redactions`; a Seal refuses a report that still holds one; per-app policy | On main ([#1407](https://github.com/OpenAdaptAI/OpenAdapt/pull/1407)) | Unit tests with generated tokens; 7,773 local reports scanned, only OpenEMR `token_main` matched | `openadapt-flow redact-report`, `local-seal run --allow-unredacted`; [REPORT_REDACTION.md](packages/flow/docs/REPORT_REDACTION.md) |
 | Strict no-outbound mode and an unattended on-prem service | Released | Synthetic | `openadapt-flow no-outbound`, `service`; [ON_PREM.md](packages/flow/docs/ON_PREM.md) |
@@ -423,16 +427,19 @@ A test fails when a command has no file or this list is out of date.
   each), reported all 30 bad saves as done. `verify-run` flagged all 30 and
   confirmed all 10 clean saves, with no false alarms. The app shows "saved"
   before the server answers, so this measures what the screen can't show, not
-  the agent's care. Not yet run on OpenEMR:
+  the agent's care:
   [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back).
 
 ## Limits
 
-- No commercial EMR, claims system or real Citrix session has been tested.
-- Repair by default has resumed items only on MockMed. On the recorded
-  OpenEMR stops none reached repair (each came after "Create New Patient",
-  which counts as a save). On openIMIS, with #1337 and a risk review, the
-  relabelled Save reached repair 3 of 3, but no fix passed the probe.
+- Published results use synthetic records on open-source systems and
+  OpenAdapt's own test apps. Each workflow is qualified on the customer's own
+  system before it touches a real record.
+- Repair by default resumed 6 of 21 eligible stops on MockMed. On the
+  recorded OpenEMR and openIMIS stops it stopped safely for a person instead:
+  OpenEMR's came after "Create New Patient", which counts as a save, and on
+  openIMIS the relabelled Save reached repair 3 of 3 with no fix passing the
+  probe.
 - Windows installers are unsigned, and macOS builds are ad-hoc signed.
-- Several capabilities have run only on OpenAdapt's synthetic apps. The
-  Evidence column says which.
+- The Evidence column says which capabilities ran on a real app and which on
+  OpenAdapt's synthetic apps.

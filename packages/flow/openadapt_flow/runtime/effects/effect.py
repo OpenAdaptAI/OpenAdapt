@@ -54,6 +54,7 @@ from pydantic import (
     model_serializer,
     model_validator,
 )
+from pydantic_core import to_jsonable_python
 
 
 class ValueExpr(BaseModel):
@@ -84,6 +85,12 @@ class ValueExpr(BaseModel):
     #: Name of a run parameter to resolve against at run time (``Workflow.params``
     #: overlaid by the caller's values). ``None`` for a literal.
     param: Optional[str] = None
+    #: For a ``param`` the system of record stores as a code: the stored value
+    #: for each value the run may enter (a select's label and its option
+    #: value, such as ``Massachusetts`` and ``MA``). The record check then
+    #: reads the entered value back as its code. A value the map doesn't name
+    #: resolves to nothing, so the check matches nothing and fails closed.
+    map: Optional[dict[str, str]] = None
 
     @model_validator(mode="after")
     def _exactly_one_source(self) -> "ValueExpr":
@@ -93,7 +100,18 @@ class ValueExpr(BaseModel):
             raise ValueError("exactly one of literal or param must be set")
         if self.param == "":
             raise ValueError("effect parameter name must not be empty")
+        if self.map is not None and (self.param is None or not self.map):
+            raise ValueError("a value map needs a parameter and at least one entry")
         return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> Any:
+        # A value without a map serializes exactly as before, so existing
+        # effect contract hashes and bundle digests are unchanged.
+        data = handler(self)
+        if isinstance(data, dict) and data.get("map") is None:
+            data.pop("map", None)
+        return data
 
     def resolve(self, params: Mapping[str, object]) -> Optional[str]:
         """Resolve to a concrete string against ``params``.
@@ -110,7 +128,10 @@ class ValueExpr(BaseModel):
             # string-only effect-verifier boundary.
             from openadapt_flow.runtime.authorization import runtime_param_text
 
-            return runtime_param_text(params[self.param])  # type: ignore[arg-type]
+            entered = runtime_param_text(params[self.param])  # type: ignore[arg-type]
+            if self.map is not None:
+                return self.map.get(entered)
+            return entered
         return self.literal
 
     def resolved(self, params: Mapping[str, object]) -> "ValueExpr":
@@ -139,7 +160,11 @@ class ValueExpr(BaseModel):
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, ValueExpr):
-            return self.literal == other.literal and self.param == other.param
+            return (
+                self.literal == other.literal
+                and self.param == other.param
+                and self.map == other.map
+            )
         if isinstance(other, str):
             # A literal expression equals the bare string it stands for.
             return self.param is None and self.literal == other
@@ -153,7 +178,7 @@ class ValueExpr(BaseModel):
         # and literal expressions then behaves unchanged.
         if self.param is None:
             return hash(self.literal)
-        return hash(("__param__", self.param))
+        return hash(("__param__", self.param, tuple(sorted((self.map or {}).items()))))
 
 
 class EffectKind(str, Enum):
@@ -998,6 +1023,23 @@ class Effect(BaseModel):
                 for selector in self.new_records
             ]
             payload["identity_field"] = self.identity_field
+        # A value that reads an entered label back as a stored code binds its
+        # map: a changed map is a different contract. Included only when a
+        # value has one, so every other contract keeps its exact digest.
+        maps: dict[str, dict[str, str]] = {}
+        for key, expr in sorted(self.match.items()):
+            if isinstance(expr, ValueExpr) and expr.map is not None:
+                maps[f"match.{key}"] = dict(sorted(expr.map.items()))
+        for name in ("value", "idempotency_key"):
+            expr = getattr(self, name)
+            if isinstance(expr, ValueExpr) and expr.map is not None:
+                maps[name] = dict(sorted(expr.map.items()))
+        for index, selector in enumerate(self.new_records):
+            for key, expr in sorted(selector.items()):
+                if isinstance(expr, ValueExpr) and expr.map is not None:
+                    maps[f"new_records.{index}.{key}"] = dict(sorted(expr.map.items()))
+        if maps:
+            payload["value_maps"] = maps
         return payload
 
     def _semantic_contract_sha256(self) -> str:
@@ -1179,7 +1221,21 @@ def stable_id(record: dict[str, Any]) -> Any:
     Prefers an ``id`` field; falls back to the whole record's sorted-items
     tuple so substrates without an explicit id still support collateral-loss
     detection.
+
+    Values are compared in their JSON form. A baseline is stored with
+    ``model_dump(mode="json")``, so a UUID, Decimal or datetime read from a
+    database driver comes back as a string; comparing the raw value would
+    count every pre-existing row as new and confirm a write that never
+    happened.
     """
     if "id" in record:
-        return ("id", record["id"])
-    return tuple(sorted((k, str(v)) for k, v in record.items()))
+        return ("id", _json_form(record["id"]))
+    return tuple(sorted((k, str(_json_form(v))) for k, v in record.items()))
+
+
+def _json_form(value: Any) -> Any:
+    """``value`` as a JSON baseline stores it, or unchanged if it has no such form."""
+    try:
+        return to_jsonable_python(value)
+    except Exception:  # noqa: BLE001 - e.g. bytes that are not UTF-8
+        return value
