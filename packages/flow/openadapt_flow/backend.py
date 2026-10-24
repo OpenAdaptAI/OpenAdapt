@@ -30,6 +30,17 @@ class StructuralResolutionRefused(RuntimeError):
     """
 
 
+class StructuralElementNotActionableRefused(StructuralResolutionRefused):
+    """A structural backend located exactly one candidate, but it is not actionable.
+
+    The element exists in the live DOM/accessibility tree but cannot be safely acted
+    upon (e.g. covered by an overlay, zero-sized, hidden, or scrolled outside the
+    viewport). Falling through to visual rungs would risk clicking the overlay or
+    wrong pixel coordinates.
+    """
+
+
+
 class ActionDeliveryUncertain(RuntimeError):
     """An action API failed after delivery may already have begun.
 
