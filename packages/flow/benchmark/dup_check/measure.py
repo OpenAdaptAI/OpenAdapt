@@ -58,7 +58,23 @@ DUPLICATE_KINDS = {
     "heldout_first_typo",
     "heldout_last_typo",
     "heldout_married_dob_typo",
+    "r2_nickname",
+    "r2_name_swap",
+    "r2_year_transposed",
+    "r2_prior_name_moved_dob_typo",
+    "limit_married_moved_dob_typo",
+    "limit_new_name_moved_same_dob",
 }
+#: Formal first names given to extra existing charts, and the nickname each
+#: is referred under (``r2_nickname``).
+FORMAL = (
+    ("Robert", "Bob"),
+    ("Elizabeth", "Liz"),
+    ("William", "Bill"),
+    ("Katherine", "Kate"),
+    ("Theodore", "Theo"),
+    ("Margaret", "Peggy"),
+)
 MARRIED = ("Okafor", "Lindqvist", "Brennan", "Moreau", "Castellanos", "Whitcombe")
 
 
@@ -169,15 +185,135 @@ def plant(existing: list[dict[str, str]], items: list[Item], seed: int) -> list[
                 [],
             )
         )
+        planted += round_two(n, person)
     out = list(items)
     for p in planted:
         out.insert(rng.randint(0, len(out)), p)
     return out
 
 
+def moved(person: dict[str, str], n: int) -> dict[str, str]:
+    """The same person at a new address, phone and email."""
+
+    return dict(
+        person,
+        street=f"{900 + n} NEW PLACE",
+        phone_home=f"555-02{n:02d}",
+        email=f"moved.{n}@example.invalid",
+    )
+
+
+def day_typo(dob: str) -> str:
+    y, m, d = dob.split("-")
+    return f"{y}-{m}-{int(d) % 28 + 1:02d}"
+
+
+def round_two(n: int, person: dict[str, str]) -> list[Item]:
+    """Kinds added after the first measurement (rules written for them,
+    except the two ``limit_`` kinds, which no rule here can catch)."""
+
+    out = [
+        Item(
+            f"r2-sw-{n}",
+            "r2_name_swap",
+            dict(person, fname=person["lname"], lname=person["fname"]),
+            None,
+            [],
+        )
+    ]
+    y, m, d = person["DOB"].split("-")
+    ty = y[:2] + y[3] + y[2]
+    if ty != y and 1900 <= int(ty) <= 2010:
+        out.append(
+            Item(
+                f"r2-ty-{n}",
+                "r2_year_transposed",
+                dict(person, DOB=f"{ty}-{m}-{d}"),
+                None,
+                [],
+            )
+        )
+    out.append(
+        Item(
+            f"lim-mm-{n}",
+            "limit_married_moved_dob_typo",
+            dict(
+                moved(person, n),
+                lname=MARRIED[(n + 3) % len(MARRIED)],
+                DOB=day_typo(person["DOB"]),
+            ),
+            None,
+            [],
+        )
+    )
+    out.append(
+        Item(
+            f"lim-nn-{n}",
+            "limit_new_name_moved_same_dob",
+            dict(moved(person, n), fname="Unrelated", lname="Renamed"),
+            None,
+            [],
+        )
+    )
+    return out
+
+
+def extra_existing(
+    existing: list[dict[str, str]],
+) -> tuple[list[dict[str, str]], list[Item]]:
+    """Charts with formal first names or a stored prior name, and their
+    true-duplicate referrals."""
+
+    extra, items = [], []
+    for n, (formal, nick) in enumerate(FORMAL):
+        base = existing[n % len(existing)]
+        chart = dict(
+            base,
+            fname=formal,
+            lname=f"Formal{n}",
+            email=f"formal.{n}@example.invalid",
+            phone_home=f"555-03{n:02d}",
+            street=f"{700 + n} FORMAL ROAD",
+        )
+        extra.append(chart)
+        items.append(
+            Item(f"r2-nk-{n}", "r2_nickname", dict(chart, fname=nick), None, [])
+        )
+    for n in range(6):
+        base = existing[(n + 3) % len(existing)]
+        chart = dict(
+            base,
+            lname=f"Married{n}",
+            prior_lname=f"Maiden{n}",
+            email=f"prior.{n}@example.invalid",
+            phone_home=f"555-04{n:02d}",
+            street=f"{800 + n} PRIOR LANE",
+            DOB=base["DOB"],
+        )
+        extra.append(chart)
+        referral = dict(
+            moved(chart, 50 + n), lname=f"Maiden{n}", DOB=day_typo(chart["DOB"])
+        )
+        referral.pop("prior_lname")
+        items.append(
+            Item(f"r2-pn-{n}", "r2_prior_name_moved_dob_typo", referral, None, [])
+        )
+    return extra, items
+
+
 def record_of(i: int, person: dict[str, str]) -> PatientRecord:
+    prior = (
+        ((person["fname"], person["prior_lname"]),) if person.get("prior_lname") else ()
+    )
     return PatientRecord(
-        str(i), person["fname"], person["lname"], person.get("DOB", "")
+        str(i),
+        person["fname"],
+        person["lname"],
+        person.get("DOB", ""),
+        phone=person.get("phone_home", ""),
+        street=person.get("street", ""),
+        email=person.get("email", ""),
+        prior_names=prior,
     )
 
 
@@ -274,10 +410,12 @@ def main() -> int:
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     runs = {}
-    existing, items = from_ledger(SOAK / "workload.jsonl")
-    runs["soak-seed7-55"] = measure(existing, plant(existing, items, 7))
-    existing, items = from_generator(7, args.long_items, 10)
-    runs[f"seed7-{args.long_items}"] = measure(existing, plant(existing, items, 7))
+    for name, (existing, items) in (
+        ("soak-seed7-55", from_ledger(SOAK / "workload.jsonl")),
+        (f"seed7-{args.long_items}", from_generator(7, args.long_items, 10)),
+    ):
+        extra, extra_items = extra_existing(existing)
+        runs[name] = measure(existing + extra, plant(existing, items + extra_items, 7))
     for name, run in runs.items():
         (args.out / f"{name}.json").write_text(
             json.dumps(run, indent=2, sort_keys=True) + "\n"

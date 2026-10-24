@@ -237,17 +237,25 @@ def test_sql_fallback(tmp_path: Path) -> None:
     db = tmp_path / "openemr.db"
     con = sqlite3.connect(db)
     con.execute(
-        "CREATE TABLE patient_data (pid INTEGER, fname TEXT, lname TEXT, "
-        "DOB TEXT, pubpid TEXT)"
+        # OpenEMR's patient_data columns the fallback reads.
+        "CREATE TABLE patient_data (pid INTEGER, fname TEXT, lname TEXT, DOB TEXT, "
+        "pubpid TEXT, phone_home TEXT, street TEXT, email TEXT, birth_fname TEXT, "
+        "birth_lname TEXT)"
     )
     con.execute(
         "INSERT INTO patient_data VALUES (4, 'Rosalind', 'Jesswood-Okafor', "
-        "'1990-04-09', '4')"
+        "'1990-04-09', '4', '', '', '', NULL, NULL)"
+    )
+    # A chart stored under a married name, with the birth name kept.
+    con.execute(
+        "INSERT INTO patient_data VALUES (5, 'Rosalind', 'Okafor', '1990-04-10', "
+        "'5', '', '', '', 'Rosalind', 'Jesswood')"
     )
     con.commit()
     con.close()
     result = check_duplicate(SqlPatientSource(lambda: sqlite3.connect(db)), WANT)
     assert result.decision == "close" and result.channel == "sql"
+    assert {c.record.record_id for c in result.candidates} == {"4", "5"}
 
 
 # -- in the replayer --------------------------------------------------------------
@@ -294,3 +302,88 @@ def test_the_replayer_fails_closed_when_the_channel_raises() -> None:
 
     passed, why = _replayer_check(Broken(), WANT)
     assert passed is False and "unreadable" in why
+
+
+# -- round two: nicknames, swapped names, prior names, contact tie-breakers -------
+
+FULL = {
+    **WANT,
+    "phone_home": "617-555-0142",
+    "email": "r.j@example.test",
+    "street": "41 Larch Way",
+}
+
+
+def full(
+    fname: str,
+    lname: str,
+    dob: str,
+    *,
+    phone: str = "",
+    email: str = "",
+    street: str = "",
+    prior: tuple = (),
+) -> PatientRecord:
+    return PatientRecord("9", fname, lname, dob, "", phone, street, email, prior)
+
+
+@pytest.mark.parametrize(
+    ("record", "match"),
+    [
+        # A married name and a mistyped day, tied by the phone.
+        (full("Rosalind", "Okafor", "1990-04-10", phone="(617) 555-0142"), "close"),
+        # The same, with nothing to tie them: not a candidate.
+        (full("Rosalind", "Okafor", "1990-04-10"), None),
+        # A nickname.
+        (full("Roz", "Jesswood", "1990-04-09"), None),  # not in the table
+        (full("Rosalind", "Jesswood", "1990-04-09"), "exact"),
+        # First and last name swapped.
+        (full("Jesswood", "Rosalind", "1990-04-09"), "close"),
+        # A prior (maiden) name on the chart, with a mistyped day.
+        (
+            full("Rosalind", "Okafor", "1990-04-10", prior=(("Rosalind", "Jesswood"),)),
+            "close",
+        ),
+        # A full name change: the same birth date and the same email.
+        (full("Mary", "Okafor", "1990-04-09", email="R.J@example.test"), "close"),
+        # A full name change with a near birth date needs two contact details.
+        (full("Mary", "Okafor", "1990-04-10", email="r.j@example.test"), None),
+        (
+            full(
+                "Mary",
+                "Okafor",
+                "1990-04-10",
+                email="r.j@example.test",
+                street="41 LARCH WAY",
+            ),
+            "close",
+        ),
+    ],
+)
+def test_round_two(record: PatientRecord, match: Optional[str]) -> None:
+    found = classify(FULL, record)
+    assert (found.match if found else None) == match, found
+
+
+def test_nickname_table() -> None:
+    want = {"fname": "Bob", "lname": "Ashby", "DOB": "1950-02-03"}
+    assert classify(want, rec("Robert", "Ashby", "1950-02-03")).match == "close"
+    assert classify(want, rec("Roberta", "Ashby", "1971-02-03")) is None
+
+
+def test_fhir_reads_old_names_and_contacts(serve) -> None:
+    resource = patient("12", "Rosalind", "Okafor", "1990-04-10")
+    resource["name"].append(
+        {"use": "maiden", "family": "Jesswood", "given": ["Rosalind"]}
+    )
+    resource["telecom"] = [{"system": "phone", "use": "home", "value": "617-555-0142"}]
+    server = serve(
+        lambda p, q: (
+            200,
+            {"resourceType": "Bundle", "total": 1, "entry": [{"resource": resource}]},
+        )
+    )
+    result = check_duplicate(FhirPatientSource(server.url), FULL)
+    assert result.decision == "close"
+    record = result.candidates[0].record
+    assert record.prior_names == (("Rosalind", "Jesswood"),) and record.phone

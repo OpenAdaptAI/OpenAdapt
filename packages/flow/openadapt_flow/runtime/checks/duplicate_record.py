@@ -53,6 +53,11 @@ class PatientRecord:
     lname: str
     dob: str  # ISO YYYY-MM-DD, or "" when the record has none
     mrn: str = ""
+    phone: str = ""
+    street: str = ""
+    email: str = ""
+    #: Earlier names, (first, last): a birth or maiden name, a previous name.
+    prior_names: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass
@@ -92,6 +97,12 @@ class PatientSource(Protocol):
     def by_family(self, family: str) -> list[PatientRecord]: ...
 
     def by_identifier(self, mrn: str) -> list[PatientRecord]: ...
+
+    def by_given(self, given: str) -> list[PatientRecord]: ...
+
+    def by_phone(self, phone: str) -> list[PatientRecord]: ...
+
+    def by_email(self, email: str) -> list[PatientRecord]: ...
 
 
 # -- matching -------------------------------------------------------------------
@@ -176,23 +187,188 @@ def one_field_off(a: str, b: str) -> bool:
     return sum(x != y for x, y in zip(pa, pb)) == 1
 
 
+#: Common English given-name equivalents. Generic, not drawn from any test
+#: workload; a deployment can extend it (``NICKNAMES.update``).
+_NICKNAME_GROUPS = (
+    "robert bob bobby rob robbie",
+    "william bill billy will willie liam",
+    "elizabeth liz beth betty eliza lizzie libby",
+    "katherine kate kathy katie kat",
+    "catherine cathy cate kate",
+    "margaret maggie meg peggy marge greta",
+    "james jim jimmy jamie",
+    "john jack johnny jon",
+    "richard rick ricky dick rich",
+    "michael mike mikey mick",
+    "thomas tom tommy",
+    "joseph joe joey",
+    "charles charlie chuck chas",
+    "edward ed eddie ted ned",
+    "anthony tony",
+    "daniel dan danny",
+    "christopher chris kit",
+    "alexander alex sasha xander",
+    "alexandra alex sandra sasha lexi",
+    "patricia pat patty trish tricia",
+    "jennifer jen jenny",
+    "rebecca becky becca",
+    "susan sue susie suzy",
+    "deborah deb debbie",
+    "nicholas nick nicky",
+    "benjamin ben benny",
+    "samuel sam sammy",
+    "samantha sam sammie",
+    "matthew matt matty",
+    "andrew andy drew",
+    "stephen steve stevie",
+    "steven steve stevie",
+    "jonathan jon jonny",
+    "timothy tim timmy",
+    "theodore theo ted teddy",
+    "dorothy dot dottie dolly",
+    "victoria vicky tori",
+    "abigail abby gail",
+    "gregory greg",
+    "kenneth ken kenny",
+    "ronald ron ronnie",
+    "donald don donnie",
+    "lawrence larry laurie",
+    "frederick fred freddie",
+    "isabella bella izzy isabel",
+    "jacqueline jackie",
+    "josephine jo josie",
+    "eleanor ellie nora nell",
+    "francis frank frankie",
+    "frances fran frankie",
+    "henry hank harry hal",
+    "harold harry hal",
+    "raymond ray",
+    "rafael rafa",
+    "dmitri dima",
+    "anastasia ana stacy",
+    "ana anna annie",
+    "ines ine",
+    "nadia nadya",
+    "mateo mat teo",
+)
+NICKNAMES: dict[str, set[str]] = {}
+for _group in _NICKNAME_GROUPS:
+    _names = set(_group.split())
+    for _name in _names:
+        NICKNAMES.setdefault(_name, set()).update(_names)
+
+
+def same_given(a: str, b: str) -> bool:
+    """The same first name: similar spelling, or a known nickname of it."""
+
+    if similar_name(a, b):
+        return True
+    x, y = norm_name(a), norm_name(b)
+    return bool(x and y and y in NICKNAMES.get(x, ()))
+
+
+def dob_near(a: str, b: str) -> bool:
+    """A mistyped date of birth: one field off, day and month swapped, or two
+    digits of one field transposed (1984 and 1948)."""
+
+    if not a or not b or a == b:
+        return False
+    return one_field_off(a, b) or swapped(a) == b
+
+
+def _digits(value: str) -> str:
+    return re.sub(r"\D", "", value or "")
+
+
+def _street(value: str) -> str:
+    return re.sub(
+        r"\s+", " ", re.sub(r"[^0-9a-z ]", "", (value or "").casefold())
+    ).strip()
+
+
+def contacts_shared(want: Mapping[str, str], record: PatientRecord) -> list[str]:
+    """Every contact detail the referral and the chart share."""
+
+    out = []
+    phone = _digits(want.get("phone_home") or "")
+    if len(phone) >= 7 and phone == _digits(record.phone):
+        out.append("same phone")
+    email = (want.get("email") or "").strip().casefold()
+    if email and email == record.email.strip().casefold():
+        out.append("same email")
+    street = _street(want.get("street") or "")
+    if street and street == _street(record.street):
+        out.append("same street address")
+    return out
+
+
+def tie_breaker(want: Mapping[str, str], record: PatientRecord) -> Optional[str]:
+    """A contact detail the referral and the chart share, if any."""
+
+    phone = _digits(want.get("phone_home") or "")
+    if len(phone) >= 7 and phone == _digits(record.phone):
+        return "same phone"
+    email = (want.get("email") or "").strip().casefold()
+    if email and email == record.email.strip().casefold():
+        return "same email"
+    street = _street(want.get("street") or "")
+    if street and street == _street(record.street):
+        return "same street address"
+    return None
+
+
 def classify(want: Mapping[str, str], record: PatientRecord) -> Optional[Candidate]:
-    """Is ``record`` this new patient (``want``: fname, lname, DOB, mrn)?"""
+    """Is ``record`` this new patient?
+
+    ``want``: fname, lname, DOB, and when known mrn, phone_home, email,
+    street. The record's prior names are tried as well as its current one.
+    """
 
     mrn = (want.get("mrn") or "").strip()
     if mrn and record.mrn and mrn == record.mrn.strip():
         return Candidate(record, "exact", "same MRN")
+    names = [(record.fname, record.lname), *record.prior_names]
+    for i, (first, last) in enumerate(names):
+        found = _classify_name(want, record, first, last)
+        if found is not None:
+            if i:
+                found.why += " (a prior name on the chart)"
+                if found.match == "exact":
+                    found.match = "close"
+            return found
+    # A full name change: only the contact details tie the two together.
+    shared = contacts_shared(want, record)
+    if (
+        shared
+        and record.dob
+        and (
+            record.dob == want["DOB"]
+            or (len(shared) >= 2 and dob_near(want["DOB"], record.dob))
+        )
+    ):
+        return Candidate(
+            record,
+            "close",
+            f"another name; {', '.join(shared)}; "
+            + ("the same" if record.dob == want["DOB"] else "a near")
+            + " date of birth",
+        )
+    return None
+
+
+def _classify_name(
+    want: Mapping[str, str], record: PatientRecord, first: str, last: str
+) -> Optional[Candidate]:
     fname, lname, dob = want["fname"], want["lname"], want["DOB"]
-    same_first = norm_name(fname) == norm_name(record.fname)
-    same_last = norm_name(lname) == norm_name(record.lname)
+    same_first = norm_name(fname) == norm_name(first)
+    same_last = norm_name(lname) == norm_name(last)
     if same_first and same_last and dob == record.dob:
         return Candidate(
             record, "exact", "same first name, last name and date of birth"
         )
-    first_like = similar_name(fname, record.fname)
-    last_like = similar_name(lname, record.lname) or bool(
-        name_parts(lname) & name_parts(record.lname)
-    )
+    first_like = same_given(fname, first)
+    last_like = similar_name(lname, last) or bool(name_parts(lname) & name_parts(last))
+    near = dob_near(dob, record.dob)
     if first_like and last_like:
         if not record.dob:
             return Candidate(
@@ -202,11 +378,23 @@ def classify(want: Mapping[str, str], record: PatientRecord) -> Optional[Candida
             return Candidate(record, "close", "same date of birth, a similar name")
         if record.dob == swapped(dob):
             return Candidate(record, "close", "same name, day and month swapped")
-        if same_first and same_last and one_field_off(dob, record.dob):
-            return Candidate(record, "close", "same name, date of birth one field off")
-    if record.dob == dob and same_first:
+        if near and (same_first and same_last or tie_breaker(want, record)):
+            return Candidate(record, "close", "same name, a mistyped date of birth")
+    swapped_names = norm_name(fname) == norm_name(last) and norm_name(
+        lname
+    ) == norm_name(first)
+    if swapped_names and (record.dob == dob or near):
+        return Candidate(record, "close", "first and last name swapped")
+    if record.dob == dob and first_like:
         return Candidate(
             record, "close", "same date of birth and first name, another last name"
+        )
+    if near and first_like and tie_breaker(want, record):
+        return Candidate(
+            record,
+            "close",
+            f"same first name, another last name, {tie_breaker(want, record)}, "
+            "a mistyped date of birth",
         )
     return None
 
@@ -232,9 +420,18 @@ def check_duplicate(
     ]
     if swapped(dob):
         queries.append((source.by_birthdate, swapped(dob)))  # type: ignore[arg-type]
-    queries += [(source.by_family, part) for part in sorted(name_parts(lname))]
+    # Each part of the last name, and of the first name (a swapped name).
+    queries += [
+        (source.by_family, part)
+        for part in sorted(name_parts(lname) | name_parts(fname))
+    ]
+    queries.append((source.by_given, fname))
     if (want.get("mrn") or "").strip():
         queries.append((source.by_identifier, want["mrn"].strip()))
+    if len(_digits(want.get("phone_home") or "")) >= 7:
+        queries.append((source.by_phone, want["phone_home"].strip()))
+    if (want.get("email") or "").strip():
+        queries.append((source.by_email, want["email"].strip()))
     seen: dict[str, PatientRecord] = {}
     try:
         for query, value in queries:
@@ -372,12 +569,17 @@ class FhirPatientSource:
         return out
 
     def _record(self, resource: dict[str, Any]) -> PatientRecord:
-        names = resource.get("name") or []
+        names = [n for n in resource.get("name") or [] if isinstance(n, dict)]
+        current = [n for n in names if n.get("use") not in ("old", "maiden")]
         official = next(
-            (n for n in names if isinstance(n, dict) and n.get("use") == "official"),
-            names[0] if names and isinstance(names[0], dict) else {},
+            (n for n in current if n.get("use") == "official"),
+            current[0] if current else {},
         )
-        given = official.get("given") or []
+
+        def pair(n: dict[str, Any]) -> tuple[str, str]:
+            given = n.get("given") or []
+            return (str(given[0]) if given else "", str(n.get("family") or ""))
+
         mrn = ""
         for ident in resource.get("identifier") or []:
             if not isinstance(ident, dict):
@@ -390,12 +592,37 @@ class FhirPatientSource:
             ):
                 mrn = str(ident.get("value") or "")
                 break
+        telecom = [t for t in resource.get("telecom") or [] if isinstance(t, dict)]
+        phone = next(
+            (
+                str(t.get("value") or "")
+                for t in telecom
+                if t.get("system") == "phone" and t.get("use") in (None, "home")
+            ),
+            "",
+        )
+        email = next(
+            (str(t.get("value") or "") for t in telecom if t.get("system") == "email"),
+            "",
+        )
+        address = next(
+            (a for a in resource.get("address") or [] if isinstance(a, dict)), {}
+        )
+        lines = address.get("line") or []
+        first, last = pair(official)
+        prior = tuple(
+            pair(n) for n in names if n is not official and pair(n) != (first, last)
+        )
         return PatientRecord(
             record_id=str(resource.get("id") or ""),
-            fname=str(given[0]) if given else "",
-            lname=str(official.get("family") or ""),
+            fname=first,
+            lname=last,
             dob=str(resource.get("birthDate") or ""),
             mrn=mrn,
+            phone=phone,
+            street=str(lines[0]) if lines else "",
+            email=email,
+            prior_names=prior,
         )
 
     def by_birthdate(self, dob: str) -> list[PatientRecord]:
@@ -406,6 +633,15 @@ class FhirPatientSource:
 
     def by_identifier(self, mrn: str) -> list[PatientRecord]:
         return self.search({"identifier": mrn})
+
+    def by_given(self, given: str) -> list[PatientRecord]:
+        return self.search({"given": given})
+
+    def by_phone(self, phone: str) -> list[PatientRecord]:
+        return self.search({"phone": phone})
+
+    def by_email(self, email: str) -> list[PatientRecord]:
+        return self.search({"email": email})
 
 
 class SqlPatientSource:
@@ -426,7 +662,7 @@ class SqlPatientSource:
         self.table = table
         self.pages_read = 0
 
-    def _query(self, where: str, value: str) -> list[PatientRecord]:
+    def _query(self, where: str, *values: str) -> list[PatientRecord]:
         try:
             conn = self._connect()
         except Exception as exc:  # noqa: BLE001
@@ -434,8 +670,9 @@ class SqlPatientSource:
         try:
             cur = conn.cursor()
             cur.execute(
-                f"SELECT pid, fname, lname, DOB, pubpid FROM {self.table} WHERE {where}",
-                (value,),
+                "SELECT pid, fname, lname, DOB, pubpid, phone_home, street, email, "
+                f"birth_fname, birth_lname FROM {self.table} WHERE {where}",
+                values,
             )
             rows = cur.fetchall()
         except Exception as exc:  # noqa: BLE001
@@ -446,26 +683,46 @@ class SqlPatientSource:
             except Exception:  # noqa: BLE001
                 pass
         self.pages_read += 1
-        return [
-            PatientRecord(
-                str(pid),
-                str(f or ""),
-                str(lname or ""),
-                str(d or "")[:10],
-                str(mrn or ""),
+        out = []
+        for pid, f, ln, d, mrn, phone, street, email, bf, bl in rows:
+            prior = ((str(bf or f or ""), str(bl)),) if bl else ()
+            out.append(
+                PatientRecord(
+                    str(pid),
+                    str(f or ""),
+                    str(ln or ""),
+                    str(d or "")[:10],
+                    str(mrn or ""),
+                    str(phone or ""),
+                    str(street or ""),
+                    str(email or ""),
+                    prior,
+                )
             )
-            for pid, f, lname, d, mrn in rows
-        ]
+        return out
 
     def by_birthdate(self, dob: str) -> list[PatientRecord]:
         return self._query("DOB = ?", dob)
 
     def by_family(self, family: str) -> list[PatientRecord]:
         # FHIR's string search is a case-insensitive prefix; match it.
-        return self._query("LOWER(lname) LIKE LOWER(?) || '%'", family)
+        return self._query(
+            "LOWER(lname) LIKE LOWER(?) || '%' OR LOWER(birth_lname) LIKE LOWER(?) || '%'",
+            family,
+            family,
+        )
 
     def by_identifier(self, mrn: str) -> list[PatientRecord]:
         return self._query("pubpid = ?", mrn)
+
+    def by_given(self, given: str) -> list[PatientRecord]:
+        return self._query("LOWER(fname) = LOWER(?)", given)
+
+    def by_phone(self, phone: str) -> list[PatientRecord]:
+        return self._query("phone_home = ?", phone)
+
+    def by_email(self, email: str) -> list[PatientRecord]:
+        return self._query("LOWER(email) = LOWER(?)", email)
 
 
 class TableSource:
@@ -484,11 +741,33 @@ class TableSource:
     def by_family(self, family: str) -> list[PatientRecord]:
         self.pages_read += 1
         prefix = norm_name(family)
-        return [r for r in self.records if norm_name(r.lname).startswith(prefix)]
+        return [
+            r
+            for r in self.records
+            if any(
+                norm_name(last).startswith(prefix)
+                for last in (r.lname, *(n[1] for n in r.prior_names))
+            )
+        ]
 
     def by_identifier(self, mrn: str) -> list[PatientRecord]:
         self.pages_read += 1
         return [r for r in self.records if r.mrn and r.mrn == mrn]
+
+    def by_given(self, given: str) -> list[PatientRecord]:
+        self.pages_read += 1
+        prefix = norm_name(given)
+        return [r for r in self.records if norm_name(r.fname).startswith(prefix)]
+
+    def by_phone(self, phone: str) -> list[PatientRecord]:
+        self.pages_read += 1
+        return [
+            r for r in self.records if r.phone and _digits(r.phone) == _digits(phone)
+        ]
+
+    def by_email(self, email: str) -> list[PatientRecord]:
+        self.pages_read += 1
+        return [r for r in self.records if r.email.casefold() == email.casefold()]
 
 
 class RestPatientSource:
@@ -562,6 +841,21 @@ class RestPatientSource:
                         lname=str(row.get("lname") or ""),
                         dob=str(row.get("DOB") or "")[:10],
                         mrn=str(row.get("pubpid") or ""),
+                        phone=str(row.get("phone_home") or ""),
+                        street=str(row.get("street") or ""),
+                        email=str(row.get("email") or ""),
+                        prior_names=(
+                            (
+                                (
+                                    str(
+                                        row.get("birth_fname") or row.get("fname") or ""
+                                    ),
+                                    str(row["birth_lname"]),
+                                ),
+                            )
+                            if row.get("birth_lname")
+                            else ()
+                        ),
                     )
                 )
             links = body.get("links") if isinstance(body, dict) else None
@@ -587,6 +881,15 @@ class RestPatientSource:
 
     def by_identifier(self, mrn: str) -> list[PatientRecord]:
         return self.search({"pubpid": mrn})
+
+    def by_given(self, given: str) -> list[PatientRecord]:
+        return self.search({"fname": given})
+
+    def by_phone(self, phone: str) -> list[PatientRecord]:
+        return self.search({"phone_home": phone})
+
+    def by_email(self, email: str) -> list[PatientRecord]:
+        return self.search({"email": email})
 
 
 def source_for_verifier(verifier: Any) -> Optional[PatientSource]:

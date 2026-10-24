@@ -30,28 +30,65 @@ married name plus a mistyped day of birth.
 Each item meets the existing charts, every earlier item's right outcome from
 the soak's truth, and another clerk's chart for `concurrent_same`.
 
-## Results (2026-10-24)
+## Results (2026-10-24, second round)
 
-| stream | items | new-chart items | true duplicates | screen: false stops per 100 items | record: false stops per 100 items | screen: missed | record: missed |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| soak-seed7-55 + planted | 118 | 45 | 71 | 8.5 (10) | 0.0 (0) | 12 | 12 |
-| seed7-500 + planted | 563 | 440 | 110 | 44.8 (252) | 0.4 (2) | 12 | 12 |
+The first version of the record check missed 12 of 110 planted duplicates,
+all of one kind: a married name with a mistyped day of birth. In every one,
+the phone, street and email matched the chart exactly. So the second round
+adds:
+- searches by first name, phone and email;
+- a nickname table;
+- swapped first and last names;
+- the chart's prior names (OpenEMR's `birth_fname`/`birth_lname`, or FHIR
+  `name.use` old or maiden);
+- contact details (phone, email, street) as tie-breakers for a mistyped date
+  of birth.
 
-- **Screen false stops** are new patients who share a last name or date of
-  birth with any chart, including charts earlier items created. On the long
-  stream, 151 of 252 are `clean` items that met a namesake: the 300-surname
-  pool fills up.
-- **Record false stops:** 2, both `shared_dob` items whose first name equals
-  that of the chart with the same date of birth. The married-name rule stops
-  them for a person, by design.
-- **Missed, both checks:** all 12 are the held-out `heldout_married_dob_typo`.
-  A married name with a mistyped date of birth shares neither the last name
-  nor the date of birth with the chart, so neither check sees it. The other
-  held-out kinds (first-name and last-name typos) were caught by the record
-  check, and by the screen through the shared date of birth.
-- **Record decisions** on the long stream: 450 `none`, 37 `exact`, 63
-  `close`, 13 `unreadable`. The `unreadable` ones are the 13 referrals with
-  no date of birth, a right stop.
+It also adds the kinds those rules target (`r2_`). Two `limit_` kinds share
+nothing with the chart but the person, so no rule here can catch them. The
+`r2_` rules were written knowing the `r2_` kinds, so those catches are not a
+blind test.
+
+Extended stream (500 seed-7 items, plus the planted and extra charts): 622
+items, 440 new charts, 169 true duplicates.
+
+| check | false stops (per 100 items) | missed duplicates |
+|---|---:|---:|
+| screen (`no_duplicate_candidate` on the list) | 252 (40.5) | 30 |
+| record, first version | 2 (0.3) | 60 |
+| record, second round | 2 (0.3) | 24 |
+
+The soak's own 55 items, with the same planting (177 items, 130 true
+duplicates): screen 10 false stops (5.6 per 100), 30 missed; record 0 false
+stops, 24 missed.
+
+Missed duplicates by kind, extended stream:
+
+| kind | planted | screen | record v1 | record v2 | field that would have caught it |
+|---|---:|---:|---:|---:|---|
+| married name + mistyped day (`heldout_married_dob_typo`) | 12 | 12 | 12 | 0 | phone, street, email (caught by v2) |
+| first and last name swapped (`r2_name_swap`) | 12 | 0 | 12 | 0 | the names, crossed (v2) |
+| nickname, Bob for Robert (`r2_nickname`) | 6 | 0 | 6 | 0 | the nickname table (v2) |
+| prior name on the chart, moved, mistyped day (`r2_prior_name_moved_dob_typo`) | 6 | 6 | 6 | 0 | the chart's birth name (v2) |
+| year digits transposed (`r2_year_transposed`) | 11 | 0 | 0 | 0 | the date of birth, one field off |
+| married name, moved, mistyped day (`limit_married_moved_dob_typo`) | 12 | 12 | 12 | 12 | none in the referral: needs an MRN, an insurance id or a person |
+| new first and last name, moved, same day (`limit_new_name_moved_same_dob`) | 12 | 0 | 12 | 12 | none in the referral; the screen stops it only because it stops every shared date of birth |
+
+**The trade-off.** Misses fell from 60 to 24, and every remaining miss is a
+`limit_` kind, while false stops stayed at 2 of 440 new charts. Both are
+`shared_dob` items whose first name equals that of the chart with the same
+birth date, which the married-name rule sends to a person on purpose. The
+screen still stops `limit_new_name_moved_same_dob`, and the record check
+doesn't: a full name change and a move, with nothing but the birth date in
+common, looks like any new patient who shares a birthday. Stopping it would
+mean stopping every shared date of birth, which is 33 of the screen's 252
+false stops.
+
+One rule was narrowed during this round. "Another name, one shared contact
+detail and a near date of birth" stopped two new patients, because the
+generator's phone pool has only 100 numbers (`555-01xx`). It now needs two
+shared contact details for a near date of birth, or one for the same date.
+That narrowing is tuned to this stream, and a real phone pool is far larger.
 
 ## Limits
 
@@ -63,6 +100,10 @@ the soak's truth, and another clerk's chart for `concurrent_same`.
 - The close-match rules were written with the soak's generator in view
   (`ambiguous_same_person` changes the day of birth). Only the held-out kinds
   are a test of rules not tuned to them.
+- The search for prior names assumes OpenEMR's FHIR `family` search also
+  matches a patient's old names. The SQL fallback does (`birth_lname`); the
+  live run must confirm FHIR. `patient_history`'s previous names are not read
+  yet.
 - One seed. The screen rule is the `no_duplicate_candidate` rule applied to
   OpenEMR's listing as the soak describes it (any chart sharing the first
   name, the last name or the date of birth); it is not a run of the browser.

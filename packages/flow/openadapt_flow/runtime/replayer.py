@@ -17791,7 +17791,7 @@ class Replayer:
 
         want = {
             name: runtime_param_text(params[name]) if name in params else ""
-            for name in ("fname", "lname", "DOB", "mrn")
+            for name in ("fname", "lname", "DOB", "mrn", "phone_home", "email", "street")
         }
         try:
             result = check_duplicate(source, want)

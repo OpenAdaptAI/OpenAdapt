@@ -73,13 +73,14 @@ read-only SQL query on `patient_data` (`SqlPatientSource`) is the documented
 fallback for a deployment with neither; it is wired by hand, not by default.
 
 The check searches by the date of birth, by the date of birth with day and
-month swapped, by each part of the last name, and by MRN when the run has one.
+month swapped, by each part of the last and first name, by first name, and by
+MRN, phone and email when the run has them.
 It reads every page, and it decides from whole records:
 
 | Decision | When | What happens |
 |---|---|---|
 | `exact` | same first name, last name and date of birth, or the same MRN | stop: the chart exists |
-| `close` | same name with the date of birth one field off or day and month swapped; same date of birth with a similar name or a shared hyphenated part; same date of birth and first name under another last name | stop for a person; the halt names each record and why |
+| `close` | same name (or a nickname, or the chart's prior name) with day and month swapped, or with the date of birth one field off and either the exact name or a shared phone, email or street; same date of birth with a similar name or a shared hyphenated part; first and last name swapped; same date of birth and first name under another last name; another name with the same date of birth and a shared contact detail, or a near date of birth and two | stop for a person; the halt names each record and why |
 | `none` | no record is this patient | proceed |
 | `unreadable` | unreachable, refused credentials, not a result set, a reported total that doesn't match what was read, more than 50 pages, a full REST page with no next link, a missing or non-ISO date of birth | stop (fail closed) |
 
@@ -87,3 +88,8 @@ Sharing only a last name, or only a date of birth, doesn't stop the item.
 
 Measured offline on the production soak's seed-7 stream, with true
 duplicates planted: `benchmark/dup_check/README.md`.
+
+Not catchable from the referral alone: a person whose name changed, who moved,
+and whose date of birth is mistyped or merely shared. Nothing the referral
+carries ties them to the chart; that needs an MRN, an insurance id, or a
+person.
