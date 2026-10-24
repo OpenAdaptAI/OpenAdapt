@@ -244,6 +244,7 @@ _RECORDING_STRUCTURAL_JSON_KEYS = frozenset(
         "pages_before",
         "param",
         "params",
+        "record_key",
         "role",
         "secret",
         "secret_params",

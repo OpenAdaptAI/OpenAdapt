@@ -687,6 +687,9 @@ class Recorder:
             structured = self._structured_identity_at(int(event["x"]), int(event["y"]))
             if structured:
                 event = {**event, "structured_identity": structured}
+                record_key = self._record_key_at(int(event["x"]), int(event["y"]))
+                if record_key:
+                    event = {**event, "record_key": record_key}
             # The part of the form the target sits in (a legend, an accordion
             # or tab header, a heading), for the program's named sections.
             # Display only: the compiler never puts it on a step.
@@ -1017,6 +1020,25 @@ class Recorder:
             return getter(int(x), int(y))
         except Exception:
             return None
+
+    def _record_key_at(self, x: int, y: int) -> Optional[str]:
+        """Stable record id of the row under (x, y), if the backend exposes it.
+
+        Backends MAY expose ``identity_candidates_at``
+        (``openadapt_flow.backend.IdentityCandidatesBackend``). The row's
+        app-owned id (a DOM ``data-*`` id, the row link's path) lets replay
+        tell apart rows whose visible text is identical. None when the
+        backend cannot read one or the row has none.
+        """
+        getter = getattr(self._backend, "identity_candidates_at", None)
+        if getter is None:
+            return None
+        try:
+            census = getter(int(x), int(y))
+        except Exception:
+            return None
+        key = census.get("record_key") if isinstance(census, dict) else None
+        return key if isinstance(key, str) and key else None
 
     def _structural_state(self) -> dict[str, Any]:
         """Structural observations the backend can provide right now.

@@ -219,6 +219,32 @@ class IdentityBackend(Protocol):
 
 
 @runtime_checkable
+class IdentityCandidatesBackend(Protocol):
+    """Optional census of rows that share the target's record identity.
+
+    ``structured_text_at`` says what the row under a point is. It cannot say
+    whether that text picks one record: two worklist rows that both read
+    "John Smith Follow-up Dr Lee" are each an exact match for the recorded
+    identity, and after the rows swap order the resolver lands on the other
+    patient. ``identity_candidates_at`` counts every shown row whose identity
+    equals the identity under the point and reads each row's stable record id
+    (app-owned ``data-*`` ids, the row link's path). The runtime acts only
+    when the target is the one shown row with that identity, or when the
+    recorded record id picks exactly one of them.
+
+    Returns a dict ``{"record_key": str | None, "incomplete": bool,
+    "candidates": [{"self": bool, "record_key": str | None, "dx": float,
+    "dy": float}, ...], "top_level": bool}``, where ``dx``/``dy`` are each
+    row's offset from the row under the point in click coordinates, or None
+    when the point has no row identity or the census failed (never raises).
+    """
+
+    def identity_candidates_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """Census of the shown rows with the same identity as (x, y)."""
+        ...
+
+
+@runtime_checkable
 class FieldLabelBackend(Protocol):
     """Optional RECORD-TIME field-label capability a backend MAY expose.
 
