@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import queue
 import sqlite3
 import threading
@@ -46,6 +47,11 @@ QUEUE_FILENAME = "worklist_queue.sqlite3"
 #: How long a worker waits for one pipelined read-back before it treats the
 #: item as an error (whether the save landed is then unknown) and stops.
 READBACK_WAIT_S = 600.0
+# A process worker: how long the child gets to close its real worker, to exit
+# after that, and between checks that its parent is still alive.
+_CHILD_CLOSE_S = 120.0
+_CHILD_EXIT_S = 10.0
+_PARENT_POLL_S = 2.0
 POOL_REPORT_FILENAME = "worklist_pool.json"
 POOL_REPORT_MD = "WORKLIST.md"
 
@@ -597,7 +603,7 @@ def run_worklist_pool(
             s.states[state] = s.states.get(state, 0) + 1
         say(f"{worker.name}: item {idx} {state}")
 
-    def worker_main(worker: PoolWorker) -> None:
+    def run_worker(worker: PoolWorker) -> None:
         summary = summaries[worker.name]
         t0 = time.monotonic()
         try:
@@ -703,6 +709,12 @@ def run_worklist_pool(
             stop(f"worker {worker.name} crashed", worker.name, None)
             while pending:
                 settle(pending.popleft())
+
+    def worker_main(worker: PoolWorker) -> None:
+        # Close the worker however the run goes, even when it is interrupted
+        # before the first claim: a process worker's child must not outlive it.
+        try:
+            run_worker(worker)
         finally:
             try:
                 worker.close()
@@ -836,10 +848,31 @@ class FunctionWorker:
 # across processes).
 
 
-def _child_main(conn: Any, factory: str, kwargs: dict[str, Any]) -> None:
+def _exit_when_orphaned(parent_pid: int) -> None:
+    """Exit this child process when its parent is gone.
+
+    A closed pipe normally ends the child, but a parent killed outright (or a
+    pipe end inherited by another process) can leave it running for good.
+    """
+    while True:
+        time.sleep(_PARENT_POLL_S)
+        if os.getppid() != parent_pid:
+            os._exit(0)
+
+
+def _child_main(
+    conn: Any,
+    factory: str,
+    kwargs: dict[str, Any],
+    parent_pid: Optional[int] = None,
+) -> None:
     import importlib
     import uuid
 
+    if parent_pid is not None:
+        threading.Thread(
+            target=_exit_when_orphaned, args=(parent_pid,), daemon=True
+        ).start()
     module, _, attr = factory.partition(":")
     lock = threading.Lock()
 
@@ -950,9 +983,12 @@ class ProcessWorker:
             else:
                 self._replies.put(msg)
 
-    def _call(self, *cmd: Any) -> tuple[Any, ...]:
+    def _call(self, *cmd: Any, timeout: Optional[float] = None) -> tuple[Any, ...]:
         self._conn.send(cmd)
-        reply = self._replies.get()
+        try:
+            reply = self._replies.get(timeout=timeout)
+        except queue.Empty:
+            raise RuntimeError(f"worker {self.name}: no reply to {cmd[0]!r}") from None
         if reply[0] == "error":
             raise RuntimeError(f"worker {self.name}: {reply[1]}")
         return reply
@@ -964,14 +1000,20 @@ class ProcessWorker:
         self._conn, child = ctx.Pipe()
         self._proc = ctx.Process(
             target=_child_main,
-            args=(child, self._factory, self._kwargs),
+            args=(child, self._factory, self._kwargs, os.getpid()),
             name=f"worklist-{self.name}",
             daemon=True,
         )
         self._proc.start()
         child.close()
         threading.Thread(target=self._read, daemon=True).start()
-        self._fingerprint = self._call("open")[1]
+        try:
+            self._fingerprint = self._call("open")[1]
+        except BaseException:
+            # The pool does not close a worker whose open failed, so end the
+            # child here rather than leave it running.
+            self._reap()
+            raise
 
     def session_fingerprint(self) -> Optional[str]:
         return self._fingerprint
@@ -982,13 +1024,30 @@ class ProcessWorker:
         pending = reply[4] if len(reply) > 4 else None
         return ItemRun(state=state, detail=detail, pending_readback=pending)
 
+    def _reap(self) -> None:
+        """End the child process whatever state it is in, and wait for it."""
+        proc, self._proc = self._proc, None
+        if proc is None:
+            return
+        try:
+            proc.join(timeout=_CHILD_EXIT_S)
+            if proc.is_alive():
+                proc.terminate()
+                proc.join(timeout=_CHILD_EXIT_S)
+            if proc.is_alive():
+                proc.kill()
+                proc.join()
+        finally:
+            try:
+                self._conn.close()
+            except OSError:  # pragma: no cover
+                pass
+
     def close(self) -> None:
         if self._proc is None:
             return
         try:
             if self._proc.is_alive():
-                self._call("close")
+                self._call("close", timeout=_CHILD_CLOSE_S)
         finally:
-            self._proc.join(timeout=60)
-            if self._proc.is_alive():
-                self._proc.kill()
+            self._reap()
