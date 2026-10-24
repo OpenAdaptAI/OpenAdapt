@@ -63,8 +63,16 @@ def queue(tmp_path: Path, enclave):
     db.close()
 
 
-def _stop(db, item_id: str, *, lname: str, transaction="HALTED_BEFORE_EFFECT",
-          reason=DUPLICATE, execution="HALTED", diffs=None) -> None:
+def _stop(
+    db,
+    item_id: str,
+    *,
+    lname: str,
+    transaction="HALTED_BEFORE_EFFECT",
+    reason=DUPLICATE,
+    execution="HALTED",
+    diffs=None,
+) -> None:
     db.insert_work_item(
         item_id,
         batch_id="batch-1",
@@ -328,9 +336,7 @@ def test_without_an_approver_key_nothing_changes(tmp_path):
     db = IndexDB(tmp_path / "index.db")
     db.initialize()
     db.insert_bundle("wf-ref", str(tmp_path / "bundle"))
-    disp = EngineDispatcher(
-        config, services=EngineServices(config, db=db, audit=_Audit())
-    )
+    disp = EngineDispatcher(config, services=EngineServices(config, db=db, audit=_Audit()))
     _stop(db, "item-40", lname="Fairwick")
     listed = disp.dispatch("list_stop_cards", {})
     assert listed["approver_key"] == {"ready": False, "in_app": False, "touch_id": False}
@@ -412,7 +418,9 @@ def test_a_waiting_save_is_answered_through_the_signed_item_approval(queue, monk
         }
     ]
     # Batch answers never carry a save approval.
-    refused = disp.dispatch("answer_stop_cards", {"card_ids": [card["card_id"]], "choice": "approve"})
+    refused = disp.dispatch(
+        "answer_stop_cards", {"card_ids": [card["card_id"]], "choice": "approve"}
+    )
     assert refused["code"] == "use_approval"
 
 
@@ -441,6 +449,4 @@ def test_the_queue_commands_answer_while_a_run_waits_and_stay_off_the_agent_sock
     assert {"list_stop_cards", "answer_stop_approval"} <= CONCURRENT_COMMANDS
     # Batch answers can run an item again, so they wait their turn.
     assert "answer_stop_cards" not in CONCURRENT_COMMANDS
-    assert not {"list_stop_cards", "answer_stop_cards", "answer_stop_approval"} & (
-        _SOCKET_COMMANDS
-    )
+    assert not {"list_stop_cards", "answer_stop_cards", "answer_stop_approval"} & (_SOCKET_COMMANDS)

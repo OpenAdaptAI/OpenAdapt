@@ -410,7 +410,7 @@ def card_for_rearm(switch: dict) -> dict[str, Any] | None:
         "workflow_id": switch["workflow_id"],
         "task_name": switch.get("task_name") or "",
         "label": "",
-        "question": "Turn \"only ask about problems\" back on?",
+        "question": 'Turn "only ask about problems" back on?',
         "summary": (
             "It went off, so every save of this task waits for a person. "
             "Turn it back on only if the reason it went off is fixed."
@@ -472,9 +472,7 @@ def expired(card: dict, *, now: datetime | None = None) -> bool:
     return (now or datetime.now(timezone.utc)) >= at
 
 
-def decision_message(
-    card_ids: Iterable[str], choice_id: str, *, decided_at: str
-) -> bytes:
+def decision_message(card_ids: Iterable[str], choice_id: str, *, decided_at: str) -> bytes:
     """The bytes the approver key signs for one (batch) answer."""
 
     return DECISION_DOMAIN + _canonical(
