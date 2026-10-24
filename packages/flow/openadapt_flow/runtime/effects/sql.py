@@ -127,6 +127,19 @@ def assert_read_only_sql(query: str) -> str:
     return text
 
 
+def _cell(value: Any) -> Any:
+    """A binary column as ``0x`` + hex, so records stay JSON-serializable.
+
+    OpenEMR keys rows by ``uuid binary(16)``; a driver returns those as bytes,
+    which a baseline (JSON) cannot hold. Equal bytes give equal text, so
+    record identity and change detection are unaffected.
+    """
+
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return "0x" + bytes(value).hex()
+    return value
+
+
 class SqlRecordVerifier(VerifierAdapterBase):
     """Verify effects against a SQL system of record with a read-only SELECT.
 
@@ -198,7 +211,8 @@ class SqlRecordVerifier(VerifierAdapterBase):
             columns = [str(col[0]) for col in description]
             rows = cursor.fetchall()
             return drop_record_fields(
-                [dict(zip(columns, row)) for row in rows], self.drop_fields
+                [dict(zip(columns, map(_cell, row))) for row in rows],
+                self.drop_fields,
             )
         except Exception:  # noqa: BLE001 - any read failure is unreadable
             return None
