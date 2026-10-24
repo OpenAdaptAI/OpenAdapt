@@ -1214,4 +1214,23 @@ export interface ItemApprovalAnswer {
   decision?: "approved" | "declined";
   error?: string;
   code?: string;
+  /** Where the approver key is set up after this refusal. */
+  setup?: "in_app" | "terminal";
+}
+
+/** This computer's approver key. Never the key itself. */
+export interface ApproverKeyStatus {
+  ok: boolean;
+  error?: string;
+  code?: string;
+  /** The app can keep the key behind Touch ID (a Mac with a Secure Enclave). */
+  supported?: boolean;
+  /** Stored and registered: approvals from this computer can count. */
+  set_up?: boolean;
+  stored?: boolean;
+  registered?: boolean;
+  principal?: string | null;
+  fingerprint?: string | null;
+  /** The terminal steps, where the app can't set the key up. */
+  instructions?: string;
 }

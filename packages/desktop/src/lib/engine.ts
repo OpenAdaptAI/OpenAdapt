@@ -49,6 +49,11 @@ export const CMD = {
   // and answer it (they're served while the run is still going).
   GET_ITEM_APPROVAL: "get_item_approval",
   ANSWER_ITEM_APPROVAL: "answer_item_approval",
+  // The approver key that signs those answers (Touch ID on a Mac). Served
+  // while a run waits, so a person can set it up from the approval screen.
+  GET_APPROVER_KEY: "get_approver_key",
+  SET_UP_APPROVER_KEY: "set_up_approver_key",
+  REMOVE_APPROVER_KEY: "remove_approver_key",
   // "Only ask a person about problems": read the switch and turn it off.
   // Turning it on happens in OpenAdapt Cloud, never here.
   GET_APPROVAL_MODE: "get_approval_mode",

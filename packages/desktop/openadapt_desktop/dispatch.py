@@ -66,7 +66,15 @@ _TEACHABLE_RUN_OUTCOMES = frozenset({"HALTED", "halt"})
 #: Flow refusals that mean this computer's approver key isn't set up or
 #: registered. Desktop shows Flow's message, which says what to do.
 _APPROVER_KEY_SETUP_CODES = frozenset(
-    {"human_answer_unsigned", "human_approver_unregistered", "approver_key_unusable"}
+    {
+        "human_answer_unsigned",
+        "human_approver_unregistered",
+        "approver_key_unusable",
+        "approver_key_missing",
+        "approver_presence_refused",
+        "approver_keychain_unsupported",
+        "approver_payload_refused",
+    }
 )
 _TEACH_CORRECTION_SCHEMA = "openadapt.desktop-teach-correction/v1"
 _TEACH_CORRECTION_META_KEY = "teach_correction"
@@ -306,6 +314,12 @@ class EngineDispatcher:
             # two answer a waiting run while it runs.
             "get_item_approval": self.get_item_approval,
             "answer_item_approval": self.answer_item_approval,
+            # The approver key that signs those answers, behind Touch ID on a
+            # Mac. Only the window and the tray's own wire reach these; the
+            # agent socket doesn't.
+            "get_approver_key": self.get_approver_key,
+            "set_up_approver_key": self.set_up_approver_key,
+            "remove_approver_key": self.remove_approver_key,
             # "Only ask a person about problems": read the switch, turn it off.
             # Nothing here turns it on; that happens in OpenAdapt Cloud.
             "get_approval_mode": self.get_approval_mode,
@@ -4349,10 +4363,15 @@ class EngineDispatcher:
         if not answer.get("ok"):
             code = str(answer.get("code") or "")
             error = "Flow refused the answer, so nothing was approved."
+            refused: dict[str, Any] = {"ok": False, "code": code}
             if code in _APPROVER_KEY_SETUP_CODES:
-                # The person needs to set up or register the approver key.
+                # The person needs to set up or register the approver key, or
+                # didn't confirm Touch ID. Flow's message says which.
                 error = str(answer.get("message") or error)
-            return {"ok": False, "error": error, "code": code}
+                setup = answer.get("setup") or self._approver_key_setup_route(code)
+                if setup:
+                    refused["setup"] = setup
+            return {**refused, "error": error}
         if answer.get("resume_required"):
             # The run stopped waiting before the answer arrived. Desktop
             # doesn't resume it: run the item again.
@@ -4367,6 +4386,79 @@ class EngineDispatcher:
             "ok": True,
             "decision": "approved" if decision == "approve" else "declined",
         }
+
+    def _approver_key_setup_route(self, code: str) -> str | None:
+        """Where the person sets the key up after this refusal, if anywhere."""
+
+        if code not in {"human_answer_unsigned", "human_approver_unregistered"}:
+            return None
+        try:
+            supported = self.services.flow_bridge.approver_keychain.supported()
+        except Exception:
+            logger.exception("Could not check the approver keychain")
+            supported = False
+        return "in_app" if supported else "terminal"
+
+    def get_approver_key(self, **_params: Any) -> dict:
+        """Whether this Mac's approver key is set up. Never the key itself."""
+
+        from openadapt_desktop.approver_key import setup_instructions
+
+        try:
+            status = self.services.flow_bridge.approver_keychain.status()
+        except Exception:
+            logger.exception("Could not read the approver key")
+            return {"ok": False, "error": "Desktop couldn't read the approver key."}
+        if not status["supported"]:
+            status["instructions"] = setup_instructions()
+        return {"ok": True, **status}
+
+    def set_up_approver_key(self, **params: Any) -> dict:
+        """Make the approver key behind Touch ID and register it (one prompt).
+
+        ``replace=True`` rotates it: the new key is registered before the old
+        one is retired.
+        """
+
+        from openadapt_desktop.approver_keychain import ApproverKeychainError
+
+        keychain = self.services.flow_bridge.approver_keychain
+        try:
+            stored = keychain.setup(replace=bool(params.get("replace")))
+        except ApproverKeychainError as exc:
+            return {"ok": False, "code": exc.code, "error": str(exc)}
+        except Exception:
+            logger.exception("Could not set up the approver key")
+            return {
+                "ok": False,
+                "code": "approver_key_unusable",
+                "error": "Desktop couldn't set up the approver key. Nothing changed.",
+            }
+        self.services.audit.log(
+            "approver_key_setup",
+            route="desktop",
+            store="keychain",
+            replaced=bool(params.get("replace")),
+            fingerprint=stored.public_key[:16],
+        )
+        return {"ok": True, **keychain.status()}
+
+    def remove_approver_key(self, **_params: Any) -> dict:
+        """Unregister this Mac's approver key and delete it from the Keychain."""
+
+        from openadapt_desktop.approver_keychain import ApproverKeychainError
+
+        keychain = self.services.flow_bridge.approver_keychain
+        try:
+            removed = keychain.remove()
+        except ApproverKeychainError as exc:
+            return {"ok": False, "code": exc.code, "error": str(exc)}
+        except Exception:
+            logger.exception("Could not remove the approver key")
+            return {"ok": False, "error": "Desktop couldn't remove the approver key."}
+        if removed:
+            self.services.audit.log("approver_key_removed", route="desktop")
+        return {"ok": True, "removed": removed, **keychain.status()}
 
     def run_item(self, **params: Any) -> dict:
         """Run a task once on one item's input values and record the outcome.

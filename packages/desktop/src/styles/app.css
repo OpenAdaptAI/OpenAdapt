@@ -2704,6 +2704,16 @@ select.input:focus {
   color: var(--text-strong);
   margin-bottom: var(--space-2);
 }
+/* The approver key's one-step setup, in place of Approve. */
+.approver-setup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.approver-setup h3 {
+  margin: 0;
+  color: var(--text-strong);
+}
 
 /* "Check the record": what was typed and what the record check read. */
 .field-diffs {

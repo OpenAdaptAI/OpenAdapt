@@ -130,7 +130,16 @@ How it works:
   reaches Flow only through the child process's environment. Flow re-checks
   the answer, re-reads the form and runs the right-record check again before
   it saves.
-- Set the key up once per computer, at a terminal. With
+- On a Mac with a Secure Enclave (Apple silicon or a T2 chip), the
+  approval screen shows **Set up your approver key** in place of Approve
+  until the key exists. One click and one Touch ID (or login password)
+  prompt make the key, seal it to the Secure Enclave, keep it in the login
+  Keychain and register its public key under `approvers` with Flow's own
+  `register_principal`. Each answer prompts again, and Flow gets only the
+  signature (`--approver-signer stdio`). Settings > Approver key replaces
+  the key (the new one is registered before the old one is retired) or
+  removes it. See `openadapt_desktop/approver_keychain.py`.
+- Elsewhere, set the key up once per computer, at a terminal. With
   `OPENADAPT_JIT_KEY_PASSPHRASE` set, run `openadapt-flow jit keygen --out
   ~/.openadapt/approver/desktop-approver.pem`, then a person registers the
   public key it prints: `openadapt-flow jit register --role approver
