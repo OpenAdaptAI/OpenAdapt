@@ -61,3 +61,29 @@ on the OpenEMR referral program, and the soak admits that version afresh
   `04/20/1944`, ISO), and a row date that reads either way counts when either
   reading matches. Other values are matched word for word, so name only
   parameters the list shows as they were typed.
+
+## Asking the system of record instead
+
+When the deployment's `effects` reads a FHIR server or OpenEMR's patient API,
+`no_duplicate_candidate` searches the system of record for the patient instead
+of reading the on-screen list (`runtime/checks/duplicate_record.py`, a check
+whose source is the record). `runtime.duplicate_check: screen` keeps the
+on-screen list. With no such channel, the on-screen list decides, as above. A
+read-only SQL query on `patient_data` (`SqlPatientSource`) is the documented
+fallback for a deployment with neither; it is wired by hand, not by default.
+
+The check searches by the date of birth, by the date of birth with day and
+month swapped, by each part of the last name, and by MRN when the run has one.
+It reads every page, and it decides from whole records:
+
+| Decision | When | What happens |
+|---|---|---|
+| `exact` | same first name, last name and date of birth, or the same MRN | stop: the chart exists |
+| `close` | same name with the date of birth one field off or day and month swapped; same date of birth with a similar name or a shared hyphenated part; same date of birth and first name under another last name | stop for a person; the halt names each record and why |
+| `none` | no record is this patient | proceed |
+| `unreadable` | unreachable, refused credentials, not a result set, a reported total that doesn't match what was read, more than 50 pages, a full REST page with no next link, a missing or non-ISO date of birth | stop (fail closed) |
+
+Sharing only a last name, or only a date of birth, doesn't stop the item.
+
+Measured offline on the production soak's seed-7 stream, with true
+duplicates planted: `benchmark/dup_check/README.md`.

@@ -868,6 +868,7 @@ class Replayer:
         state_verifier: Optional[Any] = None,
         effect_verifier: Optional[EffectVerifier] = None,
         effect_compensator: Optional[Any] = None,
+        duplicate_record_source: Optional[Any] = None,
         api_actuator: Optional[Any] = None,
         web_form_actuator: Optional[Any] = None,
         api_steps: bool = True,
@@ -1020,6 +1021,11 @@ class Replayer:
         # makes a model call — the $0 runtime guarantee is preserved.
         self.effect_verifier = effect_verifier
         self.effect_compensator = effect_compensator
+        # The duplicate check's record channel (``runtime/checks/
+        # duplicate_record.py``). When set, ``no_duplicate_candidate`` asks the
+        # system of record instead of reading the app's match list.
+        self.duplicate_record_source = duplicate_record_source
+        self._last_duplicate_check: Optional[Any] = None
         # ``run``-only, bundle-bound admission capability.  The ordinary
         # ``replay`` path leaves this unset and preserves its permissive
         # behavior.  When present it carries exact identity/effect decisions
@@ -17732,6 +17738,9 @@ class Replayer:
             or getattr(self, "_run_params", None)
             or {}
         )
+        source = getattr(self, "duplicate_record_source", None)
+        if source is not None:
+            return self._no_duplicate_record(source, params)
         names = tuple(pc.candidate_params or ())
         if not pc.candidate_rows or not names or not pc.text:
             return False
@@ -17769,6 +17778,36 @@ class Replayer:
                 return False
         return True
 
+    def _no_duplicate_record(self, source: Any, params: dict[str, Any]) -> bool:
+        """The duplicate check with the system of record as its source.
+
+        Proceeds only when the record channel answers completely and no chart
+        is this patient (``decision == "none"``). An exact or close match, or
+        an unreadable channel, fails the check, and the halt names the
+        records found and why (``_describe_postcondition``).
+        """
+
+        from openadapt_flow.runtime.checks.duplicate_record import check_duplicate
+
+        want = {
+            name: runtime_param_text(params[name]) if name in params else ""
+            for name in ("fname", "lname", "DOB", "mrn")
+        }
+        try:
+            result = check_duplicate(source, want)
+        except Exception as exc:  # noqa: BLE001 - any failure fails closed
+            from openadapt_flow.runtime.checks.duplicate_record import (
+                DuplicateCheckResult,
+            )
+
+            result = DuplicateCheckResult(
+                "unreadable",
+                channel=getattr(source, "channel", ""),
+                reason=f"the record check failed ({type(exc).__name__})",
+            )
+        self._last_duplicate_check = result
+        return result.proceed
+
     def _field_value_shown(self, pc: Any) -> bool:
         """The focused field shows this run's value of ``pc.param``.
 
@@ -17800,10 +17839,21 @@ class Replayer:
         value = read("focused_text_value")
         return value is not None and value == expected
 
-    @staticmethod
-    def _describe_postcondition(pc: Any) -> str:
+    def _describe_postcondition(self, pc: Any) -> str:
         """Human-readable one-liner for a postcondition (for error messages)."""
         kind = pc.kind.value if hasattr(pc.kind, "value") else pc.kind
+        checked = getattr(self, "_last_duplicate_check", None)
+        if kind == "no_duplicate_candidate" and checked is not None:
+            found = "; ".join(
+                f"{c.match} record {c.record.record_id} ({c.why})"
+                for c in checked.candidates
+            )
+            return (
+                f"no_duplicate_candidate (record check via {checked.channel}: "
+                f"{checked.decision}, {checked.reason}"
+                + (f": {found}" if found else "")
+                + ")"
+            )
         if kind == "local_edit":
             return "local_edit (URL, title, page count and focus unchanged)"
         if kind == "field_value":
