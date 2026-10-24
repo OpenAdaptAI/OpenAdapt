@@ -1234,3 +1234,47 @@ export interface ApproverKeyStatus {
   /** The terminal steps, where the app can't set the key up. */
   instructions?: string;
 }
+
+/** One stop in the review queue (openadapt.desktop-stop-card/v1). */
+export interface StopCard {
+  schema: "openadapt.desktop-stop-card/v1";
+  card_id: string;
+  kind: "approve_save" | "same_record" | "confirm_save" | "halted" | "rearm_problems_only";
+  source: { type: "item" | "approval" | "switch"; id: string; [key: string]: unknown };
+  workflow_id: string;
+  task_name: string;
+  label: string;
+  question: string;
+  summary: string;
+  evidence: {
+    source: { field: string; label: string; value: string }[];
+    record: { field: string; value: string }[];
+    differences: { field: string; label: string; source: string; record: string; same: boolean }[];
+    candidates: string[];
+    reason: string;
+    step: string;
+    expected: string;
+    observed: string;
+    screenshot: { item_id: string } | { approval: string } | null;
+  };
+  choices: { id: string; label: string; consequence: string }[];
+  expires_at: string | null;
+  created_at: string | null;
+  batch_key: string | null;
+  status: string;
+}
+
+export interface StopCardsResponse {
+  ok: boolean;
+  cards: StopCard[];
+  error?: string;
+  approver_key?: { ready: boolean; in_app: boolean; touch_id: boolean };
+}
+
+export interface StopAnswer {
+  ok: boolean;
+  error?: string;
+  code?: string;
+  changed?: number;
+  results?: { card_id: string; ok: boolean; error?: string | null }[];
+}

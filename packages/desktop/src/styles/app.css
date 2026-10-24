@@ -2787,3 +2787,64 @@ select.input:focus {
 .check-step-fold[open] > summary .check-step-state::after {
   content: "Hide";
 }
+
+/* Review stops: one card, the item next to what the app shows. */
+.stops .stop-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.stop-head h2 {
+  margin: 0;
+  color: var(--text-strong);
+}
+.stop-evidence {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+.stop-side {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-1);
+  padding: var(--space-3);
+}
+.stop-side h3 {
+  margin: 0 0 var(--space-2);
+}
+.stop-side dl > div {
+  display: grid;
+  grid-template-columns: 9rem 1fr;
+  gap: var(--space-2);
+  padding: 2px 0;
+}
+.stop-side dt {
+  color: var(--text-muted);
+}
+.stop-differs {
+  background: color-mix(in srgb, var(--attention) 18%, transparent);
+  border-radius: var(--radius-1);
+}
+.stop-record-value {
+  display: block;
+  font-size: 0.9em;
+  color: var(--text-muted);
+}
+.stop-candidates {
+  margin: 0 0 var(--space-2);
+  padding-left: var(--space-4);
+}
+.stop-shot {
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-1);
+}
+.stop-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-2);
+}
+.stop-batch ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}

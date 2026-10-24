@@ -51,6 +51,10 @@ export const CMD = {
   ANSWER_ITEM_APPROVAL: "answer_item_approval",
   // The approver key that signs those answers (Touch ID on a Mac). Served
   // while a run waits, so a person can set it up from the approval screen.
+  // The stop-review queue: every stop as one card (stop_queue.py).
+  LIST_STOP_CARDS: "list_stop_cards",
+  ANSWER_STOP_CARDS: "answer_stop_cards",
+  ANSWER_STOP_APPROVAL: "answer_stop_approval",
   GET_APPROVER_KEY: "get_approver_key",
   SET_UP_APPROVER_KEY: "set_up_approver_key",
   REMOVE_APPROVER_KEY: "remove_approver_key",

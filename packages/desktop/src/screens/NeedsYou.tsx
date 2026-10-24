@@ -277,9 +277,12 @@ function AttentionCard({
 export function NeedsYou({
   onTeach,
   onChanged,
+  onReviewStops,
 }: {
   onTeach: (workflowId: string) => void;
   onChanged: () => void;
+  /** Open the one-card-at-a-time queue (Review stops). */
+  onReviewStops?: () => void;
 }) {
   const [items, setItems] = useState<AttentionItem[] | null>(null);
   const [switches, setSwitches] = useState<SwitchSummary[]>([]);
@@ -379,6 +382,13 @@ export function NeedsYou({
           onlyProblems
             ? `With “${SWITCH_LABEL}” on, only problems come here. Items that passed every check were saved and read back from the record without you.`
             : "OpenAdapt stopped on these items and is waiting for a person. None of them runs again until you decide."
+        }
+        action={
+          onReviewStops && items && items.length > 0 ? (
+            <button type="button" className="btn btn-primary" onClick={onReviewStops}>
+              Review one by one
+            </button>
+          ) : undefined
         }
       />
       {switchedOff.map((entry) => (

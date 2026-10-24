@@ -41,6 +41,8 @@ CONCURRENT_COMMANDS = frozenset(
         "get_approver_key",
         "set_up_approver_key",
         "remove_approver_key",
+        "list_stop_cards",
+        "answer_stop_approval",
     }
 )
 

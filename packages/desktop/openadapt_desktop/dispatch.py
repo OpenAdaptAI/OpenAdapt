@@ -317,6 +317,10 @@ class EngineDispatcher:
             # The approver key that signs those answers, behind Touch ID on a
             # Mac. Only the window and the tray's own wire reach these; the
             # agent socket doesn't.
+            # The stop-review queue: every stop as one card (stop_queue.py).
+            "list_stop_cards": self.list_stop_cards,
+            "answer_stop_cards": self.answer_stop_cards,
+            "answer_stop_approval": self.answer_stop_approval,
             "get_approver_key": self.get_approver_key,
             "set_up_approver_key": self.set_up_approver_key,
             "remove_approver_key": self.remove_approver_key,
@@ -4398,6 +4402,319 @@ class EngineDispatcher:
             logger.exception("Could not check the approver keychain")
             supported = False
         return "in_app" if supported else "terminal"
+
+    # -- the stop-review queue ---------------------------------------------------
+
+    def _stop_cards(self) -> list[dict]:
+        """Every card the queue shows now, rebuilt from the stores."""
+
+        from openadapt_desktop import stop_queue
+        from openadapt_desktop.work_items import OPEN, TEACHING, public_item
+
+        names = {
+            row.get("bundle_id"): row.get("workflow_name") or row.get("capture_id") or ""
+            for row in self.services.db.list_bundles(limit=500)
+        }
+        cards: list[dict] = []
+        for row in self.services.db.list_work_items(statuses=(OPEN, TEACHING)):
+            item = public_item(row, include_values=True)
+            item["source"] = "item"
+            item["task_name"] = names.get(row["workflow_id"]) or row["workflow_id"]
+            card = stop_queue.card_for_item(item)
+            if card is not None:
+                cards.append(card)
+        for workflow_id in sorted(
+            {str(w.get("workflow_id") or "") for w in list(self._approval_watches.values())}
+        ):
+            state = self.get_item_approval(workflow_id=workflow_id)
+            if state.get("ok") and state.get("waiting"):
+                state["task_name"] = names.get(workflow_id) or workflow_id
+                card = stop_queue.card_for_approval(state)
+                if card is not None:
+                    cards.append(card)
+        for switch in self._approval_switches(names):
+            switch["rearm_available"] = self._rearm_available(switch["workflow_id"])
+            card = stop_queue.card_for_rearm(switch)
+            if card is not None:
+                cards.append(card)
+        return stop_queue.sort_cards(cards)
+
+    def _rearm_available(self, workflow_id: str) -> bool:
+        """Whether this build can re-arm a task's switch with a signed answer."""
+
+        from openadapt_desktop import approval_mode
+
+        check = getattr(approval_mode, "rearm_available", None)
+        if not callable(check):
+            return False
+        try:
+            return bool(check(self.config.data_dir, workflow_id))
+        except Exception:
+            logger.exception("Could not check whether the switch can be re-armed")
+            return False
+
+    def list_stop_cards(self, **_params: Any) -> dict:
+        """The stop-review queue: one card per stop, oldest first.
+
+        Read-only. Served while a run waits, so a waiting save shows up.
+        """
+
+        try:
+            cards = self._stop_cards()
+        except Exception:
+            logger.exception("Could not build the stop queue")
+            return {"ok": False, "error": "Desktop couldn't read the stops."}
+        return {"ok": True, "cards": cards, "approver_key": self._approver_key_summary()}
+
+    def _approver_key_summary(self) -> dict:
+        from openadapt_desktop.approver_key import approver_key_environment
+
+        try:
+            keychain = self.services.flow_bridge.approver_keychain
+            in_app = keychain.supported()
+            stored = in_app and keychain.stored() is not None
+        except Exception:
+            in_app, stored = False, False
+        file_key = approver_key_environment() is not None
+        return {
+            "ready": stored or file_key,
+            "in_app": in_app,
+            "touch_id": stored,
+        }
+
+    def _sign_stop_decision(self, message: bytes, *, count: int) -> dict:
+        """Sign one queue answer with this computer's approver key.
+
+        Touch ID (or the login password) on a Mac with the key set up in the
+        app, else the terminal-made key. Raises ``ApproverKeychainError``.
+        """
+
+        from openadapt_desktop.approver_key import ApproverKeyError, sign_with_file_key
+        from openadapt_desktop.approver_keychain import ApproverKeychainError
+
+        keychain = self.services.flow_bridge.approver_keychain
+        if keychain.supported() and keychain.stored() is not None:
+            reason = (
+                "record your answer to this stop"
+                if count == 1
+                else f"record your answer to {count} stops"
+            )
+            public, signature = keychain.sign(message, reason=reason)
+            return {"public_key": public, "signature": signature, "key": "keychain"}
+        try:
+            signed = sign_with_file_key(message)
+        except ApproverKeyError as exc:
+            raise ApproverKeychainError("approver_key_unusable", str(exc)) from exc
+        if signed is None:
+            raise ApproverKeychainError(
+                "approver_key_missing",
+                "Set up your approver key to answer stops. Nothing changed.",
+            )
+        return {"public_key": signed[0], "signature": signed[1], "key": "file"}
+
+    def _record_stop_decision(self, receipt: dict) -> None:
+        """Append one answer to the local decision log (owner-only)."""
+
+        import os
+
+        path = Path(self.config.data_dir) / "stop_decisions.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(receipt, sort_keys=True) + "\n")
+
+    @staticmethod
+    def _timings(params: dict, card_ids: list[str]) -> dict[str, int]:
+        """How long each card was on screen before the answer, in ms."""
+
+        raw = params.get("shown_ms")
+        out: dict[str, int] = {}
+        if isinstance(raw, dict):
+            for card_id in card_ids:
+                value = raw.get(card_id)
+                if isinstance(value, (int, float)) and 0 <= value < 86_400_000:
+                    out[card_id] = int(value)
+        return out
+
+    def _current_cards(self, card_ids: list[str]) -> tuple[list[dict] | None, str]:
+        """The cards the person saw, if each is still exactly as shown."""
+
+        from openadapt_desktop import stop_queue
+
+        if not card_ids or len(card_ids) > stop_queue.MAX_BATCH:
+            return None, f"Answer between 1 and {stop_queue.MAX_BATCH} stops at once."
+        if len(set(card_ids)) != len(card_ids):
+            return None, "A stop is listed twice. Nothing changed."
+        current = {card["card_id"]: card for card in self._stop_cards()}
+        cards = [current.get(card_id) for card_id in card_ids]
+        if any(card is None for card in cards):
+            return None, (
+                "A stop changed or was answered since you saw it. Nothing "
+                "changed; look at it again."
+            )
+        found = [card for card in cards if card is not None]
+        if any(stop_queue.expired(card) for card in found):
+            return None, "A stop expired before you answered. Nothing changed."
+        if len(found) > 1 and (
+            found[0].get("batch_key") is None
+            or any(card.get("batch_key") != found[0]["batch_key"] for card in found)
+        ):
+            return None, "Only similar stops can be answered together. Nothing changed."
+        return found, ""
+
+    def answer_stop_cards(self, **params: Any) -> dict:
+        """Answer one stop, or a batch of similar stops, with one choice.
+
+        Rebuilds every card first: a card that changed, expired or doesn't
+        offer the choice changes nothing. Signs one decision receipt with the
+        approver key (one prompt for the batch), then applies each card's own
+        action with its usual checks. Save approvals go through
+        ``answer_stop_approval``.
+        """
+
+        from datetime import datetime, timezone
+
+        from openadapt_desktop import stop_queue
+        from openadapt_desktop.approver_keychain import ApproverKeychainError
+
+        card_ids = [str(c) for c in params.get("card_ids") or []]
+        choice_id = str(params.get("choice") or "")
+        cards, problem = self._current_cards(card_ids)
+        if cards is None:
+            return {"ok": False, "code": "card_changed", "error": problem}
+        choices = [stop_queue.choice_for(card, choice_id) for card in cards]
+        if any(choice is None for choice in choices):
+            return {
+                "ok": False,
+                "code": "choice_not_offered",
+                "error": "That choice isn't on this stop. Nothing changed.",
+            }
+        if any(card["kind"] == "approve_save" for card in cards):
+            return {
+                "ok": False,
+                "code": "use_approval",
+                "error": "A waiting save is answered on its own. Nothing changed.",
+            }
+        if choice_id == "leave":
+            return {"ok": True, "results": [], "changed": 0}
+        decided_at = datetime.now(timezone.utc).isoformat()
+        message = stop_queue.decision_message(card_ids, choice_id, decided_at=decided_at)
+        try:
+            signature = self._sign_stop_decision(message, count=len(cards))
+        except ApproverKeychainError as exc:
+            return {"ok": False, "code": exc.code, "error": str(exc)}
+        results = []
+        for card, choice in zip(cards, choices):
+            assert choice is not None
+            if choice.action == "rearm":
+                outcome = self._rearm(card["workflow_id"], signature)
+            else:
+                outcome = self.resolve_attention_item(
+                    item_id=card["source"]["id"],
+                    action=choice.action,
+                    # The choice is the person's statement of what they
+                    # found in the record (stop_queue.RECORD_CHECK_ACTIONS).
+                    record_checked=choice.action in stop_queue.RECORD_CHECK_ACTIONS,
+                )
+            results.append(
+                {
+                    "card_id": card["card_id"],
+                    "ok": bool(outcome.get("ok")),
+                    "error": outcome.get("error"),
+                }
+            )
+        self._record_stop_decision(
+            {
+                "schema": stop_queue.DECISION_SCHEMA,
+                "card_ids": sorted(card_ids),
+                "kinds": sorted({card["kind"] for card in cards}),
+                "choice": choice_id,
+                "decided_at": decided_at,
+                "public_key": signature["public_key"],
+                "signature": signature["signature"],
+                "key": signature["key"],
+                "shown_ms": self._timings(params, card_ids),
+                "results": results,
+            }
+        )
+        self.services.audit.log(
+            "stop_answered",
+            cards=len(cards),
+            choice=choice_id,
+            ok=sum(1 for r in results if r["ok"]),
+        )
+        return {
+            "ok": all(r["ok"] for r in results),
+            "results": results,
+            "changed": sum(1 for r in results if r["ok"]),
+            **(
+                {}
+                if all(r["ok"] for r in results)
+                else {"error": "Some stops weren't changed. They stay in the queue."}
+            ),
+        }
+
+    def _rearm(self, workflow_id: str, signature: dict) -> dict:
+        from openadapt_desktop import approval_mode
+
+        rearm = getattr(approval_mode, "rearm", None)
+        if not callable(rearm):
+            return {"ok": False, "error": "This build can't turn the switch back on."}
+        try:
+            return dict(rearm(self.config.data_dir, workflow_id, decision=signature))
+        except Exception:
+            logger.exception("Could not re-arm the switch")
+            return {"ok": False, "error": "Desktop couldn't turn the switch back on."}
+
+    def answer_stop_approval(self, **params: Any) -> dict:
+        """Answer one waiting save from its card (Flow signs the answer).
+
+        Served while the run waits. The card must still be exactly as shown
+        and unexpired; the answer then goes through ``answer_item_approval``,
+        which Desktop's approver key signs (Touch ID on a Mac).
+        """
+
+        from datetime import datetime, timezone
+
+        from openadapt_desktop import stop_queue
+
+        card_id = str(params.get("card_id") or "")
+        choice_id = str(params.get("choice") or "")
+        cards, problem = self._current_cards([card_id])
+        if cards is None:
+            return {"ok": False, "code": "card_changed", "error": problem}
+        (card,) = cards
+        choice = stop_queue.choice_for(card, choice_id)
+        if card["kind"] != "approve_save" or choice is None:
+            return {
+                "ok": False,
+                "code": "choice_not_offered",
+                "error": "That choice isn't on this stop. Nothing changed.",
+            }
+        if choice.action == "none":
+            return {"ok": True, "changed": 0}
+        source = card["source"]
+        answer = self.answer_item_approval(
+            workflow_id=source["workflow_id"],
+            decision=choice.action,
+            request_id=source["id"],
+            request_sha256=source["request_sha256"],
+            reason=choice.reason,
+        )
+        self._record_stop_decision(
+            {
+                "schema": stop_queue.DECISION_SCHEMA,
+                "card_ids": [card_id],
+                "kinds": ["approve_save"],
+                "choice": choice_id,
+                "decided_at": datetime.now(timezone.utc).isoformat(),
+                # Flow's own answer carries the signature.
+                "key": "flow_item_approval",
+                "shown_ms": self._timings(params, [card_id]),
+                "results": [{"card_id": card_id, "ok": bool(answer.get("ok"))}],
+            }
+        )
+        return {**answer, "changed": 1 if answer.get("ok") else 0}
 
     def get_approver_key(self, **_params: Any) -> dict:
         """Whether this Mac's approver key is set up. Never the key itself."""

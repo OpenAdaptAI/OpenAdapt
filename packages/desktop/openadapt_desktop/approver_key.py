@@ -166,6 +166,24 @@ def approver_key_environment(
     return path, {PASSPHRASE_ENV: passphrase}
 
 
+def sign_with_file_key(message: bytes, route: Route = "desktop") -> tuple[str, str] | None:
+    """Sign one message with the terminal-made key, or ``None`` without one.
+
+    Returns ``(public_key_hex, "ed25519:<hex>")``. The key is opened for this
+    one signature and dropped.
+    """
+
+    found = approver_key_environment(route)
+    if found is None:
+        return None
+    path, env = found
+    key = _open(path, env[PASSPHRASE_ENV])
+    try:
+        return _public_hex(key), "ed25519:" + key.sign(message).hex()
+    finally:
+        del key
+
+
 def setup_instructions(route: Route = "desktop") -> str:
     """The one-time terminal steps that make this computer's answers count."""
 
@@ -204,4 +222,5 @@ __all__ = [
     "portal_approver_environment",
     "setup_approver_key",
     "setup_instructions",
+    "sign_with_file_key",
 ]
