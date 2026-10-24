@@ -54,6 +54,7 @@ from pydantic import (
     model_serializer,
     model_validator,
 )
+from pydantic_core import to_jsonable_python
 
 
 class ValueExpr(BaseModel):
@@ -1220,7 +1221,21 @@ def stable_id(record: dict[str, Any]) -> Any:
     Prefers an ``id`` field; falls back to the whole record's sorted-items
     tuple so substrates without an explicit id still support collateral-loss
     detection.
+
+    Values are compared in their JSON form. A baseline is stored with
+    ``model_dump(mode="json")``, so a UUID, Decimal or datetime read from a
+    database driver comes back as a string; comparing the raw value would
+    count every pre-existing row as new and confirm a write that never
+    happened.
     """
     if "id" in record:
-        return ("id", record["id"])
-    return tuple(sorted((k, str(v)) for k, v in record.items()))
+        return ("id", _json_form(record["id"]))
+    return tuple(sorted((k, str(_json_form(v))) for k, v in record.items()))
+
+
+def _json_form(value: Any) -> Any:
+    """``value`` as a JSON baseline stores it, or unchanged if it has no such form."""
+    try:
+        return to_jsonable_python(value)
+    except Exception:  # noqa: BLE001 - e.g. bytes that are not UTF-8
+        return value

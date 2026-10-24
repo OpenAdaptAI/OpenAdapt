@@ -6,7 +6,6 @@ leaves the machine. All data is synthetic.
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 from pathlib import Path
@@ -51,6 +50,12 @@ def test_a_seal_gets_its_own_token_next_to_it(tmp_path, tsa):
     assert record["schema"] == "openadapt.record-timestamp/v1"
     assert record["imprint_sha256"] == fields["seal_sha256"]  # only this was sent
     assert record["gen_time"]
+    # The token is stored in its standard binary form beside the JSON.
+    tsr = seal.with_name("seal.tsr")
+    assert record["tsr_file"] == "seal.tsr" and tsr.is_file()
+    assert record["tsr_sha256"] == hashlib.sha256(tsr.read_bytes()).hexdigest()
+    assert "token" not in record
+    assert tsr.read_bytes()[:1] == b"\x30"  # DER SEQUENCE
     result = verify_record_timestamp(fields, out, [tsa.certificate])
     assert result.ok and result.imprint_sha256 == fields["seal_sha256"]
     # Idempotent: a second call returns the stored token without asking again.
@@ -62,7 +67,7 @@ def test_a_seal_gets_its_own_token_next_to_it(tmp_path, tsa):
             raise AssertionError("must not be called")
 
     again = timestamp_record(fields, out, Refuses(), trusted=[tsa.certificate], env={})
-    assert again["token"] == record["token"]
+    assert again["tsr_sha256"] == record["tsr_sha256"]
 
 
 def test_the_default_pin_is_sigstore_so_a_local_token_is_refused(tmp_path, tsa):
@@ -87,12 +92,34 @@ def test_changed_seal_tampered_token_and_wrong_pin_are_refused(tmp_path, tsa):
     assert not verify_record_timestamp(
         fields, out, [LocalTsa.generate().certificate]
     ).ok
-    data = json.loads(out.read_text())
-    token = bytearray(base64.b64decode(data["token"]))
+    tsr = seal.with_name("seal.tsr")
+    original = tsr.read_bytes()
+    token = bytearray(original)
     token[-5] ^= 0xFF
-    data["token"] = base64.b64encode(bytes(token)).decode()
+    tsr.write_bytes(bytes(token))
+    # Changed bytes no longer match the SHA-256 the JSON names.
+    assert (
+        verify_record_timestamp(fields, out, [tsa.certificate]).reason
+        == "timestamp_token_mismatch"
+    )
+    # And a JSON rewritten to match a tampered token fails the signature check.
+    data = json.loads(out.read_text())
+    data["tsr_sha256"] = hashlib.sha256(bytes(token)).hexdigest()
     out.write_text(json.dumps(data))
     assert not verify_record_timestamp(fields, out, [tsa.certificate]).ok
+    tsr.write_bytes(original)
+    for bad in ("../seal.tsr", "/etc/passwd", "seal.json", ""):
+        out.write_text(json.dumps(dict(data, tsr_file=bad)))
+        assert (
+            verify_record_timestamp(fields, out, [tsa.certificate]).reason
+            == "timestamp_malformed"
+        ), bad
+    tsr.unlink()
+    out.write_text(json.dumps(dict(data, tsr_file="seal.tsr")))
+    assert (
+        verify_record_timestamp(fields, out, [tsa.certificate]).reason
+        == "timestamp_token_missing"
+    )
     out.write_text('{"schema": "openadapt.record-timestamp/v1", "schema": "x"}')
     assert (
         verify_record_timestamp(fields, out, [tsa.certificate]).reason

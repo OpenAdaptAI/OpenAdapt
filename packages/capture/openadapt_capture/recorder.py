@@ -1941,9 +1941,12 @@ def read_screen_events(
     Set to 0 for unlimited (legacy behaviour).
 
     In window-scoped mode (``window_scope`` set) each frame captures the
-    TARGET WINDOW's pixels instead of the full screen; the window is
-    re-resolved every frame (windows move/resize) and a bounds-timeline
-    "window" event is queued whenever the resolved bounds change, so
+    TARGET WINDOW's pixels instead of the full screen. The selectors pick
+    the window once and the scope pins it by window id, owning pid and
+    process start time, so a retitle (a browser navigating) keeps the same
+    window. The pinned window is re-resolved every frame (windows
+    move/resize) and a bounds-timeline "window" event is queued with each
+    frame, carrying any title change, so
     converters can reconstruct the exact window position for every action.
     Both native scopes reject frames crossed by input and seal one clean
     terminal frame after the last accepted action.

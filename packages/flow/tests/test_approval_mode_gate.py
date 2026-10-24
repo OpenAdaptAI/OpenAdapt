@@ -955,3 +955,12 @@ def test_the_gate_classifies_saves_as_the_run_gate_does(monkeypatch):
         is False
     )
     assert ApprovalGate("problems_only")._is_save(ctx) is True
+    # The classification counts only from a current certification under the
+    # bound policy. With the real check this bundle was never certified, so
+    # its classification (or one edited after certifying) is ignored, even
+    # when the gate names the policy.
+    monkeypatch.undo()
+    assert (
+        ApprovalGate("problems_only", policy_name="clinical-write")._is_save(ctx)
+        is True
+    )

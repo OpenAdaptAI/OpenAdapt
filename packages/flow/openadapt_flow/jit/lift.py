@@ -18,7 +18,10 @@ steps.
 
 A value is not lifted when it was typed inside longer text or never typed
 whole. Those inputs are reported so the reviewer sees them; the program would
-repeat the demonstrated text for them.
+repeat the demonstrated text for them. That includes a value typed whole in one
+step and inside longer text in another (a name typed into its field and again
+into a note): lifting only the whole step would leave the note repeating the
+demonstrated value on every run, with a constant that every check accepts.
 """
 
 from __future__ import annotations
@@ -59,16 +62,16 @@ class LiftReport:
         }
 
 
-def _match(workflow: Workflow, value: str) -> tuple[list[str], bool]:
+def _match(workflow: Workflow, value: str) -> tuple[list[str], list[str]]:
     whole: list[str] = []
-    inside = False
+    inside: list[str] = []
     for step in workflow.steps:
         if step.action != ActionKind.TYPE or step.param or step.text is None:
             continue
         if step.text == value:
             whole.append(step.id)
         elif value in step.text:
-            inside = True
+            inside.append(step.id)
     return whole, inside
 
 
@@ -164,6 +167,13 @@ def lift_params(bundle_dir: Path | str, inputs: Mapping[str, str]) -> LiftReport
         if not whole:
             report.unlifted[name] = (
                 "typed inside longer text" if inside else "not typed in any step"
+            )
+            continue
+        if inside:
+            report.unlifted[name] = (
+                f"typed whole in {', '.join(whole)} and inside longer text in "
+                f"{', '.join(inside)}; the longer text would repeat the "
+                "demonstrated value"
             )
             continue
         step_id = whole[0]

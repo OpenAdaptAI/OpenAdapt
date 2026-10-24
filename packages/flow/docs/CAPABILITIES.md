@@ -118,7 +118,9 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   (`openadapt_flow/runtime/durable/`) so a halt becomes a durable pause the
   operator can approve and resume from the last verified state (`resume` /
   `approve`), not a restart, and explicitly not "hand the rest to a free-form
-  agent."
+  agent." A save that was sent but not confirmed pauses as delivery-uncertain,
+  so an ordinary resume can't send it again; the operator reconciles it or
+  explicitly approves one retry.
 - **After a stop: change ledger, write-ordering lint, declared undo.** A stop
   isn't a rollback, so every run report lists, in order, each step that could
   have changed the app and whether each declared effect was confirmed, refuted
