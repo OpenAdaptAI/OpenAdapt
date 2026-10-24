@@ -328,6 +328,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         default=None,
         help="run only the first N items (a smoke run)",
     )
+    p.add_argument(
+        "--drift",
+        action="append",
+        default=None,
+        metavar="KIND@SEQ",
+        help="replace the drift schedule: apply UI change KIND before item SEQ "
+        "(repeatable), e.g. relabel_save@26",
+    )
     p.add_argument("--cost-model", default=V1.version, choices=sorted(MODELS))
     p.add_argument("--out", type=Path, required=True)
     args = p.parse_args(argv)
@@ -335,6 +343,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=False)
     workload = generate(args.seed, args.items, args.days, args.existing)
+    if args.drift is not None:
+        by_seq = {i.seq: i for i in workload.items}
+        workload.drift = []
+        for spec in args.drift:
+            kind, _, seq = spec.partition("@")
+            workload.drift.append(
+                {"day": by_seq[int(seq)].day, "kind": kind, "first_seq": int(seq)}
+            )
     (out / "workload.jsonl").write_text(
         "".join(json.dumps(r, sort_keys=True) + "\n" for r in workload.ledger_rows())
     )

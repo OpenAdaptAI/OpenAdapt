@@ -19,6 +19,7 @@ Injected events, each logged with exactly what was changed:
     New Patient form and its duplicate-check popup;
   - ``relabel``: the save button "Confirm Create New Patient" becomes
     "Save new patient", and "Create New Patient" becomes "Check and create";
+  - ``relabel_save``: only the save button is relabeled (proof-15's change);
   - ``reorder``: the demographics layout (``layout_options``) puts Birth Sex
     before DOB, and Home Phone and Contact Email before Address;
   - ``interstitial``: a notice over the New Patient form that must be
@@ -514,6 +515,12 @@ class OpenEMRApp:
                 "Confirm Create New Patient": "Save new patient",
                 "Create New Patient": "Check and create",
             }
+        elif kind == "relabel_save":
+            # proof-15's app change: only the save button gets a new label.
+            self.app_exec(
+                f"sed -i \"s/xla('Confirm Create New Patient')/xla('Save new patient')/\" {POPUP}"
+            )
+            changed["labels"] = {"Confirm Create New Patient": "Save new patient"}
         elif kind == "reorder":
             sql = (
                 "UPDATE openemr.layout_options SET seq=85 WHERE form_id='DEM' AND field_id='sex';"

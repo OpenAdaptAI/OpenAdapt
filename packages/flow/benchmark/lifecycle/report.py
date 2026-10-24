@@ -66,9 +66,44 @@ def render(res: dict[str, Any]) -> str:
     ]
     for name, m in res["arms"].items():
         b = m["bands"]
+        h = m.get("headline")
         lines += [
             f"## Arm `{name}`" + ("" if m["complete"] else " (incomplete)"),
             "",
+        ]
+        if h:
+            x1 = h["bands"]["x1"]
+            lines += [
+                f"- **Verified items per operator-minute: "
+                f"{x1['verified_per_operator_minute']}** "
+                f"({h['verified_completed']} verified of {h['items']} items over "
+                f"{x1['operator_min_run']} operator minutes; "
+                f"{x1['verified_per_operator_minute_with_setup']} with the "
+                f"{x1['operator_min_setup']} setup minutes). By hand: "
+                f"{round(1 / h['manual_entry_min'], 3)} an operator-minute.",
+                f"- False stops per 100 items: {h['false_stops_per_100_items']}; "
+                f"all stops per 100 items: {h['stops_per_100_items']}; operator "
+                f"minutes per stop: {x1['operator_min_per_stop']}.",
+            ]
+            for d in x1["after_app_change"]:
+                lines.append(
+                    f"- After the app change `{d['kind']}` (item {d['first_seq']}): "
+                    f"{d['items_false_stopped']} of {d['items_in_window']} items false-stopped, "
+                    f"{d['maintenance_operator_min']} operator minutes of maintenance "
+                    "(stops, repair reviews); first verified item after it: "
+                    f"{d['first_verified_seq']}, "
+                    f"{d['seconds_to_running_again']} s after the change."
+                )
+            lines += [
+                "- Cost-model bands, verified per operator-minute: "
+                + ", ".join(
+                    f"{k} {v['verified_per_operator_minute']}"
+                    for k, v in h["bands"].items()
+                )
+                + ".",
+                "",
+            ]
+        lines += [
             "| | x0.5 | x1 | x2 |",
             "|---|---:|---:|---:|",
         ]
