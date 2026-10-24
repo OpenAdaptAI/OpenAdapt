@@ -40,7 +40,6 @@ class StructuralElementNotActionableRefused(StructuralResolutionRefused):
     """
 
 
-
 class ActionDeliveryUncertain(RuntimeError):
     """An action API failed after delivery may already have begun.
 

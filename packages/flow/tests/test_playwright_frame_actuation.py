@@ -297,7 +297,6 @@ def test_ancestor_frame_change_before_locate_refuses_handle(
     assert not _has_guard_attribute(frame)
 
 
-
 @pytest.mark.parametrize("mutation", ["covered", "pointer-disabled", "rotated"])
 def test_ancestor_frame_change_before_act_refuses_delivery(
     framed_backend, mutation: str

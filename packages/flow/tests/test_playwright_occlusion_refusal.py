@@ -87,7 +87,9 @@ def test_covered_element_raises_not_actionable_refusal(page) -> None:
 def test_offscreen_element_raises_not_actionable_refusal(page) -> None:
     backend = PlaywrightBackend(page)
     loc = StructuralLocator(selector="#btn-offscreen")
-    with pytest.raises(StructuralElementNotActionableRefused, match="outside the viewport"):
+    with pytest.raises(
+        StructuralElementNotActionableRefused, match="outside the viewport"
+    ):
         backend.locate_structural(loc)
 
 
@@ -114,4 +116,3 @@ def test_covered_element_never_falls_through_to_template_rung(page) -> None:
         )
     # The visual template matcher must NOT be called when structural target is covered
     assert len(vision.template_calls) == 0
-
