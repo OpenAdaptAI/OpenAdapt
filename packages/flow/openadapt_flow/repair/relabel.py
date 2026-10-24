@@ -88,13 +88,20 @@ class RelabelReview:
     parent_digest: str
     certified_digest: str
     requalification: dict[str, Any]
+    #: Set when the relabeled control is part of the record check (a save
+    #: button's identity is): no lineage hop can carry it, so approving it is
+    #: a fresh admission of the certified copy. Says why.
+    fresh_admission: Optional[str] = None
 
 
 @dataclass
 class RelabelResult:
     """The outcome of :func:`readmit`."""
 
-    status: str  # "readmitted" | "declined" | "refused"
+    #: "readmitted" (lineage hop), "fresh_admission" (a person approved the
+    #: certified copy, which runs once the deployment pins its digest),
+    #: "declined" or "refused".
+    status: str
     reason: str = ""
     bundle_dir: Optional[Path] = None
     digest: Optional[str] = None
@@ -416,7 +423,26 @@ def readmit(
         )
     except ReadmissionRefused as exc:
         timings["requalify_s"] = round(clock() - t0, 1)
-        return RelabelResult(status="refused", reason=str(exc), timings=timings)
+        result = captured.get("result")
+        if (
+            "fresh admission" not in str(exc)
+            or not getattr(result, "passed", False)
+            or not getattr(result, "certified", False)
+        ):
+            return RelabelResult(status="refused", reason=str(exc), timings=timings)
+        # The campaign passed and certified a copy, but the relabeled control
+        # is part of the fixed contract, so no lineage hop may carry it. A
+        # person may still admit the certified copy afresh.
+        return _fresh_admission(
+            proposal,
+            parent_digest,
+            Path(result.bundle_dir),
+            _rows(result),
+            str(exc),
+            ask_person,
+            timings,
+            clock,
+        )
     timings["requalify_s"] = round(clock() - t0, 1)
     rows = _rows(captured.get("result"))
     candidate = build_candidate(
@@ -483,6 +509,55 @@ def readmit(
         bundle_dir=store.bundle_path(requalified.digest),
         digest=requalified.digest,
         lineage=record,
+        approved_by=approver,
+        timings=timings,
+    )
+
+
+def _fresh_admission(
+    proposal: RelabelProposal,
+    parent_digest: str,
+    certified_dir: Path,
+    rows: list[dict[str, Any]],
+    why: str,
+    ask_person: Callable[[RelabelReview], tuple[str, str]],
+    timings: dict[str, float],
+    clock: Callable[[], float],
+) -> RelabelResult:
+    """Ask a person to admit the certified copy afresh (no lineage)."""
+
+    certified = Workflow.load(certified_dir)
+    provenance = certified.manifest.provenance if certified.manifest else None
+    if provenance is None or not provenance.certified:
+        return RelabelResult(
+            status="refused",
+            reason="the re-qualified copy is not certified",
+            timings=timings,
+        )
+    digest = certified.manifest.content_digest  # type: ignore[union-attr]
+    review = RelabelReview(
+        proposal=proposal,
+        parent_digest=parent_digest,
+        certified_digest=digest,
+        requalification={
+            "policy": provenance.policy_name,
+            "cases": sorted({str(r.get("case_id")) for r in rows}),
+            "rows": rows,
+        },
+        fresh_admission=why,
+    )
+    t1 = clock()
+    decision, approver = ask_person(review)
+    timings["person_wait_s"] = round(clock() - t1, 1)
+    if decision != "approve":
+        return RelabelResult(
+            status="declined", reason=f"declined by {approver}", timings=timings
+        )
+    return RelabelResult(
+        status="fresh_admission",
+        reason=why,
+        bundle_dir=certified_dir,
+        digest=digest,
         approved_by=approver,
         timings=timings,
     )

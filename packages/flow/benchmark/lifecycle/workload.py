@@ -38,6 +38,10 @@ Item-level exceptions (``EXCEPTION_MIX``):
 - ``failed_save``: the save fails once (the app returns an error). Right
   outcome: no chart from the failed attempt; a chart after a retry, or a safe
   stop.
+- ``common_surname``: a new patient with the last name of an existing chart
+  (another first name, date of birth and address). Right outcome: a new chart.
+- ``shared_dob``: a new patient born on the same day as an existing chart.
+  Right outcome: a new chart.
 
 Day-level events (``DRIFT_SCHEDULE``) stay on from their day to the end, as a
 vendor release would: a theme change, a relabel of the save button, a field
@@ -53,7 +57,7 @@ from typing import Any, Optional
 
 from .arm import WorkItem
 
-WORKLOAD_VERSION = "lifecycle-workload/2026-10-20.2"
+WORKLOAD_VERSION = "lifecycle-workload/2026-10-24.1"
 
 EXCEPTION_MIX: dict[str, float] = {
     "dup_existing": 0.03,
@@ -69,6 +73,11 @@ EXCEPTION_MIX: dict[str, float] = {
     "session_expiry": 0.02,
     "slow_save": 0.02,
     "failed_save": 0.015,
+    # Ordinary coincidences a real practice sees: a new patient who shares a
+    # last name, or a date of birth, with an existing chart. Not data errors:
+    # the right outcome is a new chart.
+    "common_surname": 0.06,
+    "shared_dob": 0.08,
 }
 
 #: (day, kind) — each stays on from that day to the end of the run.
@@ -262,6 +271,20 @@ def generate(seed: int, n_items: int, days: int, n_existing: int = 12) -> Worklo
             )
             params, intended = dict(person), dict(person)
             why = "same name as an existing chart, a different person"
+        elif kind == "common_surname":
+            other = rng.choice(existing)
+            person["lname"] = other["lname"]
+            if person["fname"] == other["fname"]:
+                person["fname"] = next(f for f in FIRST if f != other["fname"])
+            person["email"] = (
+                f"{person['fname'].lower()}.{other['lname'].lower()}.{seq}@example.invalid"
+            )
+            params, intended = dict(person), dict(person)
+            why = "shares a last name with an existing chart; a different person"
+        elif kind == "shared_dob":
+            person["DOB"] = rng.choice(existing)["DOB"]
+            params, intended = dict(person), dict(person)
+            why = "born on the same day as an existing chart; a different person"
         elif kind == "missing_required":
             params.pop("DOB")
             intended = None

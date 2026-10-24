@@ -86,6 +86,24 @@ def classify(*, claimed: str, oracle: str, chart_wanted: bool, exception: str) -
     return "silent_wrong" if done else "flagged_wrong"
 
 
+def stop_cause(row: dict[str, Any]) -> str:
+    """Why an item stopped, from the product's own halt text (for root causes)."""
+
+    detail = row.get("detail") or {}
+    first = detail.get("first_run") or {}
+    halt = str(
+        first.get("halt") or detail.get("error") or row.get("product_status") or ""
+    )
+    if "no_duplicate_candidate" in halt or "No matches were found" in halt:
+        return "duplicate check listed a chart"
+    if "Identity check failed" in halt:
+        return "identity check failed (relabeled control)"
+    if "Missing" in halt or "missing" in halt and "param" in halt:
+        return "missing value"
+    outcome = first.get("transaction_outcome") or ""
+    return f"other: {outcome} {halt[:80]}".strip()
+
+
 def wilson(k: int, n: int, z: float = 1.96) -> Optional[tuple[float, float]]:
     if n == 0:
         return None
@@ -287,7 +305,38 @@ def compute(rows: Iterable[dict[str, Any]], cost: CostModel) -> dict[str, Any]:
                 "after_app_change": drift_rows,
             }
         n = len(items)
+        dup = [
+            r
+            for r in items
+            if r["claimed"] != "done"
+            and stop_cause(r) == "duplicate check listed a chart"
+        ]
+
+        def matched(r: dict[str, Any]) -> str:
+            shares = r.get("shares_with_existing") or {}
+            hit = [k for k in ("lname", "DOB") if shares.get(k)]
+            if hit:
+                return "+".join(hit)
+            return "first name only" if shares.get("fname") else "none at start"
+
         return {
+            "duplicate_rule_stops": {
+                "items": len(dup),
+                "by_shared_field": dict(Counter(matched(r) for r in dup)),
+                "by_outcome": dict(Counter(r["outcome"] for r in dup)),
+                "by_exception": dict(Counter(r["exception"] for r in dup)),
+                "note": "fields the item shared with a chart that existed when "
+                "it started; charts created during the run by earlier items "
+                "count too",
+            },
+            "stops_by_cause": {
+                outcome: dict(
+                    Counter(stop_cause(r) for r in items if r["outcome"] == outcome)
+                )
+                for outcome in sorted(
+                    {r["outcome"] for r in items if r["claimed"] != "done"}
+                )
+            },
             "verified_completed": len(completed),
             "items": n,
             "false_stops_per_100_items": round(100 * len(false_stops) / n, 2)

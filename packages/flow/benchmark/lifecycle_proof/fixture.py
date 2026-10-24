@@ -246,7 +246,9 @@ class ProofApp:
         sql = self._exec_bytes(
             self.db_container,
             'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" exec mariadb-dump -uroot '
-            "--single-transaction --triggers openemr",
+            # OpenEMR keeps the OAuth key passphrase in `keys`; restoring an
+            # older copy of it next to newer key files breaks every token.
+            "--single-transaction --triggers --ignore-table=openemr.keys openemr",
             timeout=600,
         )
         path.write_bytes(sql)

@@ -313,3 +313,77 @@ def test_a_declined_relabel_admits_nothing(tmp_path: Path, monkeypatch) -> None:
     assert result.status == "declined"
     assert admitted == [] and "approve" not in store.calls
     assert store.calls == ["add", "reject"]
+
+
+def test_a_relabeled_save_is_admitted_afresh_not_by_lineage(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A save button's identity is part of the record check, so no lineage hop
+    can carry its relabel. Once the campaign passed, a person may admit the
+    certified copy afresh; nothing is admitted without that approval."""
+
+    from openadapt_flow.repair import readmission
+    from tests.test_repair_readmission import _certified
+
+    wf = _workflow()
+    bundle = tmp_path / "bundle"
+    wf.save(bundle)
+    proposal = relabel.propose(_halted(_identity(NEW)), wf)
+    assert isinstance(proposal, relabel.RelabelProposal)
+    candidate = relabel.build(bundle, proposal, tmp_path / "candidate")
+    certified = _certified(tmp_path / "certified")
+    rows = [
+        {"case_id": "representative", "trial": 1, "transaction_outcome": "VERIFIED"}
+    ]
+
+    def requalify(parent, cand, out, requalification):
+        requalification.run(
+            cand,
+            None,
+            out=out,
+            cases=["representative"],
+            trials=1,
+            certify="clinical-write",
+            hooks=None,
+            run_id_prefix="requalify-x",
+        )
+        raise readmission.ReadmissionRefused(
+            "the repair changes the program's record check; it needs a person's "
+            "fresh admission"
+        )
+
+    monkeypatch.setattr(readmission, "requalify", requalify)
+    campaign = lambda *a, **k: SimpleNamespace(  # noqa: E731
+        passed=True, certified=True, bundle_dir=certified, rows=rows
+    )
+    reviews: list[Any] = []
+    store = _Store(tmp_path / "store")
+
+    def ask(review: Any) -> tuple[str, str]:
+        reviews.append(review)
+        return ("approve", "operator-1")
+
+    result = relabel.readmit(
+        parent_bundle=bundle,
+        candidate_bundle=candidate,
+        proposal=proposal,
+        store=store,
+        requalification=readmission.Requalification(config=None, run=campaign),
+        ask_person=ask,
+        work_dir=tmp_path / "work",
+    )
+    assert result.status == "fresh_admission" and result.bundle_dir == certified
+    assert result.lineage is None and store.calls == []
+    [review] = reviews
+    assert "fresh admission" in review.fresh_admission
+    # Declined: nothing to admit.
+    declined = relabel.readmit(
+        parent_bundle=bundle,
+        candidate_bundle=candidate,
+        proposal=proposal,
+        store=store,
+        requalification=readmission.Requalification(config=None, run=campaign),
+        ask_person=lambda review: ("decline", "operator-1"),
+        work_dir=tmp_path / "work2",
+    )
+    assert declined.status == "declined" and declined.bundle_dir is None

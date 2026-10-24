@@ -94,6 +94,20 @@ def render(res: dict[str, Any]) -> str:
                     f"{d['first_verified_seq']}, "
                     f"{d['seconds_to_running_again']} s after the change."
                 )
+            d = h.get("duplicate_rule_stops")
+            if d and d["items"]:
+                lines.append(
+                    f"- Duplicate-check stops: {d['items']}; field shared with an "
+                    f"existing chart: {json.dumps(d['by_shared_field'])}; judged "
+                    f"{json.dumps(d['by_outcome'])}; exception kinds "
+                    f"{json.dumps(d['by_exception'])}."
+                )
+            for outcome, causes in h.get("stops_by_cause", {}).items():
+                lines.append(
+                    f"- Stops judged `{outcome}`, by cause: "
+                    + ", ".join(f"{c} {n}" for c, n in sorted(causes.items()))
+                    + "."
+                )
             lines += [
                 "- Cost-model bands, verified per operator-minute: "
                 + ", ".join(

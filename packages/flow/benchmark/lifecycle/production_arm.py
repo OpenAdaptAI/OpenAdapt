@@ -142,6 +142,10 @@ class ProductionArm:
         #: A prior run's workdir whose admission (the qualified, pinned bundle)
         #: this run reuses, so two runs compare on one admitted version.
         self.admission_from = options.get("admission_from")
+        #: Admit a version whose duplicate-check step reads OpenEMR's match
+        #: list (no_duplicate_candidate) instead of requiring "No matches
+        #: were found.". A program change, so it gets its own admission.
+        self.duplicate_check = bool(options.get("duplicate_check", False))
         self.recovery = str(options.get("recovery", "none"))
         if self.recovery not in ("none", "relabel"):
             raise ValueError(f"unknown recovery {self.recovery!r}")
@@ -172,6 +176,12 @@ class ProductionArm:
             "approval": "problems_only (local stand-in for Cloud's switch status)",
             "policy": proof.POLICY,
             "recovery": self.recovery,
+            "duplicate_check": (
+                "no_duplicate_candidate on step_039 (rows tr.oneresult; a row "
+                "with the item's last name or date of birth stops the item)"
+                if self.duplicate_check
+                else "recorded: text_present 'No matches were found.'"
+            ),
             "qualification_trials": self.trials,
             "model_calls": "none on any path",
         }
@@ -196,6 +206,8 @@ class ProductionArm:
             reused = self._reuse_admission(Path(self.admission_from), out)
             admit_s = float(reused.get("seconds") or 0.0)
         else:
+            if self.duplicate_check:
+                source = with_duplicate_list_check(source, out / "program")
             dump = app.dump()
             try:
                 proof.phase_admit(ctx, source, self.trials)
@@ -466,6 +478,38 @@ class ProductionArm:
         summary["success"] = bool(result.report.success)
         return summary
 
+    def _adopt_running_release(self) -> dict[str, Any]:
+        """Pin the test copy's environment lock to the release now running.
+
+        The fixture refuses to reset (and so to qualify) when OpenEMR's
+        source differs from its lock. After a vendor release the lock must
+        name the new release; this records its source proofs and which files
+        changed. The bundle's admission and the pin are not touched.
+        """
+
+        from benchmark.openemr_local import qualify_hooks
+
+        fx = qualify_hooks.fixture()
+        app = self.ctx["app"]
+        locked: dict[str, str] = dict(fx.lock["source_proofs"])
+        out = app._exec(app.app_container, "sha256sum " + " ".join(sorted(locked)))
+        observed: dict[str, str] = {}
+        for line in out.splitlines():
+            parts = line.split(maxsplit=1)
+            if len(parts) == 2:
+                observed[parts[1].lstrip("* ")] = parts[0]
+        if set(observed) != set(locked):
+            raise RuntimeError("could not read every locked OpenEMR source file")
+        changed = sorted(k for k in locked if observed[k] != locked[k])
+        fx.lock = {**fx.lock, "source_proofs": observed}
+        app.fx.lock = {**app.fx.lock, "source_proofs": observed}
+        path = (
+            app.state_dir / f"environment.release-{len(self.recoveries) + 1}.lock.json"
+        )
+        path.write_text(json.dumps(fx.lock, indent=2) + "\n")
+        os.environ["OPENEMR_FIXTURE_LOCK"] = str(path)
+        return {"changed": changed, "lock": path.name}
+
     def _move_to(self, bundle: Path, digest: str, requalified: list[Path]) -> None:
         """Run the re-admitted version from here on, under a new switch record."""
 
@@ -509,6 +553,9 @@ class ProductionArm:
             bundle, proposal, work / "candidate", key=self.ctx["keys"]["bundle_key"]
         )
         review_charge: dict[str, Any] = {}
+        # The test copy now runs the vendor's new release; re-qualification
+        # pins that release (the person sees the changed files on the review).
+        release = self._adopt_running_release()
 
         def ask_person(review: Any) -> tuple[str, str]:
             rows = review.requalification["rows"]
@@ -519,6 +566,8 @@ class ProductionArm:
                     reason=review.proposal.summary()[:300],
                     surface="openadapt-flow repair relabel (review card)",
                     detail={
+                        "fresh_admission": review.fresh_admission,
+                        "release_changed_files": release["changed"],
                         "probes_passed": bool(rows),
                         "requalified_cases": len(rows),
                         "certified_digest": review.certified_digest,
@@ -549,12 +598,32 @@ class ProductionArm:
             "lineage_hop": (result.lineage or {}).get("hop"),
             "timings": result.timings,
             "review": review_charge,
+            "release": release,
             "seconds_to_readmitted": round(time.time() - t0, 1),
         }
         detail["relabel"] = record
         self.recoveries.append(record)
-        if result.status != "readmitted" or result.bundle_dir is None:
+        if result.status not in ("readmitted", "fresh_admission"):
             return None
+        if result.bundle_dir is None:
+            return None
+        phases_extra: list[dict[str, Any]] = []
+        if result.status == "fresh_admission":
+            # The person's approval admits the certified copy afresh: the
+            # deployment re-pins to its digest (no lineage), and the person
+            # signs that admission (the cost model's admit charge).
+            self.ctx["pinned_digest"] = str(result.digest)
+            phases_extra.append(
+                {
+                    "phase": "admit",
+                    "wall_s": 0.0,
+                    "attended_s": 0.0,
+                    "model_calls": 0,
+                    "cost_usd": 0.0,
+                    "note": "fresh admission of the re-qualified copy: "
+                    + result.reason[:200],
+                }
+            )
         self._move_to(result.bundle_dir, str(result.digest), [work / "requalify"])
         # The stopped item never wrote; it runs again on the re-admitted
         # version, as a retry (problems_only sends a retry to a person).
@@ -566,7 +635,8 @@ class ProductionArm:
         return {
             "summary": summary,
             "success": bool(rerun.success),
-            "phases": [
+            "phases": phases_extra
+            + [
                 {
                     "phase": "relabel_requalify",
                     "wall_s": result.timings.get("requalify_s", 0.0),
@@ -621,6 +691,56 @@ class ProductionArm:
                 close()
             except Exception:  # noqa: BLE001
                 pass
+
+
+DUPLICATE_STEP = "step_039"
+NO_MATCHES = "No matches were found."
+
+
+def with_duplicate_list_check(source: Path, out: Path) -> Path:
+    """The referral program with its duplicate check reading the match list.
+
+    The recorded program stops unless OpenEMR shows "No matches were found.",
+    so any listed chart stops the item, even one that shares only a first
+    name. This version replaces that one postcondition with
+    ``no_duplicate_candidate``: the item continues only when the list has
+    loaded and no listed row carries the item's last name or date of birth.
+    Every other step is unchanged. The result is uncertified; admission
+    qualifies it afresh.
+    """
+
+    import shutil
+
+    from openadapt_flow.ir import Postcondition, PostconditionKind, Workflow
+    from openadapt_flow.repair.self_repair import _uncertify_patch
+
+    workflow = Workflow.load(source)
+    steps = list(workflow.steps)
+    index = next(i for i, step in enumerate(steps) if step.id == DUPLICATE_STEP)
+    step = steps[index]
+    expect = [
+        pc
+        if not (pc.kind is PostconditionKind.TEXT_PRESENT and pc.text == NO_MATCHES)
+        else Postcondition(
+            kind=PostconditionKind.NO_DUPLICATE_CANDIDATE,
+            text=NO_MATCHES,
+            timeout_s=pc.timeout_s,
+            candidate_rows="tr.oneresult",
+            candidate_frame_path=("#modalframe",),
+            candidate_params=("lname", "DOB"),
+        )
+        for pc in step.expect
+    ]
+    if expect == list(step.expect):
+        raise RuntimeError(f"{DUPLICATE_STEP} has no '{NO_MATCHES}' check to replace")
+    steps[index] = step.model_copy(update={"expect": expect})
+    workflow.steps = steps
+    _uncertify_patch(workflow)
+    if out.exists():
+        shutil.rmtree(out)
+    shutil.copytree(source, out, ignore=shutil.ignore_patterns("manifest.json"))
+    workflow.save(out)
+    return out
 
 
 def make(options: dict[str, Any]) -> ProductionArm:

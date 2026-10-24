@@ -272,8 +272,22 @@ def run_arm(
         final = oracle.judge_final(
             t, before, oracle.snapshot(), other_clerk_ids=other_clerk_ids
         )
+        # Context for duplicate-check stops: which identity values this item
+        # shares with a chart that existed when it started (ground truth, for
+        # the report; never shown to the arm).
+        shares = {
+            key: sum(
+                1
+                for r in before
+                if str(item.params.get(key, "")).strip().casefold()
+                and r.get(key, "").strip().casefold()
+                == str(item.params.get(key, "")).strip().casefold()
+            )
+            for key in ("fname", "lname", "DOB")
+        }
         row = {
             "type": "item_result",
+            "shares_with_existing": shares,
             "seq": item.seq,
             "item_id": item.item_id,
             "day": item.day,
