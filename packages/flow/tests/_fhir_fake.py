@@ -97,13 +97,36 @@ class FhirStore:
             return out
 
 
-def _bundle(resources: list[dict]) -> dict:
+def _bundle(
+    resources: list[dict],
+    *,
+    count: Optional[int] = None,
+    offset: int = 0,
+    base_url: str = "http://fake/Observation",
+    extra_params: Optional[dict[str, str]] = None,
+    total_override: Optional[int] = None,
+) -> dict:
+    total = len(resources) if total_override is None else total_override
+    if count is not None and count > 0:
+        paged = resources[offset : offset + count]
+    else:
+        paged = resources[offset:]
+
+    links = [{"relation": "self", "url": base_url}]
+    if count is not None and offset + count < len(resources):
+        params = dict(extra_params or {})
+        params["_count"] = str(count)
+        params["_offset"] = str(offset + count)
+        query_str = "&".join(f"{k}={v}" for k, v in params.items())
+        next_url = f"{base_url}?{query_str}" if query_str else base_url
+        links.append({"relation": "next", "url": next_url})
+
     return {
         "resourceType": "Bundle",
         "type": "searchset",
-        "total": len(resources),
-        "link": [{"relation": "self", "url": "http://fake/Observation"}],
-        "entry": [{"fullUrl": f"urn:uuid:{r['id']}", "resource": r} for r in resources],
+        "total": total,
+        "link": links,
+        "entry": [{"fullUrl": f"urn:uuid:{r['id']}", "resource": r} for r in paged],
     }
 
 
@@ -139,7 +162,26 @@ def _make_handler(store: FhirStore, token: Optional[str]):
             if parsed.path.rstrip("/").endswith("/Observation"):
                 qs = parse_qs(parsed.query)
                 patient = (qs.get("patient", [None]) or [None])[0]
-                self._send(200, _bundle(store.search(patient)))
+                count_raw = (qs.get("_count", [None]) or [None])[0]
+                offset_raw = (qs.get("_offset", [None]) or [None])[0]
+                bad_total = (qs.get("_bad_total", [None]) or [None])[0]
+                count = int(count_raw) if count_raw is not None else None
+                offset = int(offset_raw) if offset_raw is not None else 0
+                total_override = int(bad_total) if bad_total is not None else None
+                all_res = store.search(patient)
+                host = self.headers.get("Host", "127.0.0.1")
+                extra = {"patient": patient} if patient else {}
+                self._send(
+                    200,
+                    _bundle(
+                        all_res,
+                        count=count,
+                        offset=offset,
+                        base_url=f"http://{host}{parsed.path}",
+                        extra_params=extra,
+                        total_override=total_override,
+                    ),
+                )
                 return
             self._send(
                 404,

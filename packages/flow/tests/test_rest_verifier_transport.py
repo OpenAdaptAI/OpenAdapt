@@ -62,3 +62,101 @@ def test_records_are_read_over_the_fallback_transport(
         assert [record["patient_id"] for record in state.records] == ["p1"]
     finally:
         stop()
+
+
+def test_rest_verifier_follows_body_pagination() -> None:
+    class FakeResponse:
+        def __init__(self, data, url="http://127.0.0.1/api/db"):
+            self.data = data
+            self.status_code = 200
+            self.url = url
+            self.links = {}
+
+        def json(self):
+            return self.data
+
+    class FakeSession:
+        def __init__(self):
+            self.calls = []
+
+        def get(self, url, timeout=None, headers=None):
+            self.calls.append(url)
+            if url == "http://127.0.0.1/api/db":
+                return FakeResponse(
+                    {"records": [{"id": 1, "val": "a"}], "next": "/api/db?page=2"},
+                    url=url,
+                )
+            elif url == "http://127.0.0.1/api/db?page=2":
+                return FakeResponse(
+                    {"records": [{"id": 2, "val": "b"}]},
+                    url=url,
+                )
+            raise AssertionError(f"unexpected url: {url}")
+
+    session = FakeSession()
+    verifier = RestRecordVerifier("http://127.0.0.1", session=session)
+    state = verifier.capture_pre_state()
+    assert state.reachable is True
+    assert len(state.records) == 2
+    assert state.records[0]["val"] == "a"
+    assert state.records[1]["val"] == "b"
+
+
+def test_rest_verifier_follows_link_header_pagination() -> None:
+    class FakeResponse:
+        def __init__(self, data, next_link=None, url="http://127.0.0.1/api/db"):
+            self.data = data
+            self.status_code = 200
+            self.url = url
+            self.links = {"next": {"url": next_link}} if next_link else {}
+
+        def json(self):
+            return self.data
+
+    class FakeSession:
+        def __init__(self):
+            self.calls = []
+
+        def get(self, url, timeout=None, headers=None):
+            self.calls.append(url)
+            if url == "http://127.0.0.1/api/db":
+                return FakeResponse(
+                    [{"id": 1, "val": "first"}],
+                    next_link="http://127.0.0.1/api/db?page=2",
+                    url=url,
+                )
+            elif url == "http://127.0.0.1/api/db?page=2":
+                return FakeResponse(
+                    [{"id": 2, "val": "second"}],
+                    url=url,
+                )
+            raise AssertionError(f"unexpected url: {url}")
+
+    session = FakeSession()
+    verifier = RestRecordVerifier("http://127.0.0.1", records_key=None, session=session)
+    state = verifier.capture_pre_state()
+    assert state.reachable is True
+    assert len(state.records) == 2
+    assert [r["val"] for r in state.records] == ["first", "second"]
+
+
+def test_rest_verifier_total_mismatch_is_unreachable() -> None:
+    class FakeResponse:
+        def __init__(self):
+            self.status_code = 200
+            self.url = "http://127.0.0.1/api/db"
+            self.links = {}
+
+        def json(self):
+            return {"records": [{"id": 1}], "total": 99}
+
+    class FakeSession:
+        def get(self, url, timeout=None, headers=None):
+            return FakeResponse()
+
+    session = FakeSession()
+    verifier = RestRecordVerifier("http://127.0.0.1", session=session)
+    state = verifier.capture_pre_state()
+    assert state.reachable is False
+    assert state.records == []
+

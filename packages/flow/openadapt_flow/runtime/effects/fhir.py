@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import time
 from typing import Any, Optional, Protocol
+from urllib.parse import urljoin
 
 from openadapt_flow.runtime.effects._common import drop_record_fields, judge_records
 from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
@@ -135,9 +136,11 @@ class FhirEffectVerifier(VerifierAdapterBase):
         verify_tls: bool = True,
         poll_interval_s: float = 0.3,
         drop_fields: tuple[str, ...] = (),
+        max_pages: int = 50,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.drop_fields = tuple(drop_fields)
+        self.max_pages = max_pages
         self.resource_type = resource_type
         self.search_params = dict(search_params or {})
         self.field_paths = dict(field_paths or DEFAULT_OBSERVATION_PATHS)
@@ -209,50 +212,83 @@ class FhirEffectVerifier(VerifierAdapterBase):
     def _search(self) -> Optional[list[dict[str, Any]]]:
         """Run the configured FHIR search; return flattened resources.
 
-        Returns ``None`` (read as unreadable -> INDETERMINATE) on any
-        transport error, non-2xx (incl. auth 401/403), non-Bundle body, or
-        malformed entries. Never raises.
+        Follows pagination (Bundle.link[rel=next]) up to ``max_pages`` and
+        verifies that the number of resources read matches Bundle.total when
+        provided. Returns ``None`` (read as unreadable -> INDETERMINATE) on
+        any transport error, non-2xx (incl. auth 401/403), non-Bundle body,
+        malformed entries, pagination cap exhaustion, or total count mismatch.
+        Never raises.
         """
         url = f"{self.base_url}/{self.resource_type}"
         headers = self._headers()
         if headers is None:
             return None
         session = self._get_session()
-        # ``verify`` is passed per request only for a ``requests``-style client;
-        # the httpx fallback already bound it at construction (see
-        # ``_get_session``), and passing it again would raise.
         tls_kwargs = {"verify": self.verify_tls} if self._verify_per_request else {}
-        try:
-            resp = session.get(
-                url,
-                params=self.search_params,
-                headers=headers,
-                timeout=self.timeout_s,
-                **tls_kwargs,
-            )
-        except Exception:  # noqa: BLE001 - transport failure is unreadable
-            return None
-        if resp.status_code == 401 and self.token_source is not None:
-            self.token_source.invalidate()
-        if resp.status_code // 100 != 2:
-            return None
-        try:
-            bundle = resp.json()
-        except Exception:  # noqa: BLE001 - unparseable body is unreadable
-            return None
-        if not isinstance(bundle, dict) or bundle.get("resourceType") != "Bundle":
-            return None
-        entries = bundle.get("entry", [])
-        if not isinstance(entries, list):
-            return None
+
         out: list[dict[str, Any]] = []
-        for entry in entries:
-            if not isinstance(entry, dict):
+        expected_total: Optional[int] = None
+        next_url: Optional[str] = url
+        params: Optional[dict[str, Any]] = self.search_params
+        pages_read = 0
+
+        while next_url is not None:
+            if pages_read >= self.max_pages:
                 return None
-            resource = entry.get("resource")
-            if not isinstance(resource, dict):
+            try:
+                resp = session.get(
+                    next_url,
+                    params=params,
+                    headers=headers,
+                    timeout=self.timeout_s,
+                    **tls_kwargs,
+                )
+            except Exception:  # noqa: BLE001 - transport failure is unreadable
                 return None
-            out.append(self._flatten(resource))
+            if resp.status_code == 401 and self.token_source is not None:
+                self.token_source.invalidate()
+            if resp.status_code // 100 != 2:
+                return None
+            try:
+                bundle = resp.json()
+            except Exception:  # noqa: BLE001 - unparseable body is unreadable
+                return None
+            if not isinstance(bundle, dict) or bundle.get("resourceType") != "Bundle":
+                return None
+
+            if expected_total is None and isinstance(bundle.get("total"), int):
+                expected_total = bundle["total"]
+
+            entries = bundle.get("entry", [])
+            if not isinstance(entries, list):
+                return None
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    return None
+                resource = entry.get("resource")
+                if not isinstance(resource, dict):
+                    return None
+                out.append(self._flatten(resource))
+
+            pages_read += 1
+
+            # Check for next page in bundle.link
+            links = bundle.get("link", [])
+            next_link_url: Optional[str] = None
+            if isinstance(links, list):
+                for link in links:
+                    if isinstance(link, dict) and link.get("relation") == "next":
+                        raw_link = link.get("url")
+                        if isinstance(raw_link, str) and raw_link.strip():
+                            next_link_url = urljoin(str(getattr(resp, "url", next_url)), raw_link.strip())
+                        break
+
+            next_url = next_link_url
+            params = None  # query parameters are already encoded in next_url
+
+        if expected_total is not None and len(out) != expected_total:
+            return None
+
         return drop_record_fields(out, self.drop_fields)
 
     # -- EffectVerifier protocol --------------------------------------------

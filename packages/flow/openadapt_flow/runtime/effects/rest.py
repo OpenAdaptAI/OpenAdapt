@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import time
 from typing import Any, Optional
+from urllib.parse import urljoin
 
 from openadapt_flow.runtime.effects._common import drop_record_fields, judge_records
 from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
@@ -71,6 +72,7 @@ class RestRecordVerifier(VerifierAdapterBase):
         timeout_s: float = 5.0,
         poll_interval_s: float = 0.2,
         drop_fields: tuple[str, ...] = (),
+        max_pages: int = 50,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.drop_fields = tuple(drop_fields)
@@ -80,6 +82,7 @@ class RestRecordVerifier(VerifierAdapterBase):
         self.timeout_s = timeout_s
         self.poll_interval_s = poll_interval_s
         self._session = session
+        self.max_pages = max_pages
 
     # -- transport ----------------------------------------------------------
 
@@ -110,39 +113,84 @@ class RestRecordVerifier(VerifierAdapterBase):
     def _fetch_records(self) -> Optional[list[dict[str, Any]]]:
         """GET the system-of-record document and extract the records list.
 
+        Follows pagination (RFC 5988 Link header rel=next or body next/links)
+        up to ``max_pages`` and validates that the number of records read
+        matches ``total`` when provided.
+
         Returns ``None`` -- read as unreadable, forcing INDETERMINATE -- on
-        any transport error, non-2xx status, or shape mismatch. Never raises.
+        any transport error, non-2xx status, shape mismatch, pagination cap
+        exhaustion, or total count mismatch. Never raises.
         """
         url = f"{self.base_url}{self.records_path}"
-        try:
-            # ``headers`` is passed ONLY when configured, so injected
-            # ``requests``-style sessions with a narrower ``get`` signature
-            # (tests, custom oracles) keep working exactly as before.
-            if self.headers:
-                resp = self._get_session().get(
-                    url, timeout=self.timeout_s, headers=self.headers
-                )
+        all_records: list[dict[str, Any]] = []
+        expected_total: Optional[int] = None
+        next_url: Optional[str] = url
+        pages_read = 0
+
+        while next_url is not None:
+            if pages_read >= self.max_pages:
+                return None
+            try:
+                # ``headers`` is passed ONLY when configured, so injected
+                # ``requests``-style sessions with a narrower ``get`` signature
+                # (tests, custom oracles) keep working exactly as before.
+                if self.headers:
+                    resp = self._get_session().get(
+                        next_url, timeout=self.timeout_s, headers=self.headers
+                    )
+                else:
+                    resp = self._get_session().get(next_url, timeout=self.timeout_s)
+            except Exception:  # noqa: BLE001 - any transport failure is unreadable
+                return None
+            if resp.status_code // 100 != 2:
+                return None
+            try:
+                body = resp.json()
+            except Exception:  # noqa: BLE001 - unparseable body is unreadable
+                return None
+
+            if self.records_key is None:
+                records = body
+            elif isinstance(body, dict):
+                records = body.get(self.records_key)
+                if expected_total is None and isinstance(body.get("total"), int):
+                    expected_total = body["total"]
+                elif expected_total is None and isinstance(body.get("total_count"), int):
+                    expected_total = body["total_count"]
             else:
-                resp = self._get_session().get(url, timeout=self.timeout_s)
-        except Exception:  # noqa: BLE001 - any transport failure is unreadable
+                return None
+
+            if not isinstance(records, list):
+                return None
+            all_records.extend([r for r in records if isinstance(r, dict)])
+            pages_read += 1
+
+            # Check next link: from resp.links (RFC 5988 / 8288 Link header) or body dictionary
+            next_link: Optional[str] = None
+            if hasattr(resp, "links") and isinstance(resp.links, dict):
+                next_entry = resp.links.get("next")
+                if isinstance(next_entry, dict) and next_entry.get("url"):
+                    next_link = next_entry["url"]
+                elif isinstance(next_entry, str):
+                    next_link = next_entry
+            if next_link is None and isinstance(body, dict):
+                raw_next = body.get("next") or body.get("next_url")
+                if isinstance(raw_next, str) and raw_next.strip():
+                    next_link = raw_next.strip()
+                elif isinstance(body.get("links"), dict):
+                    links_obj = body["links"]
+                    if isinstance(links_obj.get("next"), str):
+                        next_link = links_obj["next"].strip()
+
+            if next_link is not None:
+                next_url = urljoin(str(getattr(resp, "url", next_url)), next_link)
+            else:
+                next_url = None
+
+        if expected_total is not None and len(all_records) != expected_total:
             return None
-        if resp.status_code // 100 != 2:
-            return None
-        try:
-            body = resp.json()
-        except Exception:  # noqa: BLE001 - unparseable body is unreadable
-            return None
-        if self.records_key is None:
-            records = body
-        elif isinstance(body, dict):
-            records = body.get(self.records_key)
-        else:
-            return None
-        if not isinstance(records, list):
-            return None
-        return drop_record_fields(
-            [r for r in records if isinstance(r, dict)], self.drop_fields
-        )
+
+        return drop_record_fields(all_records, self.drop_fields)
 
     # -- EffectVerifier protocol --------------------------------------------
 

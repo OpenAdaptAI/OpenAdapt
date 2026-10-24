@@ -208,3 +208,62 @@ def test_live_openemr_fhir_reachable():
     assert before.reachable, (
         "live OpenEMR FHIR unreachable/unauthorized -- check base URL + token"
     )
+
+
+def test_fhir_pagination_follows_next_link(fhir):
+    base, store = fhir
+    # Add 3 observations; search at _count=2 to force pagination across 2 pages
+    store.add_observation(patient=PATIENT, note="Note 1")
+    store.add_observation(patient=PATIENT, note="Note 2")
+    store.add_observation(patient=PATIENT, note="Note 3")
+    v = FhirEffectVerifier(
+        base,
+        resource_type="Observation",
+        search_params={"patient": PATIENT, "_count": "2"},
+        timeout_s=2.0,
+    )
+    state = v.capture_pre_state()
+    assert state.reachable
+    assert len(state.records) == 3
+
+
+def test_fhir_pagination_catches_duplicate_on_page_two(fhir):
+    base, store = fhir
+    v = FhirEffectVerifier(
+        base,
+        resource_type="Observation",
+        search_params={"patient": PATIENT, "_count": "2"},
+        timeout_s=2.0,
+    )
+    # Pre-state has 0 records
+    before = v.capture_pre_state()
+    # Now write 3 records (first 2 on page 1, 3rd on page 2)
+    store.add_observation(patient=PATIENT, note=NOTE)
+    store.add_observation(patient=PATIENT, note=NOTE)
+    store.add_observation(patient=PATIENT, note=NOTE)
+    eff = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={"patient": REF},
+        expected_count=1,
+        timeout_s=1.0,
+    )
+    # Without paging, page 1 had 2 records; with paging, all 3 are read and duplicate is refuted
+    verdict = v.verify(eff, before)
+    assert verdict.verdict is Verdict.REFUTED
+
+
+def test_fhir_total_mismatch_yields_indeterminate(fhir):
+    base, store = fhir
+    store.add_observation(patient=PATIENT, note=NOTE)
+    # Server advertises total=10, but returns only 1 record
+    v = FhirEffectVerifier(
+        base,
+        resource_type="Observation",
+        search_params={"patient": PATIENT, "_bad_total": "10"},
+        timeout_s=2.0,
+    )
+    before = v.capture_pre_state()
+    assert not before.reachable or before.records == []
+    eff = Effect(kind=EffectKind.RECORD_WRITTEN, match={"patient": REF}, timeout_s=0.2)
+    assert v.verify(eff, before).verdict is Verdict.INDETERMINATE
+
