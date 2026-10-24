@@ -113,6 +113,7 @@ from openadapt_flow.ir import (
     LoopIterationBinding,
     LoopSpec,
     ObservedSurfaceEnvironment,
+    ParamKind,
     PixelIdentityEvidence,
     Point,
     Postcondition,
@@ -2318,6 +2319,28 @@ class Replayer:
                         "recorded example is available: "
                         + ", ".join(missing)
                         + " — refusing to run; run aborted"
+                    ),
+                )
+            )
+            report.success = False
+            report.total_ms = (time.monotonic() - t_run) * 1000.0
+            return self._finalize_report(report, workflow, run_dir)
+
+        # A typed date parameter must be a canonical ISO date before any step
+        # runs: a date written another way (03/14/1990) would otherwise be
+        # typed into the form and saved as whatever the app makes of it.
+        malformed = self._malformed_date_params(workflow, params)
+        if malformed:
+            report.results.append(
+                StepResult(
+                    step_id="<params>",
+                    intent="validate typed workflow parameters",
+                    ok=False,
+                    failure_category="governed_refusal",
+                    error=(
+                        "Typed workflow parameter(s) are not valid: "
+                        + "; ".join(malformed)
+                        + " — refusing to run; nothing was typed; run aborted"
                     ),
                 )
             )
@@ -17667,6 +17690,29 @@ class Replayer:
             except Exception:  # noqa: BLE001 - unobservable is a failure
                 return False
         return True
+
+    @staticmethod
+    def _malformed_date_params(workflow: Workflow, params: dict[str, Any]) -> list[str]:
+        """Why each supplied ``date`` parameter is not a canonical ISO date.
+
+        The same check hosted dispatch applies (``runner.inputs``). An empty
+        optional value is left to the required-parameter check.
+        """
+
+        from openadapt_flow.runner.inputs import AdmittedInputError, _validate_value
+
+        problems: list[str] = []
+        for name, spec in sorted(workflow.param_specs.items()):
+            if spec.type is not ParamKind.DATE or name not in params:
+                continue
+            value = params[name]
+            if value == "" and not spec.required:
+                continue
+            try:
+                _validate_value(spec, value)
+            except AdmittedInputError as exc:
+                problems.append(str(exc))
+        return problems
 
     def _no_duplicate_candidate(self, pc: Any, frame_png: bytes) -> bool:
         """The app's possible-duplicate list has loaded and names no candidate.
