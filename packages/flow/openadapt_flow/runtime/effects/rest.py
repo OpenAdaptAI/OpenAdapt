@@ -155,7 +155,9 @@ class RestRecordVerifier(VerifierAdapterBase):
                 records = body.get(self.records_key)
                 if expected_total is None and isinstance(body.get("total"), int):
                     expected_total = body["total"]
-                elif expected_total is None and isinstance(body.get("total_count"), int):
+                elif expected_total is None and isinstance(
+                    body.get("total_count"), int
+                ):
                     expected_total = body["total_count"]
             else:
                 return None

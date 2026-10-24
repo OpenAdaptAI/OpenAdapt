@@ -159,4 +159,3 @@ def test_rest_verifier_total_mismatch_is_unreachable() -> None:
     state = verifier.capture_pre_state()
     assert state.reachable is False
     assert state.records == []
-

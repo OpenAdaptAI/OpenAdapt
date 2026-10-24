@@ -266,4 +266,3 @@ def test_fhir_total_mismatch_yields_indeterminate(fhir):
     assert not before.reachable or before.records == []
     eff = Effect(kind=EffectKind.RECORD_WRITTEN, match={"patient": REF}, timeout_s=0.2)
     assert v.verify(eff, before).verdict is Verdict.INDETERMINATE
-

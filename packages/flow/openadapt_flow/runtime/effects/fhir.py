@@ -280,7 +280,9 @@ class FhirEffectVerifier(VerifierAdapterBase):
                     if isinstance(link, dict) and link.get("relation") == "next":
                         raw_link = link.get("url")
                         if isinstance(raw_link, str) and raw_link.strip():
-                            next_link_url = urljoin(str(getattr(resp, "url", next_url)), raw_link.strip())
+                            next_link_url = urljoin(
+                                str(getattr(resp, "url", next_url)), raw_link.strip()
+                            )
                         break
 
             next_url = next_link_url
