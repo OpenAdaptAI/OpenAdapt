@@ -1359,7 +1359,11 @@ one-way contract hash (never the resolved values), the verdict evidence
 (observed/expected counts and values, matched records), and a
 `suggested_action` for the operator. The pattern is **halt + evidence**: the
 run stops, the task tells a human exactly what could not be certified, the
-human repairs the system of record, re-verifies, and resumes. There is
+human repairs the system of record, re-verifies, and resumes. The save was
+already sent, so its pause is delivery-uncertain and an ordinary resume can't
+send it again. The person reconciles it (a read-only check of the record as it
+is now) or, after confirming the record is missing, approves one retry with
+`--authorize-uncertain-retry`. There is
 intentionally **no compensation engine** beyond the single proven safe undo
 (duplicate-record deletion via a configured `Compensator`) — automatic repair
 of missing/partial/collateral state would be another wrong write.
