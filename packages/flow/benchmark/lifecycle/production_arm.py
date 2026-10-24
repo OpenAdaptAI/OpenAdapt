@@ -146,6 +146,9 @@ class ProductionArm:
         #: list (no_duplicate_candidate) instead of requiring "No matches
         #: were found.". A program change, so it gets its own admission.
         self.duplicate_check = bool(options.get("duplicate_check", False))
+        #: Admit a version whose date of birth is a typed ``date`` parameter,
+        #: so a date written another way is refused before any step.
+        self.typed_dob = bool(options.get("typed_dob", False))
         self.recovery = str(options.get("recovery", "none"))
         if self.recovery not in ("none", "relabel"):
             raise ValueError(f"unknown recovery {self.recovery!r}")
@@ -176,6 +179,7 @@ class ProductionArm:
             "approval": "problems_only (local stand-in for Cloud's switch status)",
             "policy": proof.POLICY,
             "recovery": self.recovery,
+            "typed_dob": self.typed_dob,
             "duplicate_check": (
                 "no_duplicate_candidate on step_039 (rows tr.oneresult; a row "
                 "with the item's last name or date of birth stops the item)"
@@ -208,6 +212,8 @@ class ProductionArm:
         else:
             if self.duplicate_check:
                 source = with_duplicate_list_check(source, out / "program")
+            if self.typed_dob:
+                source = with_typed_dob(source, out / "program-typed-dob")
             dump = app.dump()
             try:
                 proof.phase_admit(ctx, source, self.trials)
@@ -735,6 +741,36 @@ def with_duplicate_list_check(source: Path, out: Path) -> Path:
         raise RuntimeError(f"{DUPLICATE_STEP} has no '{NO_MATCHES}' check to replace")
     steps[index] = step.model_copy(update={"expect": expect})
     workflow.steps = steps
+    _uncertify_patch(workflow)
+    if out.exists():
+        shutil.rmtree(out)
+    shutil.copytree(source, out, ignore=shutil.ignore_patterns("manifest.json"))
+    workflow.save(out)
+    return out
+
+
+def with_typed_dob(source: Path, out: Path) -> Path:
+    """The program with its date of birth declared as a ``date`` parameter.
+
+    The recorded program types the date of birth as a plain string, so a
+    referral that writes it as MM/DD/YYYY was typed into the form and saved
+    as whatever OpenEMR made of it. Declared as a date, a value that is not a
+    canonical ISO date refuses the run before any step. Nothing else changes;
+    the result is uncertified, so admission qualifies it afresh.
+    """
+
+    import shutil
+
+    from openadapt_flow.ir import ParamKind, ParamSpec, Workflow
+    from openadapt_flow.repair.self_repair import _uncertify_patch
+
+    workflow = Workflow.load(source)
+    specs = dict(workflow.param_specs)
+    current = specs.get("DOB") or ParamSpec(
+        name="DOB", example=workflow.params.get("DOB")
+    )
+    specs["DOB"] = current.model_copy(update={"type": ParamKind.DATE})
+    workflow.param_specs = specs
     _uncertify_patch(workflow)
     if out.exists():
         shutil.rmtree(out)

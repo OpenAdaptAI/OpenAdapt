@@ -65,14 +65,42 @@ that. Two of its items ran after the app change.
 
 ## Results
 
-At x1 of the cost model. Run-only operator minutes exclude setup; "with
-setup" adds the 5-minute admission charge.
+### The metrics, exactly
+
+- **Verified items per operator-minute (the headline).**
+  - Numerator: items whose final state the independent oracle (a direct SQL
+    read) judges right and that no person entered by hand. This includes
+    items where the right outcome is no new chart (a duplicate, a resend, a
+    missing date of birth) and the program stopped without writing.
+  - Denominator: every operator minute the run charged. That covers
+    approvals, stops, reconciliations, resumes, repair reviews, fresh
+    admissions and items entered by hand, with a 30 s interrupt on every
+    request. Setup (the first admission) is left out; the "with setup" row
+    adds it.
+- **The by-hand reference.** One item entered by hand costs 180 s (the cost
+  model's `manual_entry_s`), so 0.333 items per operator-minute. Every cost
+  scales together in the bands, so the ratio of the two numbers is the same
+  in every band.
+- **Operator minutes for the whole stream** (a secondary view). The run's
+  operator minutes, compared with entering every item of the stream by hand
+  (55 × 180 s = 165 minutes). This view credits the program for the 14 items
+  it left to a person only through the minutes it spent on them, so it reads
+  more favourably than the headline.
+
+### Headline
+
+**About break-even on this stream.** After the fixes, the configuration
+completes 0.327 verified items per operator-minute, against 0.333 entering
+them by hand: 0.98 times the by-hand rate, in every cost-model band (x0.5:
+0.653 against 0.667; x2: 0.163 against 0.167). Before the fixes, main
+completed 0.033, a tenth of the by-hand rate, and the program saved no chart
+at all.
 
 | | before (27 items) | after (55 items) |
 | --- | ---: | ---: |
 | **Verified items per operator-minute** (run only) | **0.033** | **0.327** |
 | ... with setup | 0.031 | 0.314 |
-| Entering every item by hand, items per operator-minute | 0.333 | 0.333 |
+| By hand, items per operator-minute | 0.333 | 0.333 |
 | Charts the program saved and the oracle confirmed | 0 | 30 |
 | Items right without hand entry (incl. correct non-saves) | 4 | 41 |
 | Items entered by hand | 23 | 14 |
@@ -80,21 +108,11 @@ setup" adds the 5-minute admission charge.
 | All stops per 100 items | 100 | 45.5 |
 | Operator minutes per stopped item | 4.56 | 3.72 |
 | Operator minutes in total (run) | 123.0 | 125.5 |
+| Operator minutes for the stream by hand | 81.0 (27 items) | 165.0 (55 items) |
 | Silent wrong (claimed done, oracle wrong) | 0 of 0 | 0 of 30 (95% CI 0-11.3%) |
 | Wrong writes the record check caught (`flagged_wrong`) | 0 | 2 |
 | Median item time | 227 s | 119 s |
 | Host 1-minute load, median / max | 7.0 / 76.1 | 8.0 / 102.5 |
-
-Bands, verified items per operator-minute:
-
-| | x0.5 | x1 | x2 |
-| --- | ---: | ---: | ---: |
-| before | 0.065 | 0.033 | 0.016 |
-| after | 0.653 | 0.327 | 0.163 |
-
-At x1, `after` uses 2.18 operator hours for 55 items. Entering all 55 by hand
-would take 2.75 hours, so `after` uses 21% less operator time. `before` used
-2.13 hours for 27 items, against 1.35 hours by hand: 58% more.
 
 Where `after`'s 125.5 operator minutes went:
 
@@ -105,6 +123,14 @@ Where `after`'s 125.5 operator minutes went:
 | Reconciliations | 11.0 |
 | Relabel repair review | 2.5 |
 | Fresh admission after the app change | 5.0 |
+
+**The switch turning off.** All 25.0 approval minutes (20% of the run's
+operator time) came after one caught problem turned the `problems_only`
+switch off: the malformed date of birth at item 6 (`uncertain_result`). The
+switch record opened for the re-admitted version turned off the same way, at
+its first item, 26. A switch that has turned off stays off until a new switch
+record is issued; this run does not change that rule. Whether it should
+re-arm on its own is a policy decision, not made here.
 
 ### Why items stopped
 
@@ -146,7 +172,9 @@ Neither was silent, but a wrong chart landed.
 The first one, item 6, turned the `problems_only` switch off for the rest of
 the run (`uncertain_result`). Every later saved item then needed one approval:
 the 25 approval minutes above. Declaring the date of birth as a date
-parameter would refuse these inputs before the save; it is the next fix.
+parameter refuses these inputs before any step. That change is in #1514
+(`ParamKind.DATE` is checked before the run starts; `typed_dob` in the arm).
+It is not in this `after` run, and it is the next measured change.
 `before` didn't write them only because it stopped earlier on these items.
 
 ### After the app change: stopped to running again
