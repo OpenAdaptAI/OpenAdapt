@@ -1,0 +1,580 @@
+{
+ "bundle": "medplum-new-patient (compiled from the recorded demonstration)",
+ "steps": [
+  {
+   "id": "step_000",
+   "action": "click",
+   "intent": "click 'Add Name'",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "operator-qualified override: reversible",
+   "identity_armed": false,
+   "identity_unarmed_reason": "the only readable row text is the target's own label (mutable evidence, excluded from identity)",
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": null,
+    "frame_path": null,
+    "role": "button",
+    "name": "Add Name",
+    "automation_id": null,
+    "window_name": null
+   }
+  },
+  {
+   "id": "step_001",
+   "action": "click",
+   "intent": "click 'Given'",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "control label has no retained consequential-write signal",
+   "identity_armed": true,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": "#mantine-j4si62vtk",
+    "frame_path": null,
+    "role": "textbox",
+    "name": "Given",
+    "automation_id": null,
+    "window_name": null
+   }
+  },
+  {
+   "id": "step_002",
+   "action": "type",
+   "intent": "type <fname>",
+   "param": "fname",
+   "risk": "reversible",
+   "risk_explanation": "action has no retained consequential commit signal",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_003",
+   "action": "click",
+   "intent": "click 'Family'",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "control label has no retained consequential-write signal",
+   "identity_armed": true,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": "#mantine-scw390z8r",
+    "frame_path": null,
+    "role": "textbox",
+    "name": "Family",
+    "automation_id": null,
+    "window_name": null
+   }
+  },
+  {
+   "id": "step_004",
+   "action": "type",
+   "intent": "type <lname>",
+   "param": "lname",
+   "risk": "reversible",
+   "risk_explanation": "action has no retained consequential commit signal",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_005",
+   "action": "scroll",
+   "intent": "scroll by (0, 405)",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "action has no retained consequential commit signal",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_006",
+   "action": "click",
+   "intent": "click 'AddTelecom'",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "operator-qualified override: reversible",
+   "identity_armed": false,
+   "identity_unarmed_reason": "the only readable row text is the target's own label (mutable evidence, excluded from identity)",
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": null,
+    "frame_path": null,
+    "role": "button",
+    "name": "Add Telecom",
+    "automation_id": null,
+    "window_name": null
+   }
+  },
+  {
+   "id": "step_007",
+   "action": "click",
+   "intent": "click recorded visual target",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "control label has no retained consequential-write signal",
+   "identity_armed": false,
+   "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": "#mantine-8rwicepc6",
+    "frame_path": null,
+    "role": "combobox",
+    "name": "emailphonefaxpagersmsurlother",
+    "automation_id": null,
+    "window_name": null
+   }
+  },
+  {
+   "id": "step_008",
+   "action": "type",
+   "intent": "type 'phone'",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "action has no retained consequential commit signal",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_009",
+   "action": "key",
+   "intent": "press Escape",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "special key may navigate, edit, or invoke an application shortcut",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_010",
+   "action": "click",
+   "intent": "click recorded visual target",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "control label has no retained consequential-write signal",
+   "identity_armed": false,
+   "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": "#mantine-pcdz3ddrq",
+    "frame_path": null,
+    "role": "textbox",
+    "name": "Value",
+    "automation_id": null,
+    "window_name": null
+   }
+  },
+  {
+   "id": "step_011",
+   "action": "type",
+   "intent": "type <phone_home>",
+   "param": "phone_home",
+   "risk": "reversible",
+   "risk_explanation": "action has no retained consequential commit signal",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_012",
+   "action": "click",
+   "intent": "click 'AddTelecom'",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "operator-qualified override: reversible",
+   "identity_armed": false,
+   "identity_unarmed_reason": "the only readable row text is the target's own label (mutable evidence, excluded from identity)",
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": null,
+    "frame_path": null,
+    "role": "button",
+    "name": "Add Telecom",
+    "automation_id": null,
+    "window_name": null
+   }
+  },
+  {
+   "id": "step_013",
+   "action": "click",
+   "intent": "click recorded visual target",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "control label has no retained consequential-write signal",
+   "identity_armed": false,
+   "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": "#mantine-zd6i4xm3j",
+    "frame_path": null,
+    "role": "combobox",
+    "name": "emailphonefaxpagersmsurlother",
+    "automation_id": null,
+    "window_name": null
+   }
+  },
+  {
+   "id": "step_014",
+   "action": "type",
+   "intent": "type 'email'",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "action has no retained consequential commit signal",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_015",
+   "action": "key",
+   "intent": "press Escape",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "special key may navigate, edit, or invoke an application shortcut",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_016",
+   "action": "click",
+   "intent": "click recorded visual target",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "control label has no retained consequential-write signal",
+   "identity_armed": false,
+   "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": "#mantine-4gcsbn8dn",
+    "frame_path": null,
+    "role": "textbox",
+    "name": "Value",
+    "automation_id": null,
+    "window_name": null
+   }
+  },
+  {
+   "id": "step_017",
+   "action": "type",
+   "intent": "type <email>",
+   "param": "email",
+   "risk": "reversible",
+   "risk_explanation": "action has no retained consequential commit signal",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_018",
+   "action": "click",
+   "intent": "click recorded visual target",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "control label has no retained consequential-write signal",
+   "identity_armed": false,
+   "identity_unarmed_reason": "no readable text in the target's row band at compile time (icon-only or unlabeled row)",
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": "#mantine-eho9zz1xt",
+    "frame_path": null,
+    "role": "searchbox",
+    "name": "gender",
+    "automation_id": null,
+    "window_name": null
+   }
+  },
+  {
+   "id": "step_019",
+   "action": "type",
+   "intent": "type <sex>",
+   "param": "sex",
+   "risk": "reversible",
+   "risk_explanation": "action has no retained consequential commit signal",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_020",
+   "action": "key",
+   "intent": "press ArrowDown",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "special key may navigate, edit, or invoke an application shortcut",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_021",
+   "action": "key",
+   "intent": "press Enter",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "submission/deletion key may edit locally or commit application state",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_022",
+   "action": "click",
+   "intent": "click recorded visual target",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "control label has no retained consequential-write signal",
+   "identity_armed": false,
+   "identity_unarmed_reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": "#birthDate",
+    "frame_path": null,
+    "role": "textbox",
+    "name": "Birth Date",
+    "automation_id": null,
+    "window_name": null
+   }
+  },
+  {
+   "id": "step_023",
+   "action": "type",
+   "intent": "type <DOB>",
+   "param": "DOB",
+   "risk": "reversible",
+   "risk_explanation": "action has no retained consequential commit signal",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_024",
+   "action": "scroll",
+   "intent": "scroll by (0, 480)",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "action has no retained consequential commit signal",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_025",
+   "action": "click",
+   "intent": "click 'Add Address'",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "operator-qualified override: reversible",
+   "identity_armed": false,
+   "identity_unarmed_reason": "the only readable row text is the target's own label (mutable evidence, excluded from identity)",
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": null,
+    "frame_path": null,
+    "role": "button",
+    "name": "Add Address",
+    "automation_id": null,
+    "window_name": null
+   }
+  },
+  {
+   "id": "step_026",
+   "action": "click",
+   "intent": "click 'Line 1'",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "control label has no retained consequential-write signal",
+   "identity_armed": true,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": "#mantine-eiknzrpio",
+    "frame_path": null,
+    "role": "textbox",
+    "name": "Line 1",
+    "automation_id": null,
+    "window_name": null
+   }
+  },
+  {
+   "id": "step_027",
+   "action": "type",
+   "intent": "type <street>",
+   "param": "street",
+   "risk": "reversible",
+   "risk_explanation": "action has no retained consequential commit signal",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_028",
+   "action": "click",
+   "intent": "click 'City'",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "control label has no retained consequential-write signal",
+   "identity_armed": true,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": "#mantine-2jpho0ebh",
+    "frame_path": null,
+    "role": "textbox",
+    "name": "City",
+    "automation_id": null,
+    "window_name": null
+   }
+  },
+  {
+   "id": "step_029",
+   "action": "type",
+   "intent": "type <city>",
+   "param": "city",
+   "risk": "reversible",
+   "risk_explanation": "action has no retained consequential commit signal",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_030",
+   "action": "click",
+   "intent": "click 'State'",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "control label has no retained consequential-write signal",
+   "identity_armed": true,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": "#mantine-msd66x4vr",
+    "frame_path": null,
+    "role": "textbox",
+    "name": "State",
+    "automation_id": null,
+    "window_name": null
+   }
+  },
+  {
+   "id": "step_031",
+   "action": "type",
+   "intent": "type <state_label>",
+   "param": "state_label",
+   "risk": "reversible",
+   "risk_explanation": "action has no retained consequential commit signal",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_032",
+   "action": "click",
+   "intent": "click 'Postal Code'",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "control label has no retained consequential-write signal",
+   "identity_armed": true,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": "#mantine-i4w03ghi3",
+    "frame_path": null,
+    "role": "textbox",
+    "name": "Postal Code",
+    "automation_id": null,
+    "window_name": null
+   }
+  },
+  {
+   "id": "step_033",
+   "action": "type",
+   "intent": "type <postal_code>",
+   "param": "postal_code",
+   "risk": "reversible",
+   "risk_explanation": "action has no retained consequential commit signal",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_034",
+   "action": "scroll",
+   "intent": "scroll by (0, 926)",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "action has no retained consequential commit signal",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_035",
+   "action": "scroll",
+   "intent": "scroll by (0, 412)",
+   "param": null,
+   "risk": "reversible",
+   "risk_explanation": "action has no retained consequential commit signal",
+   "identity_armed": null,
+   "identity_unarmed_reason": null,
+   "submit_binding_unbound_reason": null,
+   "structural": null
+  },
+  {
+   "id": "step_036",
+   "action": "click",
+   "intent": "click 'Create'",
+   "param": null,
+   "risk": "irreversible",
+   "risk_explanation": "retained action context names a consequential state change",
+   "identity_armed": false,
+   "identity_unarmed_reason": "the only readable row text is the target's own label (mutable evidence, excluded from identity)",
+   "submit_binding_unbound_reason": null,
+   "structural": {
+    "selector": null,
+    "frame_path": null,
+    "role": "button",
+    "name": "Create",
+    "automation_id": null,
+    "window_name": null
+   }
+  }
+ ],
+ "params": [
+  "DOB",
+  "city",
+  "email",
+  "fname",
+  "lname",
+  "phone_home",
+  "postal_code",
+  "sex",
+  "state_label",
+  "street"
+ ]
+}

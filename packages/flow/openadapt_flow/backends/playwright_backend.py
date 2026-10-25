@@ -411,7 +411,10 @@ def _fill_iso_date(locator: Any, text: str) -> bool:
     if not _ISO_DATE.fullmatch(text or ""):
         return False
     try:
-        if locator.evaluate("e => e.tagName === 'INPUT' && e.type === 'date'") is not True:
+        if (
+            locator.evaluate("e => e.tagName === 'INPUT' && e.type === 'date'")
+            is not True
+        ):
             return False
         locator.fill(text, timeout=1000)
     except Exception:  # noqa: BLE001 - not a date input: type it as usual
@@ -3000,8 +3003,10 @@ class PlaywrightBackend:
             operation="guarded_dom_type",
             # Keys go through the leased element itself, never the page
             # keyboard, so delivery stays bound to the checked target.
-            deliver=lambda locator: _fill_iso_date(locator, text)
-            or locator.press_sequentially(text, timeout=1000),
+            deliver=lambda locator: (
+                _fill_iso_date(locator, text)
+                or locator.press_sequentially(text, timeout=1000)
+            ),
         )
 
     def _handle_screenshot_frame_lifecycle(self, _frame: Any = None) -> None:

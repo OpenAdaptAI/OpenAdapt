@@ -63,7 +63,8 @@ record:
     postal_code: postal_code
     phone_home: phone_home
 
-save_step: auto
+# Create; the four "Add ..." clicks only add empty form rows.
+save_step: step_036
 
 inputs:
   source: recorded

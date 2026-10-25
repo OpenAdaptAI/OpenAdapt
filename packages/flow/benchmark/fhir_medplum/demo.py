@@ -153,7 +153,9 @@ def cmd_compile(args: argparse.Namespace) -> int:
     bundle = Path(args.bundle)
     if bundle.exists():
         raise SystemExit(f"bundle path already exists: {bundle}")
-    workflow = compile_recording(Path(args.recording), bundle, name="medplum-new-patient")
+    workflow = compile_recording(
+        Path(args.recording), bundle, name="medplum-new-patient"
+    )
     print("bundle:", bundle, "steps:", len(workflow.steps))
     print("params:", sorted(workflow.params) if workflow.params else [])
     return 0

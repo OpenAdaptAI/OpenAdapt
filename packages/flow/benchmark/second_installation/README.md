@@ -56,5 +56,77 @@ Each one is a generality bug. Status: fixed here, or filed.
 | 12 | `openadapt_flow/policies/` | The only regulated policy is `clinical-write`; a claims system certifies under it | Open |
 | 13 | `benchmark/lifecycle_proof/run.py` `LabelAgent` | Repair proposals come from OCR words; openIMIS's Save is an unlabeled icon | Open |
 | 14 | Soak injectors | A forced logout ends server sessions; openIMIS uses stateless JWTs, and Medplum's Login resources aren't revocable through its API | Recorded as unsupported per app |
+| 15 | `PlaywrightBackend.type_text` | A typed ISO date can't fill a native `<input type=date>`: Chromium splits it into locale-ordered segments, `-` doesn't advance, and the year takes six digits | Fixed: an ISO date into a date input is set with `fill` (tested) |
+| 16 | `openadapt_flow/risk.py` | Any "Add ..." button reads as a write; Medplum's form has four that only add an empty row in the browser. Each needs an operator classification (`qualify set-risk ... read_only`) before qualification | Open (operator work per app) |
+| 17 | Identity and submit binding | **Blocking.** A labeled save button alone at the end of a form gets neither an identity check (its label is excluded as mutable evidence and there is no other row text) nor a submit binding (that applies only to unlabeled controls). Qualification then refuses: "save step has no armed identity check". Medplum's Create is such a button. A fix touches identity, so it needs a design and a safety review | Open; next |
+| 18 | `qualify/campaign.py`, `qualify/faults.py` | The web fault driver and its precondition need a CSS selector for the save; the recorder captures one only for a unique `#id`. React apps (Medplum) give role and name only, which the backend's resolver already handles | Open (small fix) |
+| 19 | `benchmark/openimis_claims/fixture.py` | Runs `docker compose` against Docker Desktop's socket; on the shared Podman VM it needs `DOCKER_HOST` | Worked around |
+| 20 | openIMIS 25.10 images | amd64 only. On the Podman VM without Rosetta (qemu-user), the backend accepts connections and never answers (29 s of CPU in 58 min, before and after a restart) | Environment; the next lease turns Rosetta on |
 
-Measured results are added below once each phase has run.
+## Phase A results so far
+
+### Medplum (FHIR): taught, contract written, admission blocked
+
+What worked on the live server (Medplum 5.2.8, synthetic patients):
+
+- **Setup.** The fixture came up from pinned images, about 22 minutes, almost
+  all image pulls. It made an admin token, two client applications (record
+  check, harness) and a dedicated user through a project invite. The web app
+  took the server URL at run time.
+- **Teach.** `demo.py` recorded the new-patient form. Three demonstrations
+  with different values (two female, one male) each saved exactly one
+  Patient. Every field read back right through the Postgres oracle.
+- **Compile.** 37 steps, the 10 intended parameters
+  (`compiled-program.json`). The compiler dropped two pixel-region checks
+  that would have frozen a demonstrated value.
+- **Contract.** `verify.yaml` (FHIR `Patient`, matched by email, exact new
+  set, identity field `id`) expands to a 10-effect contract with no save
+  coverage problems.
+- **Phase B inputs.** The three demonstrations carry before and after
+  snapshots of the FHIR channel: 0 → 1, 1 → 2, 2 → 3 patients
+  (`phase-b-inputs/`).
+
+What the form made the clerk's steps be:
+
+- Gender is a ValueSet autocomplete: type the code, then ArrowDown and Enter.
+  Enter alone submits the whole form; an early probe saved three empty
+  patients that way.
+- Telecom's system is a native select: click it and type the option.
+
+Where admission stopped: `qualify` refused before running a case
+(`qualify-refusal.log`):
+
+- save step step_036 has no armed identity check;
+- save step step_036 has no structural selector.
+
+Those are bugs 17 and 18. The first is a safety design question, not a
+setting: what may stand in for row text when a labeled save is alone on its
+row. No soak has run on Medplum yet.
+
+### openIMIS: blocked on the environment
+
+The stack started and its migrations finished, but the backend never answered
+under qemu-user emulation (bug 20). Nothing past setup ran. The contract,
+hooks, profile and soak adapter are written and unexercised.
+
+### Effort so far
+
+Agent wall-clock minutes from `hours.jsonl`. They include unattended waits
+inside setup: about 22 minutes of Medplum image pulls, and most of openIMIS's
+setup, which was waiting on the hung backend.
+
+| App | Setup | Teach | Contract | Admission | Total |
+| --- | --- | --- | --- | --- | --- |
+| Medplum | 28.1 | 12.4 | 1.0 | 3.4 (blocked) | 44.9 |
+| openIMIS | 97.6 (blocked) | – | 1.4 | – | 99.0 |
+
+Lines written, the effort measure that doesn't depend on who does the work:
+
+| App | Setup (fixture) | Teach | Contract (verify.yaml, hooks, profile) |
+| --- | --- | --- | --- |
+| Medplum | 428 | 178 | 299 |
+| openIMIS | reused | reused | 319 |
+
+The soak adapters and the claims workload (836 lines) are measurement
+apparatus, not installation cost. The product fixes (bugs 7 and 15) are in
+`openadapt_flow/`.

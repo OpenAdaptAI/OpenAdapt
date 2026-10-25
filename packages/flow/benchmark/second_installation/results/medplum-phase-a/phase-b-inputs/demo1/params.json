@@ -1,0 +1,12 @@
+{
+  "fname": "Rowan",
+  "lname": "Achterberg",
+  "DOB": "1979-11-23",
+  "sex": "female",
+  "street": "41 Quarry Lane",
+  "city": "Worcester",
+  "state_label": "Massachusetts",
+  "postal_code": "01609",
+  "phone_home": "508-555-0147",
+  "email": "rowan.achterberg@example.invalid"
+}
