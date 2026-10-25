@@ -2,13 +2,16 @@
 
 Qualification, a run, a resume and the lifecycle proof must use the same
 duplicate check, or a program is admitted under one check and run under
-another. The source is resolved inside ``Replayer`` from the run's own effect
-verifier (``resolve_duplicate_source``). These tests pin that:
+another. The source is resolved by ``Replayer`` from the run's own effect
+verifier and the program's pin (``resolve_duplicate_source``). These tests
+pin that:
 
 - no construction path picks a source of its own (an AST scan of every
   ``Replayer(...)`` call);
 - the governed paths all hand the Replayer their effect verifier;
 - the same verifier gives the same source on every path;
+- OpenEMR's REST adapter is used only by a program pinned to the record;
+- resolution never crashes on a verifier it doesn't know;
 - a program pinned to the record check fails closed without a channel.
 """
 
@@ -73,9 +76,7 @@ def test_no_construction_path_picks_its_own_duplicate_source() -> None:
         for rel, fn, call in calls
         if any(k.arg == "duplicate_record_source" for k in call.keywords)
     }
-    # Only the deployment passes the operator's switch (auto or screen),
-    # never a source object.
-    assert choosing == {("openadapt_flow/deployment.py", "build_replayer")}
+    assert choosing == set()
 
 
 def test_every_governed_path_hands_the_replayer_its_effect_verifier() -> None:
@@ -87,10 +88,12 @@ def test_every_governed_path_hands_the_replayer_its_effect_verifier() -> None:
         if (rel, fn) not in GOVERNED:
             continue
         names = {k.arg for k in call.keywords}
-        # ``**kwargs`` (qualify) must carry it; checked below by name.
+        # ``None`` is ``**kwargs`` (qualify), checked by name below.
         assert "effect_verifier" in names or None in names, (rel, fn)
     campaign = (FLOW / "openadapt_flow/qualify/campaign.py").read_text()
     assert "effect_verifier=verifier" in campaign
+    # A qualification hook can't swap the duplicate check.
+    assert "replayer_kwargs may not set duplicate_record_source" in campaign
 
 
 class _Backend:
@@ -113,9 +116,18 @@ def _rest() -> RestRecordVerifier:
 
 
 @pytest.mark.parametrize(
-    ("verifier", "kind"), [(_fhir, FhirPatientSource), (_rest, RestPatientSource)]
+    ("verifier", "pinned", "kind"),
+    [
+        (_fhir, False, FhirPatientSource),
+        (_fhir, True, FhirPatientSource),
+        # OpenEMR's REST adapter only for a program pinned to the record.
+        (_rest, False, type(None)),
+        (_rest, True, RestPatientSource),
+    ],
 )
-def test_the_same_verifier_gives_the_same_source_on_every_path(verifier, kind) -> None:
+def test_the_same_verifier_gives_the_same_source_on_every_path(
+    verifier: Any, pinned: bool, kind: type
+) -> None:
     from openadapt_flow.deployment import build_replayer
     from openadapt_flow.runtime.replayer import Replayer
     from tests.test_replayer import FakeVision
@@ -131,15 +143,47 @@ def test_the_same_verifier_gives_the_same_source_on_every_path(verifier, kind) -
         use_structural=False,
     )
     for replayer in (direct, deployed):
-        assert isinstance(replayer.duplicate_record_source, kind)
-        assert replayer.duplicate_record_source.base_url == v.base_url
+        source = replayer._duplicate_source(pinned)
+        assert isinstance(source, kind)
+        if source is not None:
+            assert source.base_url == v.base_url
 
 
-def test_no_record_channel_means_the_screen_unless_the_program_pins_record() -> None:
+def test_resolution_is_tolerant_and_rest_is_opt_in() -> None:
     assert resolve_duplicate_source(None) is None
-    assert resolve_duplicate_source(_fhir(), "screen") is None
     table = TableSource([])
     assert resolve_duplicate_source(None, table) is table
+    assert resolve_duplicate_source(_rest()) is None
+    assert isinstance(
+        resolve_duplicate_source(_rest(), pinned_record=True), RestPatientSource
+    )
+
+    class Double(RestRecordVerifier):
+        """A test double that skips RestRecordVerifier.__init__."""
+
+        def __init__(self) -> None:
+            pass
+
+    # No crash at construction; no source, so a pinned program fails closed.
+    assert resolve_duplicate_source(Double(), pinned_record=True) is None
+
+    class Wrapper:
+        def __init__(self, inner: Any) -> None:
+            self.inner = inner
+
+    assert isinstance(resolve_duplicate_source(Wrapper(_fhir())), FhirPatientSource)
+
+
+def test_a_replayer_builds_with_an_unknown_verifier_double() -> None:
+    from openadapt_flow.runtime.replayer import Replayer
+    from tests.test_replayer import FakeVision
+
+    class Double(RestRecordVerifier):
+        def __init__(self) -> None:
+            pass
+
+    replayer = Replayer(_Backend(), vision=FakeVision(), effect_verifier=Double())
+    assert replayer._duplicate_source(True) is None
 
 
 def _check(source: Any, pinned: Any) -> tuple[bool, list[Any]]:
@@ -163,8 +207,24 @@ def _check(source: Any, pinned: Any) -> tuple[bool, list[Any]]:
 
 
 def test_a_program_pinned_to_the_record_fails_closed_without_a_channel() -> None:
-    passed, read = _check("screen", "record")
+    from openadapt_flow.runtime.replayer import Replayer
+    from tests.test_replayer import FakeVision
+
+    passed, read = _check(None, "record")
     assert passed is False and read == []  # never the screen instead
+    replayer = Replayer(_Backend(), vision=FakeVision())
+    pc = Postcondition(
+        kind=PostconditionKind.NO_DUPLICATE_CANDIDATE,
+        text="x",
+        candidate_rows="tr",
+        candidate_params=("lname",),
+        candidate_source="record",
+    )
+    replayer._current_params = {}
+    replayer._postcondition_passes(pc, b"", None, {})
+    why = replayer._describe_postcondition(pc)
+    # The reason the switch policy reads (#1517): a structured, stable phrase.
+    assert why.startswith("no_duplicate_candidate (record check via none: unreadable")
 
 
 def test_a_program_pinned_to_the_screen_reads_the_screen() -> None:
@@ -173,11 +233,13 @@ def test_a_program_pinned_to_the_screen_reads_the_screen() -> None:
     assert passed is True and read  # the list was read; the record wasn't asked
 
 
-def test_unset_candidate_source_serializes_as_before() -> None:
+def test_unset_candidate_fields_serialize_as_before() -> None:
     pc = Postcondition(
         kind=PostconditionKind.NO_DUPLICATE_CANDIDATE,
         text="x",
         candidate_rows="tr",
         candidate_params=("lname",),
     )
-    assert "candidate_source" not in pc.model_dump()
+    dumped = pc.model_dump()
+    assert "candidate_source" not in dumped
+    assert "candidate_record_fields" not in dumped

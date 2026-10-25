@@ -520,6 +520,10 @@ class Postcondition(BaseModel):
     #: even when a record channel exists. Unset: the record when the run has
     #: a record channel, else the screen.
     candidate_source: Optional[Literal["record", "screen"]] = None
+    #: NO_DUPLICATE_CANDIDATE, record source: the run parameter that fills
+    #: each field the record check reads (``fname``, ``lname``, ``DOB``,
+    #: ``mrn``, ``phone_home``, ``email``, ``street``). Unset: those names.
+    candidate_record_fields: Optional[dict[str, str]] = None
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -536,6 +540,7 @@ class Postcondition(BaseModel):
             "candidate_frame_path",
             "candidate_params",
             "candidate_source",
+            "candidate_record_fields",
         ):
             if getattr(self, name) is None:
                 data.pop(name, None)

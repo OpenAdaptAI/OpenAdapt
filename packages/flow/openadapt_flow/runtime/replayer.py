@@ -1022,18 +1022,11 @@ class Replayer:
         self.effect_verifier = effect_verifier
         self.effect_compensator = effect_compensator
         # The duplicate check's record channel (``runtime/checks/
-        # duplicate_record.py``), resolved here from this run's own effect
-        # verifier, so every construction path (qualification, run, resume,
-        # proof) that reads the same system of record uses the same check.
-        # When set, ``no_duplicate_candidate`` asks the system of record
-        # instead of reading the app's match list.
-        from openadapt_flow.runtime.checks.duplicate_record import (
-            resolve_duplicate_source,
-        )
-
-        self.duplicate_record_source = resolve_duplicate_source(
-            effect_verifier, duplicate_record_source
-        )
+        # duplicate_record.py``). Resolved from this run's own effect verifier
+        # when the check runs (``_duplicate_source``), so every construction
+        # path (qualification, run, resume, proof) that reads the same system
+        # of record uses the same check. Only tests and embedders pass one.
+        self._duplicate_requested = duplicate_record_source
         self._last_duplicate_check: Optional[Any] = None
         # ``run``-only, bundle-bound admission capability.  The ordinary
         # ``replay`` path leaves this unset and preserves its permissive
@@ -17747,8 +17740,10 @@ class Replayer:
             or getattr(self, "_run_params", None)
             or {}
         )
-        source = getattr(self, "duplicate_record_source", None)
         pinned = getattr(pc, "candidate_source", None)
+        source = (
+            None if pinned == "screen" else self._duplicate_source(pinned == "record")
+        )
         if pinned == "record" and source is None:
             # The program was qualified with the record check; without a
             # record channel it must not fall back to the screen.
@@ -17758,12 +17753,13 @@ class Replayer:
 
             self._last_duplicate_check = DuplicateCheckResult(
                 "unreadable",
+                channel="none",
                 reason="the program requires the record check and this run has "
                 "no record channel",
             )
             return False
-        if source is not None and pinned != "screen":
-            return self._no_duplicate_record(source, params)
+        if source is not None:
+            return self._no_duplicate_record(source, params, pc)
         names = tuple(pc.candidate_params or ())
         if not pc.candidate_rows or not names or not pc.text:
             return False
@@ -17801,7 +17797,22 @@ class Replayer:
                 return False
         return True
 
-    def _no_duplicate_record(self, source: Any, params: dict[str, Any]) -> bool:
+    def _duplicate_source(self, pinned_record: bool = False) -> Any:
+        """This run's duplicate-check record source, or None (the screen)."""
+
+        from openadapt_flow.runtime.checks.duplicate_record import (
+            resolve_duplicate_source,
+        )
+
+        return resolve_duplicate_source(
+            self.effect_verifier,
+            getattr(self, "_duplicate_requested", "auto"),
+            pinned_record=pinned_record,
+        )
+
+    def _no_duplicate_record(
+        self, source: Any, params: dict[str, Any], pc: Any = None
+    ) -> bool:
         """The duplicate check with the system of record as its source.
 
         Proceeds only when the record channel answers completely and no chart
@@ -17810,11 +17821,18 @@ class Replayer:
         records found and why (``_describe_postcondition``).
         """
 
-        from openadapt_flow.runtime.checks.duplicate_record import check_duplicate
+        from openadapt_flow.runtime.checks.duplicate_record import (
+            RECORD_FIELDS,
+            check_duplicate,
+        )
 
+        # Which run parameter fills each field: OpenEMR's names by default,
+        # ``pc.candidate_record_fields`` for any other program.
+        mapped = getattr(pc, "candidate_record_fields", None) or {}
+        names = {**RECORD_FIELDS, **dict(mapped)}
         want = {
-            name: runtime_param_text(params[name]) if name in params else ""
-            for name in ("fname", "lname", "DOB", "mrn", "phone_home", "email", "street")
+            field: runtime_param_text(params[name]) if name in params else ""
+            for field, name in names.items()
         }
         try:
             result = check_duplicate(source, want)

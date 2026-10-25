@@ -64,53 +64,91 @@ on the OpenEMR referral program, and the soak admits that version afresh
 
 ## Asking the system of record instead
 
-When the run's effect verifier reads a FHIR server or OpenEMR's patient API,
-`no_duplicate_candidate` searches the system of record for the patient instead
-of reading the on-screen list (`runtime/checks/duplicate_record.py`, a check
-whose source is the record). With no such channel, the on-screen list decides,
-as above.
+`no_duplicate_candidate` can search the system of record for the patient
+instead of reading the on-screen list (`runtime/checks/duplicate_record.py`, a
+check whose source is the record).
 
 The channels:
 
-| Source | Scope |
-|---|---|
-| `FhirPatientSource` | generic FHIR R4 (`Patient` search with standard parameters); any R4 server |
-| `RestPatientSource` | OpenEMR adapter: OpenEMR's standard REST `/api/patient` |
-| `SqlPatientSource` | OpenEMR adapter, fallback: a read-only query on `patient_data`, wired by hand, never by default |
+| Source | Scope | Used |
+|---|---|---|
+| `FhirPatientSource` | generic FHIR R4: `Patient` search with standard parameters, for any R4 server | whenever the run's effect verifier reads FHIR |
+| `RestPatientSource` | OpenEMR adapter: OpenEMR's standard REST `/api/patient` | only for a program pinned to the record check (below) |
+| `SqlPatientSource` | OpenEMR adapter, fallback: a read-only query on `patient_data` (MySQL or MariaDB `%s` parameters; `paramstyle="qmark"` for SQLite) | only when wired by hand |
 
-**One source for every path.** `Replayer` resolves the source itself, from the
-effect verifier it is given (`resolve_duplicate_source`). So qualification
-(`qualify`), a run (`build_replayer`), a resume and the lifecycle proof that
-read the same system of record use the same check, and none of them can pick
-another. `tests/test_duplicate_source_paths.py` scans every `Replayer(...)`
+**One source for every path.** `Replayer` resolves the source itself, from
+its own effect verifier and the program's pin (`resolve_duplicate_source`).
+So qualification, a run, a resume and the lifecycle proof that read the same
+system of record use the same check:
+- no construction path can choose another;
+- a qualification hook can't set one;
+- a verifier the resolution doesn't recognize gives no source rather than an
+  error.
+
+`tests/test_duplicate_source_paths.py` scans every `Replayer(...)`
 construction to keep it so.
 
-**The program can pin it.** The postcondition's `candidate_source: record`
-makes the record check part of the qualified program: a run with no record
-channel fails the step, and never reads the screen instead.
-`candidate_source: screen` keeps the list even when a channel exists. Unset,
-the run's channel decides. The deployment's `runtime.duplicate_check: screen`
-turns the record check off for unpinned programs; a program pinned to
-`record` then fails closed.
+**The program decides, and qualification sees it.** The postcondition's
+`candidate_source` is part of the qualified program:
+- `record`: the record check, with the FHIR or OpenEMR REST channel. A run
+  with no record channel fails the step and never reads the screen instead.
+- `screen`: the on-screen list, even when a channel exists.
+- unset: the FHIR channel when the run has one, else the screen.
 
-The check searches by the date of birth, by the date of birth with day and
-month swapped, by each part of the last and first name, by first name, and by
-MRN, phone and email when the run has them.
+**Parameter names.** The check reads `fname`, `lname`, `DOB`, and when
+present `mrn`, `phone_home`, `email` and `street`: OpenEMR's referral names.
+A program for another app maps its own with `candidate_record_fields`, for
+example `{"fname": "given", "lname": "family", "DOB": "birth_date"}`.
+
+The check searches:
+- by the date of birth, and by the date with day and month swapped;
+- by each part of the last and first name, and by the first name;
+- by MRN, phone and email when the run has them.
+
 It reads every page, and it decides from whole records:
 
 | Decision | When | What happens |
 |---|---|---|
 | `exact` | same first name, last name and date of birth, or the same MRN | stop: the chart exists |
-| `close` | same name (or a nickname, an initial, or the chart's prior name) with day and month swapped, or with the date of birth one field off and either the exact name or a shared phone, email or street; same date of birth with a similar name or a shared hyphenated part; first and last name swapped; same date of birth and first name under another last name; another name with the same date of birth and a shared contact detail, or a near date of birth and two | stop for a person; the halt names each record and why |
+| `close` | see the list below | stop for a person; the halt names each record and why |
 | `none` | no record is this patient | proceed |
-| `unreadable` | unreachable, refused credentials, not a result set, a reported total that doesn't match what was read, more than 50 pages, a full REST page with no next link, a missing or non-ISO date of birth | stop (fail closed) |
+| `unreadable` | see the list below | stop (fail closed) |
+
+A record is `close` when it has:
+- the same or a similar name, a nickname, an initial or the chart's prior
+  name, with day and month swapped, or with the date of birth one field off
+  and at most one name part differing (or a shared phone, email or street);
+- the same date of birth with a similar name or a shared surname part;
+- first and last name swapped;
+- the same date of birth and first name under another last name;
+- another name with the same date of birth and a shared contact detail, or a
+  near date of birth and two.
+
+A record date that is only a year or a year and month counts as no date of
+birth, so a name match is `close`, never a non-match.
+
+The check is `unreadable` when:
+- the channel is unreachable, or refuses the credentials;
+- the reply is not a result set, or a REST body carries any error field or
+  no `data` list;
+- a reported total doesn't match what was read;
+- the search runs past 50 pages, or a REST page is full with no next link;
+- a next-page link points to another host;
+- a record has no id;
+- the run's date of birth is missing or not ISO.
 
 Sharing only a last name, or only a date of birth, doesn't stop the item.
 
-Measured offline on the production soak's seed-7 stream, with true
-duplicates planted: `benchmark/dup_check/README.md`.
+**The stop reason.** A record-check stop reads `failed: no_duplicate_candidate
+(record check via <channel>: <decision>, <reason>...)`. The channel is
+`none` when a pinned program had no channel. Decision `unreadable` is a
+problem with the program or its channel. `exact` and `close` are about the
+item.
 
 Not catchable from the referral alone: a person whose name changed, who moved,
 and whose date of birth is mistyped or merely shared. Nothing the referral
 carries ties them to the chart; that needs an MRN, an insurance id, or a
 person.
+
+Measured offline on the production soak's seed-7 stream, with true
+duplicates planted: `benchmark/dup_check/README.md`.

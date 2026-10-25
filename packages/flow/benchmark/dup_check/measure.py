@@ -67,11 +67,8 @@ DUPLICATE_KINDS = {
     "pl_initial",
     "pl_both_typos_same_contact",
     "pl_ambiguous_same_person",
-    "pl_married_moved",
-    "pl_second_surname",
-    "pl_initial",
-    "pl_both_typos_same_contact",
-    "pl_ambiguous_same_person",
+    "rv_nickname_dob_typo",
+    "rv_last_typo_dob_typo",
     "limit_married_moved_dob_typo",
     "limit_new_name_moved_same_dob",
 }
@@ -248,6 +245,17 @@ def round_two(n: int, person: dict[str, str]) -> list[Item]:
     def typo(v: str) -> str:
         return v[:-2] + v[-1] + v[-2] if len(v) > 3 else v + "e"
 
+    # The review's reproduced gap (``rv_``): a last-name typo plus a day typo.
+    out.append(
+        Item(
+            f"rv-lt-{n}",
+            "rv_last_typo_dob_typo",
+            dict(person, lname=typo(person["lname"]), DOB=day_typo(person["DOB"])),
+            None,
+            [],
+        )
+    )
+
     out += [
         Item(
             f"pl-mm-{n}",
@@ -328,6 +336,15 @@ def extra_existing(
         extra.append(chart)
         items.append(
             Item(f"r2-nk-{n}", "r2_nickname", dict(chart, fname=nick), None, [])
+        )
+        items.append(
+            Item(
+                f"rv-nd-{n}",
+                "rv_nickname_dob_typo",
+                dict(chart, fname=nick, DOB=day_typo(chart["DOB"])),
+                None,
+                [],
+            )
         )
     for n in range(6):
         base = existing[(n + 5) % len(existing)]

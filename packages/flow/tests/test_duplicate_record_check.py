@@ -253,7 +253,8 @@ def test_sql_fallback(tmp_path: Path) -> None:
     )
     con.commit()
     con.close()
-    result = check_duplicate(SqlPatientSource(lambda: sqlite3.connect(db)), WANT)
+    source = SqlPatientSource(lambda: sqlite3.connect(db), paramstyle="qmark")
+    result = check_duplicate(source, WANT)
     assert result.decision == "close" and result.channel == "sql"
     assert {c.record.record_id for c in result.candidates} == {"4", "5"}
 
@@ -416,3 +417,96 @@ def test_production_lifecycle_cases_stop(
 def test_an_initial_does_not_match_another_letter() -> None:
     want = {"fname": "J.", "lname": "Ashby", "DOB": "1950-02-03"}
     assert classify(want, rec("Mary", "Ashby", "1950-02-03")) is None
+
+
+# -- review fixes: every read problem is unreadable, never "none" ----------------
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"internalErrors": ["db down"]},  # no data, an error
+        {"data": [], "validationErrors": {"DOB": "bad"}},  # an error next to data
+        {},  # no data at all
+        {"data": {"0": {}}},  # data that isn't a list
+    ],
+)
+def test_rest_error_bodies_are_unreadable(serve, body) -> None:
+    server = serve(lambda p, q: (200, body))
+    source = RestPatientSource(server.url, path="/api/patient")
+    assert check_duplicate(source, WANT).decision == "unreadable"
+
+
+@pytest.mark.parametrize("partial", ["1990", "1990-04", ""])
+def test_a_partial_record_birth_date_is_no_date_not_a_mismatch(serve, partial) -> None:
+    resource = patient("31", "Rosalind", "Jesswood", partial)
+    if not partial:
+        resource.pop("birthDate")
+    bundle = {"resourceType": "Bundle", "total": 1, "entry": [{"resource": resource}]}
+    server = serve(lambda p, q: (200, bundle))
+    assert check_duplicate(FhirPatientSource(server.url), WANT).decision == "close"
+
+
+def test_a_record_with_no_id_is_unreadable() -> None:
+    table = TableSource([rec("Ana", "Other", "1990-04-09", rid=" ")])
+    assert check_duplicate(table, WANT).decision == "unreadable"
+
+
+def test_a_next_link_to_another_host_is_unreadable(serve) -> None:
+    elsewhere = "https://elsewhere.example.test/Patient?p=2"
+    bundle = {
+        "resourceType": "Bundle",
+        "entry": [],
+        "link": [{"relation": "next", "url": elsewhere}],
+    }
+    server = serve(lambda p, q: (200, bundle))
+    result = check_duplicate(FhirPatientSource(server.url), WANT)
+    assert result.decision == "unreadable" and "another host" in result.reason
+
+
+@pytest.mark.parametrize(
+    ("want", "record"),
+    [
+        # A nickname and a one-field date typo.
+        (
+            {"fname": "Bob", "lname": "Ashby", "DOB": "1950-05-07"},
+            rec("Robert", "Ashby", "1950-05-06"),
+        ),
+        # A last-name typo and a one-field date typo.
+        (
+            {"fname": "Rosalind", "lname": "Jeswood", "DOB": "1990-04-10"},
+            rec("Rosalind", "Jesswood", "1990-04-09"),
+        ),
+    ],
+)
+def test_review_recall_gaps_stop(want, record) -> None:
+    found = classify(want, record)
+    assert found is not None and found.match == "close"
+
+
+def test_a_program_maps_its_own_parameter_names() -> None:
+    from openadapt_flow.ir import Postcondition, PostconditionKind
+    from openadapt_flow.runtime.replayer import Replayer
+    from tests.test_no_duplicate_candidate import MARKER
+    from tests.test_no_duplicate_candidate import _Backend as ListBackend
+    from tests.test_replayer import FakeVision
+
+    table = TableSource([rec("Rosalind", "Jesswood", "1990-04-09", "7")])
+    replayer = Replayer(
+        ListBackend([]), vision=FakeVision(), duplicate_record_source=table
+    )
+    replayer._current_params = {
+        "given": "Rosalind",
+        "family": "Jesswood",
+        "birth": "1990-04-09",
+    }
+    pc = Postcondition(
+        kind=PostconditionKind.NO_DUPLICATE_CANDIDATE,
+        text=MARKER,
+        candidate_rows="tr",
+        candidate_params=("family",),
+        candidate_source="record",
+        candidate_record_fields={"fname": "given", "lname": "family", "DOB": "birth"},
+    )
+    assert replayer._postcondition_passes(pc, b"", None, {}) is False
+    assert replayer._last_duplicate_check.decision == "exact"
