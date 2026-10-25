@@ -133,8 +133,6 @@
     "benchmark/dom/finals/perturbation_dom_named_028.png",
     "benchmark/dom/outcome_matrix.png",
     "benchmark/dom/results.json",
-    "benchmark/dup_check/results/seed7-500.json",
-    "benchmark/dup_check/results/soak-seed7-55.json",
     "benchmark/effect_e2e/effect_e2e.png",
     "benchmark/effect_e2e/results.json",
     "benchmark/effect_readback/results.json",
