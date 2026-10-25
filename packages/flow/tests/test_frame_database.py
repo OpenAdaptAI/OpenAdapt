@@ -213,3 +213,18 @@ def test_default_values_are_unset() -> None:
     assert is_default("0000-00-00", None)
     assert is_default("NO", "'NO'")
     assert not is_default("617-555-0142", "''")
+
+
+def test_a_table_wider_than_one_json_call_is_read(tmp_path: Path) -> None:
+    # SQLite caps a function at 127 arguments; OpenEMR's chart has more
+    # columns than that.
+    cols = ", ".join(f"c{i} TEXT" for i in range(150))
+    path = tmp_path / "wide.sqlite"
+    con = sqlite3.connect(path)
+    con.execute(f"CREATE TABLE wide (id INTEGER PRIMARY KEY, {cols})")
+    con.execute("INSERT INTO wide (id, c149) VALUES (1, 'last')")
+    con.commit()
+    con.close()
+    snap = take_snapshot(lambda: sqlite3.connect(path), "sqlite")
+    (row,) = snap.tables["wide"].rows or []
+    assert row["c149"] == "last" and len(row) == 151
