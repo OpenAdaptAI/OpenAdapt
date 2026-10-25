@@ -719,6 +719,37 @@ def clean_streak(events: list[SwitchLogEvent]) -> tuple[str, ...]:
     return () if started else tuple(streak)
 
 
+def _public_key_bytes(encoded: str) -> bytes:
+    """A raw Ed25519 public key, given as hex (the principal registry's form)
+    or base64 (the pinned-key form status keys use)."""
+
+    import re as _re
+
+    if _re.fullmatch(r"[0-9a-f]{64}", encoded):
+        return bytes.fromhex(encoded)
+    return base64.b64decode(encoded, validate=True)
+
+
+def registry_approver_keys(key_dir: Optional[Path] = None) -> dict[str, str]:
+    """Approver keys registered in the JIT key directory's principal registry.
+
+    ``approvers`` maps a person's approver name (for example Desktop's
+    ``desktop-approver``) to its hex public key (``jit register --role
+    approver``). An unreadable registry, or one with no approvers, gives no
+    keys, and then no re-arm counts.
+    """
+
+    try:
+        from openadapt_flow.jit.authority import PrincipalRegistry
+        from openadapt_flow.jit.lifecycle import default_key_dir
+
+        registry = PrincipalRegistry.load(key_dir or default_key_dir())
+    except Exception:  # noqa: BLE001 - no registry proves nothing
+        return {}
+    approvers = getattr(registry, "approvers", None) or {}
+    return {str(name): str(key) for name, key in dict(approvers).items()}
+
+
 def rearm_signing_payload(
     switch_id: str, switch_record_sha256: str, fields: Mapping[str, Any]
 ) -> bytes:
@@ -845,9 +876,7 @@ def rearm_refusal(
     if not encoded:
         return "the re-arm is not signed by a registered approver key"
     try:
-        public_key = Ed25519PublicKey.from_public_bytes(
-            base64.b64decode(encoded, validate=True)
-        )
+        public_key = Ed25519PublicKey.from_public_bytes(_public_key_bytes(encoded))
         public_key.verify(
             base64.b64decode(rearm.signature, validate=True),
             rearm_signing_payload(

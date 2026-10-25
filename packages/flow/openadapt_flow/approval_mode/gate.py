@@ -325,10 +325,16 @@ class ApprovalGate:
         else:
             self.log = SwitchLog(log)
         self._pinned_keys = dict(pinned_status_keys or {})
-        # Approver keys pinned for this runner (key id to base64 raw Ed25519
-        # public key). A person's signed re-arm counts only with one of them;
-        # with none, a switch that turned off stays off.
-        self._approver_keys = dict(pinned_approver_keys or {})
+        # Approver keys a person's signed re-arm may be signed with: the ones
+        # given here (key id to a raw Ed25519 public key, hex or base64), or
+        # by default every approver registered in the JIT key directory. With
+        # none, a switch that turned off stays off.
+        if pinned_approver_keys is not None:
+            self._approver_keys = dict(pinned_approver_keys)
+        else:
+            from openadapt_flow.approval_mode.switch import registry_approver_keys
+
+            self._approver_keys = registry_approver_keys()
         self._fetch_status = fetch_status
         self._environment_digest = environment_digest
         self._runner_id = runner_id

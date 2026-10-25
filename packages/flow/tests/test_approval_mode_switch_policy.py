@@ -272,3 +272,38 @@ def test_a_key_held_in_a_keychain_signs_the_bytes_without_leaving_it(tmp_path) -
     signature = base64.b64encode(private.sign(payload)).decode("ascii")
     rearm(log, rearm_evidence(fields, signature), approver_keys=keys)
     assert not log.state(approver_keys=keys).is_off
+
+
+def test_registered_approver_keys_in_hex_verify_a_rearm(tmp_path, monkeypatch) -> None:
+    """The principal registry's approvers (hex) are the gate's default keys."""
+
+    from types import SimpleNamespace
+
+    from openadapt_flow.approval_mode import switch
+    from openadapt_flow.jit import authority
+
+    private, keys = _keypair()
+    hex_key = base64.b64decode(keys["approver-1"]).hex()
+    monkeypatch.setattr(
+        authority.PrincipalRegistry,
+        "load",
+        classmethod(
+            lambda cls, key_dir: SimpleNamespace(approvers={"approver-1": hex_key})
+        ),
+    )
+    registered = switch.registry_approver_keys(tmp_path)
+    assert registered == {"approver-1": hex_key}
+    log = _switched_off_log(tmp_path, REARM_CLEAN_ITEMS)
+    rearm(log, _signed(log, private), approver_keys=registered)
+    assert not log.state(approver_keys=registered).is_off
+
+
+def test_an_unreadable_registry_gives_no_approver_keys(tmp_path, monkeypatch) -> None:
+    from openadapt_flow.approval_mode import switch
+    from openadapt_flow.jit import authority
+
+    def broken(cls, key_dir):
+        raise ValueError("unreadable")
+
+    monkeypatch.setattr(authority.PrincipalRegistry, "load", classmethod(broken))
+    assert switch.registry_approver_keys(tmp_path) == {}
