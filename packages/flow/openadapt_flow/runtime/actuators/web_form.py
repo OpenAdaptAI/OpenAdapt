@@ -225,6 +225,21 @@ def unsupported_client_rules(rules: Optional[dict[str, Any]]) -> list[str]:
     return sorted(out)
 
 
+def page_scripts(
+    html: str, action_path: str, sent: Iterable[str], rules: Optional[dict[str, Any]]
+) -> list[str]:
+    """Everything the browser runs on this save that reading the form can't evaluate.
+
+    :func:`form_scripts` plus the validate.js rule kinds outside
+    :data:`CLIENT_RULE_KINDS`, sorted. The API step runs these itself before
+    each save (:mod:`openadapt_flow.runtime.actuators.form_eval`).
+    """
+
+    found = form_scripts(html, action_path, sent)
+    found += [f"{rule} (validate.js)" for rule in unsupported_client_rules(rules)]
+    return sorted(set(found))
+
+
 _EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
@@ -418,6 +433,10 @@ class Transport(Protocol):
 
     def post_form(self, path: str, body: str, *, referer: str) -> Response: ...
 
+    # Optional: ``evaluate_form(form_path, action_path, fields) -> FormEvaluation``
+    # runs the form's own script on the run's values (form_eval). A transport
+    # without it can't run a form that has script; that save stays on the GUI.
+
 
 class PlaywrightSessionTransport:
     """The browser context's own request API: same cookies, same session."""
@@ -425,8 +444,23 @@ class PlaywrightSessionTransport:
     def __init__(self, page: Any, *, timeout_s: float = 30.0) -> None:
         parts = up.urlsplit(page.url)
         self.base_url = f"{parts.scheme}://{parts.netloc}"
+        self._page = page
         self._request = page.context.request
         self._timeout_ms = timeout_s * 1000.0
+
+    def evaluate_form(
+        self, form_path: str, action_path: str, fields: list[tuple[str, str]]
+    ) -> Any:
+        from openadapt_flow.runtime.actuators.form_eval import evaluate_form
+
+        return evaluate_form(
+            self._page,
+            self.base_url,
+            form_path,
+            action_path,
+            fields,
+            timeout_s=self._timeout_ms / 1000.0,
+        )
 
     def _wrap(self, resp: Any) -> Response:
         return _Resp(
@@ -649,25 +683,27 @@ class WebFormActuator:
                 return unavailable(
                     "the form's validation rules changed since the recording"
                 )
-            unsupported = unsupported_client_rules(spec.client_rules)
-            if unsupported:
-                return unavailable(
-                    "the form validates with rules the API step can't evaluate "
-                    f"({', '.join(unsupported)})"
-                )
-            scripts = form_scripts(
+            action_path = up.urlsplit(save_path).path
+            scripts = page_scripts(
                 page.text,
-                up.urlsplit(save_path).path,
+                action_path,
                 [f.name for f in spec.fields],
+                spec.client_rules,
             )
-            if scripts:
-                return unavailable(
-                    "the form runs script the API step can't run "
-                    f"({', '.join(scripts[:5])})"
-                )
+            if scripts != sorted(set(spec.client_scripts)):
+                if not spec.client_scripts:
+                    return unavailable(
+                        "the form runs script the API step wasn't proposed to run "
+                        f"({', '.join(scripts[:5])})"
+                    )
+                return unavailable("the form's script changed since the recording")
             body, problem = self.build_body(spec, params, controls)
             if problem:
                 return unavailable(problem)
+            if scripts:
+                problem = self._run_page_script(spec, form_path, action_path, body)
+                if problem:
+                    return unavailable(problem)
             for check in spec.prechecks:
                 query = [(k, _fill(v, params)) for k, v in check.query]
                 qs = "&".join(
@@ -701,6 +737,49 @@ class WebFormActuator:
                 f.name for f in spec.fields if f.source == "session"
             ),
         )
+
+    def _run_page_script(
+        self,
+        spec: Any,
+        form_path: str,
+        action_path: str,
+        body: list[tuple[str, str]],
+    ) -> Optional[str]:
+        """Run the form's own script on the run's values; why not to send, or None.
+
+        The fields the person typed or picked go into a scratch copy of the
+        form (form_eval). The save is sent only when the page's script lets
+        the submit through and the browser would send exactly ``body``, apart
+        from the session values the scratch page was issued for itself.
+        """
+
+        evaluate = getattr(self.transport, "evaluate_form", None)
+        if evaluate is None:
+            return "the form runs script and this session can't run it"
+        typed = {f.name for f in spec.fields if f.source in ("param", "select_label")}
+        result = evaluate(
+            form_path, action_path, [(k, v) for k, v in body if k in typed]
+        )
+        self.log.append(
+            {
+                "stage": "page_script",
+                "status": result.status,
+                "seconds": result.seconds,
+                "blocked": result.blocked,
+            }
+        )
+        if not result.valid:
+            return f"{result.reason}; the page's own script decided"
+        session = {f.name for f in spec.fields if f.source == "session"}
+        want = sorted((k, v) for k, v in body if k not in session)
+        got = sorted((k, v) for k, v in result.serialized or [] if k not in session)
+        if want != got:
+            changed = sorted({k for k, _ in set(want) ^ set(got)})
+            return (
+                "the page would send other values than the API step built "
+                f"({', '.join(changed[:5])}); its script changes them"
+            )
+        return None
 
     def send(self, binding: Any, prepared: "PreparedSave") -> ApiActuationResult:
         """Send exactly ``prepared``, once. Never retried."""

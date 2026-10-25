@@ -37,6 +37,12 @@ What is not proposed (the reasons are returned):
 - a folded step made a read whose response must show text the GUI checks,
   and that text is in no response.
 
+Page script on the form (field handlers, an ``onsubmit`` validator, a submit
+listener, validate.js rules such as ``pastDate``) is not a reason to refuse:
+it is listed in ``client_scripts`` and the runtime runs it on the run's
+values before each save, with writes blocked; when it can't, the GUI steps
+run.
+
 Model-free and deterministic.
 """
 
@@ -67,8 +73,7 @@ from openadapt_flow.runtime.actuators.web_form import (
     client_rules,
     folded_checks_digest,
     form_controls,
-    form_scripts,
-    unsupported_client_rules,
+    page_scripts,
 )
 
 
@@ -351,30 +356,16 @@ def propose_api_step(
     form_path, url_problems = _url_template(form_line["url"], by_value)
     if url_problems:
         return workflow, None, url_problems
-    # A browser runs the page's validation and script before it submits; the
-    # API step can only stand in for what it can evaluate itself.
-    unsupported = unsupported_client_rules(client_rules(form_line["response_text"]))
-    if unsupported:
-        return (
-            workflow,
-            None,
-            [
-                "the form validates with rules the API step can't evaluate "
-                f"({', '.join(unsupported)}); it stays on the GUI"
-            ],
-        )
-    scripts = form_scripts(
-        form_line["response_text"], _path(post["url"]), [n for n, _ in post["form"]]
+    # A browser runs the page's validation and script before it submits. What
+    # reading the form can't evaluate (handlers, submit listeners, custom
+    # validate.js rules) the API step runs itself before each save, in a
+    # scratch page with every write blocked (runtime/actuators/form_eval.py).
+    client_scripts = page_scripts(
+        form_line["response_text"],
+        _path(post["url"]),
+        [n for n, _ in post["form"]],
+        client_rules(form_line["response_text"]),
     )
-    if scripts:
-        return (
-            workflow,
-            None,
-            [
-                "the form runs script the API step can't run "
-                f"({', '.join(scripts[:5])}); it stays on the GUI"
-            ],
-        )
 
     # Steps the API step stands in for: those recorded on the form page.
     folded: list[Step] = []
@@ -609,6 +600,7 @@ def propose_api_step(
         fields=fields,
         controls=sorted(controls),
         client_rules=client_rules(form_line["response_text"]),
+        client_scripts=client_scripts,
         prechecks=prechecks,
         success_pattern=_success_pattern(post),
         replaces_steps=[s.id for s in folded],
@@ -680,6 +672,16 @@ def describe_api_step(step: Step) -> str:
             f"  right record ({identity.key}): the request sends {{{identity.param}}} "
             f"in {', '.join(p.removeprefix('/body/') for p in identity.request_pointers)} "
             f"and the record check selects {identity.effect_field} = {{{identity.param}}}"
+        )
+    if spec.client_scripts:
+        shown = spec.client_scripts[:6] + (
+            [f"and {len(spec.client_scripts) - 6} more"]
+            if len(spec.client_scripts) > 6
+            else []
+        )
+        lines.append(
+            "  the form's own script runs before each save, in a scratch page with "
+            f"writes blocked, on the run's values: {', '.join(shown)}"
         )
     if spec.screen_only_checks:
         lines.append(f"  screen-only checks, not repeated: {spec.screen_only_checks}")

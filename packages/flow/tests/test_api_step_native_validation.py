@@ -14,7 +14,7 @@ import json
 import pytest
 
 from openadapt_flow import network_capture as nc
-from openadapt_flow.compiler.api_proposal import propose_api_step
+from openadapt_flow.compiler.api_proposal import admit_api_step, propose_api_step
 from openadapt_flow.ir import WebFormField, WebFormSpec
 from openadapt_flow.runtime.actuators import ActuationStatus
 from openadapt_flow.runtime.actuators.web_form import (
@@ -26,7 +26,6 @@ from openadapt_flow.runtime.actuators.web_form import (
 from tests.test_api_tier_web_form import (
     FORM_HTML,
     FakeTransport,
-    _admitted_binding,
     _recording,
     _workflow,
 )
@@ -139,17 +138,24 @@ def _rec_with_form(tmp_path, html):
         ),
     ],
 )
-def test_script_the_api_step_cant_run_keeps_the_save_on_the_gui(tmp_path, edit, named):
+def test_script_on_the_form_is_recorded_and_must_be_run_before_the_save(
+    tmp_path, edit, named
+):
     html = edit(FORM_HTML)
-    _wf, step, reasons = propose_api_step(_workflow(), _rec_with_form(tmp_path, html))
-    assert step is None and named in " ".join(reasons)
-    # The same script on the live form makes an admitted API step unavailable.
+    wf, step, reasons = propose_api_step(_workflow(), _rec_with_form(tmp_path, html))
+    assert step is not None and not reasons
+    scripts = step.api_binding.web_form.client_scripts
+    assert any(named in s for s in scripts)
+    wf, _ = admit_api_step(wf, admitted_by="reviewer")
+    binding = wf.steps[-1].api_binding
+    run = {"lname": "Marsh", "state_label": "California", "note": "Referred"}
     live = edit(FORM_HTML.replace("<session:csrf_token_form>", "live-session-value"))
-    (tmp_path / "admitted").mkdir()
-    out = WebFormActuator(FakeTransport(form=live)).actuate(
-        _admitted_binding(tmp_path / "admitted"),
-        {"lname": "Marsh", "state_label": "California", "note": "Referred"},
-    )
+    # A session that can't run the page's script keeps the save on the GUI.
+    out = WebFormActuator(FakeTransport(form=live)).actuate(binding, run)
     assert out.status is ActuationStatus.UNAVAILABLE
-    # A rule kind the recording didn't have is first a changed rule set.
-    assert named in out.reason or "rules changed" in out.reason
+    assert "can't run it" in out.reason or "rules changed" in out.reason
+    # So does a live form whose script is not the recorded script.
+    plain = FORM_HTML.replace("<session:csrf_token_form>", "live-session-value")
+    out = WebFormActuator(FakeTransport(form=plain)).actuate(binding, run)
+    assert out.status is ActuationStatus.UNAVAILABLE
+    assert "script changed" in out.reason or "rules changed" in out.reason

@@ -4,8 +4,10 @@
 `application/x-www-form-urlencoded` POST of one HTML form, read again from
 the live page, in place of the clicks and keystrokes that filled it. It is
 not a general API client: JSON or script-built requests, more than one
-write, multi-page server state, and forms whose script validates or rewrites
-values all stay on the GUI.
+write and multi-page server state stay on the GUI. A form whose script
+validates or rewrites values is run, not refused: the API step runs that
+script on the run's values before each save (below), and the save stays on
+the GUI when the script can't be run.
 
 The right-record check before the save and the record check after it stay
 the same. If anything the API step depends on has changed, the recorded GUI
@@ -125,16 +127,31 @@ Before it sends the save, the API step:
 1. reads the form page again in this session;
 2. refuses if the form's fields or its client-side validation rules (for
    example, OpenEMR's `constraints` object) differ from the recording;
-3. refuses if the form runs script it can't run: an `on*` handler on the
-   form (`onsubmit`) or on a field it sends (`onchange`, `oninput`,
-   `onblur`, script that can validate or rewrite a value), a page script
-   listening for the submit, or a validate.js rule kind other than
-   `presence`, `length`, `format`, `numericality` and `email`;
+3. refuses if the form's script isn't the script recorded with the
+   proposal (`client_scripts`: an `on*` handler on the form, such as
+   `onsubmit`, or on a field it sends, such as `onchange`; a page script
+   listening for the submit; a validate.js rule kind other than `presence`,
+   `length`, `format`, `numericality` and `email`, such as OpenEMR's
+   `pastDate`);
 4. builds the body and checks it the way the browser would before it
    submits: native HTML constraints (`required`, `minlength`, `maxlength`,
    `pattern`, `min`, `max`, and the `email`, `url`, `number` and `date`
    input types) and the page's validate.js rules;
-5. runs the pre-checks.
+5. when the form has script, **runs it** (`runtime/actuators/form_eval.py`):
+   it opens the form page in a scratch copy of the live session (a separate
+   browser context with the session's cookies), blocks every request that
+   isn't a GET and every script-sent request once the page has loaded, puts
+   the run's typed and picked values into the form with the same `input`,
+   `change` and `blur` events a browser fires, reads the body the browser
+   would send, runs the browser's own constraint checks, submits the form
+   through its own handlers with a final listener that records whether
+   they let the submit through and then stops it, and runs the page's
+   validate.js `constraints` when it declares them. The save goes ahead only
+   when the page let the submit through, raised no error, showed no dialog,
+   tried to send nothing, and would send exactly the body the API step
+   built (session values aside). Anything else is a reason, and the GUI
+   steps run;
+6. runs the pre-checks.
 
 Each of these refusals means the save wasn't sent, so the GUI steps run.
 After the save request starts, the API tier's no-double-write rule
@@ -357,15 +374,17 @@ recording.
 - The server may enforce less than the page. On OpenEMR, the duplicate
   check and the required fields run only in the browser. The API step
   carries over the checks it can evaluate (pre-checks, native HTML
-  constraints and validate.js rules of the kinds above), and leaves a form
-  whose script it can't run to the GUI. A `pattern` is evaluated with
-  Python's regular expressions, which differ from the browser's in rare
-  syntax; one that doesn't compile keeps the save on the GUI. Letting
-  qualification show that the server enforces a script-only rule, so the
-  API step can run anyway, isn't built yet.
-- OpenEMR's new-patient form runs script on submit (`submitme(...)`) and on
-  each name field (`capitalizeMe`, which rewrites the typed value), and its
-  `constraints` use a custom `pastDate` rule. So its save stays on the GUI.
+  constraints and validate.js rules of the kinds above) and runs the
+  form's own script for the rest. A `pattern` is evaluated with Python's
+  regular expressions, which differ from the browser's in rare syntax; one
+  that doesn't compile keeps the save on the GUI.
+- Running the form's script covers what the script does on `input`,
+  `change`, `blur` and `submit`. Script that validates on a click handler
+  of the submit button only, or asynchronously after the submit event,
+  isn't seen; qualification on test cases, both paths, is what shows the
+  two paths agree. A form whose script needs the server while it validates
+  (a script-sent request after load) is blocked and stays on the GUI. Each
+  save with script costs one extra load of the form page.
 - Multi-step server state (wizards, uploads, locks held between pages) needs
   the whole request sequence, and isn't proposed.
 

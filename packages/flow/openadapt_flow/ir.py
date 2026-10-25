@@ -627,6 +627,16 @@ class WebFormSpec(BaseModel):
     fields: list[WebFormField] = Field(min_length=1)
     controls: list[str] = Field(default_factory=list)
     client_rules: Optional[dict[str, Any]] = None
+    #: Page script the browser runs on this save that the API step can't
+    #: evaluate by reading the form: the form's ``on*`` handlers, the ``on*``
+    #: handlers of the fields it sends, a page script listening for submit,
+    #: and validate.js rule kinds such as OpenEMR's ``pastDate``. Before each
+    #: save the runtime runs that script itself, in a scratch page of the live
+    #: session with every write blocked, on the run's values, and sends only
+    #: when the page would submit exactly the body the API step built. When
+    #: it can't run the script, the GUI steps run. The live form must list the
+    #: same script, or the API step doesn't run.
+    client_scripts: list[str] = Field(default_factory=list)
     prechecks: list[WebFormPrecheck] = Field(default_factory=list)
     #: Regular expression the save response must match to count as accepted.
     success_pattern: Optional[str] = None
