@@ -24,3 +24,13 @@
 {"app": "fhir-phaseB", "at": 1792905827.3503091, "event": "stop", "note": "", "step": "teach"}
 {"app": "both", "at": 1792905863.6359308, "event": "start", "note": "teardown", "step": "setup"}
 {"app": "both", "at": 1792905871.216518, "event": "stop", "note": "", "step": "setup"}
+{"app": "fhir", "at": 1792936976.547175, "event": "start", "note": "lease 2: VM, bring up Medplum again", "step": "setup"}
+{"app": "fhir", "at": 1792937358.940762, "event": "stop", "note": "", "step": "setup"}
+{"app": "fhir", "at": 1792937358.98381, "event": "start", "note": "re-record on #1543 (form identity), compile, classify Add buttons", "step": "teach"}
+{"app": "fhir", "at": 1792937526.0736792, "event": "stop", "note": "", "step": "teach"}
+{"app": "fhir", "at": 1792937538.237288, "event": "start", "note": "qualify on #1543 + #1564 (6 cases)", "step": "admission"}
+{"app": "fhir", "at": 1792937653.2309928, "event": "stop", "note": "refused: 7 unarmed field clicks (placeholder-only rows)", "step": "admission"}
+{"app": "fhir", "at": 1792937653.257854, "event": "start", "note": "keyboard navigation re-teach", "step": "teach"}
+{"app": "fhir", "at": 1792938122.615865, "event": "stop", "note": "", "step": "teach"}
+{"app": "fhir", "at": 1792938122.638038, "event": "start", "note": "qualify, keyboard program", "step": "admission"}
+{"app": "fhir", "at": 1792938223.243816, "event": "stop", "note": "refused: 2 key steps with no postcondition (focus moves only)", "step": "admission"}

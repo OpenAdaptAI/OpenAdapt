@@ -64,7 +64,7 @@ record:
     phone_home: phone_home
 
 # Create; the four "Add ..." clicks only add empty form rows.
-save_step: step_036
+save_step: step_056
 
 inputs:
   source: recorded

@@ -1,0 +1,15 @@
+qualify REFUSED: REFUSE: workflow 'medplum-new-patient' under 'standard' profile vs policy 'clinical-write'
+  [PASS] Execution profile: standard (production); durability required and enabled; settled-state detection required and enabled
+  [REFUSE] Certification: bundle is NOT certified under 'clinical-write': 18 policy violation(s) (e.g. prohibit_unarmed_clicks: identity-applicable step is UNARMED — would act with no identity verification (the only readable row text is the target's own label (mutable evidence, excluded from identity)))
+         steps: step_000, step_007, step_009, step_010, step_013, step_015, step_016, step_018, ... (+2 more)
+  [REFUSE] Identity coverage: 7/17 entity-sensitive/consequential action(s) are UNARMED -- would act with no verified target identity
+         steps: step_000, step_007, step_010, step_013, step_016, step_018, step_022
+  [PASS] Effect coverage: 1/1 consequential write(s) declare the required postcondition and confirmed system-of-record effect contracts
+  [PASS] Approval fallback: a verifier satisfying the required evidence tier is configured; 1 declared write(s) are covered
+  [PASS] Interstitial admission: no automatic interstitial actions declared
+  [WARN] Encrypted bundle: workflow.json plaintext (not required); WARNING: 43 template/screenshot asset(s) are unsealed (plaintext at rest) -- protect via disk encryption or run with --strict-templates to refuse
+         steps: templates/identifiers/step_001.png, templates/identifiers/step_003.png, templates/identifiers/step_026.png, templates/identifiers/step_028.png, templates/identifiers/step_030.png, templates/identifiers/step_032.png, templates/layout_fingerprint.json, templates/step_000.png, ... (+35 more)
+  [PASS] Sealed manifest + version pin: integrity-sealed manifest re-verified (digest cf5ee695cb4ae217..., compiler 2.3.0)
+  -> RUN REFUSED (fail-closed): Certification, Identity coverage. Nothing was executed.
+Evidence so far: /Users/abrichr/oa/scratch/second-installation/medplum/qual2
+EXIT 1
