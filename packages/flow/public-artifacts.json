@@ -143,6 +143,8 @@
     "benchmark/environments/environments.json",
     "benchmark/environments/verification.json",
     "benchmark/fault_model/results.json",
+    "benchmark/frame_scope_1505/results/after.json",
+    "benchmark/frame_scope_1505/results/before.json",
     "benchmark/frappe_lending/apps.json",
     "benchmark/frappe_lending/compose.yml",
     "benchmark/frappe_lending/environment.lock.json",

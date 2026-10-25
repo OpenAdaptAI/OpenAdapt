@@ -714,7 +714,7 @@ def judge_frame(
         else:
             assert attribution is not None
             moved = {str(c.key) for c in collateral + concurrent}
-            stray: set[tuple[str, str]] = set()
+            stray_scopes: set[tuple[str, str]] = set()
             for entry in window_entries:
                 actor = get_path(entry, attribution.actor_field)
                 ref = get_path(entry, attribution.record_field or "")
@@ -725,9 +725,9 @@ def judge_frame(
                     # writes. An insurance row, an allergy or a note for the
                     # new patient is collateral (#1505).
                     excused, scope = attribution.excuses(entry)
-                    if excused or (str(ref), scope) in stray:
+                    if excused or (str(ref), scope) in stray_scopes:
                         continue
-                    stray.add((str(ref), scope))
+                    stray_scopes.add((str(ref), scope))
                     collateral.append(
                         FrameChange(
                             "",
