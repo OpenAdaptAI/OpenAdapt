@@ -687,3 +687,37 @@ def test_the_claude_loop_in_code_mode(tmp_path: Path, monkeypatch: Any) -> None:
     assert ledger.to_dict()["images_in_requests"] == 0
     assert agent.last_trace.summary()["commits"] == 1
     assert harness.stats.gate_checks == 1
+
+
+def test_code_as_action_is_the_default_first_run_agent() -> None:
+    from openadapt_flow.__main__ import build_parser
+    from openadapt_flow.compile_agent.agents import CODE_DEFAULT_MODEL, DEFAULT_MODEL
+    from openadapt_flow.compile_agent.cli import _agent
+
+    agent = ClaudeAgent()
+    assert agent.vision == "code" and agent.model == CODE_DEFAULT_MODEL
+    assert agent.dialect == "generic"
+    assert ClaudeAgent(vision="selective").model == DEFAULT_MODEL
+    args = build_parser().parse_args(
+        ["compile-agent", "Save the note {note}", "--url", "http://app.test/"]
+    )
+    cli_agent = _agent(args)
+    assert cli_agent.vision == "code" and cli_agent.model == CODE_DEFAULT_MODEL
+
+
+def test_record_readback_names_the_record_and_flags_any_other() -> None:
+    from openadapt_flow.compile_agent.harness import record_readback
+
+    before = [{"id": 1, "patient_id": "p2", "note": "old"}]
+    state = {"now": list(before)}
+    check = record_readback(lambda: state["now"], {"patient_id": "p1"}, lambda: before)
+    assert check().outcome == "no_change"
+    state["now"] = before + [{"id": 2, "patient_id": "p1", "note": "x"}]
+    landed = check()
+    assert landed.outcome == "landed" and landed.fields == ("id", "note", "patient_id")
+    state["now"] = [{"id": 1, "patient_id": "p2", "note": "edited"}]
+    assert check().outcome == "wrong_record"
+    state["now"] = []
+    assert check().outcome == "wrong_record"
+    unreadable = record_readback(lambda: None, {"patient_id": "p1"}, lambda: before)
+    assert unreadable().outcome == "unreadable"

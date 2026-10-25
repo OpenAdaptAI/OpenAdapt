@@ -21,6 +21,18 @@ form field), the harness:
 This is the right-record check and the hold before saving from the guarded
 save design. It runs in the agent's run only; the compiled program has its own
 identity checks and reads every save back from the system of record.
+
+Read-back after every save. When the harness has a ``readback`` (the pipeline
+always gives it one, built by :func:`record_readback` from the task's
+``verify.yaml`` reader), every action that went through the gate is followed
+by a read of the system of record, compared with the read taken when run 1
+started:
+
+* a change on any record other than the one the task names stops run 1 at
+  once (:class:`ReadBackRefused`); no draft is made;
+* no change at all is reported to the agent ("nothing was saved"), so a screen
+  that says "saved" can't stand in for a save;
+* a change on the named record is reported to the agent with its field names.
 """
 
 from __future__ import annotations
@@ -36,12 +48,15 @@ from openadapt_flow.jit.adapters import CaptureComputer, Observation, translate
 __all__ = [
     "CommitHint",
     "GateRefused",
+    "ReadBack",
+    "ReadBackRefused",
     "GateRequest",
     "Harness",
     "HarnessStats",
     "SaveGate",
     "StaleRef",
     "SurfaceControl",
+    "record_readback",
     "SurfaceHarness",
     "SurfaceObservation",
 ]
@@ -50,6 +65,107 @@ __all__ = [
 class GateRefused(RuntimeError):
     """A write was not committed: the wrong record was on screen, or the hold
     said no. Nothing in the refused action was performed."""
+
+
+class ReadBackRefused(GateRefused):
+    """A save went through, and the system of record shows a change on a record
+    the task does not name. Run 1 stops; no draft is made."""
+
+
+@dataclass(frozen=True)
+class ReadBack:
+    """What the system of record showed after one save.
+
+    ``outcome`` is ``landed`` (only the named record changed), ``no_change``,
+    ``wrong_record`` (another record changed) or ``unreadable``.
+    """
+
+    outcome: str
+    detail: str
+    #: Field names of the named record's change (values stay out of the log).
+    fields: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "outcome": self.outcome,
+            "detail": self.detail,
+            "fields": list(self.fields),
+        }
+
+
+def record_readback(
+    read: Callable[[], Optional[list[dict[str, Any]]]],
+    expect: Mapping[str, Any],
+    baseline: Callable[[], Optional[list[dict[str, Any]]]],
+) -> Callable[[], ReadBack]:
+    """A read-back for the harness: ``read`` the system of record and compare
+    it with ``baseline()`` (the read when run 1 started). A created or changed
+    record is the named one when it has every ``expect`` field with that value.
+    """
+
+    wanted = {str(k): str(v) for k, v in expect.items()}
+
+    def named(record: Mapping[str, Any]) -> bool:
+        return all(str(record.get(k)) == v for k, v in wanted.items())
+
+    def check() -> ReadBack:
+        from openadapt_flow.record_sor import diff_snapshots
+
+        before, after = baseline(), read()
+        if before is None or after is None:
+            return ReadBack("unreadable", "the system of record could not be read")
+        diff = diff_snapshots(before, after)
+        touched = [*diff.created, *(c.after for c in diff.changed)]
+        if diff.removed:
+            return ReadBack("wrong_record", f"{len(diff.removed)} records disappeared")
+        others = [r for r in touched if not named(r)]
+        if others:
+            return ReadBack(
+                "wrong_record",
+                f"{len(others)} record(s) the task does not name changed",
+            )
+        if not touched:
+            return ReadBack("no_change", "nothing was saved in the system of record")
+        fields = tuple(sorted({k for r in touched for k in r}))
+        return ReadBack(
+            "landed",
+            f"{len(touched)} record(s) with "
+            + ", ".join(f"{k}={v}" for k, v in wanted.items())
+            + " saved",
+            fields,
+        )
+
+    return check
+
+
+def _read_back(harness: Any, control: str) -> Optional[ReadBack]:
+    """Read the system of record after a save went through the gate; poll a
+    little for a write that lands late. Raises ReadBackRefused on another
+    record's change."""
+
+    check = getattr(harness, "readback", None)
+    if check is None:
+        return None
+    deadline = time.monotonic() + max(float(harness.readback_wait_s), 0.0)
+    while True:
+        try:
+            got = check()
+        except Exception as exc:  # noqa: BLE001 - an unreadable read is reported
+            got = ReadBack("unreadable", f"{type(exc).__name__}: {exc}"[:200])
+        if got.outcome != "no_change" or time.monotonic() >= deadline:
+            break
+        time.sleep(0.25)
+    harness.stats.readbacks += 1
+    harness.readback_log.append(
+        {"control": control, **got.to_dict(), "at": time.time()}
+    )
+    if got.outcome == "wrong_record":
+        harness.stats.gate_refusals += 1
+        harness.refusal = (
+            f"after {control!r}, the read-back shows {got.detail}; run 1 stopped"
+        )
+        raise ReadBackRefused(harness.refusal)
+    return got
 
 
 class StaleRef(ValueError):
@@ -129,6 +245,8 @@ class HarnessStats:
     #: Kept as evidence with the run; not sent to the model.
     gate_evidence_screenshots: int = 0
     gate_refusals: int = 0
+    #: System-of-record reads after a save (see :func:`record_readback`).
+    readbacks: int = 0
 
     def to_dict(self) -> dict[str, int]:
         return dict(self.__dict__)
@@ -147,6 +265,10 @@ class Harness:
     #: One entry per gate decision, kept with the run.
     gate_log: list[dict[str, Any]] = field(default_factory=list)
     refusal: Optional[str] = None
+    #: Read after every save that went through the gate (see the module doc).
+    readback: Optional[Callable[[], ReadBack]] = None
+    readback_wait_s: float = 3.0
+    readback_log: list[dict[str, Any]] = field(default_factory=list)
     _last: Optional[_observe.StructuralObservation] = None
 
     @property
@@ -227,12 +349,17 @@ class Harness:
         return {"kind": "click", "x": control.x, "y": control.y}, control.ref
 
     def commit_target(
-        self, native: Mapping[str, Any], ref: Optional[str] = None
+        self,
+        native: Mapping[str, Any],
+        ref: Optional[str] = None,
+        *,
+        hint: Optional[CommitHint] = None,
     ) -> Optional[str]:
         """What may commit a write in ``native``, or None. Nothing is performed.
 
         ``ref`` is the text field a ``type`` will be typed into (it is clicked
         first), so the check looks at that field rather than today's focus.
+        ``hint`` is what a structure-aware tool resolved (see :meth:`act`).
         """
 
         if ref is not None and native.get("kind") == "type":
@@ -242,7 +369,7 @@ class Harness:
                 return "a typed line break" if any(c in text for c in "\r\n") else None
         hit = self._commit_target(native) if self.has_page else None
         if hit is None:
-            hit = self._hinted_commit(native, None)
+            hit = self._hinted_commit(native, hint)
         return hit[0] if hit is not None else None
 
     # -- every action -------------------------------------------------------------
@@ -277,6 +404,8 @@ class Harness:
         if commit is not None and self.has_page:
             # Let the app react before the agent looks at the result.
             _settle(self.page)
+        if commit is not None:
+            _read_back(self, commit[0])
         return obs
 
     def _hinted_commit(
@@ -567,6 +696,9 @@ class SurfaceHarness:
     stats: HarnessStats = field(default_factory=HarnessStats)
     gate_log: list[dict[str, Any]] = field(default_factory=list)
     refusal: Optional[str] = None
+    readback: Optional[Callable[[], ReadBack]] = None
+    readback_wait_s: float = 3.0
+    readback_log: list[dict[str, Any]] = field(default_factory=list)
     _last: Optional[SurfaceObservation] = None
     _focused_role: Optional[str] = None
 
@@ -679,6 +811,8 @@ class SurfaceHarness:
             self._check_gate(commit)
         obs = self.computer.execute(native)
         self.stats.actions += 1
+        if commit is not None:
+            _read_back(self, commit)
         kind = native.get("kind")
         if kind in ("click", "double_click", "right_click"):
             control = self._ref_control(ref)

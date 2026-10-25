@@ -156,11 +156,19 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     )
     p.add_argument(
         "--vision",
-        choices=["selective", "every_turn", "code"],
-        default="selective",
-        help="code: act through one terminal-style tool (docs/CODE_AS_ACTION.md)",
+        choices=["code", "selective", "every_turn"],
+        default="code",
+        help=(
+            "code (default): act through one terminal-style tool, every save read "
+            "back (docs/CODE_AS_ACTION.md); selective: the structural listing; "
+            "every_turn: a screenshot after every action"
+        ),
     )
-    p.add_argument("--model", default=None, help="model id (default claude-opus-5-5)")
+    p.add_argument(
+        "--model",
+        default=None,
+        help="model id (default claude-sonnet-5-5 for code, claude-opus-5-5 otherwise)",
+    )
     p.add_argument("--effort", default="medium")
     p.add_argument("--max-cost", type=float, default=2.0, help="USD cap for run 1")
     p.add_argument("--task-id", default=None)
@@ -207,16 +215,12 @@ def _interactive() -> bool:
 
 
 def _agent(args: argparse.Namespace) -> Any:
-    from openadapt_flow.compile_agent.agents import (
-        DEFAULT_MODEL,
-        ClaudeAgent,
-        ScriptedAgent,
-    )
+    from openadapt_flow.compile_agent.agents import ClaudeAgent, ScriptedAgent
 
     if args.agent == "claude":
         return ClaudeAgent(
             vision=args.vision,
-            model=args.model or DEFAULT_MODEL,
+            model=args.model or "",
             effort=args.effort,
             max_cost_usd=args.max_cost,
         )

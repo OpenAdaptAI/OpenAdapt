@@ -14,6 +14,7 @@ server. This package does not open an HTTP listener.
 
 from __future__ import annotations
 
+import functools
 import io
 import json
 import logging
@@ -391,9 +392,9 @@ def build_server(
             elif name == "admit" and authoring is not None and authoring.handles(name):
                 await _confirm_admit(context, authoring)
                 human_confirmed = True
-            elif teaching and name == "teach_act":
+            elif teaching and name in ("teach_act", "teach_run"):
                 hold = await anyio.to_thread.run_sync(
-                    teach.hold_needed, arguments or {}
+                    functools.partial(teach.hold_needed, arguments or {}, tool=name)
                 )
                 if hold:
                     await _confirm_with_person(

@@ -33,10 +33,13 @@ from openadapt_flow.jit.adapters import UnsupportedAction
 from openadapt_flow.jit.compile_agent import TaskRequest
 from openadapt_flow.teach_scope import ScopeViolation
 
-__all__ = ["DrivenAgent", "DrivenRun", "RunEnded", "ACTIONS"]
+__all__ = ["DrivenAgent", "DrivenRun", "RunEnded", "ACTIONS", "SCRIPT_SURFACES"]
 
 #: Actions a caller sends. ``ref`` names a control in the latest observation.
 ACTIONS = ("click", "type", "press", "hotkey")
+
+#: A code-action script sent with ``run`` (``teach_run``): web apps only.
+SCRIPT_SURFACES = ("web",)
 
 _STOP = object()
 
@@ -77,6 +80,9 @@ class DrivenAgent:
         #: approval is bound to both (see :meth:`binding`).
         self.run_id = uuid.uuid4().hex
         self.performed = 0
+        self._tool: Any = None
+        #: The code-action trace, saved with run 1 by the pipeline.
+        self.last_trace: Any = None
 
     # -- called by the gate, on the run thread -----------------------------------
 
@@ -122,8 +128,85 @@ class DrivenAgent:
         self.ledger.wall_seconds = time.monotonic() - self.ledger.started_at
         return self.ledger
 
+    def _code_tool(self) -> Any:
+        """The code-action tool over this run's harness (web only)."""
+
+        if self._tool is None:
+            from openadapt_flow.compile_agent.code_action import CodeActionTool, _watch
+            from openadapt_flow.compile_agent.harness import Harness
+
+            if not isinstance(self.harness, Harness):
+                raise ValueError(
+                    "scripts run on web apps only; on this app use teach_act"
+                )
+            self._tool = CodeActionTool(
+                self.harness, watch=_watch(self.request, self.harness)
+            )
+            self.last_trace = self._tool.trace
+        return self._tool
+
+    def script_binding(self, script: str) -> str:
+        """What a person's approval of a script covers: this run, the actions
+        performed so far, and the script's first line (the save)."""
+
+        first = next((ln.strip() for ln in str(script).splitlines() if ln.strip()), "")
+        actions = self.harness.stats.actions if self.harness is not None else 0
+        return json.dumps([self.run_id, actions, first])
+
+    def _run_script(self, command: _Command) -> dict[str, Any]:
+        tool = self._code_tool()
+        script = str(command.payload.get("script") or "")
+        if command.kind == "run_preview":
+            commit = tool.first_commit(script)
+            first = next((ln.strip() for ln in script.splitlines() if ln.strip()), "")
+            return {
+                "commit": commit,
+                "binding": self.script_binding(script) if commit else None,
+                "action": first[:200],
+            }
+        held = command.payload.get("_held_by_person")
+        if held and held != self.script_binding(script):
+            raise ValueError(
+                "the app or the run changed after the person approved this save, "
+                "so nothing was done; call teach_run again"
+            )
+        person_approves = self.harness.gate.hold is not None
+        approval = {"left": bool(held)}
+
+        def approve(control: str) -> bool:
+            if not person_approves:
+                return True  # the gate's own right-record check decides
+            # A person's approval covers one save, on the script's first line.
+            if approval["left"] and tool.line_number == 1:
+                approval["left"] = False
+                self._approved = control
+                return True
+            return False
+
+        tool.approve = approve
+        before = self.harness.stats.actions
+        try:
+            out = tool.run(script)
+        finally:
+            tool.approve = None
+            self._approved = None
+            self.performed += self.harness.stats.actions - before
+        answer: dict[str, Any] = {"output": out.text, "committed": out.committed}
+        if out.images:
+            answer["output"] += "\n(screenshots are not shared here; use teach_screen)"
+        if out.pending is not None:
+            rest = "\n".join(out.pending["rest"])
+            answer["pending"] = {
+                "save": out.pending["control"],
+                "script": rest,
+                "binding": self.script_binding(rest),
+            }
+        return answer
+
     def _handle(self, command: _Command) -> dict[str, Any]:
         h = self.harness
+        if command.kind in ("run", "run_preview"):
+            return self._run_script(command)
         if command.kind == "observe":
             obs = h.observe()
             return {"observation": obs.text}

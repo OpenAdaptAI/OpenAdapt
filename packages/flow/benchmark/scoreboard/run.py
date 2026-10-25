@@ -703,6 +703,7 @@ def _program_check(jit: Any, trace: Any) -> dict[str, Any]:
 
 def arm_code_agent(args: argparse.Namespace) -> int:
     from openadapt_flow.compile_agent import ClaudeAgent, SaveGate
+    from openadapt_flow.compile_agent.harness import record_readback
     from openadapt_flow.compile_agent.pipeline import _HarnessedAgent
 
     task = task_module(args.task)
@@ -720,9 +721,15 @@ def arm_code_agent(args: argparse.Namespace) -> int:
         max_cost_per_item=args.max_cost,
         on_screen=CODE_AGENT_ON_SCREEN[task.NAME],
     )
-    # Arm 7 needs no admission bound to an origin, so it takes a free port.
+    # Arm 7 needs no admission bound to an origin, so it takes a free port,
+    # unless it keeps a program for arm 3: that runs on the fixed origin.
     sess = (
-        Session(task, args.tag, faults=False, port=0)
+        Session(
+            task,
+            args.tag,
+            faults=args.faults,
+            port=None if args.keep_program else 0,
+        )
         if task.NAME == "mockmed"
         else None
     )
@@ -747,12 +754,27 @@ def arm_code_agent(args: argparse.Namespace) -> int:
                     ["note"],
                 )
                 readback_fn = lambda: sess.readback(it)  # noqa: E731
+                # Read after every save in run 1 (the harness's read-back). The
+                # JIT resets the store before run 1, which leaves it empty.
+                save_readback = record_readback(
+                    sess.server.records,
+                    {"patient_id": "p1", "type": "Triage"},
+                    lambda: [],
+                )
+                fault = it.fault
             else:
                 values = task.item_values(OPENEMR_CODE_ITEM_BASE + i)
                 canary_values = task.item_values(OPENEMR_CODE_ITEM_BASE + 100 + i)
                 params = list(task.PARAMS)
-                before_ids = {p["id"] for p in task.patients()}
+                before = task.patients()
+                before_ids = {p["id"] for p in before}
                 readback_fn = lambda: task.check(values, before_ids)  # noqa: E731
+                save_readback = record_readback(
+                    task.patients,
+                    {"email": values["email"], "lname": values["lname"]},
+                    lambda: before,
+                )
+                fault = "none"
             inner = ClaudeAgent(
                 vision="code",
                 model=AGENT_MODEL,
@@ -767,6 +789,7 @@ def arm_code_agent(args: argparse.Namespace) -> int:
                 keep=[*on_screen, *values.values()],
                 evidence_dir=cache / "gates",
                 principal_id=inner.principal_id,
+                readback=save_readback,
             )
             if sess is not None:
                 jit = _mockmed_jit(sess, cache, it, agent, dialect="generic")
@@ -802,6 +825,10 @@ def arm_code_agent(args: argparse.Namespace) -> int:
                     }
                     for g in (agent.harness.gate_log if agent.harness else [])
                 ],
+                "readbacks": [
+                    {k: v for k, v in r.items() if k != "at"}
+                    for r in (agent.harness.readback_log if agent.harness else [])
+                ],
             }
             if result is not None and result.candidate is not None:
                 summary["program_check"] = _program_check(jit, trace)
@@ -832,10 +859,10 @@ def arm_code_agent(args: argparse.Namespace) -> int:
                 run_id=args.run_id,
                 item=i,
                 attempt=1,
-                fault="none",
+                fault=fault,
                 reported_success=ok,
                 readback=readback,
-                outcome=schema.classify(ok, readback, "none"),
+                outcome=schema.classify(ok, readback, fault),
                 model_calls=ledger.model_calls if ledger is not None else 0,
                 input_tokens=ledger.total("input_tokens") if ledger else 0,
                 output_tokens=ledger.total("output_tokens") if ledger else 0,
@@ -859,14 +886,30 @@ def arm_code_agent(args: argparse.Namespace) -> int:
                         ),
                         "canary_status": summary.get("canary_status"),
                         "admitted": summary.get("admitted"),
+                        "readbacks": [r["outcome"] for r in summary["readbacks"]],
                         "error": f"{type(error).__name__}: {error}" if error else None,
                     },
                     default=str,
                 )[:300],
             )
             schema.append(out / "items.csv", row)
-            # The admission keys and cache stay out of the repository.
-            shutil.rmtree(cache, ignore_errors=True)
+            keep = (
+                args.keep_program
+                and i == args.start
+                and summary.get("admitted")
+                and sess is not None
+            )
+            if keep:
+                # Arm 3 replays this program: `program --program-from code-<id>`.
+                kept = schema.cache_dir(task.NAME, "first_run", f"code-{args.run_id}")
+                if kept.exists():
+                    shutil.rmtree(kept)
+                kept.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(cache), str(kept))
+                print(f"kept the admitted program for arm 3: {kept}", flush=True)
+            else:
+                # The admission keys and cache stay out of the repository.
+                shutil.rmtree(cache, ignore_errors=True)
             print(
                 f"{task.NAME} code_agent {i:3d} {row.outcome:13s} {row.model_calls} calls "
                 f"{row.item_s:6.1f}s ${row.cost_usd:.3f} load {load0}->{load1} "
@@ -899,6 +942,14 @@ def main() -> int:
     parser.add_argument("--no-faults", dest="faults", action="store_false")
     parser.add_argument("--program-from", default=None, help="first_run id")
     parser.add_argument("--pause-after-change-halt", action="store_true")
+    parser.add_argument(
+        "--keep-program",
+        action="store_true",
+        help=(
+            "code_agent on mockmed: keep the first item's admitted program (on the "
+            "fixed origin) for `program --program-from code-<run id>`"
+        ),
+    )
     parser.add_argument(
         "--ui-change-at",
         type=int,

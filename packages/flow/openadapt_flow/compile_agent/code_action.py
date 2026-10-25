@@ -125,6 +125,15 @@ class ScriptError(ValueError):
     action that was performed is in the trace."""
 
 
+class NeedsPerson(Exception):
+    """The next action may commit a write and a person must approve it first.
+    Nothing in it was performed; the script stops before it."""
+
+    def __init__(self, control: str) -> None:
+        super().__init__(control)
+        self.control = control
+
+
 class LeftTheApp(RuntimeError):
     """An action took the browser to another origin. The run ends: the agent
     may act on the target app only."""
@@ -754,6 +763,11 @@ class ActionTrace:
             "locator_agrees": sum(1 for s in recorded if s.get("agrees")),
             "locator_unique": sum(1 for s in recorded if s.get("unique")),
             "commits": len(commits),
+            "readbacks": {
+                outcome: sum(1 for st in self.steps if st.get("readback") == outcome)
+                for outcome in ("landed", "no_change", "unreadable")
+                if any(st.get("readback") == outcome for st in self.steps)
+            },
             "identity_read_before_commit": (
                 sorted(seen_before(commits[0])) if commits else []
             ),
@@ -777,6 +791,10 @@ class ToolOutput:
     text: str
     images: list[bytes] = field(default_factory=list)
     committed: bool = False
+    #: Set when the script stopped before a save a person must approve:
+    #: ``line`` (not run), ``control`` (what it may commit), ``rest`` (the
+    #: lines from it on).
+    pending: Optional[dict[str, Any]] = None
 
     def blocks(self) -> list[dict[str, Any]]:
         from openadapt_flow.compile_agent.agents import _image
@@ -866,14 +884,35 @@ class CodeActionTool:
         chunks: list[str] = []
         images: list[bytes] = []
         committed = False
+        pending: Optional[dict[str, Any]] = None
         for number, line in enumerate(lines, 1):
+            self.line_number = number
             self.trace.lines += 1
             gates = self.harness.stats.gate_checks
+            actions = self.harness.stats.actions
             try:
                 text, image = self._line(line)
             except ScopeViolation:
                 # Outside the task's declared scope: run 1 ends, no draft.
                 raise
+            except NeedsPerson as exc:
+                acted = self.harness.stats.actions > actions
+                chunks.append(
+                    f"$ {line}\nwaiting: this line may save ({self._out(exc.control)}), "
+                    "and a person must approve it first. "
+                    + (
+                        "Part of the line was done before the save; "
+                        if acted
+                        else "Nothing in this line was done; "
+                    )
+                    + "send the script again from this line once they have."
+                )
+                pending = {
+                    "line": line,
+                    "control": exc.control,
+                    "rest": lines[number - 1 :],
+                }
+                break
             except (ScriptError, ShellRefused, UnsupportedAction, LookupError) as exc:
                 self.trace.errors += 1
                 chunks.append(f"$ {line}\nerror: {self._out(str(exc))}")
@@ -898,7 +937,7 @@ class CodeActionTool:
                         "run. Read the screen to check the result.)"
                     )
                 break
-        out = ToolOutput("\n".join(chunks), images, committed)
+        out = ToolOutput("\n".join(chunks), images, committed, pending)
         self.trace.log.append(
             {"script": str(script), "output": out.text[:3000], "images": len(images)}
         )
@@ -1161,13 +1200,13 @@ class CodeActionTool:
                 )
             )
             event = self._event_index()
-            self._gates_before = len(self.harness.gate_log)
+            self._begin_step()
             self._do({"kind": "press", "key": key}, hint)
             pressed: dict[str, Any] = {"action": "press", "key": key}
             return self._finish_step(pressed, None, [event], line)
 
         element = self._target(positional, named)
-        self._gates_before = len(self.harness.gate_log)
+        self._begin_step()
         if element.disabled:
             raise ScriptError(f"@{element.ref} {element.name!r} is disabled")
         self._still_there(element)
@@ -1298,7 +1337,7 @@ class CodeActionTool:
                 "area you want to scroll first"
             )
         event = self._event_index()
-        self._gates_before = len(self.harness.gate_log)
+        self._begin_step()
         before = self._scroll_offsets()
         self._do({"kind": "scroll", "dx": 0, "dy": dy}, None)
         moved = before is None or self._scroll_offsets() != before
@@ -1380,6 +1419,10 @@ class CodeActionTool:
         return recorded
 
     def _do(self, native: Mapping[str, Any], hint: Optional[CommitHint]) -> None:
+        if self.approve is not None:
+            commit = self.harness.commit_target(native, hint=hint)
+            if commit is not None and not self.approve(commit):
+                raise NeedsPerson(commit)
         self.harness.act(native, hint=hint)
         self._settle()
         origin = self.surface.origin()
@@ -1440,6 +1483,13 @@ class CodeActionTool:
             text = f"ok: {what} {step.get('key')}"
         if step["gated"]:
             text += " (save gate passed)"
+        log = getattr(self.harness, "readback_log", [])
+        if len(log) > self._readbacks_before:
+            back = log[-1]
+            step["readback"] = back["outcome"]
+            text += "\nread back: " + back["detail"]
+            if back["outcome"] == "no_change":
+                text += " (whatever the screen says; do not report it as saved)"
         header = ""
         if self.surface.kind == "dom":
             page = self.harness.page
@@ -1447,6 +1497,68 @@ class CodeActionTool:
         return self._out(text + header)
 
     _gates_before: int = 0
+    _readbacks_before: int = 0
+    #: The line of the running script, from 1.
+    line_number: int = 0
+    #: Asked before an action the gate would stop: True lets it through to
+    #: the gate (a person approved it), False stops the script before it
+    #: (:class:`NeedsPerson`). None: the gate alone decides.
+    approve: Optional[Callable[[str], bool]] = None
+
+    def _begin_step(self) -> None:
+        self._gates_before = len(self.harness.gate_log)
+        self._readbacks_before = len(getattr(self.harness, "readback_log", []))
+
+    def first_commit(self, script: str) -> Optional[str]:
+        """What the script's first line may commit, if it acts, or None.
+        Reads the screen; performs nothing (for a person's approval form)."""
+
+        lines = [
+            ln.strip()
+            for ln in str(script).splitlines()
+            if ln.strip() and not ln.strip().startswith("#")
+        ]
+        if not lines:
+            return None
+        try:
+            tokens = shlex.split(lines[0])
+        except ValueError:
+            return None
+        command = tokens[0].lower() if tokens else ""
+        if command not in ("click", "fill", "select", "press"):
+            return None
+        positional, named = _parse_args(tokens[1:])
+        try:
+            if command == "press":
+                if len(positional) != 1:
+                    return None
+                key = positional[0]
+                focus = self.surface.focused() or {}
+                hint = (
+                    None
+                    if not focus
+                    else CommitHint(
+                        name=str(focus.get("name") or "the focused element"),
+                        scope=str(focus.get("scope") or ""),
+                        key=key if key in ("Enter", "Space") else None,
+                    )
+                )
+                return self.harness.commit_target(
+                    {"kind": "press", "key": key}, hint=hint
+                )
+            element = self._target(positional, named)
+        except (ScriptError, LookupError):
+            return None
+        editable = element.role in _FIELD_ROLES and not element.submits
+        hint = CommitHint(
+            name=element.name,
+            scope=element.scope or element.context,
+            editable=editable if command != "click" else element.role in _FIELD_ROLES,
+            commits=command == "select" and element.submits,
+        )
+        return self.harness.commit_target(
+            {"kind": "click", "x": element.x, "y": element.y}, hint=hint
+        )
 
 
 def _number(named: Mapping[str, str], key: str, default: int) -> int:

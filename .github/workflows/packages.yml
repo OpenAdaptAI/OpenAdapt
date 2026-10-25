@@ -455,6 +455,7 @@ jobs:
             tests/e2e/test_structural_action.py \
             tests/e2e/test_compile_agent_e2e.py \
             tests/e2e/test_code_action_e2e.py \
+            tests/e2e/test_code_agent_default_e2e.py \
             tests/e2e/test_mcp_teach_e2e.py \
             tests/test_agent_guard.py \
             tests/e2e/test_agent_guard_e2e.py \
