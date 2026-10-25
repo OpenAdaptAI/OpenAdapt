@@ -645,7 +645,7 @@ def _write_windows(path: Path, payload: bytes) -> None:  # pragma: no cover - Wi
         if not kernel.CreateDirectoryW(wintypes.LPCWSTR(str(directory)), ctypes.byref(attributes)):
             raise AnchorError(
                 "approver_anchor_untrusted",
-                f"Can't create {directory} (error {getattr(ctypes, "get_last_error")()}); if something "
+                f"Can't create {directory} (error {getattr(ctypes, 'get_last_error')()}); if something "
                 "made it again meanwhile, pin again.",
             )
     finally:
