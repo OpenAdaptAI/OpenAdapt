@@ -1,0 +1,2721 @@
+{
+ "app_state": {
+  "banner": "Encounter saved — Golden triage booking three months",
+  "enc_item": "Triage — Golden triage booking three months",
+  "hash": "#patient/p1"
+ },
+ "artifacts": {
+  "heals/step_000/heal.json": "bf7aef2794d4e1a56acf5ea0cc9ad61b9de9b464e474f4dbc58a3e29f8f6675d",
+  "heals/step_000/patch.json": "71cd67799906bf7c592709ae3ae7647a5e27b296994947579d8b31ea910badd8",
+  "heals/step_000/screen.png": "9e43117c8f5dcc3ba3a5e6eb636f9e736b6c31feaee783d080458d35a162c5e4",
+  "heals/step_000/template.png": "59e7a505c0762bde07517ef08e419406cd83f7024620b863a3924bcad58f4bf4",
+  "heals/step_002/heal.json": "9746367158967ae5697fec0528917c8c6076f11c127230cd683e5572eba11e8f",
+  "heals/step_002/patch.json": "e6809b37b0d857625c24b4bd7e13ec602d2caa85c75468de45763191b78e7725",
+  "heals/step_002/screen.png": "f3e6efed2eaf69d8e3f7ea4f3f03d6010b6520add327ca0d20cc8fe15b3304c0",
+  "heals/step_002/template.png": "59e7a505c0762bde07517ef08e419406cd83f7024620b863a3924bcad58f4bf4",
+  "heals/step_004/heal.json": "9d05a48d13cd8badbc0abaf75555a616bb92833615b2752c13be4fdf0b776c5c",
+  "heals/step_004/patch.json": "6fd04b3d1545c31ae069240fab0ad3b6d51d98f1785b2bb77b54a253df353ebd",
+  "heals/step_004/screen.png": "d4b2458d828ecadf3a558090f4d9079b8dffcda558e9a7a709d699802d950195",
+  "heals/step_004/template.png": "c6e8bd05f344066f595bf57ac4a1523be2b6153cf71d57b2ca27807ca872f0bb",
+  "heals/step_005/heal.json": "7137bd2e2e8d2601e1c182a67d396711c55806a85a728d4272a70242fc273576",
+  "heals/step_005/patch.json": "88b554680e2a36a5d93a532c6e3c995be7fedf8857988409502a0512e04e2655",
+  "heals/step_005/screen.png": "0cf5a5011ed7f8fa456398dc5e2a9ae679813decd68ce9e78ff7dd4f79006269",
+  "heals/step_005/template.png": "330ed0efd8adf2c753d080188513c917969d8aafbeed14d0da248694d371e1c4",
+  "heals/step_006/heal.json": "3d96fbc952e98e64398a24bb35838e5a7ab22258cfe9640a41894e4d63b6ffa9",
+  "heals/step_006/patch.json": "36f0e22ed46b0fd824f77418cc844368b6377a4794c0133111e42117f21fa720",
+  "heals/step_006/screen.png": "1b9ebdb9d885ba46909fc8fb32fccb362380b5b576e49e1e91bb1224c36a0d01",
+  "heals/step_006/template.png": "0d18d8e6f13f243c09ce02ef3646a6544c11bd7136e053a305782526a17c4bed",
+  "heals/step_007/heal.json": "6ff0d96a003a79c1e0019e0b53e52c35b13e9761f2c4ef4617f2686e1a5a6479",
+  "heals/step_007/patch.json": "8443f1cc75d1f3ae8850deba5f17fa14376464d7534464ed1bc3ee033b02aa66",
+  "heals/step_007/screen.png": "1bce149701c11c2c6595aacd14fedddf710cea19b2772071698557866ceb6b56",
+  "heals/step_007/template.png": "ce94517fe2c30adc2379a09c8e7fc0569bd06e5eb63bd24cdc401254dc5463da",
+  "heals/step_008/heal.json": "24550df84b0787d029dc93107c4ef75b56630720a4382f6ea3c6d1e3cdee1585",
+  "heals/step_008/patch.json": "fd9a4e1164b2422356e1a1f2967150712f1f8ee7d0f68725d37b08a06ceb833f",
+  "heals/step_008/screen.png": "d58dd3834cf115d70078e55f7e9e8ba30407db4c939154d309977df41dd76912",
+  "heals/step_008/template.png": "13148f2b0f7acf7cf845361f49c4bce75d767eced0aff8f6f833db483bcf9ea8",
+  "heals/step_010/heal.json": "e43dbbcddc14c4740fb69901d17ac8e2c7bf2649dffee7b25883da9985fe921b",
+  "heals/step_010/patch.json": "9ad14f25582935468fa2900a75b4808ebbd072bce75454bea90e8d64be94aa48",
+  "heals/step_010/screen.png": "62ac72d7b812e699194ef0cb7cc5dca4c59687e48d7c95809050240c3f3ae2fb",
+  "heals/step_010/template.png": "588067ceff3b713e39d281edfa82ccbe9ec3bf9e3bd79a0a9e494b61051512cc",
+  "steps/step_000_after.png": "3bc795168abc8711dbd98e9b00d2f281769a04f17f00fa26bb736e6b98c81f11",
+  "steps/step_000_before.png": "9e43117c8f5dcc3ba3a5e6eb636f9e736b6c31feaee783d080458d35a162c5e4",
+  "steps/step_001_after.png": "f3e6efed2eaf69d8e3f7ea4f3f03d6010b6520add327ca0d20cc8fe15b3304c0",
+  "steps/step_001_before.png": "3bc795168abc8711dbd98e9b00d2f281769a04f17f00fa26bb736e6b98c81f11",
+  "steps/step_002_after.png": "cce1a9982d9ab4aee39eb450454413232eec5c3231793376e55f1db972ff2665",
+  "steps/step_002_before.png": "f3e6efed2eaf69d8e3f7ea4f3f03d6010b6520add327ca0d20cc8fe15b3304c0",
+  "steps/step_003_after.png": "d4b2458d828ecadf3a558090f4d9079b8dffcda558e9a7a709d699802d950195",
+  "steps/step_003_before.png": "cce1a9982d9ab4aee39eb450454413232eec5c3231793376e55f1db972ff2665",
+  "steps/step_004_after.png": "0cf5a5011ed7f8fa456398dc5e2a9ae679813decd68ce9e78ff7dd4f79006269",
+  "steps/step_004_before.png": "d4b2458d828ecadf3a558090f4d9079b8dffcda558e9a7a709d699802d950195",
+  "steps/step_005_after.png": "1b9ebdb9d885ba46909fc8fb32fccb362380b5b576e49e1e91bb1224c36a0d01",
+  "steps/step_005_before.png": "0cf5a5011ed7f8fa456398dc5e2a9ae679813decd68ce9e78ff7dd4f79006269",
+  "steps/step_006_after.png": "1bce149701c11c2c6595aacd14fedddf710cea19b2772071698557866ceb6b56",
+  "steps/step_006_before.png": "1b9ebdb9d885ba46909fc8fb32fccb362380b5b576e49e1e91bb1224c36a0d01",
+  "steps/step_007_after.png": "d58dd3834cf115d70078e55f7e9e8ba30407db4c939154d309977df41dd76912",
+  "steps/step_007_before.png": "1bce149701c11c2c6595aacd14fedddf710cea19b2772071698557866ceb6b56",
+  "steps/step_008_after.png": "278f25f264525b4b68d93edc080b33a538f564ac90443b4c97c70ce48741672f",
+  "steps/step_008_before.png": "d58dd3834cf115d70078e55f7e9e8ba30407db4c939154d309977df41dd76912",
+  "steps/step_009_after.png": "eb3dcbc766977b9c098da061c640498e113ff8b4c0a86b878f2db99ffdf33d0a",
+  "steps/step_009_before.png": "278f25f264525b4b68d93edc080b33a538f564ac90443b4c97c70ce48741672f",
+  "steps/step_010_after.png": "0ebcd362b90dcc7373c13b8b570272facdf3dad65666174144f388fcf7613f9e",
+  "steps/step_010_before.png": "62ac72d7b812e699194ef0cb7cc5dca4c59687e48d7c95809050240c3f3ae2fb"
+ },
+ "environment": {
+  "platform": "linux",
+  "playwright": "1.64.1"
+ },
+ "report": {
+  "approved_unverified_effect_step_ids": [],
+  "attended_program_transition_evidence": [],
+  "bundle_content_digest": "fec73dc2a5e5839b60a7460c7d2d9e698e647a3b62c49abf1ed531d8c5a8238f",
+  "business_decision_evidence": [],
+  "canceled": false,
+  "change_ledger": [
+   {
+    "attempt_state": "delivered",
+    "effects": [],
+    "intent": "click 'Save Encounter'",
+    "may_need_undo": true,
+    "position": 11,
+    "status": "unknown",
+    "step_id": "step_010",
+    "undo_id": null
+   }
+  ],
+  "effect_journal": [
+   {
+    "approved_unverified": false,
+    "attempt_state": "delivered",
+    "collateral_reconciliation_actions": 0,
+    "consequential": true,
+    "effect_verified": null,
+    "intended_effect_contract_hashes": [],
+    "intent": "click 'Save Encounter'",
+    "observed_at": null,
+    "observed_effect": "unknown",
+    "step_id": "step_010",
+    "verification_performed": false
+   }
+  ],
+  "est_model_cost_usd": 0.0,
+  "execution_completed": true,
+  "execution_entry_url": null,
+  "execution_origin": null,
+  "execution_outcome": "COMPLETED_UNVERIFIED",
+  "execution_profile": "demo",
+  "execution_target_kind": null,
+  "external_network_calls": "unknown",
+  "governed_approval_source": null,
+  "governed_authorization_created_at": null,
+  "governed_authorization_id": null,
+  "governed_authorized_effect_contracts": {},
+  "governed_minimum_effect_tier": null,
+  "governed_policy_contract_sha256": null,
+  "governed_policy_name": null,
+  "governed_qualification_campaign_id_sha256": null,
+  "governed_qualification_case_action_paths": {},
+  "governed_qualification_case_id_sha256": null,
+  "governed_qualification_case_input_sha256": null,
+  "governed_qualification_case_kind": null,
+  "governed_qualification_fault_driver_contract_sha256": null,
+  "governed_qualification_fault_driver_id": null,
+  "governed_qualification_fault_driver_key_id": null,
+  "governed_qualification_fault_step_id_sha256": null,
+  "governed_qualification_project_contract_sha256": null,
+  "governed_qualification_project_id": null,
+  "governed_qualification_project_revision": null,
+  "governed_qualification_run_id_sha256": null,
+  "governed_qualified_effect_requirements": [],
+  "governed_runtime_inputs_digest": null,
+  "halt": null,
+  "heal_count": 8,
+  "idempotency_key": null,
+  "idempotent_replay": false,
+  "identity_applicable_steps": 8,
+  "identity_armed_steps": 6,
+  "identity_unarmed": [
+   {
+    "intent": "click recorded visual target",
+    "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+    "step_id": "step_002"
+   },
+   {
+    "intent": "click 'Sign In'",
+    "reason": "the only readable row text is the target's own label (mutable evidence, excluded from identity)",
+    "step_id": "step_004"
+   }
+  ],
+  "loop_iterations": [],
+  "model_calls": 0,
+  "observed_application_sha256": null,
+  "observed_application_version_sha256": null,
+  "observed_environment_binding_sha256": null,
+  "observed_environment_digest": null,
+  "observed_session_sha256": null,
+  "outcome_envelope": {
+   "compensation_actions": 0,
+   "evidence_classes": [
+    "identity",
+    "postcondition"
+   ],
+   "execution_completed": true,
+   "external_network_calls": "unknown",
+   "model_calls": 0,
+   "outcome": "COMPLETED_UNVERIFIED",
+   "passed_contracts": {
+    "authorization": 0,
+    "effect": 0,
+    "identity": 0,
+    "postcondition": 18
+   },
+   "postcondition_evidence": [
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "0012cc7dab464d2bda06aad7074c16fc67e24003eb485a10f45342b874b5563b",
+     "result_index": 0,
+     "step_contract_sha256": "b73ab43f962fd78edc8552b17c995a49ee4df914e6ed4bcab3e83adeadfc0296",
+     "step_index": 0,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "c05b0c4ec91e430a40d834fac8c0efa9ea3ab8d91579c0a1a330454b3e253011",
+     "result_index": 1,
+     "step_contract_sha256": "7db2c57ede1c11a8b54dcea8ffa671ada17f1570b87299b8072d028bf7ce0bbc",
+     "step_index": 1,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 1,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "35c7a20e3c1fb123a0a70f12f05e99e8eb58fe8b5424bc4ee94c56093d964208",
+     "result_index": 1,
+     "step_contract_sha256": "7db2c57ede1c11a8b54dcea8ffa671ada17f1570b87299b8072d028bf7ce0bbc",
+     "step_index": 1,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "intrinsic_input_readback",
+     "contract_sha256": "bc0f848c079bc69cf1db66862a17f8d792757be50240960663c9fc842d58e746",
+     "result_index": 1,
+     "step_contract_sha256": "7db2c57ede1c11a8b54dcea8ffa671ada17f1570b87299b8072d028bf7ce0bbc",
+     "step_index": 1,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "2d9242772e6e034135a2603f46c7c817f58dedc93ea190afd44d07636531c798",
+     "result_index": 2,
+     "step_contract_sha256": "f6dd97183cf5c3a25d3da79e4d013d64e82fd65e9e87821e0d8c06087d0b6772",
+     "step_index": 2,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "d42211c47d6087809121a2a6ce9342809a0b6c6adb5f72e66b3b1fb46ea59dc5",
+     "result_index": 3,
+     "step_contract_sha256": "48e381571d821f2df6146c8045092c5f40b5dcd339985477c416d49065675dd3",
+     "step_index": 3,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "intrinsic_input_readback",
+     "contract_sha256": "8d7720a455a1872aba933a5d0123544d01f66aa4ec0662258950044c5506c855",
+     "result_index": 3,
+     "step_contract_sha256": "48e381571d821f2df6146c8045092c5f40b5dcd339985477c416d49065675dd3",
+     "step_index": 3,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "42f752d02043921afd9974c53d595d07af94c804b8c87f8065d2e44f0e4a117c",
+     "result_index": 4,
+     "step_contract_sha256": "9442103e8d0384049e1966c87d31ce59792a36a61f0a780fa9a8a344b5983191",
+     "step_index": 4,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 1,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "701dde0b1a4df305cd969da278fe6d8df56bd9a55aaeb4568fbeba61ff079dc1",
+     "result_index": 4,
+     "step_contract_sha256": "9442103e8d0384049e1966c87d31ce59792a36a61f0a780fa9a8a344b5983191",
+     "step_index": 4,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "999fee233dd8c4d32d9a2a7c2e0577f097ce067bf5422a5bdc417dbc15ab5706",
+     "result_index": 5,
+     "step_contract_sha256": "0f3f3fc0a9e4d010017fe2b258c44f38004485047498f13659b243c61759a7d7",
+     "step_index": 5,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 1,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "76288bf96854bc9bcc2e5e7fa39e49bde748fe4cc97435ebd225cf15bcb2e9da",
+     "result_index": 5,
+     "step_contract_sha256": "0f3f3fc0a9e4d010017fe2b258c44f38004485047498f13659b243c61759a7d7",
+     "step_index": 5,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "df52da3e3177966f6c4746091759640e6e6029b3ed9a714c3112c261a8e97837",
+     "result_index": 6,
+     "step_contract_sha256": "79803ce0beb0dad2488b74ab60beb142654e19f43683ef256295f0bff094d566",
+     "step_index": 6,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 1,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "29eda2007bc40d6a940e3cbbcd048dd0d678f95f60e2318b1f5f541e6387fde7",
+     "result_index": 6,
+     "step_contract_sha256": "79803ce0beb0dad2488b74ab60beb142654e19f43683ef256295f0bff094d566",
+     "step_index": 6,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "3128b052b3e747aba16d3ea173d3e080df540245a5de74223063f35d412dcd4f",
+     "result_index": 7,
+     "step_contract_sha256": "613e37e116ab42029f42e3a9583c030cee27fa220fcacbb1b038a74610b3dbb6",
+     "step_index": 7,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "24bb35c6dc63834332a481acf64c96481d9685ec4e68eaf9d7eeec4f64f7d825",
+     "result_index": 8,
+     "step_contract_sha256": "1c6c7dd0d2bcff3227331af88af0ff778888adfcf58e60191c9615413a5c5d1a",
+     "step_index": 8,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "intrinsic_input_readback",
+     "contract_sha256": "cdb5af77f85f9007c1838791cce7c0c5f7b8135de3d0063d32fe7623dc575921",
+     "result_index": 9,
+     "step_contract_sha256": "f31a2184e778d9608575479adda41e1aafb292bbc9c5dce5f74a6f3203545907",
+     "step_index": 9,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "f3ace5d64ecdc21a521ea8fa5159b3237fbbd2cf66d9a151cccf3ec8eb0af50b",
+     "result_index": 10,
+     "step_contract_sha256": "26fbb91828d18d81ccd467fb0207482eae03b6e84e7e462feeff3d86a55ebd69",
+     "step_index": 10,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 1,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "3f5268f243361f8b9e56b394276051a2409846a1d07c8a4b813b281a8fc915d7",
+     "result_index": 10,
+     "step_contract_sha256": "26fbb91828d18d81ccd467fb0207482eae03b6e84e7e462feeff3d86a55ebd69",
+     "step_index": 10,
+     "verdict": "passed",
+     "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+    }
+   ],
+   "production_eligible": false,
+   "profile": "demo",
+   "required_contracts": {
+    "authorization": 0,
+    "effect": 0,
+    "identity": 0,
+    "postcondition": 18
+   },
+   "version": "openadapt.execution-outcome/v1",
+   "workflow_contract_sha256": "904791cbbdebb2d2604554475116672806e6085d2016e4a18caf73f6e5d0b41a"
+  },
+  "parameter_schema_sha256": "b9706e023d1b70651493a1b2b68bb1939f7173f74b5e574d4f9fa57acc89fc6d",
+  "params": {
+   "note": "Golden triage booking three months"
+  },
+  "production_eligible": false,
+  "program_exception_evidence": [],
+  "program_transition_evidence": [],
+  "qualification_environment_observer_contract_sha256": null,
+  "qualification_environment_observer_id": null,
+  "qualification_evidence_only": false,
+  "qualification_fault_mutations": [],
+  "readback": null,
+  "recorded_surface": null,
+  "render_scale": null,
+  "required_identity_step_ids": [],
+  "results": [
+   {
+    "actuation": null,
+    "after_png": "steps/step_000_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_000_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": {
+     "applied": true,
+     "kind": "anchor_refresh",
+     "new_anchor": {
+      "click_point": [
+       214,
+       195
+      ],
+      "context_text": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": {
+       "band_len": 0,
+       "concats": [],
+       "param_token_indices": {},
+       "rests_on_confusable_identifier": false,
+       "salt": "911a5096acf288523d50080fd3dd74de",
+       "schema_version": 1,
+       "signal_hashes": {
+        "structured|exact|": "8542b1fe0e4a708dbf8d7d127ef488b64ae4011d7eac2655ef2fd492c4f1516d",
+        "structured|normalized|casefold": "5b3e20fe152a1c4267454faf8de247dc0a923b22e1ca242324bcb3ceb083c086",
+        "structured|normalized|casefold,collapse_whitespace": "5b3e20fe152a1c4267454faf8de247dc0a923b22e1ca242324bcb3ceb083c086",
+        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "5b3e20fe152a1c4267454faf8de247dc0a923b22e1ca242324bcb3ceb083c086",
+        "structured|normalized|casefold,strip_punctuation": "5b3e20fe152a1c4267454faf8de247dc0a923b22e1ca242324bcb3ceb083c086",
+        "structured|normalized|collapse_whitespace": "8542b1fe0e4a708dbf8d7d127ef488b64ae4011d7eac2655ef2fd492c4f1516d",
+        "structured|normalized|collapse_whitespace,strip_punctuation": "8542b1fe0e4a708dbf8d7d127ef488b64ae4011d7eac2655ef2fd492c4f1516d",
+        "structured|normalized|strip_punctuation": "8542b1fe0e4a708dbf8d7d127ef488b64ae4011d7eac2655ef2fd492c4f1516d",
+        "structured|normalized|unicode_nfkc": "8542b1fe0e4a708dbf8d7d127ef488b64ae4011d7eac2655ef2fd492c4f1516d",
+        "structured|normalized|unicode_nfkc,casefold": "5b3e20fe152a1c4267454faf8de247dc0a923b22e1ca242324bcb3ceb083c086",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "5b3e20fe152a1c4267454faf8de247dc0a923b22e1ca242324bcb3ceb083c086",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "5b3e20fe152a1c4267454faf8de247dc0a923b22e1ca242324bcb3ceb083c086",
+        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "5b3e20fe152a1c4267454faf8de247dc0a923b22e1ca242324bcb3ceb083c086",
+        "structured|normalized|unicode_nfkc,collapse_whitespace": "8542b1fe0e4a708dbf8d7d127ef488b64ae4011d7eac2655ef2fd492c4f1516d",
+        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "8542b1fe0e4a708dbf8d7d127ef488b64ae4011d7eac2655ef2fd492c4f1516d",
+        "structured|normalized|unicode_nfkc,strip_punctuation": "8542b1fe0e4a708dbf8d7d127ef488b64ae4011d7eac2655ef2fd492c4f1516d"
+       },
+       "structured": "5b3e20fe152a1c42",
+       "tokens": []
+      },
+      "landmarks": [
+       {
+        "distance_px": 130,
+        "dx_px": 76,
+        "dy_px": 106,
+        "ocr_text": "Sign in to MockMed",
+        "relation": "above"
+       },
+       {
+        "distance_px": 132,
+        "dx_px": 129,
+        "dy_px": 29,
+        "ocr_text": "Username",
+        "relation": "left_of"
+       }
+      ],
+      "ocr_text": null,
+      "region": [
+       134,
+       163,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Username",
+       "role": "textbox",
+       "selector": "#username",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_000.png"
+     },
+     "old_anchor": {
+      "click_point": [
+       214,
+       195
+      ],
+      "context_text": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": {
+       "band_len": 0,
+       "concats": [],
+       "param_token_indices": {},
+       "rests_on_confusable_identifier": false,
+       "salt": "911a5096acf288523d50080fd3dd74de",
+       "schema_version": 1,
+       "signal_hashes": {
+        "structured|exact|": "8542b1fe0e4a708dbf8d7d127ef488b64ae4011d7eac2655ef2fd492c4f1516d",
+        "structured|normalized|casefold": "5b3e20fe152a1c4267454faf8de247dc0a923b22e1ca242324bcb3ceb083c086",
+        "structured|normalized|casefold,collapse_whitespace": "5b3e20fe152a1c4267454faf8de247dc0a923b22e1ca242324bcb3ceb083c086",
+        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "5b3e20fe152a1c4267454faf8de247dc0a923b22e1ca242324bcb3ceb083c086",
+        "structured|normalized|casefold,strip_punctuation": "5b3e20fe152a1c4267454faf8de247dc0a923b22e1ca242324bcb3ceb083c086",
+        "structured|normalized|collapse_whitespace": "8542b1fe0e4a708dbf8d7d127ef488b64ae4011d7eac2655ef2fd492c4f1516d",
+        "structured|normalized|collapse_whitespace,strip_punctuation": "8542b1fe0e4a708dbf8d7d127ef488b64ae4011d7eac2655ef2fd492c4f1516d",
+        "structured|normalized|strip_punctuation": "8542b1fe0e4a708dbf8d7d127ef488b64ae4011d7eac2655ef2fd492c4f1516d",
+        "structured|normalized|unicode_nfkc": "8542b1fe0e4a708dbf8d7d127ef488b64ae4011d7eac2655ef2fd492c4f1516d",
+        "structured|normalized|unicode_nfkc,casefold": "5b3e20fe152a1c4267454faf8de247dc0a923b22e1ca242324bcb3ceb083c086",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "5b3e20fe152a1c4267454faf8de247dc0a923b22e1ca242324bcb3ceb083c086",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "5b3e20fe152a1c4267454faf8de247dc0a923b22e1ca242324bcb3ceb083c086",
+        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "5b3e20fe152a1c4267454faf8de247dc0a923b22e1ca242324bcb3ceb083c086",
+        "structured|normalized|unicode_nfkc,collapse_whitespace": "8542b1fe0e4a708dbf8d7d127ef488b64ae4011d7eac2655ef2fd492c4f1516d",
+        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "8542b1fe0e4a708dbf8d7d127ef488b64ae4011d7eac2655ef2fd492c4f1516d",
+        "structured|normalized|unicode_nfkc,strip_punctuation": "8542b1fe0e4a708dbf8d7d127ef488b64ae4011d7eac2655ef2fd492c4f1516d"
+       },
+       "structured": "5b3e20fe152a1c42",
+       "tokens": []
+      },
+      "landmarks": [
+       {
+        "distance_px": 130,
+        "dx_px": 76,
+        "dy_px": 106,
+        "ocr_text": "Sign in to MockMed",
+        "relation": "above"
+       },
+       {
+        "distance_px": 132,
+        "dx_px": 129,
+        "dy_px": 29,
+        "ocr_text": "Username",
+        "relation": "left_of"
+       }
+      ],
+      "ocr_text": null,
+      "region": [
+       134,
+       163,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Username",
+       "role": "textbox",
+       "selector": "#username",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_000.png"
+     },
+     "rung_used": "geometry",
+     "screenshot": "heals/step_000/screen.png",
+     "step_id": "step_000"
+    },
+    "identity": {
+     "abstain_reason": null,
+     "coverage": 1.0,
+     "expected": "<structured identity template>",
+     "hover": null,
+     "known_id_evidence": null,
+     "known_id_halt": null,
+     "look_halt": null,
+     "looks": [],
+     "mode": "structured",
+     "observed": "Username Password Sign In",
+     "param": null,
+     "pixel_evidence": null,
+     "quorum_required": null,
+     "quorum_verified": null,
+     "signal_evidence": [],
+     "status": "verified"
+    },
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click recorded visual target",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 0.9,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      214,
+      195
+     ],
+     "rung": "geometry",
+     "structural_handle": null
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_000",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_001_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_001_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": null,
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": true,
+    "intent": "type 'nurse.demo'",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": null,
+    "risk": "reversible",
+    "risk_explanation": "action has no retained consequential commit signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_001",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_002_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_002_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": {
+     "applied": true,
+     "kind": "anchor_refresh",
+     "new_anchor": {
+      "click_point": [
+       214,
+       264
+      ],
+      "context_text": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": null,
+      "landmarks": [
+       {
+        "distance_px": 112,
+        "dx_px": 94,
+        "dy_px": -60,
+        "ocr_text": "Sign In",
+        "relation": "left_of"
+       },
+       {
+        "distance_px": 132,
+        "dx_px": 129,
+        "dy_px": 30,
+        "ocr_text": "Password",
+        "relation": "left_of"
+       }
+      ],
+      "ocr_text": null,
+      "region": [
+       134,
+       232,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Password",
+       "role": "textbox",
+       "selector": "#password",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_002.png"
+     },
+     "old_anchor": {
+      "click_point": [
+       214,
+       264
+      ],
+      "context_text": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": null,
+      "landmarks": [
+       {
+        "distance_px": 112,
+        "dx_px": 94,
+        "dy_px": -60,
+        "ocr_text": "Sign In",
+        "relation": "left_of"
+       },
+       {
+        "distance_px": 132,
+        "dx_px": 129,
+        "dy_px": 30,
+        "ocr_text": "Password",
+        "relation": "left_of"
+       }
+      ],
+      "ocr_text": null,
+      "region": [
+       134,
+       232,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Password",
+       "role": "textbox",
+       "selector": "#password",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_002.png"
+     },
+     "rung_used": "geometry",
+     "screenshot": "heals/step_002/screen.png",
+     "step_id": "step_002"
+    },
+    "identity": null,
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click recorded visual target",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 0.9,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      214,
+      264
+     ],
+     "rung": "geometry",
+     "structural_handle": null
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_002",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_003_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_003_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": null,
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": true,
+    "intent": "type 'mockmed-demo-pass'",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": null,
+    "risk": "reversible",
+    "risk_explanation": "action has no retained consequential commit signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_003",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_004_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_004_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": {
+     "applied": true,
+     "kind": "anchor_refresh",
+     "new_anchor": {
+      "click_point": [
+       120,
+       324
+      ],
+      "context_text": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": null,
+      "landmarks": [
+       {
+        "distance_px": 95,
+        "dx_px": 34,
+        "dy_px": 89,
+        "ocr_text": "Password",
+        "relation": "above"
+       },
+       {
+        "distance_px": 130,
+        "dx_px": 19,
+        "dy_px": 129,
+        "ocr_text": "nurse.demo",
+        "relation": "above"
+       }
+      ],
+      "ocr_text": "Sign In",
+      "region": [
+       40,
+       292,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Sign In",
+       "role": "button",
+       "selector": "#signin",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_004.png"
+     },
+     "old_anchor": {
+      "click_point": [
+       119,
+       324
+      ],
+      "context_text": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": null,
+      "landmarks": [
+       {
+        "distance_px": 95,
+        "dx_px": 34,
+        "dy_px": 89,
+        "ocr_text": "Password",
+        "relation": "above"
+       },
+       {
+        "distance_px": 130,
+        "dx_px": 19,
+        "dy_px": 129,
+        "ocr_text": "nurse.demo",
+        "relation": "above"
+       }
+      ],
+      "ocr_text": "Sign In",
+      "region": [
+       39,
+       292,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Sign In",
+       "role": "button",
+       "selector": "#signin",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_004.png"
+     },
+     "rung_used": "ocr",
+     "screenshot": "heals/step_004/screen.png",
+     "step_id": "step_004"
+    },
+    "identity": null,
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click 'Sign In'",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 1.0,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      120,
+      324
+     ],
+     "rung": "ocr",
+     "structural_handle": null
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_004",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_005_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_005_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": {
+     "applied": true,
+     "kind": "anchor_refresh",
+     "new_anchor": {
+      "click_point": [
+       777,
+       186
+      ],
+      "context_text": "Jane Sample Knee pain referral High",
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": {
+       "band_len": 30,
+       "concats": [
+        {
+         "c": "69675b2937c1909a",
+         "digit": false,
+         "i": 0,
+         "n": 10,
+         "name": true,
+         "r": "69675b2937c1909a",
+         "size": 2
+        },
+        {
+         "c": "dbe64c04bc7185b6",
+         "digit": false,
+         "i": 0,
+         "n": 14,
+         "name": true,
+         "r": "dbe64c04bc7185b6",
+         "size": 3
+        },
+        {
+         "c": "56018def605c583a",
+         "digit": false,
+         "i": 0,
+         "n": 18,
+         "name": true,
+         "r": "6df16f469c1ab4d1",
+         "size": 4
+        },
+        {
+         "c": "b821d403e41aaaff",
+         "digit": false,
+         "i": 1,
+         "n": 10,
+         "name": true,
+         "r": "b821d403e41aaaff",
+         "size": 2
+        },
+        {
+         "c": "30f085740d300e1d",
+         "digit": false,
+         "i": 1,
+         "n": 14,
+         "name": true,
+         "r": "8eebae20ffb49862",
+         "size": 3
+        },
+        {
+         "c": "276dd340e53188c6",
+         "digit": false,
+         "i": 1,
+         "n": 22,
+         "name": true,
+         "r": "f5973e32249138de",
+         "size": 4
+        },
+        {
+         "c": "788ba58ce0f8ff18",
+         "digit": false,
+         "i": 2,
+         "n": 8,
+         "name": true,
+         "r": "9da2a27f3ea7ac32",
+         "size": 2
+        },
+        {
+         "c": "8fca29d0fff9f063",
+         "digit": false,
+         "i": 2,
+         "n": 16,
+         "name": true,
+         "r": "1d29319cd27831c2",
+         "size": 3
+        },
+        {
+         "c": "37e34615487ed058",
+         "digit": false,
+         "i": 2,
+         "n": 20,
+         "name": true,
+         "r": "11229dedf7c779e4",
+         "size": 4
+        },
+        {
+         "c": "12093ff1c800b92c",
+         "digit": false,
+         "i": 3,
+         "n": 12,
+         "name": true,
+         "r": "285db341ce41190d",
+         "size": 2
+        },
+        {
+         "c": "fe555202397f9f9c",
+         "digit": false,
+         "i": 3,
+         "n": 16,
+         "name": true,
+         "r": "badcb77d3805aa8c",
+         "size": 3
+        },
+        {
+         "c": "be66deb82e3efd44",
+         "digit": false,
+         "i": 4,
+         "n": 12,
+         "name": true,
+         "r": "f620a3d6cc3f4d08",
+         "size": 2
+        }
+       ],
+       "param_token_indices": {},
+       "rests_on_confusable_identifier": false,
+       "salt": "911a5096acf288523d50080fd3dd74de",
+       "schema_version": 1,
+       "signal_hashes": {
+        "captured_context|exact|": "719511b999019af3bff78edcdd690d2cc50ada94546e7ac4a6f3bf4c5a4faf71",
+        "captured_context|normalized|casefold": "e495c27f885112ce51d6aeeff2de52dadd629f0cb488e109167ea507578fa241",
+        "captured_context|normalized|casefold,collapse_whitespace": "e495c27f885112ce51d6aeeff2de52dadd629f0cb488e109167ea507578fa241",
+        "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "e495c27f885112ce51d6aeeff2de52dadd629f0cb488e109167ea507578fa241",
+        "captured_context|normalized|casefold,strip_punctuation": "e495c27f885112ce51d6aeeff2de52dadd629f0cb488e109167ea507578fa241",
+        "captured_context|normalized|collapse_whitespace": "719511b999019af3bff78edcdd690d2cc50ada94546e7ac4a6f3bf4c5a4faf71",
+        "captured_context|normalized|collapse_whitespace,strip_punctuation": "719511b999019af3bff78edcdd690d2cc50ada94546e7ac4a6f3bf4c5a4faf71",
+        "captured_context|normalized|strip_punctuation": "719511b999019af3bff78edcdd690d2cc50ada94546e7ac4a6f3bf4c5a4faf71",
+        "captured_context|normalized|unicode_nfkc": "719511b999019af3bff78edcdd690d2cc50ada94546e7ac4a6f3bf4c5a4faf71",
+        "captured_context|normalized|unicode_nfkc,casefold": "e495c27f885112ce51d6aeeff2de52dadd629f0cb488e109167ea507578fa241",
+        "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "e495c27f885112ce51d6aeeff2de52dadd629f0cb488e109167ea507578fa241",
+        "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "e495c27f885112ce51d6aeeff2de52dadd629f0cb488e109167ea507578fa241",
+        "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "e495c27f885112ce51d6aeeff2de52dadd629f0cb488e109167ea507578fa241",
+        "captured_context|normalized|unicode_nfkc,collapse_whitespace": "719511b999019af3bff78edcdd690d2cc50ada94546e7ac4a6f3bf4c5a4faf71",
+        "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "719511b999019af3bff78edcdd690d2cc50ada94546e7ac4a6f3bf4c5a4faf71",
+        "captured_context|normalized|unicode_nfkc,strip_punctuation": "719511b999019af3bff78edcdd690d2cc50ada94546e7ac4a6f3bf4c5a4faf71",
+        "structured|exact|": "b783353af22e7279ae186d82f5dc0067bffa6502304686955791955a4094a2c5",
+        "structured|normalized|casefold": "eddd26191036238d93ee49297ab3f9322c8342142d1835fafa62bb595ba443f8",
+        "structured|normalized|casefold,collapse_whitespace": "eddd26191036238d93ee49297ab3f9322c8342142d1835fafa62bb595ba443f8",
+        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "eddd26191036238d93ee49297ab3f9322c8342142d1835fafa62bb595ba443f8",
+        "structured|normalized|casefold,strip_punctuation": "eddd26191036238d93ee49297ab3f9322c8342142d1835fafa62bb595ba443f8",
+        "structured|normalized|collapse_whitespace": "b783353af22e7279ae186d82f5dc0067bffa6502304686955791955a4094a2c5",
+        "structured|normalized|collapse_whitespace,strip_punctuation": "b783353af22e7279ae186d82f5dc0067bffa6502304686955791955a4094a2c5",
+        "structured|normalized|strip_punctuation": "b783353af22e7279ae186d82f5dc0067bffa6502304686955791955a4094a2c5",
+        "structured|normalized|unicode_nfkc": "b783353af22e7279ae186d82f5dc0067bffa6502304686955791955a4094a2c5",
+        "structured|normalized|unicode_nfkc,casefold": "eddd26191036238d93ee49297ab3f9322c8342142d1835fafa62bb595ba443f8",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "eddd26191036238d93ee49297ab3f9322c8342142d1835fafa62bb595ba443f8",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "eddd26191036238d93ee49297ab3f9322c8342142d1835fafa62bb595ba443f8",
+        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "eddd26191036238d93ee49297ab3f9322c8342142d1835fafa62bb595ba443f8",
+        "structured|normalized|unicode_nfkc,collapse_whitespace": "b783353af22e7279ae186d82f5dc0067bffa6502304686955791955a4094a2c5",
+        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "b783353af22e7279ae186d82f5dc0067bffa6502304686955791955a4094a2c5",
+        "structured|normalized|unicode_nfkc,strip_punctuation": "b783353af22e7279ae186d82f5dc0067bffa6502304686955791955a4094a2c5"
+       },
+       "structured": "eddd26191036238d",
+       "tokens": [
+        {
+         "alpha": true,
+         "c": "9e8e1645fdec34d0",
+         "digit": false,
+         "gen": false,
+         "glyph": false,
+         "idsh": false,
+         "n": 4,
+         "name": true,
+         "r": "9e8e1645fdec34d0"
+        },
+        {
+         "alpha": true,
+         "c": "0d68e18d565ed360",
+         "digit": false,
+         "gen": false,
+         "glyph": false,
+         "idsh": false,
+         "n": 6,
+         "name": true,
+         "r": "0d68e18d565ed360"
+        },
+        {
+         "alpha": true,
+         "c": "6b80bb4112f844a5",
+         "digit": false,
+         "gen": false,
+         "glyph": false,
+         "idsh": false,
+         "n": 4,
+         "name": true,
+         "r": "6b80bb4112f844a5"
+        },
+        {
+         "alpha": true,
+         "c": "20338486779884fb",
+         "digit": false,
+         "gen": false,
+         "glyph": false,
+         "idsh": false,
+         "n": 4,
+         "name": true,
+         "r": "4c5b884487197d9d"
+        },
+        {
+         "alpha": true,
+         "c": "8a2c79da10756add",
+         "digit": false,
+         "gen": false,
+         "glyph": false,
+         "idsh": false,
+         "n": 8,
+         "name": true,
+         "r": "8a2c79da10756add"
+        },
+        {
+         "alpha": true,
+         "c": "bd8a1dea16c274d2",
+         "digit": false,
+         "gen": false,
+         "glyph": false,
+         "idsh": false,
+         "n": 4,
+         "name": true,
+         "r": "63c0d27e3746e3af"
+        }
+       ]
+      },
+      "landmarks": [
+       {
+        "distance_px": 52,
+        "dx_px": 21,
+        "dy_px": 48,
+        "ocr_text": "Action",
+        "relation": "above"
+       },
+       {
+        "distance_px": 58,
+        "dx_px": -2,
+        "dy_px": -58,
+        "ocr_text": "Open",
+        "relation": "below"
+       }
+      ],
+      "ocr_text": "Open",
+      "region": [
+       697,
+       154,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Open",
+       "role": "button",
+       "selector": "#open-p1",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_005.png"
+     },
+     "old_anchor": {
+      "click_point": [
+       775,
+       186
+      ],
+      "context_text": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": {
+       "band_len": 30,
+       "concats": [
+        {
+         "c": "69675b2937c1909a",
+         "digit": false,
+         "i": 0,
+         "n": 10,
+         "name": true,
+         "r": "69675b2937c1909a",
+         "size": 2
+        },
+        {
+         "c": "dbe64c04bc7185b6",
+         "digit": false,
+         "i": 0,
+         "n": 14,
+         "name": true,
+         "r": "dbe64c04bc7185b6",
+         "size": 3
+        },
+        {
+         "c": "56018def605c583a",
+         "digit": false,
+         "i": 0,
+         "n": 18,
+         "name": true,
+         "r": "6df16f469c1ab4d1",
+         "size": 4
+        },
+        {
+         "c": "b821d403e41aaaff",
+         "digit": false,
+         "i": 1,
+         "n": 10,
+         "name": true,
+         "r": "b821d403e41aaaff",
+         "size": 2
+        },
+        {
+         "c": "30f085740d300e1d",
+         "digit": false,
+         "i": 1,
+         "n": 14,
+         "name": true,
+         "r": "8eebae20ffb49862",
+         "size": 3
+        },
+        {
+         "c": "276dd340e53188c6",
+         "digit": false,
+         "i": 1,
+         "n": 22,
+         "name": true,
+         "r": "f5973e32249138de",
+         "size": 4
+        },
+        {
+         "c": "788ba58ce0f8ff18",
+         "digit": false,
+         "i": 2,
+         "n": 8,
+         "name": true,
+         "r": "9da2a27f3ea7ac32",
+         "size": 2
+        },
+        {
+         "c": "8fca29d0fff9f063",
+         "digit": false,
+         "i": 2,
+         "n": 16,
+         "name": true,
+         "r": "1d29319cd27831c2",
+         "size": 3
+        },
+        {
+         "c": "37e34615487ed058",
+         "digit": false,
+         "i": 2,
+         "n": 20,
+         "name": true,
+         "r": "11229dedf7c779e4",
+         "size": 4
+        },
+        {
+         "c": "12093ff1c800b92c",
+         "digit": false,
+         "i": 3,
+         "n": 12,
+         "name": true,
+         "r": "285db341ce41190d",
+         "size": 2
+        },
+        {
+         "c": "fe555202397f9f9c",
+         "digit": false,
+         "i": 3,
+         "n": 16,
+         "name": true,
+         "r": "badcb77d3805aa8c",
+         "size": 3
+        },
+        {
+         "c": "be66deb82e3efd44",
+         "digit": false,
+         "i": 4,
+         "n": 12,
+         "name": true,
+         "r": "f620a3d6cc3f4d08",
+         "size": 2
+        }
+       ],
+       "param_token_indices": {},
+       "rests_on_confusable_identifier": false,
+       "salt": "911a5096acf288523d50080fd3dd74de",
+       "schema_version": 1,
+       "signal_hashes": {
+        "captured_context|exact|": "719511b999019af3bff78edcdd690d2cc50ada94546e7ac4a6f3bf4c5a4faf71",
+        "captured_context|normalized|casefold": "e495c27f885112ce51d6aeeff2de52dadd629f0cb488e109167ea507578fa241",
+        "captured_context|normalized|casefold,collapse_whitespace": "e495c27f885112ce51d6aeeff2de52dadd629f0cb488e109167ea507578fa241",
+        "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "e495c27f885112ce51d6aeeff2de52dadd629f0cb488e109167ea507578fa241",
+        "captured_context|normalized|casefold,strip_punctuation": "e495c27f885112ce51d6aeeff2de52dadd629f0cb488e109167ea507578fa241",
+        "captured_context|normalized|collapse_whitespace": "719511b999019af3bff78edcdd690d2cc50ada94546e7ac4a6f3bf4c5a4faf71",
+        "captured_context|normalized|collapse_whitespace,strip_punctuation": "719511b999019af3bff78edcdd690d2cc50ada94546e7ac4a6f3bf4c5a4faf71",
+        "captured_context|normalized|strip_punctuation": "719511b999019af3bff78edcdd690d2cc50ada94546e7ac4a6f3bf4c5a4faf71",
+        "captured_context|normalized|unicode_nfkc": "719511b999019af3bff78edcdd690d2cc50ada94546e7ac4a6f3bf4c5a4faf71",
+        "captured_context|normalized|unicode_nfkc,casefold": "e495c27f885112ce51d6aeeff2de52dadd629f0cb488e109167ea507578fa241",
+        "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "e495c27f885112ce51d6aeeff2de52dadd629f0cb488e109167ea507578fa241",
+        "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "e495c27f885112ce51d6aeeff2de52dadd629f0cb488e109167ea507578fa241",
+        "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "e495c27f885112ce51d6aeeff2de52dadd629f0cb488e109167ea507578fa241",
+        "captured_context|normalized|unicode_nfkc,collapse_whitespace": "719511b999019af3bff78edcdd690d2cc50ada94546e7ac4a6f3bf4c5a4faf71",
+        "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "719511b999019af3bff78edcdd690d2cc50ada94546e7ac4a6f3bf4c5a4faf71",
+        "captured_context|normalized|unicode_nfkc,strip_punctuation": "719511b999019af3bff78edcdd690d2cc50ada94546e7ac4a6f3bf4c5a4faf71",
+        "structured|exact|": "b783353af22e7279ae186d82f5dc0067bffa6502304686955791955a4094a2c5",
+        "structured|normalized|casefold": "eddd26191036238d93ee49297ab3f9322c8342142d1835fafa62bb595ba443f8",
+        "structured|normalized|casefold,collapse_whitespace": "eddd26191036238d93ee49297ab3f9322c8342142d1835fafa62bb595ba443f8",
+        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "eddd26191036238d93ee49297ab3f9322c8342142d1835fafa62bb595ba443f8",
+        "structured|normalized|casefold,strip_punctuation": "eddd26191036238d93ee49297ab3f9322c8342142d1835fafa62bb595ba443f8",
+        "structured|normalized|collapse_whitespace": "b783353af22e7279ae186d82f5dc0067bffa6502304686955791955a4094a2c5",
+        "structured|normalized|collapse_whitespace,strip_punctuation": "b783353af22e7279ae186d82f5dc0067bffa6502304686955791955a4094a2c5",
+        "structured|normalized|strip_punctuation": "b783353af22e7279ae186d82f5dc0067bffa6502304686955791955a4094a2c5",
+        "structured|normalized|unicode_nfkc": "b783353af22e7279ae186d82f5dc0067bffa6502304686955791955a4094a2c5",
+        "structured|normalized|unicode_nfkc,casefold": "eddd26191036238d93ee49297ab3f9322c8342142d1835fafa62bb595ba443f8",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "eddd26191036238d93ee49297ab3f9322c8342142d1835fafa62bb595ba443f8",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "eddd26191036238d93ee49297ab3f9322c8342142d1835fafa62bb595ba443f8",
+        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "eddd26191036238d93ee49297ab3f9322c8342142d1835fafa62bb595ba443f8",
+        "structured|normalized|unicode_nfkc,collapse_whitespace": "b783353af22e7279ae186d82f5dc0067bffa6502304686955791955a4094a2c5",
+        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "b783353af22e7279ae186d82f5dc0067bffa6502304686955791955a4094a2c5",
+        "structured|normalized|unicode_nfkc,strip_punctuation": "b783353af22e7279ae186d82f5dc0067bffa6502304686955791955a4094a2c5"
+       },
+       "structured": "eddd26191036238d",
+       "tokens": [
+        {
+         "alpha": true,
+         "c": "9e8e1645fdec34d0",
+         "digit": false,
+         "gen": false,
+         "glyph": false,
+         "idsh": false,
+         "n": 4,
+         "name": true,
+         "r": "9e8e1645fdec34d0"
+        },
+        {
+         "alpha": true,
+         "c": "0d68e18d565ed360",
+         "digit": false,
+         "gen": false,
+         "glyph": false,
+         "idsh": false,
+         "n": 6,
+         "name": true,
+         "r": "0d68e18d565ed360"
+        },
+        {
+         "alpha": true,
+         "c": "6b80bb4112f844a5",
+         "digit": false,
+         "gen": false,
+         "glyph": false,
+         "idsh": false,
+         "n": 4,
+         "name": true,
+         "r": "6b80bb4112f844a5"
+        },
+        {
+         "alpha": true,
+         "c": "20338486779884fb",
+         "digit": false,
+         "gen": false,
+         "glyph": false,
+         "idsh": false,
+         "n": 4,
+         "name": true,
+         "r": "4c5b884487197d9d"
+        },
+        {
+         "alpha": true,
+         "c": "8a2c79da10756add",
+         "digit": false,
+         "gen": false,
+         "glyph": false,
+         "idsh": false,
+         "n": 8,
+         "name": true,
+         "r": "8a2c79da10756add"
+        },
+        {
+         "alpha": true,
+         "c": "bd8a1dea16c274d2",
+         "digit": false,
+         "gen": false,
+         "glyph": false,
+         "idsh": false,
+         "n": 4,
+         "name": true,
+         "r": "63c0d27e3746e3af"
+        }
+       ]
+      },
+      "landmarks": [
+       {
+        "distance_px": 52,
+        "dx_px": 21,
+        "dy_px": 48,
+        "ocr_text": "Action",
+        "relation": "above"
+       },
+       {
+        "distance_px": 58,
+        "dx_px": -2,
+        "dy_px": -58,
+        "ocr_text": "Open",
+        "relation": "below"
+       }
+      ],
+      "ocr_text": "Open",
+      "region": [
+       695,
+       154,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Open",
+       "role": "button",
+       "selector": "#open-p1",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_005.png"
+     },
+     "rung_used": "ocr",
+     "screenshot": "heals/step_005/screen.png",
+     "step_id": "step_005"
+    },
+    "identity": {
+     "abstain_reason": null,
+     "coverage": 1.0,
+     "expected": "<structured identity template>",
+     "hover": null,
+     "known_id_evidence": null,
+     "known_id_halt": null,
+     "look_halt": null,
+     "looks": [],
+     "mode": "structured",
+     "observed": "Jane SampleKnee pain referralHigh",
+     "param": null,
+     "pixel_evidence": null,
+     "quorum_required": null,
+     "quorum_verified": null,
+     "signal_evidence": [],
+     "status": "verified"
+    },
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click 'Open'",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 1.0,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      777,
+      186
+     ],
+     "rung": "ocr",
+     "structural_handle": null
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_005",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_006_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_006_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": {
+     "applied": true,
+     "kind": "anchor_refresh",
+     "new_anchor": {
+      "click_point": [
+       113,
+       159
+      ],
+      "context_text": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": {
+       "band_len": 0,
+       "concats": [],
+       "param_token_indices": {},
+       "rests_on_confusable_identifier": false,
+       "salt": "911a5096acf288523d50080fd3dd74de",
+       "schema_version": 1,
+       "signal_hashes": {
+        "structured|exact|": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|casefold": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|casefold,collapse_whitespace": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|casefold,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|collapse_whitespace": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|collapse_whitespace,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|unicode_nfkc": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|unicode_nfkc,casefold": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|unicode_nfkc,collapse_whitespace": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|unicode_nfkc,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c"
+       },
+       "structured": "c181cef4a5621cab",
+       "tokens": []
+      },
+      "landmarks": [
+       {
+        "distance_px": 62,
+        "dx_px": 34,
+        "dy_px": -52,
+        "ocr_text": "Encounters",
+        "relation": "below"
+       },
+       {
+        "distance_px": 85,
+        "dx_px": 24,
+        "dy_px": -82,
+        "ocr_text": "No encounters yet.",
+        "relation": "below"
+       }
+      ],
+      "ocr_text": "New Encounter",
+      "region": [
+       33,
+       127,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "New Encounter",
+       "role": "button",
+       "selector": "#new-encounter",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_006.png"
+     },
+     "old_anchor": {
+      "click_point": [
+       114,
+       159
+      ],
+      "context_text": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": {
+       "band_len": 0,
+       "concats": [],
+       "param_token_indices": {},
+       "rests_on_confusable_identifier": false,
+       "salt": "911a5096acf288523d50080fd3dd74de",
+       "schema_version": 1,
+       "signal_hashes": {
+        "structured|exact|": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|casefold": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|casefold,collapse_whitespace": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|casefold,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|collapse_whitespace": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|collapse_whitespace,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|unicode_nfkc": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|unicode_nfkc,casefold": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|unicode_nfkc,collapse_whitespace": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|unicode_nfkc,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c"
+       },
+       "structured": "c181cef4a5621cab",
+       "tokens": []
+      },
+      "landmarks": [
+       {
+        "distance_px": 62,
+        "dx_px": 34,
+        "dy_px": -52,
+        "ocr_text": "Encounters",
+        "relation": "below"
+       },
+       {
+        "distance_px": 85,
+        "dx_px": 24,
+        "dy_px": -82,
+        "ocr_text": "No encounters yet.",
+        "relation": "below"
+       }
+      ],
+      "ocr_text": "New Encounter",
+      "region": [
+       34,
+       127,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "New Encounter",
+       "role": "button",
+       "selector": "#new-encounter",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_006.png"
+     },
+     "rung_used": "ocr",
+     "screenshot": "heals/step_006/screen.png",
+     "step_id": "step_006"
+    },
+    "identity": {
+     "abstain_reason": null,
+     "coverage": 1.0,
+     "expected": "<structured identity template>",
+     "hover": null,
+     "known_id_evidence": null,
+     "known_id_halt": null,
+     "look_halt": null,
+     "looks": [],
+     "mode": "structured",
+     "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
+     "param": null,
+     "pixel_evidence": null,
+     "quorum_required": null,
+     "quorum_verified": null,
+     "signal_evidence": [],
+     "status": "verified"
+    },
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click 'New Encounter'",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 1.0,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      113,
+      159
+     ],
+     "rung": "ocr",
+     "structural_handle": null
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_006",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_007_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_007_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": {
+     "applied": true,
+     "kind": "anchor_refresh",
+     "new_anchor": {
+      "click_point": [
+       85,
+       214
+      ],
+      "context_text": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": {
+       "band_len": 0,
+       "concats": [],
+       "param_token_indices": {},
+       "rests_on_confusable_identifier": false,
+       "salt": "911a5096acf288523d50080fd3dd74de",
+       "schema_version": 1,
+       "signal_hashes": {
+        "structured|exact|": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|casefold": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|casefold,collapse_whitespace": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|casefold,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|collapse_whitespace": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|collapse_whitespace,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|unicode_nfkc": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|unicode_nfkc,casefold": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|unicode_nfkc,collapse_whitespace": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|unicode_nfkc,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c"
+       },
+       "structured": "c181cef4a5621cab",
+       "tokens": []
+      },
+      "landmarks": [
+       {
+        "distance_px": 71,
+        "dx_px": 44,
+        "dy_px": -56,
+        "ocr_text": "Note",
+        "relation": "below"
+       },
+       {
+        "distance_px": 76,
+        "dx_px": -27,
+        "dy_px": 71,
+        "ocr_text": "New Encounter",
+        "relation": "above"
+       }
+      ],
+      "ocr_text": "Triage",
+      "region": [
+       5,
+       182,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Triage",
+       "role": "button",
+       "selector": "#type-triage",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_007.png"
+     },
+     "old_anchor": {
+      "click_point": [
+       85,
+       214
+      ],
+      "context_text": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": {
+       "band_len": 0,
+       "concats": [],
+       "param_token_indices": {},
+       "rests_on_confusable_identifier": false,
+       "salt": "911a5096acf288523d50080fd3dd74de",
+       "schema_version": 1,
+       "signal_hashes": {
+        "structured|exact|": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|casefold": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|casefold,collapse_whitespace": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|casefold,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|collapse_whitespace": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|collapse_whitespace,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|unicode_nfkc": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|unicode_nfkc,casefold": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|unicode_nfkc,collapse_whitespace": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|unicode_nfkc,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c"
+       },
+       "structured": "c181cef4a5621cab",
+       "tokens": []
+      },
+      "landmarks": [
+       {
+        "distance_px": 71,
+        "dx_px": 44,
+        "dy_px": -56,
+        "ocr_text": "Note",
+        "relation": "below"
+       },
+       {
+        "distance_px": 76,
+        "dx_px": -27,
+        "dy_px": 71,
+        "ocr_text": "New Encounter",
+        "relation": "above"
+       }
+      ],
+      "ocr_text": null,
+      "region": [
+       5,
+       182,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Triage",
+       "role": "button",
+       "selector": "#type-triage",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_007.png"
+     },
+     "rung_used": "geometry",
+     "screenshot": "heals/step_007/screen.png",
+     "step_id": "step_007"
+    },
+    "identity": {
+     "abstain_reason": null,
+     "coverage": 1.0,
+     "expected": "<structured identity template>",
+     "hover": null,
+     "known_id_evidence": null,
+     "known_id_halt": null,
+     "look_halt": null,
+     "looks": [],
+     "mode": "structured",
+     "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
+     "param": null,
+     "pixel_evidence": null,
+     "quorum_required": null,
+     "quorum_verified": null,
+     "signal_evidence": [],
+     "status": "verified"
+    },
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click recorded visual target",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 0.9,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      85,
+      214
+     ],
+     "rung": "geometry",
+     "structural_handle": null
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_007",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_008_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_008_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": {
+     "applied": true,
+     "kind": "anchor_refresh",
+     "new_anchor": {
+      "click_point": [
+       344,
+       350
+      ],
+      "context_text": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": {
+       "band_len": 0,
+       "concats": [],
+       "param_token_indices": {},
+       "rests_on_confusable_identifier": false,
+       "salt": "911a5096acf288523d50080fd3dd74de",
+       "schema_version": 1,
+       "signal_hashes": {
+        "structured|exact|": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|casefold": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|casefold,collapse_whitespace": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|casefold,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|collapse_whitespace": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|collapse_whitespace,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|unicode_nfkc": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|unicode_nfkc,casefold": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|unicode_nfkc,collapse_whitespace": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|unicode_nfkc,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c"
+       },
+       "structured": "c181cef4a5621cab",
+       "tokens": []
+      },
+      "landmarks": [
+       {
+        "distance_px": 194,
+        "dx_px": 138,
+        "dy_px": 137,
+        "ocr_text": "Consult",
+        "relation": "left_of"
+       },
+       {
+        "distance_px": 286,
+        "dx_px": 135,
+        "dy_px": 252,
+        "ocr_text": "Jane Sample — MRN P1 — DOB 1980-01-01",
+        "relation": "above"
+       }
+      ],
+      "ocr_text": null,
+      "region": [
+       104,
+       254,
+       480,
+       192
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Note",
+       "role": "textbox",
+       "selector": "#note",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_008.png"
+     },
+     "old_anchor": {
+      "click_point": [
+       344,
+       350
+      ],
+      "context_text": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": {
+       "band_len": 0,
+       "concats": [],
+       "param_token_indices": {},
+       "rests_on_confusable_identifier": false,
+       "salt": "911a5096acf288523d50080fd3dd74de",
+       "schema_version": 1,
+       "signal_hashes": {
+        "structured|exact|": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|casefold": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|casefold,collapse_whitespace": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|casefold,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|collapse_whitespace": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|collapse_whitespace,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|unicode_nfkc": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|unicode_nfkc,casefold": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|unicode_nfkc,collapse_whitespace": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|unicode_nfkc,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c"
+       },
+       "structured": "c181cef4a5621cab",
+       "tokens": []
+      },
+      "landmarks": [
+       {
+        "distance_px": 194,
+        "dx_px": 138,
+        "dy_px": 137,
+        "ocr_text": "Consult",
+        "relation": "left_of"
+       },
+       {
+        "distance_px": 286,
+        "dx_px": 135,
+        "dy_px": 252,
+        "ocr_text": "Jane Sample — MRN P1 — DOB 1980-01-01",
+        "relation": "above"
+       }
+      ],
+      "ocr_text": null,
+      "region": [
+       104,
+       254,
+       480,
+       192
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Note",
+       "role": "textbox",
+       "selector": "#note",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_008.png"
+     },
+     "rung_used": "geometry",
+     "screenshot": "heals/step_008/screen.png",
+     "step_id": "step_008"
+    },
+    "identity": {
+     "abstain_reason": null,
+     "coverage": 1.0,
+     "expected": "<structured identity template>",
+     "hover": null,
+     "known_id_evidence": null,
+     "known_id_halt": null,
+     "look_halt": null,
+     "looks": [],
+     "mode": "structured",
+     "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
+     "param": null,
+     "pixel_evidence": null,
+     "quorum_required": null,
+     "quorum_verified": null,
+     "signal_evidence": [],
+     "status": "verified"
+    },
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click recorded visual target",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 0.881,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      344,
+      350
+     ],
+     "rung": "geometry",
+     "structural_handle": null
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_008",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_009_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_009_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": null,
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": true,
+    "intent": "type <note>",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": null,
+    "program_scope": [],
+    "resolution": null,
+    "risk": "reversible",
+    "risk_explanation": "action has no retained consequential commit signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_009",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": "guarded_coordinate",
+    "after_png": "steps/step_010_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_010_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": {
+     "delivered_at": "<delivered_at>",
+     "native": false,
+     "operation": "guarded_coordinate_click",
+     "outcome_verified": false,
+     "receipt_id": "<receipt_id#1>",
+     "status": "delivered",
+     "target_fingerprint": "<target_fingerprint#1>"
+    },
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": {
+     "applied": true,
+     "kind": "anchor_refresh",
+     "new_anchor": {
+      "click_point": [
+       134,
+       457
+      ],
+      "context_text": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": {
+       "band_len": 0,
+       "concats": [],
+       "param_token_indices": {},
+       "rests_on_confusable_identifier": false,
+       "salt": "911a5096acf288523d50080fd3dd74de",
+       "schema_version": 1,
+       "signal_hashes": {
+        "structured|exact|": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|casefold": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|casefold,collapse_whitespace": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|casefold,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|collapse_whitespace": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|collapse_whitespace,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|unicode_nfkc": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|unicode_nfkc,casefold": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|unicode_nfkc,collapse_whitespace": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|unicode_nfkc,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c"
+       },
+       "structured": "c181cef4a5621cab",
+       "tokens": []
+      },
+      "landmarks": [
+       {
+        "distance_px": 210,
+        "dx_px": 94,
+        "dy_px": 188,
+        "ocr_text": "Note",
+        "relation": "above"
+       },
+       {
+        "distance_px": 254,
+        "dx_px": -72,
+        "dy_px": 244,
+        "ocr_text": "Consult",
+        "relation": "above"
+       }
+      ],
+      "ocr_text": "Save Encounter",
+      "region": [
+       54,
+       425,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Save Encounter",
+       "role": "button",
+       "selector": "#save-encounter",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_010.png"
+     },
+     "old_anchor": {
+      "click_point": [
+       134,
+       457
+      ],
+      "context_text": null,
+      "identifier_crop": null,
+      "identifier_region": null,
+      "identity_template": {
+       "band_len": 0,
+       "concats": [],
+       "param_token_indices": {},
+       "rests_on_confusable_identifier": false,
+       "salt": "911a5096acf288523d50080fd3dd74de",
+       "schema_version": 1,
+       "signal_hashes": {
+        "structured|exact|": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|casefold": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|casefold,collapse_whitespace": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|casefold,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|collapse_whitespace": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|collapse_whitespace,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|unicode_nfkc": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|unicode_nfkc,casefold": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "c181cef4a5621cab94d21e1ce1145345ec8c0c7bb8dcecb15b87ccc3433b08b1",
+        "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "44590c62adbeebc8ff69b6cf87799db6ead64c86a3bf116c51de0f949fdcf90e",
+        "structured|normalized|unicode_nfkc,collapse_whitespace": "6b025fbd34f3d44a8f782b095ffa218888200197aff26b793ab15efe72a15e1f",
+        "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c",
+        "structured|normalized|unicode_nfkc,strip_punctuation": "c07f5b88b8111294f4fb2a7154d87e092fd858f111ab7e1411f0a7cfe974d87c"
+       },
+       "structured": "c181cef4a5621cab",
+       "tokens": []
+      },
+      "landmarks": [
+       {
+        "distance_px": 210,
+        "dx_px": 94,
+        "dy_px": 188,
+        "ocr_text": "Note",
+        "relation": "above"
+       },
+       {
+        "distance_px": 254,
+        "dx_px": -72,
+        "dy_px": 244,
+        "ocr_text": "Consult",
+        "relation": "above"
+       }
+      ],
+      "ocr_text": "Save Encounter",
+      "region": [
+       54,
+       425,
+       160,
+       64
+      ],
+      "search_pad": 80,
+      "structural": {
+       "automation_id": null,
+       "frame_path": null,
+       "name": "Save Encounter",
+       "role": "button",
+       "selector": "#save-encounter",
+       "window_name": null
+      },
+      "structured_identity": null,
+      "template": "templates/step_010.png"
+     },
+     "rung_used": "ocr",
+     "screenshot": "heals/step_010/screen.png",
+     "step_id": "step_010"
+    },
+    "identity": {
+     "abstain_reason": null,
+     "coverage": 1.0,
+     "expected": "<structured identity template>",
+     "hover": null,
+     "known_id_evidence": null,
+     "known_id_halt": null,
+     "look_halt": null,
+     "looks": [],
+     "mode": "structured",
+     "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
+     "param": null,
+     "pixel_evidence": null,
+     "quorum_required": null,
+     "quorum_verified": null,
+     "signal_evidence": [],
+     "status": "verified"
+    },
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click 'Save Encounter'",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 1.0,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      134,
+      457
+     ],
+     "rung": "ocr",
+     "structural_handle": null
+    },
+    "risk": "irreversible",
+    "risk_explanation": "retained action context names a consequential state change",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_010",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   }
+  ],
+  "run_id_sha256": "<run_id_sha256>",
+  "rung_counts": {
+   "geometry": 4,
+   "ocr": 4
+  },
+  "screenshots_may_leave_box": false,
+  "source_recording_sha256": null,
+  "started_at": "<started_at>",
+  "success": true,
+  "surface_override": false,
+  "terminal_outcome": null,
+  "total_ms": "<total_ms>",
+  "transaction_billable": false,
+  "transaction_outcome": "COMPLETED_UNVERIFIED",
+  "transaction_platform_fault": false,
+  "visited_states": [],
+  "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e",
+  "workflow_name": "golden-triage"
+ },
+ "trace": [
+  {
+   "args": [
+    null
+   ],
+   "call": "set_qualification_input_guard"
+  },
+  {
+   "args": [
+    214,
+    195
+   ],
+   "call": "click",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    "nurse.demo"
+   ],
+   "call": "type_text"
+  },
+  {
+   "args": [
+    214,
+    264
+   ],
+   "call": "click",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    "mockmed-demo-pass"
+   ],
+   "call": "type_text"
+  },
+  {
+   "args": [
+    120,
+    324
+   ],
+   "call": "click",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    777,
+    186
+   ],
+   "call": "click",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    113,
+    159
+   ],
+   "call": "click",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    85,
+    214
+   ],
+   "call": "click",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    344,
+    350
+   ],
+   "call": "click",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    "Golden triage booking three months"
+   ],
+   "call": "type_text"
+  },
+  {
+   "call": "cancel_pending_structural_guards"
+  },
+  {
+   "args": [
+    134,
+    457
+   ],
+   "call": "arm_guarded_coordinate"
+  },
+  {
+   "call": "cancel_guarded_coordinate"
+  },
+  {
+   "args": [
+    134,
+    457
+   ],
+   "call": "act_guarded_coordinate",
+   "kwargs": {
+    "double": false,
+    "expected_frame_sha256": "62ac72d7b812e699194ef0cb7cc5dca4c59687e48d7c95809050240c3f3ae2fb"
+   }
+  },
+  {
+   "args": [
+    null
+   ],
+   "call": "set_qualification_input_guard"
+  }
+ ]
+}

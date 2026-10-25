@@ -451,7 +451,7 @@ line-length = 88
 # Generated / non-package trees at the repo root are not part of the lint
 # surface. Anchored with a leading slash so the package's own
 # openadapt_flow/benchmark/ IS still linted (a bare "benchmark" would match it).
-extend-exclude = ["/benchmark", "/docs", "/runs", "/dist"]
+extend-exclude = ["/benchmark", "/docs", "/runs", "/dist", "tests/golden_runs/baselines"]
 
 [tool.ruff.lint]
 # Start pragmatic: pyflakes (real bugs), the safe pycodestyle subset, warnings,
