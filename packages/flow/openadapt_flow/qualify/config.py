@@ -231,6 +231,10 @@ class RecordConfig(BaseModel):
     #: The field that tells a new record from one that was already there, for
     #: ``exact_new_set`` (an id the system of record assigns).
     identity_field: str = "id"
+    #: With ``verifier.kind: surfaces``, the surface the record is read from.
+    #: The other surfaces are read for the frame (writes elsewhere) and side
+    #: records. Unset: the verifier's single read.
+    surface: Optional[str] = Field(default=None, pattern=r"^[A-Za-z0-9_.-]{1,64}$")
 
     def expr(self, field: str) -> ValueExpr:
         value = self.fields[field]
