@@ -43,7 +43,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-ROLES = ("first", "last", "dob", "email", "phone", "street", "prior_last")
+ROLES = ("first", "last", "dob", "email", "phone", "street", "prior_last", "mrn")
 
 _NAME_HINTS = {
     "first": ("fname", "first", "given", "forename"),
@@ -52,6 +52,7 @@ _NAME_HINTS = {
     "email": ("email", "mail"),
     "phone": ("phone", "tel", "mobile"),
     "street": ("street", "address", "line"),
+    "mrn": ("mrn", "pubpid", "medical_record", "chart_number", "member_id"),
     "prior_last": (
         "prior_lname",
         "prior_last",
@@ -78,7 +79,11 @@ def infer_roles(
 
     out: dict[str, str] = {}
     lowered = {f: f.lower().replace("-", "_").replace(".", "_") for f in record_fields}
-    for role in ("prior_last", *[r for r in ROLES if r != "prior_last"]):
+    for role in (
+        "prior_last",
+        "mrn",
+        *[r for r in ROLES if r not in ("prior_last", "mrn")],
+    ):
         hits = [
             f
             for f, low in lowered.items()
@@ -150,7 +155,10 @@ def _date_parts(value: str) -> Optional[tuple[str, str, str]]:
     return (m.group(1), m.group(2), m.group(3)) if m else None
 
 
-def compare(role: str, a: Any, b: Any) -> set[str]:
+Variants = Mapping[str, frozenset[str]]
+
+
+def compare(role: str, a: Any, b: Any, variants: Optional[Variants] = None) -> set[str]:
     """Which comparisons hold between two values of one role."""
 
     x, y = norm(a), norm(b)
@@ -164,6 +172,8 @@ def compare(role: str, a: Any, b: Any) -> set[str]:
             out.add("edit1")
         if role == "first" and (len(x) == 1 or len(y) == 1) and x[0] == y[0]:
             out.add("initial")
+        if role == "first" and variants and y in variants.get(x, frozenset()):
+            out.add("variant")
         if _soundex(x) == _soundex(y):
             out.add("sound")
         if set(x.split()) & set(y.split()):
@@ -197,6 +207,7 @@ class Clause:
             "near": "one part off",
             "swap": "with day and month swapped",
             "initial": "matching by initial",
+            "variant": "a known variant of the other (a nickname)",
         }
         roles = {"names_swapped": "first and last names", "prior_last": "the last name"}
         parts = []
@@ -218,10 +229,11 @@ def comparisons(
     new: Mapping[str, Any],
     record: Mapping[str, Any],
     new_roles: Optional[Mapping[str, str]] = None,
+    variants: Optional[Variants] = None,
 ) -> dict[str, set[str]]:
     src = new_roles or roles
     out = {
-        role: compare(role, new.get(src[role]), record.get(roles[role]))
+        role: compare(role, new.get(src[role]), record.get(roles[role]), variants)
         for role in roles
         if role in src and role != "prior_last"
     }
@@ -240,9 +252,10 @@ def comparisons(
     return out
 
 
-def candidate_clauses(roles: Sequence[str]) -> list[Clause]:
+def candidate_clauses(roles: Sequence[str], *, variants: bool = False) -> list[Clause]:
     options: dict[str, tuple[str, ...]] = {
-        "first": ("eq", "edit1", "sound", "initial"),
+        "first": ("eq", "edit1", "sound", "initial")
+        + (("variant",) if variants else ()),
         "names_swapped": ("eq",),
         "last": ("eq", "edit1", "sound", "share"),
         "dob": ("eq", "near", "swap"),
@@ -250,6 +263,7 @@ def candidate_clauses(roles: Sequence[str]) -> list[Clause]:
         "phone": ("eq",),
         "street": ("eq",),
         "prior_last": ("eq",),
+        "mrn": ("eq",),
     }
     present = [r for r in roles if r in options]
     if "first" in roles and "last" in roles:
@@ -292,6 +306,8 @@ ERRORS = (
     "last_second_surname",
     "first_initial",
     "names_swapped",
+    "first_nickname",
+    "both_names_typo",
     "contact_changed",
 )
 
@@ -302,6 +318,7 @@ def perturb(
     roles: Mapping[str, str],
     surnames: Sequence[str],
     rng: random.Random,
+    variants: Optional[Variants] = None,
 ) -> Optional[dict[str, Any]]:
     """``person`` with one ordinary data-entry error, or None if it can't apply."""
 
@@ -345,6 +362,14 @@ def perturb(
         out[f] = first[0]
     elif kind == "names_swapped" and f and l:
         out[f], out[l] = out.get(l), out.get(f)
+    elif kind == "both_names_typo" and f and l:
+        out[f] = _typo(str(out.get(f) or ""), rng)
+        out[l] = _typo(str(out.get(l) or ""), rng)
+    elif kind == "first_nickname" and f:
+        options = sorted((variants or {}).get(norm(out.get(f)), frozenset()))
+        if not options:
+            return None
+        out[f] = rng.choice(options).title()
     elif kind == "contact_changed":
         pass
     else:
@@ -396,6 +421,12 @@ class DuplicateRule:
     calibration: Optional[Calibration] = None
     notes: list[str] = field(default_factory=list)
     estimated_false_stops_per_record: float = 0.0
+    #: The name-variant table the clauses may use (None: no variant signal).
+    variants: Optional[Variants] = field(default=None, repr=False)
+    #: Where the variant table came from, for the review.
+    variants_source: Optional[str] = None
+    #: The calibration set, kept so another check can be scored on it.
+    calibration_set: Any = field(default=None, repr=False)
 
     def decide(
         self,
@@ -413,9 +444,11 @@ class DuplicateRule:
         why: list[str] = []
         decision = "none"
         for record in table:
-            comps = comparisons(self.roles, new, record, src)
+            comps = comparisons(self.roles, new, record, src, self.variants)
             if EXACT.holds(comps):
                 return "exact", [EXACT.text()]
+            if "eq" in comps.get("mrn", set()):
+                return "exact", ["the same medical record number"]
             for clause in self.clauses:
                 if clause.holds(comps):
                     decision = "close"
@@ -431,6 +464,7 @@ class DuplicateRule:
             "close": [[list(t) for t in c.terms] for c in self.clauses],
             "calibration": self.calibration.rates() if self.calibration else None,
             "estimated_false_stops_per_record": self.estimated_false_stops_per_record,
+            "name_variants": self.variants_source,
             "notes": list(self.notes),
         }
 
@@ -440,7 +474,74 @@ class DuplicateRule:
         lines.append(
             "Stop for a person when the new record lacks a name or a date of birth."
         )
+        if self.variants_source:
+            lines.append(f"Nicknames come from {self.variants_source}.")
         return lines
+
+
+@dataclass
+class CalibrationSet:
+    """Made-up duplicates and distinct records from the system's own data.
+
+    ``positives``: (error kind, the copy posed as new, index of its source).
+    A check catches it when it stops. ``negatives``: indexes of existing
+    records posed as new against all the others. A check that stops one
+    would stop a new patient.
+    """
+
+    profile: list[dict[str, Any]]
+    positives: list[tuple[str, dict[str, Any], int]]
+    negatives: list[int]
+
+    def score(self, decide: Any) -> dict[str, Any]:
+        """Misses and false stops of ``decide(new, table) -> bool`` (stop)."""
+
+        missed: dict[str, int] = {}
+        total: dict[str, int] = {}
+        for kind, new, _source in self.positives:
+            total[kind] = total.get(kind, 0) + 1
+            if not decide(new, self.profile):
+                missed[kind] = missed.get(kind, 0) + 1
+        false = sum(
+            1
+            for i in self.negatives
+            if decide(self.profile[i], self.profile[:i] + self.profile[i + 1 :])
+        )
+        return {
+            "duplicates": len(self.positives),
+            "missed": sum(missed.values()),
+            "missed_by_error": dict(sorted(missed.items())),
+            "distinct_queries": len(self.negatives),
+            "false_stops": false,
+        }
+
+
+def calibration_set(
+    profile: Sequence[Mapping[str, Any]],
+    roles: Mapping[str, str],
+    *,
+    seed: int = 0,
+    variants: Optional[Variants] = None,
+) -> CalibrationSet:
+    rng = random.Random(seed)
+    last = roles.get("last", "")
+    surnames = sorted({str(r.get(last, "")) for r in profile if last} - {""})
+    positives: list[tuple[str, dict[str, Any], int]] = []
+    for index, person in enumerate(profile):
+        for kind in ERRORS:
+            copy = perturb(person, kind, roles, surnames, rng, variants)
+            if copy is None:
+                continue
+            for contact in ("kept", "changed"):
+                if kind == "contact_changed" and contact == "kept":
+                    continue
+                variant = (
+                    change_contact(copy, roles, rng) if contact == "changed" else copy
+                )
+                positives.append((f"{kind}+contact_{contact}", variant, index))
+    return CalibrationSet(
+        [dict(p) for p in profile], positives, list(range(len(profile)))
+    )
 
 
 def generate_rule(
@@ -448,27 +549,34 @@ def generate_rule(
     *,
     roles: Optional[Mapping[str, str]] = None,
     seed: int = 0,
-    max_false_match: float = 0.0,
-    false_stop_budget: float = 0.005,
+    false_stop_budget: float = 0.02,
     expected_records: Optional[int] = None,
-    max_clauses: int = 12,
+    max_clauses: int = 16,
+    name_variants: bool = True,
     label_sample: int = 20,
     labeller: Any = None,
 ) -> DuplicateRule:
     """Generate and calibrate a duplicate rule on ``profile`` alone.
 
-    ``labeller(pair) -> bool`` stands for the person who labels the closest
-    calls (True: the same person). Without one the sample is listed for a
-    person and the rule is used as calibrated.
+    The objective is asymmetric, because a second chart for one patient is
+    far worse than a person spending seconds on a false stop: **the fewest
+    calibration misses, subject to the estimated false stops per new record
+    staying within** ``false_stop_budget`` (0.02: two per 100 records).
 
-    A clause is admitted only when it fires on no calibration distinct pair
-    (``max_false_match``) and its estimated false stops per new record stay
-    within ``false_stop_budget``: the product of each comparison's chance on
-    a distinct pair (estimated per comparison, Fellegi-Sunter style, with
-    add-one smoothing) times ``expected_records``, the size of the table a
-    new record meets (default: the profile). A small profile can't show a
-    rare coincidence directly; per-comparison rates can.
+    A clause's false stops are estimated per comparison (Fellegi-Sunter
+    u-probabilities on the system's own distinct pairs, add-one smoothed),
+    multiplied over its terms and by ``expected_records``, the size of the
+    table a new record meets (default: the profile). A small profile can't
+    show a rare coincidence directly; per-comparison rates can. Pairs of
+    existing records a clause would call one person are listed for a person
+    to label (``labeller(item) -> bool``, True: the same person); they don't
+    block the clause, but they are in the review.
+
+    ``name_variants`` uses the committed generic table of given-name variants
+    (``name_variants.json``, model-made from common names only).
     """
+
+    from openadapt_flow.generate.name_variants import TABLE, load
 
     fields = sorted({k for r in profile for k in r})
     roles = dict(roles or infer_roles(fields, profile))
@@ -478,157 +586,201 @@ def generate_rule(
             notes.append(
                 f"no field holds the {needed}; every new record goes to a person"
             )
-    rng = random.Random(seed)
-    surnames = sorted(
-        {str(r.get(roles.get("last", ""), "")) for r in profile if roles.get("last")}
-        - {""}
-    )
-    clauses = candidate_clauses(list(roles))
+    variants = load() if name_variants else None
+    if name_variants and not variants:
+        notes.append("no name-variant table: nicknames are not matched")
+        variants = None
+    calset = calibration_set(profile, roles, seed=seed, variants=variants)
+    clauses = candidate_clauses(list(roles), variants=bool(variants))
 
-    pairs: list[tuple[int, int]] = []
-    negatives: list[dict[str, set[str]]] = []
-    for i, person in enumerate(profile):
-        for j, other in enumerate(profile):
-            if i != j:
-                pairs.append((i, j))
-                negatives.append(comparisons(roles, person, other))
-    positives: list[tuple[str, dict[str, set[str]]]] = []
-    for person in profile:
-        for kind in ERRORS:
-            copy = perturb(person, kind, roles, surnames, rng)
-            if copy is None:
-                continue
-            for contact in ("kept", "changed"):
-                if kind == "contact_changed" and contact == "kept":
-                    continue
-                variant = (
-                    change_contact(copy, roles, rng) if contact == "changed" else copy
-                )
-                positives.append(
-                    (f"{kind}+contact_{contact}", comparisons(roles, variant, person))
-                )
-
+    pairs = [(i, j) for i in range(len(profile)) for j in range(len(profile)) if i != j]
+    all_negatives = [
+        comparisons(roles, profile[i], profile[j], None, variants) for i, j in pairs
+    ]
+    positives = [
+        (kind, comparisons(roles, new, profile[src], None, variants))
+        for kind, new, src in calset.positives
+    ]
     table_size = max(expected_records or 0, len(profile))
-    same_person: set[frozenset[int]] = set()
+    hits_of = {
+        clause: {i for i, (_k, p) in enumerate(positives) if clause.holds(p)}
+        for clause in clauses
+    }
 
-    def select() -> tuple[
-        list[Clause], set[int], float, list[tuple[Clause, set[int], list[int]]]
-    ]:
-        live = [
-            k for k, (i, j) in enumerate(pairs) if frozenset((i, j)) not in same_person
-        ]
-        allowed = max_false_match * max(1, len(live))
+    def select(
+        negatives: list[dict[str, set[str]]],
+    ) -> tuple[list[Clause], set[int], float, list[Clause]]:
         u_prob: dict[tuple[str, str], float] = {}
 
         def chance(term: tuple[str, str]) -> float:
             if term not in u_prob:
                 role, c = term
-                fires = sum(c in negatives[k].get(role, set()) for k in live)
-                u_prob[term] = (fires + 1) / (len(live) + 2)
+                fires = sum(c in n.get(role, set()) for n in negatives)
+                u_prob[term] = (fires + 1) / (len(negatives) + 2)
             return u_prob[term]
 
         scored = []
-        blocked: list[tuple[Clause, set[int], list[int]]] = []
+        priced_out = []
         for clause in clauses:
-            firing = [k for k in live if clause.holds(negatives[k])]
-            hits = {
-                i
-                for i, (_k, p) in enumerate(positives)
-                if clause.holds(p) or EXACT.holds(p)
-            }
-            if len(firing) > allowed:
-                blocked.append((clause, hits, firing))
-                continue
             estimate = float(table_size)
             for term in clause.terms:
                 estimate *= chance(term)
             if estimate > false_stop_budget:
+                priced_out.append(clause)
                 continue
-            scored.append((clause, hits, len(firing), estimate))
-        chosen: list[Clause] = []
-        covered = {i for i, (_k, p) in enumerate(positives) if EXACT.holds(p)}
-        spent = 0.0
-        while len(chosen) < max_clauses:
-            # The most new calibration duplicates per estimated false stop,
-            # among the clauses the remaining budget can still pay for.
-            affordable = [
-                t
-                for t in scored
-                if t[3] <= false_stop_budget - spent and t[1] - covered
-            ]
-            best = max(
-                affordable,
-                key=lambda t: (len(t[1] - covered) / (t[3] + 1e-9), -len(t[0].terms)),
-                default=None,
-            )
-            if best is None:
-                break
-            chosen.append(best[0])
-            covered |= best[1]
-            spent += best[3]
-            scored.remove(best)
-        return chosen, covered, spent, blocked
+            scored.append((clause, hits_of[clause], estimate))
+        base = {i for i, (_k, p) in enumerate(positives) if EXACT.holds(p)}
 
-    chosen, covered, spent, blocked = select()
-    # The closest calls a person labels: pairs of existing records that alone
-    # keep a clause out (records the system holds as two people that the
-    # clause calls one), largest coverage gain first. A label of "the same
-    # person" means the system already holds a duplicate: that pair no longer
-    # counts against the clause. Labels can only add a clause the budget
-    # still affords.
-    sample: list[dict[str, Any]] = []
-    seen: set[frozenset[int]] = set()
-    for clause, hits, firing in sorted(blocked, key=lambda t: -len(t[1] - covered)):
-        if not (hits - covered) or len(firing) > 2 * max(1, label_sample):
+        def greedy(by_ratio: bool) -> tuple[list[Clause], set[int], float]:
+            # Misses first, within the budget: a knapsack. Take the clause
+            # that adds the most calibration duplicates (or the most per
+            # estimated false stop) among those the budget still affords.
+            covered = set(base)
+            chosen: list[Clause] = []
+            spent = 0.0
+            pool = list(scored)
+            while len(chosen) < max_clauses:
+                affordable = [
+                    t
+                    for t in pool
+                    if t[2] <= false_stop_budget - spent and t[1] - covered
+                ]
+
+                def value(t: tuple[Clause, set[int], float]) -> tuple[float, ...]:
+                    gain = len(t[1] - covered)
+                    if by_ratio:
+                        return (gain / (t[2] + 1e-9), gain, -len(t[0].terms))
+                    return (gain, -t[2], -len(t[0].terms))
+
+                best = max(affordable, key=value, default=None)
+                if best is None:
+                    break
+                chosen.append(best[0])
+                covered |= best[1]
+                spent += best[2]
+                pool.remove(best)
+            return chosen, covered, spent
+
+        options = [greedy(False), greedy(True)]
+        chosen, covered, spent = min(options, key=lambda o: (-len(o[1]), o[2]))
+        return chosen, covered, spent, priced_out
+
+    negatives = all_negatives
+    chosen, covered, spent, priced_out = select(negatives)
+    # The closest calls a person labels: the existing records behind the
+    # priced-out clause that would catch the most duplicates still missed. If
+    # the person says a pair is one person, the system already holds a
+    # duplicate: the pair stops counting as two people, and the rule is chosen
+    # again. A label only removes evidence of a false stop a person looked at.
+    review: list[tuple[int, int]] = []
+    for clause in sorted(priced_out, key=lambda c: -len(hits_of[c] - covered)):
+        if not (hits_of[clause] - covered):
             continue
-        for k in firing:
-            key = frozenset(pairs[k])
-            if key in seen:
-                continue
-            seen.add(key)
-            i, j = pairs[k]
-            sample.append(
-                {
-                    "pair": "existing records",
-                    "records": (dict(profile[i]), dict(profile[j])),
-                    "_pair": (i, j),
-                    "clause": clause.text(),
-                }
-            )
-        if len(sample) >= label_sample:
+        blocking = [pairs[k] for k, n in enumerate(all_negatives) if clause.holds(n)]
+        if 0 < len(blocking) <= 2 * label_sample:
+            for i, j in blocking:
+                if (j, i) not in review and (i, j) not in review:
+                    review.append((i, j))
             break
-    sample = sample[:label_sample]
-    if labeller is not None and sample:
-        for item in sample:
-            same = bool(labeller(item))
-            item["label"] = "same person" if same else "different people"
-            if same:
-                same_person.add(frozenset(item["_pair"]))
+    review = review[:label_sample]
+    same_person: set[frozenset[int]] = set()
+    if labeller is not None:
+        for i, j in review:
+            if labeller({"records": [profile[i], profile[j]]}):
+                same_person.add(frozenset((i, j)))
         if same_person:
-            chosen, covered, spent, blocked = select()
-    for item in sample:
-        item.pop("records", None)
-        item.pop("_pair", None)
-    negatives = [
-        n for k, n in enumerate(negatives) if frozenset(pairs[k]) not in same_person
-    ]
+            negatives = [
+                n
+                for k, n in enumerate(all_negatives)
+                if frozenset(pairs[k]) not in same_person
+            ]
+            chosen, covered, spent, priced_out = select(negatives)
 
-    rule = DuplicateRule(roles, chosen, notes=notes)
+    rule = DuplicateRule(roles, chosen, notes=notes, variants=variants)
     rule.estimated_false_stops_per_record = round(spent, 5)
+    rule.variants_source = (
+        f"a generic table of given-name variants ({TABLE.name}, made by a model "
+        "from common names only)"
+        if variants
+        else None
+    )
+    rule.calibration_set = calset
     by_kind: dict[str, list[int]] = {}
     for i, (kind, _p) in enumerate(positives):
         by_kind.setdefault(kind, []).append(i)
-    false_matches = sum(
-        any(c.holds(n) for c in chosen) or EXACT.holds(n) for n in negatives
-    )
+    firing = [
+        k
+        for k, n in enumerate(negatives)
+        if EXACT.holds(n) or any(c.holds(n) for c in chosen)
+    ]
     rule.calibration = Calibration(
         distinct_pairs=len(negatives),
-        false_matches=false_matches,
+        false_matches=len(firing),
         duplicates=len(positives),
         caught=len(covered),
         caught_by_error={
             k: (len(set(v) & covered), len(v)) for k, v in by_kind.items()
         },
     )
-    rule.calibration.labelled = sample
+    rule.calibration.labelled = [
+        {
+            "pair": "existing records behind a priced-out clause",
+            "label": (
+                None
+                if labeller is None
+                else "same person"
+                if frozenset(pair) in same_person
+                else "different people"
+            ),
+        }
+        for pair in review
+    ]
+    if same_person:
+        rule.notes.append(
+            f"a person labelled {len(same_person)} pair(s) of existing records as "
+            "one person; they no longer count as two"
+        )
     return rule
+
+
+@dataclass
+class Adoption:
+    use: str  # generated | reference
+    why: str
+    generated: dict[str, Any]
+    reference: Optional[dict[str, Any]]
+
+
+def adopt(rule: DuplicateRule, reference: Any = None) -> Adoption:
+    """Use the generated rule only if it misses no more than the reference.
+
+    ``reference(new, table) -> bool`` (stop) is the hand-built check, when the
+    system has one. Both are scored on the same calibration set. A generated
+    rule that misses more is not used: the reference stays, and the reason is
+    stated. Without a reference the generated rule is used, and the review
+    says there was nothing to compare it with.
+    """
+
+    def generated(new: Mapping[str, Any], table: Sequence[Mapping[str, Any]]) -> bool:
+        return rule.decide(new, table)[0] != "none"
+
+    mine = rule.calibration_set.score(generated)
+    if reference is None:
+        return Adoption("generated", "no reference check to compare with", mine, None)
+    theirs = rule.calibration_set.score(reference)
+    if mine["missed"] <= theirs["missed"]:
+        return Adoption(
+            "generated",
+            f"it misses {mine['missed']} of {mine['duplicates']} calibration "
+            f"duplicates, the reference {theirs['missed']}",
+            mine,
+            theirs,
+        )
+    return Adoption(
+        "reference",
+        f"the generated rule misses {mine['missed']} of {mine['duplicates']} "
+        f"calibration duplicates and the reference {theirs['missed']}: the "
+        "reference stays",
+        mine,
+        theirs,
+    )

@@ -137,6 +137,7 @@ class BuildResult:
     manifest: dict[str, Any]
     seconds: dict[str, float] = field(default_factory=dict)
     problems: list[str] = field(default_factory=list)
+    adoption: Any = None
 
     @property
     def admitted(self) -> bool:
@@ -177,9 +178,15 @@ def build(
     timeout_s: float = 5.0,
     verify_tls: bool = True,
     expected_records: Optional[int] = None,
+    reference_duplicate_check: Any = None,
+    false_stop_budget: float = 0.02,
 ) -> BuildResult:
     """Generate and verify every part. ``test_copy``: a fault-gate copy of the
-    app (``openadapt_flow.fault_gate.TestCopy``); without one, a replica."""
+    app (``openadapt_flow.fault_gate.TestCopy``); without one, a replica.
+    ``reference_duplicate_check`` (``(new, table) -> bool``, True: stop) is the
+    system's hand-built duplicate check: the generated rule replaces it only
+    if it misses no more on the calibration set
+    (:func:`openadapt_flow.generate.identity.adopt`)."""
 
     from openadapt_flow.generate.identity import generate_rule
     from openadapt_flow.generate.inputs import Sample, generate_inputs, round_trip
@@ -284,7 +291,12 @@ def build(
     # 3. The identity and duplicate rule, calibrated on the records already there.
     started = time.perf_counter()
     profile = list(demonstrations[0].before)
-    rule = generate_rule(profile, expected_records=expected_records)
+    from openadapt_flow.generate.identity import adopt
+
+    rule = generate_rule(
+        profile, expected_records=expected_records, false_stop_budget=false_stop_budget
+    )
+    adoption = adopt(rule, reference_duplicate_check)
     if gated is not None:
         param_of = gated.contract.bound()
         new_roles = {
@@ -297,6 +309,12 @@ def build(
         rule_doc = {**rule.as_dict(), "new_record_params": new_roles}
     else:
         rule_doc = rule.as_dict()
+    rule_doc["adoption"] = {
+        "use": adoption.use,
+        "why": adoption.why,
+        "calibration_generated": adoption.generated,
+        "calibration_reference": adoption.reference,
+    }
     (out_dir / "duplicate_rule.json").write_text(
         json.dumps(rule_doc, indent=2, default=str) + "\n"
     )
@@ -331,6 +349,7 @@ def build(
     result = BuildResult(
         out_dir, chosen, reports, gated, rule, inputs, trips, {}, seconds, problems
     )
+    result.adoption = adoption
     (out_dir / "parts.review.md").write_text(render_review(result, name))
     result.manifest = write_manifest(out_dir)
     return result
@@ -401,6 +420,14 @@ def render_review(result: BuildResult, name: str) -> str:
             lines.append(f"- Unresolved: {item}.")
     lines.append("")
     lines.append("## When a new record is already there")
+    adoption = result.adoption
+    if adoption is not None and adoption.use == "reference":
+        lines.append(f"- The hand-built duplicate check stays: {adoption.why}.")
+        lines.append("- The generated rule below is shown for comparison only.")
+    elif adoption is not None and adoption.reference is not None:
+        lines.append(
+            f"- The generated rule replaces the hand-built check: {adoption.why}."
+        )
     if result.rule is not None:
         lines += [f"- {text}" for text in result.rule.describe()]
         cal = result.rule.calibration

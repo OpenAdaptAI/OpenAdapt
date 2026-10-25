@@ -133,6 +133,17 @@ def cmd_snapshot(args: argparse.Namespace) -> int:
     return 0
 
 
+def _reference(spec: Optional[str]) -> Any:
+    """``module:function`` -> the hand-built duplicate check, ``(new, table) -> bool``."""
+
+    if not spec:
+        return None
+    import importlib
+
+    module, _, name = spec.partition(":")
+    return getattr(importlib.import_module(module), name)
+
+
 def cmd_build(args: argparse.Namespace) -> int:
     from openadapt_flow.generate.build import BuildError, build
 
@@ -145,6 +156,8 @@ def cmd_build(args: argparse.Namespace) -> int:
             timeout_s=args.timeout,
             verify_tls=not args.insecure_tls,
             expected_records=args.expected_records,
+            reference_duplicate_check=_reference(args.reference_duplicate_check),
+            false_stop_budget=args.false_stop_budget,
         )
     except BuildError as exc:
         print(f"generate-parts REFUSED: {exc}", file=sys.stderr)
@@ -227,6 +240,18 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         "--timeout", type=float, default=5.0, help="Read-back timeout per check"
     )
     b.add_argument("--expected-records", type=int, default=None)
+    b.add_argument(
+        "--reference-duplicate-check",
+        metavar="MODULE:FUNCTION",
+        help="The system's hand-built duplicate check, (new, table) -> bool. The "
+        "generated rule replaces it only if it misses no more on the calibration set",
+    )
+    b.add_argument(
+        "--false-stop-budget",
+        type=float,
+        default=0.02,
+        help="Estimated false stops per new record the duplicate rule may spend",
+    )
     b.add_argument(
         "--insecure-tls", action="store_true", help="A local test fixture only"
     )

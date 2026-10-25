@@ -81,20 +81,104 @@ def _iso(value: str) -> str:
     return f"{m.group(3)}-{m.group(1)}-{m.group(2)}" if m else (value or "")
 
 
-def run(stream: dict[str, Any], *, seed: int, budget: float = 0.005) -> dict[str, Any]:
-    from openadapt_flow.generate.identity import generate_rule
+_REFERENCE = r"""
+import json, sys
+sys.path = [p for p in sys.path if "openadapt-evals" not in p]
+from benchmark.dup_check import measure
+from openadapt_flow.runtime.checks.duplicate_record import TableSource, check_duplicate
+doc = json.load(sys.stdin)
+profile = doc["profile"]
+out = []
+for case in doc["cases"]:
+    table = profile if case["skip"] is None else profile[: case["skip"]] + profile[case["skip"] + 1 :]
+    records = [measure.record_of(i, p) for i, p in enumerate(table)]
+    decision = check_duplicate(TableSource(records), case["new"]).decision
+    out.append(decision != "none")
+json.dump(out, sys.stdout)
+"""
+
+
+def reference_on(checkout: Path, calset: Any) -> Any:
+    """#1516's record check on ``calset``, as ``decide(new, table) -> bool``."""
+
+    import os
+    import subprocess
+
+    cases = [{"new": new, "skip": None} for _k, new, _s in calset.positives]
+    cases += [{"new": calset.profile[i], "skip": i} for i in calset.negatives]
+    flow = checkout / "packages" / "flow"
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(
+            [str(flow), str(checkout / "packages" / "types")]
+        ),
+    }
+    decisions = json.loads(
+        subprocess.run(
+            [sys.executable, "-c", _REFERENCE],
+            input=json.dumps({"profile": calset.profile, "cases": cases}),
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=str(flow),
+            check=True,
+        ).stdout
+    )
+    lookup: dict[tuple[str, int], bool] = {}
+    for case, stop in zip(cases, decisions):
+        key = (
+            json.dumps(case["new"], sort_keys=True, default=str),
+            len(calset.profile) - (case["skip"] is not None),
+        )
+        lookup[key] = stop
+
+    def decide(new: dict, table: list) -> bool:
+        return lookup[(json.dumps(new, sort_keys=True, default=str), len(table))]
+
+    return decide
+
+
+def _same_first_and_dob(a: dict, b: dict) -> bool:
+    return str(a.get("fname", "")).casefold() == str(
+        b.get("fname", "")
+    ).casefold() and a.get("DOB") == b.get("DOB")
+
+
+def run(
+    stream: dict[str, Any],
+    *,
+    seed: int,
+    budget: float,
+    name_variants: bool,
+    checkout: Path,
+    assumed_labels: bool = False,
+) -> dict[str, Any]:
+    from openadapt_flow.generate.identity import adopt, generate_rule
 
     profile = [dict(p, DOB=_iso(p.get("DOB", ""))) for p in stream["profile"]]
-    started = time.perf_counter()
     # The table a new record meets grows to the stream's size: the known
     # operational volume, not any outcome.
     expected = len(profile) + sum(
         1 for i in stream["items"] if i["intended"] is not None
     )
+    started = time.perf_counter()
     rule = generate_rule(
-        profile, seed=seed, expected_records=expected, false_stop_budget=budget
+        profile,
+        seed=seed,
+        expected_records=expected,
+        false_stop_budget=budget,
+        name_variants=name_variants,
+        # ASSUMED labels, not a person's: two existing charts with the same
+        # first name and date of birth are judged one person. A sensitivity
+        # arm only.
+        labeller=(
+            (lambda item: _same_first_and_dob(*item["records"]))
+            if assumed_labels
+            else None
+        ),
     )
     gen_s = time.perf_counter() - started
+    adoption = adopt(rule, reference_on(checkout, rule.calibration_set))
     table: list[dict] = [dict(p) for p in profile]
     kinds = set(stream["duplicate_kinds"])
     hand = {r["item"]: r for r in stream["hand_rows"]}
@@ -124,7 +208,12 @@ def run(stream: dict[str, Any], *, seed: int, budget: float = 0.005) -> dict[str
             table.append(
                 dict(item["intended"], DOB=_iso(item["intended"].get("DOB", "")))
             )
-    return {"rule": rule, "rows": rows, "generation_s": round(gen_s, 3)}
+    return {
+        "rule": rule,
+        "rows": rows,
+        "generation_s": round(gen_s, 3),
+        "adoption": adoption,
+    }
 
 
 def summarize(rows: list[dict], key: str, stops: Any) -> dict:
@@ -158,7 +247,7 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--budgets",
-        default="0.005,0.01,0.02,0.05",
+        default="0.005,0.01,0.02,0.05,0.1",
         help="estimated false stops per new record the rule may spend (a sweep)",
     )
     parser.add_argument("--out", type=Path, default=HERE / "results")
@@ -168,33 +257,54 @@ def main() -> int:
     report: dict[str, Any] = {}
     budgets = [float(b) for b in args.budgets.split(",")]
     for name, stream in streams.items():
-        for budget in budgets:
-            result = run(stream, seed=args.seed, budget=budget)
-            rows = result["rows"]
-            report[f"{name}@{budget}"] = {
-                "budget": budget,
-                "profile_records": len(stream["profile"]),
-                "generation_s": result["generation_s"],
-                "rule": result["rule"].as_dict(),
-                "rule_text": result["rule"].describe(),
-                "generated": summarize(
-                    rows, "generated", lambda r: r["generated"] != "none"
-                ),
-                "hand_built_record_check": summarize(
-                    rows, "record", lambda r: r["record"] != "none"
-                ),
-            }
-            g = report[f"{name}@{budget}"]["generated"]
-            h = report[f"{name}@{budget}"]["hand_built_record_check"]
-            print(
-                f"{name} budget={budget}: generated missed {g['missed_duplicates']}/"
-                f"{g['true_duplicates']}, false stops {g['false_stops']} "
-                f"({g['false_stops_per_100_items']}/100); hand-built missed "
-                f"{h['missed_duplicates']}, false stops {h['false_stops']} "
-                f"({h['false_stops_per_100_items']}/100)"
-            )
+        for variants, labels in ((False, False), (True, False), (True, True)):
+            for budget in budgets:
+                result = run(
+                    stream,
+                    seed=args.seed,
+                    budget=budget,
+                    name_variants=variants,
+                    checkout=args.dup_check,
+                    assumed_labels=labels,
+                )
+                rows = result["rows"]
+                key = f"{name}|variants={variants}|labels={labels}|budget={budget}"
+                adoption = result["adoption"]
+                report[key] = {
+                    "stream": name,
+                    "name_variants": variants,
+                    "assumed_labels": labels,
+                    "budget": budget,
+                    "profile_records": len(stream["profile"]),
+                    "generation_s": result["generation_s"],
+                    "rule": result["rule"].as_dict(),
+                    "rule_text": result["rule"].describe(),
+                    "adoption": {
+                        "use": adoption.use,
+                        "why": adoption.why,
+                        "calibration_generated": adoption.generated,
+                        "calibration_reference": adoption.reference,
+                    },
+                    "generated": summarize(
+                        rows, "generated", lambda r: r["generated"] != "none"
+                    ),
+                    "hand_built_record_check": summarize(
+                        rows, "record", lambda r: r["record"] != "none"
+                    ),
+                }
+                g = report[key]["generated"]
+                h = report[key]["hand_built_record_check"]
+                print(
+                    f"{key}: test missed {g['missed_duplicates']}/{g['true_duplicates']} "
+                    f"false stops {g['false_stops']} ({g['false_stops_per_100_items']}/100) "
+                    f"| hand missed {h['missed_duplicates']} fs {h['false_stops']} "
+                    f"| calib gen missed {adoption.generated['missed']} ref "
+                    f"{adoption.reference['missed'] if adoption.reference else '-'} "
+                    f"of {adoption.generated['duplicates']} -> use {adoption.use}",
+                    flush=True,
+                )
     (args.out / "duplicates.json").write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n"
+        json.dumps(report, indent=2, sort_keys=True, default=str) + "\n"
     )
     return 0
 

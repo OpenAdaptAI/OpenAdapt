@@ -13,57 +13,83 @@ duplicates, 176 of them planted variants of the existing charts. The
 generated rule is calibrated only on the 30 charts that exist before the
 stream starts, with the generic error model in
 `openadapt_flow/generate/identity.py`. It never sees the stream or its labels.
-No app, no model calls; generation takes under half a second.
+No app; generation takes about 0.25 s. The one model call is the generic
+name-variant table (below), $0.24, made once.
 
 ```bash
 python -m generated_parts.dup_backtest --dup-check <checkout of #1516>
 ```
 
-| Long stream, 676 items | generated rule | #1516 record check (hand-built) |
-|---|---:|---:|
-| missed duplicates, of 223 | 54 | 24 |
-| false stops, of 440 new patients | 0 | 2 |
-| false stops per 100 items | 0.0 | 0.3 |
+### The objective, and the adoption rule
 
-Generation is worse at catching duplicates. The 54 misses:
+A miss (a second chart for one patient) is much worse than a false stop (a
+person looks for a few seconds), so the rule is chosen to **miss as few
+calibration duplicates as possible, subject to an estimated false-stop
+budget** per new record. False stops are estimated per comparison from the
+system's own records (Fellegi-Sunter u-probabilities), multiplied over a
+clause's terms and by the table size.
 
-- 24 are the two kinds #1516 also misses (a new name, new contact details
-  and the same or a mistyped date of birth: nothing else to match on);
-- 12 `pl_married_moved` (a married name and new contact details). The rule
-  would need "same first name and same date of birth", and this system's own
-  records hold six pairs of separate charts that share both, so calibration
-  refuses it. #1516's hand-written rule accepts that risk;
-- 12 `pl_both_typos_same_contact` (a typo in both names);
-- 6 `r2_prior_name_moved_dob_typo` (a prior name, new contact details and a
-  mistyped day).
+**Adoption rule** (`identity.adopt`, enforced by `generate-parts build
+--reference-duplicate-check`): a generated rule replaces the system's
+hand-built check only if it misses no more duplicates on the same
+calibration set. Otherwise the hand-built check stays, and the review says
+why.
 
-The rule's own calibration estimates a 21% miss rate on made-up duplicates
-of this system's records, and lists the error kinds it misses most (a changed
-last name, or swapped names, together with new contact details). That text
-goes to the person who approves it. The hand-built rule has a nickname table;
-the generated one has none.
+### The frontier (long stream)
 
-The rule's false-stop budget (estimated false stops per new record) changes
-calibration, but not these results: at 0.005 and at 0.05 the stream gives 54
-misses and 0 false stops.
+| Budget (false stops per new record) | Calibration misses, generated | Test misses, of 223 | Test false stops, of 440 |
+|---:|---:|---:|---:|
+| 0.005 | 142 of 604 | 54 | 0 |
+| 0.01 | 114 | 54 | 0 |
+| 0.02 | 100 | 54 | 0 |
+| 0.05 | 73 | 54 | 0 |
+| 0.1 | 45 | 53 | 0 |
+| #1516 record check (hand-built) | 3 of 604 | 24 | 2 |
+
+With the name-variant table. Without it the rows are within a few misses of
+these; with assumed labels (two existing charts sharing a first name and a
+date of birth judged one person, not a person's labels) the 0.1 row gives
+41 calibration misses and 52 test misses.
+
+**On this system the adoption rule keeps the hand-built check at every
+budget**: it misses 3 of 604 calibration duplicates where the generated rule
+misses 45 or more. Generation is worse here.
+
+### Why it is worse here
+
+- **The calibration doesn't transfer.** Raising the budget cuts calibration
+  misses from 142 to 45 and test misses not at all. Of the generated rule's
+  test misses, 24 are the two kinds #1516 also can't catch, and the rest
+  (married name and new contact details; typos in both names; a prior name
+  with new contact details and a mistyped day) are the error kinds it still
+  misses in calibration, at every budget.
+- **This system's own records say the key clause is risky.** Catching a
+  married name with new contact details needs "same first name and same date
+  of birth". Six pairs of the 30 existing charts share both, so on this
+  system's data that clause would stop 12 of 30 existing patients posed as
+  new; #1516's hand-built rule accepts that (it has the same 12 calibration
+  false stops) and is right on the stream (2 false stops in 440). Thirty
+  records are too few to tell an artifact from a real risk; the generated
+  rule takes the conservative reading.
+- **Signals.** The generated rule now has what #1516 has: exact name and date,
+  the medical record number, nicknames (a generic, model-made table of
+  given-name variants, `generate/name_variants.json`, from common names only:
+  no record leaves the system), initials, phonetic and one-letter matches,
+  a date one part off or with day and month swapped, shared or hyphenated
+  surname parts, a prior last name, swapped names, and contact tie-breakers.
+  What it lacks is the hand-written judgment of which combinations to accept.
 
 ### How the rule got here
 
-Three versions were run on this stream. The second and third were changed
-after seeing the first's result, so this stream is no longer a clean held-out
-test for the generator:
+The rule changed four times on this stream, after seeing results, so this
+stream is no longer a clean held-out test for the generator:
 
-| Version | Change | Missed | False stops |
+| Version | Change | Test missed | Test false stops |
 |---|---|---:|---:|
 | 1 | one error at a time | 78 | 0 |
 | 2 | each error with contact details kept and changed; swapped names, an initial, a second surname, a prior name | 42 | 12 |
-| 3 | admit a clause only if its estimated false stops per record, from per-comparison rates on this system's records, fit the budget | 54 | 0 |
+| 3 | estimated false stops per record from per-comparison rates | 54 | 0 |
+| 4 | misses first within a budget; nicknames, MRN, typos in both names; adoption rule | 52-54 | 0 |
 
-Version 1 picked one clause that relied on the email: every made-up
-duplicate kept its email. Version 2's loosest clauses ("same first name, last
-name one letter apart") never fired on 30 records but did on 440 new
-patients; version 3 estimates that risk from each comparison's rate instead
-of waiting to see it.
-
-The committed result is `results/duplicates.json`, including each rule in
-words.
+The committed result is `results/duplicates.json`: every arm, each rule in
+words, and both checks' calibration scores.

@@ -1,0 +1,1406 @@
+{
+ "schema_version": "openadapt.name-variants/v1",
+ "generated_by": "claude-sonnet-5-5",
+ "prompt": "List the 400 most common given names in English-speaking countries (both men's and women's), and for each its common nicknames, diminutives and short forms (for example Robert: Bob, Bobby, Rob, Robbie, Bert). Include a name's common variants only, not rare ones. Answer with JSON only, no prose: an object mapping each given name to a list of its variants, all in Title Case.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "input_tokens": 132,
+  "output_tokens": 16247,
+  "cost_usd": 0.244101
+ },
+ "variants": {
+  "Aaron": [],
+  "Abigail": [
+   "Abbie",
+   "Abby",
+   "Gail"
+  ],
+  "Abraham": [
+   "Abe",
+   "Abie"
+  ],
+  "Adam": [],
+  "Adelaide": [
+   "Ada",
+   "Addie",
+   "Adele"
+  ],
+  "Adrian": [
+   "Adie"
+  ],
+  "Agnes": [
+   "Aggie",
+   "Nessie"
+  ],
+  "Alan": [
+   "Al"
+  ],
+  "Albert": [
+   "Al",
+   "Bert",
+   "Bertie"
+  ],
+  "Alexander": [
+   "Al",
+   "Alex",
+   "Lex",
+   "Sandy",
+   "Xander"
+  ],
+  "Alexandra": [
+   "Alex",
+   "Alexa",
+   "Ali",
+   "Lexi",
+   "Sandra",
+   "Sandy"
+  ],
+  "Alexis": [
+   "Alex",
+   "Lexi"
+  ],
+  "Alfred": [
+   "Alf",
+   "Alfie",
+   "Fred"
+  ],
+  "Alice": [
+   "Allie",
+   "Lissie"
+  ],
+  "Alison": [
+   "Ali",
+   "Allie",
+   "Allison"
+  ],
+  "Alvin": [
+   "Al"
+  ],
+  "Amanda": [
+   "Amy",
+   "Mandy"
+  ],
+  "Amber": [],
+  "Amelia": [
+   "Amy",
+   "Emmy",
+   "Mel",
+   "Millie"
+  ],
+  "Amy": [],
+  "Anastasia": [
+   "Ana",
+   "Stacey",
+   "Stacy",
+   "Tasha"
+  ],
+  "Andrea": [
+   "Andi",
+   "Andie"
+  ],
+  "Andrew": [
+   "Andy",
+   "Drew"
+  ],
+  "Angela": [
+   "Angie"
+  ],
+  "Anna": [
+   "Ann",
+   "Anne",
+   "Annie",
+   "Nan"
+  ],
+  "Annabel": [
+   "Anna",
+   "Bella"
+  ],
+  "Anthony": [
+   "Ant",
+   "Tony"
+  ],
+  "Antonia": [
+   "Toni",
+   "Tonia"
+  ],
+  "April": [],
+  "Archibald": [
+   "Archie",
+   "Archy"
+  ],
+  "Arthur": [
+   "Art",
+   "Artie"
+  ],
+  "Ashley": [
+   "Ash"
+  ],
+  "Audrey": [
+   "Audie"
+  ],
+  "Austin": [],
+  "Ava": [],
+  "Barbara": [
+   "Babs",
+   "Barb",
+   "Barbie"
+  ],
+  "Barry": [
+   "Baz"
+  ],
+  "Benjamin": [
+   "Ben",
+   "Benji",
+   "Benny"
+  ],
+  "Bernadette": [
+   "Bernie",
+   "Detta"
+  ],
+  "Bernard": [
+   "Barney",
+   "Bernie"
+  ],
+  "Bethany": [
+   "Beth",
+   "Bethy"
+  ],
+  "Betty": [
+   "Bette"
+  ],
+  "Beverly": [
+   "Bev"
+  ],
+  "Blake": [],
+  "Bradley": [
+   "Brad"
+  ],
+  "Brandon": [],
+  "Brenda": [
+   "Bren"
+  ],
+  "Brett": [],
+  "Brian": [],
+  "Bridget": [
+   "Biddy",
+   "Bridie"
+  ],
+  "Brittany": [
+   "Britney",
+   "Britt"
+  ],
+  "Bruce": [],
+  "Bryan": [],
+  "Caleb": [
+   "Cal"
+  ],
+  "Calvin": [
+   "Cal"
+  ],
+  "Cameron": [
+   "Cam"
+  ],
+  "Carl": [],
+  "Carol": [
+   "Carrie"
+  ],
+  "Caroline": [
+   "Caro",
+   "Carrie",
+   "Lina"
+  ],
+  "Carolyn": [
+   "Carol",
+   "Carrie",
+   "Lynn"
+  ],
+  "Cassandra": [
+   "Cass",
+   "Cassie",
+   "Sandy"
+  ],
+  "Catherine": [
+   "Cat",
+   "Cate",
+   "Cathy",
+   "Kate",
+   "Katie",
+   "Kitty"
+  ],
+  "Cecil": [
+   "Cec"
+  ],
+  "Charlene": [],
+  "Charles": [
+   "Charlie",
+   "Chas",
+   "Chip",
+   "Chuck"
+  ],
+  "Charlotte": [
+   "Charlie",
+   "Lotta",
+   "Lottie"
+  ],
+  "Chase": [],
+  "Cheryl": [
+   "Cher",
+   "Sheryl"
+  ],
+  "Chloe": [],
+  "Christian": [
+   "Chris",
+   "Christy"
+  ],
+  "Christina": [
+   "Chris",
+   "Chrissy",
+   "Christy",
+   "Tina"
+  ],
+  "Christine": [
+   "Chris",
+   "Chrissy",
+   "Christy",
+   "Tina"
+  ],
+  "Christopher": [
+   "Chris",
+   "Kit",
+   "Topher"
+  ],
+  "Claire": [
+   "Clare"
+  ],
+  "Clifford": [
+   "Cliff"
+  ],
+  "Cody": [],
+  "Cole": [],
+  "Colin": [],
+  "Colleen": [],
+  "Connor": [
+   "Con"
+  ],
+  "Constance": [
+   "Connie"
+  ],
+  "Corey": [
+   "Cory"
+  ],
+  "Courtney": [
+   "Court"
+  ],
+  "Craig": [],
+  "Crystal": [
+   "Chris",
+   "Krystal"
+  ],
+  "Curtis": [
+   "Curt"
+  ],
+  "Cynthia": [
+   "Cindy",
+   "Cyndi"
+  ],
+  "Dale": [],
+  "Damian": [
+   "Dami",
+   "Damon"
+  ],
+  "Daniel": [
+   "Dan",
+   "Danny"
+  ],
+  "Danielle": [
+   "Dani",
+   "Danni",
+   "Elle"
+  ],
+  "Darren": [
+   "Daz"
+  ],
+  "David": [
+   "Dave",
+   "Davey",
+   "Davy"
+  ],
+  "Dawn": [],
+  "Dean": [],
+  "Deborah": [
+   "Deb",
+   "Debbie",
+   "Debra"
+  ],
+  "Declan": [
+   "Dec"
+  ],
+  "Denise": [
+   "Dee"
+  ],
+  "Dennis": [
+   "Denny"
+  ],
+  "Derek": [
+   "Del",
+   "Derrick"
+  ],
+  "Diana": [
+   "Dee",
+   "Di"
+  ],
+  "Diane": [
+   "Dee",
+   "Di"
+  ],
+  "Dominic": [
+   "Dom",
+   "Dommy",
+   "Nick"
+  ],
+  "Donald": [
+   "Don",
+   "Donnie",
+   "Donny"
+  ],
+  "Donna": [],
+  "Dorothy": [
+   "Dolly",
+   "Dora",
+   "Dot",
+   "Dottie"
+  ],
+  "Douglas": [
+   "Doug",
+   "Dougie"
+  ],
+  "Duncan": [
+   "Dunc"
+  ],
+  "Dylan": [],
+  "Earl": [],
+  "Edgar": [
+   "Ed",
+   "Eddie"
+  ],
+  "Edith": [
+   "Edie"
+  ],
+  "Edmund": [
+   "Ed",
+   "Eddie",
+   "Ned",
+   "Ted"
+  ],
+  "Edward": [
+   "Ed",
+   "Eddie",
+   "Ned",
+   "Ted",
+   "Teddy"
+  ],
+  "Edwin": [
+   "Ed",
+   "Eddie",
+   "Win"
+  ],
+  "Elaine": [
+   "Ellie",
+   "Laney"
+  ],
+  "Eleanor": [
+   "Ella",
+   "Elle",
+   "Ellie",
+   "Nell",
+   "Nellie",
+   "Nora"
+  ],
+  "Elijah": [
+   "Eli"
+  ],
+  "Elizabeth": [
+   "Beth",
+   "Betsy",
+   "Betty",
+   "Eliza",
+   "Ellie",
+   "Libby",
+   "Liz",
+   "Liza",
+   "Lizzie"
+  ],
+  "Ella": [
+   "Ellie"
+  ],
+  "Ellen": [
+   "Ellie",
+   "Nell",
+   "Nellie"
+  ],
+  "Elliot": [
+   "Eli",
+   "Ellie"
+  ],
+  "Emily": [
+   "Em",
+   "Emmy",
+   "Millie"
+  ],
+  "Emma": [
+   "Em",
+   "Emmy"
+  ],
+  "Eric": [
+   "Rick"
+  ],
+  "Erica": [
+   "Erika",
+   "Rica",
+   "Ricki"
+  ],
+  "Erin": [],
+  "Ernest": [
+   "Ernie"
+  ],
+  "Esther": [
+   "Essie",
+   "Hettie"
+  ],
+  "Ethan": [],
+  "Eugene": [
+   "Gene"
+  ],
+  "Evan": [],
+  "Evelyn": [
+   "Eva",
+   "Eve",
+   "Evie"
+  ],
+  "Faith": [],
+  "Felicity": [
+   "Flick",
+   "Fliss"
+  ],
+  "Felix": [],
+  "Fiona": [
+   "Fi"
+  ],
+  "Florence": [
+   "Flo",
+   "Florrie",
+   "Flossie"
+  ],
+  "Frances": [
+   "Fran",
+   "Frankie",
+   "Frannie"
+  ],
+  "Francis": [
+   "Fran",
+   "Frank",
+   "Frankie"
+  ],
+  "Frank": [
+   "Frankie"
+  ],
+  "Frederick": [
+   "Fred",
+   "Freddie",
+   "Freddy",
+   "Rick"
+  ],
+  "Gabriel": [
+   "Gabe"
+  ],
+  "Gabrielle": [
+   "Ella",
+   "Gabby",
+   "Gabi"
+  ],
+  "Garrett": [
+   "Gare",
+   "Gary"
+  ],
+  "Gary": [
+   "Gaz"
+  ],
+  "Gemma": [
+   "Gem"
+  ],
+  "George": [
+   "Georgie"
+  ],
+  "Georgia": [
+   "Georgie"
+  ],
+  "Georgina": [
+   "Georgie",
+   "Gina"
+  ],
+  "Gerald": [
+   "Gerry",
+   "Jerry"
+  ],
+  "Gertrude": [
+   "Gertie",
+   "Trudy"
+  ],
+  "Gilbert": [
+   "Gil",
+   "Gilly"
+  ],
+  "Gillian": [
+   "Gill",
+   "Jill",
+   "Jilly"
+  ],
+  "Glenn": [
+   "Glen"
+  ],
+  "Gloria": [],
+  "Gordon": [
+   "Gord",
+   "Gordie"
+  ],
+  "Grace": [
+   "Gracie"
+  ],
+  "Graham": [
+   "Graeme"
+  ],
+  "Gregory": [
+   "Greg",
+   "Gregg"
+  ],
+  "Hailey": [],
+  "Hannah": [
+   "Hanna"
+  ],
+  "Harold": [
+   "Hal",
+   "Harry"
+  ],
+  "Harriet": [
+   "Harry",
+   "Hattie"
+  ],
+  "Harry": [
+   "Hal",
+   "Harrie"
+  ],
+  "Hazel": [],
+  "Heather": [],
+  "Heidi": [],
+  "Helen": [
+   "Lena",
+   "Nell",
+   "Nellie"
+  ],
+  "Henrietta": [
+   "Etta",
+   "Henny",
+   "Hetty"
+  ],
+  "Henry": [
+   "Hal",
+   "Hank",
+   "Harry"
+  ],
+  "Herbert": [
+   "Bert",
+   "Herb",
+   "Herbie"
+  ],
+  "Holly": [],
+  "Howard": [
+   "Howie"
+  ],
+  "Hugh": [
+   "Hughie"
+  ],
+  "Hugo": [],
+  "Hunter": [],
+  "Ian": [],
+  "Imogen": [
+   "Immy",
+   "Midge"
+  ],
+  "Irene": [
+   "Rene",
+   "Renie"
+  ],
+  "Isaac": [
+   "Ike",
+   "Zac"
+  ],
+  "Isabella": [
+   "Bella",
+   "Isa",
+   "Isabel",
+   "Izzy"
+  ],
+  "Ivy": [],
+  "Jack": [
+   "Jackie"
+  ],
+  "Jacob": [
+   "Jake",
+   "Jay"
+  ],
+  "Jacqueline": [
+   "Jackie",
+   "Jacky",
+   "Jacqui"
+  ],
+  "Jade": [],
+  "James": [
+   "Jamie",
+   "Jim",
+   "Jimbo",
+   "Jimmy"
+  ],
+  "Jane": [
+   "Janey",
+   "Janie",
+   "Jenny"
+  ],
+  "Janet": [
+   "Jan",
+   "Jenny"
+  ],
+  "Janice": [
+   "Jan"
+  ],
+  "Jared": [
+   "Jay"
+  ],
+  "Jasmine": [
+   "Jaz",
+   "Jazz",
+   "Jazzy",
+   "Jessie"
+  ],
+  "Jason": [
+   "Jase",
+   "Jay"
+  ],
+  "Jean": [
+   "Jeanie",
+   "Jeannie"
+  ],
+  "Jeffrey": [
+   "Jeff"
+  ],
+  "Jenna": [],
+  "Jennifer": [
+   "Jen",
+   "Jenn",
+   "Jenny"
+  ],
+  "Jeremy": [
+   "Jem"
+  ],
+  "Jerome": [
+   "Jerry"
+  ],
+  "Jesse": [
+   "Jess"
+  ],
+  "Jessica": [
+   "Jess",
+   "Jessie"
+  ],
+  "Jill": [
+   "Jilly"
+  ],
+  "Joan": [
+   "Joanie"
+  ],
+  "Joanna": [
+   "Jo",
+   "Joanie",
+   "Joanne"
+  ],
+  "Joel": [],
+  "John": [
+   "Jack",
+   "Johnnie",
+   "Johnny",
+   "Jon"
+  ],
+  "Jonathan": [
+   "Jon",
+   "Jonny",
+   "Nathan"
+  ],
+  "Jordan": [
+   "Jordie"
+  ],
+  "Jose": [
+   "Joe",
+   "Pepe"
+  ],
+  "Joseph": [
+   "Joe",
+   "Joey"
+  ],
+  "Josephine": [
+   "Jo",
+   "Josie"
+  ],
+  "Joshua": [
+   "Josh"
+  ],
+  "Joyce": [],
+  "Juan": [],
+  "Judith": [
+   "Jude",
+   "Judi",
+   "Judy"
+  ],
+  "Julia": [
+   "Jules",
+   "Julie"
+  ],
+  "Julian": [
+   "Jules"
+  ],
+  "Julie": [
+   "Jules"
+  ],
+  "Justin": [],
+  "Karen": [
+   "Kari"
+  ],
+  "Katherine": [
+   "Kat",
+   "Kate",
+   "Kathy",
+   "Katie",
+   "Kay",
+   "Kit",
+   "Kitty"
+  ],
+  "Kathleen": [
+   "Kat",
+   "Kate",
+   "Kathy",
+   "Katie"
+  ],
+  "Kathryn": [
+   "Kate",
+   "Kathy",
+   "Katie"
+  ],
+  "Kayla": [
+   "Kay"
+  ],
+  "Keith": [],
+  "Kelly": [],
+  "Kenneth": [
+   "Ken",
+   "Kenny"
+  ],
+  "Kevin": [
+   "Kev"
+  ],
+  "Kimberly": [
+   "Kim",
+   "Kimmy"
+  ],
+  "Kristen": [
+   "Kris",
+   "Kristy"
+  ],
+  "Kurt": [],
+  "Kyle": [],
+  "Laura": [
+   "Laurie"
+  ],
+  "Lauren": [
+   "Laurie",
+   "Lo"
+  ],
+  "Lawrence": [
+   "Larry",
+   "Laurie",
+   "Lawrie"
+  ],
+  "Leah": [],
+  "Lee": [],
+  "Leo": [],
+  "Leonard": [
+   "Len",
+   "Lenny",
+   "Leo",
+   "Leon"
+  ],
+  "Lewis": [
+   "Lew",
+   "Louie"
+  ],
+  "Liam": [],
+  "Lillian": [
+   "Lil",
+   "Lilly",
+   "Lily"
+  ],
+  "Lily": [
+   "Lil",
+   "Lilly"
+  ],
+  "Linda": [
+   "Lindy",
+   "Lynn"
+  ],
+  "Lisa": [],
+  "Lloyd": [],
+  "Logan": [],
+  "Lorraine": [
+   "Lori",
+   "Rainie"
+  ],
+  "Louis": [
+   "Lou",
+   "Louie"
+  ],
+  "Louise": [
+   "Lou",
+   "Louie",
+   "Lulu"
+  ],
+  "Lucas": [
+   "Luc",
+   "Luke"
+  ],
+  "Lucy": [
+   "Luce",
+   "Lucie"
+  ],
+  "Luke": [],
+  "Lydia": [
+   "Liddy",
+   "Lyddie"
+  ],
+  "Mabel": [
+   "Mabs",
+   "Mae"
+  ],
+  "Madison": [
+   "Maddie",
+   "Maddy",
+   "Madi"
+  ],
+  "Malcolm": [
+   "Mal"
+  ],
+  "Marcus": [
+   "Marc",
+   "Marco"
+  ],
+  "Margaret": [
+   "Greta",
+   "Maggie",
+   "Maisie",
+   "Marge",
+   "Margie",
+   "Meg",
+   "Peggy"
+  ],
+  "Maria": [
+   "Mariah",
+   "Mia"
+  ],
+  "Marie": [
+   "Mimi"
+  ],
+  "Marilyn": [
+   "Lyn",
+   "Mari"
+  ],
+  "Mark": [
+   "Marky"
+  ],
+  "Martha": [
+   "Marty",
+   "Mattie",
+   "Patty"
+  ],
+  "Martin": [
+   "Marty"
+  ],
+  "Marvin": [
+   "Marv"
+  ],
+  "Mary": [
+   "Mae",
+   "Maisie",
+   "May",
+   "Molly",
+   "Polly"
+  ],
+  "Mason": [],
+  "Matilda": [
+   "Mattie",
+   "Maud",
+   "Tilda",
+   "Tilly"
+  ],
+  "Matthew": [
+   "Matt",
+   "Matty"
+  ],
+  "Maureen": [
+   "Mo"
+  ],
+  "Maurice": [
+   "Mo",
+   "Morris"
+  ],
+  "Maxine": [
+   "Max",
+   "Maxie"
+  ],
+  "Maxwell": [
+   "Max",
+   "Maxie"
+  ],
+  "Megan": [
+   "Meg",
+   "Meggie"
+  ],
+  "Melissa": [
+   "Lissa",
+   "Mel",
+   "Missy"
+  ],
+  "Melvin": [
+   "Mel"
+  ],
+  "Mia": [],
+  "Michael": [
+   "Mick",
+   "Mickey",
+   "Mike",
+   "Mikey"
+  ],
+  "Michelle": [
+   "Mich",
+   "Shelly"
+  ],
+  "Miles": [
+   "Myles"
+  ],
+  "Miranda": [
+   "Mandy",
+   "Mira",
+   "Randi"
+  ],
+  "Morgan": [],
+  "Nancy": [
+   "Nan",
+   "Nance"
+  ],
+  "Naomi": [
+   "Nay"
+  ],
+  "Natalie": [
+   "Nat",
+   "Natty",
+   "Tally"
+  ],
+  "Nathan": [
+   "Nate"
+  ],
+  "Nathaniel": [
+   "Nat",
+   "Nate",
+   "Nathan"
+  ],
+  "Neil": [
+   "Neal"
+  ],
+  "Nicholas": [
+   "Nick",
+   "Nicky",
+   "Nico"
+  ],
+  "Nicole": [
+   "Nicky",
+   "Nikki"
+  ],
+  "Nigel": [],
+  "Noah": [],
+  "Nora": [
+   "Norah"
+  ],
+  "Norma": [],
+  "Norman": [
+   "Norm",
+   "Normie"
+  ],
+  "Oliver": [
+   "Ollie",
+   "Olly"
+  ],
+  "Olivia": [
+   "Liv",
+   "Livvy",
+   "Olly",
+   "Via"
+  ],
+  "Oscar": [
+   "Ozzy"
+  ],
+  "Owen": [],
+  "Pamela": [
+   "Pam",
+   "Pammy"
+  ],
+  "Patricia": [
+   "Pat",
+   "Patsy",
+   "Patty",
+   "Tricia",
+   "Trish"
+  ],
+  "Patrick": [
+   "Paddy",
+   "Pat",
+   "Patty"
+  ],
+  "Paul": [
+   "Paulie"
+  ],
+  "Paula": [],
+  "Pauline": [
+   "Paulie",
+   "Polly"
+  ],
+  "Penelope": [
+   "Pen",
+   "Penny"
+  ],
+  "Peter": [
+   "Pete",
+   "Petey"
+  ],
+  "Philip": [
+   "Phil"
+  ],
+  "Phyllis": [
+   "Phyl"
+  ],
+  "Priscilla": [
+   "Cilla",
+   "Prissy"
+  ],
+  "Rachel": [
+   "Rach",
+   "Rachie"
+  ],
+  "Ralph": [
+   "Rafe"
+  ],
+  "Randall": [
+   "Rand",
+   "Randy"
+  ],
+  "Raymond": [
+   "Ray"
+  ],
+  "Rebecca": [
+   "Becca",
+   "Becky",
+   "Bex"
+  ],
+  "Richard": [
+   "Dick",
+   "Rich",
+   "Richie",
+   "Rick",
+   "Ricky"
+  ],
+  "Rita": [],
+  "Robert": [
+   "Bert",
+   "Bob",
+   "Bobby",
+   "Rob",
+   "Robbie"
+  ],
+  "Roberta": [
+   "Birdie",
+   "Bobbi",
+   "Bobbie",
+   "Robin"
+  ],
+  "Robin": [],
+  "Roderick": [
+   "Rod",
+   "Roddy",
+   "Rory"
+  ],
+  "Rodney": [
+   "Rod",
+   "Roddy"
+  ],
+  "Roger": [
+   "Rog"
+  ],
+  "Ronald": [
+   "Ron",
+   "Ronnie"
+  ],
+  "Rory": [],
+  "Rosalind": [
+   "Ros",
+   "Rosie",
+   "Roz"
+  ],
+  "Rose": [
+   "Rosie"
+  ],
+  "Rosemary": [
+   "Rose",
+   "Rosie"
+  ],
+  "Ross": [],
+  "Roy": [],
+  "Russell": [
+   "Russ"
+  ],
+  "Ruth": [
+   "Ruthie"
+  ],
+  "Ryan": [],
+  "Sabrina": [
+   "Bree"
+  ],
+  "Samantha": [
+   "Sam",
+   "Sami",
+   "Sammy"
+  ],
+  "Samuel": [
+   "Sam",
+   "Sammy"
+  ],
+  "Sandra": [
+   "Sandi",
+   "Sandy"
+  ],
+  "Sarah": [
+   "Sadie",
+   "Sally"
+  ],
+  "Scott": [
+   "Scotty"
+  ],
+  "Sean": [
+   "Shaun",
+   "Shawn"
+  ],
+  "Sebastian": [
+   "Bash",
+   "Bastian",
+   "Seb"
+  ],
+  "Seth": [],
+  "Shane": [],
+  "Sharon": [
+   "Shari"
+  ],
+  "Shirley": [
+   "Shirl"
+  ],
+  "Sidney": [
+   "Sid"
+  ],
+  "Simon": [
+   "Si"
+  ],
+  "Sophia": [
+   "Sofia",
+   "Sophie"
+  ],
+  "Sophie": [
+   "Sofia",
+   "Soph"
+  ],
+  "Spencer": [
+   "Spence"
+  ],
+  "Stanley": [
+   "Stan"
+  ],
+  "Stella": [],
+  "Stephanie": [
+   "Steph",
+   "Stephie"
+  ],
+  "Stephen": [
+   "Steve",
+   "Stevie"
+  ],
+  "Steven": [
+   "Steve",
+   "Stevie"
+  ],
+  "Stuart": [
+   "Stu"
+  ],
+  "Susan": [
+   "Sue",
+   "Susie",
+   "Suzy"
+  ],
+  "Sylvia": [
+   "Syl",
+   "Sylvie"
+  ],
+  "Tabitha": [
+   "Tab",
+   "Tabby"
+  ],
+  "Tamara": [
+   "Tam",
+   "Tammy"
+  ],
+  "Tanya": [],
+  "Terence": [
+   "Terry"
+  ],
+  "Teresa": [
+   "Terri",
+   "Terry",
+   "Tess",
+   "Tessa",
+   "Theresa"
+  ],
+  "Theodora": [
+   "Dora",
+   "Teddy",
+   "Theo"
+  ],
+  "Theodore": [
+   "Ted",
+   "Teddy",
+   "Theo"
+  ],
+  "Thomas": [
+   "Tom",
+   "Tommy"
+  ],
+  "Tiffany": [
+   "Tiff",
+   "Tiffy"
+  ],
+  "Timothy": [
+   "Tim",
+   "Timmy"
+  ],
+  "Todd": [],
+  "Tracy": [
+   "Trace",
+   "Tracey"
+  ],
+  "Travis": [
+   "Trav"
+  ],
+  "Trevor": [
+   "Trev"
+  ],
+  "Tristan": [
+   "Tris"
+  ],
+  "Troy": [],
+  "Tyler": [
+   "Ty"
+  ],
+  "Valerie": [
+   "Val"
+  ],
+  "Vanessa": [
+   "Nessa",
+   "Van",
+   "Vanny"
+  ],
+  "Vera": [],
+  "Vernon": [
+   "Vern"
+  ],
+  "Veronica": [
+   "Roni",
+   "Ronnie",
+   "Vera",
+   "Vonnie"
+  ],
+  "Victor": [
+   "Vic",
+   "Vick"
+  ],
+  "Victoria": [
+   "Tori",
+   "Tory",
+   "Vicki",
+   "Vicky"
+  ],
+  "Vincent": [
+   "Vin",
+   "Vince",
+   "Vinny"
+  ],
+  "Violet": [
+   "Letty",
+   "Vi"
+  ],
+  "Virginia": [
+   "Gina",
+   "Ginger",
+   "Ginny"
+  ],
+  "Vivian": [
+   "Viv",
+   "Vivi"
+  ],
+  "Walter": [
+   "Wally",
+   "Walt"
+  ],
+  "Warren": [],
+  "Wayne": [],
+  "Wendy": [],
+  "Wesley": [
+   "Wes"
+  ],
+  "Whitney": [
+   "Whit"
+  ],
+  "Wilhelmina": [
+   "Billie",
+   "Mina",
+   "Minnie",
+   "Willa"
+  ],
+  "William": [
+   "Bill",
+   "Billy",
+   "Liam",
+   "Will",
+   "Willie",
+   "Willy"
+  ],
+  "Wyatt": [],
+  "Yvonne": [
+   "Vonnie"
+  ],
+  "Zachary": [
+   "Zac",
+   "Zach",
+   "Zack"
+  ],
+  "Zoe": []
+ }
+}

@@ -303,6 +303,7 @@
     "openadapt_flow/console/static/console.js",
     "openadapt_flow/console/static/index.html",
     "openadapt_flow/eligibility/payer_routes.yaml",
+    "openadapt_flow/generate/name_variants.json",
     "openadapt_flow/mockloan/static/app.js",
     "openadapt_flow/mockloan/static/index.html",
     "openadapt_flow/mockloan/static/styles.css",
