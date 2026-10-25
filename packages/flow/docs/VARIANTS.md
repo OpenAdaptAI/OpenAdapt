@@ -134,7 +134,8 @@ openadapt-flow route encounter-intake --param payer=medicare --first-screen firs
 `run` routes, verifies the chosen variant's admission, and runs it:
 
 ```bash
-openadapt-flow run encounter-intake --profile standard \
+openadapt-flow run encounter-intake --profile standard --backend web \
+  --url https://app.example.test \
   --param payer=medicare --param patient_id=... \
   --qualification-trust qualification-trust.json
 ```
