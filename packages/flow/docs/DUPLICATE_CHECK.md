@@ -95,6 +95,15 @@ construction to keep it so.
 - `screen`: the on-screen list, even when a channel exists.
 - unset: the FHIR channel when the run has one, else the screen.
 
+**Choosing the channel.** `candidate_channel` picks one:
+- `fhir` with an OpenEMR REST record check (`.../apis/default/api/patient`)
+  searches OpenEMR's FHIR API on the same server (`.../apis/default/fhir`),
+  with the record check's bearer token. That token's client then needs the
+  FHIR read scope, `api:fhir user/Patient.read`. Without it every search is
+  refused, and the check is `unreadable`.
+- `rest` uses only the REST adapter.
+- Unset, the record check's own channel decides.
+
 **Parameter names.** The check reads `fname`, `lname`, `DOB`, and when
 present `mrn`, `phone_home`, `email` and `street`: OpenEMR's referral names.
 A program for another app maps its own with `candidate_record_fields`, for

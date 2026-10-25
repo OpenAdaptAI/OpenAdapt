@@ -524,6 +524,11 @@ class Postcondition(BaseModel):
     #: each field the record check reads (``fname``, ``lname``, ``DOB``,
     #: ``mrn``, ``phone_home``, ``email``, ``street``). Unset: those names.
     candidate_record_fields: Optional[dict[str, str]] = None
+    #: NO_DUPLICATE_CANDIDATE, record source: which channel to search.
+    #: ``fhir`` with an OpenEMR REST record check searches OpenEMR's FHIR API
+    #: on the same server; ``rest``, OpenEMR's REST API only. Unset: the
+    #: channel of the run's record check.
+    candidate_channel: Optional[Literal["fhir", "rest"]] = None
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -541,6 +546,7 @@ class Postcondition(BaseModel):
             "candidate_params",
             "candidate_source",
             "candidate_record_fields",
+            "candidate_channel",
         ):
             if getattr(self, name) is None:
                 data.pop(name, None)

@@ -976,7 +976,10 @@ def _unwrap(verifier: Any) -> Any:
 
 
 def source_for_verifier(
-    verifier: Any, *, allow_rest: bool = False
+    verifier: Any,
+    *,
+    allow_rest: bool = False,
+    channel: Optional[Literal["fhir", "rest"]] = None,
 ) -> Optional[PatientSource]:
     """The patient search on the same channel as a run's record check.
 
@@ -985,6 +988,12 @@ def source_for_verifier(
     gives the OpenEMR REST adapter, but only with ``allow_rest`` (a program
     pinned to the record check). Anything else, or a verifier missing the
     attributes these need, gives None.
+
+    ``channel`` (the program's ``candidate_channel``) chooses: ``fhir`` with
+    an OpenEMR REST verifier searches OpenEMR's FHIR API on the same server
+    (``.../apis/<site>/fhir``) with the verifier's bearer token, which then
+    needs the FHIR read scope (``api:fhir user/Patient.read``); ``rest``
+    uses only the REST adapter.
     """
 
     from openadapt_flow.runtime.effects import FhirEffectVerifier
@@ -992,6 +1001,8 @@ def source_for_verifier(
 
     verifier = _unwrap(verifier)
     try:
+        if channel == "rest" and not isinstance(verifier, RestRecordVerifier):
+            return None
         if isinstance(verifier, FhirEffectVerifier):
             access_token = getattr(verifier, "access_token", None)
             token_source = getattr(verifier, "token_source", None)
@@ -1008,6 +1019,25 @@ def source_for_verifier(
                 timeout_s=max(float(getattr(verifier, "timeout_s", 10.0)), 10.0),
             )
         records_path = str(getattr(verifier, "records_path", "") or "")
+        if (
+            channel == "fhir"
+            and isinstance(verifier, RestRecordVerifier)
+            and "/api/patient" in records_path
+        ):
+            # OpenEMR serves FHIR beside its REST API: .../apis/default/fhir.
+            site = records_path.split("?", 1)[0].split("/api/patient", 1)[0]
+            bearer = str(
+                (getattr(verifier, "headers", None) or {}).get("Authorization", "")
+            )
+            token = bearer.removeprefix("Bearer ").strip()
+            return FhirPatientSource(
+                f"{verifier.base_url}{site}/fhir",
+                token=(lambda: token) if token else None,
+                session=verifier._get_session(),
+                timeout_s=max(float(getattr(verifier, "timeout_s", 10.0)), 10.0),
+            )
+        if channel == "fhir":
+            return None
         if (
             allow_rest
             and isinstance(verifier, RestRecordVerifier)
@@ -1031,7 +1061,11 @@ AUTO = "auto"
 
 
 def resolve_duplicate_source(
-    effect_verifier: Any, requested: Any = AUTO, *, pinned_record: bool = False
+    effect_verifier: Any,
+    requested: Any = AUTO,
+    *,
+    pinned_record: bool = False,
+    channel: Optional[Literal["fhir", "rest"]] = None,
 ) -> Any:
     """The one place a run's duplicate-check source is decided.
 
@@ -1049,4 +1083,6 @@ def resolve_duplicate_source(
         return requested
     if effect_verifier is None:
         return None
-    return source_for_verifier(effect_verifier, allow_rest=pinned_record)
+    return source_for_verifier(
+        effect_verifier, allow_rest=pinned_record, channel=channel
+    )
