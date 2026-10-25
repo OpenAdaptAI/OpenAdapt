@@ -67,6 +67,35 @@ DEFAULT_OBSERVATION_PATHS: dict[str, str] = {
 }
 
 
+#: A search result longer than this many pages reads as unreadable, never as
+#: the first pages.
+MAX_PAGES = 50
+
+
+def _next_link(bundle: dict[str, Any]) -> Optional[str]:
+    """The Bundle's ``next`` page URL, if any."""
+
+    links = bundle.get("link")
+    if not isinstance(links, list):
+        return None
+    for link in links:
+        if isinstance(link, dict) and link.get("relation") == "next":
+            url = link.get("url")
+            return url if isinstance(url, str) and url else None
+    return None
+
+
+def _origin(url: str) -> str:
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def _same_origin(url: str, base_url: str) -> bool:
+    return _origin(url) == _origin(base_url)
+
+
 class AccessTokenSource(Protocol):
     """Supplies bearer tokens that can expire."""
 
@@ -155,6 +184,8 @@ class FhirEffectVerifier(VerifierAdapterBase):
         # (``requests``-style) session; flipped only for the httpx fallback
         # client built in :meth:`_get_session`.
         self._verify_per_request = True
+        #: Why the last read was unreadable, for the state and the verdict.
+        self.read_problem: Optional[str] = None
 
     # -- transport ----------------------------------------------------------
 
@@ -213,61 +244,121 @@ class FhirEffectVerifier(VerifierAdapterBase):
         transport error, non-2xx (incl. auth 401/403), non-Bundle body, or
         malformed entries. Never raises.
         """
+        self.read_problem = None
         url = f"{self.base_url}/{self.resource_type}"
         headers = self._headers()
         if headers is None:
+            self.read_problem = "no access token"
             return None
         session = self._get_session()
         # ``verify`` is passed per request only for a ``requests``-style client;
         # the httpx fallback already bound it at construction (see
-        # ``_get_session``), and passing it again would raise.
-        tls_kwargs = {"verify": self.verify_tls} if self._verify_per_request else {}
-        try:
-            resp = session.get(
-                url,
-                params=self.search_params,
-                headers=headers,
-                timeout=self.timeout_s,
-                **tls_kwargs,
-            )
-        except Exception:  # noqa: BLE001 - transport failure is unreadable
-            return None
-        if resp.status_code == 401 and self.token_source is not None:
-            self.token_source.invalidate()
-        if resp.status_code // 100 != 2:
-            return None
-        try:
-            bundle = resp.json()
-        except Exception:  # noqa: BLE001 - unparseable body is unreadable
-            return None
-        if not isinstance(bundle, dict) or bundle.get("resourceType") != "Bundle":
-            return None
-        entries = bundle.get("entry", [])
-        if not isinstance(entries, list):
+        # ``_get_session``), and passing it again would raise. A ``requests``
+        # session must not follow a redirect with the bearer token.
+        tls_kwargs: dict[str, Any] = (
+            {"verify": self.verify_tls} if self._verify_per_request else {}
+        )
+        if (type(session).__module__ or "").startswith("requests"):
+            tls_kwargs["allow_redirects"] = False
+
+        def get(target: str, params: Optional[dict[str, str]]) -> Any:
+            """One page: the parsed Bundle, or None with ``read_problem``."""
+
+            try:
+                kwargs = dict(tls_kwargs)
+                if params is not None:
+                    kwargs["params"] = params
+                resp = session.get(
+                    target, headers=headers, timeout=self.timeout_s, **kwargs
+                )
+            except Exception as exc:  # noqa: BLE001 - transport failure is unreadable
+                self.read_problem = f"GET {target} failed: {type(exc).__name__}"
+                return None
+            if resp.status_code == 401 and self.token_source is not None:
+                self.token_source.invalidate()
+            if resp.status_code // 100 != 2:
+                self.read_problem = f"GET {target} returned HTTP {resp.status_code}"
+                return None
+            landed = getattr(resp, "url", None)
+            landed = str(landed) if landed is not None else ""
+            if landed and _origin(landed) != _origin(target):
+                self.read_problem = (
+                    f"GET {target} was redirected to origin {_origin(landed)}"
+                )
+                return None
+            try:
+                bundle = resp.json()
+            except Exception:  # noqa: BLE001 - unparseable body is unreadable
+                self.read_problem = f"GET {target} returned a body that is not JSON"
+                return None
+            if not isinstance(bundle, dict) or bundle.get("resourceType") != "Bundle":
+                self.read_problem = f"GET {target} returned no Bundle"
+                return None
+            return bundle
+
+        bundle = get(url, self.search_params)
+        if bundle is None:
             return None
         out: list[dict[str, Any]] = []
-        for entry in entries:
-            if not isinstance(entry, dict):
+        matches = 0
+        total: Any = bundle.get("total")
+        for _page in range(MAX_PAGES):
+            entries = bundle.get("entry", [])
+            if not isinstance(entries, list):
+                self.read_problem = "a Bundle's entry is not a list"
                 return None
-            resource = entry.get("resource")
-            if not isinstance(resource, dict):
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    self.read_problem = "a Bundle entry is not an object"
+                    return None
+                resource = entry.get("resource")
+                if not isinstance(resource, dict):
+                    self.read_problem = "a Bundle entry has no resource"
+                    return None
+                mode = (entry.get("search") or {}).get("mode")
+                if mode not in ("include", "outcome"):
+                    matches += 1
+                out.append(self._flatten(resource))
+            next_url = _next_link(bundle)
+            if next_url is None:
+                break
+            if not _same_origin(next_url, self.base_url):
+                # A next page elsewhere is not this system of record.
+                self.read_problem = (
+                    f"next link origin {_origin(next_url)} != base_url "
+                    f"{_origin(self.base_url)}"
+                )
                 return None
-            out.append(self._flatten(resource))
+            bundle = get(next_url, None)
+            if bundle is None:
+                return None  # a lost page makes the set partial
+        else:
+            self.read_problem = f"more than {MAX_PAGES} pages"
+            return None  # never a truncated read
+        if isinstance(total, int) and not isinstance(total, bool) and total != matches:
+            # The server counts a different number of matches than it returned.
+            self.read_problem = (
+                f"the Bundle's total is {total}, the read returned {matches} matches"
+            )
+            return None
         return drop_record_fields(out, self.drop_fields)
 
     # -- EffectVerifier protocol --------------------------------------------
 
     def capture_pre_state(self, context: Any = None) -> EffectState:
         records = self._search()
+        detail: dict[str, Any] = {
+            "base_url": self.base_url,
+            "resource_type": self.resource_type,
+            "search_params": self.search_params,
+        }
+        if records is None and self.read_problem:
+            detail["read_problem"] = self.read_problem
         return EffectState(
             substrate=self.substrate,
             reachable=records is not None,
             records=records or [],
-            detail={
-                "base_url": self.base_url,
-                "resource_type": self.resource_type,
-                "search_params": self.search_params,
-            },
+            detail=detail,
         )
 
     def verify(
@@ -278,6 +369,10 @@ class FhirEffectVerifier(VerifierAdapterBase):
         while True:
             current = self._search()
             last = judge_records(expected, before, current, substrate=self.substrate)
+            if current is None and self.read_problem:
+                last = last.model_copy(
+                    update={"reason": f"{last.reason} ({self.read_problem})"}
+                )
             if last.confirmed or time.monotonic() >= deadline:
                 return last
             time.sleep(self.poll_interval_s)
