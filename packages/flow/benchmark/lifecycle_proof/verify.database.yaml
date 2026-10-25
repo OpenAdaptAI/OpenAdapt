@@ -64,6 +64,7 @@ frame:
     actor_field: user
     record_field: patient_id
     record_key: pid
+    record_keys: {contact: foreign_id}
     self: [openadapt_actor]
     read:
       kind: sql
