@@ -864,7 +864,8 @@ def test_revert_from_the_phone_portal(mockmed, keys, tmp_path) -> None:
     [
         ("", "", "the control has no readable label"),
         ("Void encounter", "Void encounter", "the control reads as 'void'"),
-        ("Sign note", "Sign note", "the control reads as 'sign'"),
+        # "Sign" is a write verb (openadapt_flow.risk), so the relabel adds one.
+        ("Sign note", "Sign note", "the repair adds a save"),
     ],
     ids=["unlabeled", "void", "sign"],
 )

@@ -299,10 +299,13 @@ def application_risk_rules_from_data(value: object) -> tuple[ApplicationRiskRule
 # "Add note" but NOT "address", and `post` (were it present) would not match
 # "postal". Ordered roughly by how common they are on real controls.
 #
+# "sign" counts in its writing sense ("Sign visit note", "Co-sign", "Signed"),
+# the clinical attestation that locks a note, but never as "sign in", "sign
+# on" or "sign out", which are session chrome.
+#
 # Deliberately EXCLUDED to avoid noisy false positives on navigation chrome:
-# bare "sign" (collides with "sign in"; the writing sense is covered by
-# save/submit/confirm and the explicit "sign up" below), bare "post"/"order"/
-# "book"/"complete" (collide with "Posts"/"Orders"/"Bookings"/"Completed" tabs).
+# bare "post"/"order"/"book"/"complete" (collide with "Posts"/"Orders"/
+# "Bookings"/"Completed" tabs).
 _WRITE_STEMS: tuple[str, ...] = (
     r"sav(?:e|es|ing)",
     r"submit(?:s|ted|ting)?",
@@ -319,6 +322,7 @@ _WRITE_STEMS: tuple[str, ...] = (
     r"pay(?:s|ing)?",
     r"sign[\s\-_]?up",
     r"signup",
+    r"(?:co[\-_]?|e[\-_]?)?sign(?:s|ed|ing)?(?![\s\-_]*(?:in|on|out)\b)",
     r"regist(?:er|ers|ering|ration)",
     r"enroll(?:s|ed|ing|ment)?",
     r"add(?:s|ed|ing)?",
