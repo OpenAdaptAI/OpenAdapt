@@ -87,6 +87,7 @@ from openadapt_capture.structural import (
     observe_structural_action,
 )
 from openadapt_capture.window_capture import (
+    FOCUS_EVIDENCE_WINDOW,
     WindowCaptureAmbiguousError,
     WindowCaptureError,
     WindowCapturePermissionError,
@@ -361,20 +362,26 @@ class WindowActionReservation:
         self._keyboard_focus_at_receipt = keyboard_focus_at_receipt
         self._admitted = False
 
-    def admit(self, point: tuple[float, float] | None) -> None:
+    def admit(self, point: tuple[float, float] | None) -> str:
         """Accept input only if the target window received it.
+
+        Returns:
+            The focus evidence level (see ``assert_input_on_target``).
 
         Raises:
             WindowInputNotOnTarget: The input went to another window.
         """
         if point is None:
-            self._window_scope.assert_input_on_target(
+            evidence = self._window_scope.assert_input_on_target(
                 self._geometry[0],
                 keyboard_focus_at_receipt=self._keyboard_focus_at_receipt,
             )
         else:
-            self._window_scope.assert_input_on_target(self._geometry[0], point=point)
+            evidence = self._window_scope.assert_input_on_target(
+                self._geometry[0], point=point
+            )
         self._admitted = True
+        return evidence
 
     def admit_continuation(self) -> None:
         """Accept the release or drag of a press the target already received."""
@@ -469,8 +476,14 @@ class WindowInputGapLog:
     input kind, a timestamp and, for pointer input, a point rounded to a
     coarse grid. It never holds key identity or text.
 
+    A ``keyboard_focus_evidence`` marker is written when the evidence for
+    accepted keyboard input changes level: ``process`` means the OS named
+    only the target's process, not the target window, so the input could
+    have gone to another window of the same app.
+
     Markers are appended to ``window-input-gaps.jsonl`` in the capture
-    directory, created only when input is dropped, and kept in ``records``.
+    directory, created only when input is dropped or its evidence weakens,
+    and kept in ``records``.
     """
 
     def __init__(self, capture_dir: str | os.PathLike[str] | None = None) -> None:
@@ -479,6 +492,7 @@ class WindowInputGapLog:
         )
         self._lock = threading.Lock()
         self._active_reason: str | None = None
+        self._keyboard_evidence = FOCUS_EVIDENCE_WINDOW
         self.records: list[dict[str, Any]] = []
 
     def _append_locked(self, record: dict[str, Any]) -> None:
@@ -527,6 +541,21 @@ class WindowInputGapLog:
             "window-scoped input dropped: it did not go to the target window (reason={})",
             reason,
         )
+
+    def keyboard_evidence(self, evidence: str, timestamp: float | None) -> None:
+        """Mark a change in how accepted keyboard input reached the target."""
+        with self._lock:
+            if evidence == self._keyboard_evidence:
+                return
+            self._keyboard_evidence = evidence
+            self._append_locked(
+                {
+                    "schema_version": WINDOW_INPUT_GAP_SCHEMA_VERSION,
+                    "event": "keyboard_focus_evidence",
+                    "evidence": evidence,
+                    "timestamp": timestamp,
+                }
+            )
 
     def returned(self, timestamp: float | None) -> None:
         """Close the current run of dropped input, if any."""
@@ -2648,18 +2677,20 @@ class _WindowInputAdmission:
         point = None if isinstance(event, ObservedKey) else (event.x, event.y)
         try:
             if isinstance(reservation, WindowActionReservation):
-                reservation.admit(point)
+                evidence = reservation.admit(point)
             else:
                 window = self._scope.reserve_action_geometry()[0]
                 if point is None:
-                    self._scope.assert_input_on_target(window)
+                    evidence = self._scope.assert_input_on_target(window)
                 else:
-                    self._scope.assert_input_on_target(window, point=point)
+                    evidence = self._scope.assert_input_on_target(window, point=point)
         except WindowInputNotOnTarget as exc:
             self._discard(reservation)
             self.dropped(event, exc.reason)
             return False
 
+        if isinstance(event, ObservedKey):
+            self._gap_log.keyboard_evidence(evidence, event.timestamp)
         if isinstance(event, ObservedKey):
             self._held_keys.add(_key_identity(event))
         elif isinstance(event, ObservedMouseButton):

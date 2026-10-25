@@ -35,7 +35,10 @@ from openadapt_capture.recorder import (
     WindowInputGapLog,
 )
 from openadapt_capture.window_capture import (
+    FOCUS_EVIDENCE_PROCESS,
+    FOCUS_EVIDENCE_WINDOW,
     INPUT_KEYBOARD_FOCUS_ELSEWHERE,
+    INPUT_KEYBOARD_FOCUS_IN_DIALOG,
     INPUT_KEYBOARD_FOCUS_UNKNOWN,
     INPUT_POINTER_OVER_OTHER_WINDOW,
     INPUT_POINTER_TARGET_UNKNOWN,
@@ -49,6 +52,10 @@ from tests.test_window_capture import TARGET, FakePlatform
 
 SLACK = FocusOwner(window_id=7, pid=555)
 PASSWORD_DIALOG = FocusOwner(window_id=8, pid=666)
+# The fake target is window 42 of process 1234.
+SECOND_TARGET_APP_WINDOW = FocusOwner(window_id=43, pid=1234)
+TARGET_APP_PASSWORD_WINDOW = FocusOwner(window_id=44, pid=1234)
+TARGET_APP_PASSWORD_SHEET = FocusOwner(window_id=42, pid=1234, dialog=True)
 # Inside the fake target's rectangle (300, 150, 800, 600).
 INSIDE = (400.0, 300.0)
 
@@ -418,6 +425,75 @@ def test_release_of_an_accepted_press_survives_a_focus_change(tmp_path, monkeypa
     assert recording.gaps() == []
 
 
+def test_second_window_of_the_target_app_drops_keys_and_never_stores_them(
+    tmp_path, monkeypatch, fake
+):
+    """A second browser window shares the target's process but is not it."""
+    canary = f"pw-canary-{uuid.uuid4().hex}"
+    recording = WindowRecording(tmp_path, monkeypatch, fake)
+    with recording as observer:
+        type_text(observer, "ok")
+        fake.keyboard_owner = SECOND_TARGET_APP_WINDOW
+        type_text(observer, "hunter2", canary=canary)
+        fake.keyboard_owner = TARGET
+        type_text(observer, "go")
+
+    keys = _key_rows(recording.actions())
+    assert "".join(row["key_char"] for row in keys if row["name"] == "press") == "okgo"
+    reasons = [gap["reason"] for gap in recording.gaps() if gap["event"] == "focus_left_target"]
+    assert reasons == [INPUT_KEYBOARD_FOCUS_ELSEWHERE]
+    recording.assert_nowhere(canary, "hunter2")
+
+
+@pytest.mark.parametrize(
+    ("dialog", "reason"),
+    [
+        (TARGET_APP_PASSWORD_WINDOW, INPUT_KEYBOARD_FOCUS_ELSEWHERE),
+        (TARGET_APP_PASSWORD_SHEET, INPUT_KEYBOARD_FOCUS_IN_DIALOG),
+    ],
+    ids=["own-window", "sheet-on-target"],
+)
+def test_password_dialog_of_the_target_app_drops_keys(tmp_path, monkeypatch, fake, dialog, reason):
+    """The target app's own password prompt never counts as the target.
+
+    A prompt in its own window has another window id. A sheet attached to the
+    target reports the target's window id and is flagged as a dialog.
+    """
+    canary = f"pw-canary-{uuid.uuid4().hex}"
+    recording = WindowRecording(tmp_path, monkeypatch, fake)
+    with recording as observer:
+        fake.keyboard_owner = dialog
+        type_text(observer, "s3cr3t!", canary=canary)
+        fake.keyboard_owner = TARGET
+        type_text(observer, "x")
+
+    keys = _key_rows(recording.actions())
+    assert [row["key_char"] for row in keys if row["name"] == "press"] == ["x"]
+    reasons = [gap["reason"] for gap in recording.gaps() if gap["event"] == "focus_left_target"]
+    assert reasons == [reason]
+    recording.assert_nowhere(canary, "s3cr3t!")
+
+
+def test_process_only_focus_is_kept_and_marked_as_weaker_evidence(tmp_path, monkeypatch, fake):
+    """Where the OS names no window, a process match is kept and marked."""
+    recording = WindowRecording(tmp_path, monkeypatch, fake)
+    with recording as observer:
+        type_text(observer, "a")
+        fake.keyboard_owner = FocusOwner(window_id=None, pid=fake.pid)
+        type_text(observer, "bc")
+        fake.keyboard_owner = TARGET
+        type_text(observer, "d")
+
+    keys = _key_rows(recording.actions())
+    assert "".join(row["key_char"] for row in keys if row["name"] == "press") == "abcd"
+    evidence = [gap for gap in recording.gaps() if gap["event"] == "keyboard_focus_evidence"]
+    assert [gap["evidence"] for gap in evidence] == [FOCUS_EVIDENCE_PROCESS, FOCUS_EVIDENCE_WINDOW]
+    assert all(
+        set(gap) == {"schema_version", "event", "evidence", "timestamp"} for gap in evidence
+    )
+    recording.assert_nowhere("bc")
+
+
 # ---------------------------------------------------------------------------
 # Scope-level decisions (no pipeline)
 # ---------------------------------------------------------------------------
@@ -460,6 +536,36 @@ def test_offscreen_visibility_independent_target_refuses_clicks(fake):
 def test_keyboard_focus_on_target_process_is_accepted(scope, fake):
     fake.keyboard_owner = FocusOwner(window_id=None, pid=fake.pid)
     assert isinstance(scope.generation_for_action(), int)
+
+
+def test_keyboard_focus_evidence_names_window_or_process(scope, fake):
+    window = scope.reserve_action_geometry()[0]
+    assert scope.assert_input_on_target(window) == FOCUS_EVIDENCE_WINDOW
+    fake.keyboard_owner = FocusOwner(window_id=None, pid=fake.pid)
+    assert scope.assert_input_on_target(window) == FOCUS_EVIDENCE_PROCESS
+    # A pid-only receipt reading plus a window reading at delivery is
+    # window evidence (the macOS event tap reads only the process).
+    fake.keyboard_owner = TARGET
+    assert (
+        scope.assert_input_on_target(
+            window, keyboard_focus_at_receipt=FocusOwner(pid=fake.pid)
+        )
+        == FOCUS_EVIDENCE_WINDOW
+    )
+
+
+def test_a_named_window_never_falls_back_to_the_process(scope, fake):
+    window = scope.reserve_action_geometry()[0]
+    fake.keyboard_owner = SECOND_TARGET_APP_WINDOW
+    with pytest.raises(WindowInputNotOnTarget) as excinfo:
+        scope.assert_input_on_target(window)
+    assert excinfo.value.reason == INPUT_KEYBOARD_FOCUS_ELSEWHERE
+    fake.keyboard_owner = TARGET
+    with pytest.raises(WindowInputNotOnTarget) as excinfo:
+        scope.assert_input_on_target(
+            window, keyboard_focus_at_receipt=SECOND_TARGET_APP_WINDOW
+        )
+    assert excinfo.value.reason == INPUT_KEYBOARD_FOCUS_ELSEWHERE
 
 
 def test_legacy_translation_refuses_other_window(scope, fake):
@@ -522,8 +628,41 @@ def fake_macos(monkeypatch):
     appkit = SimpleNamespace(
         NSWorkspace=SimpleNamespace(sharedWorkspace=lambda: workspace),
     )
+    # Accessibility is unavailable unless a test names a focused window.
+    state.ax_window = None  # (window number, subrole, focused element role)
+    success = 0
+
+    def copy_attribute(element, name, _out):
+        if state.ax_window is None:
+            return (-25211, None)  # kAXErrorAPIDisabled
+        number, subrole, focused_role = state.ax_window
+        values = {
+            ("app", "AXFocusedWindow"): "window",
+            ("app", "AXFocusedUIElement"): "focused",
+            ("window", "AXRole"): "AXWindow",
+            ("window", "AXSubrole"): subrole,
+            ("focused", "AXRole"): focused_role,
+            ("focused", "AXParent"): "window",
+        }
+        value = values.get((element, name))
+        return (success, value) if value is not None else (-25212, None)
+
+    applicationservices = SimpleNamespace(
+        kAXErrorSuccess=success,
+        AXUIElementCreateApplication=lambda _pid: "app",
+        AXUIElementSetMessagingTimeout=lambda _element, _seconds: success,
+        AXUIElementCopyAttributeValue=copy_attribute,
+    )
+    import openadapt_capture.window_input_focus as focus_module
+
+    monkeypatch.setattr(
+        focus_module,
+        "_macos_ax_window_number",
+        lambda element: state.ax_window[0] if element == "window" else None,
+    )
     monkeypatch.setitem(sys.modules, "Quartz", quartz)
     monkeypatch.setitem(sys.modules, "AppKit", appkit)
+    monkeypatch.setitem(sys.modules, "ApplicationServices", applicationservices)
     return state
 
 
@@ -535,12 +674,35 @@ def test_macos_probe_requires_window_list_to_agree_with_frontmost_app(fake_macos
         _quartz_window(1, 99, (0, 0, 2000, 25), layer=25),  # menu bar extra
         _quartz_window(42, 1234, (300, 150, 800, 600)),
     ]
-    assert probe.keyboard_focus() == FocusOwner(pid=1234)
+    assert probe.keyboard_focus() == FocusOwner(window_id=42, pid=1234)
     # NSWorkspace can be stale; the front-most app window belongs to Slack.
     fake_macos.windows.insert(1, _quartz_window(7, 555, (0, 0, 500, 500)))
     assert probe.keyboard_focus() is None
     # Inside the native hook only the cheap read runs.
     assert probe.keyboard_focus(at_receipt=True) == FocusOwner(pid=1234)
+
+
+def test_macos_probe_names_the_front_window_and_checks_accessibility(fake_macos):
+    from openadapt_capture.window_input_focus import MacOSInputFocusProbe
+
+    probe = MacOSInputFocusProbe()
+    fake_macos.windows = [
+        _quartz_window(43, 1234, (0, 0, 500, 500)),  # second window, in front
+        _quartz_window(42, 1234, (300, 150, 800, 600)),
+    ]
+    # Without Accessibility the front-most window of the app is focused.
+    assert probe.keyboard_focus() == FocusOwner(window_id=43, pid=1234)
+    # Accessibility agrees.
+    fake_macos.ax_window = (43, "AXStandardWindow", "AXTextField")
+    assert probe.keyboard_focus() == FocusOwner(window_id=43, pid=1234)
+    # Accessibility names another window: unknown, so input is refused.
+    fake_macos.ax_window = (42, "AXStandardWindow", "AXTextField")
+    assert probe.keyboard_focus() is None
+    # A dialog window, or a sheet under the focused element, is a dialog.
+    fake_macos.ax_window = (43, "AXDialog", "AXSecureTextField")
+    assert probe.keyboard_focus() == FocusOwner(window_id=43, pid=1234, dialog=True)
+    fake_macos.ax_window = (43, "AXStandardWindow", "AXSheet")
+    assert probe.keyboard_focus() == FocusOwner(window_id=43, pid=1234, dialog=True)
 
 
 def test_macos_probe_window_at_is_front_to_back_layer_zero(fake_macos):

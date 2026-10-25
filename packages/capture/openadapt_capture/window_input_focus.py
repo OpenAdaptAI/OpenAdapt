@@ -28,10 +28,15 @@ class FocusOwner:
     ``window_id`` uses the same identifier space as
     :attr:`openadapt_capture.window_capture.TargetWindow.window_id` on the
     same platform (CGWindowID, top-level HWND, or X11 client window).
+    A probe that can name the focused window must set it: the scope then
+    requires that exact window, and a matching ``pid`` alone is not enough.
+    ``dialog`` is set when focus is in a dialog or sheet, which never counts
+    as the target even when the target's own process owns it.
     """
 
     window_id: int | None = None
     pid: int | None = None
+    dialog: bool = False
 
 
 class InputFocusProbe(Protocol):
@@ -55,11 +60,48 @@ def _point_in_bounds(x: float, y: float, bounds: tuple[float, float, float, floa
     return left <= x < left + width and top <= y < top + height
 
 
+# Accessibility subroles of a focused window that is a dialog, not a
+# document window. Typing there never counts as typing into the target.
+_MACOS_DIALOG_SUBROLES = frozenset({"AXDialog", "AXSystemDialog"})
+_MACOS_AX_FOCUS_TIMEOUT_SECONDS = 0.25
+_MACOS_AX_MAX_ANCESTORS = 32
+
+
+def _macos_ax_window_number(element: object) -> int | None:
+    """Return the CGWindowID behind an AX window element, or ``None``.
+
+    Uses the long-standing HIServices ``_AXUIElementGetWindow`` call. There
+    is no public API for this mapping; any failure is reported as unknown.
+    """
+    try:
+        import ctypes
+
+        import objc
+
+        library = ctypes.CDLL(
+            "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices"
+        )
+        get_window = library._AXUIElementGetWindow
+        get_window.restype = ctypes.c_int32
+        get_window.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32)]
+        number = ctypes.c_uint32(0)
+        if get_window(objc.pyobjc_id(element), ctypes.byref(number)) != 0:
+            return None
+        return int(number.value) or None
+    except Exception:
+        return None
+
+
 class MacOSInputFocusProbe:
     """macOS: frontmost application and front-to-back Quartz window list.
 
     Bounds come from ``kCGWindowBounds``: global screen points with a
     top-left origin, the same space the macOS resolver binds.
+
+    The focused window is the front-most on-screen layer-0 window of the
+    frontmost application. When Accessibility can name the application's
+    ``AXFocusedWindow``, it must agree with that window, and a focused dialog
+    or sheet is reported as such.
     """
 
     @staticmethod
@@ -101,14 +143,58 @@ class MacOSInputFocusProbe:
                 "bounds": bounds,
             }
 
-    def keyboard_focus(self, *, at_receipt: bool = False) -> FocusOwner | None:
-        """Return the frontmost application's process.
+    @staticmethod
+    def _ax_focused_window(pid: int) -> tuple[int | None, bool] | None:
+        """Return ``(window number, is dialog)`` for the app's focused window.
 
-        Inside the event tap only the cheap ``NSWorkspace`` read runs. At
-        delivery the answer must also agree with the owner of the front-most
-        on-screen application window. ``NSWorkspace`` is updated through the
-        main run loop and can be stale in a process that does not run one, so
-        a disagreement is reported as unknown.
+        ``None`` when Accessibility cannot name a focused window (not
+        trusted, timed out, or the app exposes none).
+        """
+        try:
+            import ApplicationServices as ax
+
+            success = ax.kAXErrorSuccess
+
+            def attribute(element: object, name: str) -> object | None:
+                error, value = ax.AXUIElementCopyAttributeValue(element, name, None)
+                return value if error == success else None
+
+            application = ax.AXUIElementCreateApplication(pid)
+            if (
+                ax.AXUIElementSetMessagingTimeout(
+                    application, _MACOS_AX_FOCUS_TIMEOUT_SECONDS
+                )
+                != success
+            ):
+                return None
+            window = attribute(application, "AXFocusedWindow")
+            if window is None or attribute(window, "AXRole") != "AXWindow":
+                return None
+            dialog = attribute(window, "AXSubrole") in _MACOS_DIALOG_SUBROLES
+            # A sheet hangs off its parent window. Focus inside it still
+            # names the parent as the focused window.
+            element = attribute(application, "AXFocusedUIElement")
+            for _ in range(_MACOS_AX_MAX_ANCESTORS):
+                if element is None or dialog:
+                    break
+                if attribute(element, "AXRole") == "AXSheet":
+                    dialog = True
+                    break
+                element = attribute(element, "AXParent")
+            return _macos_ax_window_number(window), dialog
+        except Exception:
+            return None
+
+    def keyboard_focus(self, *, at_receipt: bool = False) -> FocusOwner | None:
+        """Return the focused window and its process.
+
+        Inside the event tap only the cheap ``NSWorkspace`` read runs and the
+        answer names the process alone. At delivery the front-most on-screen
+        application window must belong to that process. ``NSWorkspace`` is
+        updated through the main run loop and can be stale in a process that
+        does not run one, so a disagreement is reported as unknown. That
+        window is the focused window, unless Accessibility names a different
+        focused window (unknown) or a dialog or sheet.
         """
         pid = self._frontmost_pid()
         if pid is None or at_receipt:
@@ -116,7 +202,15 @@ class MacOSInputFocusProbe:
         front = next(self._onscreen_app_windows(), None)
         if front is None or front["pid"] != pid:
             return None
-        return FocusOwner(pid=pid)
+        window_id = front["window_id"] or None
+        focused = self._ax_focused_window(pid)
+        if focused is not None:
+            ax_window_id, dialog = focused
+            if dialog:
+                return FocusOwner(window_id=ax_window_id or window_id, pid=pid, dialog=True)
+            if ax_window_id is not None and ax_window_id != window_id:
+                return None
+        return FocusOwner(window_id=window_id, pid=pid)
 
     def window_at(self, x: float, y: float) -> FocusOwner | None:
         """Return the first front-to-back layer-0 window containing the point."""

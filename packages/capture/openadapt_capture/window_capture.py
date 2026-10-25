@@ -147,11 +147,17 @@ class WindowCaptureUnavailableError(WindowCaptureError):
 
 
 INPUT_KEYBOARD_FOCUS_ELSEWHERE = "keyboard_focus_elsewhere"
+INPUT_KEYBOARD_FOCUS_IN_DIALOG = "keyboard_focus_in_dialog"
 INPUT_KEYBOARD_FOCUS_UNKNOWN = "keyboard_focus_unknown"
 INPUT_POINTER_OVER_OTHER_WINDOW = "pointer_over_other_window"
 INPUT_POINTER_TARGET_UNKNOWN = "pointer_target_unknown"
 INPUT_TARGET_NOT_ON_SCREEN = "target_not_on_screen"
 _NOT_PROBED = object()
+# How an accepted input was shown to reach the target. ``window``: the OS
+# named the target window as the receiver. ``process``: it named only the
+# target's process, which cannot rule out another window of the same app.
+FOCUS_EVIDENCE_WINDOW = "window"
+FOCUS_EVIDENCE_PROCESS = "process"
 
 
 class WindowInputNotOnTarget(WindowCaptureError):
@@ -643,13 +649,21 @@ class WindowCaptureScope:
         *,
         point: tuple[float, float] | None = None,
         keyboard_focus_at_receipt: object = _NOT_PROBED,
-    ) -> None:
+    ) -> str:
         """Refuse input that ``window`` did not receive.
 
         A pointer event (``point`` set) needs ``window`` topmost at the point.
-        A keyboard event needs keyboard focus on ``window`` or its process,
-        both at native receipt (when a receipt reading is given) and now. An
-        unknown answer or a probe failure is a refusal.
+        A keyboard event needs keyboard focus on ``window``, both at native
+        receipt (when a receipt reading is given) and now. A reading that
+        names a window must name ``window`` itself: another window of the
+        same process (a second browser window, an app's password dialog) is
+        a refusal. Only a reading that names no window can fall back to the
+        process, and a dialog or sheet never counts. An unknown answer or a
+        probe failure is a refusal.
+
+        Returns:
+            ``FOCUS_EVIDENCE_WINDOW`` when some reading named the target
+            window, else ``FOCUS_EVIDENCE_PROCESS`` (weaker evidence).
 
         Raises:
             WindowInputNotOnTarget: With a stable reason code.
@@ -667,7 +681,7 @@ class WindowCaptureScope:
                 raise WindowInputNotOnTarget(INPUT_POINTER_TARGET_UNKNOWN)
             if owner.window_id != window.window_id:
                 raise WindowInputNotOnTarget(INPUT_POINTER_OVER_OTHER_WINDOW)
-            return
+            return FOCUS_EVIDENCE_WINDOW
         try:
             live = self._focus_probe.keyboard_focus()
         except Exception:
@@ -675,16 +689,21 @@ class WindowCaptureScope:
         readings = [live]
         if keyboard_focus_at_receipt is not _NOT_PROBED:
             readings.append(keyboard_focus_at_receipt)
+        evidence = FOCUS_EVIDENCE_PROCESS
         for owner in readings:
             if not isinstance(owner, FocusOwner):
                 raise WindowInputNotOnTarget(INPUT_KEYBOARD_FOCUS_UNKNOWN)
             if owner.window_id is None and owner.pid is None:
                 raise WindowInputNotOnTarget(INPUT_KEYBOARD_FOCUS_UNKNOWN)
-            on_target = (owner.window_id is not None and owner.window_id == window.window_id) or (
-                owner.pid is not None and owner.pid == window.pid
-            )
-            if not on_target:
+            if owner.dialog:
+                raise WindowInputNotOnTarget(INPUT_KEYBOARD_FOCUS_IN_DIALOG)
+            if owner.window_id is not None:
+                if owner.window_id != window.window_id:
+                    raise WindowInputNotOnTarget(INPUT_KEYBOARD_FOCUS_ELSEWHERE)
+                evidence = FOCUS_EVIDENCE_WINDOW
+            elif owner.pid != window.pid:
                 raise WindowInputNotOnTarget(INPUT_KEYBOARD_FOCUS_ELSEWHERE)
+        return evidence
 
     def _geometry_for_action(
         self,
