@@ -106,7 +106,9 @@ build = [
     "playwright>=1.44",
     # ONNX Runtime 1.27 dropped macOS Intel wheels. Flow's RapidOCR dependency
     # accepts this universal2 release, which retains Python 3.12 Intel support.
-    "onnxruntime==1.31.0; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    # Do not bump it: 1.20.1 is the last release with a macOS Intel wheel, and
+    # a dependabot bump to 1.31.0 broke the Intel installer build.
+    "onnxruntime==1.20.1; sys_platform == 'darwin' and platform_machine == 'x86_64'",
     # Keep the current runtime everywhere it publishes a compatible wheel.
     "onnxruntime==1.31.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
 ]
