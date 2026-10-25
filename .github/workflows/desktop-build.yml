@@ -78,8 +78,9 @@ jobs:
             --event "${EVENT_NAME}" \
             --paths-file "${changed_paths}" \
             --github-output "${GITHUB_OUTPUT}"
-          # A pull request builds the Linux installer only; main and dispatches
-          # build every platform.
+          # Native installers are queue tier: the merge queue, main and
+          # dispatches build every platform, and a pull request builds none
+          # (the native-installers job is skipped on pull_request).
           python - "${EVENT_NAME}" >> "${GITHUB_OUTPUT}" <<'PY'
           import json, sys
           native = [
@@ -96,8 +97,6 @@ jobs:
                "architecture": "x86_64", "target": "x86_64-unknown-linux-gnu",
                "bundles": "deb,appimage", "signing": "unsigned"},
           ]
-          if sys.argv[1] == "pull_request":
-              native = [entry for entry in native if entry["platform"] == "linux"]
           print("native_matrix=" + json.dumps(native))
           PY
 
@@ -216,13 +215,14 @@ jobs:
   native-installers:
     name: Native installer (${{ matrix.label }})
     needs: artifact-scope
-    # Main runs this evidence for dependency, toolchain, packaging, and native
-    # changes, and a pull request that changes the native shell builds the
-    # Linux installer. Application-only merges already pass the PR checks and the
+    # The merge queue and main run this evidence for dependency, toolchain,
+    # packaging, and native changes; a pull request does not. Application-only merges already pass the PR checks and the
     # exact-main frontend, distribution, and cross-platform test jobs. Every
     # immutable desktop-v* release tag rebuilds and tests all installers in the
     # separate Native Installer Release workflow.
-    if: needs.artifact-scope.outputs.run_native == 'true'
+    # Queue tier: macOS arm64 and Intel, Windows and the Linux bundles build in
+    # the merge queue, on main and on dispatch, never for a pull request.
+    if: needs.artifact-scope.outputs.run_native == 'true' && github.event_name != 'pull_request'
     strategy:
       fail-fast: false
       matrix:

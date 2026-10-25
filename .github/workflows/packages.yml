@@ -1,5 +1,11 @@
 # Per-package CI for the packages/ tree.
 #
+# Tiers (see .github/workflows/README.md for the job-by-tier table): a pull
+# request runs one fast Linux lane; the merge queue (merge_group) and main add
+# macOS, Windows, older Pythons and the native installers. packages-gate is
+# required on both: it fails a job the change selects that was skipped, except
+# a queue-only job on a pull request and a PR-only job in the queue.
+#
 # The root workflow (main.yml) only runs the launcher's own tests. This
 # workflow runs each package's own suite from the monorepo checkout, so a
 # change under packages/ cannot land untested. A `scope` job applies the
@@ -39,13 +45,14 @@
 #
 # OpenAdapt Desktop (packages/desktop) runs two reusable workflows:
 # desktop-test.yml (the Python engine on Linux for a PR, plus macOS and Windows
-# on main, and the bundled-Flow qualification contract) and desktop-build.yml
-# (frontend, Python distribution, frozen sidecar, and Tauri installers). Their
+# in the merge queue and on main, and the bundled-Flow qualification contract)
+# and desktop-build.yml (frontend, Python distribution, frozen sidecar, and the
+# Tauri installers, which build in the merge queue and on main only). Their
 # jobs are in packages-gate like every other package's.
 #
 # openadapt-tray (packages/tray) keeps its own uv.lock and runs `uv sync
-# --locked` against it: its suite on Linux with Python 3.10 and 3.12 for a PR,
-# plus 3.11, macOS and Windows on main; ruff, the version and changelog
+# --locked` against it: its suite on Linux with Python 3.12 for a PR, plus
+# 3.10, 3.11, macOS and Windows in the merge queue and on main; ruff, the version and changelog
 # contract, `uv build` and the archive boundary; and Desktop's socket test
 # against this tray client, so a tray change cannot break the protocol
 # without the desktop suite running. A desktop change runs that same test in
@@ -733,9 +740,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # A pull request runs Linux on the oldest and newest Python; main adds
+        # PR tier: Linux on Python 3.12. The merge queue and main add 3.10,
         # 3.11, macOS and Windows, where the tray's platform handlers differ.
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-latest","python-version":"3.10"},{"os":"ubuntu-latest","python-version":"3.12"}]' || '[{"os":"ubuntu-latest","python-version":"3.10"},{"os":"ubuntu-latest","python-version":"3.11"},{"os":"ubuntu-latest","python-version":"3.12"},{"os":"macos-latest","python-version":"3.12"},{"os":"windows-latest","python-version":"3.12"}]') }}
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-latest","python-version":"3.12"}]' || '[{"os":"ubuntu-latest","python-version":"3.10"},{"os":"ubuntu-latest","python-version":"3.11"},{"os":"ubuntu-latest","python-version":"3.12"},{"os":"macos-latest","python-version":"3.12"},{"os":"windows-latest","python-version":"3.12"}]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     defaults:
@@ -949,14 +956,62 @@ jobs:
       - name: Require every selected package job to pass
         env:
           RESULTS: ${{ toJSON(needs) }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           python3 - <<'PY'
           import json, os, sys
+
           needs = json.loads(os.environ["RESULTS"])
-          bad = {k: v["result"] for k, v in needs.items() if v["result"] not in ("success", "skipped")}
-          if needs["scope"]["result"] != "success":
-              bad["scope"] = needs["scope"]["result"]
-          for k, v in needs.items():
-              print(f"{k}: {v['result']}")
+          pr_tier = os.environ["EVENT_NAME"] == "pull_request"
+          # The scope output that selects each job. A selected job must run and
+          # pass, except where its tier says it does not run on this event.
+          selects = {
+              "types": "types",
+              "agent": "agent",
+              "flow-lint": "flow",
+              "flow-unit": "flow",
+              "flow-critical": "flow",
+              "capture-linux": "capture",
+              "capture-macos": "capture",
+              "capture-windows": "capture",
+              "capture-contract": "capture",
+              "capture-core-record": "capture",
+              "privacy": "privacy",
+              "privacy-presidio": "privacy",
+              "privacy-contract": "privacy",
+              "desktop-test": "desktop",
+              "desktop-build": "desktop",
+              "desktop-release-intent": "desktop",
+              "tray": "tray",
+              "tray-contract": "tray",
+              "tray-desktop-ipc": "tray",
+              "program-graph": "program_graph",
+              "install-weight": "weight",
+          }
+          # Queue tier only: skipped on a pull request, required in the merge
+          # queue, on main and on dispatch.
+          queue_only = {"capture-macos", "capture-windows"}
+          # PR tier only: checks a pull request's own diff.
+          pr_only = {"desktop-release-intent"}
+          scope = needs["scope"]
+          outputs = scope.get("outputs", {})
+          bad = {}
+          if scope["result"] != "success":
+              bad["scope"] = scope["result"]
+          for name, need in needs.items():
+              result = need["result"]
+              print(f"{name}: {result}")
+              if name == "scope":
+                  continue
+              if result not in ("success", "skipped"):
+                  bad[name] = result
+                  continue
+              # A job missing from `selects` keeps the old rule: skipped is fine.
+              selected = name in selects and outputs.get(selects[name]) == "true"
+              off_tier = (pr_tier and name in queue_only) or (not pr_tier and name in pr_only)
+              if result == "skipped" and selected and not off_tier:
+                  bad[name] = "skipped although selected"
+          if bad:
+              print(f"failed: {bad}")
           sys.exit(1 if bad else 0)
           PY

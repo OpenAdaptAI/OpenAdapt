@@ -15,9 +15,19 @@ on:
     paths:
       - "packages/desktop/**"
       - ".github/workflows/desktop-dependency-audit.yml"
+  # The merge queue runs the macOS Intel audit, which a pull request skips.
+  # merge_group takes no path filter, so the scope job checks the group's diff.
+  merge_group:
   schedule:
     - cron: "19 11 * * 1"
   workflow_dispatch:
+
+concurrency:
+  # A pull request's newer push cancels its older run. Every other event (the
+  # merge queue, main, schedules, dispatches) gets a group of its own, so it
+  # is never cancelled or replaced.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -27,8 +37,38 @@ defaults:
     working-directory: packages/desktop
 
 jobs:
+  scope:
+    name: Select the audit scope
+    runs-on: ubuntu-22.04
+    outputs:
+      run: ${{ steps.scope.outputs.run }}
+    steps:
+      - name: Checkout
+        if: github.event_name == 'merge_group'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Does this run touch Desktop?
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+        run: |
+          set -euo pipefail
+          # Other events are already path-filtered or run on a schedule.
+          if [ "$EVENT_NAME" != merge_group ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if git diff --name-only "$GROUP_BASE_SHA" HEAD \
+              | grep -Eq '^(packages/desktop/|\.github/workflows/desktop-dependency-audit\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   python:
     name: Python locked dependencies
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -49,6 +89,9 @@ jobs:
 
   python-macos-intel:
     name: Python locked dependencies (macOS Intel)
+    needs: scope
+    # Queue tier: the merge queue, main, the weekly run and dispatches.
+    if: needs.scope.outputs.run == 'true' && github.event_name != 'pull_request'
     runs-on: macos-15-intel
     steps:
       - name: Checkout
@@ -69,6 +112,8 @@ jobs:
 
   npm:
     name: npm locked dependencies
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -84,6 +129,8 @@ jobs:
 
   rust:
     name: Rust locked dependencies
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
