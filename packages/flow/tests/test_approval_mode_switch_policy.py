@@ -137,6 +137,8 @@ CAUGHT_WRONG_WRITE = StepResult(
         ("REJECTED_POLICY", INVALID_DATE),
         ("HALTED_BEFORE_EFFECT", INVALID_DATE),
         ("HALTED_BEFORE_EFFECT", _with_duplicate_check(DUPLICATE, "candidate")),
+        ("HALTED_BEFORE_EFFECT", _with_duplicate_check(DUPLICATE, "exact")),
+        ("HALTED_BEFORE_EFFECT", _with_duplicate_check(DUPLICATE, "close")),
     ],
 )
 def test_an_input_problem_leaves_the_switch_on(transaction, halted) -> None:
