@@ -2240,10 +2240,15 @@ def test_closed_loop_scroll_ocr_ambiguity_continues_but_click_halts(
             raise outcome
         return outcome
 
-    monkeypatch.setattr(
+    # The scroll's readiness probe resolves in replay.acting and the click in
+    # the replayer; interstitial handling (replay.settling) would resolve too.
+    # All draw from the same scripted outcomes.
+    for target in (
         "openadapt_flow.runtime.replayer.resolve",
-        scripted_resolve,
-    )
+        "openadapt_flow.runtime.replay.acting.resolve",
+        "openadapt_flow.runtime.replay.settling.resolve",
+    ):
+        monkeypatch.setattr(target, scripted_resolve)
     backend = FakeBackend()
     workflow = Workflow(name="wf", steps=[scroll_step(), click_step()])
 

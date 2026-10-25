@@ -280,9 +280,9 @@ def _dialog_error(seen: list[dict[str, Any]], dialog: DialogResponse) -> str:
 
 
 def test_a_dialog_mismatch_error_quotes_no_dialog_text(monkeypatch) -> None:
-    import openadapt_flow.runtime.replayer as replayer_mod
+    import openadapt_flow.runtime.replay.acting as acting_mod  # reads _DIALOG_WAIT_S
 
-    monkeypatch.setattr(replayer_mod, "_DIALOG_WAIT_S", 0.0)
+    monkeypatch.setattr(acting_mod, "_DIALOG_WAIT_S", 0.0)
     live = "Discharge patient Jane Roe (MRN 991)?"
     dialog = DialogResponse(response="accept", message="Discharge this patient?")
     error = _dialog_error([{"message": live, "matched": False}], dialog)
@@ -294,9 +294,9 @@ def test_a_dialog_mismatch_error_quotes_no_dialog_text(monkeypatch) -> None:
 
 
 def test_a_dialog_pattern_is_armed_as_a_pattern(monkeypatch) -> None:
-    import openadapt_flow.runtime.replayer as replayer_mod
+    import openadapt_flow.runtime.replay.acting as acting_mod  # reads _DIALOG_WAIT_S
 
-    monkeypatch.setattr(replayer_mod, "_DIALOG_WAIT_S", 0.0)
+    monkeypatch.setattr(acting_mod, "_DIALOG_WAIT_S", 0.0)
     dialog = DialogResponse(response="accept", message_pattern=r"Delete\ record\ \d+\?")
     replayer = Replayer.__new__(Replayer)
     backend = _DialogBackend([{"message": "Delete record 7?", "matched": True}])
