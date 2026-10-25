@@ -86,7 +86,7 @@ CONSOLE_COLLECTION: tuple[str, ...] = (
 
 RAPIDOCR_NOTICE_DIR = ROOT / "third_party" / "rapidocr"
 LINUX_RUNNER_RUNTIME_EXCLUDE = r"libgcc_s\.so(\..*)?"
-MACOS_X86_CRYPTOGRAPHY_VERSION = "50.0.0"
+MACOS_X86_CRYPTOGRAPHY_VERSION = "50.0.2"
 MACOS_OPENSSL_DYLIB = re.compile(r"(?:^|/)(?:libssl|libcrypto)(?:\.[0-9]+)*\.dylib$")
 
 

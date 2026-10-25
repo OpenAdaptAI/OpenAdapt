@@ -296,6 +296,7 @@ class ApprovalGate:
         approver_policy: Optional["ApproverPolicyV1"] = None,
         approver: Optional["Approver"] = None,
         policy_name: Optional[str] = None,
+        pinned_approver_keys: Optional[Mapping[str, str]] = None,
     ) -> None:
         self.mode = resolve_approval_mode(mode)
         if approval_store is None or isinstance(approval_store, ItemApprovalStore):
@@ -324,6 +325,18 @@ class ApprovalGate:
         else:
             self.log = SwitchLog(log)
         self._pinned_keys = dict(pinned_status_keys or {})
+        # Approver keys a person's signed re-arm may be signed with: the ones
+        # given here (key id to a raw Ed25519 public key, hex or base64), or
+        # by default the approvers on the signed approver roster that the
+        # run's pinned root vouches for (#1486). That default is deliberate:
+        # the roster is signed down from a root a person pins, and lists only
+        # people. With none, a switch that turned off stays off.
+        if pinned_approver_keys is not None:
+            self._approver_keys = dict(pinned_approver_keys)
+        else:
+            from openadapt_flow.approval_mode.switch import registry_approver_keys
+
+            self._approver_keys = registry_approver_keys()
         self._fetch_status = fetch_status
         self._environment_digest = environment_digest
         self._runner_id = runner_id
@@ -592,7 +605,7 @@ class ApprovalGate:
         if self.record is None or self.log is None:
             return True
         try:
-            return bool(self.log.state().is_off)
+            return bool(self.log.state(approver_keys=self._approver_keys).is_off)
         except (SwitchLogError, OSError):
             return True
 
@@ -991,7 +1004,7 @@ class ApprovalGate:
         if record is None or self.log is None:
             return fail("no_switch_record")
         try:
-            state = self.log.state()
+            state = self.log.state(approver_keys=self._approver_keys)
         except (SwitchLogError, OSError):
             return fail("switch_log_unreadable")
         if (
@@ -1117,7 +1130,7 @@ class ApprovalGate:
         if self._off_logged is not None:
             return
         try:
-            state = self.log.state()
+            state = self.log.state(approver_keys=self._approver_keys)
             if not state.is_off:
                 self.log.append("switched_off", reason=reason.value)
             self._off_logged = reason
@@ -1532,9 +1545,10 @@ class ApprovalGate:
                 continue
             step = steps.get(result.step_id)
             if step is not None and workflow is not None:
-                from openadapt_flow.run_gate import is_consequential
-
-                consequential = is_consequential(step, workflow)
+                # The same classifier as the gate's own saves, with the
+                # certifying policy: a step the certified qualification
+                # classified as not saving is not an unapproved save.
+                consequential = self._is_consequential(step, workflow)
             else:
                 from openadapt_flow.approval_mode.post import _consequential
 
@@ -1625,12 +1639,14 @@ class ApprovalGate:
                     ),
                 )
                 if reason == "save_not_approved":
+                    # A save was delivered that no person approved: a program
+                    # problem, so the switch turns off.
                     decision = ItemDecision(
                         kind=ItemDecisionKind.PROBLEM,
                         reason=reason,
                         needs_person=True,
                         counts_toward_problems=True,
-                        switch_off=decision.switch_off,
+                        switch_off=decision.switch_off or OffReason.UNCERTAIN_RESULT,
                     )
         recorded, off = self._log_finish(decision)
         evidence = ApprovalModeItemEvidence(
@@ -1673,7 +1689,7 @@ class ApprovalGate:
             # Only a counted problem can tip the problem rate.
             return True, off
         try:
-            state = self.log.state()
+            state = self.log.state(approver_keys=self._approver_keys)
             if not state.is_off and too_many_problems(
                 state.finished, self.record.thresholds
             ):
