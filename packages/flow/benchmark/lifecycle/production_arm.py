@@ -85,13 +85,15 @@ class OperatorPerson:
         self.item: Optional[WorkItem] = None
         self.operator: Any = None
         self.kind = "approval"
+        #: The run's fixture approver (benchmark.lifecycle_proof.approver).
+        self.approver: Any = None
 
     def watch(self, store: Any) -> None:
         self.stores.append(store)
 
     def sleep(self, seconds: float) -> None:
         time.sleep(min(seconds, 0.5))
-        from openadapt_flow.approval_mode.item_approval import make_answer
+        from benchmark.lifecycle_proof import run as proof
 
         for store in list(self.stores):
             for request in store.requests():
@@ -115,15 +117,11 @@ class OperatorPerson:
                     )
                 )
                 approve = decision.action in ("approve", "accept_repair")
+                # Signed by the run's fixture approver; an unsigned answer is
+                # refused, and the refusal is logged before it stops the gate.
                 store.write_answer(
-                    make_answer(
-                        request,
-                        decision="approve" if approve else "decline",
-                        decline_reason=None if approve else "wrong_record",
-                        decided_by="human",
-                        route="desktop_run_it",
-                        approver_id=APPROVER_ID,
-                        auth_method="cloud_aal2",
+                    proof.answer_signed(
+                        self.ledger, self.approver, store, request, approve
                     )
                 )
                 self.touches += 1
@@ -209,6 +207,7 @@ class ProductionArm:
         ledger = _Ledger(out / "arm-ledger.jsonl", root=out.parent.parent)
         ctx = proof._context(out, self.keys_dir, ledger)  # type: ignore[arg-type]
         person = OperatorPerson(ledger)
+        person.approver = ctx["approver"]
         person.operator = operator
         ctx["person"] = person
         self.ctx = ctx
@@ -560,14 +559,13 @@ class ProductionArm:
         configuration's ``repair.agent`` does. It re-runs the item itself."""
 
         from benchmark.lifecycle_proof import run as proof
-        from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
         from openadapt_flow.repair.self_repair import ScreenAccess, SelfRepair
 
         person: OperatorPerson = self.ctx["person"]
         run_dir = self._run_dir(item, "repair")
         handle = proof.Item(self.ctx, item.item_id, run_dir, params=item.params)
         person.kind = "repair_review"
-        person.watch(ItemApprovalStore(run_dir))
+        person.watch(self.ctx["approver"].store(run_dir))
         try:
             repair = SelfRepair(
                 proof.LabelAgent(),
