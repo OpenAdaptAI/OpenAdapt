@@ -138,9 +138,12 @@ including an answer file written around the command
     never update a deployment config's or Desktop's head.
   - The agent's task ledger and its guard server take their root only from
     the deployment config (`--config`); the environment never counts there.
-  - With `--config-sha256`, Flow reads the deployment config once, refuses it
-    if its digest differs, and parses only those bytes for the whole command
-    (Desktop passes it for every run).
+  - With `--config-sha256`, Flow opens the deployment config once (not
+    through a symlink; it must be a regular file), refuses it if its digest
+    differs, and from then on parses only those bytes whenever the command
+    loads that path, including the approver pin. Replacing the file, or a
+    symlink put in its place, changes nothing (Desktop passes it for every
+    run).
   - The deployment config's `approvers` section is read once per command,
     so swapping the file mid-run changes nothing.
   - The run records the root, the key directory and the roster's head when

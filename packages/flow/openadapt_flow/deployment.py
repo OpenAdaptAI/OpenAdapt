@@ -1262,30 +1262,56 @@ def incomplete_deployment_reasons(cfg: DeploymentConfig) -> list[str]:
 
 
 #: Config bytes read once and checked against the digest the caller passed
-#: (``--config-sha256``), by resolved path. Every later load of that path in
-#: this process parses these bytes, never the file, so a file swapped after
-#: the check changes nothing.
+#: (``--config-sha256``), keyed by the path as given (``os.path.abspath``, not
+#: resolved, so a symlink put there later can't redirect a lookup). Every later
+#: load of that path in this process parses these bytes, never the file.
 _PINNED_CONFIG_BYTES: dict[str, bytes] = {}
 
 
-def pin_deployment_bytes(source: str | Path, sha256: str) -> None:
+def _config_key(source: str | Path) -> str:
+    import os
+
+    return os.path.abspath(str(source))
+
+
+def pin_deployment_bytes(source: str | Path, sha256: str) -> bytes:
     """Read ``source`` once, check it against ``sha256``, and keep those bytes.
 
-    Raises ValueError when the digest doesn't match.
+    The file is opened without following a symlink and must be a regular
+    file. Returns the bytes. Raises ValueError when the digest doesn't match
+    or the path isn't a regular file.
     """
 
     import hashlib
+    import os
+    import stat
 
-    path = Path(source)
-    data = path.read_bytes()
-    want = sha256.strip().lower().removeprefix("sha256:")
-    got = hashlib.sha256(data).hexdigest()
-    if got != want:
+    try:
+        fd = os.open(str(source), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as exc:
         raise ValueError(
-            f"deployment config {path} doesn't match --config-sha256 (it changed "
+            f"deployment config {source} can't be opened as a plain file: {exc}"
+        ) from exc
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError(f"deployment config {source} isn't a regular file")
+        chunks = []
+        while True:
+            chunk = os.read(fd, 1 << 16)
+            if not chunk:
+                break
+            chunks.append(chunk)
+    finally:
+        os.close(fd)
+    data = b"".join(chunks)
+    want = sha256.strip().lower().removeprefix("sha256:")
+    if hashlib.sha256(data).hexdigest() != want:
+        raise ValueError(
+            f"deployment config {source} doesn't match --config-sha256 (it changed "
             "after it was written)"
         )
-    _PINNED_CONFIG_BYTES[str(path.resolve())] = data
+    _PINNED_CONFIG_BYTES[_config_key(source)] = data
+    return data
 
 
 def load_deployment(
@@ -1301,7 +1327,7 @@ def load_deployment(
     import yaml
 
     path = Path(source)
-    pinned = _PINNED_CONFIG_BYTES.get(str(path.resolve()))
+    pinned = _PINNED_CONFIG_BYTES.get(_config_key(path))
     if pinned is None and not path.is_file():
         raise FileNotFoundError(f"deployment config {source!r} is not an existing file")
     try:
