@@ -1,0 +1,122 @@
+# Import boundaries for openadapt-flow, checked by `lint-imports` in CI
+# (.github/workflows/packages.yml, flow core lint). See
+# docs/design/DECOMPOSITION.md, section 2.
+#
+# runtime.core carries out steps; governance (authorization, approvals,
+# qualification, profiles, runners, the replayer that wires them) is passed in
+# as gates. tests/test_import_boundaries.py keeps the forbidden list complete.
+
+[importlinter]
+root_package = openadapt_flow
+include_external_packages = False
+
+[importlinter:contract:runtime-core-direct]
+name = runtime.core imports no governance module
+type = forbidden
+source_modules =
+    openadapt_flow.runtime.core
+forbidden_modules =
+    openadapt_flow.runner
+    openadapt_flow.hosted
+    openadapt_flow.approval_mode
+    openadapt_flow.jit
+    openadapt_flow.runtime.replayer
+    openadapt_flow.production_qualification
+    openadapt_flow.qualification
+    openadapt_flow.qualification_admission
+    openadapt_flow.qualification_admission_v2
+    openadapt_flow.qualification_admission_v4
+    openadapt_flow.qualification_campaign_authority
+    openadapt_flow.qualification_campaign_permit
+    openadapt_flow.qualification_dev_signer
+    openadapt_flow.qualification_drills
+    openadapt_flow.qualification_environment
+    openadapt_flow.qualification_faults
+    openadapt_flow.qualification_identity_evidence
+    openadapt_flow.qualification_oracle_gate
+    openadapt_flow.qualification_proposal
+    openadapt_flow.qualification_web_session
+    openadapt_flow.qualified_business_decisions
+    openadapt_flow.qualify
+allow_indirect_imports = True
+
+[importlinter:contract:runtime-core-indirect]
+# The same boundary through every chain of imports. Today the schema and
+# several shared modules import governance, so every module runtime.core
+# depends on reaches it. Each edge below is one of those imports. A new import
+# of governance by any module runtime.core depends on fails; a new route to an
+# edge already listed does not, so keep the list short. Cutting an edge removes
+# its line; an empty list makes the boundary complete.
+name = runtime.core reaches no governance module except through listed edges
+type = forbidden
+source_modules =
+    openadapt_flow.runtime.core
+forbidden_modules =
+    openadapt_flow.runner
+    openadapt_flow.hosted
+    openadapt_flow.approval_mode
+    openadapt_flow.jit
+    openadapt_flow.runtime.replayer
+    openadapt_flow.production_qualification
+    openadapt_flow.qualification
+    openadapt_flow.qualification_admission
+    openadapt_flow.qualification_admission_v2
+    openadapt_flow.qualification_admission_v4
+    openadapt_flow.qualification_campaign_authority
+    openadapt_flow.qualification_campaign_permit
+    openadapt_flow.qualification_dev_signer
+    openadapt_flow.qualification_drills
+    openadapt_flow.qualification_environment
+    openadapt_flow.qualification_faults
+    openadapt_flow.qualification_identity_evidence
+    openadapt_flow.qualification_oracle_gate
+    openadapt_flow.qualification_proposal
+    openadapt_flow.qualification_web_session
+    openadapt_flow.qualified_business_decisions
+    openadapt_flow.qualify
+ignore_imports =
+    openadapt_flow.admit_pipeline -> openadapt_flow.approval_mode.approver
+    openadapt_flow.admit_pipeline -> openadapt_flow.approval_mode.signed_policy
+    openadapt_flow.admit_pipeline -> openadapt_flow.jit.lifecycle
+    openadapt_flow.admit_pipeline -> openadapt_flow.qualification_proposal
+    openadapt_flow.admitted_composition -> openadapt_flow.qualification_admission
+    openadapt_flow.deployment -> openadapt_flow.qualification_environment
+    openadapt_flow.execution_profiles -> openadapt_flow.qualification
+    openadapt_flow.execution_profiles -> openadapt_flow.qualification_identity_evidence
+    openadapt_flow.fleet.fingerprint -> openadapt_flow.qualification_environment
+    openadapt_flow.fleet.signing -> openadapt_flow.qualification_admission_v2
+    openadapt_flow.fleet.status -> openadapt_flow.qualification_admission_v2
+    openadapt_flow.ir -> openadapt_flow.approval_mode.model
+    openadapt_flow.ir -> openadapt_flow.qualification
+    openadapt_flow.ir -> openadapt_flow.qualification_faults
+    openadapt_flow.policy -> openadapt_flow.qualification
+    openadapt_flow.repair.candidate -> openadapt_flow.qualification
+    openadapt_flow.repair.invariants -> openadapt_flow.qualification
+    openadapt_flow.repair.lifecycle -> openadapt_flow.jit.authority
+    openadapt_flow.repair.readmission -> openadapt_flow.jit.lifecycle
+    openadapt_flow.repair.readmission -> openadapt_flow.jit.signature
+    openadapt_flow.repair.readmission -> openadapt_flow.qualify.campaign
+    openadapt_flow.repair.registration -> openadapt_flow.qualification
+    openadapt_flow.repair.self_repair -> openadapt_flow.approval_mode.approver
+    openadapt_flow.repair.self_repair -> openadapt_flow.approval_mode.form_state
+    openadapt_flow.repair.self_repair -> openadapt_flow.approval_mode.gate
+    openadapt_flow.repair.self_repair -> openadapt_flow.approval_mode.item_approval
+    openadapt_flow.repair.self_repair -> openadapt_flow.approval_mode.model
+    openadapt_flow.repair.self_repair -> openadapt_flow.approval_mode.post
+    openadapt_flow.repair.self_repair -> openadapt_flow.jit.adapters
+    openadapt_flow.repair.self_repair -> openadapt_flow.jit.keys
+    openadapt_flow.repair.self_repair -> openadapt_flow.jit.lifecycle
+    openadapt_flow.repair.self_repair -> openadapt_flow.jit.signature
+    openadapt_flow.repair.standard_change -> openadapt_flow.jit.authority
+    openadapt_flow.run_gate -> openadapt_flow.qualification
+    openadapt_flow.run_gate -> openadapt_flow.qualification_faults
+    openadapt_flow.runtime.authorization -> openadapt_flow.qualification
+    openadapt_flow.runtime.authorization -> openadapt_flow.qualification_admission
+    openadapt_flow.runtime.durable.attended -> openadapt_flow.qualification
+    openadapt_flow.runtime.durable.business_decision -> openadapt_flow.qualification
+    openadapt_flow.runtime.durable.controller -> openadapt_flow.approval_mode.model
+    openadapt_flow.runtime.durable.resume -> openadapt_flow.runtime.replayer
+    openadapt_flow.runtime_validation -> openadapt_flow.hosted
+    openadapt_flow.sections -> openadapt_flow.qualification
+    openadapt_flow.teach_scope -> openadapt_flow.jit.adapters
+    openadapt_flow.terminal_verification_v2 -> openadapt_flow.qualification_admission_v2

@@ -23,6 +23,7 @@ repeat the measurements.
 7. [Coordination with work in flight](#7-coordination-with-work-in-flight)
 8. [How the numbers were measured](#8-how-the-numbers-were-measured)
 9. [Review decisions](#9-review-decisions)
+10. [Duplicates to collapse](#10-duplicates-to-collapse)
 
 ## 1. What replayer.py is today
 
@@ -299,7 +300,37 @@ state, and the production lifecycle work that changes them often.
 object. Reason: the report schema is a public contract, so its construction
 should be in one place.
 
-### 2.4 Deliberately not done
+### 2.4 The `runtime.core` boundary
+
+`openadapt_flow/runtime/core/` holds the code that carries out a step through
+a backend and nothing that decides whether it may. Governance reaches it only
+as gates the caller passes in: `ActionContext.authorize` runs delivery
+authorization and the qualification-environment check at the last point
+before input, in the order the replayer always ran them.
+
+Two import-linter contracts in `packages/flow/.importlinter`, run by
+`lint-imports` in the flow lint job, keep it that way. Neither may import
+`runner`, `hosted`, `approval_mode`, `jit`, the replayer or any
+`qualification*` module:
+
+- **Direct.** No module in `runtime.core` imports a governance module. This
+  holds with no exceptions.
+- **Indirect.** The same through every chain of imports, except 45 listed
+  edges. Measured on `origin/main` at `ecc162e12`: a module that imports only
+  `ir`, `backend` and the resolver reaches 249 of the package's 562 modules,
+  44 of them governance. The routes run through the schema (`ir` imports
+  `qualification`, `qualification_faults` and `approval_mode.model`), the
+  effect verifier (`effects.effect` → `authorization` → `execution_profiles`
+  → `durable` → the replayer → `runner`), and the policy, repair, fleet and
+  durable modules. A new governance import in any module the core depends on
+  fails the contract. Each cut removes a line; PR 5 removes the `ir` edges.
+
+`tests/test_import_boundaries.py` keeps the forbidden list complete as
+`qualification_*` modules are added, and proves every `ActionKind` is carried
+out in exactly one place: `runtime.core.ACTION_EXECUTORS` (KEY, HOTKEY and
+WAIT so far) or the replayer's list of kinds not yet moved.
+
+### 2.5 Deliberately not done
 
 - **Resolution rungs as registered strategies.** `resolver.resolve()` is
   already separate, and the rung order is part of the safety argument
@@ -326,6 +357,8 @@ how the pull request proves it.
 | Approval gates need a signed human answer | Approval tests; no change to approval code paths outside the moves (and none before #1486 merges) |
 | Same side effects in the same order | Golden runs record every backend call (method and arguments) and compare the trace |
 | Import paths keep working | `replayer.py` re-exports every moved name; a test imports every name importable from the module on `main` before the first move |
+| Contract hashes over source bytes unchanged | Nothing moves out of `runtime/resolver.py` or `runtime/program_predicates.py`: the program-predicate evaluator contract hashes their source bytes (and the vision module's) |
+| Command identities unchanged | The CLI split keeps `_SEALED_READY_COMMANDS` matching, because it keys on each command function's `module:name` |
 | Strict typing and code-owner review keep covering the moved code | Same pull request updates the strict mypy list and CODEOWNERS to cover `runtime/replay/` |
 
 ### 3.1 Golden runs
@@ -370,19 +403,20 @@ mix.py:7: error: The erased type of self "host.Replayer" is not a supertype
 of its class "mix.IdentityMixin"  [misc]
 ```
 
-Instead, each mixin declares what it needs from the host as a `Protocol` that
-only mypy sees:
+Instead, each mixin declares what it needs from the host in a host class
+that only mypy sees as its base:
 
 ```python
-class _IdentityHost(Protocol):
+# mypy: disable-error-code="empty-body"
+class _IdentityChecksHost:
     backend: Backend
-    vision: Vision
-    identity_vlm: IdentityVlm | None
+    vision: Any
+    identity_vlm: Optional[Any]
     pixel_verify_enabled: bool
-    def _asset_bytes(self, ...) -> bytes: ...
+    def _asset_bytes(self, bundle_dir: Path, rel: str, *, workflow: Optional[Workflow] = None) -> Optional[bytes]: ...
 
 if TYPE_CHECKING:
-    _Base = _IdentityHost
+    _Base = _IdentityChecksHost
 else:
     _Base = object
 
@@ -391,14 +425,37 @@ class IdentityChecks(_Base):
         ...
 ```
 
-This was checked with mypy 1.11.2 using the strict flags from CI. The mixin
-type-checks; at run time the class is a plain `type` whose method resolution
-order is `Replayer`, the mixins, `object` (no `Protocol` metaclass); and when
-`Replayer` assigns an attribute a type that no longer matches the declaration,
-mypy reports an error. Drift is caught, not silent.
+The host is a plain class, not a `Protocol`. A first version used
+`Protocol` and failed in two ways under mypy 1.11 and 2.4:
 
-The host protocols are also the first deliverable of the design: each one
-lists exactly what its concern reads, which is the input for Stage B.
+- A protocol attribute declared without a value is abstract, so a mixin
+  method that assigns it (`self._render_scale_inner = None`) re-infers its
+  type as `None`, and the replayer's own declaration then conflicts.
+- Protocol methods with empty bodies are implicitly abstract. When one mixin
+  stubs a method that a later mixin defines, the stub comes first in the
+  method resolution order and mypy reports the replayer as abstract.
+
+A plain host class avoids both. Its stubs' empty bodies are allowed by a
+per-module `empty-body` exemption, which cannot hide anything in the moved
+code because moved methods are never empty. The attribute types are the
+replayer's own (class-level annotations, `__init__` annotations, or the
+annotation of the parameter an attribute is assigned from), with `Any` only
+where the replayer states no type.
+
+This was checked with mypy 2.4 using the strict flags from CI, on the real
+moves in PR 2: the mixins type-check; at run time the class is a plain
+`type` whose method resolution order is `Replayer`, the mixins, `object`;
+and when `Replayer` assigns an attribute a type that no longer matches a
+host declaration, mypy reports an error. Drift is caught, not silent.
+
+`scripts/extract_mixin.py` generates the mixin module, its imports and its
+host class. Each host lists exactly what its concern reads, which is the
+input for Stage B.
+
+A concern goes into `runtime.core` only when its host reads no governance
+state (approval, authorization, qualification, durable or profile
+attributes) and its module imports no governance module, even for types.
+Everything else goes into `runtime/replay/`.
 
 Stage A also reduces merge conflicts. In the October merge-conflict review,
 three API-step pull requests (#1370, #1371, #1372) each conflicted on
@@ -656,3 +713,31 @@ Decided in review on 2026-10-24:
 4. **Resolution rungs:** no second ladder is planned, so `resolver.resolve()`
    stays one ladder. Checking identity against the system of record is a check
    source (S5), not a ladder.
+5. **Core boundary:** an import-linter contract keeps `runtime.core` free of
+   governance imports (2.4), and the first executors move behind it at the
+   start of PR 2. Governance becomes gates around the core.
+6. **Landing order:** #1510 (PR 1) lands last among the in-flight pull
+   requests, with budgets reset to `main` at merge time and the committed
+   golden baselines; the ratchet then becomes blocking.
+
+## 10. Duplicates to collapse
+
+Measured on `origin/main` at `ecc162e12` by reading and `grep`. "Users" counts
+non-test files that reference the symbol. Each family names the canonical
+implementation and the pull request in section 4.3 that collapses it.
+
+| Family | What exists | Canonical | PR |
+|---|---|---|---|
+| Check-strength scales | 8 ladders for one idea: `CheckLevel` (types, 0–5, higher is stronger, already maps the others), `VerificationTier` (1–4, lower is stronger, 46 users, on the wire), `EffectVerificationTier`, `EffectStrengthV1`, `OracleTier`, `ReadBackTier` (defined in types and hand-copied in `approval_mode/approver.py:237`), six copies of the `independent_readback \| screen_readback \| unchecked` literal, two identical `ReadGrade` literals | `CheckLevel`; `VerificationTier` stays as a wire alias | 5 |
+| Run outcomes | `TransactionOutcome` (10 states), `ExecutionOutcome` and the envelope literal (5), `QualificationOutcome` (the same 5 in lower case), `ProductionExecutionOutcome`, `ExecuteTerminalOutcomeV1`, `PlainResultV1`, a parallel plain vocabulary in `desktop/outcomes.py`, free strings in the agent runner; `RunReport` carries `success`, `execution_outcome`, `outcome_envelope` and `transaction_outcome` at once | `TransactionOutcome` for the terminal state; `PlainResultV1` for people | 3 (report), 5 (schema) |
+| Admission formats | Qualification admission v1 (enforced today), v2, v4; local-dev admission; JIT `admission.json`; execute admission; admit-pipeline pending and decision records; product-release admission | The v4 envelope, with dev, JIT and execute as issuer or mode variants | 5, after a cross-repository contract review |
+| Certify paths | Three certify commands repeat the same policy-source resolution; Desktop `certify_bundle` evaluates qualification twice; JIT, repair readmission and the admit pipeline each sign their own records | `certify_project` and one `resolve_policy` helper | 4 |
+| Signing and canonical JSON | About 45 canonical-JSON helpers. They are not byte-identical: some use `ensure_ascii=True` (`runner_capability.py:177`, `jit/lifecycle.py:192` by default), most `False`. `flow/openadapt_flow/agent/seal.py` copies `types/openadapt_types/seal.py`. Six key stores | `openadapt_types.seal.canonical_json` with an explicit `ensure_ascii`; signed formats keep a versioned helper so existing signatures still verify | 3 (agent seal copy first), 5 |
+| Pagination | One pager (`runtime/list_source.py`), used only by `list_guard.py` | Nothing to collapse | — |
+| Census | Not on `main`; on its feature branch a positional-id check exists in Python twice and once in JavaScript | One implementation with a generated JavaScript mirror | After that branch merges |
+| Runtimes | One step interpreter (`Replayer`). Four callers start it as a subprocess, five through `deployment.build_replayer`, and about ten construct `Replayer(...)` directly with their own arguments, which can skip governance wiring | `build_replayer` for every in-process caller | 3 |
+
+Cheapest first: the agent seal copy, the shared literals, the copied outcome
+string sets, `resolve_policy`, routing direct `Replayer(...)` callers through
+`build_replayer`. Strength scales, outcomes and admissions change persisted or
+signed formats and come last, each with a versioned mapping.

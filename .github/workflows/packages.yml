@@ -288,6 +288,11 @@ jobs:
         run: ruff check openadapt_flow
       - name: Ruff format check
         run: ruff format --check openadapt_flow tests
+      - name: Import boundaries (runtime.core imports no governance)
+        # Contracts in packages/flow/.importlinter; DECOMPOSITION.md, section 2.
+        run: |
+          pip install 'import-linter==2.15'
+          lint-imports
       - name: Mypy
         run: mypy
       - name: Mypy (strict, safety path only)
@@ -304,6 +309,8 @@ jobs:
             openadapt_flow/runtime/identity_template.py \
             openadapt_flow/runtime/identity_vlm.py \
             openadapt_flow/runtime/replayer.py \
+            openadapt_flow/runtime/core \
+            openadapt_flow/runtime/replay \
             openadapt_flow/runtime/resolver.py \
             openadapt_flow/submit_binding.py \
             openadapt_flow/runtime/effects/effect.py \
