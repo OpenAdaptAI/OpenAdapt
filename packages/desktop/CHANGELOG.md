@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.24.1 (2026-10-25)
+
+### Bug Fixes
+
+- **desktop**: bundle openadapt-flow 2.4.0. 0.24.0 bundled a Flow that didn't accept the options Desktop sends for a run's pinned config and for a person's signed answer, so governed runs and answers stopped before they started. Every command line Desktop builds is now checked against the Flow it bundles, in CI and against the installer's own binary.
+
+
+
 ## v0.24.0 (2026-10-24)
 
 ### Features
