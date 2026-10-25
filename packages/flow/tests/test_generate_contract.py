@@ -254,3 +254,16 @@ def test_the_floor_refuses_every_weakening() -> None:
     assert "'fname' is not checked" in text
     assert "attribution" in text
     assert "widens" in text
+
+
+def test_a_contract_without_a_frame_is_below_the_floor() -> None:
+    contract = generate_contract(_demos(), CHANNEL)
+    doc = {k: v for k, v in contract.verify.items() if k != "frame"}
+    assert any(
+        "no frame" in p for p in baseline_problems(parse_verify_config(doc), TYPED[0])
+    )
+    doc["frame"] = {"ignore_fields": []}
+    assert any(
+        "identity field" in p
+        for p in baseline_problems(parse_verify_config(doc), TYPED[0])
+    )

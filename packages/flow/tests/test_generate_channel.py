@@ -386,3 +386,35 @@ def test_a_fhir_total_larger_than_the_read_is_unreadable() -> None:
         assert read_through(section, {}) is None
     finally:
         server.shutdown()
+
+
+def test_a_rest_next_page_on_another_origin_is_unreadable() -> None:
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            body = {
+                "data": [{"id": 1}],
+                "links": {"next": "http://203.0.113.9/api/patient?page=1"},
+            }
+            data = json.dumps(body).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *a):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        section = {
+            "kind": "rest",
+            "base_url": f"http://127.0.0.1:{server.server_address[1]}",
+            "records_path": "/api/patient",
+            "records_key": "data",
+            "records_next_path": "links.next",
+        }
+        assert read_through(section, {}) is None
+    finally:
+        server.shutdown()

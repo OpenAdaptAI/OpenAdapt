@@ -630,9 +630,10 @@ def run_suite(
     """Misses and false stops of ``decide`` on the suite, over ``table``."""
 
     missed: dict[str, int] = {}
+    missed_cases: list[int] = []
     false_stops = 0
     duplicates = distinct = 0
-    for case in cases:
+    for index, case in enumerate(cases):
         rows = (
             list(table)
             if case["exclude"] is None
@@ -643,6 +644,7 @@ def run_suite(
             duplicates += 1
             if not stop:
                 missed[case["kind"]] = missed.get(case["kind"], 0) + 1
+                missed_cases.append(index)
         else:
             distinct += 1
             false_stops += int(stop)
@@ -650,6 +652,7 @@ def run_suite(
         "duplicates": duplicates,
         "missed": sum(missed.values()),
         "missed_by_kind": dict(sorted(missed.items())),
+        "missed_cases": missed_cases,
         "distinct": distinct,
         "false_stops": false_stops,
     }
@@ -666,14 +669,17 @@ class MappingAdoption:
 def adopt_mapping(
     generated: dict[str, Any], reference: Optional[dict[str, Any]]
 ) -> MappingAdoption:
-    """Use the generated mapping only if it does no worse on the suite."""
+    """Use the generated mapping only if it does no worse on the suite: it
+    catches every duplicate the reference catches, and stops no more existing
+    records."""
 
     if reference is None:
         return MappingAdoption(
             "generated", "no reference mapping to compare with", generated, None
         )
     if (
-        generated["missed"] <= reference["missed"]
+        not set(generated.get("missed_cases", []))
+        - set(reference.get("missed_cases", []))
         and generated["false_stops"] <= reference["false_stops"]
     ):
         return MappingAdoption(

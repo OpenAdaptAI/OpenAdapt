@@ -21,8 +21,8 @@ never a guessed success.
 from __future__ import annotations
 
 import time
-from urllib.parse import urljoin, urlsplit
 from typing import Any, Optional
+from urllib.parse import urljoin, urlsplit
 
 from openadapt_flow.runtime.effects._common import drop_record_fields, judge_records
 from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
@@ -32,7 +32,6 @@ from openadapt_flow.runtime.effects.effect import (
     EffectVerdict,
 )
 from openadapt_flow.verification import VerificationTier
-
 
 #: A paged read longer than this many pages reads as unreadable.
 MAX_PAGES = 50

@@ -23,6 +23,8 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 
+from openadapt_flow.cli_hints import command
+
 
 def _load_doc(source: str) -> Any:
     """A JSON or YAML document from a file or an http(s) URL."""
@@ -168,8 +170,9 @@ def cmd_build(args: argparse.Namespace) -> int:
         print(f"PROBLEM: {problem}")
     print(f"Times (s): {json.dumps(result.seconds)}")
     print(
-        "ADMITTED (not approved): approve with `openadapt-flow generate-parts approve "
-        f"{args.out} --approved-by NAME`"
+        "ADMITTED (not approved): approve with `"
+        + command(f"generate-parts approve {args.out} --approved-by NAME")
+        + "`"
         if result.admitted
         else "NOT ADMITTED: the problems above must be fixed first."
     )

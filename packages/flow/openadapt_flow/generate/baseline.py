@@ -79,6 +79,10 @@ def baseline_problems(cfg: Any, typed_params: Iterable[str]) -> list[str]:
         if effect.needs_operator_confirmation:
             problems.append("an effect is still a placeholder")
     frame = getattr(cfg, "frame", None)
+    if frame is None:
+        problems.append("the contract declares no frame (nothing else may change)")
+    elif not frame.identity_field:
+        problems.append("the frame names no identity field to compare records by")
     if frame is not None:
         if frame.attribution is not None:
             problems.append(

@@ -154,7 +154,7 @@ def test_the_suite_and_the_adoption_rule() -> None:
 
     result = run_suite(cases, people, exact_only)
     assert result["missed"] > 0 and result["false_stops"] == 0
-    better = dict(result, missed=0)
+    better = dict(result, missed=0, missed_cases=[])
     assert adopt_mapping(result, better).use == "reference"
     assert adopt_mapping(better, result).use == "generated"
     assert adopt_mapping(result, None).use == "generated"

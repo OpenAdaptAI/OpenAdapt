@@ -147,3 +147,27 @@ def test_labels_only_remove_evidence_a_person_looked_at() -> None:
     assert plain.calibration.labelled
     assert all(entry["label"] is None for entry in plain.calibration.labelled)
     assert labelled.calibration.caught >= plain.calibration.caught
+
+
+def test_adoption_needs_a_superset_of_the_reference_catches() -> None:
+    """Fewer misses is not enough: missing one the reference stops refuses."""
+
+    from types import SimpleNamespace
+
+    from openadapt_flow.generate.identity_template import adopt_mapping
+
+    gen = {"missed": 1, "missed_cases": [7], "false_stops": 0}
+    ref = {"missed": 2, "missed_cases": [3, 4], "false_stops": 0}
+    assert adopt_mapping(gen, ref).use == "reference"
+    assert adopt_mapping({**gen, "missed_cases": [3]}, ref).use == "generated"
+
+    rule = generate_rule(_profile(), false_stop_budget=0.02, expected_records=500)
+    scores = iter(
+        [
+            {"missed": 1, "missed_cases": [7], "duplicates": 10},
+            {"missed": 2, "missed_cases": [3, 4], "duplicates": 10},
+        ]
+    )
+    rule.calibration_set = SimpleNamespace(score=lambda decide: next(scores))
+    kept = adopt(rule, lambda new, table: True)
+    assert kept.use == "reference" and "reference catches" in kept.why

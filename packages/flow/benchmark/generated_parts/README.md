@@ -40,11 +40,17 @@ The mapping is verified, never calibrated on the live table:
 
 **Adoption rule** (`identity_template.adopt_mapping`, enforced by
 `generate-parts build --reference-identity`): a generated mapping is used
-only if template plus mapping misses no more duplicates and stops no more
-existing records on the suite than template plus the reference mapping (the
-site's hand-written source adapter). Otherwise the reference stays and the
-review says why. The same rule governs a generated duplicate rule
-(`identity.adopt`, `--reference-duplicate-check`).
+only if template plus mapping catches every duplicate on the suite that
+template plus the reference mapping (the site's hand-written source adapter)
+catches, and stops no more existing records. Fewer misses is not enough if
+they are different ones. Otherwise the reference stays and the review says
+why. The same rule governs a generated duplicate rule (`identity.adopt`,
+`--reference-duplicate-check`).
+
+Both yardsticks are built by the generator from synthetic duplicates, so
+they lean toward generation: on its calibration set #1516's check missed 0
+to 3 duplicates, and on the real stream 24. Passing the adoption rule is
+necessary, not sufficient; the stream rows below are the evidence.
 
 ### Measured: the generated mapping against #1516's hand-written adapters
 

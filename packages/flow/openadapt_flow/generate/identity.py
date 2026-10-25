@@ -497,11 +497,11 @@ class CalibrationSet:
         """Misses and false stops of ``decide(new, table) -> bool`` (stop)."""
 
         missed: dict[str, int] = {}
-        total: dict[str, int] = {}
-        for kind, new, _source in self.positives:
-            total[kind] = total.get(kind, 0) + 1
+        missed_cases: list[int] = []
+        for index, (kind, new, _source) in enumerate(self.positives):
             if not decide(new, self.profile):
                 missed[kind] = missed.get(kind, 0) + 1
+                missed_cases.append(index)
         false = sum(
             1
             for i in self.negatives
@@ -511,6 +511,7 @@ class CalibrationSet:
             "duplicates": len(self.positives),
             "missed": sum(missed.values()),
             "missed_by_error": dict(sorted(missed.items())),
+            "missed_cases": missed_cases,
             "distinct_queries": len(self.negatives),
             "false_stops": false,
         }
@@ -752,12 +753,15 @@ class Adoption:
 
 
 def adopt(rule: DuplicateRule, reference: Any = None) -> Adoption:
-    """Use the generated rule only if it misses no more than the reference.
+    """Use the generated rule only if it catches every duplicate the reference does.
 
     ``reference(new, table) -> bool`` (stop) is the hand-built check, when the
-    system has one. Both are scored on the same calibration set. A generated
-    rule that misses more is not used: the reference stays, and the reason is
-    stated. Without a reference the generated rule is used, and the review
+    system has one. Both are scored on the same calibration set. The
+    generated rule must catch a superset of what the reference catches: fewer
+    misses overall is not enough if it misses a duplicate the reference
+    stops. Otherwise the reference stays, and the reason is stated. The
+    calibration set is the generator's own synthetic set, so this yardstick
+    leans toward the generated rule; passing it is necessary, not sufficient. Without a reference the generated rule is used, and the review
     says there was nothing to compare it with.
     """
 
@@ -768,7 +772,8 @@ def adopt(rule: DuplicateRule, reference: Any = None) -> Adoption:
     if reference is None:
         return Adoption("generated", "no reference check to compare with", mine, None)
     theirs = rule.calibration_set.score(reference)
-    if mine["missed"] <= theirs["missed"]:
+    newly_missed = sorted(set(mine["missed_cases"]) - set(theirs["missed_cases"]))
+    if not newly_missed:
         return Adoption(
             "generated",
             f"it misses {mine['missed']} of {mine['duplicates']} calibration "
@@ -779,8 +784,8 @@ def adopt(rule: DuplicateRule, reference: Any = None) -> Adoption:
     return Adoption(
         "reference",
         f"the generated rule misses {mine['missed']} of {mine['duplicates']} "
-        f"calibration duplicates and the reference {theirs['missed']}: the "
-        "reference stays",
+        f"calibration duplicates and the reference {theirs['missed']}, and "
+        f"{len(newly_missed)} it misses the reference catches: the reference stays",
         mine,
         theirs,
     )

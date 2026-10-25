@@ -57,7 +57,14 @@
       "missed": 5,
       "missed_by_kind": {
         "first_nickname+contact_changed": 5
-      }
+      },
+      "missed_cases": [
+        35,
+        56,
+        296,
+        319,
+        363
+      ]
     },
     "suite_reference": {
       "distinct": 30,
@@ -66,7 +73,14 @@
       "missed": 5,
       "missed_by_kind": {
         "first_nickname+contact_changed": 5
-      }
+      },
+      "missed_cases": [
+        35,
+        56,
+        296,
+        319,
+        363
+      ]
     }
   },
   "fhir_first_item": {
@@ -124,7 +138,39 @@
       "missed_by_kind": {
         "first_nickname+contact_changed": 5,
         "only_email_kept+contact_kept": 25
-      }
+      },
+      "missed_cases": [
+        19,
+        35,
+        40,
+        56,
+        61,
+        82,
+        141,
+        160,
+        179,
+        198,
+        219,
+        238,
+        259,
+        280,
+        296,
+        301,
+        319,
+        324,
+        347,
+        363,
+        368,
+        387,
+        406,
+        425,
+        444,
+        484,
+        506,
+        528,
+        548,
+        608
+      ]
     },
     "suite_reference": {
       "distinct": 30,
@@ -133,7 +179,14 @@
       "missed": 5,
       "missed_by_kind": {
         "first_nickname+contact_changed": 5
-      }
+      },
+      "missed_cases": [
+        35,
+        56,
+        296,
+        319,
+        363
+      ]
     }
   },
   "openemr_rest": {
@@ -194,7 +247,14 @@
       "missed": 5,
       "missed_by_kind": {
         "first_nickname+contact_changed": 5
-      }
+      },
+      "missed_cases": [
+        35,
+        56,
+        296,
+        319,
+        363
+      ]
     },
     "suite_reference": {
       "distinct": 30,
@@ -203,7 +263,14 @@
       "missed": 5,
       "missed_by_kind": {
         "first_nickname+contact_changed": 5
-      }
+      },
+      "missed_cases": [
+        35,
+        56,
+        296,
+        319,
+        363
+      ]
     }
   },
   "rows": {
@@ -263,7 +330,14 @@
       "missed": 5,
       "missed_by_kind": {
         "first_nickname+contact_changed": 5
-      }
+      },
+      "missed_cases": [
+        35,
+        56,
+        296,
+        319,
+        363
+      ]
     },
     "suite_reference": {
       "distinct": 30,
@@ -272,7 +346,14 @@
       "missed": 5,
       "missed_by_kind": {
         "first_nickname+contact_changed": 5
-      }
+      },
+      "missed_cases": [
+        35,
+        56,
+        296,
+        319,
+        363
+      ]
     }
   }
 }
