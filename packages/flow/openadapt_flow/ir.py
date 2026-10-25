@@ -4397,6 +4397,14 @@ class StepResult(BaseModel):
     #: on that path alone; None otherwise, and then omitted from the
     #: serialized result.
     scroll_target_ready_before: Optional[bool] = None
+    #: Set when ``no_duplicate_candidate`` failed this step: ``exact`` or
+    #: ``close`` (a record matched), ``candidate`` (a listed row matched on the
+    #: screen): about the item; ``unreadable`` (the record channel or the
+    #: screen list could not answer, or a record-pinned check had no
+    #: channel): about the program. None otherwise, and then omitted.
+    duplicate_check: Optional[Literal["exact", "close", "candidate", "unreadable"]] = (
+        None
+    )
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -4415,6 +4423,8 @@ class StepResult(BaseModel):
             data.pop("check_to_click", None)
         if isinstance(data, dict) and self.scroll_target_ready_before is None:
             data.pop("scroll_target_ready_before", None)
+        if isinstance(data, dict) and self.duplicate_check is None:
+            data.pop("duplicate_check", None)
         return data
 
 

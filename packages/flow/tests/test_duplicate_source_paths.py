@@ -243,3 +243,83 @@ def test_unset_candidate_fields_serialize_as_before() -> None:
     dumped = pc.model_dump()
     assert "candidate_source" not in dumped
     assert "candidate_record_fields" not in dumped
+
+
+# -- the structured outcome on the halted step (#1517 reads it) -----------------
+
+
+def _halted(source: Any, rows: Any, pinned: Any = None) -> Any:
+    from openadapt_flow.ir import StepResult
+    from openadapt_flow.runtime.replayer import Replayer
+    from tests.test_no_duplicate_candidate import MARKER
+    from tests.test_no_duplicate_candidate import _Backend as ListBackend
+    from tests.test_replayer import FakeVision
+
+    replayer = Replayer(
+        ListBackend(rows, marker=False),
+        vision=FakeVision(),
+        duplicate_record_source=source,
+    )
+    replayer._current_params = {"fname": "Ada", "lname": "Quill", "DOB": "1984-03-07"}
+    pc = Postcondition(
+        kind=PostconditionKind.NO_DUPLICATE_CANDIDATE,
+        text=MARKER,
+        candidate_rows="tr.oneresult",
+        candidate_frame_path=("#modalframe",),
+        candidate_params=("lname", "DOB"),
+        candidate_source=pinned,
+    )
+    result = StepResult(step_id="s", intent="x", ok=False)
+    failed = [] if replayer._postcondition_passes(pc, b"", None, {}) else [pc]
+    replayer._stamp_duplicate_check(result, failed)
+    return result
+
+
+@pytest.mark.parametrize(
+    ("source", "rows", "pinned", "outcome"),
+    [
+        (
+            TableSource([PatientRecord("1", "Ada", "Quill", "1984-03-07")]),
+            [],
+            None,
+            "exact",
+        ),
+        (
+            TableSource([PatientRecord("2", "Ada", "Okafor", "1984-03-07")]),
+            [],
+            None,
+            "close",
+        ),
+        (None, [], "record", "unreadable"),  # pinned, no channel
+        (None, ["5\tQuill, Ana\t1961-01-01"], "screen", "candidate"),
+        (None, None, "screen", "unreadable"),  # the list can't be read
+        (None, [], "screen", "unreadable"),  # never loaded (no marker)
+    ],
+)
+def test_the_halted_step_carries_the_duplicate_outcome(
+    source, rows, pinned, outcome
+) -> None:
+    result = _halted(source, rows, pinned)
+    assert result.duplicate_check == outcome
+    assert result.model_dump()["duplicate_check"] == outcome
+
+
+def test_an_unreadable_record_channel_is_unreadable() -> None:
+    class Broken:
+        channel = "fhir"
+
+        def by_birthdate(self, dob: str) -> list[PatientRecord]:
+            raise RuntimeError("down")
+
+    assert _halted(Broken(), []).duplicate_check == "unreadable"
+
+
+def test_a_passing_or_unrelated_step_serializes_as_before() -> None:
+    from openadapt_flow.ir import StepResult
+
+    result = _halted(TableSource([]), [])
+    assert result.duplicate_check is None
+    assert (
+        "duplicate_check"
+        not in StepResult(step_id="s", intent="x", ok=True).model_dump()
+    )
