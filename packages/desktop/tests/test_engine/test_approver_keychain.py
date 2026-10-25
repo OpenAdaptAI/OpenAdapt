@@ -806,3 +806,37 @@ def test_each_run_config_carries_this_macs_pin(tmp_path):
     source.write_text(f"name: clinic\napprovers:\n  root_public_key: {'b' * 64}\n")
     with pytest.raises(PrivateFlowConfigError, match="another approver root"):
         prepare_flow_config(source, None, approver_root="a" * 64)
+
+
+def test_each_run_config_carries_this_macs_roster_head(tmp_path):
+    import yaml
+
+    from openadapt_desktop.private_flow_config import prepare_flow_config
+
+    source = tmp_path / "deployment.yaml"
+    source.write_text("name: clinic\n")
+    prepared = prepare_flow_config(
+        source, None, approver_root="a" * 64, approver_head=(3, "sha256:" + "c" * 64)
+    )
+    assert yaml.safe_load(prepared.payload)["approvers"] == {
+        "root_public_key": "a" * 64,
+        "head": [3, "sha256:" + "c" * 64],
+    }
+
+
+def test_run_it_answers_bring_this_macs_pin(
+    monkeypatch, tmp_path, keychain, registry, fake_keyring
+):
+    from openadapt_desktop.approver_keychain import ROOT_ACCOUNT
+
+    stored = keychain.setup()
+    fake_keyring.set_password(SERVICE_NAME, ROOT_ACCOUNT, stored.public_key)
+    launched: list = []
+    bridge = _bridge(monkeypatch, keychain, registry, _payload(), launched)
+
+    bridge.item_approval_answer(
+        tmp_path, decision="approve", request_id=REQUEST_ID, request_sha256=REQUEST_SHA
+    )
+
+    (flow,) = launched
+    assert flow.cmd[flow.cmd.index("--approver-root") + 1] == stored.public_key

@@ -1190,6 +1190,19 @@ class FlowBridge:
             args += ["--reason", str(reason)]
         elif reason is not None:
             raise ValueError("An approval has no reason")
+        from openadapt_desktop.approver_keychain import (
+            ApproverKeychainError,
+            pinned_root,
+        )
+
+        try:
+            root = pinned_root()
+        except ApproverKeychainError as exc:
+            return {"ok": False, "code": exc.code, "message": str(exc)}
+        if root:
+            # The reader brings its own pin; the run directory's record must
+            # match it, and is never trusted on its own.
+            args += ["--approver-root", root]
         from openadapt_desktop.approver_key import (
             approver_key_environment,
             setup_instructions,

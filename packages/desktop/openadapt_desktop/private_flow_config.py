@@ -231,6 +231,7 @@ def prepare_flow_config(
     target: ExecutionTarget | None,
     *,
     approver_root: str | None = None,
+    approver_head: tuple[int, str] | None = None,
 ) -> PreparedPrivateYaml | None:
     """Parse, merge, serialize, and derive redactions from one snapshot.
 
@@ -255,7 +256,12 @@ def prepare_flow_config(
                 "The deployment config pins another approver root than this Mac. "
                 "Nothing was run."
             )
-        deployment["approvers"] = {**dict(approvers or {}), "root_public_key": approver_root}
+        section = {**dict(approvers or {}), "root_public_key": approver_root}
+        if approver_head is not None:
+            # The roster head this Mac's Keychain recorded: Flow refuses a
+            # roster that doesn't extend it.
+            section["head"] = [int(approver_head[0]), str(approver_head[1])]
+        deployment["approvers"] = section
     remote_decisions, remote_decision_runner_id = _remote_decision_settings(deployment)
     return PreparedPrivateYaml(
         payload=yaml.safe_dump(deployment, sort_keys=False),

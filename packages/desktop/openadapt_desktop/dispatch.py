@@ -1501,6 +1501,7 @@ class EngineDispatcher:
         try:
             from openadapt_desktop.approver_keychain import (
                 ApproverKeychainError,
+                pinned_head,
                 pinned_root,
             )
             from openadapt_desktop.private_flow_config import (
@@ -1511,9 +1512,15 @@ class EngineDispatcher:
 
             try:
                 approver_root = pinned_root()
+                approver_head = pinned_head() if approver_root else None
             except ApproverKeychainError as exc:
                 return self._pre_action_refusal(str(exc))
-            prepared = prepare_flow_config(base_config, target, approver_root=approver_root)
+            prepared = prepare_flow_config(
+                base_config,
+                target,
+                approver_root=approver_root,
+                approver_head=approver_head,
+            )
             # The signed-in browser can also come from the operator's own
             # config file (or the default deployment.json), not only from the
             # target. Decide from the exact snapshot Flow will receive.
@@ -1527,7 +1534,12 @@ class EngineDispatcher:
             if prepared is None:
                 staged_context = nullcontext(None)
             else:
-                staged_context = stage_private_yaml(run_dir, prepared=prepared)
+                # Staged outside the run directory, which the run (and anything
+                # it drives) can write: the config carries the approver pin.
+                staged_context = stage_private_yaml(
+                    ensure_private_dir(Path(self.config.data_dir) / "staged-configs"),
+                    prepared=prepared,
+                )
             if isinstance(item_inputs, dict):
                 log_redactions = tuple(log_redactions) + tuple(
                     str(value)

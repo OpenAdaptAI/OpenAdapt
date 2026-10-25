@@ -305,6 +305,12 @@ def pinned_root() -> str | None:
     return FlowRoster().root()
 
 
+def pinned_head() -> tuple[int, str] | None:
+    """The roster head this Mac recorded after its own last roster change."""
+
+    return FlowRoster()._head()
+
+
 def registered_name(public_key: str) -> str | None:
     """The approver name the pinned roster has for this key, or ``None``."""
 
@@ -934,6 +940,7 @@ __all__ = [
     "HEAD_ACCOUNT",
     "ROOT_ACCOUNT",
     "Roster",
+    "pinned_head",
     "pinned_root",
     "registered_name",
 ]
