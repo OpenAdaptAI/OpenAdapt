@@ -97,6 +97,11 @@ class FrameAttribution(BaseModel):
     #: ``audit_read`` only: the read-only read of the log, as an ``effects:``
     #: verifier section. Built by the caller (``verify-run``).
     read: Optional[dict[str, Any]] = None
+    #: ``audit_read`` only: the record field the audit entry's
+    #: ``record_field`` refers to, when it isn't the frame's identity field.
+    #: OpenEMR's log names a patient (``pid``) while ``lists`` or ``pnotes``
+    #: rows are told apart by their own ``id``.
+    record_key: Optional[str] = None
     #: ``record_field`` only: a version, revision or ETag on each record.
     version_field: Optional[str] = None
     #: ``record_field`` only: the record fields this app sets on the server
@@ -145,6 +150,27 @@ class FrameAttribution(BaseModel):
         return self
 
 
+class FrameSideRecord(BaseModel):
+    """Rows the save adds beside each new declared record (a side record).
+
+    OpenEMR's New Patient path writes one ``history_data`` row for the new
+    chart, linked by ``pid``. Declared here, such rows are part of the save,
+    not collateral, and a missing or extra one refutes the frame.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The surface the side rows are read from.
+    surface: str
+    #: The side row's field that names its record (``pid``).
+    link_field: str
+    #: The surface of the declared record, and the field the link names.
+    of_surface: str
+    of_field: str
+    #: How many side rows each new declared record gets.
+    count: int = Field(default=1, ge=1)
+
+
 class FrameSpec(BaseModel):
     """``frame:`` in ``verify.yaml``: the slice that must otherwise not move."""
 
@@ -159,6 +185,8 @@ class FrameSpec(BaseModel):
     #: the fields the effects name.
     target_fields: Optional[list[str]] = None
     attribution: Optional[FrameAttribution] = None
+    #: Rows the save adds beside each new declared record (``FrameSideRecord``).
+    side_records: list[FrameSideRecord] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _identity_for_audit(self) -> "FrameSpec":
@@ -383,6 +411,19 @@ def judge_frame(
             seen = {stable_id(e) for e in audit_before}
             window_entries = [e for e in audit_after if stable_id(e) not in seen]
 
+    def ref_of(
+        key: Any,
+        before: Optional[Mapping[str, Any]],
+        after: Optional[Mapping[str, Any]],
+    ) -> Any:
+        """What an audit entry names for this record (``record_key``)."""
+
+        if attribution is None or not attribution.record_key:
+            return key
+        record = after if after is not None else before
+        value = None if record is None else record.get(attribution.record_key)
+        return None if value in (None, "") else str(value)
+
     def other_on_target(
         key: Any,
         before: Optional[Mapping[str, Any]],
@@ -392,6 +433,7 @@ def judge_frame(
 
         if attribution is None:
             return False
+        key = ref_of(key, before, after)
         if attribution.kind == "audit_read":
             return window_entries is not None and any(
                 str(get_path(e, attribution.record_field or "")) == str(key)
@@ -414,7 +456,8 @@ def judge_frame(
         if attribution is None:
             return "unattributed"
         if attribution.kind == "audit_read":
-            if window_entries is None:
+            key = ref_of(key, before, after)
+            if window_entries is None or key is None:
                 return "unattributed"
             actors = {
                 str(get_path(e, attribution.actor_field))
@@ -460,6 +503,33 @@ def judge_frame(
             concurrent.append(change)
         else:
             collateral.append(change)
+
+    def selectors_for(name: str) -> list[Any]:
+        mine = [
+            effect
+            for index, effect in enumerate(effects)
+            if routes is None or name in routes.get(str(index), (name,))
+        ]
+        return [s for effect in mine for s in declared_selectors(effect)]
+
+    # Side records: the links each new declared record gives its side rows.
+    side_links: list[set[str]] = []
+    side_found: list[dict[str, int]] = []
+    for side in spec.side_records:
+        links: set[str] = set()
+        before_state, after_records = slices.get(side.of_surface, (None, None))
+        if before_state is not None and after_records is not None:
+            sels = selectors_for(side.of_surface)
+            old = {key_of(r) for r in before_state.records}
+            for record in after_records:
+                if key_of(record) in old:
+                    continue
+                if any(record_matches(dict(record), s) for s in sels):
+                    value = record.get(side.of_field)
+                    if value not in (None, ""):
+                        links.add(str(value))
+        side_links.append(links)
+        side_found.append({link: 0 for link in links})
 
     for name, (before_state, after_records) in slices.items():
         if not before_state.reachable:
@@ -508,7 +578,7 @@ def judge_frame(
                 after is not None and declared(after)
             )
             if is_declared:
-                declared_keys.add(str(key))
+                declared_keys.add(str(ref_of(key, before, after)))
                 if other_on_target(key, before, after):
                     # The saved value may not stand: never excused.
                     collateral.append(
@@ -543,6 +613,21 @@ def judge_frame(
                     )
                 continue
             if before is None and after is not None:
+                side_index = next(
+                    (
+                        i
+                        for i, side in enumerate(spec.side_records)
+                        if side.surface == name
+                        and str(after.get(side.link_field)) in side_links[i]
+                    ),
+                    None,
+                )
+                if side_index is not None:
+                    # A side record of a new declared record: part of the save.
+                    link = str(after.get(spec.side_records[side_index].link_field))
+                    side_found[side_index][link] += 1
+                    declared_keys.add(str(ref_of(key, None, after)))
+                    continue
                 note(
                     FrameChange(
                         name,
@@ -568,6 +653,20 @@ def judge_frame(
                             key=key,
                         )
                     )
+
+    for i, side in enumerate(spec.side_records):
+        for link, found in side_found[i].items():
+            if found != side.count:
+                # Missing (or doubled) side record: the chart is not whole.
+                collateral.append(
+                    FrameChange(
+                        side.surface,
+                        "removed" if found < side.count else "added",
+                        "unattributed",
+                        [f"{found} of {side.count} side record(s)"],
+                        key=link,
+                    )
+                )
 
     if mode == "audit_read":
         if window_entries is None:
