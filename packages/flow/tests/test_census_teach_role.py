@@ -163,3 +163,40 @@ def test_teach_time_role_unknown_without_any_record() -> None:
     step.anchor.structural = None
     assert teach_time_role(step) == "unknown"
     assert _W > 0 and np is not None
+
+
+@pytest.mark.parametrize("role", ["button", "menuitem", "tab", "checkbox"])
+def test_a_control_role_never_skips_an_ocr_census_that_can_count(
+    bundle, run_dir, role
+) -> None:
+    """A per-row "Open" button: the role does not exempt OCR look-alikes."""
+
+    band = "Jane Sample Knee pain referral High"
+    vision = FakeVision()
+    vision.template_results = [
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.99)
+    ] * 4
+    vision.ocr_lines = [
+        OcrLine(band, region=(160, 95, 240, 20)),
+        OcrLine(band, region=(160, 195, 240, 20)),
+    ]
+    step = context_click_step(band, risk="irreversible")
+    step.anchor.structural = StructuralLocator(role=role, name="Open")
+    backend = FakeBackend()
+    report = Replayer(backend, vision=vision, poll_interval_s=0.01).run(
+        Workflow(name="wf", steps=[step]), bundle_dir=bundle, run_dir=run_dir
+    )
+    assert report.success is False
+    assert backend.actions == []
+    assert report.results[0].identity.ambiguity_halt == "identical_candidates"
+
+
+def test_a_recorded_structured_identity_with_no_teach_census_is_not_a_control() -> None:
+    """A backend with no census at teach time: the row text may be a row's."""
+
+    step = click_step()
+    _with_role(step, "button")
+    step.anchor.identity_template = itmpl.build_identity_template(
+        None, structured_identity="John Smith Follow-up Dr Lee"
+    )
+    assert teach_time_role(step) == "unknown"

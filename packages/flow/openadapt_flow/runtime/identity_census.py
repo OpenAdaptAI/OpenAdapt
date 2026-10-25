@@ -177,6 +177,10 @@ def teach_time_role(step: Any) -> Literal["row", "control", "unknown"]:
         return "row"
     if recorded_row is False:
         return "control"
+    if getattr(template, "structured", None):
+        # A structured identity was recorded but nothing counted its rows (a
+        # backend without a census, a legacy bundle): it may be a row's text.
+        return "unknown"
     structural = getattr(anchor, "structural", None)
     role = (getattr(structural, "role", None) or "").strip().casefold()
     return "control" if role in CONTROL_ROLES else "unknown"
