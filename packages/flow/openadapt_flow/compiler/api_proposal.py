@@ -67,6 +67,7 @@ from openadapt_flow.ir import (
     WebFormField,
     WebFormPrecheck,
     WebFormSpec,
+    WebFormWrite,
     Workflow,
 )
 from openadapt_flow.runtime.actuators.web_form import (
@@ -74,6 +75,7 @@ from openadapt_flow.runtime.actuators.web_form import (
     folded_checks_digest,
     form_controls,
     page_scripts,
+    web_form_effects,
 )
 
 
@@ -244,6 +246,140 @@ def _success_pattern(line: dict[str, Any]) -> Optional[str]:
             re.escape(name) + "=" + (r"\d+" if value.isdigit() else re.escape(value))
         )
     return r".*?".join(pieces)
+
+
+def _span_writes(
+    lines: list[dict[str, Any]],
+    post: dict[str, Any],
+    form_line: dict[str, Any],
+    folded: list[Step],
+    events: list[dict[str, Any]],
+    controls: dict[str, Any],
+    typed: dict[str, Optional[str]],
+    params: dict[str, str],
+) -> tuple[list[WebFormWrite], list[str]]:
+    """Every other write sent while the replaced steps ran, each with its role.
+
+    ``ambient`` when the page sent it on its own: a script request (fetch or
+    XHR) from another document than the form, one loaded before the form
+    opened, to an endpoint the form page's source doesn't name. ``step``
+    otherwise: sent in its recorded place before the save, rebuilt from a
+    form-encoded body whose every field is a typed parameter (by provenance,
+    as for the save), a session value or an unchanged form default, and read
+    back by the record check of the step it was sent during. Returns the
+    problems that refuse the proposal.
+    """
+
+    form_t, post_t = float(form_line["t"]), float(post["t"])
+    form_doc = _path(form_line["url"])
+    form_html = form_line.get("response_text") or ""
+    loaded_before = {
+        ln["url"]
+        for ln in lines
+        if ln["method"] == "GET"
+        and ln.get("resource_type") == "document"
+        and float(ln["t"]) < form_t
+    }
+    stamps = [
+        (float(events[i]["t"]), s.id)
+        for s in folded
+        if (i := _event_index(s)) is not None and i < len(events)
+    ]
+    out: list[WebFormWrite] = []
+    problems: list[str] = []
+    for ln in lines:
+        if (
+            ln["method"] in ("GET", "HEAD", "OPTIONS")
+            or ln is post
+            or not form_t < float(ln["t"]) < post_t
+        ):
+            continue
+        method, path = ln["method"], _path(ln["url"])
+        sender = ln.get("frame_url") or ""
+        leaf = path.rsplit("/", 1)[-1]
+        if (
+            ln.get("resource_type") in ("fetch", "xhr")
+            and sender
+            and _path(sender) != form_doc
+            and sender in loaded_before
+            and leaf
+            and leaf not in form_html
+        ):
+            out.append(
+                WebFormWrite(
+                    role="ambient",
+                    method=method,
+                    path=path,
+                    sent_by=_path(sender),
+                    evidence=(
+                        f"sent by a script of {_path(sender)}, a page loaded before "
+                        "the form opened; the form page doesn't name it"
+                    ),
+                )
+            )
+            continue
+        during = [sid for t, sid in stamps if t <= float(ln["t"])]
+        from_step = during[-1] if during else None
+        what = f"{method} {path}"
+        if from_step is None:
+            problems.append(
+                f"{what} was sent before any replaced step; its cause is unknown"
+            )
+            continue
+        if _origin(ln["url"]) != _origin(post["url"]):
+            problems.append(f"the steps also sent {what} to another origin")
+            continue
+        if up.urlsplit(ln["url"]).query:
+            problems.append(f"{from_step} also sent {what} with values in its URL")
+            continue
+        if ln.get("form") is None:
+            problems.append(
+                f"{from_step} also sent {what} with a body the API step can't rebuild "
+                f"({ln.get('body_omitted') or ln.get('request_type') or 'not form-encoded'})"
+            )
+            continue
+        status = ln.get("status")
+        if not isinstance(status, int) or not 200 <= status < 400:
+            problems.append(
+                f"{from_step} also sent {what}, and it wasn't accepted ({status})"
+            )
+            continue
+        fields: list[WebFormField] = []
+        for name, value in ln["form"]:
+            ctl = controls.get(name)
+            param = typed.get(name)
+            if param is not None and params.get(param) == value:
+                fields.append(WebFormField(name=name, source="param", param=param))
+            elif (
+                value.startswith("<session:")
+                and ctl is not None
+                and ctl.get("default") == value
+            ):
+                fields.append(WebFormField(name=name, source="session"))
+            elif ctl is not None and (ctl.get("default") or "") == value:
+                fields.append(
+                    WebFormField(name=name, source="form_default", value=value)
+                )
+            else:
+                problems.append(
+                    f"{from_step} also sent {what}; its field {name!r} is not a typed "
+                    "value, a form default or a session value"
+                )
+                break
+        else:
+            out.append(
+                WebFormWrite(
+                    role="step",
+                    method=method,
+                    path=path,
+                    sent_by=_path(sender),
+                    from_step=from_step,
+                    fields=fields,
+                    expected_status=[status],
+                    evidence=f"sent while {from_step} ran",
+                )
+            )
+    return out, problems
 
 
 def propose_api_step(
@@ -574,27 +710,11 @@ def propose_api_step(
             )
         )
 
-    others = sorted(
-        {
-            f"{ln['method']} {_path(ln['url'])}"
-            for ln in lines
-            if ln["method"] not in ("GET", "HEAD", "OPTIONS")
-            and ln is not post
-            and form_t < float(ln["t"]) < float(post["t"])
-        }
+    writes, write_problems = _span_writes(
+        lines, post, form_line, folded, events, controls, typed, params
     )
-    if others:
-        # The steps the API step would replace also wrote (a reservation, an
-        # autosave, a background call): the one request can't stand in for
-        # them, and skipping them would change what the program does.
-        return (
-            workflow,
-            None,
-            [
-                "the steps the API step would replace also sent "
-                f"{', '.join(others)}; one request can't stand in for them"
-            ],
-        )
+    if write_problems:
+        return workflow, None, write_problems
     spec = WebFormSpec(
         form_path=form_path,
         fields=fields,
@@ -604,7 +724,7 @@ def propose_api_step(
         prechecks=prechecks,
         success_pattern=_success_pattern(post),
         replaces_steps=[s.id for s in folded],
-        other_writes_seen=others,
+        writes=writes,
         screen_only_checks=screen_only,
         folded_checks_digest=folded_checks_digest(folded),
     )
@@ -666,6 +786,11 @@ def describe_api_step(step: Step) -> str:
     )
     lines.append(
         f"  record check after: {len(b.effects)} effect(s) copied from the save step"
+        + (
+            " and the steps whose writes it sends"
+            if any(w.role == "step" for w in spec.writes)
+            else ""
+        )
     )
     for identity in b.identity:
         lines.append(
@@ -685,6 +810,17 @@ def describe_api_step(step: Step) -> str:
         )
     if spec.screen_only_checks:
         lines.append(f"  screen-only checks, not repeated: {spec.screen_only_checks}")
+    for i, write in enumerate(spec.writes, 1):
+        if write.role == "ambient":
+            lines.append(
+                f"  not sent (the page's own request): {write.method} {write.path}; "
+                f"{write.evidence}"
+            )
+        else:
+            lines.append(
+                f"  sent before the save, in this order: {write.method} {write.path} "
+                f"({len(write.fields)} field(s)), read back by {write.from_step}'s record check"
+            )
     if spec.other_writes_seen:
         lines.append(
             f"  NOT repeated (other writes seen during these steps): {spec.other_writes_seen}"
@@ -791,13 +927,22 @@ def admit_api_step(
                     f"{step.id} has no record check; an API step must be confirmed by one "
                     "(add it, for example with record --verify or check mark, then admit)"
                 )
+            by_id = {s.id: s for s in workflow.steps}
+            for write in b.web_form.writes if b.web_form is not None else []:
+                cause = by_id.get(write.from_step or "")
+                if write.role == "step" and (cause is None or not cause.effects):
+                    raise ApiProposalError(
+                        f"{step.id}: {write.method} {write.path} is sent during "
+                        f"{write.from_step}, which has no record check; each write the "
+                        "API step sends must be read back (add one to that step, then admit)"
+                    )
             identities = [
                 web_form_identity(b, list(step.effects), key, param)
                 for key, param in sorted((identity or {}).items())
             ]
             clean = b.model_copy(
                 update={
-                    "effects": list(step.effects),
+                    "effects": web_form_effects(workflow.steps, step),
                     "admission": None,
                     "identity": identities or list(b.identity),
                 }
