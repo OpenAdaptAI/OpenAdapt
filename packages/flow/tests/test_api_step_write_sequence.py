@@ -170,9 +170,27 @@ def _admitted_sequence(tmp_path):
 
 
 class SequenceTransport(FakeTransport):
-    def __init__(self, write_status=200, raise_on_write=False):
+    def __init__(self, write_status=200, raise_on_write=False, page_sends=True):
         super().__init__()
         self.write_status, self.raise_on_write = write_status, raise_on_write
+        self.page_sends = page_sends
+
+    def evaluate_form(self, form_path, action_path, fields, **kw):
+        # The page's own script posts the draft as the person types (blocked
+        # in the scratch run); the actuator compares it with the one it built.
+        result = super().evaluate_form(form_path, action_path, fields, **kw)
+        self.step_writes = kw.get("step_writes")
+        if self.page_sends:
+            result.writes = [
+                (
+                    "POST /app/draft.php",
+                    [
+                        ("csrf_token_form", "scratch-token"),
+                        ("form_lname", dict(fields)["form_lname"]),
+                    ],
+                )
+            ]
+        return result
 
     def post_form(self, path, body, *, referer):
         if path == "/app/draft.php":
@@ -291,3 +309,11 @@ def test_api_admit_shows_the_requests_left_to_the_page_before_the_person_types(
     assert code == 0 and Workflow.load(bundle).steps[-1].api_binding.admitted()
     assert "will NOT send these requests" in out and "POST /library/ajax/bg.php" in out
     assert "leave the 1 request(s) above to the page" in prompts[0]
+
+
+def test_a_step_write_the_page_wouldnt_send_keeps_the_save_on_the_gui(tmp_path):
+    t = SequenceTransport(page_sends=False)
+    out = WebFormActuator(t).actuate(_admitted_sequence(tmp_path), RUN)
+    assert out.status is ActuationStatus.UNAVAILABLE
+    assert "didn't send POST /app/draft.php" in out.reason
+    assert t.posts == [] and t.step_writes == ("POST /app/draft.php",)

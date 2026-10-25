@@ -158,6 +158,11 @@ class FormEvaluation:
     #: Requests the page tried to send and were blocked, ``METHOD /path``.
     blocked: list[str] = field(default_factory=list)
     seconds: float = 0.0
+    #: Declared step writes the page's script sent (and the route blocked):
+    #: ``(METHOD /path, body pairs or None)``.
+    writes: list[tuple[str, Optional[list[tuple[str, str]]]]] = field(
+        default_factory=list
+    )
 
     @property
     def valid(self) -> bool:
@@ -177,6 +182,7 @@ def evaluate_form(
     *,
     submitter: Optional[str] = None,
     submitter_requests: tuple[str, ...] = (),
+    step_writes: tuple[str, ...] = (),
     timeout_s: float = 20.0,
     settle_ms: int = 250,
 ) -> FormEvaluation:
@@ -291,9 +297,28 @@ def evaluate_form(
             )
         except Exception as exc:  # noqa: BLE001 - e.g. the page navigated away
             result = {"navigated": type(exc).__name__}
-        return _verdict(
-            result, late, errors, dialogs, action_path, set(submitter_requests), done
+        verdict = _verdict(
+            result,
+            [b for b in late if b["what"] not in step_writes],
+            errors,
+            dialogs,
+            action_path,
+            set(submitter_requests),
+            done,
         )
+        # The step writes the page's script sent (blocked), with their bodies.
+        verdict.writes = [
+            (
+                b["what"],
+                up.parse_qsl(b["body"], keep_blank_values=True)
+                if b["body"] is not None
+                and "x-www-form-urlencoded" in b["content_type"]
+                else None,
+            )
+            for b in late
+            if b["what"] in step_writes
+        ]
+        return verdict
     except Exception as exc:  # noqa: BLE001 - a failure to run is unevaluable
         return done("unevaluable", f"the scratch page failed ({type(exc).__name__})")
     finally:

@@ -135,7 +135,10 @@ proposal (`web_form.writes`), in recorded order, with one of two roles:
   values and unchanged form defaults from the live form), in its recorded
   place before the save. A write whose body isn't form-encoded, that carries
   values in its URL or another value, that went to another origin, or that
-  wasn't accepted when recorded refuses the proposal. Each step write is
+  wasn't accepted when recorded refuses the proposal. Before each save the
+  page's own script must send each step write itself, with the same body,
+  when it runs on the run's values in the scratch page (the request is
+  blocked there); otherwise the GUI steps run. Each step write is
   read back by the record check declared on the step it was sent during:
   admission refuses one whose step has none, and the binding's record check
   is the save's followed by those steps' checks. If a write fails or answers
@@ -145,6 +148,19 @@ proposal (`web_form.writes`), in recorded order, with one of two roles:
   approves covers every request in the sequence.
 
 A write that fits neither role keeps the save on the GUI.
+
+In a durable run, the span persists a write-ahead checkpoint before its
+first request leaves: the folded steps' checkpoints and a
+delivery-uncertain pause at the save. If the process stops anywhere in the
+sequence, a resume starts at the save, which is only reconciled (the
+attended reconcile action reads the records back) and never sent again,
+and no write of the sequence is resent. The save's own outcome replaces
+that pause; once its checkpoint is persisted, the pause is removed (only if
+it is still exactly the one written). A resumed leg uses the continuation
+guard's `delivery_started` phase as its write-ahead.
+
+`api admit` lists each request the API step leaves to the page, with the
+evidence, before the person types `admit`.
 
 ## What happens at run time
 

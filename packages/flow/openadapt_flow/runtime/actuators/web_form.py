@@ -532,6 +532,7 @@ class PlaywrightSessionTransport:
         *,
         submitter: Optional[str] = None,
         submitter_requests: tuple[str, ...] = (),
+        step_writes: tuple[str, ...] = (),
     ) -> Any:
         from openadapt_flow.runtime.actuators.form_eval import evaluate_form
 
@@ -543,6 +544,7 @@ class PlaywrightSessionTransport:
             fields,
             submitter=submitter,
             submitter_requests=submitter_requests,
+            step_writes=step_writes,
             timeout_s=self._timeout_ms / 1000.0,
         )
 
@@ -814,8 +816,34 @@ class WebFormActuator:
             body, problem = self.build_body(spec, params, controls)
             if problem:
                 return unavailable(problem)
+            writes: list[PreparedWrite] = []
+            for write in spec.writes:
+                if write.role != "step":
+                    continue  # the page's own request: not the API step's to send
+                sub = spec.model_copy(update={"fields": write.fields})
+                wbody, problem = self.build_body(
+                    sub, params, controls, enforce_rules=False
+                )
+                if problem:
+                    return unavailable(f"{write.method} {write.path}: {problem}")
+                writes.append(
+                    PreparedWrite(
+                        method=write.method,
+                        path=fill_url(write.path, params),
+                        body=tuple(wbody),
+                        expected_status=tuple(write.expected_status),
+                        from_step=write.from_step or "",
+                    )
+                )
+            if writes and not scripts:
+                return unavailable(
+                    "the API step would send writes the page's script sends, but "
+                    "the page has no script to check them against"
+                )
             if scripts:
-                problem = self._run_page_script(spec, form_path, action_path, body)
+                problem = self._run_page_script(
+                    spec, form_path, action_path, body, writes
+                )
                 if problem:
                     return unavailable(problem)
             for check in spec.prechecks:
@@ -838,25 +866,6 @@ class WebFormActuator:
                         f"the check before saving ({check.from_step or check.path}) did not pass: "
                         f"missing {missing!r}"
                     )
-            writes: list[PreparedWrite] = []
-            for write in spec.writes:
-                if write.role != "step":
-                    continue  # the page's own request: not the API step's to send
-                sub = spec.model_copy(update={"fields": write.fields})
-                wbody, problem = self.build_body(
-                    sub, params, controls, enforce_rules=False
-                )
-                if problem:
-                    return unavailable(f"{write.method} {write.path}: {problem}")
-                writes.append(
-                    PreparedWrite(
-                        method=write.method,
-                        path=fill_url(write.path, params),
-                        body=tuple(wbody),
-                        expected_status=tuple(write.expected_status),
-                        from_step=write.from_step or "",
-                    )
-                )
         except KeyError as exc:
             return unavailable(f"the run has no value for {exc}")
         except Exception as exc:  # noqa: BLE001 - only reads were sent
@@ -878,6 +887,7 @@ class WebFormActuator:
         form_path: str,
         action_path: str,
         body: list[tuple[str, str]],
+        writes: list["PreparedWrite"] = (),  # type: ignore[assignment]
     ) -> Optional[str]:
         """Run the form's own script on the run's values; why not to send, or None.
 
@@ -899,6 +909,7 @@ class WebFormActuator:
             [(k, v) for k, v in body if k in typed],
             submitter=spec.submitter,
             submitter_requests=tuple(spec.submitter_requests),
+            step_writes=tuple(f"{w.method} {up.urlsplit(w.path).path}" for w in writes),
         )
         self.log.append(
             {
@@ -920,6 +931,27 @@ class WebFormActuator:
                 "the page would send other values than the API step built "
                 f"({', '.join(changed[:5])}); its script changes them"
             )
+        # Each write the API step sends before the save must be one the
+        # page's own script sent in the scratch run, with the same body.
+        sent = list(getattr(result, "writes", None) or [])
+        for write in writes:
+            what = f"{write.method} {up.urlsplit(write.path).path}"
+            want_w = sorted((k, v) for k, v in write.body if k not in session)
+            match = next(
+                (
+                    b
+                    for w, b in sent
+                    if w == what
+                    and b is not None
+                    and sorted((k, v) for k, v in b if k not in session) == want_w
+                ),
+                None,
+            )
+            if match is None:
+                return (
+                    f"the page's script didn't send {what} with the body the API step "
+                    "built when it ran on these values"
+                )
         return None
 
     def send(self, binding: Any, prepared: "PreparedSave") -> ApiActuationResult:
