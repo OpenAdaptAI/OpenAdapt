@@ -358,12 +358,24 @@ def bound_fields(effects: Any) -> dict[str, str]:
     return out
 
 
+def bound_maps(effects: Any) -> dict[str, dict[str, str]]:
+    """Parameter name -> the value map its field declares (label -> code)."""
+
+    out: dict[str, dict[str, str]] = {}
+    for effect in effects:
+        value = getattr(effect, "value", None)
+        if value is not None and value.param and value.map:
+            out.setdefault(value.param, dict(value.map))
+    return out
+
+
 def round_trip(
     provenance: ProvenanceFile,
     record: Optional[Mapping[str, Any]],
     fields: Mapping[str, str],
     documents: Mapping[str, Any],
     second: Extractor,
+    maps: Optional[Mapping[str, Mapping[str, str]]] = None,
 ) -> RoundTrip:
     """Compare ``record`` (as read back) with the source of each value.
 
@@ -398,6 +410,11 @@ def round_trip(
             checks.append(FieldCheck(name, "no_document"))
             continue
         source_value = second.read(document, name, prov.source)
+        mapping = (maps or {}).get(name)
+        if mapping is not None and source_value is not None:
+            # The document shows the label, the record stores its code (a
+            # state's name and "MA", a provider's name and their id).
+            source_value = mapping.get(source_value.strip())
         stored = "" if record.get(record_field) is None else str(record[record_field])
         if source_value is None:
             checks.append(FieldCheck(name, "missing", stored))
