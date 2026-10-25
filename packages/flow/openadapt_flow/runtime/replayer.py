@@ -159,6 +159,7 @@ from openadapt_flow.run_gate import is_consequential
 from openadapt_flow.runtime import heal as heal_mod
 from openadapt_flow.runtime import healing as healing_mod
 from openadapt_flow.runtime import identity as identity_mod
+from openadapt_flow.runtime import identity_census as census_mod
 from openadapt_flow.runtime import identity_looks as looks_mod
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
@@ -10688,6 +10689,25 @@ class Replayer:
                 "target, the screen answered differently from the recording "
                 f"({reason}) — refusing to click; run aborted"
             )
+        elif check.ambiguity_halt is not None:
+            if check.ambiguity_halt == "identical_candidates":
+                why = (
+                    f"{check.candidate_count} shown rows carry the same "
+                    "identity and no recorded record id tells them apart"
+                )
+            elif check.ambiguity_halt == "identity_uncounted":
+                why = (
+                    "this surface cannot count the rows that might share it, "
+                    "and a consequential write follows (identity_uncounted)"
+                )
+            else:
+                why = "the rows that could share its identity could not all be counted"
+            error = (
+                f"Step '{step.id}' ({step.intent}) matched the recorded "
+                f"identity, but {why} (rung '{resolution.rung}') — acting "
+                "could open another record; refusing to act"
+            )
+            result.safety_halt = True
         elif check.mode == "hover":
             # Hover evidence only adds a stop. A step that had no identity
             # check before keeps going when the response is absent or cannot
@@ -11750,6 +11770,9 @@ class Replayer:
                 ),
             )
         resolution, matched_region = resolved
+        resolution, matched_region = self._retarget_by_record_key(
+            step, resolution, matched_region
+        )
 
         if step.risk == "irreversible" and is_below_ocr(resolution.rung):
             return (
@@ -15518,9 +15541,254 @@ class Replayer:
                 step, resolution, before_png, params, workflow
             )
 
-        return identity_mod.run_identity_ladder(
+        check = identity_mod.run_identity_ladder(
             [structured_tier, pixel_tier, vlm_tier, ocr_tier]
         )
+        return self._apply_candidate_census(
+            step, resolution, check, before_png, params, workflow
+        )
+
+    def _structured_census(self, step: Step, point: Point) -> census_mod.CensusDecision:
+        """The DOM/a11y candidate census at ``point`` (see identity_census)."""
+
+        anchor = step.anchor
+        assert anchor is not None
+        getter = getattr(self.backend, "identity_candidates_at", None)
+        if getter is None:
+            return census_mod.CensusDecision("cannot_count")
+        try:
+            census = getter(int(point[0]), int(point[1]))
+        except Exception:
+            census = None
+        tmpl = anchor.identity_template
+        recorded = tmpl if tmpl is not None and tmpl.record_key else None
+        from openadapt_flow.runtime import identity_template as itmpl
+
+        return census_mod.decide(
+            census,
+            has_recorded_key=recorded is not None,
+            key_matches=lambda key: (
+                recorded is not None and itmpl.record_key_matches(recorded, key)
+            ),
+        )
+
+    def _ocr_census(
+        self,
+        step: Step,
+        resolution: Resolution,
+        before_png: bytes,
+        params: Mapping[str, RuntimeParamScalar],
+        workflow: Workflow,
+    ) -> census_mod.CensusDecision:
+        """Count the frame's OCR rows that verify as the recorded identity.
+
+        The pixel-only counterpart of :meth:`_structured_census`: every text
+        row of the frame is read the way the OCR tier reads the target's row
+        (the same band height, the target's own crop excluded at the same
+        offset, volatile lines dropped) and checked against the recorded band.
+        """
+        anchor = step.anchor
+        assert anchor is not None
+        tmpl = anchor.identity_template
+        if not (anchor.context_text or (tmpl is not None and tmpl.tokens)):
+            return census_mod.CensusDecision("cannot_count")
+        today = date.today()
+        try:
+            lines = [
+                line
+                for line in self.vision.ocr(before_png, region=None)
+                if line.text.strip()
+                and not identity_mod.is_volatile_line(line.text, reference_date=today)
+            ]
+        except Exception:
+            return census_mod.CensusDecision("cannot_count")
+        viewport = self.backend.viewport
+        px, py = int(resolution.point[0]), int(resolution.point[1])
+        ex, ey = (
+            anchor.region[0] - anchor.click_point[0],
+            anchor.region[1] - (anchor.click_point[1]),
+        )
+        run_params = runtime_params_for_gui(params)
+
+        def row_text(y: int) -> str:
+            band = identity_mod.band_region((px, y), anchor.region[3], viewport)
+            exclude = (px + ex, y + ey, anchor.region[2], anchor.region[3])
+            kept = [
+                line
+                for line in lines
+                if identity_mod.regions_intersect(line.region, band)
+                and not identity_mod.regions_intersect(line.region, exclude)
+            ]
+            return " ".join(
+                line.text.strip() for line in identity_mod.lines_near_point(kept, y)
+            )
+
+        def verifies(text: str) -> bool:
+            if tmpl is not None and tmpl.tokens:
+                from openadapt_flow.runtime import identity_template as itmpl
+
+                verdict = itmpl.verify_template_identity(
+                    tmpl, text, params=run_params, param_examples=workflow.params
+                )
+            else:
+                assert anchor.context_text is not None
+                verdict = identity_mod.verify_target_identity(
+                    anchor.context_text,
+                    text,
+                    params=run_params,
+                    param_examples=workflow.params,
+                )
+            return verdict.status == "verified"
+
+        target_lines = identity_mod.lines_near_point(lines, py)
+        heights = sorted(line.region[3] for line in target_lines) or [16]
+        same_row_px = max(4, heights[len(heights) // 2])
+        centers: list[int] = []
+        for line in sorted(lines, key=lambda item: item.region[1]):
+            center = line.region[1] + line.region[3] // 2
+            if not centers or center - centers[-1] > 3:
+                centers.append(center)
+        rows = [(y, row_text(y)) for y in centers]
+        count = census_mod.count_matching_rows(
+            rows, target_y=py, verifies=verifies, same_row_px=same_row_px
+        )
+        if count > 1:
+            return census_mod.CensusDecision("ambiguous", count)
+        return census_mod.CensusDecision("unique", count)
+
+    def _apply_candidate_census(
+        self,
+        step: Step,
+        resolution: Resolution,
+        check: IdentityCheck,
+        before_png: bytes,
+        params: Mapping[str, RuntimeParamScalar],
+        workflow: Workflow,
+    ) -> IdentityCheck:
+        """Keep ``verified`` only when the identity picks one shown record.
+
+        A verified ladder verdict says the target reads like the recorded
+        row. When another shown row reads the same, the verdict cannot tell
+        them apart, whichever rung resolved the point. The census
+        (:mod:`openadapt_flow.runtime.identity_census`) then decides: the
+        recorded record id picks the row, or the step halts.
+        """
+        if check.status != "verified" or check.mode not in (
+            "structured",
+            "pixel",
+            "vlm",
+            "context",
+            "param",
+        ):
+            return check
+        if check.mode == "structured":
+            decision = self._structured_census(step, resolution.point)
+        else:
+            decision = self._ocr_census(step, resolution, before_png, params, workflow)
+        tmpl = step.anchor.identity_template if step.anchor is not None else None
+        if (
+            decision.verdict == "cannot_count"
+            and check.mode == "structured"
+            and tmpl is not None
+            and tmpl.structured_row is False
+        ):
+            # Teach time saw no record row here (a form field, a button).
+            decision = census_mod.CensusDecision("not_a_row")
+        if decision.verdict == "not_a_row":
+            return check.model_copy(update={"census_status": "not_a_row"})
+        if decision.verdict == "cannot_count":
+            if not self._leads_into_consequential(step, workflow):
+                return check.model_copy(update={"census_status": "cannot_count"})
+            return check.model_copy(
+                update={"status": "abstain", "ambiguity_halt": "identity_uncounted"}
+            )
+        if decision.verdict == "unique":
+            return check.model_copy(
+                update={"candidate_count": decision.candidate_count}
+            )
+        if decision.verdict in ("wrong_record", "retarget"):
+            return check.model_copy(
+                update={
+                    "status": "mismatch",
+                    "coverage": 0.0,
+                    "expected": "<recorded record id>",
+                    "candidate_count": decision.candidate_count,
+                }
+            )
+        return check.model_copy(
+            update={
+                "status": "abstain",
+                "candidate_count": decision.candidate_count,
+                "ambiguity_halt": (
+                    "candidates_uncounted"
+                    if decision.verdict == "uncounted"
+                    else "identical_candidates"
+                ),
+            }
+        )
+
+    def _leads_into_consequential(
+        self, step: Step, workflow: Optional[Workflow]
+    ) -> bool:
+        """Whether this step or any step after it is a consequential write.
+
+        A step that picks a record (opening a chart) is not itself a write, but
+        the write that follows lands on whatever it opened. Program graphs and
+        steps not found in the linear list count every step of the workflow.
+        """
+
+        if workflow is None:
+            return is_consequential(step, None)
+        steps = list(workflow.steps)
+        index = next((i for i, item in enumerate(steps) if item.id == step.id), None)
+        following = steps[index:] if index is not None else steps
+        return self._step_is_consequential(step, workflow) or any(
+            self._step_is_consequential(item, workflow) for item in following
+        )
+
+    def _retarget_by_record_key(
+        self,
+        step: Step,
+        resolution: Resolution,
+        matched_region: Region,
+    ) -> tuple[Resolution, Region]:
+        """Move a visual resolution onto the row with the recorded record id.
+
+        When rows read identically, a template or text rung lands on whichever
+        row now sits where the recorded one was. The recorded record id names
+        the right row; move the point (and matched region) by that row's
+        offset. A structural resolution names one exact element and is never
+        moved: if it is the wrong record, the identity check refuses it.
+        """
+        anchor = step.anchor
+        if (
+            anchor is None
+            or resolution.structural_handle is not None
+            or anchor.identity_template is None
+            or not anchor.identity_template.record_key
+        ):
+            return resolution, matched_region
+        decision = self._structured_census(step, resolution.point)
+        if decision.verdict != "retarget" or decision.offset is None:
+            return resolution, matched_region
+        dx, dy = (int(round(v)) for v in decision.offset)
+        x, y = resolution.point[0] + dx, resolution.point[1] + dy
+        width, height = self.backend.viewport
+        if not (0 <= x < width and 0 <= y < height):
+            return resolution, matched_region
+        moved = resolution.model_copy(
+            update={
+                "point": (x, y),
+                # The retained visual evidence reproduces the old point.
+                "visual_evidence": None,
+                "resolution_evidence_regions": tuple(
+                    (rx + dx, ry + dy, rw, rh)
+                    for rx, ry, rw, rh in resolution.resolution_evidence_regions
+                ),
+            }
+        )
+        rx, ry, rw, rh = matched_region
+        return moved, (rx + dx, ry + dy, rw, rh)
 
     def _identifier_displacement(
         self,

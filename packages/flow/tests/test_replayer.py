@@ -1518,7 +1518,11 @@ def test_remote_preedge_retry_refuses_a_changed_identity(bundle, run_dir):
         Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
         for _ in range(3)
     ]
+    # Each verified read is followed by the candidate census's whole-frame
+    # read (runtime.identity_census); one row each time.
     vision.ocr_results = [
+        [OcrLine("Jane Sample Knee pain referral High")],
+        [OcrLine("Jane Sample Knee pain referral High")],
         [OcrLine("Jane Sample Knee pain referral High")],
         [OcrLine("Jane Sample Knee pain referral High")],
         [OcrLine("Taylor Duplicate Knee pain referral High")],
@@ -2698,6 +2702,9 @@ def test_consequential_remote_reruns_identity_on_fresh_frame(bundle, run_dir):
     ]
     vision.ocr_results = [
         [OcrLine("Jane Sample Knee pain referral High")],
+        # The candidate census reads the whole frame once the first read
+        # verifies (runtime.identity_census); one row, so it stays verified.
+        [OcrLine("Jane Sample Knee pain referral High")],
         [OcrLine("Taylor Duplicate Knee pain referral High")],
     ]
     step = context_click_step(
@@ -2728,6 +2735,9 @@ def test_fresh_pre_actuation_identity_loss_has_typed_refusal_and_zero_input(
         Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.99),
     ]
     vision.ocr_results = [
+        [OcrLine("Jane Sample Knee pain referral High")],
+        # The candidate census reads the whole frame once the first read
+        # verifies (runtime.identity_census); one row, so it stays verified.
         [OcrLine("Jane Sample Knee pain referral High")],
         [OcrLine("Taylor Duplicate Knee pain referral High")],
     ]

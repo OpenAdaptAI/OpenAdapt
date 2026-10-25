@@ -687,6 +687,15 @@ class Recorder:
             structured = self._structured_identity_at(int(event["x"]), int(event["y"]))
             if structured:
                 event = {**event, "structured_identity": structured}
+                census = self._identity_census_at(int(event["x"]), int(event["y"]))
+                if census is not None:
+                    # Whether the identity came from a record row. A replay
+                    # surface that cannot count look-alike rows still runs a
+                    # target that is not a row (a form field, a button).
+                    event = {**event, "structured_row": census.get("row") is not False}
+                    key = census.get("record_key")
+                    if isinstance(key, str) and key:
+                        event = {**event, "record_key": key}
             # The part of the form the target sits in (a legend, an accordion
             # or tab header, a heading), for the program's named sections.
             # Display only: the compiler never puts it on a step.
@@ -1017,6 +1026,25 @@ class Recorder:
             return getter(int(x), int(y))
         except Exception:
             return None
+
+    def _identity_census_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """The row census under (x, y), if the backend exposes one.
+
+        Backends MAY expose ``identity_candidates_at``
+        (``openadapt_flow.backend.IdentityCandidatesBackend``). It says
+        whether the target is a record row and reads the row's app-owned id
+        (a DOM ``data-*`` id, the row link's path), which lets replay tell
+        apart rows whose visible text is identical. None when the backend has
+        no census or it failed.
+        """
+        getter = getattr(self._backend, "identity_candidates_at", None)
+        if getter is None:
+            return None
+        try:
+            census = getter(int(x), int(y))
+        except Exception:
+            return None
+        return census if isinstance(census, dict) else None
 
     def _structural_state(self) -> dict[str, Any]:
         """Structural observations the backend can provide right now.
