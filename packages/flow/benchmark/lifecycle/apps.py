@@ -560,6 +560,9 @@ def make_app(name: str) -> Any:
         return FakeApp()
     if name == "openemr":
         app = OpenEMRApp()
+        from .openemr_patches import apply
+
+        apply(app.db_container)
         app.point_hooks_here()
         return app
     raise ValueError(f"unknown app {name}")

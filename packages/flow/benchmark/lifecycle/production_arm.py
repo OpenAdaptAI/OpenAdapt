@@ -875,6 +875,10 @@ def with_duplicate_list_check(source: Path, out: Path) -> Path:
             # Qualified with the record check (OpenEMR's patient API): a run
             # without that channel fails the step instead of reading the list.
             candidate_source="record",
+            # OpenEMR's REST search can't page (its next link names the
+            # configured site address); its FHIR Patient search returns every
+            # match in one Bundle (#1516's live check).
+            candidate_channel="fhir",
         )
         for pc in step.expect
     ]
