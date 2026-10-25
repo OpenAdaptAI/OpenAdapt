@@ -186,7 +186,20 @@ def test_admission_policy(rest_copy, tmp_path: Path) -> None:
     no_frame = run_gate(
         cfg, PARAMS, rest_copy, claims=("delta",), workdir=tmp_path / "g2"
     )
-    assert strict.problem(no_frame, check_digest(cfg)) == "coverage_class_missing"
+    # Coverage measured without the frame can't admit: verify-run signs the
+    # frame into every receipt.
+    assert strict.problem(no_frame, check_digest(cfg)) == "coverage_claims_short:frame"
+    assert policy.problem(no_frame, check_digest(cfg)) == "coverage_claims_short:frame"
+    assert record.store_tables == 1
+    # A store known to hold other tables: a one-collection copy is refused.
+    emr = AdmissionPolicy(coverage=str(path), refuse_not_applicable=True)
+    assert emr.problem(loaded, check_digest(cfg)) == (
+        "coverage_class_not_applicable:other_table"
+    )
+    floor = AdmissionPolicy(coverage=str(path), min_store_tables=2)
+    assert floor.problem(loaded, check_digest(cfg)) == "coverage_store_too_small"
+    unknown = loaded.model_copy(update={"store_tables": None})
+    assert floor.problem(unknown, check_digest(cfg)) == "coverage_store_too_small"
 
 
 def test_a_missed_claimed_class_refuses_whatever_the_total(tmp_path: Path) -> None:
@@ -237,12 +250,15 @@ def test_a_missed_claimed_class_refuses_whatever_the_total(tmp_path: Path) -> No
     untestable = record.model_copy(deep=True)
     untestable.classes["side_write"].untestable = 1
     assert untestable.class_results()["side_write"] == "untestable"
-    # A check that claims no frame isn't held to the frame's classes.
+    # Coverage measured on the delta alone never admits the check.
     delta_only = run_gate(
         cfg, PARAMS, copy, claims=("delta",), workdir=tmp_path / "gate2"
     )
     assert "other_table" not in delta_only.class_results()
-    assert lenient.problem(delta_only, check_digest(cfg)) is None
+    assert lenient.problem(delta_only, check_digest(cfg)) == (
+        "coverage_claims_short:frame"
+    )
+    assert record.store_tables == 2
 
 
 def test_a_read_of_both_tables_kills_the_outside_faults(tmp_path: Path) -> None:
@@ -327,6 +343,17 @@ def test_verify_run_signs_the_coverage_it_was_admitted_with(
             baseline_path=baseline,
             private_dir=tmp_path / name,
         )["receipt"]
+
+    # Coverage measured with the frame left out of the claims: verify-run
+    # would sign frame: held with no frame fault tested, so it refuses.
+    short = run_gate(
+        _rest_cfg(), PARAMS, rest_copy, claims=("delta",), workdir=tmp_path / "g2"
+    )
+    write_coverage(short, tmp_path)
+    narrowed = run("narrowed")
+    assert narrowed["outcome"] == "reconciliation_required"
+    assert narrowed["checked"]["coverage"]["policy"] == "coverage_claims_short:frame"
+    write_coverage(record, tmp_path)
 
     admitted = run("admitted")
     assert admitted["outcome"] == "verified"

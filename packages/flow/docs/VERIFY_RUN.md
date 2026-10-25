@@ -199,6 +199,8 @@ admission:
   min_coverage: 1.0               # default: every applicable fault caught
   require_classes: [unrelated_edit]
   refuse_test_copies: [recorded_states]   # the default
+  refuse_not_applicable: false    # true for an EMR: refuse a trimmed copy
+  min_store_tables: 0             # the fewest tables the test copy must hold
 ```
 
 A check is admitted only when every fault class of every part it claims was

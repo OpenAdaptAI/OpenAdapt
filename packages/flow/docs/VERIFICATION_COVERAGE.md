@@ -210,6 +210,17 @@ record is missing, stale or short of the policy. The receipt's
 `checked.coverage.classes` gives each claimed class's result: `killed`,
 `missed`, `untestable`, `not_applicable` or `missing`.
 
+The coverage must claim both `delta` and `frame`. `verify-run` judges the
+frame on every run, with or without a `frame:` section, and signs it into the
+receipt, so a gate run with a narrower `claims` can't admit the check
+(`coverage_claims_short:frame`).
+
+On a store that holds tables outside the check's read, such as an EMR, a test
+copy trimmed to the check's own table makes `other_table` and `side_write` not
+applicable. The coverage record keeps the copy's table count
+(`store_tables`). A deployment can refuse that kind of copy with
+`refuse_not_applicable: true`, or require a floor with `min_store_tables`.
+
 `scaffold-verifier`'s fault test becomes a call to this gate. With `--db` or a
 fixture it runs on a store copy. Without one it falls back to recorded
 states and says so in the coverage record (`test_copy: recorded_states`),

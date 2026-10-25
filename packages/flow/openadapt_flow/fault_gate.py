@@ -83,6 +83,11 @@ _FRAME_CLASSES = frozenset({"unrelated_edit", "other_table", "side_write"})
 CLAIM_OF: dict[str, str] = {
     name: ("frame" if name in _FRAME_CLASSES else "delta") for name in FAULT_CLASSES
 }
+#: The parts every admitted check must be tested on. verify-run signs the
+#: delta and the frame into every receipt (the frame is judged even when
+#: ``verify.yaml`` has no ``frame:`` section), so coverage measured with a
+#: narrower ``claims`` can't admit a check (``coverage_claims_short``).
+REQUIRED_CLAIMS: tuple[str, ...] = ("delta", "frame")
 #: Every fault class that tests a part of the claim.
 CLASSES_OF: dict[str, tuple[str, ...]] = {
     part: tuple(name for name in FAULT_CLASSES if CLAIM_OF[name] == part)
@@ -158,6 +163,9 @@ class TestCopy(Protocol):
     #
     # def add_elsewhere(self, target: Mapping[str, Any]) -> str:
     #     """Add a row outside the slice for the saved record ``target``."""
+    #
+    # def store_tables(self) -> int:
+    #     """How many tables (collections) the copied store holds."""
 
 
 class NotApplicable(Exception):
@@ -232,6 +240,10 @@ class CoverageRecord(BaseModel):
     killed: int
     applicable: int
     cases: list[dict[str, Any]] = Field(default_factory=list)
+    #: How many tables or collections the test copy's store held. A copy
+    #: trimmed to the check's own table makes the outside-read classes not
+    #: applicable; a policy can require a floor (``min_store_tables``).
+    store_tables: Optional[int] = None
 
     @property
     def complete(self) -> bool:
@@ -243,6 +255,8 @@ class CoverageRecord(BaseModel):
 
     def digest(self) -> str:
         payload = self.model_dump(mode="json")
+        if payload.get("store_tables") is None:
+            payload.pop("store_tables", None)  # records from before the field
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -291,6 +305,12 @@ class AdmissionPolicy(BaseModel):
     require_classes: list[str] = Field(default_factory=list)
     #: Test-copy kinds whose coverage this policy refuses.
     refuse_test_copies: list[str] = Field(default_factory=lambda: ["recorded_states"])
+    #: Refuse a claimed class that did not apply to the test copy. For a
+    #: store known to hold other tables (an EMR), ``not_applicable`` means
+    #: the copy was trimmed, not that nothing is outside the read.
+    refuse_not_applicable: bool = False
+    #: The fewest tables the test copy's store must hold (0: no floor).
+    min_store_tables: int = Field(default=0, ge=0)
 
     def problem(self, record: CoverageRecord, check_sha256: str) -> Optional[str]:
         """None when ``record`` admits the check ``check_sha256``."""
@@ -305,11 +325,22 @@ class AdmissionPolicy(BaseModel):
             return "coverage_clean_save_failed"
         if record.applicable == 0:
             return "coverage_empty"
+        # The check can't choose what it is tested on: coverage with a
+        # narrower claim never admits it.
+        for part in REQUIRED_CLAIMS:
+            if part not in record.claims:
+                return f"coverage_claims_short:{part}"
+        if self.min_store_tables and (
+            record.store_tables is None or record.store_tables < self.min_store_tables
+        ):
+            return "coverage_store_too_small"
         # Per class: a check that misses a class it claims is not admitted,
         # whatever its total (OpenAdaptAI/OpenAdapt#1506).
         for name, result in record.class_results().items():
             if result in ("missed", "untestable", "missing"):
                 return f"coverage_class_{result}:{name}"
+            if result == "not_applicable" and self.refuse_not_applicable:
+                return f"coverage_class_not_applicable:{name}"
         if record.killed / record.applicable < self.min_coverage:
             return "coverage_below_policy"
         for name in self.require_classes:
@@ -651,6 +682,7 @@ def run_gate(
         killed=sum(c.killed for c in classes.values()),
         applicable=sum(c.applicable for c in classes.values()),
         cases=[c.as_dict() for c in cases],
+        store_tables=(copy_.store_tables() if hasattr(copy_, "store_tables") else None),
     )
 
 
@@ -769,6 +801,9 @@ class MemoryRestCopy:
             "records_path": self.records_path,
             "records_key": self.records_key,
         }
+
+    def store_tables(self) -> int:
+        return 1
 
     def edit_elsewhere(self) -> str:
         raise NotApplicable("the store holds one collection")
@@ -917,6 +952,13 @@ class SqliteCopy:
     @staticmethod
     def _table_columns(con: Any, table: str) -> list[str]:
         return [row[1] for row in con.execute(f'PRAGMA table_info("{table}")')]
+
+    def store_tables(self) -> int:
+        con = self._connect()
+        try:
+            return len(self._others(con)) + 1
+        finally:
+            con.close()
 
     def edit_elsewhere(self) -> str:
         """Edit one value of one row in the first other table that has one."""
