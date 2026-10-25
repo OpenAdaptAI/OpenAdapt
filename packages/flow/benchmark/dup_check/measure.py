@@ -492,7 +492,8 @@ def _count(rows: list[dict[str, Any]], key: str = "exception") -> dict[str, int]
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--out", type=Path, default=HERE / "results")
+    # Per-item rows are raw evidence: write them outside the repository.
+    parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--long-items", type=int, default=500)
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)

@@ -7,10 +7,12 @@ of record instead (`runtime/checks/duplicate_record.py`) against the screen
 rule, on the same stream and the same patient table.
 
 ```bash
-python -m benchmark.dup_check.measure          # writes results/*.json
+python -m benchmark.dup_check.measure --out DIR   # per-item rows, kept out of the repo
 ```
 
-No app, no model calls. `measure.py` says exactly what each check sees. The
+The per-item rows of the run below are private, in openadapt-corpus
+(`reliability_recipes/verification_coverage/dup_check_offline-2026-10-24/`);
+this README keeps the aggregate tables. No app, no model calls. `measure.py` says exactly what each check sees. The
 record check reads an in-memory table with FHIR search semantics
 (`TableSource`): a case-insensitive name prefix and an exact birth date.
 
