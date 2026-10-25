@@ -855,7 +855,7 @@ class _TabOcr:
             _TABS + ["Contact"],
             key=lambda name: float(np.abs(crop.astype(int) - _tab(name)).mean()),
         )
-        return [types.SimpleNamespace(text=label)]
+        return [types.SimpleNamespace(text=label, confidence=1.0)]
 
 
 def _tab_census(tmp_path, labels: list[str], target: int, *, readable: bool = True):
@@ -922,3 +922,80 @@ def test_featureless_crops_are_recognized() -> None:
     cv2.putText(text, "MG4408 Okafor", (6, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.7, 0, 2)
     assert not crop_is_featureless(_png(text))
     assert not crop_is_featureless(_png(_tab("Contact")))
+
+
+class _ScriptedOcr:
+    """OCR that reads the target crop first, then every other place, as given."""
+
+    def __init__(self, target: tuple[str, float], others: tuple[str, float]):
+        self._target = target
+        self._others = others
+        self._calls = 0
+
+    def ocr(self, png: bytes, *, region=None):
+        self._calls += 1
+        text, confidence = self._target if self._calls == 1 else self._others
+        return [types.SimpleNamespace(text=text, confidence=confidence)]
+
+
+def _identical_tabs_census(tmp_path, ocr) -> CensusDecision:
+    """Two identical "Contact" tabs, read through ``ocr``."""
+
+    labels = ["Contact", "Contact"]
+    (tmp_path / "templates").mkdir(parents=True, exist_ok=True)
+    recorded = _png(_tab("Contact"))
+    (tmp_path / "templates" / "id.png").write_bytes(recorded)
+    (tmp_path / "templates" / "t.png").write_bytes(recorded)
+    step = Step(
+        id="open_contact",
+        intent="click 'Contact'",
+        action=ActionKind.CLICK,
+        identity_armed=True,
+        anchor=Anchor(
+            template="templates/t.png",
+            region=(0, 0, _TAB_W, _TAB_H),
+            click_point=(0, 0),
+            identifier_crop="templates/id.png",
+            identifier_region=(0, 0, _TAB_W, _TAB_H),
+        ),
+    )
+    replayer = Replayer(
+        _PixelBackend(), vision=ocr, poll_interval_s=0.01, pixel_verify_enabled=True
+    )
+    resolution = Resolution(rung="template", point=(0, 0), confidence=1.0, elapsed_ms=1)
+    return replayer._pixel_census(
+        step, resolution, _png(_tabs(labels)), Workflow(name="wf"), tmp_path
+    )
+
+
+def test_a_low_confidence_misread_never_tells_identical_rows_apart(tmp_path) -> None:
+    """JPEG noise read "Smith, John" as "Smith, 10 lohn" with low confidence:
+    that reading is unreadable, not a different label."""
+
+    ocr = _ScriptedOcr(("Smith, John", 0.97), ("Smith, 10 lohn", 0.55))
+    assert _identical_tabs_census(tmp_path, ocr) == CensusDecision("ambiguous", 2)
+
+
+def test_one_label_read_two_ways_is_still_the_same_label(tmp_path) -> None:
+    """A confident misread close to the target text ("Smith, S John") or one
+    that contains it is the same label, not a sibling."""
+
+    for other in ("Smith, S John", "Smith, John Jr", "John"):
+        ocr = _ScriptedOcr(("Smith, John", 0.97), (other, 0.95))
+        assert _identical_tabs_census(tmp_path, ocr).verdict == "ambiguous", other
+
+
+def test_an_edge_label_in_a_wide_crop_is_not_featureless() -> None:
+    """A short label at one edge of a wide cell ("Li, Al" in 200 px) leaves one
+    shifted window flat; that is structure, not a blank band."""
+
+    import cv2
+    import numpy as np
+
+    from openadapt_flow.vision.match import crop_is_featureless
+
+    cell = np.full((32, 200), 255, np.uint8)
+    cv2.putText(
+        cell, "Li, Al", (2, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.5, 0, 1, cv2.LINE_AA
+    )
+    assert not crop_is_featureless(_png(cell))

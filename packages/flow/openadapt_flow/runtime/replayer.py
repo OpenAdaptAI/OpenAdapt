@@ -736,6 +736,16 @@ class _WebFormApprovalView:
     ref: Any
 
 
+# The pixel census's OCR tie-break: a place the pixels do not rule out is
+# distinguishable only when OCR reads both crops with every line at or above
+# this confidence, neither text contains the other, and the two texts are less
+# similar than this ratio. One label read two ways measured 0.82-0.95
+# ("Smith, John" / "Smith, S John" / "Smith, 10 lohn"); sibling tab labels
+# ("Contact" / "Stats") measure 0.5 or less.
+PIXEL_CENSUS_OCR_MIN_CONFIDENCE = 0.8
+PIXEL_CENSUS_OCR_MAX_SIMILARITY = 0.6
+
+
 class Replayer:
     """Replays a Workflow against a Backend using injected vision.
 
@@ -15823,9 +15833,26 @@ class Replayer:
                 lines = self.vision.ocr(png, region=None)
             except Exception:
                 return ""
+            # A low-confidence fragment ("S", "10", "lohn") is a misread, not
+            # evidence: the whole crop then counts as unreadable.
+            if any(
+                float(getattr(line, "confidence", 0.0) or 0.0)
+                < PIXEL_CENSUS_OCR_MIN_CONFIDENCE
+                for line in lines
+            ):
+                return ""
             return identity_mod.squash(
                 " ".join(str(getattr(line, "text", "") or "") for line in lines)
             )
+
+        def texts_differ(a: str, b: str) -> bool:
+            """Clearly different labels, not one label read two ways."""
+            import difflib
+
+            if a in b or b in a:
+                return False  # a dropped or clipped word, not another label
+            ratio = difflib.SequenceMatcher(None, a, b, autojunk=False).ratio()
+            return ratio < PIXEL_CENSUS_OCR_MAX_SIMILARITY
 
         target_text: Optional[str] = None
         count = 1
@@ -15847,7 +15874,7 @@ class Replayer:
             if target_text is None:
                 target_text = crop_text(live)
             other_text = crop_text(crop)
-            if target_text and other_text and other_text != target_text:
+            if target_text and other_text and texts_differ(target_text, other_text):
                 continue
             count += 1
         if count > 1:

@@ -333,8 +333,15 @@ def crop_is_featureless(template_png: bytes) -> bool:
     def shifted_score(a: np.ndarray, b: np.ndarray) -> float:
         a = a - a.mean()
         b = b - b.mean()
-        denom = math.sqrt(float((a * a).sum()) * float((b * b).sum()))
-        return 1.0 if denom == 0 else float((a * b).sum()) / denom
+        energy_a = float((a * a).sum())
+        energy_b = float((b * b).sum())
+        if energy_a == 0 and energy_b == 0:
+            return 1.0  # both windows flat: nothing tells places apart
+        if energy_a == 0 or energy_b == 0:
+            # Content confined to one edge quarter (a short label in a wide
+            # cell): the shifted windows are not alike.
+            return 0.0
+        return float((a * b).sum()) / math.sqrt(energy_a * energy_b)
 
     dx = max(1, width // 4)
     dy = max(1, height // 4)
