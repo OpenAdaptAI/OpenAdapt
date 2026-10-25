@@ -90,7 +90,7 @@ written knowing those cases. The held-out score is the one that counts.
 
 All three misses come from one cause: the frame compared only the tables the
 contract reads, so a write anywhere else passed. The fix is not a check per
-case. `frame.database` (#1581) diffs every table and column, with a reviewed
+case. `frame.database` (#1582) diffs every table and column, with a reviewed
 allow-list for OpenEMR's own bookkeeping instead of a read-list. The
 contract is `lifecycle_proof/verify.database.yaml` (`--contract whole`).
 
