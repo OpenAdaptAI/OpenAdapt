@@ -146,8 +146,19 @@ def span(lines: list[str], node: ast.AST) -> tuple[int, int]:
 
 
 def runtime_names(nodes: list[ast.AST]) -> set[str]:
-    """Names the bodies need at run time (annotations are strings here)."""
+    """Names the bodies need at run time (annotations are strings here).
+
+    Names a body imports for itself are left out: importing them at module
+    level as well would let ``ruff --fix`` delete the body's own import,
+    which is an edit, not a move.
+    """
     found: set[str] = set()
+    local: set[str] = set()
+    for node in nodes:
+        for sub in ast.walk(node):
+            if isinstance(sub, (ast.Import, ast.ImportFrom)):
+                for alias in sub.names:
+                    local.add((alias.asname or alias.name).split(".")[0])
     for node in nodes:
         assert isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         for deco in node.decorator_list:
@@ -158,9 +169,7 @@ def runtime_names(nodes: list[ast.AST]) -> set[str]:
             for sub in ast.walk(stmt):
                 if isinstance(sub, ast.Name):
                     found.add(sub.id)
-                elif isinstance(sub, ast.AnnAssign):
-                    pass
-    return found
+    return found - local
 
 
 def import_lines(names: set[str], imports: Imports, shared: dict[str, str]) -> tuple[list[str], list[str]]:
@@ -351,7 +360,14 @@ def extract_module_defs(args: argparse.Namespace) -> None:
     for node in nodes:
         names |= names_in([node])
     provided = {n for node in nodes for n in _defined_names(node)}
-    runtime, missing = import_lines(names - provided, imports, {})
+    local = {
+        (alias.asname or alias.name).split(".")[0]
+        for node in nodes
+        for sub in ast.walk(node)
+        if isinstance(sub, (ast.Import, ast.ImportFrom))
+        for alias in sub.names
+    }
+    runtime, missing = import_lines(names - provided - local, imports, {})
     if missing:
         sys.exit(f"these definitions use other module-level names; move them too: {missing}")
     # Adjacent definitions (only blank or comment lines between them) move as
