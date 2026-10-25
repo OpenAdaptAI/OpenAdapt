@@ -274,13 +274,40 @@ def cocoa_worklist(tmp_path: Path):
         proc.kill()
 
 
+def _ax_trail(client: Any, pid: int, x: float, y: float) -> list[Any]:
+    """Roles and text from the element at (x, y) up to its window, for a
+    failure message."""
+
+    from ApplicationServices import (
+        AXUIElementCopyElementAtPosition,
+        AXUIElementCreateApplication,
+    )
+
+    from openadapt_flow.backends.macos_backend import _AXTreeView
+
+    view = _AXTreeView(client)
+    _err, node = AXUIElementCopyElementAtPosition(
+        AXUIElementCreateApplication(pid), float(x), float(y), None
+    )
+    trail = []
+    for _ in range(10):
+        if node is None:
+            break
+        trail.append((view.role(node), client._text(node), view.id_attributes(node)))
+        node = view.parent(node)
+    return trail
+
+
 def test_macos_table_identical_rows_are_ambiguous(cocoa_worklist) -> None:
     client, start = cocoa_worklist
     pid, centers = start(
         [{"text": SAME, "id": ""}, {"text": SAME, "id": ""}, {"text": OTHER, "id": ""}]
     )
     census = client.row_census(pid, TITLE, *centers[1], limit=4000)
-    assert _decide(census) == CensusDecision("ambiguous", 2), census
+    assert _decide(census) == CensusDecision("ambiguous", 2), (
+        census,
+        _ax_trail(client, pid, *centers[1]),
+    )
 
 
 def test_macos_table_record_ids_pick_the_recorded_row(cocoa_worklist) -> None:
@@ -290,7 +317,7 @@ def test_macos_table_record_ids_pick_the_recorded_row(cocoa_worklist) -> None:
     )
     census = client.row_census(pid, TITLE, *centers[0], limit=4000)
     decision = _decide(census, "ax-identifier=chart-1001")
-    assert decision.verdict == "retarget", census
+    assert decision.verdict == "retarget", (census, _ax_trail(client, pid, *centers[0]))
     assert decision.offset is not None and decision.offset[1] > 0
 
 
@@ -298,4 +325,7 @@ def test_macos_table_unique_row_runs(cocoa_worklist) -> None:
     client, start = cocoa_worklist
     pid, centers = start([{"text": SAME, "id": ""}, {"text": OTHER, "id": ""}])
     census = client.row_census(pid, TITLE, *centers[1], limit=4000)
-    assert _decide(census) == CensusDecision("unique", 1), census
+    assert _decide(census) == CensusDecision("unique", 1), (
+        census,
+        _ax_trail(client, pid, *centers[1]),
+    )

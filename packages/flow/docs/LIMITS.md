@@ -187,7 +187,7 @@ For an armed step:
 
 A verified identity says the row reads like the recorded row, not that no
 other row reads the same. Before an armed step acts, the runtime counts the
-rows that show the same identity (`runtime/identity_census.py`). When more
+rows that show the same identity (`openadapt_flow/runtime/identity_census.py`). When more
 than one does, it acts only on the row with the record id recorded at teach
 time, or halts. How each surface counts:
 

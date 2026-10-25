@@ -182,6 +182,23 @@ class TreeView(Protocol):
     def row_count(self, container: Any) -> Optional[int]: ...
 
 
+def _same(view: TreeView, a: Any, b: Any) -> bool:
+    """Whether two node handles are the same node.
+
+    A view MAY define ``same(a, b)``: AX hands back a fresh wrapper for the
+    same element on every read, so equality there is ``CFEqual``.
+    """
+    if a is b:
+        return True
+    same = getattr(view, "same", None)
+    if callable(same):
+        try:
+            return bool(same(a, b))
+        except Exception:
+            return False
+    return bool(a == b)
+
+
 def _record_key(view: TreeView, row: Any, path: list[int], index: int) -> Optional[str]:
     """The stable record id of ``row``: ids on the row and on the path to the
     target, minus values that are only the row's position."""
@@ -255,13 +272,15 @@ def tree_row_census(
         return {"row": False}
     path: list[int] = []
     node = target
-    while node is not row:
+    while not _same(view, node, row):
         parent = view.parent(node)
         if parent is None:
             return None
         siblings = view.children(parent)
         try:
-            path.insert(0, next(i for i, c in enumerate(siblings) if c == node))
+            path.insert(
+                0, next(i for i, c in enumerate(siblings) if _same(view, c, node))
+            )
         except StopIteration:
             return None
         node = parent
@@ -271,10 +290,10 @@ def tree_row_census(
     container = view.parent(row)
     siblings = view.children(container) if container is not None else [row]
     row_role = view.role(row)
-    rows = [c for c in siblings if c == row or view.role(c) == row_role]
+    rows = [c for c in siblings if _same(view, c, row) or view.role(c) == row_role]
     declared = view.row_count(container) if container is not None else None
     incomplete = len(rows) > max_rows or (declared is not None and declared > len(rows))
-    row_index = next((i for i, c in enumerate(rows) if c == row), 0)
+    row_index = next((i for i, c in enumerate(rows) if _same(view, c, row)), 0)
     result: dict[str, Any] = {
         "record_key": _record_key(view, row, path, row_index),
         "incomplete": incomplete,
@@ -285,7 +304,8 @@ def tree_row_census(
         return result
     origin = view.origin(row)
     for index, candidate in enumerate(rows):
-        if candidate == row:
+        is_row = _same(view, candidate, row)
+        if is_row:
             observed: Optional[str] = own_identity
         else:
             node = candidate
@@ -310,10 +330,10 @@ def tree_row_census(
         )
         result["candidates"].append(
             {
-                "self": candidate == row,
+                "self": is_row,
                 "record_key": (
                     result["record_key"]
-                    if candidate == row
+                    if is_row
                     else _record_key(view, candidate, path, index)
                 ),
                 "dx": offset[0],

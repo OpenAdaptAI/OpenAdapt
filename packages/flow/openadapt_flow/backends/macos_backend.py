@@ -605,6 +605,13 @@ class _AXTreeView:
     def __init__(self, client: QuartzMacAXClient) -> None:
         self._client = client
 
+    @staticmethod
+    def same(a: Any, b: Any) -> bool:
+        # Every AX read returns a new wrapper; CFEqual compares the elements.
+        from CoreFoundation import CFEqual
+
+        return bool(CFEqual(a, b))
+
     def parent(self, node: Any) -> Any:
         from ApplicationServices import kAXParentAttribute
 
