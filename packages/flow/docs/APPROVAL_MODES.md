@@ -217,11 +217,30 @@ The gate writes a `switched_off` event to the runner's hash-chained switch
 log, which applies before the next save, offline too. Cloud can't undo it,
 and a missing or broken log also reads as off.
 
+### Which problems turn it off
+
+Every item that needs a person is classed by its cause
+(`approval_mode/post.py`, `problem_class`):
+
+- **An item-input problem leaves the switch on.** The item goes to a person
+  and doesn't count toward `too_many_problems`. It is one of these, caught
+  before anything was written:
+  - a value refused before the first step: a missing required value, or a
+    typed value that isn't valid, such as a date that isn't an ISO date;
+  - an input item check (`inputs_supplied`, `inputs_strict`, `channel`);
+  - a real candidate in the app's possible-duplicate list
+    ([`DUPLICATE_CHECK.md`](DUPLICATE_CHECK.md)).
+- **A program or environment problem turns it off at once.** For example a
+  wrong write the record check caught, a failed identity check, a
+  postcondition that failed after delivery, a changed screen, or the wrong
+  user signed in. Any cause not named above counts here, and so does any
+  outcome that doesn't consistently read "nothing was written".
+
 | Reason | Trigger in Flow |
 | --- | --- |
 | `uncertain_result` | The item ended "Check the record", "Finished, not checked", rolled back, had an unknown or inconsistent outcome, or an earlier item was interrupted. Also when the gate let a save through and its input was delivered, but the outcome says nothing was written: the read-back showed only that the expected record is absent. |
-| `too_many_problems` | 3 counted problems in a row, or 5 in the last 20 counted items. Items sent to approval by the item checks or by a stale status don't count. |
-| `screen_changed` | P4 or R2 failed. |
+| `too_many_problems` | 3 counted problems in a row, or 5 in the last 20 counted items. Items sent to approval by the item checks or by a stale status, and item-input problems, don't count. Every program problem now turns the switch off by itself, so this is a backstop. |
+| `screen_changed` | P4 or R2 failed, a failed identity check, or a stop before any effect with no input cause. |
 | `record_check_lost` | P5 failed, or the engine's own record-check preflight refused the save. |
 | `version_changed` / `environment_changed` | The bundle, the environment, the runner or the dedicated user changed. |
 | Any reason in a Cloud "off" status | Cloud turned the switch off. |
@@ -232,6 +251,37 @@ stricter.
 While the switch reads off, each item waits for a person to approve it before
 the save, as in `each_item`, when the run has an approval store. Without one,
 the item stops before the save and nothing is saved.
+
+### Re-arming takes one signed tap
+
+A switched-off switch never turns itself back on, under any profile. A person
+may re-arm it once these hold:
+
+- **10 consecutive verified items since the switch went off.** These are
+  items saved without a person, or approved by one, and confirmed. Any other
+  finished item resets the count.
+- **The person is shown what happened:** the switch-off, its reason, the
+  recorded cause, and those items. Their approver key signs it
+  (`approval_mode/switch.py`, `rearm_request`, `sign_rearm`, `rearm`).
+
+The log's `rearmed` event records:
+
+- who signed, and the key;
+- what they saw;
+- the off event it answers.
+
+A gate honours it only when the signing key is an approver key it trusts.
+By default, those are the approvers on the signed approver roster that the
+run's pinned root approver vouches for (#1486; the root is pinned by the
+deployment config, `--approver-root` or `OPENADAPT_APPROVER_ROOT`). Desktop's
+approver key is one of them. With no pinned root, or a roster that doesn't
+verify, no re-arm counts. `ApprovalGate(pinned_approver_keys=...)` names the
+keys explicitly instead.
+Desktop can sign with a key that never leaves its keychain: `rearm_to_sign`
+returns the bytes to sign, and `rearm_evidence` wraps the signature. Without the pinned key, a forged,
+tampered or early re-arm is ignored, and the switch stays off. Each reader
+checks the re-arm again against the log before it. A later problem turns the
+switch off again, and the count starts over.
 
 ## Requirements
 
