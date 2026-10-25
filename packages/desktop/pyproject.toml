@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-desktop"
-version = "0.22.0"
+version = "0.24.0"
 description = "The OpenAdapt desktop app and local engine: record a data-entry task, run it on a list, and check each saved record"
 readme = "README.md"
 requires-python = ">=3.11"

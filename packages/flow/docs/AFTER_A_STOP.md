@@ -362,9 +362,10 @@ in [`benchmark/undo_proposal/results/`](../benchmark/undo_proposal/results/).
   offered for a workflow that has a loop.
 - **One attempt per run.** If an undo isn't verified, a person repairs the
   record by hand.
-- **The approval is a local record.** Like a durable resume approval, it's as
-  strong as the operator's control of the run directory. It isn't signed, and
-  it isn't sent to the phone approval portal.
+- **The approval is a local record.** It's as strong as the operator's
+  control of the run directory. Unlike a durable resume approval, which a
+  registered approver key signs, it isn't signed, and it isn't sent to the
+  phone approval portal.
 - **Undo crops from encrypted demonstrations.** `undo declare --from-bundle`
   refuses an encrypted demonstration bundle.
 - **Lint covers straight-line bundles only**, and it can't tell whether a check

@@ -108,11 +108,14 @@ document.getElementById('sign').onclick = () => {{
 </script></body></html>"""
 
 
+_PAGES = {"/form.html": _form, "/worklist.html": _worklist}
+
+
 class _Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
-        page = {"/form.html": _form, "/worklist.html": _worklist}.get(parsed.path)
+        page = _PAGES.get(parsed.path)
         if page is None:
             self.send_error(404)
             return
@@ -448,5 +451,116 @@ def test_a_backend_that_cannot_count_rows_still_runs_a_plain_form(
     try:
         assert report.success, _summary(report)
         assert page.locator("#status").inner_text() == "Saved Ada"
+    finally:
+        page.close()
+
+
+def test_browser_record_ids_follow_the_same_positional_rule(browser) -> None:
+    """The page-side record-id filter drops exactly what positional_id drops."""
+
+    import uuid
+
+    from openadapt_flow.backends.playwright_backend import _RECORD_KEY_JS
+    from openadapt_flow.runtime.identity_census import positional_id
+
+    values = [
+        str(uuid.uuid4()),
+        uuid.uuid4().hex,
+        f"encounter-{uuid.uuid4()}",
+        "MRN-A1234",
+        "00012345",
+        "chart-1001",
+        "ENC2024-000123",
+        "01HEHRGVBY0HPFKMYZV5Q9KR35",
+        "row-3",
+        "r3c2",
+        "item_12",
+        "row-3-col-1",
+        "3-1",
+        "ListViewItem-0",
+        "2",
+    ]
+    page = browser.new_page()
+    try:
+        items = "".join(f'<li data-id="{v}">x</li>' for v in values)
+        page.set_content(f"<ul>{items}</ul>")
+        keys = page.evaluate(
+            f"() => Array.from(document.querySelectorAll('li'))"
+            f".map((li) => ({_RECORD_KEY_JS})(li, li))"
+        )
+    finally:
+        page.close()
+    for index, (value, key) in enumerate(zip(values, keys)):
+        assert (key is None) == positional_id(value, index), (value, key)
+
+
+def _row_buttons(query: dict[str, list[str]]) -> str:
+    """Identical table rows, each with an Edit button whose id is positional."""
+    order = query.get("order", ["ab"])[0]
+    charts = {"a": "1001", "b": "1002"}
+    rows = "".join(
+        f'<tr data-chart="{charts[k]}"><td>John Smith Follow-up Dr Lee</td>'
+        f'<td><button id="edit-{i}" onclick="openRow(\'{charts[k]}\')">Edit</button>'
+        "</td></tr>"
+        for i, k in enumerate(order)
+    )
+    return f"""<!doctype html><html><head><title>Worklist</title>
+<style>{_STYLE}</style></head><body><h1>Worklist</h1><table>{rows}</table>
+<div id="status">No chart open</div>
+<div id="chart" style="display:none; margin-top:24px">
+  <button id="sign">Sign visit note</button></div>
+<div id="signed">Nothing signed</div>
+<script>
+let open = null;
+function openRow(c) {{
+  open = c;
+  document.getElementById('status').textContent = 'Opened chart ' + c;
+  document.getElementById('chart').style.display = 'block';
+}}
+document.getElementById('sign').onclick = () => {{
+  document.getElementById('signed').textContent = 'Signed chart ' + open;
+}};
+</script></body></html>"""
+
+
+_PAGES["/rows.html"] = _row_buttons
+
+
+def test_a_row_button_taught_without_a_census_halts_after_a_swap(
+    app_url, browser, tmp_path
+) -> None:
+    """Taught and replayed on a surface that cannot count rows: the Edit
+    button's role must not exempt the row it sits in."""
+
+    url = app_url + "/rows.html"
+    page = _page(browser, url)
+    try:
+        recorder = Recorder(
+            _CannotCountBackend(page),
+            tmp_path / "recording",
+            app_url=url,
+            settle_interval_s=0.05,
+            settle_timeout_s=2.0,
+        )
+        recorder.click(*_center(page, "#edit-0"))
+        recorder.click(*_center(page, "#sign"))
+        assert page.locator("#signed").inner_text() == "Signed chart 1001"
+        recording = recorder.finish()
+    finally:
+        page.close()
+    compile_recording(recording, tmp_path / "bundle", name="rows")
+    report, page = _replay(
+        browser,
+        url + "?order=ba",
+        tmp_path / "bundle",
+        tmp_path / "run",
+        backend=_CannotCountBackend,
+    )
+    try:
+        assert page.locator("#signed").inner_text() != "Signed chart 1002", _summary(
+            report
+        )
+        assert not report.success, _summary(report)
+        assert report.results[0].identity.ambiguity_halt == "identity_uncounted"
     finally:
         page.close()

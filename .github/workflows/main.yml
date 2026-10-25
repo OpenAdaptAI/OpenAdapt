@@ -2,6 +2,8 @@ name: Python CI
 
 on:
   pull_request:
+    # Drafts run nothing (each job checks `draft`); marking one ready runs CI.
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - '**'
   # The merge queue tests each group before it lands on main.
@@ -9,13 +11,19 @@ on:
   push:
     branches:
       - main
+  # Runs the post-merge tier (every Python on Linux and macOS) on demand.
+  workflow_dispatch:
 
 concurrency:
-  group: python-ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A pull request's newer push cancels its older run. Every other event (the
+  # merge queue, main, schedules, dispatches) gets a group of its own, so it
+  # is never cancelled or replaced.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   run-ci:
+    if: github.event.pull_request.draft != true
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -23,11 +31,11 @@ jobs:
 
     strategy:
       matrix:
-        # PR tier: one lane, the required run-ci (ubuntu-latest, 3.12). The
-        # merge queue and main run every supported Python on Linux and macOS,
-        # so nothing reaches main untested on them.
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest"]') }}
-        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
+        # PR and queue tiers: one lane, the required run-ci (ubuntu-latest,
+        # 3.12), which the queue needs to report. A push to main and a
+        # dispatch run every supported Python on Linux and macOS.
+        os: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
 
     steps:
       - name: Checkout code
@@ -39,7 +47,7 @@ jobs:
       # is tested by the Packages workflow, so this job reports success without
       # running its suite. The job itself always runs, because a skipped matrix
       # job never reports its required check name. The merge queue and main
-      # always run everything.
+      # always run the suite.
       - name: Scope (skip the suite for package-only pull requests)
         id: scope
         env:
@@ -116,8 +124,9 @@ jobs:
   # unsupported interpreters, that the built wheel installs without the engine
   # and that each engine command prints the Python 3.12 install fix.
   unsupported-python-guard:
-    # Merge queue and main only (PR tier runs one lane).
-    if: github.event_name != 'pull_request'
+    # Post-merge tier (main and dispatch); a pull request and the queue run
+    # one lane. tests/test_python_support.py runs in that lane on every tier.
+    if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     permissions:
       contents: read

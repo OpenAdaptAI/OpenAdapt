@@ -48,19 +48,25 @@ Desktop reads the requests and answers one of them:
 
 ```bash
 openadapt-flow item-approval show RUN_DIR            # JSON; waiting requests
-openadapt-flow item-approval approve RUN_DIR \
+OPENADAPT_JIT_KEY_PASSPHRASE=... openadapt-flow item-approval approve RUN_DIR \
   --request-id ID --request-sha256 SHA256 \
-  --decided-by human --route desktop_run_it \
-  --approver-id CLOUD_USER_ID --auth-method cloud_aal2   # or --unauthenticated
+  --decided-by human --route desktop_run_it --unauthenticated \
+  --approver-key APPROVER_KEY.pem
 openadapt-flow item-approval decline RUN_DIR ... --reason wrong_values
 ```
 
-- An answer names the request digest the person saw. A person answers with
-  `--decided-by human` from the `desktop_run_it` route, or from their phone
-  on the runner's decision portal (`decision_portal`; see
+- An answer names the request digest the person saw. A person answers from
+  the `desktop_run_it` route, or from their phone on the runner's decision
+  portal (`decision_portal`; see
   [`APPROVAL_AND_VERIFICATION.md`](APPROVAL_AND_VERIFICATION.md)), which
   echoes the signed task for that exact request. A decline carries
   one closed reason: `wrong_values`, `wrong_record` or `screen_problem`.
+- A person's answer counts only when a registered approver key signs it
+  (below). `--decided-by human`, the route, `--unauthenticated` and a
+  Cloud user id are claims any process could make, so on their own they are
+  refused (`human_answer_unsigned`). A claimed Cloud sign-in
+  (`--auth-method cloud_aal2` or `cloud_aal1`) is refused too
+  (`auth_method_unverified`): nothing on the runner can check it.
 - Answers are created once and never replaced. The run checks every answer
   itself, so an answer file written around the command is held to the same
   rules. An approval is used for exactly one save; a loop that reaches the
@@ -87,6 +93,124 @@ openadapt-flow item-approval decline RUN_DIR ... --reason wrong_values
   nothing, and the approval is spent. Start the item again instead. A resume
   in a signed-in browser the run attached to, where the form is still open,
   checks the form against the approved request before the save.
+
+### The approver key
+
+A person's answer carries an Ed25519 signature over the whole answer. The
+signer must be on the **signed approver roster** (`approvers.json` in the
+key directory, `$OPENADAPT_JIT_KEY_DIR`, default `~/.openadapt/jit`), and the
+run must **pin the roster's root**. The run checks both on every answer,
+including an answer file written around the command
+(`approval_mode/approver_roster.py`).
+
+- **The roster.** Its first entry is the root approver key, signed by
+  itself. Every later change, adding or removing an approver, is signed by
+  an approver already on the roster. Each entry also signs its position
+  (`seq`) and the hash of the entry before it (`prev`), so an entry can't be
+  replayed, reordered or dropped. Editing the file adds nobody: the first
+  entry that doesn't check out stops the replay, and nothing after it
+  counts. `principals.json` no longer lists approvers, and `jit register`
+  no longer registers one.
+- **The pin.** A run names the root approver key it trusts.
+  - A governed run, or one an agent started (`--started-by`), takes the root
+    only from its deployment config's `approvers.root_public_key`;
+    `--approver-root` and `OPENADAPT_APPROVER_ROOT` are ignored, since whoever
+    starts the run sets them. Without a config pin, every person's answer in
+    that run is refused.
+  - Other commands also accept `--approver-root` or `OPENADAPT_APPROVER_ROOT`;
+    two sources that disagree are refused.
+  - A deployment config that can't be read refuses the run rather than
+    dropping its pin.
+  - Nothing in the run directory or the environment is a trust anchor.
+    Verification takes the root only from the caller, never from
+    `OPENADAPT_APPROVER_ROOT`. A reader (`item-approval`, a resume) brings its
+    own pin, from its deployment config or `--approver-root`, and is refused
+    without one.
+  - The roster must extend every head recorded outside the run: the one in
+    the key directory's `approvers.head.json` (written by every roster
+    change) and the deployment config's `approvers.head` (Desktop writes its
+    Keychain's). A roster the run can't verify at start refuses the run.
+    The sidecar sits in the key directory, so a process that can write the
+    key directory can delete it and put an older roster back. Only a head
+    kept elsewhere (the deployment config's, or Desktop's Keychain) catches
+    that, which is one more reason to keep the key directory away from the
+    agents. `jit approver add` and `remove` update only the sidecar; they
+    never update a deployment config's or Desktop's head.
+  - The agent's task ledger and its guard server take their root only from
+    the deployment config (`--config`); the environment never counts there.
+  - With `--config-sha256`, Flow opens the deployment config once (not
+    through a symlink; it must be a regular file), refuses it if its digest
+    differs, and from then on parses only those bytes whenever the command
+    loads that path, including the approver pin. Replacing the file, or a
+    symlink put in its place, changes nothing (Desktop passes it for every
+    run).
+  - The deployment config's `approvers` section is read once per command,
+    so swapping the file mid-run changes nothing.
+  - The run records the root, the key directory and the roster's head when
+    it starts. A governed run's resume refuses when that record is missing. After that, an `item-approval` answer or a resume that names
+    another root (its own deployment config's included) or key directory is
+    refused, and so is a pin planted in the run directory before the run.
+    A roster that doesn't extend the recorded head (an older copy put back)
+    is refused (`approver_roster_rolled_back`).
+  - A deployment config can also pin `approvers.key_dir`; a run given
+    another `--key-dir` is then refused.
+- **The first approver.** On a Mac, Desktop sets it up behind Touch ID: the
+  root is Desktop's approver key, signed after a presence prompt. Elsewhere,
+  a person starts the roster with `openadapt-flow jit approver init`, and
+  the deployment config pins its root.
+
+Each route signs with its own key:
+
+- **Desktop's Run it** signs with the Desktop approver key.
+  - On a Mac, a person sets it up in the app, from the approval screen or
+    Settings, with one Touch ID or login-password prompt. The key is sealed
+    to a Secure Enclave key that asks for presence on every use. Setup signs
+    the roster's root with it behind that prompt (or, when a roster exists,
+    an approver adds it). Flow never sees the key: Desktop runs
+    `item-approval approve|decline` with `--approver-signer stdio
+    --approver-public-key HEX`. Flow writes the exact bytes to sign on
+    stdout; Desktop checks that they are the person's answer, asks for
+    Touch ID, and writes the signature back on stdin. A cancelled prompt or
+    any other failure is a refusal, and Flow records nothing.
+  - On a Mac, Desktop's pin is the root it set up behind Touch ID, kept in
+    the login Keychain; nothing else names it (not the environment, not a
+    file the user can write). A process running as the same user can delete
+    the Keychain items; Desktop then has no pin, and no person's answer
+    counts until someone sets the key up again behind Touch ID.
+  - On Windows and Linux, `openadapt-desktop approver-key setup` creates it,
+    keeps the encrypted key in an owner-only file and its passphrase in the
+    OS keychain, and prints the `jit approver` commands that put it on the
+    roster.
+- **The decision portal** signs with the key at `OPENADAPT_PORTAL_APPROVER_KEY`
+  after the person answered on their phone. Without it, the portal records
+  no answer. Its key is added to the roster like any other approver.
+- **At a terminal**, a person passes their own key with `--approver-key`. The
+  key's passphrase comes from `OPENADAPT_JIT_KEY_PASSPHRASE`, never from the
+  command line.
+
+To start a roster and add an approver:
+
+```bash
+openadapt-flow jit keygen --out ROOT.pem
+openadapt-flow jit approver init --principal front-desk --key ROOT.pem
+openadapt-flow jit approver add --principal night-desk \
+  --public-key PUBLIC_KEY_HEX --signer-key ROOT.pem --approver-root ROOT_HEX
+```
+
+Neither command asks for a terminal or a typed confirmation: a change counts
+because an approver signed it.
+
+The run also refuses:
+- a key that holds another role, or an approver id that names an agent or
+  model;
+- an answer signed by the other route's key;
+- an answer changed after it was signed;
+- an answer signed by whoever started the run.
+
+Keep the key directory, the deployment config and the approver keys away
+from the agents the run governs. This pins the runs a deployment governs. A
+process that can rewrite the deployment config itself, or that starts its
+own run with its own pin, is outside it.
 
 The report's `approval` block lists every answer as codes and digests: no
 values, no screenshot and no form state. An item is `approved` only when a

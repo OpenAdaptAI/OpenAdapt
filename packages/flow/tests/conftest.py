@@ -12,6 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from tests._approver_keys import approver  # noqa: E402,F401 - shared fixture
 from tests.repo_tree_guard import (  # noqa: E402 - needs the sys.path line above
     capture_baseline,
     check_and_report,

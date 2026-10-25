@@ -78,8 +78,9 @@ jobs:
             --event "${EVENT_NAME}" \
             --paths-file "${changed_paths}" \
             --github-output "${GITHUB_OUTPUT}"
-          # A pull request builds the Linux installer only; main and dispatches
-          # build every platform.
+          # Native installers are post-merge tier: main and dispatches build
+          # every platform; a pull request and the merge queue build none (the
+          # native-installers job is skipped on both).
           python - "${EVENT_NAME}" >> "${GITHUB_OUTPUT}" <<'PY'
           import json, sys
           native = [
@@ -96,8 +97,6 @@ jobs:
                "architecture": "x86_64", "target": "x86_64-unknown-linux-gnu",
                "bundles": "deb,appimage", "signing": "unsigned"},
           ]
-          if sys.argv[1] == "pull_request":
-              native = [entry for entry in native if entry["platform"] == "linux"]
           print("native_matrix=" + json.dumps(native))
           PY
 
@@ -163,14 +162,16 @@ jobs:
   python-sidecar:
     name: Python sidecar (${{ matrix.os }})
     needs: artifact-scope
-    if: needs.artifact-scope.outputs.run_sidecar == 'true'
+    # PR and post-merge tiers. The merge queue skips it: the pull request
+    # already froze and smoke-tested the Linux sidecar on its merge with main.
+    if: needs.artifact-scope.outputs.run_sidecar == 'true' && github.event_name != 'merge_group'
     strategy:
       fail-fast: false
       matrix:
-        # PRs prove the frozen-engine contract on Linux. The merge queue and
-        # main add macOS (which freezes the PyObjC wheels, whose license
-        # notices the build must find) and Windows. Immutable native release
-        # tags rebuild every supported OS.
+        # PRs prove the frozen-engine contract on Linux. Main and dispatch
+        # add macOS (which freezes the PyObjC wheels, whose license notices
+        # the build must find) and Windows. Immutable native release tags
+        # rebuild every supported OS.
         os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-22.04"]' || '["ubuntu-22.04", "macos-14", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
@@ -216,18 +217,20 @@ jobs:
   native-installers:
     name: Native installer (${{ matrix.label }})
     needs: artifact-scope
-    # Main runs this evidence for dependency, toolchain, packaging, and native
-    # changes, and a pull request that changes the native shell builds the
-    # Linux installer. Application-only merges already pass the PR checks and the
-    # exact-main frontend, distribution, and cross-platform test jobs. Every
-    # immutable desktop-v* release tag rebuilds and tests all installers in the
-    # separate Native Installer Release workflow.
-    if: needs.artifact-scope.outputs.run_native == 'true'
+    # Main runs this evidence for dependency, toolchain, packaging, and
+    # native changes; a pull request and the merge queue do not.
+    # Application-only merges already pass the PR checks and the exact-main
+    # frontend, distribution, and cross-platform test jobs. Every immutable
+    # desktop-v* release tag rebuilds and tests all installers in the separate
+    # Native Installer Release workflow, and desktop-release.yml starts only
+    # from a push-to-main Packages run that includes this job.
+    # Post-merge tier: macOS arm64 and Intel, Windows and the Linux bundles
+    # build on main and on dispatch, never for a pull request or a queue group.
+    if: needs.artifact-scope.outputs.run_native == 'true' && github.event_name != 'pull_request' && github.event_name != 'merge_group'
     strategy:
       fail-fast: false
       matrix:
-        # Built by the artifact-scope job: every platform on main and dispatch,
-        # Linux only on a pull request that changes the native shell.
+        # Built by the artifact-scope job: every platform.
         include: ${{ fromJSON(needs.artifact-scope.outputs.native_matrix) }}
     runs-on: ${{ matrix.os }}
     steps:

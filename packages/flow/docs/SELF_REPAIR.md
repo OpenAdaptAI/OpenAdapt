@@ -192,8 +192,12 @@ show it:
 - **Terminal.** `run --self-repair` prints the exact command when it asks:
 
   ```bash
-  openadapt-flow item-approval approve runs/item-17 --request-id <id> --request-sha256 <sha> --decided-by human --route desktop_run_it --unauthenticated
+  openadapt-flow item-approval approve runs/item-17 --request-id <id> --request-sha256 <sha> --decided-by human --route desktop_run_it --unauthenticated --approver-key <approver-key.pem>
   ```
+
+  The person's registered approver key signs the answer, with its
+  passphrase in `OPENADAPT_JIT_KEY_PASSPHRASE` (see
+  [`APPROVAL_MODES.md`](APPROVAL_MODES.md#the-approver-key)).
 
 - **Reject in the store.** Rejecting the candidate with `RepairStore.reject`
   while the run waits ends the wait as a decline.

@@ -12,6 +12,7 @@ matching the Windows Agent Arena Flask contract (the WAADirect pattern):
                                serialized request
     POST /uia/locator-at    -> stable UIA locator at a demonstrated point
     POST /uia/text-at-point -> structured row text for identity verification
+    POST /uia/identity-candidates-at -> rows that read the same as that row
     POST /uia/find          -> zero / unique / ambiguous exact candidates
     POST /uia/act           -> unique native UIA action + delivery receipt
     POST /uia/read          -> read-only text of one unique control (value or
@@ -82,6 +83,7 @@ import hmac
 import io
 import json
 import os
+import re
 import secrets
 import subprocess
 import sys
@@ -734,6 +736,208 @@ def _structured_text_at(auto: Any, x: int, y: int) -> Optional[str]:
     return value or None
 
 
+_CENSUS_ROW_TYPES = frozenset(
+    {"DataItemControl", "ListItemControl", "TreeItemControl", "TableRowControl"}
+)
+_MAX_CENSUS_ROWS = 2000
+_SINGLE_NUMBER = re.compile(r"^\D*(\d+)\D*$")
+# Mirror of identity_census.positional_id.
+_POSITION_WORDS = (
+    "row|item|idx|index|cell|col|column|line|pos|position|listviewitem|node|child"
+)
+_POSITION_TOKEN = re.compile(rf"^(?:(?:{_POSITION_WORDS})\d+|r\d+c\d+)$", re.IGNORECASE)
+_POSITION_WORD_TOKEN = re.compile(rf"^(?:{_POSITION_WORDS}|r|c)$", re.IGNORECASE)
+
+
+def _positional_id(value: str, index: int) -> bool:
+    """Whether a row id names a position (``row-3``, ``r3c2``) not a record."""
+
+    tokens = [t for t in re.split(r"[^A-Za-z0-9]+", value) if t]
+    if any(_POSITION_TOKEN.match(t) for t in tokens):
+        return True
+    for word, following in zip(tokens, tokens[1:]):
+        if _POSITION_WORD_TOKEN.match(word) and following.isdigit():
+            return True
+    if len(tokens) > 1 and all(t.isdigit() and len(t) <= 3 for t in tokens):
+        return True
+    match = _SINGLE_NUMBER.match(value)
+    return bool(match and int(match.group(1)) in (index, index + 1))
+
+
+def _row_identity(row: object, excluded: Optional[int]) -> Optional[str]:
+    """A row's identity as ``_structured_text_at`` reads it, by child index."""
+
+    parts: list[str] = []
+    for index, child in enumerate(_children(row)):
+        if excluded is not None and index == excluded:
+            continue
+        name = str(_control_value(child, "Name", "") or "")
+        if name:
+            parts.append(name)
+    if not parts:
+        name = str(_control_value(row, "Name", "") or "")
+        if name:
+            parts.append(name)
+    value = " ".join(" ".join(parts).split())
+    return value or None
+
+
+def _census_record_key(
+    row: object, branch: Optional[object], index: int
+) -> Optional[str]:
+    """The row's AutomationIds (row and target branch), minus positional ones."""
+
+    keys: set[str] = set()
+    for control in (row, branch):
+        if control is None:
+            continue
+        value = str(_control_value(control, "AutomationId", "") or "").strip()
+        if not value or len(value) > 256:
+            continue
+        if _positional_id(value, index):
+            continue
+        keys.add(f"automation-id={value}")
+    return "\n".join(sorted(keys)) or None
+
+
+def _identity_candidates_at(auto: Any, x: int, y: int) -> Optional[dict[str, Any]]:
+    """Census of the shown rows that read the same as the row at (x, y).
+
+    Mirrors ``_structured_text_at`` (and ``identity_census.tree_row_census``
+    in the openadapt_flow package, which this guest copy cannot import): the
+    record row is the nearest data, list, tree or table-row item; its identity
+    is its children's names except the clicked cell; every sibling row of the
+    same control type is read at the same child index. A container whose Grid
+    pattern reports more rows than it exposes, or a scrollable container that
+    realizes items on demand (ItemContainer pattern), is ``incomplete``: its
+    off-screen rows are not in the tree. ``{"row": False}`` when the point is
+    in no row; None when UIA fails.
+    """
+    try:
+        element = auto.ControlFromPoint(x, y)
+    except Exception:  # noqa: BLE001
+        return None
+    if element is None:
+        return None
+    row: Optional[object] = element
+    for _ in range(6):
+        if str(_control_value(row, "ControlTypeName", "")) in _CENSUS_ROW_TYPES:
+            break
+        row = _parent(row)
+        if row is None:
+            break
+    else:
+        row = None
+    if row is None or (
+        str(_control_value(row, "ControlTypeName", "")) not in _CENSUS_ROW_TYPES
+    ):
+        return {"row": False}
+    own: Optional[object] = element
+    for _ in range(6):
+        parent = _parent(own)
+        if parent is None:
+            own = None
+            break
+        if parent is row:
+            break
+        own = parent
+    row_children = _children(row)
+    excluded = next(
+        (i for i, child in enumerate(row_children) if own is not None and child is own),
+        None,
+    )
+    branch = row_children[excluded] if excluded is not None else None
+    target_identity = _row_identity(row, excluded)
+    if not target_identity:
+        return None
+    container = _parent(row)
+    row_type = str(_control_value(row, "ControlTypeName", ""))
+    siblings = _children(container) if container is not None else [row]
+    rows = [
+        c
+        for c in siblings
+        if c is row or str(_control_value(c, "ControlTypeName", "")) == row_type
+    ]
+
+    # The target row's own wrapper may differ from the sibling's; locate it by
+    # runtime id when the provider exposes one, else by bounds.
+    def same(a: object, b: object) -> bool:
+        if a is b:
+            return True
+        compare = getattr(auto, "ControlsAreSame", None)
+        if callable(compare):
+            try:
+                return bool(compare(a, b))
+            except Exception:  # noqa: BLE001
+                pass
+        return _bounds(a) is not None and _bounds(a) == _bounds(b)
+
+    row_index = next((i for i, c in enumerate(rows) if same(c, row)), None)
+    incomplete = len(rows) > _MAX_CENSUS_ROWS or row_index is None
+    if container is not None and not incomplete:
+        # A provider that fails while answering is not a complete answer.
+        try:
+            grid_get = _control_value(container, "GetGridPattern", None)
+            grid = grid_get() if callable(grid_get) else None
+            declared = int(grid.RowCount) if grid is not None else None
+            scroll_get = _control_value(container, "GetScrollPattern", None)
+            scroll = scroll_get() if callable(scroll_get) else None
+            scrollable = (
+                bool(scroll.VerticallyScrollable) if scroll is not None else False
+            )
+            items_get = _control_value(container, "GetItemContainerPattern", None)
+            realizes = callable(items_get) and items_get() is not None
+        except Exception:  # noqa: BLE001
+            declared, scrollable, realizes, incomplete = None, True, True, True
+        if declared is not None and declared > len(rows):
+            incomplete = True
+        if scrollable and realizes:
+            incomplete = True
+    result: dict[str, Any] = {
+        "record_key": _census_record_key(row, branch, row_index or 0),
+        "incomplete": incomplete,
+        "top_level": True,
+        "candidates": [],
+    }
+    if incomplete:
+        return result
+    origin = _bounds(row)
+    for index, candidate in enumerate(rows):
+        is_self = index == row_index
+        if is_self:
+            observed: Optional[str] = target_identity
+            candidate_branch = branch
+        else:
+            observed = _row_identity(candidate, excluded)
+            kids = _children(candidate)
+            if row_children and not kids:
+                # A row whose cells are not built yet: it cannot be read.
+                result["incomplete"] = True
+                result["candidates"] = []
+                return result
+            candidate_branch = (
+                kids[excluded]
+                if excluded is not None and excluded < len(kids)
+                else None
+            )
+        if observed != target_identity:
+            continue
+        here = _bounds(candidate)
+        result["candidates"].append(
+            {
+                "self": is_self,
+                "record_key": (
+                    result["record_key"]
+                    if is_self
+                    else _census_record_key(candidate, candidate_branch, index)
+                ),
+                "dx": here[0] - origin[0] if here and origin else None,
+                "dy": here[1] - origin[1] if here and origin else None,
+            }
+        )
+    return result
+
+
 _ROW_TYPES = frozenset(
     {
         "DataItemControl",
@@ -844,12 +1048,19 @@ def _perform_uia_initialized(
     auto: Any, operation: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
     """Perform one typed UIA operation in an initialized COM apartment."""
-    if operation in {"locator-at", "text-at-point", "focused-at-point"}:
+    if operation in {
+        "locator-at",
+        "text-at-point",
+        "focused-at-point",
+        "identity-candidates-at",
+    }:
         data = _exact_object(payload, required=frozenset({"x", "y"}), label=operation)
         x = _bounded_int(data["x"], "x")
         y = _bounded_int(data["y"], "y")
         if operation == "text-at-point":
             return {"status": "ok", "text": _structured_text_at(auto, x, y)}
+        if operation == "identity-candidates-at":
+            return {"status": "ok", "census": _identity_candidates_at(auto, x, y)}
         try:
             element = auto.ControlFromPoint(x, y)
         except Exception as exc:  # noqa: BLE001
@@ -1432,6 +1643,7 @@ def make_handler_class(
                 "/context/identity": ("context", "identity"),
                 "/uia/locator-at": ("uia", "locator-at"),
                 "/uia/text-at-point": ("uia", "text-at-point"),
+                "/uia/identity-candidates-at": ("uia", "identity-candidates-at"),
                 "/uia/find": ("uia", "find"),
                 "/uia/act": ("uia", "act"),
                 "/uia/read": ("uia", "read"),

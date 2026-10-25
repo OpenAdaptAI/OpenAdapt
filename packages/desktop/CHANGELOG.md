@@ -1,6 +1,40 @@
 # CHANGELOG
 
 
+## v0.24.0 (2026-10-24)
+
+### Features
+
+- **desktop**: set up the approver key in the app, behind Touch ID
+- **desktop**: review stops as one-tap cards with the evidence side by side,
+  on the computer (keys 1-9, batches of similar stops) or a paired phone; every
+  answer is signed with the approver key
+- **desktop**: re-arm "only ask about problems" from a stop card with one
+  Touch ID
+
+### Bug Fixes
+
+- **desktop**: a locked Mac isn't a Mac without a Secure Enclave
+- **desktop**: the Touch ID setup signs the approver roster's root behind its one prompt and pins that root for Desktop's runs; a key rotation is signed by the old key, and a roster this Mac didn't start needs an approver to add the key
+- **desktop**: re-register a stored approver key only after it opens behind Touch ID
+- **desktop**: Flow checks each run's config against the digest Desktop computed (--config-sha256); Run it answers carry the Keychain's head; staged-config folders that are symlinks are refused; only the Keychain names Desktop's approver root (not OPENADAPT_APPROVER_ROOT, not a user-writable file); with no Keychain pin, no person's answer counts
+- **desktop**: each run's deployment config also carries the Keychain's roster head and is staged outside the run directory; Run it answers name this Mac's pin with --approver-root
+- **desktop**: the Keychain's approver pin wins over OPENADAPT_APPROVER_ROOT (a different value is refused); each run's deployment config carries the pin; the roster head is kept in the Keychain and an older roster put back is refused
+- **desktop**: a Mac that can keep the key behind Touch ID never falls back to a terminal-made key
+- **desktop**: a stop card that changes during the Touch ID prompt changes nothing
+- **desktop**: a stop where nothing was written also offers "I did it by hand"
+
+
+
+## v0.23.0 (2026-10-24)
+
+### Bug Fixes
+
+- a person's approval needs the signature of a key on the signed approver roster, whose root the run pins from the deployment config's `approvers.root_public_key` (a governed run takes it from nowhere else, so an environment variable can't pin it). Set the key up from a terminal (`jit keygen`, then `jit approver init`); every later approver is added with an approver's signature (`jit approver add`). An approval from a key not on the pinned roster is refused.
+- security updates to locked dependencies (pillow 13.0.0, certifi, setuptools, rustls-webpki, webpki-root-certs)
+
+
+
 ## v0.22.0 (2026-10-19)
 
 0.21.1 was never published: its release stopped before PyPI, because the release check accepted only Python packages and refused the Desktop installers. This release ships the 0.21.1 and 0.21.0 changes below together with these.

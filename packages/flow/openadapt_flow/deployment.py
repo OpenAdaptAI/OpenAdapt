@@ -387,6 +387,15 @@ class EffectsConfig(BaseModel):
     base_url: Optional[str] = None
     records_path: str = "/api/db"
     records_key: Optional[str] = "records"
+    #: ``rest`` only: dotted path in the response body to the next page's URL
+    #: (``links.next``). Set, the read follows every page on the same origin
+    #: and reads as unreadable when a page fails or the chain is too long.
+    #: Unset: one response is the whole read, as before.
+    records_next_path: Optional[str] = None
+    #: ``rest`` only: dotted path in the first page's body to the number of
+    #: records the read should return (``meta.total``). Set, a read whose
+    #: count differs reads as unreadable. Unset: the read trusts the chain.
+    records_total_path: Optional[str] = None
     #: Secret-isolated auth headers for the records read (bearer_env /
     #: header+value_env / basic_env). Never a credential literal.
     auth: Optional[AuthRef] = None
@@ -612,7 +621,12 @@ class EffectsConfig(BaseModel):
         """Keep configs without a desktop read-back byte-identical."""
 
         data: dict[str, Any] = handler(self)
-        for added in ("desktop_readback", "deferred_report"):
+        for added in (
+            "desktop_readback",
+            "deferred_report",
+            "records_next_path",
+            "records_total_path",
+        ):
             if data.get(added, "") is None:
                 data.pop(added, None)
         return data
@@ -1028,6 +1042,23 @@ class RepairSection(BaseModel):
     requalify_trials: int = Field(default=1, ge=1, le=10)
 
 
+class ApproversSection(BaseModel):
+    """Who may approve this deployment's saves (approval_mode/approver_roster).
+
+    ``root_public_key`` pins the root approver key (64 hex): a person's answer
+    counts only when its signer is on the signed roster this key vouches
+    for. ``key_dir``, when set, is the only key directory a run accepts.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    root_public_key: str = Field(pattern=r"^[0-9a-f]{64}$")
+    key_dir: Optional[str] = None
+    #: A roster head ``[seq, "sha256:..."]`` recorded outside the key
+    #: directory (Desktop writes its Keychain's): the roster must extend it.
+    head: Optional[tuple[int, str]] = None
+
+
 class DeploymentConfig(BaseModel):
     """The whole-deployment configuration (one ``deployment.yaml``)."""
 
@@ -1058,6 +1089,9 @@ class DeploymentConfig(BaseModel):
     #: Declares the target a resettable test copy (``induce --probe-on``
     #: only). None (and omitted when serialized) otherwise.
     test_copy: Optional[ProbeCopySection] = None
+    #: The pinned approver root (approval_mode/approver_roster.py). None (and
+    #: omitted when serialized) means the run names it some other way.
+    approvers: Optional[ApproversSection] = None
     #: Automatic repair of stops that wrote nothing. Omitted when serialized
     #: at its defaults (no agent).
     repair: RepairSection = Field(default_factory=RepairSection)
@@ -1090,6 +1124,8 @@ class DeploymentConfig(BaseModel):
             data.pop("worklist", None)
         if self.test_copy is None:
             data.pop("test_copy", None)
+        if self.approvers is None:
+            data.pop("approvers", None)
         if self.repair == RepairSection():
             data.pop("repair", None)
         return data
@@ -1239,6 +1275,59 @@ def incomplete_deployment_reasons(cfg: DeploymentConfig) -> list[str]:
     return reasons
 
 
+#: Config bytes read once and checked against the digest the caller passed
+#: (``--config-sha256``), keyed by the path as given (``os.path.abspath``, not
+#: resolved, so a symlink put there later can't redirect a lookup). Every later
+#: load of that path in this process parses these bytes, never the file.
+_PINNED_CONFIG_BYTES: dict[str, bytes] = {}
+
+
+def _config_key(source: str | Path) -> str:
+    import os
+
+    return os.path.abspath(str(source))
+
+
+def pin_deployment_bytes(source: str | Path, sha256: str) -> bytes:
+    """Read ``source`` once, check it against ``sha256``, and keep those bytes.
+
+    The file is opened without following a symlink and must be a regular
+    file. Returns the bytes. Raises ValueError when the digest doesn't match
+    or the path isn't a regular file.
+    """
+
+    import hashlib
+    import os
+    import stat
+
+    try:
+        fd = os.open(str(source), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as exc:
+        raise ValueError(
+            f"deployment config {source} can't be opened as a plain file: {exc}"
+        ) from exc
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError(f"deployment config {source} isn't a regular file")
+        chunks = []
+        while True:
+            chunk = os.read(fd, 1 << 16)
+            if not chunk:
+                break
+            chunks.append(chunk)
+    finally:
+        os.close(fd)
+    data = b"".join(chunks)
+    want = sha256.strip().lower().removeprefix("sha256:")
+    if hashlib.sha256(data).hexdigest() != want:
+        raise ValueError(
+            f"deployment config {source} doesn't match --config-sha256 (it changed "
+            "after it was written)"
+        )
+    _PINNED_CONFIG_BYTES[_config_key(source)] = data
+    return data
+
+
 def load_deployment(
     source: str | Path, *, allow_unresolved: bool = False
 ) -> DeploymentConfig:
@@ -1252,10 +1341,12 @@ def load_deployment(
     import yaml
 
     path = Path(source)
-    if not path.is_file():
+    pinned = _PINNED_CONFIG_BYTES.get(_config_key(path))
+    if pinned is None and not path.is_file():
         raise FileNotFoundError(f"deployment config {source!r} is not an existing file")
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        text = pinned.decode("utf-8") if pinned is not None else path.read_text()
+        data = yaml.safe_load(text) or {}
     except yaml.YAMLError as e:  # pragma: no cover - passthrough
         raise ValueError(f"could not parse deployment YAML {path}: {e}") from e
     if not isinstance(data, dict):
@@ -1887,6 +1978,8 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         "fresh_session",
         "desktop_readback",
         "deferred_report",
+        "records_next_path",
+        "records_total_path",
     ):
         if config.get(added) is None:
             config.pop(added, None)
@@ -2039,6 +2132,8 @@ def _build_effect_verifier_unredacted(
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
             drop_fields=tuple(cfg.records_drop_fields),
+            next_path=cfg.records_next_path,
+            total_path=cfg.records_total_path,
         )
 
     if kind == "fhir":

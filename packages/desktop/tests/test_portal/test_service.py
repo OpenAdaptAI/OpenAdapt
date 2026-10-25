@@ -567,6 +567,40 @@ def test_a_deployment_without_remote_decisions_never_asks_for_the_flag(
     assert "OPENADAPT_RUNNER_TOKEN" not in seen["env"]
 
 
+def test_the_console_signs_phone_answers_with_the_portal_approver_key(
+    monkeypatch, tmp_path
+) -> None:
+    from openadapt_desktop import approver_key
+
+    seen, popen = _capture_spawn(monkeypatch)
+    passphrase = "synthetic-portal-passphrase"
+    monkeypatch.setattr(
+        approver_key,
+        "portal_approver_environment",
+        lambda: {
+            "OPENADAPT_PORTAL_APPROVER_KEY": str(tmp_path / "portal-approver.pem"),
+            "OPENADAPT_JIT_KEY_PASSPHRASE": passphrase,
+        },
+    )
+    service = PortalService(configured(tmp_path / "data"), popen=popen)
+    service._start_console().stop()
+    assert seen["env"]["OPENADAPT_PORTAL_APPROVER_KEY"].endswith("portal-approver.pem")
+    assert seen["env"]["OPENADAPT_JIT_KEY_PASSPHRASE"] == passphrase
+    # The passphrase reaches the console only through its environment.
+    assert passphrase not in " ".join(seen["command"])
+
+
+def test_without_a_portal_approver_key_the_console_gets_none(monkeypatch, tmp_path) -> None:
+    from openadapt_desktop import approver_key
+
+    monkeypatch.setattr(approver_key, "KEY_DIR", tmp_path / "no-keys")
+    monkeypatch.delenv("OPENADAPT_PORTAL_APPROVER_KEY", raising=False)
+    seen, popen = _capture_spawn(monkeypatch)
+    service = PortalService(configured(tmp_path / "data"), popen=popen)
+    service._start_console().stop()
+    assert "OPENADAPT_PORTAL_APPROVER_KEY" not in seen["env"]
+
+
 def test_remote_decisions_refuses_when_this_computer_is_not_registered(
     monkeypatch, tmp_path
 ) -> None:

@@ -40,17 +40,19 @@ on:
     workflows: ["Release and PyPI Publish", "Release package", "Desktop release"]
     types: [completed]
   pull_request:
+    # Drafts run nothing (each job checks `draft`); marking one ready runs CI.
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'scripts/check_release_health.py'
       - '.github/release-health.json'
       - '.github/workflows/release-health.yml'
 
 concurrency:
-  # Keyed by ref so a pull request's self-test can never queue behind (or be
-  # cancelled by) a scheduled main run. The check is stateless and idempotent,
-  # so superseding an in-flight one costs nothing.
-  group: release-health-${{ github.ref }}
-  cancel-in-progress: true
+  # A pull request's newer push cancels its older run. Every other event (the
+  # merge queue, main, schedules, dispatches) gets a group of its own, so it
+  # is never cancelled or replaced.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -58,7 +60,7 @@ permissions:
 jobs:
   self-test:
     name: Prove the detectors fire and stay quiet
-    if: github.event_name == 'pull_request'
+    if: github.event.pull_request.draft != true && (github.event_name == 'pull_request')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

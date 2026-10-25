@@ -536,6 +536,8 @@ improvising or retrying when something is off.
 | Admit a record check only after a fault suite written to a store copy shows it catches every fault it claims, and sign its coverage into the receipt | On main | Synthetic (in-memory REST store, SQLite copy) | `openadapt_flow/fault_gate.py`, `scaffold-verifier --fault-gate`, `verify-run` `admission:` |
 | Check that the saved record matches its source document, not only the parameters: intake keeps each value's line, a second reading must agree before a guarded save, and a round trip compares the read-back with the document | On main | Synthetic (MockMed, text referral) | `openadapt_flow/provenance.py`, `intake`, `verify-run --provenance`, guarded save |
 | Guarded save: a safety layer any agent wraps around one write (check the record, hold for approval, read back) | On main ([#1258](https://github.com/OpenAdaptAI/OpenAdapt/pull/1258)) | Synthetic | `GUARDED_SAVE.md` |
+| A person's approval in Desktop is signed with a key kept behind Touch ID on a Mac: one-prompt setup in the app, a prompt for every answer, and Flow never sees the key | On main ([#1500](https://github.com/OpenAdaptAI/OpenAdapt/pull/1500)) | Unit tests; opt-in test on a real Secure Enclave | `packages/desktop/openadapt_desktop/approver_keychain.py`, [APPROVAL_MODES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/APPROVAL_MODES.md#the-approver-key) |
+| Review stops: every stop as one card with the evidence side by side (the item next to each possible match, field by field), answered with one key or tap on the computer or a paired phone, signed with the approver key, with batches for similar stops. The queue presents and collects; a changed or expired card changes nothing | On main ([#1519](https://github.com/OpenAdaptAI/OpenAdapt/pull/1519)) | Unit tests; a keystroke-level estimate on 20 soak stops (26.7 s to 8.2 s to decide, a model, not a person) | `packages/desktop/openadapt_desktop/stop_queue.py`, [benchmark/stop_queue](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/benchmark/stop_queue/README.md) |
 | Draft a record check from the demonstration's write steps (`scaffold-verifier`) | Released | Synthetic | `openadapt-flow scaffold-verifier` (a person fills in the draft) |
 | Build a working record check from the reads the app made while the person viewed the saved record, and test it against injected bad writes before anyone reviews it | On main ([#1284](https://github.com/OpenAdaptAI/OpenAdapt/pull/1284)) | Synthetic (MockMed, OpenEMR fixture) | `openadapt-flow scaffold-verifier` |
 | Check a save on desktop, RDP or Citrix by looking the record up in a separate read-only session | On main ([#1280](https://github.com/OpenAdaptAI/OpenAdapt/pull/1280)) | Synthetic (WinForms, RDP and Citrix stand-ins) | `runtime/effects/` |
@@ -609,6 +611,7 @@ improvising or retrying when something is off.
 | Say, for every feature under every run profile, whether it works or is refused and why, checked against the runtime in CI | On main ([#1364](https://github.com/OpenAdaptAI/OpenAdapt/pull/1364)) | Synthetic | [COMPATIBILITY.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/COMPATIBILITY.md) |
 | Run a worklist on several workers at once, one signed-in session each, each item claimed once, with a stop on any worker stopping all | On main ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic patients on a local OpenEMR test copy | `--workers`, [THROUGHPUT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/THROUGHPUT.md) |
 | Read a save back while the next item runs (pipelined read-back, REST, FHIR, GraphQL or SQL record checks) | On main ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic | `--readback-window`, [THROUGHPUT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/THROUGHPUT.md) |
+| Read a paged REST or FHIR record list whole (FHIR `next` links and `total`, REST `records_next_path`), or not at all: a page elsewhere, a failed page, a redirect or a count that doesn't match the total is unreadable | On main ([#1538](https://github.com/OpenAdaptAI/OpenAdapt/pull/1538)) | Synthetic (local FHIR and REST servers) | `effects: kind: rest` `records_next_path`, `kind: fhir`; [EFFECT_KIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EFFECT_KIT.md) |
 | A faster speed profile that keeps every check (one insert per plain text field, shorter page-quiet wait) | On main ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Synthetic | `runtime.speed: fast`, [THROUGHPUT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/THROUGHPUT.md) |
 | Record where each step's time goes in every run report | On main ([#1296](https://github.com/OpenAdaptAI/OpenAdapt/pull/1296)) | Real app and synthetic | `timings` in `report.json` |
 
@@ -1341,6 +1344,38 @@ For an armed step:
   different pixels too. The OCR parameter check decides instead: it puts the
   run's value into the recorded band and requires the whole band to match. A
   band that rests on a glyph-confusable identifier keeps the pixel comparison.
+
+A verified identity says the row reads like the recorded row, not that no
+other row reads the same. Before an armed step acts, the runtime counts the
+rows that show the same identity (`openadapt_flow/runtime/identity_census.py`). When more
+than one does, it acts only on the row with the record id recorded at teach
+time, or halts. How each surface counts:
+
+- browser: every shown row in the page, with app-owned `data-*` ids and row
+  links as record ids;
+- Windows (UI Automation agent): the sibling rows of the clicked row, with
+  non-positional AutomationIds as record ids. A grid that reports more rows
+  than it exposes, or a scrollable list that builds items on demand, cannot be
+  counted, and a row pick before a write halts;
+- macOS (AX): the rows of the `AXTable`, `AXOutline` or `AXList` around the
+  element, with the AX identifier and URL as record ids. A table that reports
+  more `AXRows` than it exposes, or a list with no row count inside a scroll
+  area with a scroll bar, cannot be counted;
+- Linux (AT-SPI): the sibling list items, table rows or tree items of the
+  clicked row, with AT-SPI accessible ids as record ids. A list with no Table
+  row count inside a scroll pane with a scroll bar cannot be counted. GTK 3
+  list boxes and
+  tree views expose no row identity under the structured reading (one child
+  per row, or cells without a row), so the identity check there rests on OCR;
+- pixel-only displays: the OCR rows of the frame, or, with no OCR band, every
+  place the identifier crop matches. Only a clear pixel mismatch rules a place
+  out; a frame at another scale than the recording cannot be counted.
+
+Ids that name a position (`row-3`, `r3c2`, `item_12`, the row's own index)
+never tell rows apart.
+
+A surface that cannot count the rows halts any row pick that leads into a
+write.
 
 On a pixel-only display, the OCR tier also stops the correct record whenever
 its own identifier contains a look-alike glyph (`O`/`0`, `l`/`1`, `B`/`8`).
