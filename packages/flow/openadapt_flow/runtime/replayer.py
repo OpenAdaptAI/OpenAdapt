@@ -2713,7 +2713,10 @@ class Replayer:
         the API step may run. None when no API step starts here.
         """
 
-        from openadapt_flow.runtime.actuators.web_form import folded_checks_digest
+        from openadapt_flow.runtime.actuators.web_form import (
+            folded_checks_digest,
+            web_form_effects,
+        )
 
         first = workflow.steps[step_index].id
         for end_index in range(step_index, len(workflow.steps)):
@@ -2760,7 +2763,7 @@ class Replayer:
                     "step names no right-record contract (openadapt-flow api "
                     "admit --identity)"
                 )
-            elif list(binding.effects) != list(save.effects):
+            elif list(binding.effects) != web_form_effects(workflow.steps, save):
                 reason = (
                     "the save step's record check differs from the one admitted "
                     "with the API step (openadapt-flow api admit)"

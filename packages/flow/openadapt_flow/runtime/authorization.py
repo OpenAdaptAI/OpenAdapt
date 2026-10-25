@@ -363,6 +363,8 @@ def admitted_api_steps(workflow: Any) -> tuple[AdmittedApiStep, ...]:
     step's own, is listed.
     """
 
+    from openadapt_flow.runtime.actuators.web_form import web_form_effects
+
     rows: list[AdmittedApiStep] = []
     for step in workflow.steps:
         binding = step.api_binding
@@ -372,7 +374,7 @@ def admitted_api_steps(workflow: Any) -> tuple[AdmittedApiStep, ...]:
             or binding.web_form is None
             or not binding.admitted()
             or not binding.effects
-            or list(binding.effects) != list(step.effects)
+            or list(binding.effects) != web_form_effects(workflow.steps, step)
         ):
             continue
         rows.append(
