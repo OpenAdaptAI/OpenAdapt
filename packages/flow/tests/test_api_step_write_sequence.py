@@ -269,3 +269,25 @@ def test_a_step_write_the_api_step_cant_repeat_refuses_the_proposal(
 ):
     _wf, step, reasons = propose_api_step(_workflow(), _rec(tmp_path, write))
     assert step is None and why in " ".join(reasons)
+
+
+def test_api_admit_shows_the_requests_left_to_the_page_before_the_person_types(
+    tmp_path, capsys
+):
+    import argparse
+
+    from openadapt_flow.cli_api import cmd_api_admit
+    from openadapt_flow.ir import Workflow
+
+    wf, _step, _ = propose_api_step(_workflow(), _rec(tmp_path, SHELL, BACKGROUND))
+    bundle = tmp_path / "bundle"
+    wf.save(bundle)
+    prompts: list[str] = []
+    args = argparse.Namespace(bundle=str(bundle), step=None, by="reviewer", identity=[])
+    code = cmd_api_admit(
+        args, ask=lambda p: prompts.append(p) or "admit", interactive=lambda: True
+    )
+    out = capsys.readouterr().out
+    assert code == 0 and Workflow.load(bundle).steps[-1].api_binding.admitted()
+    assert "will NOT send these requests" in out and "POST /library/ajax/bg.php" in out
+    assert "leave the 1 request(s) above to the page" in prompts[0]
