@@ -2,8 +2,8 @@
 
 Real desktops have several windows of one app: two browser windows, two EMR
 charts. When more than one window matches the target, binding the largest
-one records whichever chart happens to be bigger. Every resolver refuses that
-(#1468); this pins the rule on X11.
+one records whichever chart happens to be bigger. Every resolver raises
+``WindowCaptureAmbiguousError`` here (#1468); these tests pin the rule on X11.
 """
 
 from __future__ import annotations
