@@ -637,6 +637,13 @@ class WebFormSpec(BaseModel):
     #: it can't run the script, the GUI steps run. The live form must list the
     #: same script, or the API step doesn't run.
     client_scripts: list[str] = Field(default_factory=list)
+    #: The control in the form the person clicked to start the save (a CSS
+    #: selector from the recording), and the requests that click made
+    #: (``METHOD /path``). Running the page's script clicks it, as the person
+    #: did, and the page must then submit the form or make one of those
+    #: requests.
+    submitter: Optional[str] = None
+    submitter_requests: list[str] = Field(default_factory=list)
     prechecks: list[WebFormPrecheck] = Field(default_factory=list)
     #: Regular expression the save response must match to count as accepted.
     success_pattern: Optional[str] = None

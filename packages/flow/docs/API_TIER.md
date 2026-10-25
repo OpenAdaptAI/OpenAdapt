@@ -127,30 +127,41 @@ Before it sends the save, the API step:
 1. reads the form page again in this session;
 2. refuses if the form's fields or its client-side validation rules (for
    example, OpenEMR's `constraints` object) differ from the recording;
-3. refuses if the form's script isn't the script recorded with the
-   proposal (`client_scripts`: an `on*` handler on the form, such as
-   `onsubmit`, or on a field it sends, such as `onchange`; a page script
-   listening for the submit; a validate.js rule kind other than `presence`,
-   `length`, `format`, `numericality` and `email`, such as OpenEMR's
-   `pastDate`);
+3. refuses if the page's script isn't the script recorded with the
+   proposal (`client_scripts`): every script the page loads, by URL;
+   whether it has inline script; each `on*` handler of the form, of a field
+   it sends and of the form's buttons, with a digest of its source; a page
+   script listening for submit; and validate.js rule kinds other than
+   `presence`, `length`, `format`, `numericality` and `email`, such as
+   OpenEMR's `pastDate`;
 4. builds the body and checks it the way the browser would before it
    submits: native HTML constraints (`required`, `minlength`, `maxlength`,
    `pattern`, `min`, `max`, and the `email`, `url`, `number` and `date`
    input types) and the page's validate.js rules;
-5. when the form has script, **runs it** (`runtime/actuators/form_eval.py`):
-   it opens the form page in a scratch copy of the live session (a separate
-   browser context with the session's cookies), blocks every request that
-   isn't a GET and every script-sent request once the page has loaded, puts
-   the run's typed and picked values into the form with the same `input`,
-   `change` and `blur` events a browser fires, reads the body the browser
-   would send, runs the browser's own constraint checks, submits the form
-   through its own handlers with a final listener that records whether
-   they let the submit through and then stops it, and runs the page's
-   validate.js `constraints` when it declares them. The save goes ahead only
-   when the page let the submit through, raised no error, showed no dialog,
-   tried to send nothing, and would send exactly the body the API step
-   built (session values aside). Anything else is a reason, and the GUI
-   steps run;
+5. when the page has any script, **runs it** (`runtime/actuators/form_eval.py`):
+   - it opens the form page in a scratch copy of the live session: a
+     separate browser context with the session's cookies and no service
+     workers. While the page loads, only same-origin GET requests go
+     through; once it has loaded, every request is blocked, so nothing the
+     page does there can write or reach the session;
+   - it puts the run's typed and picked values into the form with the same
+     `input`, `change` and `blur` events a browser fires;
+   - it starts the submit as the person did: it clicks the control the
+     person clicked (`submitter`, from the recording). When the recording
+     names none it submits the form, and a form whose buttons have click
+     handlers is refused;
+   - the page must then submit the form, or make a request the person's
+     click made in the recording (`submitter_requests`; on OpenEMR, the
+     duplicate search). The body compared is the one the page submits,
+     taken at the moment it submits (a last `submit` listener, the form's
+     own `submit()`, or the browser's POST, which the route blocks); when
+     the page goes on to a recorded request instead, it is the form as the
+     page left it. Declared validate.js `constraints` run too;
+   - the save goes ahead only when the page submitted or went on as
+     recorded, raised no error, showed no dialog, tried to send nothing
+     else, and the body equals the one the API step built (session values
+     aside). Any difference, and anything else, is a reason, and the GUI
+     steps run;
 6. runs the pre-checks.
 
 Each of these refusals means the save wasn't sent, so the GUI steps run.
@@ -378,13 +389,14 @@ recording.
   form's own script for the rest. A `pattern` is evaluated with Python's
   regular expressions, which differ from the browser's in rare syntax; one
   that doesn't compile keeps the save on the GUI.
-- Running the form's script covers what the script does on `input`,
-  `change`, `blur` and `submit`. Script that validates on a click handler
-  of the submit button only, or asynchronously after the submit event,
-  isn't seen; qualification on test cases, both paths, is what shows the
-  two paths agree. A form whose script needs the server while it validates
-  (a script-sent request after load) is blocked and stays on the GUI. Each
-  save with script costs one extra load of the form page.
+- Running the form's script covers what it does on `input`, `change`,
+  `blur`, the recorded click and `submit`, within a short settle time.
+  Script that validates later (after a timer or a server reply) isn't seen:
+  a form whose script needs the server while it validates is blocked and
+  stays on the GUI. Running it is evidence for one run's values, not a
+  proof that the two paths always agree; admitting the API step stays a
+  person's decision. Each save with script costs one extra load of the
+  form page.
 - Multi-step server state (wizards, uploads, locks held between pages) needs
   the whole request sequence, and isn't proposed.
 

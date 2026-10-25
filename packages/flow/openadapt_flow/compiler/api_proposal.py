@@ -246,6 +246,56 @@ def _success_pattern(line: dict[str, Any]) -> Optional[str]:
     return r".*?".join(pieces)
 
 
+def _in_page(selector: str, html: str) -> bool:
+    """Whether a recorded ``#id`` or ``[name="..."]`` selector names an element of ``html``."""
+
+    m = re.fullmatch(r"#([A-Za-z][\w:.-]*)", selector)
+    if m:
+        return (
+            re.search(r"""\bid\s*=\s*["']%s["']""" % re.escape(m.group(1)), html)
+            is not None
+        )
+    m = re.fullmatch(r"""\[name=["']?([^"'\]]+)["']?\]""", selector)
+    if m:
+        return (
+            re.search(r"""\bname\s*=\s*["']%s["']""" % re.escape(m.group(1)), html)
+            is not None
+        )
+    return False
+
+
+def _submitter(
+    folded: list[Step],
+    events: list[dict[str, Any]],
+    lines: list[dict[str, Any]],
+    form_html: str,
+) -> tuple[Optional[str], list[str]]:
+    """The last folded click on a control of the form page, and what it requested."""
+
+    for step in reversed(folded):
+        if step.action not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
+            continue
+        i = _event_index(step)
+        selector = None
+        if step.anchor is not None and step.anchor.structural is not None:
+            selector = step.anchor.structural.selector
+        elif i is not None and i < len(events):
+            selector = (events[i].get("structural") or {}).get("selector")
+        if not selector or not _in_page(selector, form_html) or i is None:
+            continue
+        lo = float(events[i]["t"]) if i < len(events) else float("-inf")
+        hi = float(events[i + 1]["t"]) if i + 1 < len(events) else float("inf")
+        made = sorted(
+            {
+                f"{ln['method']} {_path(ln['url'])}"
+                for ln in lines
+                if lo <= float(ln["t"]) < hi
+            }
+        )
+        return selector, made
+    return None, []
+
+
 def propose_api_step(
     workflow: Workflow, recording_dir: Path | str, *, replace: bool = False
 ) -> tuple[Workflow, Optional[Step], list[str]]:
@@ -595,12 +645,17 @@ def propose_api_step(
                 f"{', '.join(others)}; one request can't stand in for them"
             ],
         )
+    submitter, submitter_requests = _submitter(
+        folded, events, lines, form_line["response_text"]
+    )
     spec = WebFormSpec(
         form_path=form_path,
         fields=fields,
         controls=sorted(controls),
         client_rules=client_rules(form_line["response_text"]),
         client_scripts=client_scripts,
+        submitter=submitter,
+        submitter_requests=submitter_requests,
         prechecks=prechecks,
         success_pattern=_success_pattern(post),
         replaces_steps=[s.id for s in folded],

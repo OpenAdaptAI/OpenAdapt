@@ -151,7 +151,11 @@ def test_script_on_the_form_is_recorded_and_must_be_run_before_the_save(
     run = {"lname": "Marsh", "state_label": "California", "note": "Referred"}
     live = edit(FORM_HTML.replace("<session:csrf_token_form>", "live-session-value"))
     # A session that can't run the page's script keeps the save on the GUI.
-    out = WebFormActuator(FakeTransport(form=live)).actuate(binding, run)
+
+    class NoScriptTransport(FakeTransport):
+        evaluate_form = None
+
+    out = WebFormActuator(NoScriptTransport(form=live)).actuate(binding, run)
     assert out.status is ActuationStatus.UNAVAILABLE
     assert "can't run it" in out.reason or "rules changed" in out.reason
     # So does a live form whose script is not the recorded script.

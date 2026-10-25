@@ -77,6 +77,8 @@ class _FormParser(HTMLParser):
                 "action": a.get("action", ""),
                 "controls": {},
                 "handlers": sorted(k for k in a if k.startswith("on")),
+                "handler_src": {k: v for k, v in a.items() if k.startswith("on")},
+                "buttons": [],
                 "novalidate": "novalidate" in a,
             }
             self.forms.append(self._form)
@@ -84,8 +86,21 @@ class _FormParser(HTMLParser):
         if self._form is None:
             return
         name = a.get("name")
+        kind = a.get("type", "text" if tag == "input" else "submit").lower()
+        if tag == "button" or (
+            tag == "input" and kind in ("submit", "button", "image")
+        ):
+            # A control that can start the submit: its click handlers run
+            # before the form's own.
+            self._form["buttons"].append(
+                {
+                    "id": a.get("id"),
+                    "name": name,
+                    "type": kind,
+                    "handler_src": {k: v for k, v in a.items() if k.startswith("on")},
+                }
+            )
         if tag == "input" and name:
-            kind = a.get("type", "text").lower()
             if kind in ("submit", "button", "image", "reset", "file"):
                 return
             if kind in ("checkbox", "radio") and "checked" not in a:
@@ -162,6 +177,7 @@ def _native_rules(a: dict[str, str]) -> dict[str, Any]:
         "maxlength": a.get("maxlength"),
         "disabled": "disabled" in a,
         "handlers": sorted(k for k in a if k.startswith("on")),
+        "handler_src": {k: v for k, v in a.items() if k.startswith("on")},
     }
 
 
@@ -225,17 +241,51 @@ def unsupported_client_rules(rules: Optional[dict[str, Any]]) -> list[str]:
     return sorted(out)
 
 
+_SCRIPT_SRC = re.compile(r"""<script\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']""", re.I)
+_INLINE_SCRIPT = re.compile(r"<script\b(?![^>]*\bsrc\s*=)[^>]*>\s*\S", re.I)
+
+
+def _src_digest(source: str) -> str:
+    return hashlib.sha256(source.encode("utf-8")).hexdigest()[:12]
+
+
 def page_scripts(
     html: str, action_path: str, sent: Iterable[str], rules: Optional[dict[str, Any]]
 ) -> list[str]:
-    """Everything the browser runs on this save that reading the form can't evaluate.
+    """Every script the browser may run on this save, fingerprinted, sorted.
 
-    :func:`form_scripts` plus the validate.js rule kinds outside
-    :data:`CLIENT_RULE_KINDS`, sorted. The API step runs these itself before
-    each save (:mod:`openadapt_flow.runtime.actuators.form_eval`).
+    The form's own ``on*`` handlers, the ``on*`` handlers of the fields the
+    save sends and of the form's buttons (each with a digest of its source),
+    a page script listening for submit, every script the page loads (by
+    URL), whether it has inline script, and the validate.js rule kinds
+    outside :data:`CLIENT_RULE_KINDS`. Any entry means the API step runs the
+    page's script before each save
+    (:mod:`openadapt_flow.runtime.actuators.form_eval`), and a live page whose
+    list differs doesn't run the API step.
     """
 
-    found = form_scripts(html, action_path, sent)
+    found: list[str] = []
+    form = _form(html, action_path)
+    if form is not None:
+        found += [f"form {h} {_src_digest(v)}" for h, v in form["handler_src"].items()]
+        sent_names = set(sent)
+        for name, control in form["controls"].items():
+            if name in sent_names:
+                found += [
+                    f"{name} {h} {_src_digest(v)}"
+                    for h, v in (control.get("handler_src") or {}).items()
+                ]
+        for button in form["buttons"]:
+            label = button["id"] or button["name"] or button["type"]
+            found += [
+                f"button {label} {h} {_src_digest(v)}"
+                for h, v in button["handler_src"].items()
+            ]
+    if _SUBMIT_LISTENER.search(html):
+        found.append("a page script listening for submit")
+    found += [f"script {src}" for src in _SCRIPT_SRC.findall(html)]
+    if _INLINE_SCRIPT.search(html):
+        found.append("inline script")
     found += [f"{rule} (validate.js)" for rule in unsupported_client_rules(rules)]
     return sorted(set(found))
 
@@ -449,7 +499,13 @@ class PlaywrightSessionTransport:
         self._timeout_ms = timeout_s * 1000.0
 
     def evaluate_form(
-        self, form_path: str, action_path: str, fields: list[tuple[str, str]]
+        self,
+        form_path: str,
+        action_path: str,
+        fields: list[tuple[str, str]],
+        *,
+        submitter: Optional[str] = None,
+        submitter_requests: tuple[str, ...] = (),
     ) -> Any:
         from openadapt_flow.runtime.actuators.form_eval import evaluate_form
 
@@ -459,6 +515,8 @@ class PlaywrightSessionTransport:
             form_path,
             action_path,
             fields,
+            submitter=submitter,
+            submitter_requests=submitter_requests,
             timeout_s=self._timeout_ms / 1000.0,
         )
 
@@ -748,9 +806,11 @@ class WebFormActuator:
         """Run the form's own script on the run's values; why not to send, or None.
 
         The fields the person typed or picked go into a scratch copy of the
-        form (form_eval). The save is sent only when the page's script lets
-        the submit through and the browser would send exactly ``body``, apart
-        from the session values the scratch page was issued for itself.
+        form, and the recorded control is clicked (form_eval). The save is
+        sent only when the page submits, or goes on to a request the click
+        made in the recording, and the body it submits is exactly ``body``
+        apart from the session values the scratch page was issued for
+        itself. Any difference keeps the save on the GUI.
         """
 
         evaluate = getattr(self.transport, "evaluate_form", None)
@@ -758,12 +818,17 @@ class WebFormActuator:
             return "the form runs script and this session can't run it"
         typed = {f.name for f in spec.fields if f.source in ("param", "select_label")}
         result = evaluate(
-            form_path, action_path, [(k, v) for k, v in body if k in typed]
+            form_path,
+            action_path,
+            [(k, v) for k, v in body if k in typed],
+            submitter=spec.submitter,
+            submitter_requests=tuple(spec.submitter_requests),
         )
         self.log.append(
             {
                 "stage": "page_script",
                 "status": result.status,
+                "via": result.via,
                 "seconds": result.seconds,
                 "blocked": result.blocked,
             }

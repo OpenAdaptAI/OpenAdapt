@@ -21,6 +21,7 @@ from openadapt_flow.runtime.actuators.form_eval import FormEvaluation
 from openadapt_flow.runtime.actuators.web_form import (
     PlaywrightSessionTransport,
     WebFormActuator,
+    page_scripts,
 )
 
 playwright = pytest.importorskip("playwright.sync_api")
@@ -111,9 +112,9 @@ def app_page(browser):
 GOOD = [("lname", "Marsh"), ("dob", "1979-06-14"), ("state", "CA")]
 
 
-def _evaluate(app: _App, page: Any, fields=GOOD) -> FormEvaluation:
+def _evaluate(app: _App, page: Any, fields=GOOD, **kw: Any) -> FormEvaluation:
     return PlaywrightSessionTransport(page).evaluate_form(
-        "/new.php", "/save.php", fields
+        "/new.php", "/save.php", fields, **kw
     )
 
 
@@ -189,8 +190,8 @@ def test_a_programmatic_submit_after_validation_counts_and_never_navigates(app_p
                 "form_attrs": "",
                 "script": "document.forms[0].addEventListener('submit', e => e.stopPropagation())",
             },
-            "unevaluable",
-            "tried to send POST /save.php",
+            "valid",
+            "",
         ),
         ({"form_attrs": "", "lname_attrs": "required"}, "valid", ""),
         (
@@ -269,8 +270,9 @@ class _Transport:
 
         return _Resp(302, "", {"location": "/view.php?id=7"})
 
-    def evaluate_form(self, form_path, action_path, fields):
+    def evaluate_form(self, form_path, action_path, fields, **kw):
         self.calls.append(fields)
+        self.kw = kw
         return self.evaluation
 
 
@@ -286,7 +288,13 @@ def _binding():
             WebFormField(name="state", source="select_label", param="state_label"),
         ],
         controls=["csrf", "dob", "lname", "state"],
-        client_scripts=["dob onchange", "form onsubmit"],
+        client_scripts=page_scripts(
+            FORM.format(form_attrs=VALIDATE, lname_attrs="", script="", n="1"),
+            "/save.php",
+            ["csrf", "lname", "dob", "state"],
+            None,
+        ),
+        submitter="button[type=submit]",
         replaces_steps=["s0"],
         folded_checks_digest="sha256:" + "0" * 64,
     )
@@ -319,6 +327,7 @@ def test_the_actuator_sends_only_what_the_page_would_send():
     assert out.status.value == "actuated", out.reason
     # Only the typed and picked fields are put into the scratch form.
     assert t.calls == [[("lname", "Marsh"), ("dob", "1979-06-14"), ("state", "CA")]]
+    assert t.kw["submitter"] == "button[type=submit]"
     assert len(t.posts) == 1 and "csrf=tok-1" in t.posts[0]
 
 
@@ -365,3 +374,87 @@ def test_the_actuator_leaves_the_save_to_the_gui_when_the_page_disagrees(
     out = WebFormActuator(t).actuate(_binding(), RUN)
     assert out.status.value == "unavailable" and reason in out.reason
     assert t.posts == []
+
+
+# -- review cases: submit-time body, click handlers, blocking ---------------------
+
+
+def test_an_onsubmit_rewrite_is_in_the_body_compared(app_page):
+    app, page = app_page
+    app.form(
+        form_attrs='onsubmit="this.lname.value = this.lname.value.toUpperCase(); return true"'
+    )
+    result = _evaluate(app, page)
+    assert result.status == "valid" and result.via == "submit"
+    assert ("lname", "MARSH") in result.serialized
+
+
+def test_a_click_handler_on_a_button_needs_the_recorded_control(app_page):
+    app, page = app_page
+    app.form(
+        form_attrs="",
+        script="document.querySelector('button').addEventListener('click', "
+        "e => { if (!pastDate(document.forms[0].dob.value)) e.preventDefault(); })",
+    )
+    # No recorded control: refused, the GUI runs.
+    assert _evaluate(app, page).status == "unevaluable"
+    # The recorded control is clicked, as the person did.
+    assert _evaluate(app, page, submitter="button").status == "valid"
+    bad = [("lname", "Marsh"), ("dob", "2999-01-01"), ("state", "CA")]
+    assert _evaluate(app, page, bad, submitter="button").status == "invalid"
+    assert app.writes == []
+
+
+def test_a_click_that_goes_on_to_the_recorded_request_counts(app_page):
+    app, page = app_page
+    app.pages["/dup.php"] = "<html>No matches</html>"
+    app.form(
+        form_attrs="",
+        lname_attrs="",
+        script="function check() { if (pastDate(document.forms[0].dob.value)) {"
+        " const f = document.createElement('iframe'); f.src = '/dup.php?lname=x';"
+        " document.body.appendChild(f); } }",
+    )
+    page_html = app.pages["/new.php"].replace(
+        '<button type="submit">Save</button>',
+        '<button type="button" id="create" onclick="check()">Save</button>',
+    )
+    app.pages["/new.php"] = page_html
+    loads = app.loads
+    ok = _evaluate(app, page, submitter="#create", submitter_requests=("GET /dup.php",))
+    assert ok.status == "valid" and ok.via == "GET /dup.php"
+    # The duplicate search was blocked: only the form page itself loaded.
+    assert app.loads == loads + 1
+    bad = [("lname", "Marsh"), ("dob", "2999-01-01"), ("state", "CA")]
+    refused = _evaluate(
+        app, page, bad, submitter="#create", submitter_requests=("GET /dup.php",)
+    )
+    assert refused.status == "invalid" and "neither submitted" in refused.reason
+    # A request the recording didn't make is refused.
+    other = _evaluate(
+        app, page, submitter="#create", submitter_requests=("GET /else.php",)
+    )
+    assert other.status == "unevaluable" and "GET /dup.php" in other.reason
+
+
+def test_no_request_leaves_after_the_page_has_loaded(app_page):
+    app, page = app_page
+    app.pages["/lookup.php"] = "ok"
+    app.form(
+        script="document.forms[0].dob.addEventListener('change', () => { new Image().src = '/lookup.php?q=1'; });"
+    )
+    loads = app.loads
+    result = _evaluate(app, page)
+    assert result.status == "unevaluable" and "GET /lookup.php" in result.reason
+    assert app.loads == loads + 1  # the form page only
+
+
+def test_the_script_fingerprint_covers_handler_source_and_script_urls():
+    html = FORM.format(form_attrs=VALIDATE, lname_attrs="", script="", n="1").replace(
+        "<script>", '<script src="/js/app.js?v=3"></script><script>'
+    )
+    found = page_scripts(html, "/save.php", ["dob"], None)
+    assert "script /js/app.js?v=3" in found and "inline script" in found
+    assert any(f.startswith("form onsubmit ") for f in found)
+    edited = html.replace("return pastDate", "return true || pastDate")
+    assert page_scripts(edited, "/save.php", ["dob"], None) != found
