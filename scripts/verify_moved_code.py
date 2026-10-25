@@ -52,6 +52,8 @@ class Unit:
     # A statement that documents or declares but does nothing at run time:
     # a docstring, or an annotation with no value (a protocol attribute).
     is_declaration: bool = False
+    # Module-level names a function reads (it looks them up in its module).
+    reads: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -120,8 +122,20 @@ def units(source: str, file: str) -> tuple[list[Unit], dict[str, list[str]]]:
             if _is_import(node):
                 continue
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                reads = frozenset(
+                    sub.id
+                    for sub in ast.walk(node)
+                    if isinstance(sub, ast.Name) and isinstance(sub.ctx, ast.Load)
+                )
                 out.append(
-                    Unit(file, prefix + node.name, node.lineno, _dump(node), True)
+                    Unit(
+                        file,
+                        prefix + node.name,
+                        node.lineno,
+                        _dump(node),
+                        True,
+                        reads=reads,
+                    )
                 )
             elif isinstance(node, ast.ClassDef):
                 name = prefix + node.name
@@ -208,7 +222,8 @@ def verify(root: Path, base: str, search: list[str]) -> Result:
                 head_by_dump.setdefault(unit.dump, []).append(unit)
 
     base_units: Counter[str] = Counter()
-    moved_globals: dict[str, set[str]] = {}
+    # (old module, name) -> modules whose moved code now reads that name.
+    moved_reads: dict[tuple[str, str], set[str]] = {}
     for path in changed:
         old = base_source(root, base, path)
         if old is None:
@@ -220,16 +235,25 @@ def verify(root: Path, base: str, search: list[str]) -> Result:
         if new_file.is_file():
             new_units, new_bases = units(new_file.read_text(encoding="utf-8"), path)
         new_here = {u.dump for u in new_units}
+        old_module = _module_name(path)
+        module_level = _module_level_names(old)
         for unit in old_units:
             if unit.dump not in head_units:
                 result.missing.append(unit)
             elif unit.dump not in new_here:
                 base_units[unit.dump] += 1  # left this file; may land elsewhere
                 result.moved += 1
-                if unit.is_function and "." not in unit.qualname:
-                    module = _module_name(path)
-                    if module:
-                        moved_globals.setdefault(module, set()).add(unit.qualname)
+                landed = [
+                    m
+                    for u in head_by_dump.get(unit.dump, [])
+                    if u.file != path and (m := _module_name(u.file))
+                ]
+                if old_module and landed:
+                    names = set(unit.reads & module_level)
+                    if unit.is_function and "." not in unit.qualname:
+                        names.add(unit.qualname)
+                    for name in names:
+                        moved_reads.setdefault((old_module, name), set()).update(landed)
         for cls, old_cls_bases in old_bases.items():
             if cls in new_bases and new_bases[cls] != old_cls_bases:
                 result.changed_bases.append(
@@ -274,12 +298,53 @@ def verify(root: Path, base: str, search: list[str]) -> Result:
             else:
                 result.new_bodies.append(unit)
 
-    result.stale_patches = stale_patches(root, moved_globals)
+    result.stale_patches = stale_patches(root, moved_reads)
     return result
 
 
-def stale_patches(root: Path, moved: dict[str, set[str]]) -> list[str]:
-    """Test strings that patch a moved global through its old module path."""
+def _module_level_names(source: str) -> set[str]:
+    """Names bound at module level: imports, functions, classes, constants."""
+    names: set[str] = set()
+    for node in ast.parse(source).body:
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            names |= {(a.asname or a.name).split(".")[0] for a in node.names}
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            names |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+    return names
+
+
+def _patches(text: str, module: str, name: str) -> list[int]:
+    """Lines that patch ``module.name``, by dotted string or module alias."""
+    lines = []
+    pattern = rf"[\"']{re.escape(module)}\.{re.escape(name)}[\"']"
+    for match in re.finditer(pattern, text):
+        lines.append(text.count("\n", 0, match.start()) + 1)
+    parent, _, leaf = module.rpartition(".")
+    aliases = set(re.findall(rf"import {re.escape(module)} as (\w+)", text))
+    aliases |= set(
+        re.findall(rf"from {re.escape(parent)} import {leaf} as (\w+)", text)
+    )
+    if re.search(rf"from {re.escape(parent)} import {leaf}\b(?! as)", text):
+        aliases.add(leaf)
+    for alias in aliases:
+        for match in re.finditer(
+            rf"setattr\(\s*{re.escape(alias)}\s*,\s*[\"']{re.escape(name)}[\"']", text
+        ):
+            lines.append(text.count("\n", 0, match.start()) + 1)
+    return lines
+
+
+def stale_patches(root: Path, moved: dict[tuple[str, str], set[str]]) -> list[str]:
+    """Tests that patch a name through its old module only.
+
+    Moved code reads module-level names from its new module, so a test that
+    patches ``old.name`` no longer affects it. A test is flagged unless it
+    also patches the name in every module the moved code now reads it from.
+    """
     if not moved:
         return []
     hits = []
@@ -287,13 +352,17 @@ def stale_patches(root: Path, moved: dict[str, set[str]]) -> list[str]:
         if ".venv" in path.parts:
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
-        for module, names in moved.items():
-            for name in names:
-                pattern = rf"[\"']{re.escape(module)}\.{re.escape(name)}[\"']"
-                for match in re.finditer(pattern, text):
-                    line = text.count("\n", 0, match.start()) + 1
-                    rel = path.relative_to(root).as_posix()
-                    hits.append(f"{rel}:{line}: patches {module}.{name}")
+        rel = path.relative_to(root).as_posix()
+        for (old, name), new_modules in sorted(moved.items()):
+            old_lines = _patches(text, old, name)
+            if not old_lines:
+                continue
+            unpatched = sorted(m for m in new_modules if not _patches(text, m, name))
+            if unpatched:
+                hits.append(
+                    f"{rel}:{old_lines[0]}: patches {old}.{name}; moved code reads "
+                    f"it from {', '.join(unpatched)}"
+                )
     return hits
 
 

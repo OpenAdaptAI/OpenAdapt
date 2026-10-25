@@ -175,6 +175,43 @@ def test_a_patch_through_the_old_module_is_flagged(repo: Path) -> None:
     result = _verify(repo)
 
     assert result.stale_patches == [
-        "packages/demo/tests/test_demo.py:2: patches openadapt_demo.replayer.helper"
+        "packages/demo/tests/test_demo.py:2: patches openadapt_demo.replayer.helper; "
+        "moved code reads it from openadapt_demo.replay.identity"
     ]
     assert verify_moved_code.main(["--root", str(repo), "--base", "HEAD"]) == 1
+
+
+def test_a_patched_import_the_moved_code_reads_is_flagged_until_retargeted(
+    tmp_path: Path,
+) -> None:
+    """The case the first real move hit: moved code reads an imported name."""
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "config", "user.email", "t@example.com")
+    _git(tmp_path, "config", "user.name", "t")
+    base = BASE.replace("return len(self.backend) > 0", "return len(os.sep) > 0")
+    _write(tmp_path, f"{PKG}/replayer.py", base)
+    _write(tmp_path, f"{PKG}/__init__.py", "")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "base")
+    _write(tmp_path, f"{PKG}/replayer.py", MOVED_REPLAYER)
+    _write(tmp_path, f"{PKG}/replay/__init__.py", "")
+    mixin = MIXIN.replace("LIMIT = 3", "import os\n\nLIMIT = 3", 1).replace(
+        "return len(self.backend) > 0", "return len(os.sep) > 0"
+    )
+    _write(tmp_path, f"{PKG}/replay/identity.py", mixin)
+    test = (
+        "def test_x(monkeypatch):\n"
+        '    monkeypatch.setattr("openadapt_demo.replayer.os", None)\n'
+    )
+    _write(tmp_path, "packages/demo/tests/test_demo.py", test)
+
+    assert _verify(tmp_path).stale_patches == [
+        "packages/demo/tests/test_demo.py:2: patches openadapt_demo.replayer.os; "
+        "moved code reads it from openadapt_demo.replay.identity"
+    ]
+
+    retargeted = test + (
+        '    monkeypatch.setattr("openadapt_demo.replay.identity.os", None)\n'
+    )
+    _write(tmp_path, "packages/demo/tests/test_demo.py", retargeted)
+    assert _verify(tmp_path).stale_patches == []
