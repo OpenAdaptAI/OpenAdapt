@@ -76,6 +76,9 @@ class TrayConfig:
     default_record_audio: bool = True
     default_transcribe: bool = True
     stop_on_triple_ctrl: bool = True
+    # Show recordings that `openadapt-flow record` or `capture record` start
+    # without OpenAdapt Desktop (needs openadapt-capture in the tray's env).
+    watch_local_recorders: bool = True
 
     # Appearance
     use_native_dialogs: bool = True
@@ -209,6 +212,7 @@ class TrayConfig:
             "default_record_audio": self.default_record_audio,
             "default_transcribe": self.default_transcribe,
             "stop_on_triple_ctrl": self.stop_on_triple_ctrl,
+            "watch_local_recorders": self.watch_local_recorders,
             "use_native_dialogs": self.use_native_dialogs,
         }
 

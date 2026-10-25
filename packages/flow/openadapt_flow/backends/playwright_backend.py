@@ -700,6 +700,138 @@ _STRUCTURED_TEXT_AT_JS = (
 }"""
 )
 
+# The stable record id a row carries in the DOM: app-owned ``data-*`` id
+# attributes on the target, its ancestors up to the row, and the row, plus the
+# path and id-like query parameters of the row's link. Index-like attribute
+# names, and values that are only the row's position, are left out: a key that
+# moves with the row would point at whichever record now sits there. Null when
+# the row exposes no such id.
+_RECORD_KEY_JS = r"""(row, node) => {
+    const ID_NAME = /^data-(?:[a-z0-9_-]*-)?(?:id|key|uid|uuid|guid|mrn|pid|record|recordid)$/i;
+    const POSITIONAL = /(?:index|idx|position|pos|order|rank|seq)/i;
+    const parent = row.parentElement;
+    const index = parent ? Array.prototype.indexOf.call(parent.children, row) : -1;
+    const positional = (value) => {
+        const m = /^\D*(\d+)\D*$/.exec(value);
+        if (!m) return false;
+        const n = Number(m[1]);
+        return n === index || n === index + 1;
+    };
+    const parts = [];
+    let cursor = node;
+    for (let depth = 0; cursor && depth < 12; depth += 1) {
+        for (const attr of Array.from(cursor.attributes || [])) {
+            const name = attr.name.toLowerCase();
+            if (name.startsWith('data-openadapt-actuation-')) continue;
+            if (name !== 'data-openadapt-record' &&
+                    (!ID_NAME.test(name) || POSITIONAL.test(name))) continue;
+            const value = (attr.value || '').trim();
+            if (!value || value.length > 256 || positional(value)) continue;
+            parts.push(name + '=' + value);
+        }
+        if (cursor === row) break;
+        cursor = cursor.parentElement;
+    }
+    let link = node.closest('a[href]');
+    if (!link || !row.contains(link)) {
+        const links = row.querySelectorAll('a[href]');
+        link = row.matches('a[href]') ? row : (links.length === 1 ? links[0] : null);
+    }
+    if (link) {
+        try {
+            const url = new URL(link.getAttribute('href'), location.href);
+            if (url.protocol === 'http:' || url.protocol === 'https:') {
+                const ids = [];
+                for (const [k, v] of url.searchParams) {
+                    if (/(?:^|[_-])(?:id|key|uid|uuid|guid|mrn|pid)$/i.test(k) ||
+                            /^(?:id|pid|mrn)$/i.test(k)) ids.push(k + '=' + v);
+                }
+                ids.sort();
+                const here = url.pathname === location.pathname && !ids.length;
+                const value = url.pathname + (ids.length ? '?' + ids.join('&') : '') + url.hash;
+                if (!(here && !url.hash) && value.length <= 512 && !positional(value)) {
+                    parts.push('href=' + value);
+                }
+            }
+        } catch (e) {}
+    }
+    if (!parts.length) return null;
+    return Array.from(new Set(parts)).sort().join('\n');
+}"""
+
+# Every shown row whose record identity equals the identity of the row under
+# the point, with each row's stable record id and position. The identity is
+# computed exactly as ``structured_text_at`` does, for the cell at the same
+# place in each row. ``{row: false}`` when the point has no row identity (a
+# form field group, a standalone control): there is no row to compare.
+_IDENTITY_CANDIDATES_AT_JS = (
+    r"""([px, py, cap]) => {
+    const el = document.elementFromPoint(px, py);
+    if (!el) return null;
+    const describe = """
+    + _DESCRIBE_TARGET_JS
+    + r""";
+    const recordKey = """
+    + _RECORD_KEY_JS
+    + r""";
+    const target = describe(el);
+    if (!target.rowIdentity || !target.row) return {row: false};
+    const row = target.row;
+    const own = el.closest('td, th, [role="cell"], [role="gridcell"]') || el;
+    const path = [];
+    let cursor = own;
+    while (cursor && cursor !== row) {
+        const parent = cursor.parentElement;
+        if (!parent) break;
+        path.unshift(Array.prototype.indexOf.call(parent.children, cursor));
+        cursor = parent;
+    }
+    const ownInRow = cursor === row;
+    const shown = (node) => {
+        if (!node.isConnected) return false;
+        if (typeof node.checkVisibility === 'function') {
+            return node.checkVisibility({visibilityProperty: true, opacityProperty: true});
+        }
+        if (!node.getClientRects().length) return false;
+        const style = window.getComputedStyle(node);
+        return style.visibility !== 'hidden' && style.display !== 'none';
+    };
+    const rows = document.querySelectorAll('tr, [role="row"], li, [role="listitem"]');
+    const rowRect = row.getBoundingClientRect();
+    const result = {
+        record_key: recordKey(row, el),
+        incomplete: rows.length > cap,
+        candidates: [],
+    };
+    if (result.incomplete) return result;
+    for (const candidate of rows) {
+        if (candidate !== row && !shown(candidate)) continue;
+        let node = candidate;
+        if (ownInRow) {
+            for (const index of path) node = node && node.children[index];
+        }
+        if (!node) continue;
+        const observed = candidate === row ? target : describe(node);
+        if (observed.row !== candidate || observed.rowIdentity !== target.rowIdentity) {
+            continue;
+        }
+        const rect = candidate.getBoundingClientRect();
+        result.candidates.push({
+            self: candidate === row,
+            record_key: candidate === row ? result.record_key : recordKey(candidate, node),
+            dx: rect.x - rowRect.x,
+            dy: rect.y - rowRect.y,
+        });
+    }
+    return result;
+}"""
+)
+
+# Rows scanned by the candidate census before it gives up. A document with
+# more rows than this reports ``incomplete`` and the runtime cannot prove the
+# target unique.
+IDENTITY_CANDIDATE_ROW_CAP = 5000
+
 _TEXT_VALUE_AT_JS = r"""([px, py]) => {
     const hit = document.elementFromPoint(px, py);
     if (!hit) return null;
@@ -1640,6 +1772,42 @@ class PlaywrightBackend:
             return None
         return result or None
 
+    def identity_candidates_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """Census of the rows that show the same record identity as (x, y).
+
+        ``structured_text_at`` says what the row under the point is; this says
+        whether any OTHER shown row says the same thing. Two worklist rows
+        reading "John Smith Follow-up Dr Lee" are both a verified match for
+        the recorded text, so the text alone cannot pick the recorded record
+        (see :class:`openadapt_flow.backend.IdentityCandidatesBackend`).
+
+        Returns ``{"record_key", "incomplete", "candidates"}``: the stable
+        record id of the row under the point (app-owned ``data-*`` ids and the
+        row link's path, or None), whether the document had too many rows to
+        scan, and one entry per shown row with the same identity (the row
+        under the point included, ``self`` true) carrying its record id and
+        its offset ``(dx, dy)`` from the row under the point, in viewport CSS
+        pixels. ``{"row": False}`` when the point has no row identity (a
+        standalone control, a form field); None when the census failed.
+        """
+        try:
+            point = self._frame_point(int(x), int(y))
+            if point is None:
+                return None
+            result = point.scope.evaluate(
+                _IDENTITY_CANDIDATES_AT_JS,
+                [point.x, point.y, IDENTITY_CANDIDATE_ROW_CAP],
+            )
+        except Exception:
+            return None
+        if not isinstance(result, dict):
+            return None
+        # Offsets are in the hit frame's own pixels. Outside the top-level
+        # document they cannot be mapped back with certainty, so a retarget
+        # is not offered there; the count still holds.
+        result["top_level"] = not point.frame_path
+        return result
+
     def text_value_at(self, x: int, y: int) -> Optional[str]:
         """Return the exact value of the editable control under ``(x, y)``.
 
@@ -1690,6 +1858,26 @@ class PlaywrightBackend:
             with_arg=True,
         )
         return result if isinstance(result, bool) else None
+
+    def element_texts(
+        self, selector: str, frame_path: tuple[str, ...] = ()
+    ) -> Optional[list[str]]:
+        """The rendered text of every element matching ``selector``.
+
+        Read in the frame ``frame_path`` names (outermost first). ``None``
+        when the frame is missing or ambiguous, or the read fails; an empty
+        list means the frame is there and nothing matches. Read-only; never
+        raises.
+        """
+
+        try:
+            scope = self._resolve_scope(tuple(frame_path))
+            if scope is None:
+                return None
+            texts = scope.locator(selector).all_inner_texts()
+        except Exception:  # noqa: BLE001 - unreadable is None
+            return None
+        return [str(text) for text in texts]
 
     def focused_select_label(self) -> Optional[str]:
         """The focused ``<select>``'s selected option label, or None."""
