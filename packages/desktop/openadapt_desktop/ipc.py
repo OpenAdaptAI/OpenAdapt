@@ -74,6 +74,9 @@ class IPCHandler:
         self.config = config
         self.dispatcher = EngineDispatcher(config, services=services, emit=self.send_event)
         self.dispatch_lock = threading.RLock()
+        # The paired phone's answers to stops take the same lock, so an
+        # answer that runs an item again waits its turn like a command.
+        self.dispatcher.serial_lock = self.dispatch_lock
         self._write_lock = threading.Lock()
         self._handlers: dict[str, Any] = {}
         self._register_handlers()

@@ -1,0 +1,123 @@
+/* The stop-review queue on a phone. Builds on styles.css and uses only its
+   colour tokens, so the palette stays in one place. The page scrolls: a stop
+   with its evidence is taller than one screen. */
+
+body.stops-page { overflow: auto; }
+.app.stops-app { height: auto; min-height: 100vh; min-height: 100dvh; }
+
+.stops-link {
+  color: var(--accent);
+  font-size: 15px;
+  text-decoration: none;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+}
+
+.stops-notice, .stops-error, .stops-warn {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-size: 14px;
+}
+.stops-notice { background: var(--accent-glow); color: var(--text); }
+.stops-error { background: var(--danger-glow); color: var(--danger); }
+.stops-warn { background: var(--warn-soft); color: var(--warn); }
+
+.stops-main { margin-top: 12px; padding-bottom: 24px; }
+
+.stops-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+.stops-where { margin: 0; font-size: 13px; color: var(--muted); }
+.stops-q { margin: 10px 0 6px; font-size: 26px; line-height: 1.15; font-weight: 650; letter-spacing: -0.02em; }
+.stops-sub { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+.stops-evidence { display: grid; gap: 14px; margin-top: 18px; }
+.stops-side h2, .stops-batch h2 { margin: 0 0 8px; font-size: 15px; font-weight: 650; }
+.stops-side dl { margin: 0; border-top: 1px solid var(--line); }
+.stops-row { padding: 10px 2px; border-bottom: 1px solid var(--line); }
+.stops-row dt { font-size: 13px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.stops-row dd { margin: 2px 0 0; font-size: 16px; overflow-wrap: anywhere; }
+.stops-differs { background: var(--warn-soft); border-radius: 10px; padding-left: 8px; padding-right: 8px; }
+.stops-flag {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: 999px;
+  padding: 0 7px;
+}
+.stops-record { display: block; font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+.stops-candidates { margin: 0 0 10px; padding-left: 18px; font-size: 14px; color: var(--muted); }
+.stops-reason { font-size: 13px; color: var(--faint); margin: 10px 0 0; overflow-wrap: anywhere; }
+
+.stops-shot { margin: 0; }
+.stops-shot img { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); }
+.stops-shot figcaption { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+
+.stops-choices { display: grid; gap: 10px; margin-top: 18px; }
+.stops-choice {
+  min-height: 56px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+}
+.stops-choice.primary { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.stops-choice:disabled { opacity: 0.5; cursor: default; }
+.stops-choice-label { font-size: 16.5px; font-weight: 600; }
+.stops-choice-then { font-size: 13.5px; color: var(--muted); }
+
+.stops-viewonly { margin-top: 18px; padding: 14px; border-radius: 16px; border: 1px dashed var(--line); }
+.stops-viewonly p { margin: 0 0 10px; }
+.stops-button {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 18px;
+  border-radius: 14px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+  text-decoration: none;
+  margin-top: 12px;
+}
+
+.stops-batch { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); }
+.stops-batch ul { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.stops-pick {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 4px;
+  font-size: 14.5px;
+  overflow-wrap: anywhere;
+}
+.stops-pick input { width: 24px; height: 24px; flex: none; accent-color: var(--accent); }
+
+.stops-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+.stops-nav-btn {
+  min-height: 52px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+.stops-nav-btn:disabled { opacity: 0.4; cursor: default; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

@@ -76,6 +76,10 @@ _APPROVER_KEY_SETUP_CODES = frozenset(
         "approver_payload_refused",
     }
 )
+#: Stop cards a paired phone may answer through Desktop. A waiting save is
+#: answered through the portal's own save approval; turning "only ask about
+#: problems" back on is answered on the computer.
+PHONE_ANSWERABLE_KINDS = frozenset({"same_record", "confirm_save", "halted"})
 _TEACH_CORRECTION_SCHEMA = "openadapt.desktop-teach-correction/v1"
 _TEACH_CORRECTION_META_KEY = "teach_correction"
 
@@ -257,6 +261,11 @@ class EngineDispatcher:
         # waits (they never take the dispatch lock).
         self._approval_watches: dict[str, dict[str, Any]] = {}
         self._approval_lock = threading.Lock()
+        # The lock the local wires take around a command that isn't
+        # concurrent (set by ``IPCHandler``). The paired phone's answers to
+        # stops take it too, so an answer that runs an item again never
+        # overlaps a run started from the window.
+        self.serial_lock: Any = None
         self._coach: dict[str, Any] = {}
         # Shadow mode: built on first use, never from config or a remote
         # policy. Its commands are served on the Tauri window wire only.
@@ -4512,6 +4521,61 @@ class EngineDispatcher:
             )
         return {"public_key": signed[0], "signature": signed[1], "key": "file"}
 
+    @staticmethod
+    def _sign_stop_decision_portal(message: bytes, *, count: int) -> dict:
+        """Sign a phone's answer with the portal's approver key.
+
+        The phone can't reach Touch ID on this computer. Its answers are
+        signed with the key registered for the decision portal, the same
+        one the Flow console signs the phone's save approvals with.
+        """
+
+        from openadapt_desktop.approver_key import ApproverKeyError, sign_with_file_key
+        from openadapt_desktop.approver_keychain import ApproverKeychainError
+
+        del count  # one signature per answer, no prompt to word
+        try:
+            signed = sign_with_file_key(message, route="portal")
+        except ApproverKeyError as exc:
+            raise ApproverKeychainError("approver_key_unusable", str(exc)) from exc
+        if signed is None:
+            raise ApproverKeychainError(
+                "approver_key_missing",
+                "Answers from a phone need the decision portal's approver key. "
+                "Set it up on the computer. Nothing changed.",
+            )
+        return {"public_key": signed[0], "signature": signed[1], "key": "portal"}
+
+    def stop_card_screenshot(self, card_id: str) -> bytes | None:
+        """The PNG a card shows as evidence, for the paired phone, or None.
+
+        The card must be in the queue now. The picture is the one the window
+        shows: where the item's run stopped, or the form a waiting save is
+        about to save.
+        """
+
+        card = next((c for c in self._stop_cards() if c["card_id"] == card_id), None)
+        ref = (card or {}).get("evidence", {}).get("screenshot")
+        if not isinstance(ref, dict):
+            return None
+        data_url = None
+        if ref.get("item_id"):
+            frame = self.get_attention_screenshot(item_id=ref["item_id"])
+            data_url = frame.get("data_url") if frame.get("ok") else None
+        elif ref.get("approval") and card is not None:
+            state = self.get_item_approval(workflow_id=card["workflow_id"])
+            request = state.get("request") if isinstance(state, dict) else None
+            if isinstance(request, dict) and request.get("request_id") == ref["approval"]:
+                data_url = request.get("screenshot")
+        prefix = "data:image/png;base64,"
+        if not isinstance(data_url, str) or not data_url.startswith(prefix):
+            return None
+        try:
+            data = base64.b64decode(data_url[len(prefix) :], validate=True)
+        except ValueError:
+            return None
+        return data if data.startswith(b"\x89PNG\r\n\x1a\n") else None
+
     def _record_stop_decision(self, receipt: dict) -> None:
         """Append one answer to the local decision log (owner-only)."""
 
@@ -4570,15 +4634,90 @@ class EngineDispatcher:
         approver key (one prompt for the batch), then applies each card's own
         action with its usual checks. Save approvals go through
         ``answer_stop_approval``.
+
+        This is the window's command, and it always signs with this
+        computer's approver key. No parameter selects another key: the
+        paired phone's answers come in through
+        :meth:`answer_stop_cards_from_portal`, which no wire registers.
         """
 
+        return self._answer_stop_cards(
+            [str(c) for c in params.get("card_ids") or []],
+            str(params.get("choice") or ""),
+            shown_ms=params.get("shown_ms"),
+            sign=self._sign_stop_decision,
+            device=None,
+        )
+
+    def answer_stop_cards_from_portal(
+        self,
+        *,
+        card_ids: list[str],
+        choice: str,
+        shown_ms: Any,
+        device: dict[str, str],
+    ) -> dict:
+        """Answer stops from the paired phone, signed with the portal's key.
+
+        Called only by the decision portal, in this process, for a request
+        that carried an approved device session. It is deliberately not a
+        command: the window and the tray can't reach it, so neither can sign
+        with the portal's key. The receipt names the key (``portal``) and the
+        device session. A waiting save and a problems-only re-arm aren't
+        answered here: a save goes through the portal's own save approval,
+        and the re-arm is answered on the computer.
+        """
+
+        from openadapt_desktop import stop_queue
+
+        ids = [str(c) for c in card_ids or []]
+        cards, problem = self._current_cards(ids)
+        if cards is None:
+            return {"ok": False, "code": "card_changed", "error": problem}
+        if any(stop_queue.choice_for(card, choice) is None for card in cards):
+            return {
+                "ok": False,
+                "code": "choice_not_offered",
+                "error": "That choice isn't on this stop. Nothing changed.",
+            }
+        if any(card["kind"] == "approve_save" for card in cards):
+            return {
+                "ok": False,
+                "code": "use_approval",
+                "error": "A waiting save is answered on its own. Nothing changed.",
+            }
+        if any(card["kind"] not in PHONE_ANSWERABLE_KINDS for card in cards):
+            return {
+                "ok": False,
+                "code": "answer_on_computer",
+                "error": "Answer this on the computer. Nothing changed.",
+            }
+        return self._answer_stop_cards(
+            ids,
+            str(choice or ""),
+            shown_ms=shown_ms,
+            sign=self._sign_stop_decision_portal,
+            device={
+                "id": str(device.get("id") or ""),
+                "label": str(device.get("label") or "")[:120],
+            },
+        )
+
+    def _answer_stop_cards(
+        self,
+        card_ids: list[str],
+        choice_id: str,
+        *,
+        shown_ms: Any,
+        sign: Callable[..., dict],
+        device: dict[str, str] | None,
+    ) -> dict:
         from datetime import datetime, timezone
 
         from openadapt_desktop import stop_queue
         from openadapt_desktop.approver_keychain import ApproverKeychainError
 
-        card_ids = [str(c) for c in params.get("card_ids") or []]
-        choice_id = str(params.get("choice") or "")
+        params = {"shown_ms": shown_ms}
         cards, problem = self._current_cards(card_ids)
         if cards is None:
             return {"ok": False, "code": "card_changed", "error": problem}
@@ -4600,7 +4739,7 @@ class EngineDispatcher:
         decided_at = datetime.now(timezone.utc).isoformat()
         message = stop_queue.decision_message(card_ids, choice_id, decided_at=decided_at)
         try:
-            signature = self._sign_stop_decision(message, count=len(cards))
+            signature = sign(message, count=len(cards))
         except ApproverKeychainError as exc:
             return {"ok": False, "code": exc.code, "error": str(exc)}
         results = []
@@ -4635,6 +4774,8 @@ class EngineDispatcher:
                 "key": signature["key"],
                 "shown_ms": self._timings(params, card_ids),
                 "results": results,
+                # The paired phone's device session, for a portal answer.
+                **({"device": device} if device is not None else {}),
             }
         )
         self.services.audit.log(
@@ -4642,6 +4783,7 @@ class EngineDispatcher:
             cards=len(cards),
             choice=choice_id,
             ok=sum(1 for r in results if r["ok"]),
+            key=signature["key"],
         )
         return {
             "ok": all(r["ok"] for r in results),
@@ -5957,8 +6099,11 @@ class EngineDispatcher:
         """Lazily build the runner-local decision portal service."""
         if self.services.portal is None:
             from openadapt_desktop.portal.service import PortalService
+            from openadapt_desktop.portal.stops import DispatcherStopQueue
 
-            self.services.portal = PortalService(self.config)
+            self.services.portal = PortalService(
+                self.config, stops=DispatcherStopQueue(self)
+            )
         return self.services.portal
 
     def portal_status(self, **params: Any) -> dict:
