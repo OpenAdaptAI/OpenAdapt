@@ -479,7 +479,9 @@ class ProductionArm:
         try:
             if not log.state(approver_keys=keys).is_off:
                 return None
-            request = rearm_request(log, cause="recorded in the arm ledger")
+            request = rearm_request(
+                log, cause="recorded in the arm ledger", approver_keys=keys
+            )
         except SwitchLogError:
             return None
         decision = operator.ask(
@@ -497,7 +499,7 @@ class ProductionArm:
         evidence = sign_rearm(
             log,
             request,
-            approver_id="soak-operator",
+            approver_id="soak-approver",
             key_id="soak-approver",
             private_key=self._approver[0],
         )
