@@ -174,3 +174,50 @@ def test_teach_ambiguity_is_stored_and_left_out_when_unset() -> None:
     plain = itmpl.build_identity_template(None, structured_identity=ROW)
     assert twin is not None and twin.teach_ambiguous is True
     assert plain is not None and "teach_ambiguous" not in plain.model_dump()
+
+
+def test_a_teach_time_twin_halt_says_teach_time_saw_it() -> None:
+    from pathlib import Path
+
+    from openadapt_flow.ir import (
+        ActionKind,
+        Anchor,
+        Resolution,
+        Step,
+        StepResult,
+        Workflow,
+    )
+    from openadapt_flow.runtime.replayer import Replayer
+
+    step = Step(
+        id="open",
+        intent="click 'Open'",
+        action=ActionKind.CLICK,
+        anchor=Anchor(
+            template="t.png",
+            region=(0, 0, 10, 10),
+            click_point=(5, 5),
+            identity_template=itmpl.build_identity_template(
+                None, structured_identity=ROW, structured_ambiguous=True
+            ),
+        ),
+    )
+    replayer = Replayer(object(), vision=object(), poll_interval_s=0.01)
+    replayer._verify_identity = lambda *a, **k: IdentityCheck(  # type: ignore[method-assign]
+        status="abstain",
+        mode="structured",
+        ambiguity_halt="identical_candidates",
+        candidate_count=1,
+    )
+    result = StepResult(step_id="open", intent="click 'Open'", ok=False)
+    error = replayer._identity_gate_error(
+        step,
+        Resolution(rung="template", point=(5, 5), confidence=1.0, elapsed_ms=1),
+        b"",
+        {},
+        Workflow(name="wf"),
+        Path("."),
+        result,
+    )
+    assert error is not None and "teach time saw another row" in error
+    assert "1 shown rows" not in error

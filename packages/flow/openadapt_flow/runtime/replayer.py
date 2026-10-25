@@ -10726,13 +10726,20 @@ class Replayer:
                 f"({reason}) — refusing to click; run aborted"
             )
         elif check.ambiguity_halt is not None:
-            if check.ambiguity_halt == "identical_candidates":
+            teach_twin = bool(
+                step.anchor is not None
+                and step.anchor.identity_template is not None
+                and step.anchor.identity_template.teach_ambiguous
+            )
+            if check.ambiguity_halt == "identical_candidates" and teach_twin:
+                why = (
+                    "teach time saw another row with the same identity and no "
+                    "record id between them (it may be out of view now)"
+                )
+            elif check.ambiguity_halt == "identical_candidates":
                 why = (
                     f"{check.candidate_count} shown rows carry the same "
                     "identity and no recorded record id tells them apart"
-                    if check.candidate_count is not None
-                    else "teach time saw another row with the same identity and "
-                    "no record id between them (it may be out of view now)"
                 )
             elif check.ambiguity_halt == "identity_uncounted":
                 why = (
