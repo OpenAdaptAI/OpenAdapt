@@ -130,7 +130,17 @@ including an answer file written around the command
     the key directory's `approvers.head.json` (written by every roster
     change) and the deployment config's `approvers.head` (Desktop writes its
     Keychain's). A roster the run can't verify at start refuses the run.
-  - The agent's task ledger takes its root only from the deployment config.
+    The sidecar sits in the key directory, so a process that can write the
+    key directory can delete it and put an older roster back. Only a head
+    kept elsewhere (the deployment config's, or Desktop's Keychain) catches
+    that, which is one more reason to keep the key directory away from the
+    agents. `jit approver add` and `remove` update only the sidecar; they
+    never update a deployment config's or Desktop's head.
+  - The agent's task ledger and its guard server take their root only from
+    the deployment config (`--config`); the environment never counts there.
+  - With `--config-sha256`, Flow reads the deployment config once, refuses it
+    if its digest differs, and parses only those bytes for the whole command
+    (Desktop passes it for every run).
   - The deployment config's `approvers` section is read once per command,
     so swapping the file mid-run changes nothing.
   - The run records the root, the key directory and the roster's head when
