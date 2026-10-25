@@ -2,8 +2,8 @@
 
 Real desktops have several windows of one app: two browser windows, two EMR
 charts. When more than one window matches the target, binding the largest
-one records whichever chart happens to be bigger. The macOS resolver raises
-``WindowCaptureAmbiguousError`` here; these tests pin the same rule on X11.
+one records whichever chart happens to be bigger. Every resolver raises
+``WindowCaptureAmbiguousError`` here (#1468); these tests pin the rule on X11.
 """
 
 from __future__ import annotations
@@ -30,13 +30,6 @@ def _window(window_id: int, title: str, bounds) -> X11WindowRecord:
     return X11WindowRecord(window_id=window_id, title=title, pid=1000, bounds=bounds, viewable=True)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "REALISM_AUDIT capture-5: the X11 resolver binds the largest of "
-        "several matching windows instead of refusing"
-    ),
-)
 def test_two_matching_browser_windows_are_ambiguous(x11_environment) -> None:
     client = FakeX11Client(
         [
