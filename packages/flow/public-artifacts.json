@@ -146,6 +146,8 @@
     "benchmark/frappe_lending/apps.json",
     "benchmark/frappe_lending/compose.yml",
     "benchmark/frappe_lending/environment.lock.json",
+    "benchmark/gate_per_class/results/after.json",
+    "benchmark/gate_per_class/results/before.json",
     "benchmark/governed_run/results.json",
     "benchmark/grounding_eval/results.json",
     "benchmark/grounding_eval/results_sweep.json",
