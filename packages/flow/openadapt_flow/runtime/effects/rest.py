@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import time
 from typing import Any, Optional
+from urllib.parse import urljoin, urlsplit
 
 from openadapt_flow.runtime.effects._common import drop_record_fields, judge_records
 from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
@@ -31,6 +32,25 @@ from openadapt_flow.runtime.effects.effect import (
     EffectVerdict,
 )
 from openadapt_flow.verification import VerificationTier
+
+#: A paged read longer than this many pages reads as unreadable.
+MAX_PAGES = 50
+
+_UNREADABLE = object()
+
+
+def _dotted(body: Any, path: str) -> Any:
+    node = body
+    for part in path.split("."):
+        if not isinstance(node, dict):
+            return None
+        node = node.get(part)
+    return node
+
+
+def _same_origin(url: str, base_url: str) -> bool:
+    a, b = urlsplit(url), urlsplit(base_url)
+    return (a.scheme, a.netloc) == (b.scheme, b.netloc)
 
 
 class RestRecordVerifier(VerifierAdapterBase):
@@ -55,6 +75,10 @@ class RestRecordVerifier(VerifierAdapterBase):
             records by their whole content, so a change to another record
             reads as that record removed and a new one added, and the
             collateral-loss check catches it). Empty -> records as read.
+        next_path: Dotted path in the body to the next page's URL. Set, every
+            page on the same origin is read (at most :data:`MAX_PAGES`); a
+            failed page or a longer chain reads as unreadable. Unset, one
+            response is the whole read.
     """
 
     substrate = "rest"
@@ -71,8 +95,10 @@ class RestRecordVerifier(VerifierAdapterBase):
         timeout_s: float = 5.0,
         poll_interval_s: float = 0.2,
         drop_fields: tuple[str, ...] = (),
+        next_path: Optional[str] = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        self.next_path = next_path
         self.drop_fields = tuple(drop_fields)
         self.records_path = records_path
         self.records_key = records_key
@@ -107,13 +133,9 @@ class RestRecordVerifier(VerifierAdapterBase):
                 self._session = requests.Session()
         return self._session
 
-    def _fetch_records(self) -> Optional[list[dict[str, Any]]]:
-        """GET the system-of-record document and extract the records list.
+    def _get_json(self, url: str) -> Any:
+        """One GET; the parsed body, or ``_UNREADABLE``. Never raises."""
 
-        Returns ``None`` -- read as unreadable, forcing INDETERMINATE -- on
-        any transport error, non-2xx status, or shape mismatch. Never raises.
-        """
-        url = f"{self.base_url}{self.records_path}"
         try:
             # ``headers`` is passed ONLY when configured, so injected
             # ``requests``-style sessions with a narrower ``get`` signature
@@ -125,23 +147,56 @@ class RestRecordVerifier(VerifierAdapterBase):
             else:
                 resp = self._get_session().get(url, timeout=self.timeout_s)
         except Exception:  # noqa: BLE001 - any transport failure is unreadable
-            return None
+            return _UNREADABLE
         if resp.status_code // 100 != 2:
-            return None
+            return _UNREADABLE
         try:
-            body = resp.json()
+            return resp.json()
         except Exception:  # noqa: BLE001 - unparseable body is unreadable
-            return None
+            return _UNREADABLE
+
+    def _records_of(self, body: Any) -> Optional[list[Any]]:
         if self.records_key is None:
             records = body
         elif isinstance(body, dict):
             records = body.get(self.records_key)
         else:
             return None
-        if not isinstance(records, list):
+        return records if isinstance(records, list) else None
+
+    def _fetch_records(self) -> Optional[list[dict[str, Any]]]:
+        """GET the system-of-record document and extract the records list.
+
+        Returns ``None`` -- read as unreadable, forcing INDETERMINATE -- on
+        any transport error, non-2xx status, or shape mismatch, and, with
+        ``next_path``, on a failed page, a page on another origin or a chain
+        longer than :data:`MAX_PAGES`. Never raises.
+        """
+        url = f"{self.base_url}{self.records_path}"
+        collected: list[Any] = []
+        for _page in range(MAX_PAGES):
+            body = self._get_json(url)
+            if body is _UNREADABLE:
+                return None
+            records = self._records_of(body)
+            if records is None:
+                return None
+            collected.extend(records)
+            if self.next_path is None:
+                break
+            following = _dotted(body, self.next_path)
+            if following in (None, ""):
+                break
+            if not isinstance(following, str):
+                return None
+            following = urljoin(url, following)
+            if not _same_origin(following, self.base_url):
+                return None
+            url = following
+        else:
             return None
         return drop_record_fields(
-            [r for r in records if isinstance(r, dict)], self.drop_fields
+            [r for r in collected if isinstance(r, dict)], self.drop_fields
         )
 
     # -- EffectVerifier protocol --------------------------------------------
