@@ -162,6 +162,11 @@ class FormEvaluation:
     #: Requests the page tried to send and were blocked, ``METHOD /path``.
     blocked: list[str] = field(default_factory=list)
     seconds: float = 0.0
+    #: Declared step writes the page's script sent (and the route blocked):
+    #: ``(METHOD /path, body pairs or None)``.
+    writes: list[tuple[str, Optional[list[tuple[str, str]]]]] = field(
+        default_factory=list
+    )
 
     @property
     def valid(self) -> bool:
@@ -186,6 +191,7 @@ def evaluate_form(
     submitter: Optional[str] = None,
     submitter_requests: tuple[str, ...] = (),
     confirm: Optional[str] = None,
+    step_writes: tuple[str, ...] = (),
     timeout_s: float = 20.0,
     settle_ms: int = 300,
 ) -> FormEvaluation:
@@ -260,16 +266,22 @@ def evaluate_form(
             body = req.post_data
         except Exception:  # noqa: BLE001 - a binary body has no text
             body = None
+        what = _summary(req.method, req.url)
         late.append(
             {
-                "what": _summary(req.method, req.url),
+                "what": what,
                 "method": req.method,
                 "path": parts.path,
                 "body": body,
                 "content_type": (req.headers or {}).get("content-type", ""),
             }
         )
-        r.abort()
+        if what in step_writes:
+            # A declared step write: it never leaves, but the page sees it
+            # accepted, as it was in the recording.
+            r.fulfill(status=200, body="")
+        else:
+            r.abort()
 
     def done(
         status: str, reason: str = "", serialized: Any = None, via: str = ""
@@ -389,7 +401,29 @@ def evaluate_form(
                 frame.locator(confirm).first.click(timeout=_ACT_TIMEOUT_MS)
                 scratch.wait_for_timeout(settle_ms)
                 state = _collect(scratch)
-        return _verdict(state, late, errors, dialogs, stray, action_path, done)
+        # The declared step writes the page's own script sent (blocked), with
+        # their bodies, for the caller to compare; they aren't stray sends.
+        writes = [b for b in late if b["what"] in step_writes]
+        verdict = _verdict(
+            state,
+            [b for b in late if b["what"] not in step_writes],
+            errors,
+            dialogs,
+            stray,
+            action_path,
+            done,
+        )
+        verdict.writes = [
+            (
+                b["what"],
+                up.parse_qsl(b["body"], keep_blank_values=True)
+                if b["body"] is not None
+                and "x-www-form-urlencoded" in b["content_type"]
+                else None,
+            )
+            for b in writes
+        ]
+        return verdict
     except Exception as exc:  # noqa: BLE001 - a failure to run is unevaluable
         return done("unevaluable", f"the scratch page failed ({type(exc).__name__})")
     finally:

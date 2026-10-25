@@ -3,8 +3,11 @@
 **Scope: a single HTML form submission.** An API step repeats one
 `application/x-www-form-urlencoded` POST of one HTML form, read again from
 the live page, in place of the clicks and keystrokes that filled it. It is
-not a general API client: JSON or script-built requests, more than one
-write and multi-page server state stay on the GUI. A form whose script
+not a general API client: JSON or script-built requests and multi-page
+server state stay on the GUI. Other writes during the replaced steps are a
+declared sequence (below): the page's own background requests are listed
+and left to the page, and a write a step caused is sent in its recorded
+place before the save and read back. A form whose script
 validates or rewrites values is run, not refused: the API step runs that
 script on the run's values before each save (below), and the save stays on
 the GUI when the script can't be run.
@@ -95,10 +98,10 @@ doesn't propose an API step in these cases:
 - the save sends a secret field;
 - the form page wasn't captured;
 - the save isn't the program's last step;
-- the steps the API step would replace also sent another write (a POST,
-  PUT, PATCH or DELETE other than the save, such as a reservation, an
-  autosave or a background call). Admission and runs refuse such a binding
-  too;
+- the steps the API step would replace also sent a write (a POST, PUT,
+  PATCH or DELETE other than the save) that is neither the page's own
+  request nor a write the API step can repeat (see "Other writes in the
+  span");
 - the program has branches;
 - a URL value equals two inputs' values (ambiguous), or the save or a
   pre-check is on another origin than the form;
@@ -114,6 +117,52 @@ found." The API step sends these requests and requires the same text before
 it sends the save. On-screen checks of steps that made no request (layout
 and region checks) are screen-only. They are listed for the person who
 admits the step and aren't repeated.
+
+## Other writes in the span
+
+Every other write sent while the replaced steps ran is declared in the
+proposal (`web_form.writes`), in recorded order, with one of two roles:
+
+- **ambient**: the page sent it on its own. It is a script request (fetch or
+  XHR) from another document than the form, one that was loaded before the
+  form opened, to an endpoint the form page's source doesn't name. OpenEMR's
+  tab shell, for example, posts `execute_background_services.php` on a
+  timer while the patient form is open. No replaced step caused it, so the
+  API step neither sends nor waits for it: the live page goes on sending it,
+  as it does under the GUI steps. `api show` lists it with that evidence.
+- **step**: a replaced step caused it. The API step sends it, rebuilt the
+  same way as the save (typed parameters by which step typed them, session
+  values and unchanged form defaults from the live form), in its recorded
+  place before the save. A write whose body isn't form-encoded, that carries
+  values in its URL or another value, that went to another origin, or that
+  wasn't accepted when recorded refuses the proposal. Before each save the
+  page's own script must send each step write itself, with the same body,
+  when it runs on the run's values in the scratch page (there the request
+  never reaches the app; the page gets an empty 200, as the recorded write
+  was accepted), and each request it sent matches one step write;
+  otherwise the GUI steps run. Each step write is
+  read back by the record check declared on the step it was sent during:
+  admission refuses one whose step has none, and the binding's record check
+  is the save's followed by those steps' checks. If a write fails or answers
+  outside its recorded status, the run stops there: nothing after it is
+  sent, nothing is retried or redone through the GUI, and the run reconciles
+  by reading the records back. Under approval, the digest the person
+  approves covers every request in the sequence.
+
+A write that fits neither role keeps the save on the GUI.
+
+In a durable run, the span persists a write-ahead checkpoint before its
+first request leaves: the folded steps' checkpoints and a
+delivery-uncertain pause at the save. If the process stops anywhere in the
+sequence, a resume starts at the save, which is only reconciled (the
+attended reconcile action reads the records back) and never sent again,
+and no write of the sequence is resent. The save's own outcome replaces
+that pause; once its checkpoint is persisted, the pause is removed (only if
+it is still exactly the one written). A resumed leg uses the continuation
+guard's `delivery_started` phase as its write-ahead.
+
+`api admit` lists each request the API step leaves to the page, with the
+evidence, before the person types `admit`.
 
 ## What happens at run time
 

@@ -412,6 +412,32 @@ def option_for_label(control: dict[str, Any], label: str) -> Optional[str]:
     return hits[0] if len(hits) == 1 else None
 
 
+def web_form_effects(steps: Any, save: Any) -> list[Any]:
+    """The record check an API step must carry: the save's, then each step write's.
+
+    A ``step`` write (WebFormWrite) is read back by the record check declared
+    on the step it was sent during, so the binding's record check is the
+    save step's effects followed by those steps' effects, in write order,
+    each step once.
+    """
+
+    out = list(save.effects)
+    binding = getattr(save, "api_binding", None)
+    spec = getattr(binding, "web_form", None)
+    if spec is None:
+        return out
+    by_id = {s.id: s for s in steps}
+    seen: set[str] = set()
+    for write in spec.writes:
+        if write.role != "step" or not write.from_step or write.from_step in seen:
+            continue
+        seen.add(write.from_step)
+        step = by_id.get(write.from_step)
+        if step is not None:
+            out.extend(step.effects)
+    return out
+
+
 def folded_checks_digest(steps: Any) -> str:
     """SHA-256 over the complete definition of the steps an API step replaces.
 
@@ -507,6 +533,7 @@ class PlaywrightSessionTransport:
         submitter: Optional[str] = None,
         submitter_requests: tuple[str, ...] = (),
         confirm: Optional[str] = None,
+        step_writes: tuple[str, ...] = (),
     ) -> Any:
         from openadapt_flow.runtime.actuators.form_eval import evaluate_form
 
@@ -519,6 +546,7 @@ class PlaywrightSessionTransport:
             submitter=submitter,
             submitter_requests=submitter_requests,
             confirm=confirm,
+            step_writes=step_writes,
             timeout_s=self._timeout_ms / 1000.0,
         )
 
@@ -573,20 +601,43 @@ class PreparedSave:
     #: Fields whose value the server issued to this session (CSRF tokens).
     #: In the digest; never shown to the person.
     session_fields: frozenset[str] = frozenset()
+    #: The span's ``step`` writes, sent in this order before the save.
+    writes: tuple["PreparedWrite", ...] = ()
 
     def encoded(self) -> str:
         return up.urlencode(list(self.body))
 
     def payload_sha256(self) -> str:
-        payload = {
+        payload: dict[str, Any] = {
             "method": self.method.upper(),
             "path": self.path,
             "content_type": "application/x-www-form-urlencoded",
             "body": self.encoded(),
             "referer": self.referer,
         }
+        if self.writes:
+            # Every request the API step sends, in order. A save without step
+            # writes keeps the digest it always had.
+            payload["writes_before_save"] = [
+                {"method": w.method.upper(), "path": w.path, "body": w.encoded()}
+                for w in self.writes
+            ]
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class PreparedWrite:
+    """One ``step`` write of the span, built and checked, not yet sent."""
+
+    method: str
+    path: str
+    body: tuple[tuple[str, str], ...]
+    expected_status: tuple[int, ...]
+    from_step: str
+
+    def encoded(self) -> str:
+        return up.urlencode(list(self.body))
 
 
 def operation_digest(
@@ -642,6 +693,13 @@ def operation_rows(
             defaults += 1
     for name, value in record:
         rows.append((f"Record check: {name}", value))
+    for i, write in enumerate(prepared.writes, 1):
+        rows.append(
+            (
+                f"Write {i} before the save",
+                f"{write.method.upper()} {write.path} ({len(write.body)} field(s), from {write.from_step})",
+            )
+        )
     rows.append(
         (
             "Request",
@@ -760,8 +818,34 @@ class WebFormActuator:
             body, problem = self.build_body(spec, params, controls)
             if problem:
                 return unavailable(problem)
+            writes: list[PreparedWrite] = []
+            for write in spec.writes:
+                if write.role != "step":
+                    continue  # the page's own request: not the API step's to send
+                sub = spec.model_copy(update={"fields": write.fields})
+                wbody, problem = self.build_body(
+                    sub, params, controls, enforce_rules=False
+                )
+                if problem:
+                    return unavailable(f"{write.method} {write.path}: {problem}")
+                writes.append(
+                    PreparedWrite(
+                        method=write.method,
+                        path=fill_url(write.path, params),
+                        body=tuple(wbody),
+                        expected_status=tuple(write.expected_status),
+                        from_step=write.from_step or "",
+                    )
+                )
+            if writes and not scripts:
+                return unavailable(
+                    "the API step would send writes the page's script sends, but "
+                    "the page has no script to check them against"
+                )
             if scripts:
-                problem = self._run_page_script(spec, form_path, action_path, body)
+                problem = self._run_page_script(
+                    spec, form_path, action_path, body, writes
+                )
                 if problem:
                     return unavailable(problem)
             for check in spec.prechecks:
@@ -796,6 +880,7 @@ class WebFormActuator:
             session_fields=frozenset(
                 f.name for f in spec.fields if f.source == "session"
             ),
+            writes=tuple(writes),
         )
 
     def _run_page_script(
@@ -804,6 +889,7 @@ class WebFormActuator:
         form_path: str,
         action_path: str,
         body: list[tuple[str, str]],
+        writes: list["PreparedWrite"] = (),  # type: ignore[assignment]
     ) -> Optional[str]:
         """Run the form's own script on the run's values; why not to send, or None.
 
@@ -825,6 +911,7 @@ class WebFormActuator:
             submitter=spec.submitter,
             submitter_requests=tuple(spec.submitter_requests),
             confirm=spec.confirm,
+            step_writes=tuple(f"{w.method} {up.urlsplit(w.path).path}" for w in writes),
         )
         self.log.append(
             {
@@ -846,6 +933,34 @@ class WebFormActuator:
                 "the page would send other values than the API step built "
                 f"({', '.join(changed[:5])}); its script changes them"
             )
+        # Each write the API step sends before the save must be one the
+        # page's own script sent in the scratch run, with the same body.
+        sent = list(getattr(result, "writes", None) or [])
+        for write in writes:
+            what = f"{write.method} {up.urlsplit(write.path).path}"
+            want_w = sorted((k, v) for k, v in write.body if k not in session)
+            match = next(
+                (
+                    i
+                    for i, (w, b) in enumerate(sent)
+                    if w == what
+                    and b is not None
+                    and sorted((k, v) for k, v in b if k not in session) == want_w
+                ),
+                None,
+            )
+            if match is not None:
+                sent.pop(match)  # each request the page sent matches one write
+            if match is None:
+                return (
+                    f"the page's script didn't send {what} with the body the API step "
+                    "built when it ran on these values"
+                )
+        if sent:
+            return (
+                "the page's script sent more step writes than the API step would "
+                f"({', '.join(w for w, _ in sent[:3])})"
+            )
         return None
 
     def send(self, binding: Any, prepared: "PreparedSave") -> ApiActuationResult:
@@ -853,6 +968,43 @@ class WebFormActuator:
 
         spec = binding.web_form
         summary = f"{binding.method} {binding.url_template}"
+        total = len(prepared.writes) + 1
+        for i, write in enumerate(prepared.writes, 1):
+            what = f"{write.method} {write.path}"
+            done = f"; the {i - 1} write(s) before it were accepted" if i > 1 else ""
+            try:
+                wresp = self.transport.post_form(
+                    write.path, write.encoded(), referer=prepared.referer
+                )
+            except Exception as exc:  # noqa: BLE001 - after dispatch began
+                self.log.append({"stage": "write", "n": i, "error": type(exc).__name__})
+                return ApiActuationResult(
+                    status=ActuationStatus.HALT,
+                    substrate=self.substrate,
+                    halt_kind=ApiHaltKind.DELIVERY_UNCERTAIN,
+                    reason=(
+                        f"write {i} of {total} ({what}) failed after it was sent "
+                        f"({type(exc).__name__}){done}; it may have written, nothing "
+                        "after it was sent and nothing is retried"
+                    ),
+                    request_summary=summary,
+                )
+            accepted = wresp.status in (write.expected_status or tuple(range(200, 400)))
+            self.log.append(
+                {"stage": "write", "n": i, "status": wresp.status, "accepted": accepted}
+            )
+            if not accepted:
+                return ApiActuationResult(
+                    status=ActuationStatus.HALT,
+                    substrate=self.substrate,
+                    halt_kind=ApiHaltKind.RESPONSE_REJECTED,
+                    reason=(
+                        f"write {i} of {total} ({what}) -> {wresp.status}, outside its "
+                        f"recorded response{done}; the save was not sent and nothing is retried"
+                    ),
+                    http_status=wresp.status,
+                    request_summary=summary,
+                )
         try:
             resp = self.transport.post_form(
                 prepared.path, prepared.encoded(), referer=prepared.referer

@@ -1142,6 +1142,11 @@ class Replayer:
         self.api_steps_off_reason: Optional[str] = None
         self.web_form_actuator = web_form_actuator
         self._web_form_span_active = False
+        #: Set by a durable _run_web_form_span: persists the span's write-ahead
+        #: checkpoint right before its first request is sent.
+        self._web_form_write_ahead: Optional[Callable[[], None]] = None
+        self._web_form_folded_checkpointed = False
+        self._web_form_write_ahead_pause = ""
         self._web_form_fallback_reason: Optional[str] = None
         # (step id, reason) set when a closed-loop scroll used up its budget
         # because the next step's target never resolved. That step then
@@ -2477,6 +2482,7 @@ class Replayer:
                             bundle_dir=bundle_dir,
                             run_dir=run_dir,
                             new_crops=new_crops,
+                            durable_run=durable_run,
                         )
                         if batch is None:
                             why_not = self._web_form_fallback_reason
@@ -2502,6 +2508,11 @@ class Replayer:
                 # so a resume runs the whole span again.
                 save_result = batch[-1]
                 checkpoint_folded = save_result.ok or save_result.delivery_attempted
+                # The write-ahead checkpoint (before the first request) already
+                # holds the folded steps.
+                already = len(batch) > 1 and getattr(
+                    self, "_web_form_folded_checkpointed", False
+                )
                 for offset, result in enumerate(batch):
                     folded = offset < len(batch) - 1
                     stop_run = self._record_linear_result(
@@ -2512,11 +2523,22 @@ class Replayer:
                         step=workflow.steps[step_index + offset],
                         params=params,
                         durable_run=(
-                            None if folded and not checkpoint_folded else durable_run
+                            None
+                            if folded and (already or not checkpoint_folded)
+                            else durable_run
                         ),
                     )
                     if stop_run:
                         break
+                if (
+                    already
+                    and durable_run is not None
+                    and save_result.ok
+                    and not stop_run
+                ):
+                    # The save's own checkpoint is persisted: the write-ahead
+                    # pause has done its job (unless something replaced it).
+                    durable_run.consume_pause(self._web_form_write_ahead_pause)
                 if stop_run:
                     break
 
@@ -2740,7 +2762,10 @@ class Replayer:
         the API step may run. None when no API step starts here.
         """
 
-        from openadapt_flow.runtime.actuators.web_form import folded_checks_digest
+        from openadapt_flow.runtime.actuators.web_form import (
+            folded_checks_digest,
+            web_form_effects,
+        )
 
         first = workflow.steps[step_index].id
         for end_index in range(step_index, len(workflow.steps)):
@@ -2787,7 +2812,7 @@ class Replayer:
                     "step names no right-record contract (openadapt-flow api "
                     "admit --identity)"
                 )
-            elif list(binding.effects) != list(save.effects):
+            elif list(binding.effects) != web_form_effects(workflow.steps, save):
                 reason = (
                     "the save step's record check differs from the one admitted "
                     "with the API step (openadapt-flow api admit)"
@@ -2959,6 +2984,7 @@ class Replayer:
         bundle_dir: Path,
         run_dir: Path,
         new_crops: dict[str, bytes],
+        durable_run: Optional[Any] = None,
     ) -> Optional[list[StepResult]]:
         """Run the API step for steps ``start_index..end_index``.
 
@@ -2970,23 +2996,6 @@ class Replayer:
         """
 
         save = workflow.steps[end_index]
-        self._web_form_span_active = True
-        try:
-            result = self._run_step(
-                save,
-                workflow=workflow,
-                step_index=end_index,
-                params=params,
-                bundle_dir=bundle_dir,
-                run_dir=run_dir,
-                new_crops=new_crops,
-            )
-        finally:
-            self._web_form_span_active = False
-            self._web_form_approval.clear()
-        if result.api_fallback is not None:
-            self._web_form_fallback_reason = result.api_fallback
-            return None
         router = getattr(self, "_surface_router", None)
         surface = router.active_id if router is not None else None
         folded = [
@@ -3004,6 +3013,81 @@ class Replayer:
             )
             for s in workflow.steps[start_index:end_index]
         ]
+        # A resumed leg already has its write-ahead: the continuation guard
+        # moves the attempt to delivery_started before the first request, and
+        # a restart then reconciles. A first leg gets one here.
+        if durable_run is not None and self._durable_continuation_guard is None:
+
+            def write_ahead() -> None:
+                # What a resume reads if the process stops while the span's
+                # requests are going out: the folded steps are done, and the
+                # save is paused as delivery-uncertain. A resume then starts at
+                # the save and only reconciles it; it never sends a write of
+                # the sequence again. The save's own outcome replaces this
+                # pause, and the run's completion consumes it.
+                observations = router.observations if router is not None else None
+                self._web_form_folded_checkpointed = True
+                for offset, item in enumerate(folded):
+                    durable_run.record(
+                        start_index + offset,
+                        workflow.steps[start_index + offset],
+                        item,
+                        dict(params),
+                        workflow=workflow,
+                        active_surface=surface,
+                        surface_observations=observations,
+                    )
+                provisional = StepResult(
+                    step_id=save.id,
+                    intent=save.intent,
+                    ok=False,
+                    safety_halt=True,
+                    failure_category="safety_halt",
+                    actuation="api",
+                    delivery_attempted=True,
+                    surface=surface,
+                    risk=save.risk,
+                    risk_explanation=save.risk_explanation,
+                    risk_review_required=save.risk_review_required,
+                    error=(
+                        f"Step '{save.id}' ({save.intent}): the API step began "
+                        "sending its requests and the run stopped before it "
+                        "finished; they may have written. Resume never sends "
+                        "them again; reconcile by reading the records back"
+                    ),
+                )
+                durable_run.record(
+                    end_index,
+                    save,
+                    provisional,
+                    dict(params),
+                    workflow=workflow,
+                    active_surface=surface,
+                    surface_observations=observations,
+                )
+                self._web_form_write_ahead_pause = durable_run.pause_digest()
+
+            self._web_form_write_ahead = write_ahead
+        self._web_form_folded_checkpointed = False
+        self._web_form_write_ahead_pause = ""
+        self._web_form_span_active = True
+        try:
+            result = self._run_step(
+                save,
+                workflow=workflow,
+                step_index=end_index,
+                params=params,
+                bundle_dir=bundle_dir,
+                run_dir=run_dir,
+                new_crops=new_crops,
+            )
+        finally:
+            self._web_form_span_active = False
+            self._web_form_write_ahead = None
+            self._web_form_approval.clear()
+        if result.api_fallback is not None:
+            self._web_form_fallback_reason = result.api_fallback
+            return None
         return [*folded, result]
 
     def _lookup_capability_refusal(
@@ -9597,6 +9681,55 @@ class Replayer:
         # request delivery, not against state captured earlier during
         # authorization or verifier setup.
         start_state = self._structural_state()
+        # A durable API span persists its write-ahead checkpoint (the folded
+        # steps, delivery attempted) before its first request leaves, so a
+        # crash anywhere in its sequence of writes resumes at the save, which
+        # is only ever reconciled, never sent again (_run_web_form_span).
+        write_ahead = getattr(self, "_web_form_write_ahead", None)
+        if (
+            write_ahead is not None
+            and send_prepared is None
+            and callable(getattr(api_actuator, "prepare", None))
+            and callable(getattr(api_actuator, "send", None))
+        ):
+            # Prepare first (reads only), so a save that can't be sent falls
+            # back to the GUI without a write-ahead checkpoint.
+            from openadapt_flow.runtime.actuators.api import (
+                ApiActuationResult as _Receipt,
+            )
+
+            try:
+                early = api_actuator.prepare(binding, runtime_params_for_gui(params))
+            except Exception as exc:  # noqa: BLE001 - reads only, nothing sent
+                early = None
+                result.ok = False
+                result.error = (
+                    f"Step '{step.id}' ({step.intent}): preparing the API request "
+                    f"failed ({type(exc).__name__}); nothing was sent"
+                )
+                return True
+            if isinstance(early, _Receipt):
+                # UNAVAILABLE: nothing was sent, as on the actuate path below.
+                result.effect_results.append(f"[api] {early.reason}")
+                del result.effect_contract_hashes[api_hash_start:]
+                if binding.on_unavailable == "halt":
+                    self._set_api_unavailable_refusal(step, result, reason=early.reason)
+                    return True
+                return False
+            send_prepared = early
+        if write_ahead is not None and send_prepared is not None:
+            try:
+                write_ahead()
+            except Exception as exc:  # noqa: BLE001 - nothing has been sent
+                result.ok = False
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                result.error = (
+                    f"Step '{step.id}' ({step.intent}): the durable run could not "
+                    f"persist its write-ahead checkpoint ({type(exc).__name__}); "
+                    "nothing was sent"
+                )
+                return True
         # This transition is the explicit delivery boundary. Set it BEFORE the
         # call because an exception/timeout may occur after the request left the
         # process but before the actuator can return a receipt-like outcome.
