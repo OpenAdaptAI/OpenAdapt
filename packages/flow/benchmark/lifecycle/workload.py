@@ -224,7 +224,9 @@ def _pick(rng: random.Random) -> str:
     return "clean"
 
 
-def generate(seed: int, n_items: int, days: int, n_existing: int = 12) -> Workload:
+def generate(
+    seed: int, n_items: int, days: int, n_existing: int = 12, app: str = "openemr"
+) -> Workload:
     """The stream for ``seed``: ``n_items`` referrals over ``days`` days."""
 
     rng = random.Random(seed)
@@ -337,7 +339,7 @@ def generate(seed: int, n_items: int, days: int, n_existing: int = 12) -> Worklo
             seq=seq,
             item_id=item_id,
             day=day,
-            app="openemr",
+            app=app,
             params=params,
             source_text=_source_text(params),
         )

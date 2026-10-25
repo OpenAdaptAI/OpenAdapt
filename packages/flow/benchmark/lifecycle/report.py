@@ -220,7 +220,10 @@ def stops(run_dir: Path) -> list[dict[str, Any]]:
     whether anything was actually wrong (for false-stop root-causing)."""
 
     out = []
-    for r in load(run_dir):
+    rows = load(run_dir)
+    start = next((r for r in rows if r["type"] == "run_start"), {})
+    app_name = (start.get("app") or {}).get("app", "openemr")
+    for r in rows:
         if r["type"] != "item_result" or r["claimed"] == "done":
             continue
         d = r.get("detail") or {}
@@ -231,7 +234,7 @@ def stops(run_dir: Path) -> list[dict[str, Any]]:
                 "seq": r["seq"],
                 "item_id": r["item_id"],
                 "evidence": r.get("evidence"),
-                "app": "openemr",
+                "app": app_name,
                 "exception": r["exception"],
                 "drift_active": r.get("drift_active"),
                 "halt_step": d.get("halt_step"),

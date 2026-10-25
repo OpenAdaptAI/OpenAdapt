@@ -553,7 +553,23 @@ class OpenEMRApp:
             pass
 
 
+#: Every app the soak can run against (``run.py --app``).
+APPS = ("openemr", "openimis", "fhir", "fake")
+
+
 def make_app(name: str) -> Any:
+    if name == "openimis":
+        from .apps_openimis import OpenIMISApp
+
+        app = OpenIMISApp()
+        app.point_hooks_here()
+        return app
+    if name == "fhir":
+        from .apps_fhir import FhirApp
+
+        app = FhirApp()
+        app.point_hooks_here()
+        return app
     if name == "fake":
         from .fake import FakeApp
 

@@ -1,0 +1,3 @@
+{"app": "both", "at": 1792886992.818742, "event": "start", "note": "offline inventory of harness, fixtures, FHIR duplicate check", "step": "prep"}
+{"app": "both", "at": 1792887357.8493319, "event": "stop", "note": "", "step": "prep"}
+{"app": "both", "at": 1792887357.87052, "event": "start", "note": "app registry, oracle schema, claims workload, openIMIS soak adapter", "step": "harness"}
