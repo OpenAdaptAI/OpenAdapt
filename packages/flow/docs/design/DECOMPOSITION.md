@@ -357,6 +357,8 @@ how the pull request proves it.
 | Approval gates need a signed human answer | Approval tests; no change to approval code paths outside the moves (and none before #1486 merges) |
 | Same side effects in the same order | Golden runs record every backend call (method and arguments) and compare the trace |
 | Import paths keep working | `replayer.py` re-exports every moved name; a test imports every name importable from the module on `main` before the first move |
+| Contract hashes over source bytes unchanged | Nothing moves out of `runtime/resolver.py` or `runtime/program_predicates.py`: the program-predicate evaluator contract hashes their source bytes (and the vision module's) |
+| Command identities unchanged | The CLI split keeps `_SEALED_READY_COMMANDS` matching, because it keys on each command function's `module:name` |
 | Strict typing and code-owner review keep covering the moved code | Same pull request updates the strict mypy list and CODEOWNERS to cover `runtime/replay/` |
 
 ### 3.1 Golden runs
@@ -401,19 +403,20 @@ mix.py:7: error: The erased type of self "host.Replayer" is not a supertype
 of its class "mix.IdentityMixin"  [misc]
 ```
 
-Instead, each mixin declares what it needs from the host as a `Protocol` that
-only mypy sees:
+Instead, each mixin declares what it needs from the host in a host class
+that only mypy sees as its base:
 
 ```python
-class _IdentityHost(Protocol):
+# mypy: disable-error-code="empty-body"
+class _IdentityChecksHost:
     backend: Backend
-    vision: Vision
-    identity_vlm: IdentityVlm | None
+    vision: Any
+    identity_vlm: Optional[Any]
     pixel_verify_enabled: bool
-    def _asset_bytes(self, ...) -> bytes: ...
+    def _asset_bytes(self, bundle_dir: Path, rel: str, *, workflow: Optional[Workflow] = None) -> Optional[bytes]: ...
 
 if TYPE_CHECKING:
-    _Base = _IdentityHost
+    _Base = _IdentityChecksHost
 else:
     _Base = object
 
@@ -422,14 +425,37 @@ class IdentityChecks(_Base):
         ...
 ```
 
-This was checked with mypy 1.11.2 using the strict flags from CI. The mixin
-type-checks; at run time the class is a plain `type` whose method resolution
-order is `Replayer`, the mixins, `object` (no `Protocol` metaclass); and when
-`Replayer` assigns an attribute a type that no longer matches the declaration,
-mypy reports an error. Drift is caught, not silent.
+The host is a plain class, not a `Protocol`. A first version used
+`Protocol` and failed in two ways under mypy 1.11 and 2.4:
 
-The host protocols are also the first deliverable of the design: each one
-lists exactly what its concern reads, which is the input for Stage B.
+- A protocol attribute declared without a value is abstract, so a mixin
+  method that assigns it (`self._render_scale_inner = None`) re-infers its
+  type as `None`, and the replayer's own declaration then conflicts.
+- Protocol methods with empty bodies are implicitly abstract. When one mixin
+  stubs a method that a later mixin defines, the stub comes first in the
+  method resolution order and mypy reports the replayer as abstract.
+
+A plain host class avoids both. Its stubs' empty bodies are allowed by a
+per-module `empty-body` exemption, which cannot hide anything in the moved
+code because moved methods are never empty. The attribute types are the
+replayer's own (class-level annotations, `__init__` annotations, or the
+annotation of the parameter an attribute is assigned from), with `Any` only
+where the replayer states no type.
+
+This was checked with mypy 2.4 using the strict flags from CI, on the real
+moves in PR 2: the mixins type-check; at run time the class is a plain
+`type` whose method resolution order is `Replayer`, the mixins, `object`;
+and when `Replayer` assigns an attribute a type that no longer matches a
+host declaration, mypy reports an error. Drift is caught, not silent.
+
+`scripts/extract_mixin.py` generates the mixin module, its imports and its
+host class. Each host lists exactly what its concern reads, which is the
+input for Stage B.
+
+A concern goes into `runtime.core` only when its host reads no governance
+state (approval, authorization, qualification, durable or profile
+attributes) and its module imports no governance module, even for types.
+Everything else goes into `runtime/replay/`.
 
 Stage A also reduces merge conflicts. In the October merge-conflict review,
 three API-step pull requests (#1370, #1371, #1372) each conflicted on
