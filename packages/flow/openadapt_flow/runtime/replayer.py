@@ -7601,6 +7601,25 @@ class Replayer:
         if missed is not None and missed[0] == step.id:
             self._scroll_missed_target = None
             target_missed = missed[1]
+        if step.target_param is not None:
+            # A record-selecting click acts on the run's record: look for the
+            # run's value; the identity check verifies the row (param mode).
+            from openadapt_flow.runtime.target_param import bind_target_param
+
+            sealed_step = step
+            step, refusal = bind_target_param(step, params, workflow)
+            # The sealed-leaf check compares the program's step with the
+            # step the runtime acts on; it must see the sealed one.
+            self._target_param_binding = (step, sealed_step)
+            if refusal is not None:
+                return StepResult(
+                    step_id=step.id,
+                    intent=step.intent,
+                    ok=False,
+                    error=refusal,
+                    safety_halt=True,
+                    failure_category="safety_halt",
+                )
         router = self._surface_router
         if router is None:
             if step.action is ActionKind.SWITCH_SURFACE:
@@ -8966,6 +8985,10 @@ class Replayer:
                 and matched_region is not None
                 and resolution.rung not in ("template", "structural")
                 and step.anchor is not None
+                # A click rebound to the run's record (runtime.target_param)
+                # found another record's row; that row must never become the
+                # step's recorded anchor.
+                and not (step.target_param is not None and not step.anchor.template)
             ):
                 # Heal from the PRE-action frame: that is the frame the
                 # anchor was resolved against (the action may have navigated
@@ -10540,9 +10563,11 @@ class Replayer:
             if qualification is not None
             else None
         )
+        # A click that selects a record by a run value (Step.target_param)
+        # is judged by its identity band, never by hover evidence alone.
         hover_check = (
             self._hover_check(step, resolution, frame_png, workflow, bundle_dir)
-            if qualified_policy is None
+            if qualified_policy is None and step.target_param is None
             else None
         )
         if hover_check is None and (
@@ -10688,7 +10713,7 @@ class Replayer:
                 + " — refusing to act; run aborted"
             )
         elif check.status in ("unreadable", "abstain") and (
-            step.risk == "irreversible" or governed
+            step.risk == "irreversible" or governed or step.target_param is not None
         ):
             reason = (
                 "rests on a glyph-confusable identifier OCR may have "
@@ -10701,6 +10726,8 @@ class Replayer:
                 "requires verified identity under the governed run policy"
                 if governed
                 else "is irreversible"
+                if step.risk == "irreversible"
+                else "selects a record by a run value"
             )
             error = (
                 f"Step '{step.id}' ({step.intent}) {scope} and its target "
@@ -11605,6 +11632,17 @@ class Replayer:
         self._active_delivery_region = fresh_region
         return fresh_resolution, fresh_region, fresh_png, error
 
+    def _sealed_step(self, step: Step) -> Step:
+        """The program's own step for one the runtime rebound to a run value.
+
+        ``runtime.target_param`` rebinds a record-selecting click to the
+        run's record; integrity checks compare against the sealed step.
+        """
+        binding = getattr(self, "_target_param_binding", None)
+        if binding is not None and binding[0] is step:
+            return binding[1]
+        return step
+
     def _resolve_step_target(
         self,
         step: Step,
@@ -12041,7 +12079,7 @@ class Replayer:
             or leaf.get("state_id") != self._current_state_id
             or parent_state is None
             or parent_state.kind is not StateKind.ACTION
-            or parent_state.step != step
+            or parent_state.step != self._sealed_step(step)
         ):
             return (
                 "governed program leaf frame no longer matches the exact sealed "
@@ -18161,6 +18199,10 @@ class Replayer:
         workflow: Optional[Workflow] = None,
     ) -> Optional[bytes]:
         """Return the verified run snapshot for governed asset consumers."""
+        if not rel:
+            # No crop: a record-selecting click rebound to another record
+            # (runtime.target_param) carries none.
+            return None
         if self.governed_authorization is not None:
             data = self._governed_asset_snapshot.get(rel)
             expected = self._governed_asset_hashes.get(rel)

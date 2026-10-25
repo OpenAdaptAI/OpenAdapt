@@ -197,22 +197,17 @@ class ProofApp:
         if sock:
             os.environ["DOCKER_HOST"] = sock
 
-    def _exec_bytes(
-        self, container: str, script: str, *, stdin: bytes = b"", timeout: float = 120
-    ) -> bytes:
+    def _exec(self, container: str, script: str, *, stdin: bytes = b"") -> str:
         proc = subprocess.run(
             ["podman", "exec", "-i", container, "sh", "-c", script],
             input=stdin,
             capture_output=True,
-            timeout=timeout,
+            timeout=120,
             check=False,
         )
         if proc.returncode != 0:
             raise RuntimeError(f"podman exec failed: {proc.stderr.decode()[-400:]}")
-        return proc.stdout
-
-    def _exec(self, container: str, script: str, *, stdin: bytes = b"") -> str:
-        return self._exec_bytes(container, script, stdin=stdin).decode()
+        return proc.stdout.decode()
 
     def rows(self) -> list[dict[str, str]]:
         """Every chart, read directly from the database (the oracle)."""
@@ -242,25 +237,20 @@ class ProofApp:
         """The current charts, for putting back after a re-qualification."""
 
         path = self.state_dir / "proof-data.sql"
-        # The dump is bytes: OpenEMR's install data is not all UTF-8.
-        sql = self._exec_bytes(
+        sql = self._exec(
             self.db_container,
             'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" exec mariadb-dump -uroot '
-            # OpenEMR keeps the OAuth key passphrase in `keys`; restoring an
-            # older copy of it next to newer key files breaks every token.
-            "--single-transaction --triggers --ignore-table=openemr.keys openemr",
-            timeout=600,
+            "--single-transaction openemr",
         )
-        path.write_bytes(sql)
+        path.write_text(sql)
         path.chmod(0o600)
         return path
 
     def restore(self, path: Path) -> None:
-        self._exec_bytes(
+        self._exec(
             self.db_container,
             'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" exec mariadb -uroot openemr',
             stdin=path.read_bytes(),
-            timeout=600,
         )
 
     def relabel_save(self) -> dict[str, str]:
