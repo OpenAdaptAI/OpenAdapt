@@ -91,10 +91,17 @@ class Snapshot:
 ANY_VALUE = "\x00any"
 
 
+def _computed(default: Optional[str]) -> bool:
+    """A default the database computes at insert (the current time)."""
+
+    text = (default or "").strip().lower().strip("()")
+    return text.startswith(("current_timestamp", "now", "current_date", "localtime"))
+
+
 def is_default(value: Any, default: Optional[str]) -> bool:
     """Does a new row's ``value`` look like nothing set it?"""
 
-    if default == ANY_VALUE or value is None:
+    if default == ANY_VALUE or value is None or _computed(default):
         return True
     text = str(value).strip()
     if text in _EMPTY:
