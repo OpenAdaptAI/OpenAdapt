@@ -925,9 +925,22 @@ _STRUCTURAL_LOCATOR_AT_JS = (
     ) || el;
     const tag = actionable.tagName.toLowerCase();
     let selector = null;
+    // A selector counts only when, in the clicked element's own document,
+    // it matches exactly one element and that element is the clicked one. A
+    // look-alike elsewhere must not make a selector "unique" for the wrong
+    // element. Inside a shadow root no selector is built: Playwright's CSS
+    // locator pierces open shadow roots at replay, so a selector unique in
+    // one root could match a look-alike in the page or another root.
+    const root = actionable.getRootNode();
+    const unique = (candidate) => {
+        if (!(root instanceof Document)) return false;
+        try {
+            return root.querySelectorAll(candidate).length === 1 &&
+                root.querySelector(candidate) === actionable;
+        } catch (_) { return false; }
+    };
     const id = actionable.id;
-    if (id && document.querySelectorAll(
-            '#' + CSS.escape(id)).length === 1) {
+    if (id && unique('#' + CSS.escape(id))) {
         selector = '#' + CSS.escape(id);
     }
     // No unique id: the same unique attributes the interactive recorder uses,
@@ -938,10 +951,6 @@ _STRUCTURAL_LOCATOR_AT_JS = (
         ? (actionable.getAttribute('type') || 'text').toLowerCase() : '';
     const isButtonInput = ['submit', 'button', 'reset', 'image']
         .indexOf(inputType) >= 0;
-    const unique = (candidate) => {
-        try { return document.querySelectorAll(candidate).length === 1; }
-        catch (_) { return false; }
-    };
     for (const attr of ['data-testid', 'data-test', 'name']) {
         if (selector) break;
         const value = actionable.getAttribute(attr);

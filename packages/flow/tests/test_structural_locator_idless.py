@@ -119,3 +119,76 @@ def test_recorded_create_step_carries_its_selector(
     assert save.anchor.structural.selector == 'input[name="submit"]'
     assert save.anchor.structural.role == "button"
     assert save.anchor.structural.name == "Create ticket"
+
+
+SHADOW_PAGE = """<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="font:16px Arial;margin:24px">
+<p><button name="save" onclick="window.actions.push('light')">Save</button></p>
+<save-panel></save-panel>
+<script>
+window.actions = [];
+customElements.define('save-panel', class extends HTMLElement {
+  constructor() {
+    super();
+    const root = this.attachShadow({mode: 'open'});
+    root.innerHTML = '<button name="save" style="margin-top:40px">Save</button>';
+    root.querySelector('button').addEventListener(
+      'click', () => window.actions.push('shadow'));
+  }
+});
+</script>
+</body></html>"""
+
+
+def test_a_lookalike_in_another_root_never_names_the_clicked_button(
+    browser: Any, tmp_path: Path
+) -> None:
+    """A Save inside a shadow root, and a look-alike Save in the page with
+    the same name. ``button[name="save"]`` matches exactly one element in the
+    document, the look-alike, so a count alone would call it unique for the
+    shadow button and a replay would click the wrong Save."""
+
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    path = tmp_path / "shadow.html"
+    path.write_text(SHADOW_PAGE)
+    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    try:
+        page.goto(path.as_uri())
+        backend = PlaywrightBackend(page)
+        shadow = page.locator("save-panel").locator("button")
+        box = shadow.bounding_box()
+        assert box is not None
+        x, y = int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2)
+
+        # The page's own hit test stops at the shadow host.
+        located = backend.structural_locator_at(x, y)
+        assert located is None or located.selector != 'button[name="save"]'
+
+        # A hit test that reaches the button inside the shadow root (as a
+        # piercing one would): still no selector, because the only match in
+        # the document is the look-alike.
+        page.evaluate(
+            """() => {
+              const inner = document.querySelector('save-panel')
+                .shadowRoot.querySelector('button');
+              document.elementFromPoint = () => inner;
+            }"""
+        )
+        located = backend.structural_locator_at(x, y)
+        assert located is not None
+        assert located.selector is None
+        assert (located.role, located.name) == ("button", "Save")
+
+        # The light-DOM Save is the one element its selector matches, and it
+        # is the clicked one: it keeps the selector.
+        page.reload()
+        light = page.locator("p > button")
+        box = light.bounding_box()
+        assert box is not None
+        located = backend.structural_locator_at(
+            int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2)
+        )
+        assert located is not None and located.selector == 'button[name="save"]'
+    finally:
+        page.close()
