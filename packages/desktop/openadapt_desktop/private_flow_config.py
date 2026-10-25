@@ -229,6 +229,9 @@ def _redactions_for_mapping(
 def prepare_flow_config(
     source: Path | None,
     target: ExecutionTarget | None,
+    *,
+    approver_root: str | None = None,
+    approver_head: tuple[int, str] | None = None,
 ) -> PreparedPrivateYaml | None:
     """Parse, merge, serialize, and derive redactions from one snapshot.
 
@@ -241,6 +244,31 @@ def prepare_flow_config(
     if source is None and target is None:
         return None
     deployment = _merged_config(source, target)
+    approvers = deployment.get("approvers")
+    if approvers is not None and not isinstance(approvers, Mapping):
+        raise PrivateFlowConfigError("The deployment config's approvers section is invalid.")
+    if not approver_root:
+        # Without this Mac's Keychain pin there is no trusted root. The base
+        # config is a file the agent's user can write, so none of its
+        # approvers section reaches Flow (a section without a root is also
+        # unreadable to Flow, which would refuse the whole run). Flow runs
+        # normally and refuses only a person's answer (approver_root_unpinned).
+        deployment.pop("approvers", None)
+    if approver_root:
+        # A governed run takes its approver pin only from its deployment
+        # config: write this Mac's pin into the snapshot Flow receives.
+        existing = (approvers or {}).get("root_public_key")
+        if existing and str(existing).strip().lower() != approver_root:
+            raise PrivateFlowConfigError(
+                "The deployment config pins another approver root than this Mac. "
+                "Nothing was run."
+            )
+        section = {**dict(approvers or {}), "root_public_key": approver_root}
+        if approver_head is not None:
+            # The roster head this Mac's Keychain recorded: Flow refuses a
+            # roster that doesn't extend it.
+            section["head"] = [int(approver_head[0]), str(approver_head[1])]
+        deployment["approvers"] = section
     remote_decisions, remote_decision_runner_id = _remote_decision_settings(deployment)
     return PreparedPrivateYaml(
         payload=yaml.safe_dump(deployment, sort_keys=False),
@@ -373,7 +401,9 @@ def stage_private_text(
             os.fchmod(fd, 0o600)
         except (AttributeError, OSError):  # pragma: no cover - Windows fallback
             os.chmod(path, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        # No newline translation: the bytes on disk are exactly
+        # payload.encode("utf-8"), so the digest Desktop passes matches.
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
             fd = -1
             handle.write(payload)
             handle.flush()

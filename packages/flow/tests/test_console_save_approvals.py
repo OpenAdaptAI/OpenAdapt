@@ -7,7 +7,9 @@ Invariants under test:
 * an answer binds the task the phone was shown: a changed or forged task is
   refused, and the answer is single-use (a second tap is refused);
 * only a person answers here (``decided_by = human`` on the
-  ``decision_portal`` route), and a decline needs a closed reason;
+  ``decision_portal`` route), signed by the portal's registered approver key,
+  and a decline needs a closed reason;
+* a portal without an approver key records no answer at all;
 * answering is offered only by the attended console the portal relays to.
 """
 
@@ -21,6 +23,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from openadapt_flow.approval_mode.human_attestation import PORTAL_KEY_ENV
 from openadapt_flow.approval_mode.item_approval import (
     ItemApprovalStore,
     decided_by_summary,
@@ -29,6 +32,9 @@ from openadapt_flow.approval_mode.model import ApprovalMode
 from openadapt_flow.console import save_approvals
 from openadapt_flow.console.app import create_app
 from openadapt_types.human_decision import HumanDecisionTaskV1
+
+# The portal signs every answer with its registered approver key.
+pytestmark = pytest.mark.usefixtures("approver")
 
 FRAME = b"\x89PNG\r\n\x1a\nmade-up filled form"
 FORM = ("dom", "sha256:" + "1" * 64)
@@ -98,6 +104,9 @@ def test_an_approval_is_recorded_once_as_a_person_on_the_portal(tmp_path):
     answer = store.read_answer(request.request_id)
     assert answer.decided_by == "human" and answer.route == "decision_portal"
     assert answer.approver_kind == "unauthenticated"
+    assert answer.attestation is not None
+    assert answer.attestation.method == "portal_key"
+    assert answer.attestation.signer == "decision-portal"
     assert decided_by_summary(store, request)["route"] == "decision_portal"
     # Single use: the save is no longer waiting, so a second tap is refused.
     assert save_approvals.list_save_approvals(tmp_path) == []
@@ -118,6 +127,32 @@ def test_a_decline_needs_one_closed_reason(tmp_path):
     )
     assert receipt.state.value == "rejected"
     assert store.read_answer(request.request_id).decline_reason == "wrong_record"
+
+
+def test_a_portal_without_an_approver_key_records_no_answer(tmp_path, monkeypatch):
+    store, request = _open(tmp_path)
+    monkeypatch.delenv(PORTAL_KEY_ENV)
+    with pytest.raises(save_approvals.SaveApprovalRefused) as err:
+        _answer(tmp_path, request.request_id)
+    assert err.value.code == "human_answer_unverifiable"
+    assert store.read_answer(request.request_id) is None
+    assert store.status(request) == "waiting"
+    # The console route refuses the same way and still offers the save.
+    client = _client(tmp_path, attend=True)
+    detail = client.get(f"/api/save-approvals/{request.request_id}").json()
+    response = client.post(
+        f"/api/save-approvals/{request.request_id}/actions/verify_and_resume",
+        json={
+            "action": "verify_and_resume",
+            "task_digest": detail["task_digest"],
+            "task_signature": detail["task"]["signature"],
+        },
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == "human_answer_unverifiable"
+    assert store.read_answer(request.request_id) is None
+    rows = save_approvals.list_save_approvals(tmp_path)
+    assert [row.request_id for row in rows] == [request.request_id]
 
 
 def test_an_answer_for_another_task_is_refused(tmp_path):

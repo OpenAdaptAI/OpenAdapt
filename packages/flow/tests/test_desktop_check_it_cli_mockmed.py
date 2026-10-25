@@ -43,6 +43,9 @@ import openadapt_flow.__main__ as main  # noqa: E402
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend  # noqa: E402
 from openadapt_flow.compiler import compile_recording  # noqa: E402
 from openadapt_flow.ir import RunReport, Workflow  # noqa: E402
+from openadapt_flow.jit.authority import KEY_PASSPHRASE_ENV  # noqa: E402
+from openadapt_flow.approval_mode.approver_roster import ROOT_ENV  # noqa: E402
+from openadapt_flow.jit.lifecycle import KEY_DIR_ENV  # noqa: E402
 from openadapt_flow.mockmed.fault_server import serve  # noqa: E402
 from openadapt_flow.qualify.environment import (  # noqa: E402
     WEB_OBSERVER_CONTRACT_SHA256,
@@ -93,6 +96,7 @@ from openadapt_flow.tutorial import (  # noqa: E402
 )
 from openadapt_flow.verification import VerificationTier  # noqa: E402
 from scripts import export_public_demo_evidence as demo  # noqa: E402
+from tests import _approver_keys as approver_keys  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_KEY = "desktop-check-it-test-key"
@@ -117,9 +121,10 @@ def _flow(*argv: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
 class DesktopRunIt:
     """Answers the run's waiting approval request, as Desktop's Run it would."""
 
-    def __init__(self, run_dir: Path, env: dict[str, str]) -> None:
+    def __init__(self, run_dir: Path, env: dict[str, str], approver_key: Path) -> None:
         self.run_dir = run_dir
         self.env = env
+        self.approver_key = approver_key
         self.shown: list[dict[str, Any]] = []
         self.answers: list[dict[str, Any]] = []
         self.errors: list[str] = []
@@ -162,10 +167,11 @@ class DesktopRunIt:
                     "human",
                     "--route",
                     "desktop_run_it",
-                    "--approver-id",
-                    "cloud-user-0001",
-                    "--auth-method",
-                    "cloud_aal2",
+                    "--unauthenticated",
+                    # Desktop signs the person's answer with its registered
+                    # approver key; a claimed Cloud sign-in proves nothing here.
+                    "--approver-key",
+                    str(self.approver_key),
                     env=self.env,
                 )
                 if answered.returncode != 0:
@@ -185,10 +191,24 @@ def check_it(tmp_path_factory: pytest.TempPathFactory):
     home = work / "openadapt-home"
     saved_env = {
         name: os.environ.get(name)
-        for name in ("OPENADAPT_HOME", "OPENADAPT_BUNDLE_KEY")
+        for name in (
+            "OPENADAPT_HOME",
+            "OPENADAPT_BUNDLE_KEY",
+            KEY_DIR_ENV,
+            KEY_PASSPHRASE_ENV,
+            ROOT_ENV,
+        )
     }
     os.environ["OPENADAPT_HOME"] = str(home)
     os.environ["OPENADAPT_BUNDLE_KEY"] = BUNDLE_KEY
+    # The person's answers are signed by Desktop's registered approver key,
+    # and the run verifies them against this key directory.
+    key_dir = work / "approver-keys"
+    os.environ[KEY_DIR_ENV] = str(key_dir)
+    os.environ[KEY_PASSPHRASE_ENV] = approver_keys.PASSPHRASE
+    approver_key, _signer = approver_keys.provision(key_dir)
+    # Desktop's runs pin the roster's root (approval_mode/approver_roster).
+    os.environ[ROOT_ENV] = approver_keys.root_of(key_dir)
     env = {
         **os.environ,
         "OPENADAPT_HOME": str(home),
@@ -349,8 +369,11 @@ def check_it(tmp_path_factory: pytest.TempPathFactory):
                 base_url,
                 "--approval-wait",
                 "120",
+                # A governed run takes its approver pin only from its config.
+                "--config",
+                str(approver_keys.approver_config(work / "approvers.yaml")),
             ]
-            with DesktopRunIt(run_dir, env) as person:
+            with DesktopRunIt(run_dir, env, approver_key) as person:
                 exit_code = main.main(argv)
             report = RunReport.model_validate_json(
                 (run_dir / "report.json").read_text(encoding="utf-8")
@@ -377,6 +400,7 @@ def check_it(tmp_path_factory: pytest.TempPathFactory):
             base_url=base_url,
             entry_url=entry_url,
             env=env,
+            approver_key=approver_key,
         )
     finally:
         observer_patch.undo()
@@ -416,8 +440,9 @@ def test_the_practice_item_waits_for_desktop_and_saves_once_after_approval(check
     assert run.report.approval.mode.value == "each_item"
     assert run.report.approval.decision.value == "approved"
     (approval,) = run.report.approval.approvals
-    assert approval.approver_id == "cloud-user-0001"
-    assert approval.auth_method == "cloud_aal2"
+    # A signed Run it answer names no Cloud user: its proof is the signature.
+    assert approval.approver_id is None
+    assert approval.auth_method == "none"
     # Desktop saw one request, with a screenshot of the filled form.
     (shown,) = run.person.shown
     assert Path(shown["screenshot"]).is_file()
@@ -559,6 +584,8 @@ def test_run_it_saves_once_after_approval_and_never_saves_a_form_nobody_sees(
         base_url,
         "--params-file",
         str(params_file),
+        "--config",
+        str(approver_keys.approver_config(check_it.bundle.parent / "approvers.yaml")),
     ]
 
     def run(run_dir: Path, wait_s: str) -> int:
@@ -604,6 +631,8 @@ def test_run_it_saves_once_after_approval_and_never_saves_a_form_nobody_sees(
         "--route",
         "desktop_run_it",
         "--unauthenticated",
+        "--approver-key",
+        str(check_it.approver_key),
         env=check_it.env,
     )
     assert approved.returncode == 0, approved.stdout + approved.stderr
@@ -615,7 +644,7 @@ def test_run_it_saves_once_after_approval_and_never_saves_a_form_nobody_sees(
 
     # 3. The item again, answered in time.
     again = check_it.work / "runs" / "run-it-again"
-    with DesktopRunIt(again, check_it.env) as person:
+    with DesktopRunIt(again, check_it.env, check_it.approver_key) as person:
         assert run(again, "120") == 0
     assert person.errors == []
     assert len(person.answers) == 1

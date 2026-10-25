@@ -190,3 +190,7 @@ def test_bridges_that_save_invent_values_or_run_long_are_refused(
     assert len(_records(base_url)) == 0
     assert RepairStore(tmp_path / "repair-store").list_candidates() == []
     assert not (tmp_path / "run" / "item-approval").exists()
+
+
+# Every person in these tests signs with a registered approver key.
+pytestmark = pytest.mark.usefixtures("approver")
