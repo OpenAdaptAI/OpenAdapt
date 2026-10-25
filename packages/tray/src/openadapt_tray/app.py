@@ -868,7 +868,8 @@ class TrayApplication:
         # Watch recorders started without the desktop app.
         if self.config.watch_local_recorders and not self.capture_watch.start():
             print(
-                "openadapt-capture is not installed in the tray's environment; "
+                "openadapt-capture 1.3.0 or later is not installed in the "
+                "tray's environment (pip install 'openadapt-tray[capture]'); "
                 "recordings started outside the desktop app will not show."
             )
 

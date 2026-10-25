@@ -99,11 +99,12 @@ and **Stop Recording** sends it Ctrl-C. The command's output goes to
 terminal, **Stop Recording** asks the recorder to stop through its local
 control channel.
 
-This needs `openadapt-flow` and `openadapt-capture` 1.3.0 or later in the same
-Python environment as the tray:
+This needs `openadapt-capture` 1.3.0 or later (the tray's `capture` extra) and,
+to start recordings from the menu, `openadapt-flow`, both in the same Python
+environment as the tray:
 
 ```bash
-pip install openadapt-tray "openadapt-flow[capture,macos]" "openadapt-capture>=1.3.0"
+pip install "openadapt-tray[capture]" "openadapt-flow[capture,macos]"
 ```
 
 The tray and the recorder must also run as the same user with the same
