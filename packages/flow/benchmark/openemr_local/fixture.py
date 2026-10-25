@@ -739,11 +739,12 @@ class OpenEMRFixture:
         except ValueError as exc:
             raise FixtureError(f"{role} token response was not JSON") from exc
         requested_scope = set(scope.split())
-        # Pinned OpenEMR v8.0.0.3 includes ``api:oemr`` in the signed JWT's
-        # ``scopes`` claim but omits that base API capability from the token
-        # response's display-oriented ``scope`` string. Check both exact forms.
+        # Pinned OpenEMR v8.0.0.3 includes the base API capabilities
+        # (``api:oemr``, ``api:fhir``) in the signed JWT's ``scopes`` claim but
+        # omits them from the token response's display-oriented ``scope``
+        # string. Check both exact forms.
         returned_scope = set(str(payload.get("scope", "")).split())
-        if returned_scope != requested_scope - {"api:oemr"}:
+        if returned_scope != requested_scope - {"api:oemr", "api:fhir"}:
             raise FixtureError(
                 f"{role} token scope differs from the exact requested scope"
             )
