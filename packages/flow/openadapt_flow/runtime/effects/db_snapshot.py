@@ -177,6 +177,29 @@ def _cell(dialect: Dialect, column: str, binary: bool) -> str:
     return f"CASE WHEN typeof({q}) = 'blob' THEN hex({q}) ELSE {q} END"
 
 
+#: Columns per JSON object call: SQLite caps a function at 127 arguments.
+_CHUNK = 50
+
+
+def _row_json(dialect: Dialect, cols: Sequence[str], binary: set[str]) -> list[str]:
+    """One row as JSON objects of at most ``_CHUNK`` columns each.
+
+    Merged in Python, not in SQL: a JSON merge patch drops null values.
+    """
+
+    obj = "JSON_OBJECT" if dialect == "mysql" else "json_object"
+    return [
+        obj
+        + "("
+        + ", ".join(
+            f"{_literal(c)}, {_cell(dialect, c, c in binary)}"
+            for c in cols[i : i + _CHUNK]
+        )
+        + ")"
+        for i in range(0, len(cols), _CHUNK)
+    ]
+
+
 def take_snapshot(
     connect: Callable[[], Any],
     dialect: Dialect,
@@ -213,21 +236,23 @@ def take_snapshot(
             rows=None if t in large else [],
         )
     if small:
-        obj = "JSON_OBJECT" if dialect == "mysql" else "json_object"
+        parts = {t: _row_json(dialect, schema[t][0], schema[t][3]) for t in small}
+        width = max(len(p) for p in parts.values())
         selects = []
         for t in small:
-            cols, _pk, _d, binary = schema[t]
-            pairs = ", ".join(
-                f"{_literal(c)}, {_cell(dialect, c, c in binary)}" for c in cols
-            )
+            padded = parts[t] + ["NULL"] * (width - len(parts[t]))
+            cells = ", ".join(f"{c} AS r{i}" for i, c in enumerate(padded))
             selects.append(
-                f"SELECT {_literal(t)} AS t, {obj}({pairs}) AS r "
-                f"FROM {_quote(dialect, t)}"
+                f"SELECT {_literal(t)} AS t, {cells} FROM {_quote(dialect, t)}"
             )
-        for t, row in _query(connect, " UNION ALL ".join(selects)):
+        for t, *chunks in _query(connect, " UNION ALL ".join(selects)):
             rows = snap.tables[str(t)].rows
             assert rows is not None
-            rows.append(json.loads(row) if isinstance(row, str) else dict(row))
+            row: dict[str, Any] = {}
+            for chunk in chunks:
+                if chunk is not None:
+                    row.update(json.loads(chunk) if isinstance(chunk, str) else chunk)
+            rows.append(row)
     if large:
         if dialect == "mysql":
             for t, checksum in _query(
