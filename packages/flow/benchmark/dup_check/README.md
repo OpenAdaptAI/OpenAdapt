@@ -49,32 +49,53 @@ nothing with the chart but the person, so no rule here can catch them. The
 `r2_` rules were written knowing the `r2_` kinds, so those catches are not a
 blind test.
 
-Extended stream (500 seed-7 items, plus the planted and extra charts): 622
-items, 440 new charts, 169 true duplicates.
+Then production-lifecycle named six cases that must stop. Each is planted as
+a `pl_` kind:
+- a married name and a new address;
+- a mistyped day of birth;
+- a second surname ("Garcia Lopez" against "Garcia");
+- an initial ("J." for the first name);
+- a crossed name;
+- both names misspelled with the same phone and email.
+
+The initial was the one gap, and a rule was added for it.
+
+Extended stream (500 seed-7 items, plus the planted and extra charts): 676
+items, 440 new charts, 223 true duplicates.
 
 | check | false stops (per 100 items) | missed duplicates |
 |---|---:|---:|
-| screen (`no_duplicate_candidate` on the list) | 252 (40.5) | 30 |
-| record, first version | 2 (0.3) | 60 |
-| record, second round | 2 (0.3) | 24 |
+| screen (`no_duplicate_candidate` on the list) | 252 (37.3) | 30 |
+| record, first version | 2 (0.3) | 72 |
+| record, now | 2 (0.3) | 24 |
 
-The soak's own 55 items, with the same planting (177 items, 130 true
-duplicates): screen 10 false stops (5.6 per 100), 30 missed; record 0 false
+The soak's own 55 items, with the same planting (231 items, 184 true
+duplicates): screen 10 false stops (4.3 per 100), 30 missed; record 0 false
 stops, 24 missed.
 
-Missed duplicates by kind, extended stream:
+Every kind, extended stream (planted count; missed by screen, record v1,
+record now):
 
-| kind | planted | screen | record v1 | record v2 | field that would have caught it |
+| kind | planted | screen | v1 | now | what catches it now |
 |---|---:|---:|---:|---:|---|
-| married name + mistyped day (`heldout_married_dob_typo`) | 12 | 12 | 12 | 0 | phone, street, email (caught by v2) |
-| first and last name swapped (`r2_name_swap`) | 12 | 0 | 12 | 0 | the names, crossed (v2) |
-| nickname, Bob for Robert (`r2_nickname`) | 6 | 0 | 6 | 0 | the nickname table (v2) |
-| prior name on the chart, moved, mistyped day (`r2_prior_name_moved_dob_typo`) | 6 | 6 | 6 | 0 | the chart's birth name (v2) |
-| year digits transposed (`r2_year_transposed`) | 11 | 0 | 0 | 0 | the date of birth, one field off |
-| married name, moved, mistyped day (`limit_married_moved_dob_typo`) | 12 | 12 | 12 | 12 | none in the referral: needs an MRN, an insurance id or a person |
-| new first and last name, moved, same day (`limit_new_name_moved_same_dob`) | 12 | 0 | 12 | 12 | none in the referral; the screen stops it only because it stops every shared date of birth |
+| married name + mistyped day (`heldout_married_dob_typo`) | 12 | 12 | 12 | 0 | first name, a near date of birth, a shared phone, street or email |
+| married name, new address (`pl_married_moved`) | 12 | 0 | 0 | 0 | same first name and date of birth |
+| same name, mistyped day (`pl_ambiguous_same_person`, `ambiguous_same_person`) | 22 | 0 | 0 | 0 | same name, date of birth one field off |
+| day and month swapped (`planted_swapped_dob`) | 3 | 0 | 0 | 0 | same name, swapped date |
+| second surname (`pl_second_surname`) | 6 | 0 | 0 | 0 | a shared surname part, same first name and date of birth |
+| hyphenated name (`planted_hyphenated`) | 12 | 0 | 0 | 0 | a shared surname part |
+| initial for the first name (`pl_initial`) | 12 | 0 | 12 | 0 | the initial rule |
+| nickname (`r2_nickname`) | 6 | 0 | 6 | 0 | the nickname table |
+| first and last name swapped (`r2_name_swap`) | 12 | 0 | 12 | 0 | the crossed names |
+| both names misspelled, same contact (`pl_both_typos_same_contact`) | 12 | 0 | 0 | 0 | similar names, same date of birth |
+| prior name on the chart, moved, mistyped day (`r2_prior_name_moved_dob_typo`) | 6 | 6 | 6 | 0 | the chart's birth name |
+| year digits transposed (`r2_year_transposed`) | 11 | 0 | 0 | 0 | same name, date of birth one field off |
+| married name, moved, mistyped day (`limit_married_moved_dob_typo`) | 12 | 12 | 12 | 12 | nothing in the referral: needs an MRN, an insurance id or a person |
+| new first and last name, moved, same day (`limit_new_name_moved_same_dob`) | 12 | 0 | 12 | 12 | nothing in the referral; the screen stops it only because it stops every shared date of birth |
 
-**The trade-off.** Misses fell from 60 to 24, and every remaining miss is a
+Every match the record check makes is `close` or `exact`, and both stop.
+
+**The trade-off.** Misses fell from 72 to 24, and every remaining miss is a
 `limit_` kind, while false stops stayed at 2 of 440 new charts. Both are
 `shared_dob` items whose first name equals that of the chart with the same
 birth date, which the married-name rule sends to a person on purpose. The

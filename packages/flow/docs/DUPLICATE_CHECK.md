@@ -80,7 +80,7 @@ It reads every page, and it decides from whole records:
 | Decision | When | What happens |
 |---|---|---|
 | `exact` | same first name, last name and date of birth, or the same MRN | stop: the chart exists |
-| `close` | same name (or a nickname, or the chart's prior name) with day and month swapped, or with the date of birth one field off and either the exact name or a shared phone, email or street; same date of birth with a similar name or a shared hyphenated part; first and last name swapped; same date of birth and first name under another last name; another name with the same date of birth and a shared contact detail, or a near date of birth and two | stop for a person; the halt names each record and why |
+| `close` | same name (or a nickname, an initial, or the chart's prior name) with day and month swapped, or with the date of birth one field off and either the exact name or a shared phone, email or street; same date of birth with a similar name or a shared hyphenated part; first and last name swapped; same date of birth and first name under another last name; another name with the same date of birth and a shared contact detail, or a near date of birth and two | stop for a person; the halt names each record and why |
 | `none` | no record is this patient | proceed |
 | `unreadable` | unreachable, refused credentials, not a result set, a reported total that doesn't match what was read, more than 50 pages, a full REST page with no next link, a missing or non-ISO date of birth | stop (fail closed) |
 

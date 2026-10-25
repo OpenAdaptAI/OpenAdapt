@@ -259,11 +259,14 @@ for _group in _NICKNAME_GROUPS:
 
 
 def same_given(a: str, b: str) -> bool:
-    """The same first name: similar spelling, or a known nickname of it."""
+    """The same first name: similar spelling, an initial, or a known nickname."""
 
     if similar_name(a, b):
         return True
     x, y = norm_name(a), norm_name(b)
+    # An initial ("J." for James) stands for any name with that first letter.
+    if x and y and (len(x) == 1 or len(y) == 1) and x[0] == y[0]:
+        return True
     return bool(x and y and y in NICKNAMES.get(x, ()))
 
 

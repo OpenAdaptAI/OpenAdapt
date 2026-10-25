@@ -389,3 +389,30 @@ def test_fhir_reads_old_names_and_contacts(serve) -> None:
     assert result.decision == "close"
     record = result.candidates[0].record
     assert record.prior_names == (("Rosalind", "Jesswood"),) and record.phone
+
+
+@pytest.mark.parametrize(
+    ("want", "record"),
+    [
+        # An initial for the first name.
+        (
+            {"fname": "J.", "lname": "Ashby", "DOB": "1950-02-03"},
+            rec("James", "Ashby", "1950-02-03"),
+        ),
+        # A second surname on the chart, the first one on the referral.
+        (
+            {"fname": "Lucia", "lname": "Garcia", "DOB": "1981-06-15"},
+            rec("Lucia", "Garcia Lopez", "1981-06-15"),
+        ),
+    ],
+)
+def test_production_lifecycle_cases_stop(
+    want: dict[str, str], record: PatientRecord
+) -> None:
+    found = classify(want, record)
+    assert found is not None and found.match == "close"
+
+
+def test_an_initial_does_not_match_another_letter() -> None:
+    want = {"fname": "J.", "lname": "Ashby", "DOB": "1950-02-03"}
+    assert classify(want, rec("Mary", "Ashby", "1950-02-03")) is None

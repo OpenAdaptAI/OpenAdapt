@@ -62,6 +62,16 @@ DUPLICATE_KINDS = {
     "r2_name_swap",
     "r2_year_transposed",
     "r2_prior_name_moved_dob_typo",
+    "pl_married_moved",
+    "pl_second_surname",
+    "pl_initial",
+    "pl_both_typos_same_contact",
+    "pl_ambiguous_same_person",
+    "pl_married_moved",
+    "pl_second_surname",
+    "pl_initial",
+    "pl_both_typos_same_contact",
+    "pl_ambiguous_same_person",
     "limit_married_moved_dob_typo",
     "limit_new_name_moved_same_dob",
 }
@@ -233,6 +243,46 @@ def round_two(n: int, person: dict[str, str]) -> list[Item]:
                 [],
             )
         )
+
+    # The six cases production-lifecycle named (``pl_``).
+    def typo(v: str) -> str:
+        return v[:-2] + v[-1] + v[-2] if len(v) > 3 else v + "e"
+
+    out += [
+        Item(
+            f"pl-mm-{n}",
+            "pl_married_moved",
+            dict(moved(person, n), lname=MARRIED[(n + 4) % len(MARRIED)]),
+            None,
+            [],
+        ),
+        Item(
+            f"pl-in-{n}",
+            "pl_initial",
+            dict(person, fname=person["fname"][0] + "."),
+            None,
+            [],
+        ),
+        Item(
+            f"pl-bt-{n}",
+            "pl_both_typos_same_contact",
+            dict(
+                person,
+                fname=typo(person["fname"]),
+                lname=typo(person["lname"]),
+                street=f"{n} SOMEWHERE ELSE",
+            ),
+            None,
+            [],
+        ),
+        Item(
+            f"pl-as-{n}",
+            "pl_ambiguous_same_person",
+            dict(person, DOB=day_typo(person["DOB"])),
+            None,
+            [],
+        ),
+    ]
     out.append(
         Item(
             f"lim-mm-{n}",
@@ -278,6 +328,26 @@ def extra_existing(
         extra.append(chart)
         items.append(
             Item(f"r2-nk-{n}", "r2_nickname", dict(chart, fname=nick), None, [])
+        )
+    for n in range(6):
+        base = existing[(n + 5) % len(existing)]
+        chart = dict(
+            base,
+            fname=f"Second{n}",
+            lname=f"Garcia{n} Lopez{n}",
+            email=f"second.{n}@example.invalid",
+            phone_home=f"555-05{n:02d}",
+            street=f"{600 + n} SECOND STREET",
+        )
+        extra.append(chart)
+        items.append(
+            Item(
+                f"pl-ss-{n}",
+                "pl_second_surname",
+                dict(moved(chart, 70 + n), lname=f"Garcia{n}"),
+                None,
+                [],
+            )
         )
     for n in range(6):
         base = existing[(n + 3) % len(existing)]

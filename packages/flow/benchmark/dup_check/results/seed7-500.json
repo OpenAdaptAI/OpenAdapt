@@ -33,6 +33,16 @@
       "screen": "proceed"
     },
     {
+      "exception": "pl_ambiguous_same_person",
+      "item": "pl-as-9",
+      "record": "close",
+      "record_why": [
+        "same name, a mistyped date of birth"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
       "exception": "shared_dob",
       "item": "ref-00005",
       "record": "none",
@@ -97,6 +107,16 @@
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
+    },
+    {
+      "exception": "heldout_married_dob_typo",
+      "item": "held-md-9",
+      "record": "close",
+      "record_why": [
+        "same first name, another last name, same phone, a mistyped date of birth"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "proceed"
     },
     {
       "exception": "concurrent_other",
@@ -189,14 +209,15 @@
       "screen": "proceed"
     },
     {
-      "exception": "heldout_married_dob_typo",
-      "item": "held-md-9",
+      "exception": "pl_both_typos_same_contact",
+      "item": "pl-bt-6",
       "record": "close",
       "record_why": [
-        "same first name, another last name, same phone, a mistyped date of birth"
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "ambiguous_same_person",
@@ -325,11 +346,11 @@
       "screen": "stop"
     },
     {
-      "exception": "planted_hyphenated",
-      "item": "plant-h-1",
+      "exception": "pl_ambiguous_same_person",
+      "item": "pl-as-0",
       "record": "close",
       "record_why": [
-        "same date of birth, a similar name"
+        "same name, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -343,12 +364,12 @@
       "screen": "proceed"
     },
     {
-      "exception": "heldout_first_typo",
-      "item": "held-f-7",
+      "exception": "planted_married",
+      "item": "plant-m-5",
       "record": "close",
       "record_why": [
         "same date of birth and first name, another last name",
-        "same date of birth, a similar name"
+        "same date of birth and first name, another last name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -415,12 +436,12 @@
       "screen": "proceed"
     },
     {
-      "exception": "limit_married_moved_dob_typo",
-      "item": "lim-mm-2",
+      "exception": "limit_new_name_moved_same_dob",
+      "item": "lim-nn-1",
       "record": "none",
       "record_why": [],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "clean",
@@ -447,11 +468,21 @@
       "screen": "proceed"
     },
     {
-      "exception": "r2_name_swap",
-      "item": "r2-sw-2",
+      "exception": "pl_married_moved",
+      "item": "pl-mm-10",
       "record": "close",
       "record_why": [
-        "first and last name swapped"
+        "same date of birth and first name, another last name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "pl_ambiguous_same_person",
+      "item": "pl-as-1",
+      "record": "close",
+      "record_why": [
+        "same name, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -510,10 +541,21 @@
       "screen": "stop"
     },
     {
-      "exception": "planted_hyphenated",
-      "item": "plant-h-10",
+      "exception": "r2_name_swap",
+      "item": "r2-sw-11",
       "record": "close",
       "record_why": [
+        "first and last name swapped"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "heldout_first_typo",
+      "item": "held-f-7",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
         "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
@@ -544,23 +586,31 @@
       "screen": "proceed"
     },
     {
-      "exception": "r2_year_transposed",
-      "item": "r2-ty-8",
+      "exception": "pl_initial",
+      "item": "pl-in-11",
       "record": "close",
       "record_why": [
-        "same name, a mistyped date of birth"
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
     {
-      "exception": "planted_hyphenated",
-      "item": "plant-h-4",
+      "exception": "heldout_first_typo",
+      "item": "held-f-6",
       "record": "close",
       "record_why": [
         "same date of birth and first name, another last name",
         "same date of birth, a similar name"
       ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "limit_new_name_moved_same_dob",
+      "item": "lim-nn-2",
+      "record": "none",
+      "record_why": [],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
@@ -573,26 +623,8 @@
       "screen": "proceed"
     },
     {
-      "exception": "planted_married",
-      "item": "plant-m-2",
-      "record": "close",
-      "record_why": [
-        "same date of birth and first name, another last name"
-      ],
-      "right": "no chart: duplicate",
-      "screen": "stop"
-    },
-    {
-      "exception": "limit_married_moved_dob_typo",
-      "item": "lim-mm-0",
-      "record": "none",
-      "record_why": [],
-      "right": "no chart: duplicate",
-      "screen": "proceed"
-    },
-    {
       "exception": "r2_name_swap",
-      "item": "r2-sw-8",
+      "item": "r2-sw-1",
       "record": "close",
       "record_why": [
         "first and last name swapped"
@@ -601,15 +633,33 @@
       "screen": "stop"
     },
     {
-      "exception": "planted_married",
-      "item": "plant-m-4",
+      "exception": "pl_married_moved",
+      "item": "pl-mm-0",
       "record": "close",
       "record_why": [
-        "same date of birth and first name, another last name",
         "same date of birth and first name, another last name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
+    },
+    {
+      "exception": "planted_hyphenated",
+      "item": "plant-h-6",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "limit_married_moved_dob_typo",
+      "item": "lim-mm-2",
+      "record": "none",
+      "record_why": [],
+      "right": "no chart: duplicate",
+      "screen": "proceed"
     },
     {
       "exception": "clean",
@@ -620,8 +670,8 @@
       "screen": "proceed"
     },
     {
-      "exception": "heldout_last_typo",
-      "item": "held-l-2",
+      "exception": "pl_initial",
+      "item": "pl-in-1",
       "record": "close",
       "record_why": [
         "same date of birth, a similar name"
@@ -638,12 +688,11 @@
       "screen": "proceed"
     },
     {
-      "exception": "planted_hyphenated",
-      "item": "plant-h-8",
+      "exception": "pl_ambiguous_same_person",
+      "item": "pl-as-5",
       "record": "close",
       "record_why": [
-        "same date of birth and first name, another last name",
-        "same date of birth, a similar name"
+        "same name, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -692,15 +741,14 @@
       "screen": "proceed"
     },
     {
-      "exception": "heldout_first_typo",
-      "item": "held-f-6",
+      "exception": "heldout_married_dob_typo",
+      "item": "held-md-4",
       "record": "close",
       "record_why": [
-        "same date of birth and first name, another last name",
-        "same date of birth, a similar name"
+        "same first name, another last name, same phone, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
-      "screen": "stop"
+      "screen": "proceed"
     },
     {
       "exception": "clean",
@@ -711,10 +759,12 @@
       "screen": "proceed"
     },
     {
-      "exception": "limit_new_name_moved_same_dob",
-      "item": "lim-nn-10",
-      "record": "none",
-      "record_why": [],
+      "exception": "pl_ambiguous_same_person",
+      "item": "pl-as-7",
+      "record": "close",
+      "record_why": [
+        "same name, a mistyped date of birth"
+      ],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
@@ -727,6 +777,14 @@
       "screen": "stop"
     },
     {
+      "exception": "limit_new_name_moved_same_dob",
+      "item": "lim-nn-8",
+      "record": "none",
+      "record_why": [],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
       "exception": "clean",
       "item": "ref-00068",
       "record": "none",
@@ -735,8 +793,8 @@
       "screen": "proceed"
     },
     {
-      "exception": "heldout_last_typo",
-      "item": "held-l-7",
+      "exception": "planted_hyphenated",
+      "item": "plant-h-5",
       "record": "close",
       "record_why": [
         "same date of birth and first name, another last name",
@@ -746,11 +804,11 @@
       "screen": "stop"
     },
     {
-      "exception": "r2_name_swap",
-      "item": "r2-sw-1",
+      "exception": "planted_hyphenated",
+      "item": "plant-h-1",
       "record": "close",
       "record_why": [
-        "first and last name swapped"
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -798,12 +856,10 @@
       "screen": "proceed"
     },
     {
-      "exception": "heldout_married_dob_typo",
-      "item": "held-md-5",
-      "record": "close",
-      "record_why": [
-        "same first name, another last name, same phone, a mistyped date of birth"
-      ],
+      "exception": "limit_married_moved_dob_typo",
+      "item": "lim-mm-3",
+      "record": "none",
+      "record_why": [],
       "right": "no chart: duplicate",
       "screen": "proceed"
     },
@@ -866,15 +922,12 @@
       "screen": "proceed"
     },
     {
-      "exception": "heldout_first_typo",
-      "item": "held-f-8",
-      "record": "close",
-      "record_why": [
-        "same date of birth and first name, another last name",
-        "same date of birth, a similar name"
-      ],
+      "exception": "limit_married_moved_dob_typo",
+      "item": "lim-mm-5",
+      "record": "none",
+      "record_why": [],
       "right": "no chart: duplicate",
-      "screen": "stop"
+      "screen": "proceed"
     },
     {
       "exception": "common_surname",
@@ -882,6 +935,16 @@
       "record": "none",
       "record_why": [],
       "right": "new chart",
+      "screen": "stop"
+    },
+    {
+      "exception": "planted_hyphenated",
+      "item": "plant-h-11",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
       "screen": "stop"
     },
     {
@@ -911,6 +974,14 @@
       "screen": "stop"
     },
     {
+      "exception": "limit_new_name_moved_same_dob",
+      "item": "lim-nn-11",
+      "record": "none",
+      "record_why": [],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
       "exception": "clean",
       "item": "ref-00084",
       "record": "none",
@@ -919,14 +990,12 @@
       "screen": "stop"
     },
     {
-      "exception": "heldout_first_typo",
-      "item": "held-f-1",
-      "record": "close",
-      "record_why": [
-        "same date of birth, a similar name"
-      ],
+      "exception": "limit_married_moved_dob_typo",
+      "item": "lim-mm-0",
+      "record": "none",
+      "record_why": [],
       "right": "no chart: duplicate",
-      "screen": "stop"
+      "screen": "proceed"
     },
     {
       "exception": "clean",
@@ -947,12 +1016,14 @@
       "screen": "stop"
     },
     {
-      "exception": "limit_married_moved_dob_typo",
-      "item": "lim-mm-1",
-      "record": "none",
-      "record_why": [],
+      "exception": "heldout_last_typo",
+      "item": "held-l-1",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "clean",
@@ -973,10 +1044,12 @@
       "screen": "stop"
     },
     {
-      "exception": "limit_new_name_moved_same_dob",
-      "item": "lim-nn-3",
-      "record": "none",
-      "record_why": [],
+      "exception": "pl_ambiguous_same_person",
+      "item": "pl-as-2",
+      "record": "close",
+      "record_why": [
+        "same name, a mistyped date of birth"
+      ],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
@@ -1031,11 +1104,11 @@
       "screen": "stop"
     },
     {
-      "exception": "r2_name_swap",
-      "item": "r2-sw-3",
+      "exception": "pl_married_moved",
+      "item": "pl-mm-2",
       "record": "close",
       "record_why": [
-        "first and last name swapped"
+        "same date of birth and first name, another last name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -1051,10 +1124,13 @@
       "screen": "stop"
     },
     {
-      "exception": "limit_new_name_moved_same_dob",
-      "item": "lim-nn-9",
-      "record": "none",
-      "record_why": [],
+      "exception": "planted_married",
+      "item": "plant-m-7",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
+        "same date of birth and first name, another last name"
+      ],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
@@ -1083,6 +1159,16 @@
       ],
       "right": "new chart",
       "screen": "stop"
+    },
+    {
+      "exception": "heldout_married_dob_typo",
+      "item": "held-md-10",
+      "record": "close",
+      "record_why": [
+        "same first name, another last name, same phone, a mistyped date of birth"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "proceed"
     },
     {
       "exception": "clean",
@@ -1125,12 +1211,11 @@
       "screen": "proceed"
     },
     {
-      "exception": "heldout_last_typo",
-      "item": "held-l-6",
+      "exception": "r2_name_swap",
+      "item": "r2-sw-4",
       "record": "close",
       "record_why": [
-        "same date of birth and first name, another last name",
-        "same date of birth, a similar name"
+        "first and last name swapped"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -1152,11 +1237,11 @@
       "screen": "proceed"
     },
     {
-      "exception": "heldout_last_typo",
-      "item": "held-l-10",
+      "exception": "r2_name_swap",
+      "item": "r2-sw-7",
       "record": "close",
       "record_why": [
-        "same date of birth, a similar name"
+        "first and last name swapped"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -1194,15 +1279,14 @@
       "screen": "stop"
     },
     {
-      "exception": "heldout_first_typo",
-      "item": "held-f-3",
+      "exception": "heldout_married_dob_typo",
+      "item": "held-md-2",
       "record": "close",
       "record_why": [
-        "same date of birth and first name, another last name",
-        "same date of birth, a similar name"
+        "same first name, another last name, same phone, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
-      "screen": "stop"
+      "screen": "proceed"
     },
     {
       "exception": "dup_resend",
@@ -1215,11 +1299,12 @@
       "screen": "stop"
     },
     {
-      "exception": "r2_name_swap",
-      "item": "r2-sw-11",
+      "exception": "heldout_last_typo",
+      "item": "held-l-8",
       "record": "close",
       "record_why": [
-        "first and last name swapped"
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -1267,6 +1352,14 @@
       "screen": "proceed"
     },
     {
+      "exception": "limit_married_moved_dob_typo",
+      "item": "lim-mm-9",
+      "record": "none",
+      "record_why": [],
+      "right": "no chart: duplicate",
+      "screen": "proceed"
+    },
+    {
       "exception": "ambiguous_same_person",
       "item": "ref-00115",
       "record": "close",
@@ -1293,11 +1386,11 @@
       "screen": "proceed"
     },
     {
-      "exception": "planted_hyphenated",
-      "item": "plant-h-2",
+      "exception": "r2_year_transposed",
+      "item": "r2-ty-1",
       "record": "close",
       "record_why": [
-        "same date of birth, a similar name"
+        "same name, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -1327,11 +1420,29 @@
       "screen": "proceed"
     },
     {
+      "exception": "planted_hyphenated",
+      "item": "plant-h-9",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
       "exception": "clean",
       "item": "ref-00121",
       "record": "none",
       "record_why": [],
       "right": "new chart",
+      "screen": "proceed"
+    },
+    {
+      "exception": "limit_married_moved_dob_typo",
+      "item": "lim-mm-8",
+      "record": "none",
+      "record_why": [],
+      "right": "no chart: duplicate",
       "screen": "proceed"
     },
     {
@@ -1343,6 +1454,14 @@
       "screen": "stop"
     },
     {
+      "exception": "limit_married_moved_dob_typo",
+      "item": "lim-mm-11",
+      "record": "none",
+      "record_why": [],
+      "right": "no chart: duplicate",
+      "screen": "proceed"
+    },
+    {
       "exception": "clean",
       "item": "ref-00123",
       "record": "none",
@@ -1351,10 +1470,12 @@
       "screen": "proceed"
     },
     {
-      "exception": "limit_new_name_moved_same_dob",
-      "item": "lim-nn-2",
-      "record": "none",
-      "record_why": [],
+      "exception": "planted_married",
+      "item": "plant-m-2",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name"
+      ],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
@@ -1441,19 +1562,21 @@
       "screen": "stop"
     },
     {
-      "exception": "limit_new_name_moved_same_dob",
-      "item": "lim-nn-6",
-      "record": "none",
-      "record_why": [],
+      "exception": "pl_ambiguous_same_person",
+      "item": "pl-as-4",
+      "record": "close",
+      "record_why": [
+        "same name, a mistyped date of birth"
+      ],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
     {
-      "exception": "planted_swapped_dob",
-      "item": "plant-s-3",
+      "exception": "heldout_last_typo",
+      "item": "held-l-2",
       "record": "close",
       "record_why": [
-        "same name, day and month swapped"
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -1475,14 +1598,12 @@
       "screen": "proceed"
     },
     {
-      "exception": "planted_married",
-      "item": "plant-m-11",
-      "record": "close",
-      "record_why": [
-        "same date of birth and first name, another last name"
-      ],
+      "exception": "limit_married_moved_dob_typo",
+      "item": "lim-mm-7",
+      "record": "none",
+      "record_why": [],
       "right": "no chart: duplicate",
-      "screen": "stop"
+      "screen": "proceed"
     },
     {
       "exception": "clean",
@@ -1533,12 +1654,22 @@
       "screen": "proceed"
     },
     {
-      "exception": "limit_married_moved_dob_typo",
-      "item": "lim-mm-9",
+      "exception": "planted_married",
+      "item": "plant-m-9",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "limit_new_name_moved_same_dob",
+      "item": "lim-nn-6",
       "record": "none",
       "record_why": [],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "slow_save",
@@ -1554,6 +1685,16 @@
       "record": "none",
       "record_why": [],
       "right": "new chart",
+      "screen": "stop"
+    },
+    {
+      "exception": "pl_married_moved",
+      "item": "pl-mm-9",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name"
+      ],
+      "right": "no chart: duplicate",
       "screen": "stop"
     },
     {
@@ -1573,11 +1714,22 @@
       "screen": "proceed"
     },
     {
-      "exception": "r2_year_transposed",
-      "item": "r2-ty-6",
+      "exception": "pl_married_moved",
+      "item": "pl-mm-11",
       "record": "close",
       "record_why": [
-        "same name, a mistyped date of birth"
+        "same date of birth and first name, another last name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "pl_initial",
+      "item": "pl-in-4",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -1709,6 +1861,16 @@
       "screen": "stop"
     },
     {
+      "exception": "pl_both_typos_same_contact",
+      "item": "pl-bt-11",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
       "exception": "clean",
       "item": "ref-00160",
       "record": "none",
@@ -1741,8 +1903,8 @@
       "screen": "proceed"
     },
     {
-      "exception": "heldout_first_typo",
-      "item": "held-f-5",
+      "exception": "pl_both_typos_same_contact",
+      "item": "pl-bt-3",
       "record": "close",
       "record_why": [
         "same date of birth and first name, another last name",
@@ -1792,14 +1954,14 @@
       "screen": "stop"
     },
     {
-      "exception": "heldout_married_dob_typo",
-      "item": "held-md-3",
+      "exception": "r2_year_transposed",
+      "item": "r2-ty-2",
       "record": "close",
       "record_why": [
-        "same first name, another last name, same phone, a mistyped date of birth"
+        "same name, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "ambiguous_same_person",
@@ -1848,11 +2010,11 @@
       "screen": "stop"
     },
     {
-      "exception": "r2_year_transposed",
-      "item": "r2-ty-3",
+      "exception": "pl_initial",
+      "item": "pl-in-2",
       "record": "close",
       "record_why": [
-        "same name, a mistyped date of birth"
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -1946,11 +2108,12 @@
       "screen": "stop"
     },
     {
-      "exception": "planted_swapped_dob",
-      "item": "plant-s-10",
+      "exception": "heldout_last_typo",
+      "item": "held-l-7",
       "record": "close",
       "record_why": [
-        "same name, day and month swapped"
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -1982,11 +2145,12 @@
       "screen": "proceed"
     },
     {
-      "exception": "planted_swapped_dob",
-      "item": "plant-s-4",
+      "exception": "planted_married",
+      "item": "plant-m-3",
       "record": "close",
       "record_why": [
-        "same name, day and month swapped"
+        "same date of birth and first name, another last name",
+        "same date of birth and first name, another last name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -1998,6 +2162,26 @@
       "record_why": [],
       "right": "new chart",
       "screen": "proceed"
+    },
+    {
+      "exception": "heldout_first_typo",
+      "item": "held-f-9",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "heldout_last_typo",
+      "item": "held-l-9",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
     },
     {
       "exception": "clean",
@@ -2021,6 +2205,16 @@
       "record": "none",
       "record_why": [],
       "right": "new chart",
+      "screen": "stop"
+    },
+    {
+      "exception": "pl_ambiguous_same_person",
+      "item": "pl-as-8",
+      "record": "close",
+      "record_why": [
+        "same name, a mistyped date of birth"
+      ],
+      "right": "no chart: duplicate",
       "screen": "stop"
     },
     {
@@ -2188,14 +2382,14 @@
       "screen": "stop"
     },
     {
-      "exception": "heldout_married_dob_typo",
-      "item": "held-md-10",
+      "exception": "r2_year_transposed",
+      "item": "r2-ty-7",
       "record": "close",
       "record_why": [
-        "same first name, another last name, same phone, a mistyped date of birth"
+        "same name, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "clean",
@@ -2214,11 +2408,19 @@
       "screen": "stop"
     },
     {
-      "exception": "r2_year_transposed",
-      "item": "r2-ty-2",
+      "exception": "limit_married_moved_dob_typo",
+      "item": "lim-mm-1",
+      "record": "none",
+      "record_why": [],
+      "right": "no chart: duplicate",
+      "screen": "proceed"
+    },
+    {
+      "exception": "pl_initial",
+      "item": "pl-in-9",
       "record": "close",
       "record_why": [
-        "same name, a mistyped date of birth"
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -2232,11 +2434,11 @@
       "screen": "stop"
     },
     {
-      "exception": "planted_married",
-      "item": "plant-m-1",
+      "exception": "pl_both_typos_same_contact",
+      "item": "pl-bt-0",
       "record": "close",
       "record_why": [
-        "same date of birth and first name, another last name"
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -2258,11 +2460,11 @@
       "screen": "proceed"
     },
     {
-      "exception": "heldout_first_typo",
-      "item": "held-f-2",
+      "exception": "pl_married_moved",
+      "item": "pl-mm-1",
       "record": "close",
       "record_why": [
-        "same date of birth, a similar name"
+        "same date of birth and first name, another last name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -2308,12 +2510,11 @@
       "screen": "proceed"
     },
     {
-      "exception": "heldout_last_typo",
-      "item": "held-l-5",
+      "exception": "pl_ambiguous_same_person",
+      "item": "pl-as-3",
       "record": "close",
       "record_why": [
-        "same date of birth and first name, another last name",
-        "same date of birth, a similar name"
+        "same name, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -2367,11 +2568,21 @@
       "screen": "stop"
     },
     {
-      "exception": "planted_hyphenated",
-      "item": "plant-h-5",
+      "exception": "pl_initial",
+      "item": "pl-in-3",
       "record": "close",
       "record_why": [
         "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "pl_both_typos_same_contact",
+      "item": "pl-bt-9",
+      "record": "close",
+      "record_why": [
         "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
@@ -2439,14 +2650,25 @@
       "screen": "stop"
     },
     {
-      "exception": "heldout_married_dob_typo",
-      "item": "held-md-11",
+      "exception": "r2_year_transposed",
+      "item": "r2-ty-8",
       "record": "close",
       "record_why": [
-        "same first name, another last name, same phone, a mistyped date of birth"
+        "same name, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
+    },
+    {
+      "exception": "heldout_first_typo",
+      "item": "held-f-8",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
     },
     {
       "exception": "malformed_case",
@@ -2473,22 +2695,19 @@
       "screen": "stop"
     },
     {
-      "exception": "heldout_last_typo",
-      "item": "held-l-8",
-      "record": "close",
-      "record_why": [
-        "same date of birth and first name, another last name",
-        "same date of birth, a similar name"
-      ],
+      "exception": "limit_new_name_moved_same_dob",
+      "item": "lim-nn-5",
+      "record": "none",
+      "record_why": [],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
     {
-      "exception": "r2_year_transposed",
-      "item": "r2-ty-1",
+      "exception": "heldout_first_typo",
+      "item": "held-f-1",
       "record": "close",
       "record_why": [
-        "same name, a mistyped date of birth"
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -2568,14 +2787,14 @@
       "screen": "proceed"
     },
     {
-      "exception": "heldout_first_typo",
-      "item": "held-f-10",
+      "exception": "heldout_married_dob_typo",
+      "item": "held-md-7",
       "record": "close",
       "record_why": [
-        "same date of birth, a similar name"
+        "same first name, another last name, same phone, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
-      "screen": "stop"
+      "screen": "proceed"
     },
     {
       "exception": "concurrent_other",
@@ -2594,11 +2813,11 @@
       "screen": "stop"
     },
     {
-      "exception": "planted_hyphenated",
-      "item": "plant-h-9",
+      "exception": "r2_year_transposed",
+      "item": "r2-ty-6",
       "record": "close",
       "record_why": [
-        "same date of birth, a similar name"
+        "same name, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -2668,6 +2887,16 @@
       "screen": "stop"
     },
     {
+      "exception": "heldout_last_typo",
+      "item": "held-l-10",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
       "exception": "clean",
       "item": "ref-00257",
       "record": "none",
@@ -2716,8 +2945,8 @@
       "screen": "proceed"
     },
     {
-      "exception": "planted_hyphenated",
-      "item": "plant-h-6",
+      "exception": "heldout_last_typo",
+      "item": "held-l-4",
       "record": "close",
       "record_why": [
         "same date of birth and first name, another last name",
@@ -2815,12 +3044,15 @@
       "screen": "stop"
     },
     {
-      "exception": "limit_married_moved_dob_typo",
-      "item": "lim-mm-8",
-      "record": "none",
-      "record_why": [],
+      "exception": "heldout_last_typo",
+      "item": "held-l-6",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
+      ],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "ambiguous_new_person",
@@ -2839,12 +3071,10 @@
       "screen": "stop"
     },
     {
-      "exception": "r2_name_swap",
-      "item": "r2-sw-5",
-      "record": "close",
-      "record_why": [
-        "first and last name swapped"
-      ],
+      "exception": "limit_new_name_moved_same_dob",
+      "item": "lim-nn-3",
+      "record": "none",
+      "record_why": [],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
@@ -2865,19 +3095,18 @@
       "screen": "stop"
     },
     {
-      "exception": "planted_married",
-      "item": "plant-m-3",
+      "exception": "planted_hyphenated",
+      "item": "plant-h-2",
       "record": "close",
       "record_why": [
-        "same date of birth and first name, another last name",
-        "same date of birth and first name, another last name"
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
     {
-      "exception": "planted_married",
-      "item": "plant-m-5",
+      "exception": "pl_married_moved",
+      "item": "pl-mm-3",
       "record": "close",
       "record_why": [
         "same date of birth and first name, another last name",
@@ -2903,14 +3132,14 @@
       "screen": "stop"
     },
     {
-      "exception": "r2_name_swap",
-      "item": "r2-sw-7",
+      "exception": "heldout_married_dob_typo",
+      "item": "held-md-5",
       "record": "close",
       "record_why": [
-        "first and last name swapped"
+        "same first name, another last name, same phone, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
-      "screen": "stop"
+      "screen": "proceed"
     },
     {
       "exception": "missing_optional",
@@ -3017,11 +3246,12 @@
       "screen": "stop"
     },
     {
-      "exception": "r2_name_swap",
-      "item": "r2-sw-4",
+      "exception": "heldout_last_typo",
+      "item": "held-l-3",
       "record": "close",
       "record_why": [
-        "first and last name swapped"
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -3037,12 +3267,11 @@
       "screen": "stop"
     },
     {
-      "exception": "heldout_last_typo",
-      "item": "held-l-3",
+      "exception": "r2_name_swap",
+      "item": "r2-sw-2",
       "record": "close",
       "record_why": [
-        "same date of birth and first name, another last name",
-        "same date of birth, a similar name"
+        "first and last name swapped"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -3109,6 +3338,16 @@
       "screen": "proceed"
     },
     {
+      "exception": "planted_hyphenated",
+      "item": "plant-h-10",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
       "exception": "ambiguous_same_person",
       "item": "ref-00301",
       "record": "close",
@@ -3127,6 +3366,17 @@
       "screen": "stop"
     },
     {
+      "exception": "pl_initial",
+      "item": "pl-in-8",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
       "exception": "clean",
       "item": "ref-00303",
       "record": "none",
@@ -3135,21 +3385,22 @@
       "screen": "stop"
     },
     {
-      "exception": "heldout_last_typo",
-      "item": "held-l-9",
+      "exception": "pl_initial",
+      "item": "pl-in-6",
       "record": "close",
       "record_why": [
+        "same date of birth and first name, another last name",
         "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
     {
-      "exception": "r2_year_transposed",
-      "item": "r2-ty-7",
+      "exception": "r2_name_swap",
+      "item": "r2-sw-5",
       "record": "close",
       "record_why": [
-        "same name, a mistyped date of birth"
+        "first and last name swapped"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -3195,14 +3446,12 @@
       "screen": "stop"
     },
     {
-      "exception": "r2_year_transposed",
-      "item": "r2-ty-9",
-      "record": "close",
-      "record_why": [
-        "same name, a mistyped date of birth"
-      ],
+      "exception": "limit_married_moved_dob_typo",
+      "item": "lim-mm-6",
+      "record": "none",
+      "record_why": [],
       "right": "no chart: duplicate",
-      "screen": "stop"
+      "screen": "proceed"
     },
     {
       "exception": "clean",
@@ -3213,12 +3462,15 @@
       "screen": "stop"
     },
     {
-      "exception": "limit_married_moved_dob_typo",
-      "item": "lim-mm-6",
-      "record": "none",
-      "record_why": [],
+      "exception": "pl_both_typos_same_contact",
+      "item": "pl-bt-4",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
+      ],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "concurrent_other",
@@ -3237,12 +3489,14 @@
       "screen": "proceed"
     },
     {
-      "exception": "limit_married_moved_dob_typo",
-      "item": "lim-mm-7",
-      "record": "none",
-      "record_why": [],
+      "exception": "r2_year_transposed",
+      "item": "r2-ty-5",
+      "record": "close",
+      "record_why": [
+        "same name, a mistyped date of birth"
+      ],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "clean",
@@ -3261,6 +3515,16 @@
       "screen": "stop"
     },
     {
+      "exception": "pl_ambiguous_same_person",
+      "item": "pl-as-10",
+      "record": "close",
+      "record_why": [
+        "same name, a mistyped date of birth"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
       "exception": "failed_save",
       "item": "ref-00314",
       "record": "none",
@@ -3269,10 +3533,22 @@
       "screen": "proceed"
     },
     {
-      "exception": "limit_new_name_moved_same_dob",
-      "item": "lim-nn-5",
-      "record": "none",
-      "record_why": [],
+      "exception": "planted_married",
+      "item": "plant-m-11",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "planted_swapped_dob",
+      "item": "plant-s-4",
+      "record": "close",
+      "record_why": [
+        "same name, day and month swapped"
+      ],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
@@ -3298,6 +3574,43 @@
       "record": "none",
       "record_why": [],
       "right": "new chart",
+      "screen": "stop"
+    },
+    {
+      "exception": "limit_married_moved_dob_typo",
+      "item": "lim-mm-10",
+      "record": "none",
+      "record_why": [],
+      "right": "no chart: duplicate",
+      "screen": "proceed"
+    },
+    {
+      "exception": "heldout_married_dob_typo",
+      "item": "held-md-11",
+      "record": "close",
+      "record_why": [
+        "same first name, another last name, same phone, a mistyped date of birth"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "proceed"
+    },
+    {
+      "exception": "limit_new_name_moved_same_dob",
+      "item": "lim-nn-10",
+      "record": "none",
+      "record_why": [],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "pl_both_typos_same_contact",
+      "item": "pl-bt-8",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
       "screen": "stop"
     },
     {
@@ -3441,11 +3754,12 @@
       "screen": "proceed"
     },
     {
-      "exception": "r2_year_transposed",
-      "item": "r2-ty-10",
+      "exception": "pl_initial",
+      "item": "pl-in-7",
       "record": "close",
       "record_why": [
-        "same name, a mistyped date of birth"
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -3491,39 +3805,52 @@
       "screen": "stop"
     },
     {
-      "exception": "heldout_first_typo",
-      "item": "held-f-9",
+      "exception": "pl_married_moved",
+      "item": "pl-mm-6",
       "record": "close",
       "record_why": [
-        "same date of birth, a similar name"
+        "same date of birth and first name, another last name",
+        "same date of birth and first name, another last name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "r2_year_transposed",
+      "item": "r2-ty-3",
+      "record": "close",
+      "record_why": [
+        "same name, a mistyped date of birth"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "pl_married_moved",
+      "item": "pl-mm-7",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
+        "same date of birth and first name, another last name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
     {
       "exception": "limit_new_name_moved_same_dob",
-      "item": "lim-nn-4",
+      "item": "lim-nn-9",
       "record": "none",
       "record_why": [],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
     {
-      "exception": "r2_name_swap",
-      "item": "r2-sw-10",
+      "exception": "planted_married",
+      "item": "plant-m-8",
       "record": "close",
       "record_why": [
-        "first and last name swapped"
-      ],
-      "right": "no chart: duplicate",
-      "screen": "stop"
-    },
-    {
-      "exception": "heldout_first_typo",
-      "item": "held-f-11",
-      "record": "close",
-      "record_why": [
-        "same date of birth, a similar name"
+        "same date of birth and first name, another last name",
+        "same date of birth and first name, another last name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -3577,6 +3904,16 @@
       "screen": "stop"
     },
     {
+      "exception": "pl_ambiguous_same_person",
+      "item": "pl-as-11",
+      "record": "close",
+      "record_why": [
+        "same name, a mistyped date of birth"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
       "exception": "common_surname",
       "item": "ref-00345",
       "record": "none",
@@ -3607,6 +3944,17 @@
       "record_why": [],
       "right": "new chart",
       "screen": "proceed"
+    },
+    {
+      "exception": "pl_married_moved",
+      "item": "pl-mm-8",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
+        "same date of birth and first name, another last name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
     },
     {
       "exception": "missing_optional",
@@ -3657,12 +4005,14 @@
       "screen": "stop"
     },
     {
-      "exception": "limit_married_moved_dob_typo",
-      "item": "lim-mm-3",
-      "record": "none",
-      "record_why": [],
+      "exception": "pl_both_typos_same_contact",
+      "item": "pl-bt-2",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "clean",
@@ -3739,10 +4089,12 @@
       "screen": "proceed"
     },
     {
-      "exception": "limit_married_moved_dob_typo",
-      "item": "lim-mm-11",
-      "record": "none",
-      "record_why": [],
+      "exception": "heldout_married_dob_typo",
+      "item": "held-md-8",
+      "record": "close",
+      "record_why": [
+        "same first name, another last name, same phone, a mistyped date of birth"
+      ],
       "right": "no chart: duplicate",
       "screen": "proceed"
     },
@@ -3776,6 +4128,16 @@
       "record": "none",
       "record_why": [],
       "right": "new chart",
+      "screen": "stop"
+    },
+    {
+      "exception": "pl_initial",
+      "item": "pl-in-10",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
       "screen": "stop"
     },
     {
@@ -3917,32 +4279,38 @@
       "screen": "stop"
     },
     {
-      "exception": "planted_hyphenated",
-      "item": "plant-h-7",
+      "exception": "limit_new_name_moved_same_dob",
+      "item": "lim-nn-4",
+      "record": "none",
+      "record_why": [],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "limit_new_name_moved_same_dob",
+      "item": "lim-nn-7",
+      "record": "none",
+      "record_why": [],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "pl_married_moved",
+      "item": "pl-mm-4",
       "record": "close",
       "record_why": [
         "same date of birth and first name, another last name",
-        "same date of birth, a similar name"
+        "same date of birth and first name, another last name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
     {
-      "exception": "planted_hyphenated",
-      "item": "plant-h-11",
+      "exception": "heldout_first_typo",
+      "item": "held-f-11",
       "record": "close",
       "record_why": [
         "same date of birth, a similar name"
-      ],
-      "right": "no chart: duplicate",
-      "screen": "stop"
-    },
-    {
-      "exception": "r2_name_swap",
-      "item": "r2-sw-6",
-      "record": "close",
-      "record_why": [
-        "first and last name swapped"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -3996,14 +4364,14 @@
       "screen": "stop"
     },
     {
-      "exception": "heldout_married_dob_typo",
-      "item": "held-md-2",
+      "exception": "pl_both_typos_same_contact",
+      "item": "pl-bt-1",
       "record": "close",
       "record_why": [
-        "same first name, another last name, same phone, a mistyped date of birth"
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "clean",
@@ -4046,11 +4414,11 @@
       "screen": "stop"
     },
     {
-      "exception": "planted_married",
-      "item": "plant-m-9",
+      "exception": "r2_name_swap",
+      "item": "r2-sw-6",
       "record": "close",
       "record_why": [
-        "same date of birth and first name, another last name"
+        "first and last name swapped"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -4104,6 +4472,16 @@
       "screen": "stop"
     },
     {
+      "exception": "r2_name_swap",
+      "item": "r2-sw-9",
+      "record": "close",
+      "record_why": [
+        "first and last name swapped"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
       "exception": "common_surname",
       "item": "ref-00401",
       "record": "none",
@@ -4133,14 +4511,15 @@
       "screen": "stop"
     },
     {
-      "exception": "heldout_married_dob_typo",
-      "item": "held-md-4",
+      "exception": "heldout_first_typo",
+      "item": "held-f-3",
       "record": "close",
       "record_why": [
-        "same first name, another last name, same phone, a mistyped date of birth"
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "missing_required",
@@ -4151,11 +4530,11 @@
       "screen": "stop"
     },
     {
-      "exception": "r2_name_swap",
-      "item": "r2-sw-9",
+      "exception": "pl_ambiguous_same_person",
+      "item": "pl-as-6",
       "record": "close",
       "record_why": [
-        "first and last name swapped"
+        "same name, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -4179,11 +4558,10 @@
       "screen": "stop"
     },
     {
-      "exception": "planted_hyphenated",
-      "item": "plant-h-3",
+      "exception": "heldout_first_typo",
+      "item": "held-f-2",
       "record": "close",
       "record_why": [
-        "same date of birth and first name, another last name",
         "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
@@ -4214,12 +4592,12 @@
       "screen": "stop"
     },
     {
-      "exception": "planted_married",
-      "item": "plant-m-8",
+      "exception": "pl_both_typos_same_contact",
+      "item": "pl-bt-5",
       "record": "close",
       "record_why": [
         "same date of birth and first name, another last name",
-        "same date of birth and first name, another last name"
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -4265,12 +4643,12 @@
       "screen": "stop"
     },
     {
-      "exception": "planted_married",
-      "item": "plant-m-6",
+      "exception": "heldout_first_typo",
+      "item": "held-f-4",
       "record": "close",
       "record_why": [
         "same date of birth and first name, another last name",
-        "same date of birth and first name, another last name"
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -4292,6 +4670,16 @@
       "screen": "stop"
     },
     {
+      "exception": "r2_name_swap",
+      "item": "r2-sw-10",
+      "record": "close",
+      "record_why": [
+        "first and last name swapped"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
       "exception": "clean",
       "item": "ref-00416",
       "record": "none",
@@ -4308,14 +4696,14 @@
       "screen": "proceed"
     },
     {
-      "exception": "heldout_married_dob_typo",
-      "item": "held-md-1",
+      "exception": "planted_married",
+      "item": "plant-m-1",
       "record": "close",
       "record_why": [
-        "same first name, another last name, same phone, a mistyped date of birth"
+        "same date of birth and first name, another last name"
       ],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "clean",
@@ -4334,22 +4722,25 @@
       "screen": "stop"
     },
     {
-      "exception": "limit_new_name_moved_same_dob",
-      "item": "lim-nn-1",
-      "record": "none",
-      "record_why": [],
-      "right": "no chart: duplicate",
-      "screen": "stop"
-    },
-    {
       "exception": "heldout_married_dob_typo",
-      "item": "held-md-8",
+      "item": "held-md-1",
       "record": "close",
       "record_why": [
         "same first name, another last name, same phone, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
       "screen": "proceed"
+    },
+    {
+      "exception": "planted_married",
+      "item": "plant-m-6",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
+        "same date of birth and first name, another last name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
     },
     {
       "exception": "clean",
@@ -4378,12 +4769,15 @@
       "screen": "proceed"
     },
     {
-      "exception": "limit_married_moved_dob_typo",
-      "item": "lim-mm-10",
-      "record": "none",
-      "record_why": [],
+      "exception": "pl_both_typos_same_contact",
+      "item": "pl-bt-7",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
+      ],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "clean",
@@ -4404,12 +4798,14 @@
       "screen": "stop"
     },
     {
-      "exception": "limit_married_moved_dob_typo",
-      "item": "lim-mm-4",
-      "record": "none",
-      "record_why": [],
+      "exception": "r2_name_swap",
+      "item": "r2-sw-3",
+      "record": "close",
+      "record_why": [
+        "first and last name swapped"
+      ],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "clean",
@@ -4420,11 +4816,12 @@
       "screen": "stop"
     },
     {
-      "exception": "planted_married",
-      "item": "plant-m-10",
+      "exception": "planted_hyphenated",
+      "item": "plant-h-7",
       "record": "close",
       "record_why": [
-        "same date of birth and first name, another last name"
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -4492,6 +4889,16 @@
       "screen": "proceed"
     },
     {
+      "exception": "planted_married",
+      "item": "plant-m-10",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
       "exception": "shared_dob",
       "item": "ref-00433",
       "record": "none",
@@ -4500,12 +4907,10 @@
       "screen": "stop"
     },
     {
-      "exception": "heldout_last_typo",
-      "item": "held-l-1",
-      "record": "close",
-      "record_why": [
-        "same date of birth, a similar name"
-      ],
+      "exception": "limit_new_name_moved_same_dob",
+      "item": "lim-nn-0",
+      "record": "none",
+      "record_why": [],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
@@ -4526,14 +4931,14 @@
       "screen": "proceed"
     },
     {
-      "exception": "r2_year_transposed",
-      "item": "r2-ty-4",
+      "exception": "heldout_married_dob_typo",
+      "item": "held-md-3",
       "record": "close",
       "record_why": [
-        "same name, a mistyped date of birth"
+        "same first name, another last name, same phone, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
-      "screen": "stop"
+      "screen": "proceed"
     },
     {
       "exception": "clean",
@@ -4586,15 +4991,12 @@
       "screen": "stop"
     },
     {
-      "exception": "planted_married",
-      "item": "plant-m-7",
-      "record": "close",
-      "record_why": [
-        "same date of birth and first name, another last name",
-        "same date of birth and first name, another last name"
-      ],
+      "exception": "limit_married_moved_dob_typo",
+      "item": "lim-mm-4",
+      "record": "none",
+      "record_why": [],
       "right": "no chart: duplicate",
-      "screen": "stop"
+      "screen": "proceed"
     },
     {
       "exception": "clean",
@@ -4605,10 +5007,13 @@
       "screen": "stop"
     },
     {
-      "exception": "limit_new_name_moved_same_dob",
-      "item": "lim-nn-7",
-      "record": "none",
-      "record_why": [],
+      "exception": "pl_married_moved",
+      "item": "pl-mm-5",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
+        "same date of birth and first name, another last name"
+      ],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
@@ -4642,6 +5047,16 @@
       "record": "none",
       "record_why": [],
       "right": "new chart",
+      "screen": "stop"
+    },
+    {
+      "exception": "pl_both_typos_same_contact",
+      "item": "pl-bt-10",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
       "screen": "stop"
     },
     {
@@ -4727,12 +5142,15 @@
       "screen": "stop"
     },
     {
-      "exception": "limit_married_moved_dob_typo",
-      "item": "lim-mm-5",
-      "record": "none",
-      "record_why": [],
+      "exception": "planted_hyphenated",
+      "item": "plant-h-4",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
+      ],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "clean",
@@ -4740,6 +5158,16 @@
       "record": "none",
       "record_why": [],
       "right": "new chart",
+      "screen": "stop"
+    },
+    {
+      "exception": "heldout_first_typo",
+      "item": "held-f-10",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
       "screen": "stop"
     },
     {
@@ -4783,10 +5211,12 @@
       "screen": "stop"
     },
     {
-      "exception": "limit_new_name_moved_same_dob",
-      "item": "lim-nn-11",
-      "record": "none",
-      "record_why": [],
+      "exception": "r2_name_swap",
+      "item": "r2-sw-8",
+      "record": "close",
+      "record_why": [
+        "first and last name swapped"
+      ],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
@@ -4807,10 +5237,11 @@
       "screen": "stop"
     },
     {
-      "exception": "heldout_last_typo",
-      "item": "held-l-11",
+      "exception": "planted_hyphenated",
+      "item": "plant-h-8",
       "record": "close",
       "record_why": [
+        "same date of birth and first name, another last name",
         "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
@@ -4851,14 +5282,14 @@
       "screen": "stop"
     },
     {
-      "exception": "heldout_married_dob_typo",
-      "item": "held-md-6",
+      "exception": "r2_year_transposed",
+      "item": "r2-ty-4",
       "record": "close",
       "record_why": [
-        "same first name, another last name, same phone, a mistyped date of birth"
+        "same name, a mistyped date of birth"
       ],
       "right": "no chart: duplicate",
-      "screen": "proceed"
+      "screen": "stop"
     },
     {
       "exception": "clean",
@@ -4869,8 +5300,8 @@
       "screen": "stop"
     },
     {
-      "exception": "heldout_first_typo",
-      "item": "held-f-4",
+      "exception": "planted_hyphenated",
+      "item": "plant-h-3",
       "record": "close",
       "record_why": [
         "same date of birth and first name, another last name",
@@ -5016,6 +5447,16 @@
       "screen": "proceed"
     },
     {
+      "exception": "r2_year_transposed",
+      "item": "r2-ty-9",
+      "record": "close",
+      "record_why": [
+        "same name, a mistyped date of birth"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
       "exception": "clean",
       "item": "ref-00486",
       "record": "none",
@@ -5024,11 +5465,12 @@
       "screen": "stop"
     },
     {
-      "exception": "r2_year_transposed",
-      "item": "r2-ty-5",
+      "exception": "planted_married",
+      "item": "plant-m-4",
       "record": "close",
       "record_why": [
-        "same name, a mistyped date of birth"
+        "same date of birth and first name, another last name",
+        "same date of birth and first name, another last name"
       ],
       "right": "no chart: duplicate",
       "screen": "stop"
@@ -5114,6 +5556,16 @@
       "screen": "stop"
     },
     {
+      "exception": "planted_swapped_dob",
+      "item": "plant-s-10",
+      "record": "close",
+      "record_why": [
+        "same name, day and month swapped"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
       "exception": "clean",
       "item": "ref-00497",
       "record": "none",
@@ -5136,6 +5588,16 @@
       "record_why": [],
       "right": "new chart",
       "screen": "proceed"
+    },
+    {
+      "exception": "r2_year_transposed",
+      "item": "r2-ty-10",
+      "record": "close",
+      "record_why": [
+        "same name, a mistyped date of birth"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
     },
     {
       "exception": "clean",
@@ -5186,21 +5648,31 @@
       "screen": "stop"
     },
     {
-      "exception": "heldout_married_dob_typo",
-      "item": "held-md-7",
-      "record": "close",
-      "record_why": [
-        "same first name, another last name, same phone, a mistyped date of birth"
-      ],
-      "right": "no chart: duplicate",
-      "screen": "proceed"
-    },
-    {
-      "exception": "heldout_last_typo",
-      "item": "held-l-4",
+      "exception": "heldout_first_typo",
+      "item": "held-f-5",
       "record": "close",
       "record_why": [
         "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "planted_swapped_dob",
+      "item": "plant-s-3",
+      "record": "close",
+      "record_why": [
+        "same name, day and month swapped"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "heldout_last_typo",
+      "item": "held-l-11",
+      "record": "close",
+      "record_why": [
         "same date of birth, a similar name"
       ],
       "right": "no chart: duplicate",
@@ -5219,6 +5691,86 @@
     {
       "exception": "r2_nickname",
       "item": "r2-nk-5",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "pl_second_surname",
+      "item": "pl-ss-0",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "pl_second_surname",
+      "item": "pl-ss-1",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "pl_second_surname",
+      "item": "pl-ss-2",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "pl_second_surname",
+      "item": "pl-ss-3",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "heldout_married_dob_typo",
+      "item": "held-md-6",
+      "record": "close",
+      "record_why": [
+        "same first name, another last name, same phone, a mistyped date of birth"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "proceed"
+    },
+    {
+      "exception": "pl_second_surname",
+      "item": "pl-ss-4",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "pl_initial",
+      "item": "pl-in-0",
+      "record": "close",
+      "record_why": [
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
+    },
+    {
+      "exception": "pl_second_surname",
+      "item": "pl-ss-5",
       "record": "close",
       "record_why": [
         "same date of birth, a similar name"
@@ -5267,10 +5819,13 @@
       "screen": "proceed"
     },
     {
-      "exception": "limit_new_name_moved_same_dob",
-      "item": "lim-nn-8",
-      "record": "none",
-      "record_why": [],
+      "exception": "heldout_last_typo",
+      "item": "held-l-5",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
+      ],
       "right": "no chart: duplicate",
       "screen": "stop"
     },
@@ -5285,14 +5840,6 @@
       "screen": "proceed"
     },
     {
-      "exception": "limit_new_name_moved_same_dob",
-      "item": "lim-nn-0",
-      "record": "none",
-      "record_why": [],
-      "right": "no chart: duplicate",
-      "screen": "stop"
-    },
-    {
       "exception": "r2_prior_name_moved_dob_typo",
       "item": "r2-pn-5",
       "record": "close",
@@ -5301,15 +5848,26 @@
       ],
       "right": "no chart: duplicate",
       "screen": "proceed"
+    },
+    {
+      "exception": "pl_initial",
+      "item": "pl-in-5",
+      "record": "close",
+      "record_why": [
+        "same date of birth and first name, another last name",
+        "same date of birth, a similar name"
+      ],
+      "right": "no chart: duplicate",
+      "screen": "stop"
     }
   ],
   "summary": {
-    "items": 622,
+    "items": 676,
     "new_chart_items": 440,
     "record": {
-      "caught_duplicates": 145,
+      "caught_duplicates": 199,
       "decisions": {
-        "close": 110,
+        "close": 164,
         "exact": 37,
         "none": 462,
         "unreadable": 13
@@ -5326,7 +5884,7 @@
       "missed_duplicates": 24
     },
     "screen": {
-      "caught_duplicates": 139,
+      "caught_duplicates": 193,
       "false_stops": 252,
       "false_stops_by_exception": {
         "ambiguous_new_person": 7,
@@ -5341,7 +5899,7 @@
         "shared_dob": 33,
         "slow_save": 5
       },
-      "false_stops_per_100_items": 40.5,
+      "false_stops_per_100_items": 37.3,
       "missed_by_exception": {
         "heldout_married_dob_typo": 12,
         "limit_married_moved_dob_typo": 12,
@@ -5349,6 +5907,6 @@
       },
       "missed_duplicates": 30
     },
-    "true_duplicates": 169
+    "true_duplicates": 223
   }
 }
