@@ -49,7 +49,9 @@ def _interactive() -> bool:
 
 
 def _needs_terminal(args: argparse.Namespace) -> bool:
-    if args.jit_cmd in ("status", "keygen"):
+    # ``jit approver`` changes are authorized by an approver's signature, not
+    # by a terminal or a typed confirmation.
+    if args.jit_cmd in ("status", "keygen", "approver"):
         return False
     if args.jit_cmd == "review" and args.queue:
         return False
@@ -60,6 +62,76 @@ def _needs_terminal(args: argparse.Namespace) -> bool:
 
 def _keys(args: argparse.Namespace) -> Path:
     return _key_dir(args) or lifecycle.default_key_dir()
+
+
+def _cmd_approver(args: argparse.Namespace) -> int:
+    """``jit approver init|add|remove|list``: the signed approver roster.
+
+    Every change is signed: ``init`` by the root key itself, ``add`` and
+    ``remove`` by an approver already on the roster (``--signer-key``). A run
+    trusts the roster only through its pinned root (``--approver-root``,
+    ``OPENADAPT_APPROVER_ROOT`` or the deployment config).
+    """
+
+    from openadapt_flow.approval_mode import approver_roster as roster
+
+    key_dir = _keys(args)
+    try:
+        if args.approver_cmd == "init":
+            key = authority.load_encrypted_key(args.key)
+            entry = roster.init_root(
+                key_dir,
+                principal=args.principal,
+                public_key=authority.public_hex(key),
+                sign=roster.file_key_signer(key),
+            )
+            print(
+                f"started the approver roster in {key_dir} with {entry.principal} "
+                f"as its root. Pin this root in the deployment config "
+                f"(approvers.root_public_key: {entry.public_key})."
+            )
+            return 0
+        root = roster.pinned_root(args.approver_root)
+        if args.approver_cmd == "list":
+            for pid, public in sorted(roster.verified_approvers(key_dir, root).items()):
+                print(f"{pid}\t{public}")
+            return 0
+        key = authority.load_encrypted_key(args.signer_key)
+        signer_public = authority.public_hex(key)
+        signer = next(
+            (
+                pid
+                for pid, public in roster.verified_approvers(key_dir, root).items()
+                if public == signer_public
+            ),
+            None,
+        )
+        if signer is None:
+            raise roster.RosterError(
+                "approver_signer_unregistered",
+                "--signer-key isn't an approver on this roster",
+            )
+        change = (
+            roster.add_approver
+            if args.approver_cmd == "add"
+            else roster.remove_approver
+        )
+        entry = change(
+            key_dir,
+            root,
+            principal=args.principal,
+            public_key=args.public_key,
+            signed_by=signer,
+            sign=roster.file_key_signer(key),
+        )
+        print(f"{args.approver_cmd}: {entry.principal}, signed by {entry.signed_by}")
+        return 0
+    except (roster.RosterError, authority.AuthorityError, OSError) as exc:
+        code = getattr(exc, "code", "approver_roster_refused")
+        print(
+            f"jit approver {args.approver_cmd} REFUSED ({code}): {exc}", file=sys.stderr
+        )
+        return 2
 
 
 def cmd_jit(
@@ -91,6 +163,8 @@ def cmd_jit(
             print(f"wrote {args.out}; public key {pub}")
             print(f"A person registers it: {command('jit register')} ...")
             return 0
+        if args.jit_cmd == "approver":
+            return _cmd_approver(args)
         if args.jit_cmd == "register":
             if confirm(
                 f"Register {args.principal} as {args.role} with key {args.public_key}?"
@@ -332,14 +406,54 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     common(p, program=False)
     p.add_argument("--out", required=True)
     p = verbs.add_parser(
-        "register", help="Register a key as a policy signer, admitter key or agent"
+        "register",
+        help="Register a key as a policy signer, admitter key or agent "
+        "(approvers: jit approver)",
     )
     common(p, program=False)
     p.add_argument(
-        "--role", required=True, choices=["policy_signer", "admitter_key", "agent"]
+        "--role",
+        required=True,
+        choices=["policy_signer", "admitter_key", "agent"],
     )
     p.add_argument("--principal", required=True)
     p.add_argument("--public-key", required=True, help="hex, from jit keygen")
+    p = verbs.add_parser(
+        "approver",
+        help="The signed approver roster: who may approve a save. Every change "
+        "is signed by an approver already on it",
+    )
+    approver_verbs = p.add_subparsers(dest="approver_cmd", required=True)
+    for name, verb_help in (
+        ("init", "Start the roster with its root approver (once per key directory)"),
+        ("add", "Add an approver, signed by an approver on the roster"),
+        ("remove", "Remove an approver, signed by an approver on the roster"),
+        ("list", "Print the approvers the pinned root vouches for"),
+    ):
+        q = approver_verbs.add_parser(name, help=verb_help)
+        common(q, program=False)
+        if name == "init":
+            q.add_argument("--principal", required=True)
+            q.add_argument(
+                "--key",
+                required=True,
+                help="The root approver's encrypted key; passphrase from "
+                f"${authority.KEY_PASSPHRASE_ENV}",
+            )
+            continue
+        q.add_argument(
+            "--approver-root",
+            default=None,
+            help="The pinned root approver key (hex); default $OPENADAPT_APPROVER_ROOT",
+        )
+        if name in ("add", "remove"):
+            q.add_argument("--principal", required=True)
+            q.add_argument("--public-key", required=True, help="hex, from jit keygen")
+            q.add_argument(
+                "--signer-key",
+                required=True,
+                help="An approver's encrypted key that signs this change",
+            )
     p = verbs.add_parser(
         "sign-policy", help="Sign an admission policy with your policy-signer key"
     )
