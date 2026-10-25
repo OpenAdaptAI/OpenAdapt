@@ -48,9 +48,25 @@ def _dotted(body: Any, path: str) -> Any:
     return node
 
 
+def _origin(url: str) -> str:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"
+
+
 def _same_origin(url: str, base_url: str) -> bool:
-    a, b = urlsplit(url), urlsplit(base_url)
-    return (a.scheme, a.netloc) == (b.scheme, b.netloc)
+    return _origin(url) == _origin(base_url)
+
+
+def _no_redirects(session: Any) -> dict[str, Any]:
+    """Keyword that stops ``requests`` following a redirect.
+
+    A redirect could carry the configured auth headers to another host, so a
+    3xx is a failed read. ``httpx`` doesn't follow redirects by default; an
+    injected session keeps its own ``get`` signature.
+    """
+
+    module = type(session).__module__ or ""
+    return {"allow_redirects": False} if module.startswith("requests") else {}
 
 
 class RestRecordVerifier(VerifierAdapterBase):
@@ -79,6 +95,13 @@ class RestRecordVerifier(VerifierAdapterBase):
             page on the same origin is read (at most :data:`MAX_PAGES`); a
             failed page or a longer chain reads as unreadable. Unset, one
             response is the whole read.
+        total_path: Dotted path in the first page's body to the number of
+            records the server holds for the read. Set, a read whose record
+            count differs, or a body without it, reads as unreadable. Unset,
+            the read trusts the page chain.
+
+    Why the last read was unreadable is in :attr:`read_problem` (and in the
+    state's ``detail`` and the verdict's reason).
     """
 
     substrate = "rest"
@@ -96,9 +119,12 @@ class RestRecordVerifier(VerifierAdapterBase):
         poll_interval_s: float = 0.2,
         drop_fields: tuple[str, ...] = (),
         next_path: Optional[str] = None,
+        total_path: Optional[str] = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.next_path = next_path
+        self.total_path = total_path
+        self.read_problem: Optional[str] = None
         self.drop_fields = tuple(drop_fields)
         self.records_path = records_path
         self.records_key = records_key
@@ -136,23 +162,34 @@ class RestRecordVerifier(VerifierAdapterBase):
     def _get_json(self, url: str) -> Any:
         """One GET; the parsed body, or ``_UNREADABLE``. Never raises."""
 
+        session = self._get_session()
         try:
             # ``headers`` is passed ONLY when configured, so injected
             # ``requests``-style sessions with a narrower ``get`` signature
             # (tests, custom oracles) keep working exactly as before.
             if self.headers:
-                resp = self._get_session().get(
-                    url, timeout=self.timeout_s, headers=self.headers
+                resp = session.get(
+                    url,
+                    timeout=self.timeout_s,
+                    headers=self.headers,
+                    **_no_redirects(session),
                 )
             else:
-                resp = self._get_session().get(url, timeout=self.timeout_s)
-        except Exception:  # noqa: BLE001 - any transport failure is unreadable
+                resp = session.get(url, timeout=self.timeout_s)
+        except Exception as exc:  # noqa: BLE001 - any transport failure is unreadable
+            self.read_problem = f"GET {url} failed: {type(exc).__name__}"
             return _UNREADABLE
         if resp.status_code // 100 != 2:
+            self.read_problem = f"GET {url} returned HTTP {resp.status_code}"
+            return _UNREADABLE
+        landed = getattr(resp, "url", None)
+        if isinstance(landed, str) and landed and not _same_origin(landed, url):
+            self.read_problem = f"GET {url} was redirected to origin {_origin(landed)}"
             return _UNREADABLE
         try:
             return resp.json()
         except Exception:  # noqa: BLE001 - unparseable body is unreadable
+            self.read_problem = f"GET {url} returned a body that is not JSON"
             return _UNREADABLE
 
     def _records_of(self, body: Any) -> Optional[list[Any]]:
@@ -172,15 +209,20 @@ class RestRecordVerifier(VerifierAdapterBase):
         ``next_path``, on a failed page, a page on another origin or a chain
         longer than :data:`MAX_PAGES`. Never raises.
         """
+        self.read_problem = None
         url = f"{self.base_url}{self.records_path}"
         collected: list[Any] = []
-        for _page in range(MAX_PAGES):
+        total: Any = None
+        for page in range(MAX_PAGES):
             body = self._get_json(url)
             if body is _UNREADABLE:
                 return None
             records = self._records_of(body)
             if records is None:
+                self.read_problem = f"GET {url}: no records list in the body"
                 return None
+            if page == 0 and self.total_path is not None:
+                total = _dotted(body, self.total_path)
             collected.extend(records)
             if self.next_path is None:
                 break
@@ -188,13 +230,31 @@ class RestRecordVerifier(VerifierAdapterBase):
             if following in (None, ""):
                 break
             if not isinstance(following, str):
+                self.read_problem = f"the next link at {self.next_path} is not a URL"
                 return None
             following = urljoin(url, following)
             if not _same_origin(following, self.base_url):
+                # OpenEMR, for one, builds next links from its configured site
+                # address, which can differ from the address the read uses.
+                self.read_problem = (
+                    f"next link origin {_origin(following)} != base_url "
+                    f"{_origin(self.base_url)}"
+                )
                 return None
             url = following
         else:
+            self.read_problem = f"more than {MAX_PAGES} pages"
             return None
+        if self.total_path is not None:
+            if isinstance(total, bool) or not isinstance(total, int):
+                self.read_problem = f"no record total at {self.total_path}"
+                return None
+            if total != len(collected):
+                self.read_problem = (
+                    f"the record total at {self.total_path} is {total}, the read "
+                    f"returned {len(collected)}"
+                )
+                return None
         return drop_record_fields(
             [r for r in collected if isinstance(r, dict)], self.drop_fields
         )
@@ -203,11 +263,14 @@ class RestRecordVerifier(VerifierAdapterBase):
 
     def capture_pre_state(self, context: Any = None) -> EffectState:
         records = self._fetch_records()
+        detail: dict[str, Any] = {"url": f"{self.base_url}{self.records_path}"}
+        if records is None and self.read_problem:
+            detail["read_problem"] = self.read_problem
         return EffectState(
             substrate=self.substrate,
             reachable=records is not None,
             records=records or [],
-            detail={"url": f"{self.base_url}{self.records_path}"},
+            detail=detail,
         )
 
     def verify(
@@ -222,6 +285,10 @@ class RestRecordVerifier(VerifierAdapterBase):
         while True:
             current = self._fetch_records()
             last = judge_records(expected, before, current, substrate=self.substrate)
+            if current is None and self.read_problem:
+                last = last.model_copy(
+                    update={"reason": f"{last.reason} ({self.read_problem})"}
+                )
             if last.confirmed or time.monotonic() >= deadline:
                 return last
             time.sleep(self.poll_interval_s)

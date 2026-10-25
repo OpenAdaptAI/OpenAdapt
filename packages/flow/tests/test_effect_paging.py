@@ -24,7 +24,9 @@ from openadapt_flow.runtime.effects.rest import RestRecordVerifier
 
 PATIENTS = [{"id": str(i), "fname": f"F{i}", "lname": f"L{i}"} for i in range(1, 6)]
 
-Page = Callable[[str, int], tuple[int, dict]]
+Page = Callable[[str, int], tuple]
+#: Request headers every test server saw, in order.
+SEEN: list[dict] = []
 
 
 @pytest.fixture
@@ -36,9 +38,12 @@ def serve():
             def do_GET(self) -> None:  # noqa: N802 - http.server API
                 parts = urlsplit(self.path)
                 number = int(parse_qs(parts.query).get("page", ["0"])[0])
-                status, body = page(parts.path, number)
+                SEEN.append(dict(self.headers))
+                status, body, *extra = page(parts.path, number)
                 data = json.dumps(body).encode()
                 self.send_response(status)
+                for name, value in (extra[0] if extra else {}).items():
+                    self.send_header(name, value)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
@@ -271,3 +276,137 @@ def test_records_next_path_in_a_config(serve) -> None:
         {k: v for k, v in section.items() if k != "records_next_path"}
     )
     assert "records_next_path" not in plain.model_dump(mode="json")
+
+
+# -- review of #1538 ---------------------------------------------------------------
+
+
+def test_fhir_total_below_the_read_is_unreadable(serve) -> None:
+    holder: dict = {}
+    url = serve(lambda path, n: (200, _bundle(holder["url"], n, per=10, total=3)))
+    holder["url"] = url
+    verifier = _fhir(url)
+    state = verifier.capture_pre_state()
+    assert not state.reachable
+    assert state.detail["read_problem"] == (
+        "the Bundle's total is 3, the read returned 5 matches"
+    )
+
+
+def test_fhir_included_resources_are_not_matches(serve) -> None:
+    holder: dict = {}
+
+    def page(path: str, n: int) -> tuple:
+        bundle = _bundle(holder["url"], n, per=10, total=5)
+        bundle["entry"].append(
+            {
+                "resource": {"resourceType": "Practitioner", "id": "dr1"},
+                "search": {"mode": "include"},
+            }
+        )
+        return 200, bundle
+
+    holder["url"] = serve(page)
+    assert len(_read(_fhir(holder["url"])) or []) == 6
+
+
+def test_fhir_next_origin_is_named(serve) -> None:
+    url = serve(lambda path, n: (200, _bundle("http://203.0.113.9", n)))
+    state = _fhir(url).capture_pre_state()
+    assert state.detail["read_problem"] == (
+        f"next link origin http://203.0.113.9 != base_url {url}"
+    )
+
+
+def test_openemr_next_links_name_the_site_address(serve) -> None:
+    """OpenEMR builds REST next links from its configured site address. Read
+    through a mapped port, the link names another origin: unreadable, with
+    both origins in the reason, never page one alone."""
+
+    site = "https://localhost:9300"
+
+    def page(path: str, n: int) -> tuple:
+        return 200, {
+            "validationErrors": [],
+            "internalErrors": [],
+            "data": PATIENTS[n * 2 : n * 2 + 2],
+            "links": {"next": f"{site}/apis/default/api/patient?page={n + 1}"},
+        }
+
+    url = serve(page)
+    verifier = _rest(url)
+    state = verifier.capture_pre_state()
+    assert not state.reachable
+    assert state.detail["read_problem"] == (
+        f"next link origin {site} != base_url {url}"
+    )
+
+
+def _rest_total(url: str, path: str = "meta.total") -> RestRecordVerifier:
+    return RestRecordVerifier(
+        url,
+        records_path="/api/patient",
+        records_key="data",
+        timeout_s=2.0,
+        next_path="links.next",
+        total_path=path,
+    )
+
+
+@pytest.mark.parametrize("total,ok", [(5, True), (6, False), (4, False), (None, False)])
+def test_rest_total_path(serve, total, ok) -> None:
+    def page(path: str, n: int) -> tuple:
+        body = _rest_page(n, next_url=lambda m: f"/api/patient?page={m}")
+        if total is not None:
+            body["meta"] = {"total": total}
+        return 200, body
+
+    verifier = _rest_total(serve(page))
+    state = verifier.capture_pre_state()
+    assert state.reachable is ok
+    if not ok:
+        assert "total" in state.detail["read_problem"]
+
+
+def test_a_redirect_never_carries_the_auth_headers(serve) -> None:
+    """A 3xx is a failed read; the configured headers never reach the other
+    host."""
+
+    SEEN.clear()
+    other = serve(lambda path, n: (200, {"data": PATIENTS, "links": {}}))
+    url = serve(lambda path, n: (302, {}, {"Location": f"{other}/api/patient"}))
+    verifier = RestRecordVerifier(
+        url,
+        records_path="/api/patient",
+        records_key="data",
+        headers={"X-Api-Key": "test-key-not-a-secret"},
+        timeout_s=2.0,
+    )
+    state = verifier.capture_pre_state()
+    assert not state.reachable
+    assert state.detail["read_problem"].endswith("returned HTTP 302")
+    assert len(SEEN) == 1  # the other host was never asked
+
+    SEEN.clear()
+    fhir_url = serve(lambda path, n: (302, {}, {"Location": f"{other}/fhir/Patient"}))
+    state = _fhir(fhir_url).capture_pre_state()
+    assert not state.reachable
+    assert len(SEEN) == 1
+
+
+def test_the_verdict_names_why_the_read_failed(serve) -> None:
+    from openadapt_flow.runtime.effects import Effect, EffectKind
+
+    url = serve(
+        lambda path, n: (
+            200,
+            _rest_page(
+                n, next_url=lambda m: f"http://203.0.113.9/api/patient?page={m}"
+            ),
+        )
+    )
+    verifier = _rest(url)
+    before = verifier.capture_pre_state()
+    effect = Effect(kind=EffectKind.RECORD_WRITTEN, match={"lname": "L5"}, timeout_s=0)
+    verdict = verifier.verify(effect, before)
+    assert "next link origin http://203.0.113.9" in verdict.reason
