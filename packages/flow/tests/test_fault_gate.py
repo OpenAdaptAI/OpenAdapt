@@ -19,6 +19,7 @@ from openadapt_flow.fault_gate import (
     run_gate,
     write_coverage,
 )
+from openadapt_flow.runtime.effects.surfaces import surface_probe
 from openadapt_flow.verify_run import parse_verify_config
 
 PARAMS = {"patient_id": "p1", "note": "Follow-up in two weeks", "type": "Triage"}
@@ -74,11 +75,16 @@ def test_a_full_read_kills_every_fault(rest_copy, tmp_path: Path) -> None:
         "wrong_value",
         "wrong_record",
         "unrelated_edit",
+        "other_table",
+        "side_write",
         "partial",
         "duplicate",
         "missing",
         "delayed",
     }
+    # The store holds one collection: nothing outside the read to write.
+    assert record.classes["other_table"].applicable == 0
+    assert record.class_results()["side_write"] == "not_applicable"
     # One wrong-value case per declared field.
     assert record.classes["wrong_value"].applicable == 3
     assert record.killed == record.applicable == 9
@@ -183,6 +189,100 @@ def test_admission_policy(rest_copy, tmp_path: Path) -> None:
     assert strict.problem(no_frame, check_digest(cfg)) == "coverage_class_missing"
 
 
+def test_a_missed_claimed_class_refuses_whatever_the_total(tmp_path: Path) -> None:
+    """The one-table check of #1506: every in-table fault killed, the faults
+    outside its read missed. A lower min_coverage doesn't admit it."""
+
+    db = tmp_path / "app.sqlite"
+    con = sqlite3.connect(db)
+    con.executescript(
+        "CREATE TABLE enc (id INTEGER PRIMARY KEY, patient_id TEXT, type TEXT, note TEXT);"
+        "CREATE TABLE allergy (id INTEGER PRIMARY KEY, patient_id TEXT, title TEXT);"
+        "INSERT INTO enc VALUES (1, 'p2', 'Consult', 'Allergy: penicillin');"
+        "INSERT INTO allergy VALUES (1, 'p2', 'penicillin');"
+    )
+    con.commit()
+    con.close()
+    cfg = _sql_cfg(db, scoped=False)
+    copy = SqliteCopy(db, "enc", TARGET, workdir=tmp_path / "copy")
+    record = run_gate(cfg, PARAMS, copy, workdir=tmp_path / "gate")
+    assert record.clean_pass
+    results = record.class_results()
+    assert results["unrelated_edit"] == "killed"
+    assert results["other_table"] == results["side_write"] == "missed"
+    assert record.killed == record.applicable - 2
+    lenient = AdmissionPolicy(coverage="c.json", min_coverage=0.5)
+    assert (
+        lenient.problem(record, check_digest(cfg))
+        == "coverage_class_missed:other_table"
+    )
+    detail = {c["fault"]: c["detail"] for c in record.cases}
+    assert "allergy." in detail["other_table"]
+    assert "allergy.patient_id" in detail["side_write"]
+
+    # Coverage from the earlier suite has no outside-read classes: refused.
+    old = record.model_copy(
+        update={
+            "classes": {
+                k: v
+                for k, v in record.classes.items()
+                if k not in ("other_table", "side_write")
+            }
+        }
+    )
+    assert (
+        lenient.problem(old, check_digest(cfg)) == "coverage_class_missing:other_table"
+    )
+    # A class the copy couldn't build is refused, not credited.
+    untestable = record.model_copy(deep=True)
+    untestable.classes["side_write"].untestable = 1
+    assert untestable.class_results()["side_write"] == "untestable"
+    # A check that claims no frame isn't held to the frame's classes.
+    delta_only = run_gate(
+        cfg, PARAMS, copy, claims=("delta",), workdir=tmp_path / "gate2"
+    )
+    assert "other_table" not in delta_only.class_results()
+    assert lenient.problem(delta_only, check_digest(cfg)) is None
+
+
+def test_a_read_of_both_tables_kills_the_outside_faults(tmp_path: Path) -> None:
+    db = tmp_path / "app.sqlite"
+    con = sqlite3.connect(db)
+    con.executescript(
+        "CREATE TABLE enc (id INTEGER PRIMARY KEY, patient_id TEXT, type TEXT, note TEXT);"
+        "CREATE TABLE allergy (id INTEGER PRIMARY KEY, patient_id TEXT, title TEXT);"
+        "INSERT INTO enc VALUES (1, 'p2', 'Consult', 'Allergy: penicillin');"
+        "INSERT INTO allergy VALUES (1, 'p2', 'penicillin');"
+    )
+    con.commit()
+    con.close()
+    cfg = parse_verify_config(
+        {
+            "schema_version": "openadapt.verify/v1",
+            "verifier": {
+                "kind": "surfaces",
+                "surfaces": {
+                    "enc": {
+                        "kind": "sql",
+                        "sqlite_database": str(db),
+                        "sql_query": "SELECT id, patient_id, type, note FROM enc",
+                    },
+                    "allergy": {
+                        "kind": "sql",
+                        "sqlite_database": str(db),
+                        "sql_query": "SELECT id, patient_id, title FROM allergy",
+                    },
+                },
+            },
+            "effects": [dict(e, probe=surface_probe("enc")) for e in _effects()],
+        }
+    )
+    copy = SqliteCopy(db, "enc", TARGET, workdir=tmp_path / "copy")
+    record = run_gate(cfg, PARAMS, copy, workdir=tmp_path / "gate")
+    assert record.complete, [c for c in record.cases if c["result"] != "killed"]
+    assert AdmissionPolicy(coverage="c.json").problem(record, check_digest(cfg)) is None
+
+
 # -- verify-run under an admission policy ----------------------------------------
 
 
@@ -230,7 +330,15 @@ def test_verify_run_signs_the_coverage_it_was_admitted_with(
 
     admitted = run("admitted")
     assert admitted["outcome"] == "verified"
-    assert admitted["checked"]["coverage"] == {**record.totals(), "policy": "met"}
+    assert admitted["checked"]["coverage"] == {
+        **record.totals(),
+        "policy": "met",
+        "classes": record.class_results(),
+    }
+    # The memory store has one collection: nothing outside the read.
+    assert admitted["checked"]["coverage"]["classes"]["other_table"] == (
+        "not_applicable"
+    )
     assert receipt_problem(admitted) is None
 
     (tmp_path / "check_coverage.json").unlink()
@@ -295,7 +403,9 @@ def test_the_gate_finds_a_read_scoped_to_the_patient(tmp_path: Path) -> None:
     cov = rcs.gate_on_database(proposal, db, rcs.gate_config(proposal))
     assert cov is not None and cov.clean_pass
     survived = {c["fault"] for c in cov.cases if c["result"] == "SURVIVED"}
-    assert survived == {"unrelated_edit"}
+    # Nor an edit in billing: synthesis reads billing only to see that no
+    # row was added, which catches the side write but not the edit.
+    assert survived == {"unrelated_edit", "other_table"}
 
     recorded = rcs.coverage_from_recorded(proposal.faults, rcs.gate_config(proposal))
     assert recorded.test_copy == "recorded_states"
@@ -312,6 +422,23 @@ def test_scaffold_verifier_on_the_gate_reads_the_target_table_whole(
     assert any("every row" in s.source for s in gated.search.surfaces)
     cov = gated.coverage
     assert cov is not None and cov.test_copy == "sqlite"
-    assert cov.complete, [c for c in cov.cases if c["result"] != "killed"]
-    assert gated.working, gated.misses
+    assert cov.classes["unrelated_edit"].killed == 1
+    # The check reads encounters whole and billing only for "no row added":
+    # it sees a billing row added for the saved patient, not a billing edit.
+    # It claims a frame, so it is a draft, not a working check (#1506).
+    results = cov.class_results()
+    assert results["side_write"] == "killed"
+    assert results["other_table"] == "missed"
+    assert not gated.working
+    assert any("other_table" in m for m in gated.misses)
     assert gated.proof()["coverage"]["test_copy"] == "sqlite"
+
+    # The same check on a store with no other table is working.
+    con = sqlite3.connect(db)
+    con.execute("DROP TABLE billing")
+    con.commit()
+    con.close()
+    alone = synthesize(rec, db_path=db, fault_gate=True)
+    assert alone.coverage is not None and alone.coverage.complete
+    assert alone.coverage.class_results()["other_table"] == "not_applicable"
+    assert alone.working, alone.misses

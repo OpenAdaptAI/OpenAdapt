@@ -19,16 +19,28 @@ Fault class        The copy holds after the save                Claim
 ``wrong_value``    the target with one declared field changed   delta
 ``wrong_record``   the target's values on a look-alike instead  delta
 ``unrelated_edit`` the clean save plus another record edited    frame
+``other_table``    the clean save plus a record in another       frame
+                   table edited
+``side_write``     the clean save plus a row in another table    frame
+                   added for the saved record
 ``partial``        the target with its later fields blank       delta
 ``duplicate``      the target twice                             delta
 ``missing``        no target                                    delta
 ``delayed``        no target until after the check's timeout    delta
 =================  ===========================================  ===========
 
-Coverage is faults killed over faults applicable, recorded in
+``other_table`` and ``side_write`` write outside the check's read: an edit
+to another chart's history, an insurance row or a note for the new patient
+(OpenAdaptAI/OpenAdapt#1506). A check that reads one table of a store that
+holds others can't see them, so it is not admitted for a frame. On a store
+with no other table they are not applicable.
+
+Coverage is faults killed over faults applicable, per class, recorded in
 ``check_coverage.json`` (``openadapt.check-coverage/v1``) and bound to the
 check by :func:`check_digest`. ``verify-run`` reads it under an
-``admission:`` policy and signs the totals into the receipt.
+``admission:`` policy: every class of every part the check claims must be
+tested and every one of its faults killed. The receipt signs the totals and
+the result per class.
 
 The mechanism, the seven operators and this public suite are public. A grown
 fault corpus and deployment coverage floors stay private
@@ -52,21 +64,29 @@ from openadapt_flow.runtime.effects.effect import Effect, EffectKind
 
 COVERAGE_SCHEMA = "openadapt.check-coverage/v1"
 SUITE_ID = "openadapt.fault-suite/public"
-SUITE_VERSION = "1.0.0"
+SUITE_VERSION = "1.1.0"
 COVERAGE_FILE = "check_coverage.json"
 
 FAULT_CLASSES: tuple[str, ...] = (
     "wrong_value",
     "wrong_record",
     "unrelated_edit",
+    "other_table",
+    "side_write",
     "partial",
     "duplicate",
     "missing",
     "delayed",
 )
+_FRAME_CLASSES = frozenset({"unrelated_edit", "other_table", "side_write"})
 #: Which part of the claim each fault class tests.
 CLAIM_OF: dict[str, str] = {
-    name: ("frame" if name == "unrelated_edit" else "delta") for name in FAULT_CLASSES
+    name: ("frame" if name in _FRAME_CLASSES else "delta") for name in FAULT_CLASSES
+}
+#: Every fault class that tests a part of the claim.
+CLASSES_OF: dict[str, tuple[str, ...]] = {
+    part: tuple(name for name in FAULT_CLASSES if CLAIM_OF[name] == part)
+    for part in sorted(set(CLAIM_OF.values()))
 }
 
 #: Verifier keys that say where the store is or how to sign in, not what is
@@ -130,6 +150,19 @@ class TestCopy(Protocol):
     def verifier_overrides(self) -> dict[str, Any]:
         """Verifier keys that point the check's read at this copy."""
 
+    # Optional, for ``other_table`` and ``side_write``. A copy without them
+    # can't test a frame outside its read, so those classes are untestable.
+    #
+    # def edit_elsewhere(self) -> str:
+    #     """Edit a record outside the slice; return what was edited."""
+    #
+    # def add_elsewhere(self, target: Mapping[str, Any]) -> str:
+    #     """Add a row outside the slice for the saved record ``target``."""
+
+
+class NotApplicable(Exception):
+    """The store holds nothing this fault could write (no other table)."""
+
 
 # -- results -------------------------------------------------------------------
 
@@ -143,6 +176,8 @@ class FaultCase:
     killed: bool = False
     #: True when the fault could not be built on this copy (not credited).
     untestable: bool = False
+    #: Why the fault doesn't apply to this store (it holds no other table).
+    not_applicable: str = ""
     outcome: str = ""
     checked: dict[str, Any] = field(default_factory=dict)
 
@@ -169,6 +204,17 @@ class ClassCoverage(BaseModel):
     model_config = ConfigDict(extra="forbid")
     applicable: int = 0
     killed: int = 0
+    #: Applicable faults that could not be built on the test copy.
+    untestable: int = 0
+
+    def result(self) -> str:
+        """``killed``, ``missed``, ``untestable`` or ``not_applicable``."""
+
+        if self.applicable == 0:
+            return "not_applicable"
+        if self.untestable:
+            return "untestable"
+        return "killed" if self.killed == self.applicable else "missed"
 
 
 class CoverageRecord(BaseModel):
@@ -209,14 +255,31 @@ class CoverageRecord(BaseModel):
             "sha256": self.digest(),
         }
 
+    def class_results(self) -> dict[str, str]:
+        """Each claimed part's fault classes and how each came out.
+
+        A class the record doesn't hold (coverage measured by an older suite)
+        is ``missing``.
+        """
+
+        out: dict[str, str] = {}
+        for part in sorted(set(self.claims)):
+            for name in CLASSES_OF.get(part, ()):
+                cls = self.classes.get(name)
+                out[name] = "missing" if cls is None else cls.result()
+        return out
+
 
 class AdmissionPolicy(BaseModel):
     """``admission:`` in ``verify.yaml``.
 
     The public default is the rule, not a tuned number: the clean save passes
-    and every applicable fault is killed. A deployment can also require
-    classes to be applicable (``require_classes``, for example every check
-    must claim a frame) and refuse coverage measured only on recorded states.
+    and, for every part the check claims, every fault class of that part was
+    tested and every one of its faults killed. A class missed, untestable on
+    the copy, or absent from the record refuses the check whatever the
+    totals say. A deployment can also require classes to be applicable
+    (``require_classes``, for example every check must claim a frame) and
+    refuse coverage measured only on recorded states.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -242,6 +305,11 @@ class AdmissionPolicy(BaseModel):
             return "coverage_clean_save_failed"
         if record.applicable == 0:
             return "coverage_empty"
+        # Per class: a check that misses a class it claims is not admitted,
+        # whatever its total (OpenAdaptAI/OpenAdapt#1506).
+        for name, result in record.class_results().items():
+            if result in ("missed", "untestable", "missing"):
+                return f"coverage_class_{result}:{name}"
         if record.killed / record.applicable < self.min_coverage:
             return "coverage_below_policy"
         for name in self.require_classes:
@@ -331,6 +399,8 @@ class _Prepared:
 
     key: Any
     target: dict[str, Any]
+    #: What an operator wrote, when it chose (a table and column).
+    detail: str = ""
 
 
 Apply = Callable[[TestCopy, _Prepared], Optional[Callable[[], None]]]
@@ -387,6 +457,24 @@ def _plan(
         c.update(victim[key_field], {name: _perturb(victim[name])})
 
     plan.append(("unrelated_edit", "another record in the slice edited", unrelated))
+
+    def other_table(c: TestCopy, p: _Prepared) -> None:
+        edit = getattr(c, "edit_elsewhere", None)
+        if edit is None:
+            raise _Untestable("the test copy can't write outside the check's read")
+        p.detail = edit()
+
+    plan.append(("other_table", "a record in another table edited", other_table))
+
+    def side_write(c: TestCopy, p: _Prepared) -> None:
+        add = getattr(c, "add_elsewhere", None)
+        if add is None:
+            raise _Untestable("the test copy can't write outside the check's read")
+        p.detail = add(p.target)
+
+    plan.append(
+        ("side_write", "a row in another table added for the saved record", side_write)
+    )
 
     later = [f for f in fields[len(fields) // 2 :] if f in sample] or fields[-1:]
 
@@ -519,10 +607,17 @@ def run_gate(
         try:
             baseline, prepared = prepare()
             later = apply(copy_, prepared)
+        except NotApplicable as exc:
+            case.applicable = False
+            case.not_applicable = str(exc)
+            case.detail += f" ({exc})"
+            continue
         except _Untestable as exc:
             case.untestable = True
             case.detail += f" ({exc})"
             continue
+        if prepared.detail:
+            case.detail += f" ({prepared.detail})"
         timer: Optional[threading.Timer] = None
         if later is not None:
             timer = threading.Timer(_check_timeout(effects) + delay_margin_s, later)
@@ -542,7 +637,9 @@ def run_gate(
         entry = classes.setdefault(case.fault, ClassCoverage())
         if case.applicable:
             entry.applicable += 1
-            if case.killed and not case.untestable:
+            if case.untestable:
+                entry.untestable += 1
+            elif case.killed:
                 entry.killed += 1
     return CoverageRecord(
         check_sha256=check_digest(cfg),
@@ -673,12 +770,23 @@ class MemoryRestCopy:
             "records_key": self.records_key,
         }
 
+    def edit_elsewhere(self) -> str:
+        raise NotApplicable("the store holds one collection")
+
+    def add_elsewhere(self, target: Mapping[str, Any]) -> str:
+        raise NotApplicable("the store holds one collection")
+
 
 class SqliteCopy:
     """A copy of a SQLite database file, one table as the slice.
 
     ``source`` is copied before every case. ``save`` runs the clean save's
     SQL (or inserts ``target``). The check's read runs against the copy.
+
+    The database's other tables are outside the slice. ``subject_field`` is
+    the column they refer to the saved record by (OpenEMR's ``pid``). Unset,
+    it is the one column the slice's table shares with other tables whose
+    name ends in ``id`` (not the key).
     """
 
     name = "sqlite"
@@ -691,6 +799,7 @@ class SqliteCopy:
         *,
         key_field: str = "id",
         saved_key: Any = None,
+        subject_field: Optional[str] = None,
         workdir: Optional[Path] = None,
     ) -> None:
         import re
@@ -699,9 +808,14 @@ class SqliteCopy:
             r"[A-Za-z_][A-Za-z0-9_]{0,63}", key_field
         ):
             raise GateError("table and key field must be plain identifiers")
+        if subject_field is not None and not re.fullmatch(
+            r"[A-Za-z_][A-Za-z0-9_]{0,63}", subject_field
+        ):
+            raise GateError("subject field must be a plain identifier")
         self.source = Path(source)
         self.table = table
         self.key_field = key_field
+        self.subject_field = subject_field
         self._target = {k: v for k, v in dict(target).items() if k != key_field}
         #: When ``source`` already holds the saved record (a database copied
         #: after the demonstration), its key: reset removes it.
@@ -787,3 +901,98 @@ class SqliteCopy:
 
     def verifier_overrides(self) -> dict[str, Any]:
         return {"sqlite_database": str(self.path)}
+
+    def _others(self, con: Any) -> list[str]:
+        """The database's other tables, in name order."""
+
+        return sorted(
+            row[0]
+            for row in con.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' "
+                "AND name NOT LIKE 'sqlite_%'"
+            )
+            if row[0] != self.table
+        )
+
+    @staticmethod
+    def _table_columns(con: Any, table: str) -> list[str]:
+        return [row[1] for row in con.execute(f'PRAGMA table_info("{table}")')]
+
+    def edit_elsewhere(self) -> str:
+        """Edit one value of one row in the first other table that has one."""
+
+        con = self._connect()
+        try:
+            others = self._others(con)
+            if not others:
+                raise NotApplicable("the database holds no other table")
+            for table in others:
+                for row in con.execute(
+                    f'SELECT rowid AS _r, * FROM "{table}" LIMIT 20'
+                ):
+                    for name in row.keys()[1:]:
+                        value = row[name]
+                        if name == "id" or not isinstance(value, (str, int, float)):
+                            continue
+                        if value == "":
+                            continue
+                        con.execute(
+                            f'UPDATE "{table}" SET "{name}" = ? WHERE rowid = ?',
+                            [_perturb(value), row["_r"]],
+                        )
+                        con.commit()
+                        return f"{table}.{name}"
+            raise _Untestable("no other table holds a row with an editable value")
+        finally:
+            con.close()
+
+    def _subject(self, con: Any, others: Sequence[str]) -> Optional[str]:
+        if self.subject_field is not None:
+            return self.subject_field
+        own = set(self._table_columns(con, self.table))
+        shared = sorted(
+            {
+                name
+                for table in others
+                for name in self._table_columns(con, table)
+                if name in own
+                and name not in (self.key_field, "id", "uuid")
+                and name.lower().endswith("id")
+            }
+        )
+        return shared[0] if len(shared) == 1 else None
+
+    def add_elsewhere(self, target: Mapping[str, Any]) -> str:
+        """Add a row for the saved record to the first other table that
+        refers to records by the subject field and accepts one."""
+
+        import sqlite3
+
+        con = self._connect()
+        try:
+            others = self._others(con)
+            if not others:
+                raise NotApplicable("the database holds no other table")
+            subject = self._subject(con, others)
+            if subject is None:
+                raise _Untestable(
+                    "no subject_field: which column of the other tables names "
+                    "the saved record is unknown"
+                )
+            value = target.get(subject)
+            if value in (None, ""):
+                raise _Untestable(f"the saved record has no {subject}")
+            for table in others:
+                if subject not in self._table_columns(con, table):
+                    continue
+                try:
+                    con.execute(
+                        f'INSERT INTO "{table}" ("{subject}") VALUES (?)', [value]
+                    )
+                except sqlite3.DatabaseError:
+                    continue  # a NOT NULL column without a default
+                con.commit()
+                return f"{table}.{subject}"
+            raise _Untestable(f"no other table accepts a row by {subject} alone")
+        finally:
+            con.close()
