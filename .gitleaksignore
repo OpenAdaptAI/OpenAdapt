@@ -60,3 +60,6 @@ e8ec96725c4451aa64cb97230c18d04b55d98503:packages/flow/tests/e2e/test_mcp_teach_
 # test_network_capture_redact_json.py; the next commit builds them at run time.
 52502adf407793c211fb3c0ac5aba37556206d8c:packages/flow/tests/test_network_capture_redact_json.py:generic-api-key:17
 52502adf407793c211fb3c0ac5aba37556206d8c:packages/flow/tests/test_network_capture_redact_json.py:generic-api-key:146
+# PR #1437 (offline Seal viewer): RFC 8032 section 7.1 TEST 1's secret key, a
+# published test vector the verifier's tests sign a Seal with. No credential.
+0b12a9fbdff9d885f23ae8098a9f8750847f60eb:packages/seal-view/test/rfc8032.test.mjs:generic-api-key:19
