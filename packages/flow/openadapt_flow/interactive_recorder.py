@@ -97,6 +97,8 @@ from openadapt_flow.section_capture import SECTION_CONTEXT_JS
 from openadapt_flow.submit_binding import (
     OBSERVE_SUBMIT_BINDING_JS,
     SUBMIT_BINDING_FIELD_SELECTOR,
+    form_values_from_page,
+    form_values_record,
     observation_from_page,
 )
 
@@ -441,6 +443,9 @@ _INIT_JS = r"""
   const SUBMIT_FIELD = __SUBMIT_FIELD__;
   const observeSubmitBinding = __OBSERVE_SUBMIT_BINDING__;
   const filledFields = [];
+  // Each hidden control's value as typing starts: a create-new form's
+  // fingerprint names the hidden tokens that rotate while it is filled in.
+  const hiddenBaseline = new WeakMap();
   // One identity for this DOCUMENT. The init script builds a fresh closure per
   // document, so this closure never saw a value an earlier document received.
   // Python compares this id against the document that received a secret and
@@ -1937,7 +1942,7 @@ _INIT_JS = r"""
         ? target.closest(SUBMIT_ACTIONABLE) : null;
       if (!control || control.matches(
           'canvas, input[type="range"], [role="slider"]')) return null;
-      const out = observeSubmitBinding(control, filledFields);
+      const out = observeSubmitBinding(control, filledFields, hiddenBaseline);
       if (!out || !out.observation) return null;
       // A labelled control matters only as the save of the form the fields
       // were typed into (openadapt_flow.ir.FormIdentity).
@@ -2147,6 +2152,9 @@ _INIT_JS = r"""
       if (e.isTrusted && el.matches(SUBMIT_FIELD)
           && filledFields.indexOf(el) < 0) {
         filledFields.push(el);
+        for (const input of document.querySelectorAll('input[type="hidden"]')) {
+          if (!hiddenBaseline.has(input)) hiddenBaseline.set(input, String(input.value));
+        }
       }
     } catch (err) {}
     emitInFrameSpace(o);
@@ -4153,8 +4161,14 @@ class InteractiveRecorder:
                 event["submit_binding"] = observation_from_page(
                     ev["submit_binding"]
                 ).model_dump(mode="json", exclude_none=True)
+                # A create-new form's other field values, for the compiler
+                # to keep as salted digests. Tokens are dropped here.
+                values = form_values_from_page(ev["submit_binding"])
+                if values is not None:
+                    event["form_values"] = form_values_record(values)
             except ValueError:
-                pass
+                event.pop("submit_binding", None)
+                event.pop("form_values", None)
         # Marked identifier field rect (--identifier FIELD), captured in-page
         # at click time: the compiler crops these pixels
         # (anchor.identifier_crop) to arm the pixel identity tier.

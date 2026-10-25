@@ -9,14 +9,18 @@ the replayer requires that the button's form holds exactly the fields this run
 typed into, with the values it typed.
 
 Real headless Chromium throughout: the interactive recorder on a Trac-shaped
-form, the real compiler, and the real Replayer against the same page and two
-variants that must halt before the click.
+form, the real compiler, and the real Replayer against the same page and
+variants that must halt before the click with nothing submitted, including
+the ones the #1543 review found: an edit form that looks like a create form,
+an address or method changed after typing, a record id added while typing, a
+parent left on the wrong default, and a click that submits another form.
 """
 
 from __future__ import annotations
 
 import http.server
 import json
+import secrets
 import threading
 from pathlib import Path
 from typing import Any, Callable, Iterator
@@ -66,29 +70,102 @@ _PORTAL = (
 )
 
 
+# Variants from the #1543 review: each looks like the same create form, and
+# each would submit the wrong thing if only the typed fields were checked.
+_SCRIPTS = {
+    # A script sets a different action and method, and adds a record id,
+    # after the run has typed.
+    "action_swap": """
+document.querySelector('[name=field_description]').addEventListener('focus', () => {
+  const f = document.getElementById('ticket'); f.action = '/ticket/42'; f.method = 'post';
+  const h = document.createElement('input'); h.type = 'hidden'; h.name = 'id';
+  h.value = '42'; f.appendChild(h);
+});""",
+    # A hidden record id appears while the run types.
+    "late_hidden": """
+document.querySelector('[name=field_description]').addEventListener('input', () => {
+  const f = document.getElementById('ticket');
+  if (!f.querySelector('[name=id]')) { const h = document.createElement('input');
+    h.type = 'hidden'; h.name = 'id'; h.value = '42'; f.appendChild(h); }
+});""",
+    # The Create button's click handler submits another form instead.
+    "click_other": """
+document.querySelector('[name=submit]').addEventListener('click', (e) => {
+  e.preventDefault(); document.getElementById('other').requestSubmit();
+});""",
+    # A hidden revision that changes on every keystroke, as some editors keep.
+    "rotating": """
+document.querySelector('[name=field_description]').addEventListener('input', () => {
+  const h = document.querySelector('[name=draft_rev]');
+  h.value = 'r' + Math.random().toString(16).slice(2);
+});""",
+    # A React-style keyed remount of the summary input on blur, same value.
+    "remount": """
+document.querySelector('[name=field_summary]').addEventListener('blur', () => {
+  const s = document.querySelector('[name=field_summary]');
+  const n = s.cloneNode(true); n.value = s.value; s.replaceWith(n);
+}, {once: true});""",
+}
+
+
 def _page(variant: str) -> str:
     # "split": the Create button belongs to another form. "formattr": it sits
     # outside the form and names it with form=. "portal": it sits outside the
     # form with no form owner at all.
     owner = {"split": ' form="other"', "formattr": ' form="ticket"'}.get(variant, "")
     inside = (
-        _CREATE.format(owner=owner)
-        if variant in ("plain", "tamper", "split", "reformat", "blurformat")
-        else ""
+        _CREATE.format(owner=owner) if variant not in ("formattr", "portal") else ""
     )
     outside = (
         _CREATE.format(owner=owner)
         if variant == "formattr"
         else (_PORTAL if variant == "portal" else "")
     )
+    title, action, hidden, extra = "New ticket", "/newticket", "", ""
+    if variant == "edit":
+        # Ticket 42's edit form: the same blank fields, a record id, another
+        # address. Its save updates ticket 42.
+        title, action = "Ticket #42 (edit)", "/ticket/42"
+        hidden = '<input type="hidden" name="id" value="42">'
+    if variant in ("parent_ok", "parent_wrong"):
+        hidden = (
+            '<input type="hidden" name="pid" value="'
+            + ("7" if variant == "parent_ok" else "9")
+            + '">'
+        )
+    if variant in ("select_ok", "select_wrong"):
+        chosen = "7" if variant == "select_ok" else "9"
+        extra = (
+            '<p><label>Patient <select name="pid">'
+            + "".join(
+                f'<option value="{v}"{" selected" if v == chosen else ""}>{n}</option>'
+                for v, n in (("7", "Ann (7)"), ("9", "Bob (9)"))
+            )
+            + "</select></label></p>"
+        )
+    if variant == "csrf":
+        # A per-session token, different on every page load (Trac's form has
+        # one).
+        hidden = (
+            f'<input type="hidden" name="__FORM_TOKEN" value="{secrets.token_hex(12)}">'
+        )
+    if variant == "rotating":
+        hidden = (
+            '<input type="hidden" name="draft_rev" value="r'
+            + secrets.token_hex(6)
+            + '">'
+        )
+    script = _SCRIPTS.get(variant, "")
     return f"""<!doctype html><html><head><meta charset="utf-8">
-<title>New ticket</title></head><body style="font:16px Arial;margin:24px">
-<h1>New ticket</h1>
-<form id="ticket" onsubmit="event.preventDefault(); window.created.push(
-  document.querySelector('[name=field_summary]').value)">
+<title>{title}</title></head><body style="font:16px Arial;margin:24px">
+<h1>{title}</h1>
+<form id="ticket" action="{action}" onsubmit="event.preventDefault();
+  window.created.push(document.querySelector('[name=field_summary]').value)">
+  {hidden}
   <p><label>Summary <input name="field_summary" size="40"></label></p>
   <p><label>Description <textarea name="field_description" rows="3"
      cols="40"></textarea></label></p>
+  {extra}
   <p>{inside}</p>
 </form>
 <div id="footer"><p>{outside}</p></div>
@@ -98,6 +175,7 @@ def _page(variant: str) -> str:
 {_TAMPER if variant == "tamper" else ""}
 {_REFORMAT if variant == "reformat" else ""}
 {_BLUR_FORMAT if variant == "blurformat" else ""}
+{f"<script>{script}</script>" if script else ""}
 </body></html>"""
 
 
@@ -303,3 +381,105 @@ def test_a_portal_button_with_no_form_owner_is_not_armed_and_halts(
     assert (
         "not in the form that owns the filled fields" in checked[-1].identity.observed
     )
+
+
+@pytest.fixture(scope="module")
+def parent_bundle(url: str, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return _record(f"{url}?v=parent_ok", tmp_path_factory.mktemp("create-parent"))
+
+
+@pytest.fixture(scope="module")
+def select_bundle(url: str, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return _record(f"{url}?v=select_ok", tmp_path_factory.mktemp("create-select"))
+
+
+def _halted_by_form(report: Any, created: list, expected: str) -> None:
+    assert not report.success
+    assert created == []
+    checked = [r for r in report.results if r.identity and r.identity.mode == "form"]
+    assert checked, [(r.step_id, r.error) for r in report.results]
+    assert checked[-1].identity.status == "mismatch"
+    assert expected in checked[-1].identity.observed
+
+
+@pytest.mark.parametrize(
+    "variant, expected",
+    [
+        ("edit", "submits to a different address"),
+        ("action_swap", "submits to a different address"),
+        ("late_hidden", "different set of fields"),
+    ],
+)
+def test_a_form_that_is_not_the_demonstrated_one_halts(
+    url: str, bundle: Path, tmp_path: Path, variant: str, expected: str
+) -> None:
+    report, created = _replay(f"{url}?v={variant}", bundle, tmp_path / "run")
+    _halted_by_form(report, created, expected)
+
+
+def test_a_hidden_parent_on_another_record_halts(
+    url: str, parent_bundle: Path, tmp_path: Path
+) -> None:
+    save = Workflow.load(parent_bundle).steps[-1]
+    assert save.anchor is not None and save.anchor.form_identity is not None
+    stored = json.dumps(save.anchor.form_identity.model_dump())
+    assert '"7"' not in stored and "pid" in stored  # a digest, not the value
+
+    report, created = _replay(f"{url}?v=parent_ok", parent_bundle, tmp_path / "ok")
+    assert report.success, [(r.step_id, r.error) for r in report.results]
+    assert created == ["Scanner offline on floor 3"]
+
+    report, created = _replay(f"{url}?v=parent_wrong", parent_bundle, tmp_path / "bad")
+    _halted_by_form(report, created, "'pid' field, which this run did not type into")
+
+
+def test_a_select_left_on_another_default_halts(
+    url: str, select_bundle: Path, tmp_path: Path
+) -> None:
+    report, created = _replay(f"{url}?v=select_ok", select_bundle, tmp_path / "ok")
+    assert report.success, [(r.step_id, r.error) for r in report.results]
+
+    report, created = _replay(f"{url}?v=select_wrong", select_bundle, tmp_path / "bad")
+    _halted_by_form(report, created, "'pid' field, which this run did not type into")
+
+
+def test_a_click_that_submits_another_form_is_cancelled(
+    url: str, bundle: Path, tmp_path: Path
+) -> None:
+    report, created = _replay(f"{url}?v=click_other", bundle, tmp_path / "run")
+    assert not report.success
+    assert created == []
+    save = report.results[-1]
+    assert save.identity is not None and save.identity.status == "verified"
+    assert "submitted a different form" in (save.error or "")
+
+
+@pytest.mark.parametrize("variant", ["csrf", "rotating"])
+def test_a_rotating_token_still_verifies(
+    url: str, tmp_path: Path, variant: str
+) -> None:
+    """A per-session token (named like one) and a hidden value that changed
+    while the demonstration was typed are not compared, so a new page load
+    with a new token still verifies, and the token's value is never kept."""
+
+    bundle = _record(f"{url}?v={variant}", tmp_path / "rec")
+    save = Workflow.load(bundle).steps[-1]
+    assert save.anchor is not None and save.anchor.form_identity is not None
+    assert save.anchor.form_identity.exempt == (
+        ("__FORM_TOKEN",) if variant == "csrf" else ("draft_rev",)
+    )
+    report, created = _replay(f"{url}?v={variant}", bundle, tmp_path / "run")
+    assert report.success, [(r.step_id, r.error) for r in report.results]
+    assert created == ["Scanner offline on floor 3"]
+    assert report.results[-1].identity.status == "verified"
+
+
+def test_a_keyed_remount_halts_a_known_limit(
+    url: str, bundle: Path, tmp_path: Path
+) -> None:
+    """A React-style keyed remount replaces a typed field with a new node, even
+    with the same value. The new node isn't one the run typed into, so the run
+    halts: a false halt, and the safe direction (LIMITS.md)."""
+
+    report, created = _replay(f"{url}?v=remount", bundle, tmp_path / "run")
+    _halted_by_form(report, created, "typed into 1 field(s)")

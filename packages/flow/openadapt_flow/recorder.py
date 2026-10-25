@@ -710,6 +710,9 @@ class Recorder:
                 binding = self._submit_binding_at(int(event["x"]), int(event["y"]))
                 if binding:
                     event = {**event, "submit_binding": binding}
+                    values = self._form_values_at(int(event["x"]), int(event["y"]))
+                    if values:
+                        event = {**event, "form_values": values}
         dialog_response, self._expected_dialog = self._expected_dialog, None
         if dialog_response is not None:
             arm = getattr(self._backend, "arm_dialog", None)
@@ -953,6 +956,18 @@ class Recorder:
         except Exception:
             return None
         return observation if isinstance(observation, dict) else None
+
+    def _form_values_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """A create-new form's untouched field values at (x, y), if any (the
+        backend's ``form_values_at``). The compiler keeps salted digests."""
+        getter = getattr(self._backend, "form_values_at", None)
+        if getter is None:
+            return None
+        try:
+            values = getter(int(x), int(y))
+        except Exception:
+            return None
+        return values if isinstance(values, dict) else None
 
     @staticmethod
     def _redact(png: bytes, region: tuple[int, int, int, int]) -> bytes:

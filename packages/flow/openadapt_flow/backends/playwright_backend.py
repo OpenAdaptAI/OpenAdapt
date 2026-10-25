@@ -43,6 +43,8 @@ from openadapt_flow.runtime.resolver import (
 from openadapt_flow.submit_binding import (
     OBSERVE_SUBMIT_BINDING_JS,
     SUBMIT_BINDING_FIELD_SELECTOR,
+    form_values_from_page,
+    form_values_record,
     observation_from_page,
     verify_form_identity,
     verify_submit_binding,
@@ -458,7 +460,9 @@ _SUBMIT_BINDING_AT_JS = (
     + OBSERVE_SUBMIT_BINDING_JS
     + r""";
     const fills = window[args.fillKey];
-    return observe(control, Array.isArray(fills) ? fills : []);
+    return observe(
+        control, Array.isArray(fills) ? fills : [], window[args.fillKey + '_hidden']
+    );
 }"""
 )
 
@@ -476,6 +480,17 @@ _REGISTER_FILLED_FIELD_JS = (
         Object.defineProperty(window, key, {value: fills, configurable: true});
     }
     if (fills.indexOf(el) < 0) fills.push(el);
+    // Each hidden control's value as typing starts, so a create-new form's
+    // fingerprint can tell a token that rotates while the form is filled in.
+    let hidden = window[key + '_hidden'];
+    if (!(hidden instanceof WeakMap)) {
+        hidden = new WeakMap();
+        Object.defineProperty(
+            window, key + '_hidden', {value: hidden, configurable: true});
+    }
+    for (const input of el.ownerDocument.querySelectorAll('input[type="hidden"]')) {
+        if (!hidden.has(input)) hidden.set(input, String(input.value));
+    }
     return true;
 }"""
 )
@@ -524,7 +539,7 @@ _FORM_IDENTITY_AT_JS = (
     + OBSERVE_SUBMIT_BINDING_JS
     + r""";
     const fills = Array.isArray(window[args.fillKey]) ? window[args.fillKey] : [];
-    const out = observe(control, fills);
+    const out = observe(control, fills, window[args.fillKey + '_hidden']);
     const values = window[args.valueKey];
     const form = control.form || control.closest('form');
     let changed = 0;
@@ -540,6 +555,47 @@ _FORM_IDENTITY_AT_JS = (
     return {observation: out.observation, changed: changed};
 }"""
 )
+
+# Before a create-new form's save: cancel any submit during the click that is
+# not the checked form submitted by the checked button (a click handler that
+# submits another form, or the form without its button), and remember why.
+# One shot: it removes itself at the first submit or after 30 s.
+_ARM_FORM_SUBMIT_GUARD_JS = (
+    r"""(args) => {
+    const hit = document.elementFromPoint(args.x, args.y);
+    const control = hit ? hit.closest("""
+    + json.dumps(GUARDED_ACTIONABLE_SELECTOR)
+    + r""") : null;
+    const form = control ? (control.form || control.closest('form')) : null;
+    if (!form) return false;
+    const previous = window[args.key];
+    if (previous && previous.remove) previous.remove();
+    const state = {refused: null};
+    const handler = (event) => {
+        state.remove();
+        if (event.target === form && event.submitter === control) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        state.refused = event.target === form
+            ? 'the form was submitted by something other than its save button'
+            : 'the click submitted a different form';
+    };
+    state.remove = () => window.removeEventListener('submit', handler, true);
+    window.addEventListener('submit', handler, true);
+    setTimeout(state.remove, 30000);
+    Object.defineProperty(
+        window, args.key, {value: state, configurable: true, writable: true});
+    return true;
+}"""
+)
+
+_FORM_SUBMIT_GUARD_RESULT_JS = r"""(key) => {
+    const state = window[key];
+    if (!state) return null;
+    if (state.remove) state.remove();
+    delete window[key];
+    return state.refused || null;
+}"""
 
 # Page-structure identity of a FORM FIELD that sits in no record row.
 #
@@ -1367,6 +1423,8 @@ class PlaywrightBackend:
         # references only) for submit bindings. A new backend starts empty.
         self._fill_store_key = f"__oaflow_filled_{uuid.uuid4().hex}"
         self._fill_value_key = f"__oaflow_filled_values_{uuid.uuid4().hex}"
+        self._form_guard_key = f"__oaflow_form_guard_{uuid.uuid4().hex}"
+        self._form_guard_scope: Any = None
         self._structural_tokens: dict[str, _StructuralGuard] = {}
         self._guarded_coordinate: Optional[_CoordinateGuard] = None
         # One-shot expectation that the next click closes this page surface
@@ -2023,12 +2081,16 @@ class PlaywrightBackend:
     def form_identity_at(self, x: int, y: int, identity: FormIdentity) -> Optional[str]:
         """Check a create-new form's identity for the control at a point.
 
-        Returns None when the control's form owns exactly the fields this run
-        typed into, the control plays the recorded submit role, and every one
-        of those fields still holds what the run typed. Otherwise the reason,
-        in plain words, including when the page can't be read.
+        Returns None when the control is still the submit button of the
+        demonstrated form (same address, method and set of fields), the form
+        owns exactly the fields this run typed into, each holding exactly what
+        the run typed, and every other field holds its demonstrated value.
+        Then it arms a one-shot guard that cancels any other submit during the
+        click (:meth:`form_submit_guard_refusal` reports it). Otherwise the
+        reason, in plain words, including when the page can't be read.
         """
 
+        self.cancel_form_submit_guard()
         try:
             point = self._frame_point(int(x), int(y))
             if point is None:
@@ -2045,12 +2107,64 @@ class PlaywrightBackend:
             if not isinstance(raw, dict):
                 return "no control at the resolved point"
             observation = observation_from_page(raw.get("observation"))
+            values = form_values_from_page(raw.get("observation"))
             changed = int(raw.get("changed", -1))
         except Exception:
             return "could not read the form at the resolved point"
         if changed < 0:
             return "could not read the form's field values"
-        return verify_form_identity(identity, observation, changed_fields=changed)
+        reason = verify_form_identity(
+            identity, observation, changed_fields=changed, values=values
+        )
+        if reason is not None:
+            return reason
+        try:
+            armed = point.scope.evaluate(
+                _ARM_FORM_SUBMIT_GUARD_JS,
+                {"x": point.x, "y": point.y, "key": self._form_guard_key},
+            )
+        except Exception:
+            armed = False
+        if armed is not True:
+            return "could not guard the form's submission"
+        self._form_guard_scope = point.scope
+        return None
+
+    def form_submit_guard_refusal(self) -> Optional[str]:
+        """After the click: why the guard cancelled a submit, or None.
+
+        Disarms the guard. A page that navigated away (the checked form's own
+        submit) has nothing to report.
+        """
+
+        scope, self._form_guard_scope = self._form_guard_scope, None
+        if scope is None:
+            return None
+        try:
+            refused = scope.evaluate(_FORM_SUBMIT_GUARD_RESULT_JS, self._form_guard_key)
+        except Exception:
+            return None
+        return refused if isinstance(refused, str) else None
+
+    def cancel_form_submit_guard(self) -> None:
+        """Disarm a guard whose click never happened."""
+
+        self.form_submit_guard_refusal()
+
+    def form_values_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """RECORD-TIME: the values of the form's fields the demonstration did
+        not type into, for the control at a point (see
+        :func:`~openadapt_flow.submit_binding.form_values_record`), or None.
+        Plaintext for the recording only; the compiler keeps salted digests.
+        Never raises.
+        """
+
+        try:
+            raw = self._observe_submit_binding(x, y)
+            values = form_values_from_page(raw.get("observation")) if raw else None
+        except Exception:
+            return None
+        return form_values_record(values) if values is not None else None
 
     def _focused_element_call(
         self, js: str, *, arg: Any = None, with_arg: bool = False

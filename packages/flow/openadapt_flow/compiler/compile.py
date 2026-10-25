@@ -2866,6 +2866,7 @@ def _compile_recording(
     # Submit-binding observations recorded on click events (unlabeled
     # controls only), attached once every risk decision is final.
     binding_observations: dict[str, object] = {}
+    form_values: dict[str, object] = {}
     for j, (step, step_before, step_after, event) in enumerate(pending):
         steps.append(step)
         if isinstance(event.get("dialog"), dict):
@@ -2875,6 +2876,8 @@ def _compile_recording(
             step.dialog = _dialog_identity(event["dialog"], exclude_texts)
         if event.get("submit_binding") is not None:
             binding_observations[step.id] = event["submit_binding"]
+            if event.get("form_values") is not None:
+                form_values[step.id] = event["form_values"]
         if step.action in (ActionKind.SCROLL, ActionKind.READ):
             continue  # see the scroll and read branches in pass 1
         if step.action is ActionKind.SWITCH_SURFACE:
@@ -3472,7 +3475,7 @@ def _compile_recording(
     # fields the demonstration filled, or record why it cannot be bound (the
     # replayer refuses that click). Runs after every risk decision, model
     # annotation included, so the binding covers exactly the final writes.
-    _attach_submit_bindings(workflow.steps, binding_observations)
+    _attach_submit_bindings(workflow.steps, binding_observations, form_values)
 
     # PHI-at-rest remediation (audit REM-2): replace the plaintext identity
     # band (``anchor.context_text``) and structured identity on every anchor
@@ -3532,7 +3535,11 @@ def _compile_recording(
     return workflow
 
 
-def _attach_submit_bindings(steps: list[Step], observations: dict[str, object]) -> None:
+def _attach_submit_bindings(
+    steps: list[Step],
+    observations: dict[str, object],
+    form_values: Optional[dict[str, object]] = None,
+) -> None:
     """Attach :class:`~openadapt_flow.ir.SubmitBinding` evidence in place.
 
     A binding applies to a consequential CLICK/DOUBLE_CLICK whose target has
@@ -3553,6 +3560,7 @@ def _attach_submit_bindings(steps: list[Step], observations: dict[str, object]) 
     from openadapt_flow.submit_binding import (
         decide_form_identity,
         decide_submit_binding,
+        form_values_from_record,
         observation_from_page,
     )
 
@@ -3593,7 +3601,10 @@ def _attach_submit_bindings(steps: list[Step], observations: dict[str, object]) 
             # A labelled save with no record on screen to check: a create-new
             # form. The record is the one the run typed into the form.
             try:
-                form_identity, _ = decide_form_identity(observation_from_page(raw))
+                form_identity, _ = decide_form_identity(
+                    observation_from_page(raw),
+                    form_values_from_record((form_values or {}).get(step.id)),
+                )
             except ValueError:
                 form_identity = None
             if form_identity is not None:

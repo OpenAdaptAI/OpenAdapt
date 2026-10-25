@@ -12937,6 +12937,33 @@ class Replayer:
         is confirmed closed. Every other step leaves such a report uncertain.
         """
 
+        guarded = step.anchor is not None and step.anchor.form_identity is not None
+        backend = self.backend
+        try:
+            error = self._act_closing_surface(step, resolution, params, **kwargs)
+        finally:
+            # A create-new form's save: the identity check armed a guard that
+            # cancels any other submit during the click (ir.FormIdentity).
+            refusal_of = getattr(backend, "form_submit_guard_refusal", None)
+            refusal = refusal_of() if guarded and callable(refusal_of) else None
+        if refusal is not None and error is None:
+            result = kwargs.get("result")
+            if result is not None:
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+            return (
+                f"Step '{step.id}' ({step.intent}): {refusal}; the submission was "
+                "cancelled before it left the page — run aborted"
+            )
+        return error
+
+    def _act_closing_surface(
+        self,
+        step: Step,
+        resolution: Optional[Resolution],
+        params: Mapping[str, RuntimeParamScalar],
+        **kwargs: Any,
+    ) -> Optional[str]:
         expect = (
             getattr(self.backend, "expect_page_close", None)
             if step.closes_surface
@@ -15444,11 +15471,6 @@ class Replayer:
         """
         anchor = step.anchor
         assert anchor is not None
-        if anchor.form_identity is not None:
-            # A create-new form's save: the record is what this run typed into
-            # the form, so the form is checked, in the DOM, and nothing else
-            # can stand in for that check (see ir.FormIdentity).
-            return self._verify_form_identity(step, resolution, anchor.form_identity)
         project = getattr(workflow, "qualification", None)
         if project is not None:
             identity_policy = project.identity_policies.get(step.id)
@@ -15456,7 +15478,7 @@ class Replayer:
                 identity_policy is not None
                 and identity_policy.enforcement.value == "signal_quorum"
             ):
-                return self._verify_signal_quorum(
+                quorum = self._verify_signal_quorum(
                     step=step,
                     resolution=resolution,
                     before_png=before_png,
@@ -15465,6 +15487,20 @@ class Replayer:
                     bundle_dir=bundle_dir,
                     policy=identity_policy,
                 )
+                # An operator's quorum policy and a create-new form's identity
+                # must both hold.
+                if quorum.status == "verified" and anchor.form_identity is not None:
+                    form = self._verify_form_identity(
+                        step, resolution, anchor.form_identity
+                    )
+                    if form.status != "verified":
+                        return form
+                return quorum
+        if anchor.form_identity is not None:
+            # A create-new form's save: the record is what this run typed into
+            # the form, so the form is checked, in the DOM (see
+            # ir.FormIdentity).
+            return self._verify_form_identity(step, resolution, anchor.form_identity)
 
         def structured_tier() -> Optional[IdentityCheck]:
             # PHI-free bundles carry a salted-hash identity_template instead of
