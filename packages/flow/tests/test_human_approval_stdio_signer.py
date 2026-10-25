@@ -19,6 +19,13 @@ from pathlib import Path
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from openadapt_flow.approval_mode.approver_roster import (
+    ROOT_ENV,
+    add_approver,
+    file_key_signer,
+    init_root,
+    remove_approver,
+)
 from openadapt_flow.approval_mode.human_attestation import (
     ANSWER_DOMAIN,
     SIGN_REQUEST_SCHEMA,
@@ -29,13 +36,6 @@ from openadapt_flow.approval_mode.human_attestation import (
 )
 from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
 from openadapt_flow.approval_mode.model import ApprovalMode
-from openadapt_flow.approval_mode.approver_roster import (
-    ROOT_ENV,
-    add_approver,
-    file_key_signer,
-    init_root,
-    remove_approver,
-)
 from openadapt_flow.jit.authority import public_hex
 from openadapt_flow.jit.lifecycle import KEY_DIR_ENV
 
@@ -218,7 +218,9 @@ def test_a_removed_key_no_longer_signs(tmp_path, held_key):
         signed_by="front-desk",
         sign=file_key_signer(root),
     )
-    assert stdio_signer(public_hex(other), key_dir, method="desktop_key")
+    assert stdio_signer(
+        public_hex(other), key_dir, method="desktop_key", root=public_hex(root)
+    )
     remove_approver(
         key_dir,
         public_hex(root),
@@ -228,7 +230,9 @@ def test_a_removed_key_no_longer_signs(tmp_path, held_key):
         sign=file_key_signer(root),
     )
     with pytest.raises(AttestationRefused) as raised:
-        stdio_signer(public_hex(other), key_dir, method="desktop_key")
+        stdio_signer(
+            public_hex(other), key_dir, method="desktop_key", root=public_hex(root)
+        )
     assert raised.value.code == "human_approver_unregistered"
 
 
@@ -236,10 +240,10 @@ def test_a_key_the_pinned_root_doesnt_vouch_for_never_signs(
     tmp_path, held_key, monkeypatch
 ):
     key_dir, root = held_key
-    monkeypatch.setenv(ROOT_ENV, public_hex(Ed25519PrivateKey.generate()))
+    other_root = public_hex(Ed25519PrivateKey.generate())
 
     with pytest.raises(AttestationRefused) as raised:
-        stdio_signer(public_hex(root), key_dir, method="desktop_key")
+        stdio_signer(public_hex(root), key_dir, method="desktop_key", root=other_root)
     assert raised.value.code == "approver_root_mismatch"
 
 
