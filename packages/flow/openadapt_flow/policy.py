@@ -1030,6 +1030,21 @@ def evaluate_policy(
                     )
                 )
 
+    # A record-selecting click (Step.target_param) cannot be qualified yet:
+    # any policy that demands identity refuses it, with a plain reason.
+    if policy.prohibit_unarmed_clicks or policy.require_identity_for:
+        from openadapt_flow.runtime.target_param import UNQUALIFIED_SELECTION_REASON
+
+        for step in steps:
+            if step.target_param is not None:
+                violations.append(
+                    Violation(
+                        rule="unqualified_record_selection",
+                        step_id=step.id,
+                        reason=UNQUALIFIED_SELECTION_REASON,
+                    )
+                )
+
     if policy.max_unverified_steps is not None:
         vacuous = [s.id for s in steps if is_vacuous(s)]
         if len(vacuous) > policy.max_unverified_steps:
