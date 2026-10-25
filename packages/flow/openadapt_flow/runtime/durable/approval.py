@@ -134,7 +134,7 @@ def stored_approval_refusal(
     key_dir: Optional[Path],
     *,
     root: Optional[str] = None,
-    at_least: Optional[tuple[int, str]] = None,
+    at_least: Any = None,
 ) -> Optional[str]:
     """Why a stored resume approval isn't a verified person's, or ``None``.
 

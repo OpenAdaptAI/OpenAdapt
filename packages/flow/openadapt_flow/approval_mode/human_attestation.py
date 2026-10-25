@@ -100,24 +100,25 @@ def approvers(
     root: Optional[str] = None,
     *,
     env: Optional[Mapping[str, str]] = None,
-    at_least: Optional[tuple[int, str]] = None,
+    at_least: Any = None,
 ) -> dict[str, str]:
-    """The verified approvers for this run's pinned root.
+    """The verified approvers for the given pinned root.
 
-    ``root`` is the run's pin; without one, :data:`.approver_roster.ROOT_ENV`.
-    Raises :class:`AttestationRefused` with the roster's code.
+    ``root`` is the caller's pin (a run's, from its deployment config or an
+    explicit flag). Nothing here reads the environment: without a root,
+    nobody is an approver (``approver_root_unpinned``). Raises
+    :class:`AttestationRefused` with the roster's code. ``env`` is unused and
+    kept for callers that pass it.
     """
 
     from openadapt_flow.approval_mode.approver_roster import (
         RosterError,
-        pinned_root,
         verified_approvers,
     )
 
+    del env
     try:
-        return verified_approvers(
-            key_dir, pinned_root(root, env=env), at_least=at_least
-        )
+        return verified_approvers(key_dir, root, at_least=at_least)
     except RosterError as exc:
         raise AttestationRefused(exc.code, str(exc)) from exc
 
@@ -173,7 +174,7 @@ def refusal(
     key_dir: Optional[Path],
     method: Optional[AttestationMethod] = None,
     root: Optional[str] = None,
-    at_least: Optional[tuple[int, str]] = None,
+    at_least: Any = None,
 ) -> Optional[str]:
     """A closed reason this attestation proves nothing, or ``None``.
 

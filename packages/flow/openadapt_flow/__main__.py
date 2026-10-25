@@ -3155,8 +3155,19 @@ def _approval_wait_seconds(args: argparse.Namespace) -> float:
 
 
 def _deployment_approvers(args: argparse.Namespace) -> Any:
-    """The deployment config's ``approvers`` section, or ``None``."""
+    """The deployment config's ``approvers`` section, or ``None``.
 
+    Parsed once per command: every later reader in this process sees the
+    same pin, even if the file is swapped while the run goes on.
+    """
+
+    if hasattr(args, "_approvers_section"):
+        return args._approvers_section
+    args._approvers_section = _load_deployment_approvers(args)
+    return args._approvers_section
+
+
+def _load_deployment_approvers(args: argparse.Namespace) -> Any:
     config = getattr(args, "config", None)
     if not config:
         return None
@@ -3210,6 +3221,9 @@ def _approver_pin(args: argparse.Namespace, *, config_only: bool) -> dict[str, A
         "approver_root": getattr(args, "approver_root", None),
         "config_root": pinned.root_public_key if pinned is not None else None,
         "config_only": config_only,
+        "config_head": tuple(pinned.head)
+        if pinned is not None and pinned.head
+        else None,
     }
 
 
@@ -3323,6 +3337,25 @@ def _prepare_approval_store(
     return store, approver
 
 
+def _record_approver_pin(args: argparse.Namespace, run_dir: Path) -> None:
+    from openadapt_flow.approval_mode.item_approval import (
+        ItemApprovalRefused,
+        ItemApprovalStore,
+    )
+
+    store = ItemApprovalStore(
+        run_dir,
+        key_dir=_args_key_dir(args),
+        **_approver_pin(args, config_only=True),
+    )
+    try:
+        store.write_approver_root()
+    except ItemApprovalRefused as exc:
+        raise SystemExit(
+            f"run REFUSED: {exc} ({exc.code}). Nothing was executed."
+        ) from None
+
+
 def _approval_gate_for_run(
     args: argparse.Namespace,
     run_dir: Path,
@@ -3333,6 +3366,10 @@ def _approval_gate_for_run(
 
     mode = getattr(args, "_approval_mode", None)
     if mode is None:
+        if _run_is_config_pinned(args):
+            # No gate, but a durable stop may still need a person's signed
+            # approval later: record the pin a resume will check now.
+            _record_approver_pin(args, run_dir)
         return None
     from openadapt_flow.approval_mode.gate import ApprovalGate
 

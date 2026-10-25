@@ -196,6 +196,7 @@ def test_the_portal_key_cant_answer_for_desktop(tmp_path, approver):
         store.key_directory() / "decision-portal.approver.pem",
         store.key_directory(),
         method="portal_key",
+        root=store.approver_root,
     )
     with pytest.raises(ItemApprovalRefused) as raised:
         make_answer(

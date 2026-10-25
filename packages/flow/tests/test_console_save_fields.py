@@ -164,7 +164,7 @@ def test_the_values_stay_out_of_everything_else(tmp_path, approver):
         auth_method="none",
         decline_reason=None,
         policy=store.context(),
-        signer=portal_signer(store.key_directory()),
+        signer=portal_signer(store.key_directory(), root=store.approver_root),
     )
     assert VALUE not in json.dumps(answer.reference(request).model_dump(mode="json"))
     assert VALUE not in json.dumps(answer.model_dump(mode="json"))

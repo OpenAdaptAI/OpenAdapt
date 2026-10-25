@@ -135,7 +135,7 @@ def test_an_edit_to_principals_json_adds_no_approver(started):
     assert "helper" not in roster.verified_approvers(key_dir, root)
 
 
-def test_nothing_after_a_bad_entry_counts(started):
+def test_an_entry_changed_after_signing_is_refused(started):
     key_dir, root_key, root = started
     _a, a_public = _key()
     roster.add_approver(
@@ -151,7 +151,11 @@ def test_nothing_after_a_bad_entry_counts(started):
     data["entries"][1]["principal"] = "b-nurse"  # changed after signing
     path.write_text(json.dumps(data))
 
-    assert roster.verified_approvers(key_dir, root) == {"front-desk": root}
+    # The changed entry stops the replay, and the roster no longer reaches
+    # the head recorded beside it, so nothing is trusted.
+    with pytest.raises(RosterError) as raised:
+        roster.verified_approvers(key_dir, root)
+    assert raised.value.code == "approver_roster_rolled_back"
 
 
 def test_only_an_approver_can_add_one(started):
@@ -304,19 +308,29 @@ def test_a_reader_with_another_root_or_key_dir_is_refused(
         .pin_refusal
         == "approver_key_dir_mismatch"
     )
-    # A reader naming nothing uses what the run recorded.
+    # A reader naming nothing is refused: the run directory is never the
+    # trust anchor.
     reader = ItemApprovalStore(tmp_path / "run", key_dir=key_dir)
-    assert reader.context().approver_root == root
-    assert reader.context().pin_refusal is None
+    assert reader.context().pin_refusal == "approver_root_unpinned"
+    same = ItemApprovalStore(tmp_path / "run", key_dir=key_dir, approver_root=root)
+    assert same.context().approver_root == root
+    assert same.context().pin_refusal is None
 
 
 def test_a_planted_pin_refuses_the_run(started, tmp_path):
     key_dir, _key_, root = started
     _other, other_public = _key()
-    planted = ItemApprovalStore(
-        tmp_path / "run", key_dir=key_dir, approver_root=other_public
+    planted = tmp_path / "run" / "item-approval"
+    planted.mkdir(parents=True)
+    (planted / "approver-root.json").write_text(
+        json.dumps(
+            {
+                "approver_root": other_public,
+                "key_dir": str(key_dir.resolve()),
+                "head": None,
+            }
+        )
     )
-    planted.write_approver_root()
 
     with pytest.raises(ItemApprovalRefused) as raised:
         ItemApprovalStore(
@@ -466,9 +480,11 @@ def test_dropping_a_removal_from_the_middle_is_caught_by_the_recorded_head(start
     del data["entries"][2]  # the removal of a-nurse
     path.write_text(json.dumps(data))
 
-    # The chain breaks after the removed entry: b-nurse no longer counts...
-    assert "b-nurse" not in roster.verified_approvers(key_dir, root)
-    # ...and against the head a run recorded, the edited roster is refused.
+    # The chain breaks after the removed entry, and the roster no longer
+    # reaches the head recorded beside it (or the one a run recorded).
+    with pytest.raises(RosterError) as raised:
+        roster.verified_approvers(key_dir, root)
+    assert raised.value.code == "approver_roster_rolled_back"
     with pytest.raises(RosterError) as raised:
         roster.verified_approvers(key_dir, root, at_least=recorded)
     assert raised.value.code == "approver_roster_rolled_back"
@@ -588,3 +604,136 @@ def test_a_malformed_deployment_config_refuses_instead_of_dropping_its_pin(
         _approver_pin(
             argparse.Namespace(config=str(config), approver_root=None), config_only=True
         )
+
+
+# -- second review: nothing agent-writable is a trust anchor ------------------------
+
+
+def test_verification_never_reads_the_environment(started, monkeypatch):
+    from openadapt_flow.approval_mode.human_attestation import (
+        AttestationRefused,
+        approvers,
+    )
+
+    key_dir, _key_, root = started
+    monkeypatch.setenv(roster.ROOT_ENV, root)
+    with pytest.raises(AttestationRefused) as raised:
+        approvers(key_dir, None)
+    assert raised.value.code == "approver_root_unpinned"
+
+
+def test_a_governed_reader_refuses_when_the_run_record_is_deleted(started, tmp_path):
+    key_dir, _key_, root = started
+    run = ItemApprovalStore(
+        tmp_path / "run", key_dir=key_dir, config_root=root, config_only=True
+    )
+    run.write_approver_root()
+    (tmp_path / "run" / "item-approval" / "approver-root.json").unlink()
+
+    resume = ItemApprovalStore(
+        tmp_path / "run", key_dir=key_dir, config_root=root, config_only=True
+    )
+    assert resume.context().pin_refusal == "approver_root_record_missing"
+
+
+def test_a_rewritten_run_record_without_a_config_pin_counts_for_nothing(
+    started, tmp_path, monkeypatch
+):
+    key_dir, _key_, root = started
+    agent_key, agent_public = _key()
+    agent_keys = tmp_path / "agent-keys"
+    roster.init_root(
+        agent_keys,
+        principal="front-desk",
+        public_key=agent_public,
+        sign=roster.file_key_signer(agent_key),
+    )
+    record = tmp_path / "run" / "item-approval"
+    record.mkdir(parents=True)
+    (record / "approver-root.json").write_text(
+        json.dumps(
+            {
+                "approver_root": agent_public,
+                "key_dir": str(agent_keys.resolve()),
+                "head": None,
+            }
+        )
+    )
+    monkeypatch.setenv(roster.ROOT_ENV, agent_public)
+
+    resume = ItemApprovalStore(tmp_path / "run", key_dir=agent_keys, config_only=True)
+    assert resume.context().pin_refusal == "approver_root_unpinned"
+
+
+def test_an_older_roster_put_back_between_runs_is_refused(started):
+    """No run recorded anything: the head beside the roster catches it."""
+
+    key_dir, root_key, root = started
+    _a, a_public = _key()
+    _add(key_dir, root, root_key, "a-nurse", a_public)
+    older = (key_dir / roster.ROSTER_FILE).read_text()
+    _remove(key_dir, root, root_key, "a-nurse", a_public)
+    (key_dir / roster.ROSTER_FILE).write_text(older)
+
+    with pytest.raises(RosterError) as raised:
+        roster.verified_approvers(key_dir, root)
+    assert raised.value.code == "approver_roster_rolled_back"
+
+
+def test_a_head_from_the_config_refuses_an_older_roster_even_without_the_sidecar(
+    started,
+):
+    key_dir, root_key, root = started
+    _a, a_public = _key()
+    _add(key_dir, root, root_key, "a-nurse", a_public)
+    older = (key_dir / roster.ROSTER_FILE).read_text()
+    _remove(key_dir, root, root_key, "a-nurse", a_public)
+    config_head = roster.head(key_dir, root)  # what Desktop's Keychain holds
+    (key_dir / roster.ROSTER_FILE).write_text(older)
+    (key_dir / roster.HEAD_FILE).unlink()  # the sidecar is deleted too
+
+    with pytest.raises(RosterError) as raised:
+        roster.verified_approvers(key_dir, root, at_least=config_head)
+    assert raised.value.code == "approver_roster_rolled_back"
+
+
+def test_a_pinned_run_wont_start_on_a_roster_it_cant_verify(started, tmp_path):
+    key_dir, _key_, root = started
+    _other, other_public = _key()
+    run = ItemApprovalStore(
+        tmp_path / "run", key_dir=key_dir, config_root=other_public, config_only=True
+    )
+    with pytest.raises(ItemApprovalRefused) as raised:
+        run.write_approver_root()
+    assert raised.value.code == "approver_root_mismatch"
+
+
+def test_the_task_ledger_never_takes_its_root_from_the_environment(
+    started, tmp_path, monkeypatch
+):
+    from openadapt_flow.agent.ledger import TaskLedger
+
+    key_dir, _key_, root = started
+    monkeypatch.setenv(roster.ROOT_ENV, root)
+    ledger = TaskLedger(tmp_path / "ledger", key_dir=key_dir, config_only=True)
+    job = ledger.open_job("Synthetic work.", [], [{"item_id": "R01"}])
+    asked = ledger.ask_user(job["job_id"], "R01: north or south?", "R01", 0)
+
+    store = ItemApprovalStore(
+        ledger._question_dir(asked["question_id"]), key_dir=key_dir, **ledger._pin()
+    )
+    assert store.context().pin_refusal == "approver_root_unpinned"
+
+
+def test_the_deployment_pin_is_read_once_per_command(tmp_path):
+    from openadapt_flow.__main__ import _approver_pin
+
+    _a, first = _key()
+    _b, second = _key()
+    config = tmp_path / "deployment.yaml"
+    config.write_text(f"approvers:\n  root_public_key: {first}\n")
+    args = argparse.Namespace(config=str(config), approver_root=None)
+
+    assert _approver_pin(args, config_only=True)["config_root"] == first
+    config.write_text(f"approvers:\n  root_public_key: {second}\n")  # swapped mid-run
+    assert _approver_pin(args, config_only=True)["config_root"] == first

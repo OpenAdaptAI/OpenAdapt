@@ -1040,6 +1040,9 @@ class ApproversSection(BaseModel):
 
     root_public_key: str = Field(pattern=r"^[0-9a-f]{64}$")
     key_dir: Optional[str] = None
+    #: A roster head ``[seq, "sha256:..."]`` recorded outside the key
+    #: directory (Desktop writes its Keychain's): the roster must extend it.
+    head: Optional[tuple[int, str]] = None
 
 
 class DeploymentConfig(BaseModel):

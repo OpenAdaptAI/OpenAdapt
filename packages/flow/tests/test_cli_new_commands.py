@@ -10,6 +10,7 @@ objects; the objects' own behavior is covered by their unit suites.
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,8 @@ from openadapt_flow.__main__ import (
     build_parser,
     main,
 )
+from openadapt_flow.approval_mode.approver_roster import ROOT_ENV
+from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
 from openadapt_flow.compiler.induction import induce_program
 from openadapt_flow.ir import ActionKind, BackendHints, Step, Workflow
 from openadapt_flow.runner.dispatch_envelope import (
@@ -41,6 +44,7 @@ from openadapt_flow.runtime.durable.checkpoint import (
     RunManifest,
 )
 from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
+from tests._approver_keys import approvers_yaml
 
 # ---------------------------------------------------------------------------
 # worklist loading + relation binding
@@ -229,6 +233,11 @@ def _paused_run(
         managed_dispatch_binding_sha256=managed_binding_sha256,
     )
     store.write_fresh_manifest(manifest)
+    if authorization is not None and os.environ.get(ROOT_ENV):
+        # A governed run records its config-pinned approver root at start.
+        ItemApprovalStore(
+            run, config_root=os.environ[ROOT_ENV], config_only=True
+        ).write_approver_root()
     authority = DurableAuthority(run, store)
     active = authority.validate(manifest)
     if verified_first:
@@ -610,7 +619,8 @@ def test_resume_wires_all_configured_appliance_tiers(
     run = _paused_run(tmp_path)
     assert _approve(run, approver) == 0
     config = tmp_path / "deployment.yaml"
-    config.write_text("runtime:\n  allow_model_grounding: true\n")
+    # A governed resume takes its approver pin only from its config.
+    config.write_text("runtime:\n  allow_model_grounding: true\n" + approvers_yaml())
 
     captured: dict = {}
     _install_fake_browser(monkeypatch, captured)
@@ -668,7 +678,8 @@ def test_managed_resume_refuses_model_grounding_profile(
     run = _paused_run(tmp_path, managed=True)
     assert _approve(run, approver) == 0
     config = tmp_path / "deployment.yaml"
-    config.write_text("runtime:\n  allow_model_grounding: true\n")
+    # A governed resume takes its approver pin only from its config.
+    config.write_text("runtime:\n  allow_model_grounding: true\n" + approvers_yaml())
     manifest = CheckpointStore(run).read_manifest()
     assert manifest is not None
     assert manifest.governed_authorization is not None
