@@ -30,6 +30,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 from openadapt_flow.backend import (
     ActionDeliveryUncertain,
+    StructuralElementNotActionable,
     StructuralElementNotActionableRefused,
     StructuralResolutionRefused,
 )
@@ -2096,7 +2097,7 @@ class PlaywrightBackend:
                 target_fingerprint=fingerprint,
                 supported_operations=["dom_click", "dom_double_click", "dom_drag"],
             )
-        except StructuralResolutionRefused:
+        except (StructuralResolutionRefused, StructuralElementNotActionable):
             raise
         except Exception:
             return None

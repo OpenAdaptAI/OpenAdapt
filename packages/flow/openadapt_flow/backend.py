@@ -30,7 +30,7 @@ class StructuralResolutionRefused(RuntimeError):
     """
 
 
-class StructuralElementNotActionableRefused(StructuralResolutionRefused):
+class StructuralElementNotActionable(RuntimeError):
     """A structural backend located exactly one candidate, but it is not actionable.
 
     The element exists in the live DOM/accessibility tree but cannot be safely acted
@@ -38,6 +38,9 @@ class StructuralElementNotActionableRefused(StructuralResolutionRefused):
     viewport). Falling through to visual rungs would risk clicking the overlay or
     wrong pixel coordinates.
     """
+
+
+StructuralElementNotActionableRefused = StructuralElementNotActionable
 
 
 class ActionDeliveryUncertain(RuntimeError):
