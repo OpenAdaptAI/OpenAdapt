@@ -507,6 +507,87 @@ def _verify_portal_deployment_target(
     return result
 
 
+def _verify_flow_command_contract(
+    flow: list[str], root: Path, env: dict[str, str], bundle: Path
+) -> dict:
+    """Every command line Desktop builds gets past the bundled Flow's parser,
+    and the config pin Desktop sends is enforced, not just accepted.
+
+    Desktop 0.24.0 sent flags its bundled Flow didn't have; every unit test
+    faked the bridge, so only this run against the frozen binary sees it.
+    """
+
+    import hashlib
+
+    from flow_command_contract import argparse_refused, bridge_commands
+
+    refused = {}
+    commands = bridge_commands(root / "contract")
+    for name, argv in commands.items():
+        done = subprocess.run(
+            [*flow, *argv],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+            env=env,
+            stdin=subprocess.DEVNULL,
+        )
+        if argparse_refused(done.stderr):
+            refused[name] = done.stderr[-800:]
+    if refused:
+        raise RuntimeError(f"the bundled Flow refuses Desktop's command lines: {refused}")
+
+    config = root / "contract-deployment.yaml"
+    config.write_text("name: frozen-contract-smoke\n", encoding="utf-8")
+    digest = hashlib.sha256(config.read_bytes()).hexdigest()
+
+    def governed(sha: str, run_dir: str) -> str:
+        done = subprocess.run(
+            [
+                *flow,
+                "run",
+                str(bundle),
+                "--config",
+                str(config),
+                "--config-sha256",
+                sha,
+                "--run-dir",
+                str(root / run_dir),
+                "--approval-mode",
+                "each_item",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=False,
+            env=env,
+            stdin=subprocess.DEVNULL,
+        )
+        output = (done.stdout or "") + (done.stderr or "")
+        if argparse_refused(done.stderr or ""):
+            raise RuntimeError(f"the bundled Flow refused a governed run's flags: {output[-800:]}")
+        return output
+
+    if "deployment_config_changed" not in governed("0" * 64, "contract-run-wrong-digest"):
+        raise RuntimeError("the bundled Flow ran a config whose digest Desktop didn't send")
+    if "deployment_config_changed" in governed(digest, "contract-run"):
+        raise RuntimeError("the bundled Flow refused the config Desktop pinned")
+    return {"flow_command_lines_parsed": len(commands), "config_pin_enforced": True}
+
+
+#: What Flow prints when it downloads Playwright's browser: the full build
+#: (headed) or only the headless shell.
+BROWSER_DOWNLOAD_NOTICES = (
+    "Downloading the Chromium browser",
+    "downloading Playwright's headless Chromium",
+)
+
+
+def _downloaded_browser(output: str) -> bool:
+    return any(notice in output for notice in BROWSER_DOWNLOAD_NOTICES)
+
+
 def _run(command: list[str], *, env: dict[str, str], timeout: float = 900) -> tuple[str, float]:
     started = time.monotonic()
     result = subprocess.run(
@@ -550,6 +631,9 @@ def main() -> int:
         env["PLAYWRIGHT_BROWSERS_PATH"] = str(root / "browser-runtime")
         env["OPENADAPT_VISION_RUNTIME_ROOT"] = str(root / "vision-runtime")
         env.pop("OPENADAPT_FLOW_NO_AUTO_INSTALL", None)
+        # Flow prefers an installed Chrome or Edge, which build runners have;
+        # force Playwright's own browser so its first-use download is proven.
+        env["OPENADAPT_FLOW_BROWSER"] = "bundled"
 
         flow = [str(executable), "__openadapt_flow__"]
         first_output, first_seconds = _run(
@@ -560,7 +644,7 @@ def main() -> int:
             raise RuntimeError("clean-user run did not exercise first-use vision provision")
         if not any((root / "vision-runtime").glob("*/*/.complete.json")):
             raise RuntimeError("vision runtime was not persisted outside the one-file extraction")
-        if "Downloading the Chromium browser" not in first_output:
+        if not _downloaded_browser(first_output):
             raise RuntimeError("clean-user run did not exercise first-use browser provision")
         if not any((root / "browser-runtime").glob("chromium*")):
             raise RuntimeError("browser runtime was not persisted outside the one-file extraction")
@@ -587,6 +671,8 @@ def main() -> int:
             ],
             env=env,
         )
+
+        contract = _verify_flow_command_contract(flow, root, env, root / "bundle")
 
         report = json.loads((root / "run" / "report.json").read_text(encoding="utf-8"))
         results = report.get("results") or []
@@ -657,7 +743,7 @@ def main() -> int:
             [*flow, "demo-record", "--out", str(root / "recording-warm")],
             env=env,
         )
-        if "Downloading the Chromium browser" in second_output:
+        if _downloaded_browser(second_output):
             raise RuntimeError("warm run attempted to download the browser again")
         if any(
             marker in second_output
@@ -677,6 +763,7 @@ def main() -> int:
             json.dumps(
                 {
                     "artifact_bytes": executable.stat().st_size,
+                    **contract,
                     "first_provision_seconds": round(first_seconds, 3),
                     "replay_seconds": round(replay_seconds, 3),
                     "warm_record_seconds": round(warm_seconds, 3),
