@@ -8266,8 +8266,9 @@ def build_parser() -> argparse.ArgumentParser:
             "back-to-back repeats and search, open, act, return worklists, "
             "including rows that differ; not pagination (a next-page step "
             "between rows) or a list nested inside each row. Certified and "
-            "governed runs refuse a looped program until qualification covers "
-            "it. REFUSES (nonzero exit, no bundle) when intent is "
+            "governed runs refuse a loop that opens each row's record by its "
+            "values (a record-selecting click) until qualification covers it. "
+            "REFUSES (nonzero exit, no bundle) when intent is "
             "underdetermined, printing a record-next worklist of missing "
             "demonstrations"
         ),

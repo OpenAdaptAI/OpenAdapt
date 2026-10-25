@@ -23,6 +23,8 @@ Each item lands in one class:
   disagrees (wrong entity, wrong value, a duplicate, collateral damage);
 - ``wrong_effect``: the engine did not end VERIFIED and the independent check
   found a change it should not have (a partial or wrong write);
+- ``unconfirmed_write``: the intended change landed but the engine did not
+  confirm it (it stopped after the write, or could not read it back);
 - ``error``: the item could not be run.
 
 ``score`` is generalized / items. A program with any ``silent_wrong`` or
@@ -50,7 +52,12 @@ from typing import Any, Callable, Literal, Mapping, Optional, Sequence
 from pydantic import BaseModel, Field
 
 CaseClass = Literal[
-    "generalized", "halted_safely", "silent_wrong", "wrong_effect", "error"
+    "generalized",
+    "halted_safely",
+    "silent_wrong",
+    "wrong_effect",
+    "unconfirmed_write",
+    "error",
 ]
 IndependentVerdict = Literal["VERIFIED", "MISSING", "WRONG"]
 
@@ -58,16 +65,23 @@ IndependentVerdict = Literal["VERIFIED", "MISSING", "WRONG"]
 _ENGINE_VERIFIED = {"VERIFIED"}
 
 
-def classify_case(engine_outcome: str, independent: Optional[str]) -> CaseClass:
+def classify_case(
+    engine_outcome: str,
+    independent: Optional[str],
+    *,
+    readback_confirmed: bool = False,
+) -> CaseClass:
     """Class of one held-out item from the engine outcome and the independent check.
 
     ``independent`` is ``VERIFIED`` (exactly the intended change on the
     intended entity), ``MISSING`` (no change) or ``WRONG`` (anything else), or
-    None when no independent check was supplied.
+    None when no independent check was supplied. ``readback_confirmed`` counts
+    a run with no production profile (which never reports ``VERIFIED``) as
+    confirmed when it succeeded and its record check confirmed every write.
     """
 
     engine = str(engine_outcome or "").split(".")[-1].upper()
-    verified = engine in _ENGINE_VERIFIED
+    verified = engine in _ENGINE_VERIFIED or readback_confirmed
     if engine in ("", "ERROR", "REFUSED"):
         if independent in (None, "MISSING"):
             return "error"
@@ -78,6 +92,8 @@ def classify_case(engine_outcome: str, independent: Optional[str]) -> CaseClass:
         return "generalized" if independent == "VERIFIED" else "silent_wrong"
     if independent == "MISSING":
         return "halted_safely"
+    if independent == "VERIFIED":
+        return "unconfirmed_write"
     return "wrong_effect"
 
 
@@ -85,6 +101,8 @@ class HeldOutCaseResult(BaseModel):
     #: SHA-256 of the item's canonical inputs (values are not stored).
     inputs_sha256: str
     engine_outcome: str
+    #: The run succeeded and its record check confirmed every write it read back.
+    readback_confirmed: bool = False
     independent: Optional[str] = None
     case_class: CaseClass
     failed_step_id: Optional[str] = None
@@ -102,6 +120,7 @@ class BehavioralGeneralization(BaseModel):
     halted_safely: int = 0
     silent_wrong: int = 0
     wrong_effect: int = 0
+    unconfirmed_write: int = 0
     errors: int = 0
     #: True when every item was also judged by an independent check.
     independent: bool = False
@@ -132,9 +151,23 @@ class BehavioralGeneralization(BaseModel):
             f"Held-out BEHAVIORAL generalization: {self.generalized}/{self.n_items} "
             f"items ran VERIFIED on the intended record ({self.score:.2f}); "
             f"{self.halted_safely} halted safely, {self.silent_wrong} silent wrong, "
-            f"{self.wrong_effect} wrong effect, {self.errors} errors. "
+            f"{self.wrong_effect} wrong effect, {self.unconfirmed_write} unconfirmed "
+            f"write, {self.errors} errors. "
             f"Executed every item; judged by {check}."
         )
+
+
+def readback_confirmed(report: Any) -> bool:
+    """The run succeeded and the record check confirmed every write it read back."""
+
+    if not getattr(report, "success", False):
+        return False
+    verdicts = [
+        getattr(evidence, "final_verdict", None)
+        for result in getattr(report, "results", []) or []
+        for evidence in getattr(result, "effect_evidence", []) or []
+    ]
+    return bool(verdicts) and all(v == "confirmed" for v in verdicts)
 
 
 def inputs_digest(params: Mapping[str, Any]) -> str:
@@ -150,6 +183,7 @@ def summarize(results: Sequence[HeldOutCaseResult]) -> BehavioralGeneralization:
             "halted_safely",
             "silent_wrong",
             "wrong_effect",
+            "unconfirmed_write",
             "error",
         )
     }
@@ -161,6 +195,7 @@ def summarize(results: Sequence[HeldOutCaseResult]) -> BehavioralGeneralization:
         halted_safely=counts["halted_safely"],
         silent_wrong=counts["silent_wrong"],
         wrong_effect=counts["wrong_effect"],
+        unconfirmed_write=counts["unconfirmed_write"],
         errors=counts["error"],
         independent=bool(results) and all(r.independent is not None for r in results),
         model_calls=sum(r.model_calls for r in results),
@@ -188,6 +223,12 @@ def score_held_out(
     given together. ``make_verifier(params)`` builds the engine's record check
     for the item (the same one a governed run uses). With ``reset_each`` the
     test copy is reset before every item; otherwise once before the first.
+
+    A loop program (a bundle with a worklist relation) runs each item as a
+    one-row worklist, so every row is judged on its own.
+
+    An item whose run, snapshot or independent check raises is an ``error``
+    result; scoring goes on with the next item.
     """
 
     from openadapt_flow.ir import Workflow
@@ -199,48 +240,81 @@ def score_held_out(
     run_root = Path(run_root)
     run_root.mkdir(parents=True, exist_ok=True)
     workflow = Workflow.load(bundle_dir)
+    relation = (
+        next(iter(workflow.data_sources), None) if workflow.data_sources else None
+    )
     results: list[HeldOutCaseResult] = []
     if reset is not None and not reset_each:
         reset()
     for n, item in enumerate(items, start=1):
         params = {k: str(v) for k, v in item.items()}
-        if reset is not None and reset_each:
-            reset()
-        before = snapshot() if snapshot is not None else None
         t0 = time.time()
-        engine, failed, calls, detail = "ERROR", None, 0, {}
+        engine, failed, calls, confirmed = "ERROR", None, 0, False
+        detail: dict[str, Any] = {}
+        verdict: Optional[str] = None
+        check_failed = False
+        before: Any = None
         try:
-            backend, close = open_session()
+            if reset is not None and reset_each:
+                reset()
+            if snapshot is not None:
+                before = snapshot()
+        except Exception as exc:  # noqa: BLE001 - one item, not the whole score
+            detail["snapshot_error"] = f"{type(exc).__name__}: {exc}"[:500]
+            check_failed = True
+        if not check_failed:
             try:
-                report = Replayer(
-                    backend,
-                    effect_verifier=make_verifier(params),
-                    **dict(replayer_kwargs or {}),
-                ).run(
-                    workflow.model_copy(deep=True),
-                    params=params,
-                    bundle_dir=bundle_dir,
-                    run_dir=run_root / f"item-{n:03d}",
+                backend, close = open_session()
+                try:
+                    run_kwargs: dict[str, Any] = (
+                        {"params": {}, "worklists": {relation: [params]}}
+                        if relation is not None
+                        else {"params": params}
+                    )
+                    report = Replayer(
+                        backend,
+                        effect_verifier=make_verifier(params),
+                        **dict(replayer_kwargs or {}),
+                    ).run(
+                        workflow.model_copy(deep=True),
+                        bundle_dir=bundle_dir,
+                        run_dir=run_root / f"item-{n:03d}",
+                        **run_kwargs,
+                    )
+                finally:
+                    close()
+                engine = str(
+                    report.transaction_outcome or report.execution_outcome or "UNKNOWN"
                 )
-            finally:
-                close()
-            engine = str(
-                report.transaction_outcome or report.execution_outcome or "UNKNOWN"
-            )
-            bad = next((r for r in report.results if not r.ok), None)
-            failed = bad.step_id if bad is not None else None
-            calls = int(report.model_calls or 0)
-        except Exception as exc:  # noqa: BLE001 - an item that cannot run is a result
-            detail["error"] = f"{type(exc).__name__}: {exc}"[:500]
-        verdict = None
-        if independent is not None and snapshot is not None:
-            verdict = independent(item, before, snapshot())
+                confirmed = readback_confirmed(report)
+                bad = next((r for r in report.results if not r.ok), None)
+                failed = bad.step_id if bad is not None else None
+                calls = int(report.model_calls or 0)
+            except Exception as exc:  # noqa: BLE001 - an item that cannot run is a result
+                detail["error"] = f"{type(exc).__name__}: {exc}"[:500]
+            if independent is not None and snapshot is not None:
+                try:
+                    after = snapshot()
+                except Exception as exc:  # noqa: BLE001 - one item, not the whole score
+                    detail["snapshot_error"] = f"{type(exc).__name__}: {exc}"[:500]
+                    check_failed = True
+                else:
+                    try:
+                        verdict = independent(item, before, after)
+                    except Exception as exc:  # noqa: BLE001 - one item, not the score
+                        detail["independent_error"] = f"{type(exc).__name__}: {exc}"[
+                            :500
+                        ]
+                        check_failed = True
         results.append(
             HeldOutCaseResult(
                 inputs_sha256=inputs_digest(params),
                 engine_outcome=engine.split(".")[-1].upper(),
-                independent=verdict,
-                case_class=classify_case(engine, verdict),
+                readback_confirmed=confirmed,
+                independent=None if check_failed else verdict,
+                case_class="error"
+                if check_failed
+                else classify_case(engine, verdict, readback_confirmed=confirmed),
                 failed_step_id=failed,
                 model_calls=calls,
                 seconds=round(time.time() - t0, 2),

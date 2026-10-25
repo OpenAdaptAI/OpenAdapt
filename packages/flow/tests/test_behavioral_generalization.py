@@ -19,7 +19,7 @@ from openadapt_flow.validation import behavioral_generalization as bg
         ("HALTED_BEFORE_EFFECT", "MISSING", "halted_safely"),
         ("RECONCILIATION_REQUIRED", "MISSING", "halted_safely"),
         ("RECONCILIATION_REQUIRED", "WRONG", "wrong_effect"),
-        ("HALTED_BEFORE_EFFECT", "VERIFIED", "wrong_effect"),
+        ("HALTED_BEFORE_EFFECT", "VERIFIED", "unconfirmed_write"),
         ("ERROR", "MISSING", "error"),
         ("ERROR", "WRONG", "wrong_effect"),
         ("VERIFIED", None, "generalized"),
@@ -54,6 +54,28 @@ def test_summary_counts_and_generalizes():
     assert not bg.summarize([]).generalizes
 
 
+def test_an_unprofiled_run_counts_when_every_read_back_confirmed():
+    def report(success, verdicts):
+        return SimpleNamespace(
+            success=success,
+            results=[
+                SimpleNamespace(
+                    effect_evidence=[SimpleNamespace(final_verdict=v) for v in verdicts]
+                )
+            ],
+        )
+
+    assert bg.readback_confirmed(report(True, ["confirmed", "confirmed"]))
+    assert not bg.readback_confirmed(report(True, ["confirmed", "refuted"]))
+    assert not bg.readback_confirmed(report(True, []))  # nothing was read back
+    assert not bg.readback_confirmed(report(False, ["confirmed"]))
+    assert (
+        bg.classify_case("COMPLETED_UNVERIFIED", "VERIFIED", readback_confirmed=True)
+        == "generalized"
+    )
+    assert bg.classify_case("COMPLETED_UNVERIFIED", "VERIFIED") == "unconfirmed_write"
+
+
 def test_inputs_are_digested_not_stored():
     a = bg.inputs_digest({"note": "x", "n": 1})
     assert a == bg.inputs_digest({"n": "1", "note": "x"}) and len(a) == 64
@@ -85,7 +107,11 @@ def test_score_held_out_executes_each_item(monkeypatch, tmp_path):
     monkeypatch.setattr("openadapt_flow.runtime.Replayer", FakeReplayer)
     monkeypatch.setattr(
         "openadapt_flow.ir.Workflow.load",
-        classmethod(lambda cls, path: SimpleNamespace(model_copy=lambda deep: None)),
+        classmethod(
+            lambda cls, path: SimpleNamespace(
+                model_copy=lambda deep: None, data_sources={}
+            )
+        ),
     )
     closed = []
 
@@ -165,3 +191,126 @@ def test_structural_score_stays_labelled_structural():
 
     text = HeldOutValidation(per_trace=[1.0], mean=1.0, n_traces=2).render()
     assert "STRUCTURAL" in text and "NOT behavioral" in text
+
+
+def test_a_failing_check_is_an_error_item_not_the_end(monkeypatch, tmp_path):
+    """snapshot() or independent() raising marks that item, scoring goes on."""
+
+    class FakeReplayer:
+        def __init__(self, backend, *, effect_verifier, **kw):
+            pass
+
+        def run(self, workflow, *, params, bundle_dir, run_dir):
+            return SimpleNamespace(
+                transaction_outcome="VERIFIED",
+                execution_outcome=None,
+                results=[SimpleNamespace(step_id="s1", ok=True)],
+                model_calls=0,
+            )
+
+    monkeypatch.setattr("openadapt_flow.runtime.Replayer", FakeReplayer)
+    monkeypatch.setattr(
+        "openadapt_flow.ir.Workflow.load",
+        classmethod(
+            lambda cls, path: SimpleNamespace(
+                model_copy=lambda deep: None, data_sources={}
+            )
+        ),
+    )
+    snaps = iter([1, RuntimeError("store down"), 2, 3, 4, 5])
+
+    def snapshot():
+        value = next(snaps)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    def independent(item, before, after):
+        if item["note"] == "c":
+            raise ValueError("unreadable")
+        return "VERIFIED"
+
+    result = bg.score_held_out(
+        tmp_path,
+        [{"note": "a"}, {"note": "b"}, {"note": "c"}],
+        open_session=lambda: (object(), lambda: None),
+        make_verifier=lambda params: None,
+        run_root=tmp_path / "runs",
+        independent=independent,
+        snapshot=snapshot,
+    )
+    classes = [r.case_class for r in result.per_item]
+    assert classes == ["error", "generalized", "error"]
+    assert "store down" in result.per_item[0].detail["snapshot_error"]
+    assert "unreadable" in result.per_item[2].detail["independent_error"]
+    assert result.errors == 2 and not result.generalizes
+
+
+# --------------------------------------------------------------------------
+# End to end: an induced loop program on an in-memory chart application
+# --------------------------------------------------------------------------
+
+
+def test_held_out_rows_on_an_in_memory_app(tmp_path):
+    """Induce a worklist loop, then score rows it never saw against the app.
+
+    The application keeps its records (one note per patient) across items, as
+    a system of record does. The independent check reads those records, not
+    the engine's report. A row whose identity does not match the patient on
+    screen must stop before writing.
+    """
+
+    from openadapt_flow.compiler.induction import induce_program
+    from tests.test_loop_shapes import (
+        CONTROLS,
+        HELD_OUT,
+        ChartApp,
+        ChartVision,
+        NoteStore,
+        _demos,
+        _template_bytes,
+    )
+
+    result = induce_program(_demos())
+    assert result.certified, result.render()
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True)
+    for name, (path, *_rest) in CONTROLS.items():
+        (bundle / path).write_bytes(_template_bytes(name))
+    result.workflow.save(bundle)
+
+    app = ChartApp()
+
+    def open_session():
+        app.screen, app.results, app.open_patient, app.focus = "list", [], None, None
+        return app, lambda: None
+
+    def independent(item, before, after):
+        changed = {k for k in after if after[k] != before[k]}
+        if not changed:
+            return "MISSING"
+        name = item["search"]
+        return (
+            "VERIFIED" if changed == {name} and after[name] == item["note"] else "WRONG"
+        )
+
+    wrong_identity = dict(
+        search="Carol Okafor", search_identity_1="1999-12-31", note="Should not land"
+    )
+    score = bg.score_held_out(
+        bundle,
+        [*HELD_OUT, wrong_identity],
+        open_session=open_session,
+        make_verifier=lambda params: NoteStore(app),
+        run_root=tmp_path / "runs",
+        independent=independent,
+        snapshot=lambda: dict(app.notes),
+        replayer_kwargs={"vision": ChartVision(app), "poll_interval_s": 0.01},
+    )
+    classes = [r.case_class for r in score.per_item]
+    assert classes == ["generalized", "generalized", "halted_safely"], score.per_item
+    assert app.notes["Susan Underwood"] == "BP recheck"
+    assert app.notes["Robert Getting"] == "Flu shot given"
+    assert app.notes["Carol Okafor"] == ""
+    assert score.independent and score.silent_wrong == 0 and score.wrong_effect == 0
+    assert not score.generalizes  # one held-out row stopped
