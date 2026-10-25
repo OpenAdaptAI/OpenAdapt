@@ -26,7 +26,8 @@ from typing import Any, Optional
 from .oracle import OracleSchema
 
 GENDER = {"Female": "female", "Male": "male"}
-STATE_CODE = {"Massachusetts": "MA"}
+#: Medplum's state field is free text, so it stores the label as typed.
+STATE_CODE = {"Massachusetts": "Massachusetts"}
 
 SCHEMA = OracleSchema(
     fields=(

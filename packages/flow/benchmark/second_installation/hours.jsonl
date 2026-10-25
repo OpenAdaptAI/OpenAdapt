@@ -10,3 +10,12 @@
 {"app": "openimis", "at": 1792887932.2611232, "event": "stop", "note": "", "step": "contract"}
 {"app": "both", "at": 1792887988.1452, "event": "start", "note": "FHIR and openIMIS soak adapters (offline drafts)", "step": "harness"}
 {"app": "both", "at": 1792888053.092582, "event": "stop", "note": "", "step": "harness"}
+{"app": "openimis", "at": 1792897385.426445, "event": "start", "note": "lease, VM, pull pinned images, bring up, bootstrap", "step": "setup"}
+{"app": "openimis", "at": 1792903243.3119738, "event": "stop", "note": "blocked: amd64 backend hangs under qemu-user on the Podman VM", "step": "setup"}
+{"app": "fhir", "at": 1792903254.20307, "event": "start", "note": "bring up Medplum, verify login, admin token, clients, actor user, oracle", "step": "setup"}
+{"app": "fhir", "at": 1792904767.628521, "event": "stop", "note": "", "step": "setup"}
+{"app": "fhir", "at": 1792904767.6521542, "event": "start", "note": "scripted demonstration of Medplum's new-patient form; compile", "step": "teach"}
+{"app": "fhir-phaseB", "at": 1792905171.439326, "event": "start", "note": "generate-parts worktree, channels from the CapabilityStatement", "step": "setup"}
+{"app": "fhir-phaseB", "at": 1792905193.203636, "event": "stop", "note": "", "step": "setup"}
+{"app": "fhir", "at": 1792905514.009442, "event": "stop", "note": "", "step": "teach"}
+{"app": "fhir", "at": 1792905514.034531, "event": "start", "note": "openadapt-flow qualify (6 cases), certify clinical-write", "step": "admission"}

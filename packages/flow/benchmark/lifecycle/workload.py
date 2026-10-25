@@ -335,6 +335,9 @@ def generate(
             inject.append({"event": "failed_save", "times": 1, "when": "during_item"})
             why = "the save fails once"
 
+        if app == "fhir" and params.get("sex"):
+            # A FHIR gender is a code; intake writes the code the form takes.
+            params["sex"] = params["sex"].lower()
         item = WorkItem(
             seq=seq,
             item_id=item_id,

@@ -36,7 +36,7 @@ def fixture() -> MedplumFixture:
 
 
 def actor_password() -> str:
-    return fixture()._secrets().get("actor_password", "")
+    return fixture().ensure_user(ACTOR_EMAIL, "OpenAdapt", "Actor")
 
 
 def record_token() -> str:
@@ -72,10 +72,10 @@ def _shared_browser() -> Any:
 def sign_in(page: Any, email: str, password: str) -> None:
     fx = fixture()
     page.goto(f"{fx.ui_url}signin", wait_until="networkidle", timeout=60_000)
-    page.get_by_label("Email").fill(email)
-    page.get_by_role("button", name="Next").click()
-    page.get_by_label("Password").fill(password)
-    page.get_by_role("button", name="Sign in").click()
+    page.locator("input[name=email]").fill(email)
+    page.get_by_role("button", name="Continue").click()
+    page.locator("input[name=password]").fill(password)
+    page.get_by_role("button", name="Sign In").click()
     page.wait_for_url(lambda url: "/signin" not in url, timeout=60_000)
 
 

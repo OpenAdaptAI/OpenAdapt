@@ -396,6 +396,29 @@ GUARDED_ACTIONABLE_SELECTOR = (
     ' [role="radio"], [role="switch"]'
 )
 
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _fill_iso_date(locator: Any, text: str) -> bool:
+    """Set an ISO date (``YYYY-MM-DD``) into a native ``<input type=date>``.
+
+    Chromium splits a date input into locale-ordered segments that a string
+    can't be typed into (``-`` doesn't advance, and the year segment takes
+    six digits). ``fill`` takes the ISO value whatever the locale and fires
+    ``input`` and ``change`` as typing does. Returns whether it filled.
+    """
+
+    if not _ISO_DATE.fullmatch(text or ""):
+        return False
+    try:
+        if locator.evaluate("e => e.tagName === 'INPUT' && e.type === 'date'") is not True:
+            return False
+        locator.fill(text, timeout=1000)
+    except Exception:  # noqa: BLE001 - not a date input: type it as usual
+        return False
+    return True
+
+
 _BIND_COORDINATE_TARGET_JS = (
     r"""(args) => {
     const hit = document.elementFromPoint(args.x, args.y);
@@ -2977,7 +3000,8 @@ class PlaywrightBackend:
             operation="guarded_dom_type",
             # Keys go through the leased element itself, never the page
             # keyboard, so delivery stays bound to the checked target.
-            deliver=lambda locator: locator.press_sequentially(text, timeout=1000),
+            deliver=lambda locator: _fill_iso_date(locator, text)
+            or locator.press_sequentially(text, timeout=1000),
         )
 
     def _handle_screenshot_frame_lifecycle(self, _frame: Any = None) -> None:
@@ -3542,7 +3566,10 @@ class PlaywrightBackend:
         """Insert ``text`` at the caret in one call when the focused element
         is an ordinary text field (native fill: the field's ``input`` event
         fires, and ``change`` on blur, as for typing); otherwise ``per_key``
-        types it key by key."""
+        types it key by key. An ISO date into a native date input is set
+        with ``fill`` (see :func:`_fill_iso_date`)."""
+        if _fill_iso_date(self.page.locator(":focus"), text):
+            return
         if self.native_fill and text and self._focused_plain_text_field():
             self.page.keyboard.insert_text(text)
             return

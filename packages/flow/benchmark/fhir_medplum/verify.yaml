@@ -54,11 +54,12 @@ record:
     lname: lname
     fname: fname
     DOB: DOB
-    # The form shows "Female" / "Male"; FHIR stores the code.
-    sex: {param: sex, map: {Female: female, Male: male}}
+    # Gender is a code field: the clerk types the code (female, male).
+    sex: sex
     street: street
     city: city
-    state: {param: state_label, map: {Massachusetts: MA}}
+    # Medplum's state field is free text; it stores what was typed.
+    state: state_label
     postal_code: postal_code
     phone_home: phone_home
 

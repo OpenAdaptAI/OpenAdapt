@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import atexit
 import os
+from pathlib import Path
 from typing import Any, Callable
 
 ORACLE_ROLE = "oa_claims_oracle"
@@ -29,10 +30,19 @@ _fixture: Any = None
 _browser: Any = None
 
 
+#: The second-installation copy (its own compose project and state, ports
+#: 9401/9402); the environment can name another.
+DEFAULT_STATE = Path.home() / "oa/scratch/second-installation/openimis-state"
+DEFAULT_PROJECT = "openadapt-si-openimis"
+
+
 def fixture() -> Any:
     global _fixture
     if _fixture is None:
         from benchmark.openimis_claims.fixture import OpenIMISFixture
+
+        os.environ.setdefault("OPENIMIS_STATE_DIR", str(DEFAULT_STATE))
+        os.environ.setdefault("OPENIMIS_COMPOSE_PROJECT", DEFAULT_PROJECT)
 
         _fixture = OpenIMISFixture()
     return _fixture

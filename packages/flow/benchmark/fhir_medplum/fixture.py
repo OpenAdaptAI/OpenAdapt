@@ -238,6 +238,34 @@ class MedplumFixture:
         path.write_text(json.dumps(clients, indent=2))
         return clients[name]
 
+    def ensure_user(self, email: str, first: str, last: str) -> str:
+        """A project member who signs in to the web app; returns its password."""
+
+        path = self.state_dir / "secrets.json"
+        data = json.loads(path.read_text())
+        key = f"user:{email}"
+        if key in data:
+            return data[key]
+        password = secrets.token_urlsafe(18)
+        admin = self.admin_token()
+        me = _http("GET", f"{self.base_url}/auth/me", token=admin)
+        _http(
+            "POST",
+            f"{self.base_url}/admin/projects/{me['project']['id']}/invite",
+            body={
+                "resourceType": "Practitioner",
+                "firstName": first,
+                "lastName": last,
+                "email": email,
+                "password": password,
+                "sendEmail": False,
+            },
+            token=admin,
+        )
+        data[key] = password
+        path.write_text(json.dumps(data, indent=2))
+        return password
+
     def client_token(self, name: str) -> str:
         c = self.client(name)
         token = _http(
