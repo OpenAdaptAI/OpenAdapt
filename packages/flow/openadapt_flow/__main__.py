@@ -3154,6 +3154,17 @@ def _approval_wait_seconds(args: argparse.Namespace) -> float:
     return max(0.0, min(float(raw), MAX_APPROVAL_WAIT_S))
 
 
+def _args_key_dir(args: argparse.Namespace) -> Optional[Path]:
+    """The ``--key-dir`` the operator chose, or ``None`` for the default.
+
+    Never read from a run directory: the approval files there are writable by
+    any process, so a path stored in them would let a forger pick the registry.
+    """
+
+    key_dir = getattr(args, "key_dir", None)
+    return Path(key_dir) if key_dir else None
+
+
 def _approver_settings(args: argparse.Namespace):
     """The run's approver grant and delegated approver, from its flags.
 
@@ -3179,7 +3190,7 @@ def _approver_settings(args: argparse.Namespace):
     loaded = None
     path = getattr(args, "approver_policy", None)
     if path:
-        loaded = load_approver_policy(path, default_key_dir())
+        loaded = load_approver_policy(path, _args_key_dir(args) or default_key_dir())
         if loaded.refusal is not None:
             from openadapt_flow.cli_hints import command
 
@@ -3215,7 +3226,7 @@ def _prepare_approval_store(
         ItemApprovalStore,
     )
 
-    store = ItemApprovalStore(run_dir)
+    store = ItemApprovalStore(run_dir, key_dir=_args_key_dir(args))
     loaded, approver = _approver_settings(args)
     try:
         if loaded is not None and loaded.signed is not None:
@@ -3952,7 +3963,9 @@ def _resume_approval_mode(args: argparse.Namespace, authorization):
     return None
 
 
-def _carry_item_approval_to_pause(run_dir: Path, store, pending):
+def _carry_item_approval_to_pause(
+    run_dir: Path, store, pending, key_dir: Optional[Path] = None
+):
     """Answer a waiting ``item_approval`` pause from an unused approval, if any.
 
     Returns the pause as it now stands (unchanged when there's no approval).
@@ -3965,7 +3978,7 @@ def _carry_item_approval_to_pause(run_dir: Path, store, pending):
     try:
         manifest = store.read_manifest()
         found = (
-            ItemApprovalStore(run_dir).find_unused_approval(
+            ItemApprovalStore(run_dir, key_dir=key_dir).find_unused_approval(
                 run_id=manifest.run_id,
                 step_id=pending.step_id,
                 step_index=pending.step_index,
@@ -4036,7 +4049,9 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         # before this pause existed for `item-approval approve` to answer.
         # Carry that approval to the pause now; the resumed run still checks
         # the answer itself and uses it once.
-        pending = _carry_item_approval_to_pause(run_dir, store, pending)
+        pending = _carry_item_approval_to_pause(
+            run_dir, store, pending, _args_key_dir(args)
+        )
     if args.require_approval and pending.status != "approved":
         from openadapt_flow.cli_hints import command
 
@@ -4063,7 +4078,9 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
 
         if (
-            ItemApprovalStore(run_dir).find_unused_approval(
+            ItemApprovalStore(
+                run_dir, key_dir=_args_key_dir(args)
+            ).find_unused_approval(
                 run_id=manifest.run_id,
                 step_id=pending.step_id,
                 step_index=pending.step_index,
@@ -4088,7 +4105,9 @@ def _cmd_resume(args: argparse.Namespace) -> int:
 
         stored = store.read_approval()
         if stored is not None:
-            code = stored_approval_refusal(stored, default_key_dir())
+            code = stored_approval_refusal(
+                stored, _args_key_dir(args) or default_key_dir()
+            )
             if code is not None:
                 print(
                     f"Resume REFUSED ({code}): the approval isn't signed by a "
@@ -7630,6 +7649,15 @@ def _add_approver_key_flags(p: argparse.ArgumentParser) -> None:
 def _add_approval_flags(p: argparse.ArgumentParser) -> None:
     """Add the per-item approval flags to ``run``, ``resume`` and ``run-case``."""
 
+    p.add_argument(
+        "--key-dir",
+        default=None,
+        help=(
+            "Key directory with the approver registry (principals.json) that "
+            "approvals are checked against; use the one you approved with "
+            "(default $OPENADAPT_JIT_KEY_DIR or ~/.openadapt/jit)"
+        ),
+    )
     p.add_argument(
         "--approver-policy",
         default=None,
