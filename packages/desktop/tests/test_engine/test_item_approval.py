@@ -345,6 +345,41 @@ def test_an_answer_after_the_run_stopped_waiting_is_not_a_save(task) -> None:
     assert "already stopped waiting" in flow.answer["error"]
 
 
+def test_a_missing_approver_key_tells_the_person_how_to_set_it_up(task) -> None:
+    disp, _events = task
+
+    def unsigned(flow: _GatedFlow, shown: dict) -> None:
+        def answer(run_dir, **kwargs):
+            flow.answers.append(kwargs)
+            return {
+                "ok": False,
+                "code": "human_answer_unsigned",
+                "message": "This computer has no approver key, so nothing was approved.",
+            }
+
+        flow.item_approval_answer = answer
+        request = shown["request"]
+        flow.answer = disp.dispatch(
+            "answer_item_approval",
+            {
+                "workflow_id": "wf-note",
+                "decision": "approve",
+                "request_id": request["request_id"],
+                "request_sha256": request["request_sha256"],
+            },
+        )
+        flow.answers.clear()
+
+    flow = _GatedFlow(disp, unsigned)
+    disp.services._flow_bridge = flow
+
+    _run(disp)
+
+    assert flow.answer["ok"] is False
+    assert flow.answer["code"] == "human_answer_unsigned"
+    assert "no approver key" in flow.answer["error"]
+
+
 def test_no_run_means_nothing_to_approve(task) -> None:
     disp, _events = task
     answer = disp.dispatch(
@@ -431,7 +466,9 @@ def test_the_wire_answers_an_approval_while_a_run_waits(
 # ------------------------------------------------------------ the Flow bridge
 
 
-def _bridge(calls: list, *, returncode: int = 0, stdout: str = "") -> FlowBridge:
+def _bridge(
+    calls: list, *, returncode: int = 0, stdout: str = "", envs: list | None = None
+) -> FlowBridge:
     class Proc:
         def __init__(self) -> None:
             self.returncode = returncode
@@ -440,9 +477,21 @@ def _bridge(calls: list, *, returncode: int = 0, stdout: str = "") -> FlowBridge
 
     def run(cmd, capture_output=True, text=True, timeout=None, env=None):
         calls.append(cmd)
+        if envs is not None:
+            envs.append(env)
         return Proc()
 
     return FlowBridge(runner=run)
+
+
+@pytest.fixture
+def approver_key(monkeypatch, tmp_path: Path):
+    """This computer's approver key, in a throwaway folder and fake keychain."""
+
+    from openadapt_desktop import approver_key as module
+
+    monkeypatch.setattr(module, "KEY_DIR", tmp_path / "approver")
+    return module.setup_approver_key()
 
 
 def test_bridge_asks_flow_to_wait_before_each_save(monkeypatch, tmp_path: Path) -> None:
@@ -473,9 +522,12 @@ def test_bridge_asks_flow_to_wait_before_each_save(monkeypatch, tmp_path: Path) 
     assert case[case.index("--approval-wait") + 1] == "600"
 
 
-def test_bridge_answers_as_a_signed_out_person_from_run_it(monkeypatch, tmp_path: Path) -> None:
+def test_bridge_signs_a_signed_out_persons_answer_from_run_it(
+    monkeypatch, tmp_path: Path, approver_key
+) -> None:
     _fake_pinned_flow(monkeypatch)
     calls: list = []
+    envs: list = []
     ok = json.dumps(
         {
             "ok": True,
@@ -485,7 +537,7 @@ def test_bridge_answers_as_a_signed_out_person_from_run_it(monkeypatch, tmp_path
             "resume_required": False,
         }
     )
-    bridge = _bridge(calls, stdout=ok)
+    bridge = _bridge(calls, stdout=ok, envs=envs)
 
     answer = bridge.item_approval_answer(
         tmp_path,
@@ -503,6 +555,12 @@ def test_bridge_answers_as_a_signed_out_person_from_run_it(monkeypatch, tmp_path
     assert "--unauthenticated" in command
     assert "--approver-id" not in command
     assert command[command.index("--reason") + 1] == "screen_problem"
+    # Signed with Desktop's approver key; the passphrase reaches Flow only
+    # through the child's environment.
+    assert command[command.index("--approver-key") + 1] == str(approver_key.key_path)
+    (env,) = envs
+    passphrase = env["OPENADAPT_JIT_KEY_PASSPHRASE"]
+    assert passphrase and not any(passphrase in part for part in command)
     with pytest.raises(ValueError):
         bridge.item_approval_answer(
             tmp_path,
@@ -521,7 +579,122 @@ def test_bridge_answers_as_a_signed_out_person_from_run_it(monkeypatch, tmp_path
         )
 
 
-def test_bridge_reports_a_refused_answer(monkeypatch, tmp_path: Path) -> None:
+def test_bridge_sends_no_answer_without_an_approver_key(monkeypatch, tmp_path: Path) -> None:
+    from openadapt_desktop import approver_key as module
+
+    monkeypatch.setattr(module, "KEY_DIR", tmp_path / "approver")
+    _fake_pinned_flow(monkeypatch)
+    calls: list = []
+    answer = _bridge(calls, stdout="{}").item_approval_answer(
+        tmp_path, decision="approve", request_id=REQUEST_ID, request_sha256=REQUEST_SHA
+    )
+    assert answer["ok"] is False
+    assert answer["code"] == "human_answer_unsigned"
+    message = answer["message"]
+    key_path = str(module.approver_key_path())
+    assert f"openadapt-flow jit keygen --out {key_path}" in message
+    assert "OPENADAPT_JIT_KEY_PASSPHRASE" in message
+    assert "openadapt-flow jit approver init --principal" in message
+    assert "approvers.root_public_key" in message
+    assert "OPENADAPT_APPROVER_ROOT" not in message
+    assert calls == []  # never an unsigned answer
+
+
+def test_a_key_made_with_flow_keygen_signs_with_desktops_passphrase(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A key a person made at a terminal with jit keygen, not with Desktop."""
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from openadapt_desktop import approver_key as module
+
+    monkeypatch.setattr(module, "KEY_DIR", tmp_path / "approver")
+    monkeypatch.setenv("OPENADAPT_JIT_KEY_PASSPHRASE", "synthetic-terminal-passphrase")
+    path = module.approver_key_path()
+    path.parent.mkdir(parents=True)
+    path.write_bytes(
+        Ed25519PrivateKey.generate().private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.BestAvailableEncryption(b"synthetic-terminal-passphrase"),
+        )
+    )
+    found = module.approver_key_environment()
+    assert found == (
+        path,
+        {"OPENADAPT_JIT_KEY_PASSPHRASE": "synthetic-terminal-passphrase"},
+    )
+
+
+def test_approver_key_setup_is_encrypted_private_and_stable(
+    tmp_path: Path, approver_key, fake_keyring
+) -> None:
+    import os
+
+    from cryptography.hazmat.primitives import serialization
+
+    from openadapt_desktop.approver_key import setup_approver_key
+
+    assert approver_key.created is True
+    assert len(approver_key.public_key) == 64
+    data = approver_key.key_path.read_bytes()
+    with pytest.raises(TypeError):  # encrypted: no passphrase, no key
+        serialization.load_pem_private_key(data, password=None)
+    if os.name != "nt":
+        assert approver_key.key_path.stat().st_mode & 0o777 == 0o600
+    assert not any(
+        value.encode() in data for value in fake_keyring._store.values()
+    )  # the passphrase lives in the keychain, not next to the key
+    again = setup_approver_key()
+    assert again.created is False
+    assert again.public_key == approver_key.public_key
+    command = again.register_command("front-desk")
+    # The Desktop key starts the signed roster as its root.
+    assert "jit approver init --principal front-desk" in command
+    assert str(approver_key.key_path) in command
+
+
+def test_the_portal_gets_its_own_approver_key(tmp_path: Path, approver_key) -> None:
+    from openadapt_desktop.approver_key import (
+        approver_key_environment,
+        portal_approver_environment,
+        setup_approver_key,
+    )
+
+    assert portal_approver_environment() == {}  # not set up yet
+    portal = setup_approver_key("portal")
+    assert portal.key_path != approver_key.key_path
+    assert portal.public_key != approver_key.public_key
+    add = portal.register_command(root=approver_key)
+    # The portal key is added with the Desktop (root) key's signature.
+    assert "jit approver add --principal decision-portal" in add
+    assert f"--signer-key {approver_key.key_path}" in add
+    assert f"--approver-root {approver_key.public_key}" in add
+    env = portal_approver_environment()
+    assert env["OPENADAPT_PORTAL_APPROVER_KEY"] == str(portal.key_path)
+    desktop = approver_key_environment()
+    assert desktop is not None
+    assert env["OPENADAPT_JIT_KEY_PASSPHRASE"] != desktop[1]["OPENADAPT_JIT_KEY_PASSPHRASE"]
+
+
+def test_approver_key_setup_fails_closed_without_a_keychain(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from openadapt_desktop import approver_key as module
+
+    monkeypatch.setattr(module, "KEY_DIR", tmp_path / "approver")
+    monkeypatch.setattr("openadapt_desktop.auth.store._keyring", lambda: None)
+    with pytest.raises(module.ApproverKeyError):
+        module.setup_approver_key()
+    assert not module.approver_key_path().exists()
+    assert module.approver_key_environment() is None
+
+
+def test_bridge_reports_a_refused_answer(
+    monkeypatch, tmp_path: Path, approver_key
+) -> None:
     _fake_pinned_flow(monkeypatch)
     refused = json.dumps({"ok": False, "code": "request_expired", "message": "expired"})
     bridge = _bridge([], returncode=2, stdout=refused)

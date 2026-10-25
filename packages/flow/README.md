@@ -254,9 +254,16 @@ still rehearse the workflow, but a production run can't report a checked save:
 it stops, or it hands the result to a person.
 
 ```bash
+python -m openadapt_flow.cli_config init bundle --out deploy.yaml
+# Fill in every path listed under `unresolved`; no secrets in the file.
 openadapt-flow certify bundle --config deploy.yaml
 openadapt-flow run bundle --profile standard --config deploy.yaml
 ```
+
+`init` writes the execution surface (`backend.kind` and its URL or app) from the
+bundle. `run --profile standard` refuses to start without one, because there is
+no implicit browser default in production; with a hand-written config, set
+`backend.kind` or pass `--backend`.
 
 `certify` checks the bundle against a policy. `clinical-write` is the strict
 built-in policy, and `permissive` is a smoke check. A new recording usually

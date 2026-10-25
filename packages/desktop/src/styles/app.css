@@ -2704,6 +2704,16 @@ select.input:focus {
   color: var(--text-strong);
   margin-bottom: var(--space-2);
 }
+/* The approver key's one-step setup, in place of Approve. */
+.approver-setup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.approver-setup h3 {
+  margin: 0;
+  color: var(--text-strong);
+}
 
 /* "Check the record": what was typed and what the record check read. */
 .field-diffs {
@@ -2776,4 +2786,84 @@ select.input:focus {
 }
 .check-step-fold[open] > summary .check-step-state::after {
   content: "Hide";
+}
+
+/* Review stops: one card, the item next to what the app shows. */
+.stops .stop-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.stop-head h2 {
+  margin: 0;
+  color: var(--text-strong);
+}
+.stop-evidence {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+.stop-side {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-1);
+  padding: var(--space-3);
+}
+.stop-side h3 {
+  margin: 0 0 var(--space-2);
+}
+.stop-side dl > div {
+  display: grid;
+  grid-template-columns: 9rem 1fr;
+  gap: var(--space-2);
+  padding: 2px 0;
+}
+.stop-side dt {
+  color: var(--text-muted);
+}
+.stop-differs {
+  background: color-mix(in srgb, var(--attention) 18%, transparent);
+  border-radius: var(--radius-1);
+}
+.stop-same {
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  border-radius: var(--radius-1);
+}
+.stop-record-value {
+  display: block;
+  font-size: 0.9em;
+  color: var(--text-muted);
+}
+.stop-evidence .technical,
+.stop-evidence .stop-side:only-of-type {
+  grid-column: 1 / -1;
+}
+.stop-compare {
+  width: 100%;
+  border-collapse: collapse;
+}
+.stop-compare th,
+.stop-compare td {
+  text-align: left;
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.stop-compare thead th {
+  color: var(--text-muted);
+  font-weight: var(--fw-semibold);
+}
+.stop-shot {
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-1);
+}
+.stop-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-2);
+}
+.stop-batch ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
