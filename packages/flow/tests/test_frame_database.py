@@ -213,6 +213,9 @@ def test_default_values_are_unset() -> None:
     assert is_default("0000-00-00", None)
     assert is_default("NO", "'NO'")
     assert not is_default("617-555-0142", "''")
+    # Set by the database at insert: any value is its default.
+    assert is_default("2026-10-25 11:00:00", "CURRENT_TIMESTAMP")
+    assert is_default("2026-10-25 11:00:00", "current_timestamp()")
 
 
 def test_a_table_wider_than_one_json_call_is_read(tmp_path: Path) -> None:
