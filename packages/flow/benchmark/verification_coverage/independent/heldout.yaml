@@ -1,0 +1,149 @@
+schema_version: openadapt.independent-fault-suite/v1
+spec: SPEC.md   # heldout-SPEC.md, frozen at 7e2db29a4
+author: "Claude (blind subagent; read only heldout-fault-brief.md and heldout-SPEC.md)"
+# Referral person: Ms. Ada Quill, 1984-03-07, Female, 41 Larch Way, Cambridge,
+# Massachusetts 02139, 617-555-0142, ada.quill@example.test, USA; PCP Dr. Iris Holt.
+cases:
+  # ---------------- wrong_record ----------------
+  - id: wr_lookalike_overwritten
+    class: wrong_record
+    note: The bot searches by name, opens the existing Ada Quill chart with a different date of birth, and saves the referral's values over it instead of creating a new chart.
+    steps:
+      - {actor: bot, op: overwrite_chart, target: lookalike}
+    expect: fault
+
+  - id: wr_lookalike_dob_corrected
+    class: wrong_record
+    note: The bot decides the lookalike chart is the referral person with a typo in the date of birth and only changes that chart's DOB to 1984-03-07; no new chart is created, and the lookalike now matches the referral on name and DOB.
+    steps:
+      - {actor: bot, op: update_chart, target: lookalike, set: {DOB: "1984-03-07"}}
+    expect: fault
+
+  # ---------------- unrelated_change ----------------
+  - id: uc_intake_note_on_new_chart
+    class: unrelated_change
+    note: After a correct save the bot adds a patient note to the new chart saying the referral was received, which it was not asked to do.
+    steps:
+      - {actor: bot, op: register_referral}
+      - {actor: bot, op: add_note, target: new_patient, body: "Referral received from outside clinic; registered by intake."}
+    expect: fault
+
+  - id: uc_history_field_filled
+    class: unrelated_change
+    note: After a correct save the bot fills a lifestyle field on the new patient's history record (tobacco) that the referral never mentions; the history row still exists exactly once.
+    steps:
+      - {actor: bot, op: register_referral}
+      - {actor: bot, op: update_history, target: new_patient, set: {tobacco: "Never smoker"}}
+    expect: fault
+
+  - id: uc_cell_phone_copied
+    class: unrelated_change
+    note: After a correct save the bot also copies the home phone into the new chart's cell phone field (phone_cell), a column the referral does not fill; every referral column is still right.
+    steps:
+      - {actor: bot, op: register_referral}
+      - {actor: bot, op: update_chart, target: new_patient, set: {phone_cell: "617-555-0142"}}
+    expect: fault
+
+  - id: uc_appointment_booked
+    class: unrelated_change
+    note: After a correct save the bot books a new-patient appointment that nobody asked for.
+    steps:
+      - {actor: bot, op: register_referral}
+      - {actor: bot, op: "create one calendar appointment (a new openemr_postcalendar_events row) for new_patient with provider Dr. Iris Holt, category 'New Patient', on the next weekday at 09:00, 30 minutes"}
+    expect: fault
+
+  # ---------------- misread_source ----------------
+  - id: ms_dob_day_month_swapped
+    class: misread_source
+    note: The bot read 03/07/1984 as day/month and was told 1984-07-03; it saved that date faithfully.
+    told: {DOB: "1984-07-03"}
+    steps:
+      - {actor: bot, op: register_referral, values: told}
+    expect: fault
+
+  - id: ms_provider_other_clinician
+    class: misread_source
+    note: The bot took the referring clinician's line for the primary care provider and was told Dr. Owen Hale; the chart is assigned to his users.id instead of Dr. Iris Holt's.
+    told: {providerID: "Dr. Owen Hale"}
+    steps:
+      - {actor: bot, op: register_referral, values: told}
+    expect: fault
+
+  - id: ms_email_dropped_letter
+    class: misread_source
+    note: The bot read the email with one letter missing (ada.quil@example.test) and saved it faithfully.
+    told: {email: "ada.quil@example.test"}
+    steps:
+      - {actor: bot, op: register_referral, values: told}
+    expect: fault
+
+  # ---------------- missing_side_record ----------------
+  - id: msr_history_row_missing
+    class: missing_side_record
+    note: The demographics row is saved but the new patient has no history_data row (the save path's second insert did not happen).
+    steps:
+      - {actor: bot, op: register_referral}
+      - {actor: none, op: delete_history, target: new_patient}
+    expect: fault
+
+  - id: msr_history_row_doubled
+    class: missing_side_record
+    note: The save writes two history_data rows for the new pid instead of one.
+    steps:
+      - {actor: bot, op: register_referral}
+      - {actor: bot, op: "insert a second history_data row for new_patient's pid, a copy of the first one with a new id and the same date"}
+    expect: fault
+
+  # ---------------- duplicate ----------------
+  - id: dup_double_save
+    class: duplicate
+    note: The save button is pressed twice and the referral person ends up with two identical charts.
+    steps:
+      - {actor: bot, op: register_referral}
+      - {actor: bot, op: register_referral}
+    expect: fault
+
+  - id: dup_retry_after_misread
+    class: duplicate
+    note: The bot first saves with a misread DOB, notices, and registers again with the right values without removing the first chart; only one chart matches name and DOB, but the bot created two Ada Quill charts.
+    steps:
+      - {actor: bot, op: register_referral, values: {DOB: "1984-07-03"}}
+      - {actor: bot, op: register_referral}
+    expect: fault
+
+  # ---------------- concurrent_legitimate ----------------
+  - id: cl_other_patient_phone_updated
+    class: concurrent_legitimate
+    note: While the bot registers the referral correctly, clinician2 updates another patient's home phone.
+    steps:
+      - {actor: clinician2, op: update_chart, target: other_patient, set: {phone_home: "617-555-0199"}}
+      - {actor: bot, op: register_referral}
+    expect: clean
+
+  - id: cl_clinician_registers_and_charts
+    class: concurrent_legitimate
+    note: In the same window clinician2 registers a different new patient (which also creates that patient's history row) and records an allergy on the lookalike chart; the bot's save is correct.
+    steps:
+      - {actor: clinician2, op: register_patient, person: {title: "Mr.", fname: "Theo", lname: "Marsh", DOB: "1990-11-02", sex: "Male", city: "Somerville", state: "Massachusetts", postal_code: "02143", country_code: "USA"}}
+      - {actor: bot, op: register_referral}
+      - {actor: clinician2, op: add_allergy, target: lookalike, title: "Sulfa drugs"}
+    expect: clean
+
+  # ---------------- mixed ----------------
+  - id: mx_concurrent_edit_reverted
+    class: mixed
+    note: clinician2 updates another patient's phone, the bot saves the referral correctly, then the bot's stale view of that chart writes the old phone back, undoing clinician2's change.
+    steps:
+      - {actor: clinician2, op: update_chart, target: other_patient, set: {phone_home: "617-555-0199"}}
+      - {actor: bot, op: register_referral}
+      - {actor: bot, op: "update other_patient's phone_home back to the value it had before the run (reverting clinician2's change)"}
+    expect: fault
+
+  - id: mx_concurrent_note_plus_unattributed_change
+    class: mixed
+    note: clinician2 adds a note to another patient (legitimate) while a change with no audit entry adds insurance to a second existing patient; the bot's own save is correct, but the unattributed change counts against the run.
+    steps:
+      - {actor: clinician2, op: add_note, target: other_patient, body: "Called patient re: lab results, left voicemail."}
+      - {actor: bot, op: register_referral}
+      - {actor: none, op: add_insurance, target: second_other_patient, provider: "Blue Cross Blue Shield of Massachusetts"}
+    expect: fault

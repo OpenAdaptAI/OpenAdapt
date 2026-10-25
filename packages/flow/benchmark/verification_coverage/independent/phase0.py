@@ -2,6 +2,7 @@
 
     python -m verification_coverage.independent.phase0 standin --baseline-sql PATH --out DIR
     python -m verification_coverage.independent.phase0 live --out DIR [--only id,...]
+    ... --suite heldout.yaml   # the held-out suite instead of faults.yaml
     ... --contract plus   # the production contract with the proposed fixes
 
 ``--contract production`` (the default) is the check the production
@@ -269,10 +270,13 @@ def main() -> int:
     parser.add_argument("--baseline-sql", type=Path)
     parser.add_argument("--only", default="")
     parser.add_argument(
+        "--suite", type=Path, default=HERE / "faults.yaml", help="the fault suite"
+    )
+    parser.add_argument(
         "--contract", choices=("production", "plus"), default="production"
     )
     args = parser.parse_args()
-    suite = yaml.safe_load((HERE / "faults.yaml").read_text())
+    suite = yaml.safe_load(args.suite.read_text())
     args.out.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="phase0-"))
     if args.mode == "standin":

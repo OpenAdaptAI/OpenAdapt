@@ -393,3 +393,46 @@ class Store:
         self.log(
             user, "patient-record-insert", pid, f"INSERT INTO insurance_data pid={pid}"
         )
+
+    def add_appointment(
+        self, user: Optional[str], pid: int, provider_id: int, category: str
+    ) -> None:
+        """One calendar appointment, as the calendar's add form writes it."""
+
+        catid = 10  # 'New Patient' in the pinned fixture's categories
+        self.con.execute(
+            "INSERT INTO openemr_postcalendar_events (pc_catid, pc_aid, pc_pid, "
+            "pc_title, pc_time, pc_eventDate, pc_endDate, pc_duration, pc_startTime, "
+            "pc_endTime, pc_apptstatus, pc_facility, pc_billing_location) "
+            "VALUES (?,?,?,?,?, '2026-10-26', '0000-00-00', 1800, '09:00:00', "
+            "'09:30:00', '-', 3, 3)",
+            (catid, str(provider_id), str(pid), category, self._now()),
+        )
+        self.log(
+            user,
+            "patient-record-insert",
+            pid,
+            f"INSERT INTO openemr_postcalendar_events pid={pid}",
+        )
+
+    def duplicate_history(self, user: Optional[str], pid: int) -> None:
+        """A second history_data row for ``pid``, a copy of the first."""
+
+        cols = [
+            r[1]
+            for r in self.con.execute("PRAGMA table_info(history_data)")
+            if r[1] not in ("id", "uuid")
+        ]
+        names = ",".join(f'"{c}"' for c in cols)
+        cur = self.con.execute(
+            f"INSERT INTO history_data ({names}) SELECT {names} FROM history_data "
+            "WHERE pid = ? ORDER BY id LIMIT 1",
+            (pid,),
+        )
+        self.con.execute(
+            "UPDATE history_data SET uuid = ? WHERE id = ?",
+            (self._uuid("history_data", cur.lastrowid), cur.lastrowid),
+        )
+        self.log(
+            user, "patient-record-insert", pid, f"INSERT INTO history_data pid={pid}"
+        )

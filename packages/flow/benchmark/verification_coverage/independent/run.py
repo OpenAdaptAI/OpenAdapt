@@ -217,6 +217,47 @@ AUDIT_QUERY = (
 )
 
 
+#: Operations the held-out suite describes in words (``heldout.yaml``), each
+#: implemented as written, with the chart it acts on.
+APPOINTMENT_OP = (
+    "create one calendar appointment (a new openemr_postcalendar_events row) for "
+    "new_patient with provider Dr. Iris Holt, category 'New Patient', on the next "
+    "weekday at 09:00, 30 minutes"
+)
+DOUBLE_HISTORY_OP = (
+    "insert a second history_data row for new_patient's pid, a copy of the first "
+    "one with a new id and the same date"
+)
+REVERT_OP = (
+    "update other_patient's phone_home back to the value it had before the run "
+    "(reverting clinician2's change)"
+)
+HELD_OUT_OPS = {
+    APPOINTMENT_OP: "new_patient",
+    DOUBLE_HISTORY_OP: "new_patient",
+    REVERT_OP: "other_patient",
+}
+
+
+def step_values(step: dict[str, Any], told: dict[str, str]) -> dict[str, str]:
+    """The values one save enters: ``told``, or the step's own inline values."""
+
+    values = step.get("values")
+    return {**told, **values} if isinstance(values, dict) else told
+
+
+def person_values(step: dict[str, Any], ids: dict[str, int]) -> dict[str, Any]:
+    """Another user's new patient: the step's person map, or the suite's default."""
+
+    person = step.get("person")
+    if not isinstance(person, dict):
+        return {**CONCURRENT_PERSON, "providerID": ids["iholt"]}
+    blank = dict.fromkeys(CONCURRENT_PERSON, "")
+    out = {**blank, **person}
+    out["state"] = "MA" if out["state"] == "Massachusetts" else out["state"]
+    return {**out, "providerID": None}
+
+
 def told_values(case: dict[str, Any]) -> dict[str, str]:
     """A case's misread inputs, keyed by referral field (``providerID`` in the
     suite names the referral's provider)."""
@@ -385,9 +426,18 @@ def apply_steps(
         if op == "register_referral":
             if step.get("phase") == "finish":
                 continue
-            new_pid = store.register(who, stored(told, ids))
+            new_pid = store.register(who, stored(step_values(step, told), ids))
         elif op == "register_patient":
-            store.register(who, {**CONCURRENT_PERSON, "providerID": ids["iholt"]})
+            store.register(who, person_values(step, ids))
+        elif op in HELD_OUT_OPS:
+            pid = new_pid if HELD_OUT_OPS[op] == "new_patient" else ids["other_patient"]
+            if op == APPOINTMENT_OP:
+                store.add_appointment(who, pid, ids["iholt"], "New Patient")
+            elif op == DOUBLE_HISTORY_OP:
+                store.duplicate_history(who, pid)
+            else:  # REVERT_OP: the value the chart had before the run
+                field = "phone_home"
+                store.update_chart(who, pid, {field: SEEDS["other_patient"][field]})
         elif op == "overwrite_chart":
             values = stored(REFERRAL, ids)
             store.update_chart(who, ids[step["target"]], values)
