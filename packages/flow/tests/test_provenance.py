@@ -28,7 +28,7 @@ REFERRAL = IntakeDocument(
     [
         "Referral to: Example Family Clinic",
         "Last name: Okafor",
-        "Date of birth: 03/07/1991",
+        "Date of birth: 03/27/1991",
         "Postal code: 02139",
         "Home phone: 555-0142",
     ],
@@ -64,7 +64,7 @@ def _prov(**values: str) -> ProvenanceFile:
 
 GOOD = {
     "lname": "Okafor",
-    "DOB": "1991-03-07",
+    "DOB": "1991-03-27",
     "postal_code": "02139",
     "phone_home": "555-0142",
 }
@@ -75,7 +75,7 @@ def test_intake_keeps_the_line_it_read() -> None:
     prov = from_intake(result, DOC)
     assert prov.params["postal_code"].source.line == 4
     assert prov.params["postal_code"].extractor == "intake:local"
-    assert prov.params["DOB"].value == "1991-03-07"
+    assert prov.params["DOB"].value == "1991-03-27"
 
 
 def test_two_methods_that_agree_let_the_save_go() -> None:
@@ -138,7 +138,7 @@ def test_round_trip_holds_for_a_faithful_record() -> None:
     record = {
         "id": 7,
         "lname": "Okafor",
-        "DOB": "1991-03-07",
+        "DOB": "1991-03-27",
         "postal_code": "02139",
         "phone_home": "555-0142",
     }

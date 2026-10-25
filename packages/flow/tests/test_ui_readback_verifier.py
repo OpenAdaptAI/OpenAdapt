@@ -230,6 +230,19 @@ def test_a_missing_row_never_proves_that_nothing_was_saved() -> None:
     assert "not proof that nothing was saved" in verdict.reason
 
 
+def test_a_search_that_finds_nothing_never_confirms() -> None:
+    nothing = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={"patient": ValueExpr(literal="p1")},
+        expected_count=0,
+        timeout_s=0.0,
+    )
+    verifier = _verifier(FakeDriver([_page(identity="", not_found=True)]))
+    verdict = verifier.verify(nothing, EMPTY_BEFORE)
+    assert verdict.verdict is Verdict.INDETERMINATE
+    assert "not proof" in verdict.reason
+
+
 def test_duplicate_and_lost_update_are_refuted() -> None:
     before = EffectState(
         substrate="ui-readback",

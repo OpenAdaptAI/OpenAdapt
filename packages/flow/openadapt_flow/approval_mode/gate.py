@@ -569,11 +569,32 @@ class ApprovalGate:
         if self.mode is ApprovalMode.EACH_ITEM:
             return True
         if self.mode is ApprovalMode.PROBLEMS_ONLY:
-            return self._item_fallback is not None or (
-                self._decision is not None
-                and self._decision.kind is ItemDecisionKind.APPROVAL_REQUIRED
+            return (
+                self._item_fallback is not None
+                or (
+                    self._decision is not None
+                    and self._decision.kind is ItemDecisionKind.APPROVAL_REQUIRED
+                )
+                or self._switch_reads_off()
             )
         return False
+
+    def _switch_reads_off(self) -> bool:
+        """The local switch log already reads off (P1 would fail at the save).
+
+        A switched-off mode waits for a person to approve the item, as in
+        ``each_item``. P1 runs at the save, after the last point a person can
+        be asked, so the ask happens here; without this, every item after the
+        switch turned off stopped at the save and nobody was asked. A missing
+        or unreadable log reads as off, as P1 does.
+        """
+
+        if self.record is None or self.log is None:
+            return True
+        try:
+            return bool(self.log.state().is_off)
+        except (SwitchLogError, OSError):
+            return True
 
     def _before_step(self, ctx: StepContext) -> GateVerdict:
         if not self._began:
