@@ -4,9 +4,9 @@ A person's approval used to be a claim: ``--decided-by human`` with
 ``--unauthenticated`` or a named ``--auth-method`` was enough, and any process
 that could run the CLI or write the run directory could approve its own save.
 Now a person's answer counts only when it carries a :class:`HumanAttestation`:
-an Ed25519 signature over the answer, by a key registered under ``approvers``
-in the key directory's ``principals.json``
-(:class:`~openadapt_flow.jit.authority.PrincipalRegistry`).
+an Ed25519 signature over the answer, by a key on the signed approver roster
+(``approvers.json`` in the key directory) that the run's pinned root vouches
+for (:mod:`.approver_roster`).
 
 * Desktop's Run it signs with the Desktop approver key (``desktop_key``).
 * The decision portal signs, after the person answered on their phone, with
@@ -15,15 +15,17 @@ in the key directory's ``principals.json``
   person's own approver key (``person_key``); ``resume`` refuses a stored
   approval without one.
 
-The registry and the keys follow the trust root of program admission
-(:mod:`openadapt_flow.jit.authority`): a person registers each key at a
-terminal (``jit register --role approver``), an approver key can't hold any
-other role, and an approver id that names an agent or model is refused. Keep
-the key directory and the approver keys away from the agents they govern.
+The roster starts from a root approver key; every later approver is added
+with an approver's signature (``jit approver add``, or Desktop's setup behind
+Touch ID). A run pins the root (the deployment config only, for a governed or
+agent-started run) and the roster head it saw. An approver key can't hold
+another role, and an approver id that names an agent or model is refused.
+Keep the key directory, the deployment config and the approver keys away from
+the agents they govern.
 
-Every check fails closed: no key directory, no registered approver, a wrong
-key, a changed answer, or a route signed with the other route's method is a
-refusal. A claimed Cloud sign-in (``cloud_aal1``/``cloud_aal2``) is refused
+Every check fails closed: no pin, no roster, a roster that doesn't extend
+the recorded head, an unlisted signer, a wrong key, a changed answer, or a
+route signed with the other route's method is a refusal. A claimed Cloud sign-in (``cloud_aal1``/``cloud_aal2``) is refused
 too, because nothing here can verify it.
 """
 
@@ -98,6 +100,7 @@ def approvers(
     root: Optional[str] = None,
     *,
     env: Optional[Mapping[str, str]] = None,
+    at_least: Optional[tuple[int, str]] = None,
 ) -> dict[str, str]:
     """The verified approvers for this run's pinned root.
 
@@ -112,7 +115,9 @@ def approvers(
     )
 
     try:
-        return verified_approvers(key_dir, pinned_root(root, env=env))
+        return verified_approvers(
+            key_dir, pinned_root(root, env=env), at_least=at_least
+        )
     except RosterError as exc:
         raise AttestationRefused(exc.code, str(exc)) from exc
 
@@ -168,6 +173,7 @@ def refusal(
     key_dir: Optional[Path],
     method: Optional[AttestationMethod] = None,
     root: Optional[str] = None,
+    at_least: Optional[tuple[int, str]] = None,
 ) -> Optional[str]:
     """A closed reason this attestation proves nothing, or ``None``.
 
@@ -184,7 +190,7 @@ def refusal(
     from openadapt_flow.jit.authority import _verify
 
     try:
-        known = approvers(key_dir, root)
+        known = approvers(key_dir, root, at_least=at_least)
     except AttestationRefused as exc:
         return exc.code
     public = known.get(attestation.signer)

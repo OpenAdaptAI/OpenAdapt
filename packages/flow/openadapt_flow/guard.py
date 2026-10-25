@@ -306,8 +306,8 @@ class GuardedSave:
     verify: VerifyConfig
     state_dir: Path
     approval: ApprovalSetting = "each_item"
-    #: Where registered approver keys (``principals.json``) are read to check
-    #: a person's signed answer. ``None``: ``$OPENADAPT_JIT_KEY_DIR`` or
+    #: Where the approver roster (``approvers.json``) is read to check a
+    #: person's signed answer. ``None``: ``$OPENADAPT_JIT_KEY_DIR`` or
     #: ``~/.openadapt/jit``. Keep it away from the agent this guard governs.
     key_dir: Optional[Path] = None
     #: The approver root this guard pins (approval_mode/approver_roster).

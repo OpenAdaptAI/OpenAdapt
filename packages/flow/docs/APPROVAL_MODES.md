@@ -105,19 +105,30 @@ including an answer file written around the command
 
 - **The roster.** Its first entry is the root approver key, signed by
   itself. Every later change, adding or removing an approver, is signed by
-  an approver already on the roster. Editing the file adds nobody: an entry
-  without a valid signature from a current approver counts for nothing, and
-  neither does anything after it. `principals.json` no longer lists
-  approvers, and `jit register` no longer registers one.
-- **The pin.** A run names the root approver key it trusts. The sources are
-  the deployment config's `approvers.root_public_key`, `--approver-root` or
-  `OPENADAPT_APPROVER_ROOT`. If two of them disagree, the run is refused.
-  The run records the root and the key directory in its own run directory
-  when it starts. After that, an `item-approval` answer or a resume that
-  names another root or key directory is refused, and so is a pin planted
-  in the run directory before the run. A deployment config can also pin
-  `approvers.key_dir`; a run given another `--key-dir` is then refused.
-  Without a pin, a person's answer is refused (`approver_root_unpinned`).
+  an approver already on the roster. Each entry also signs its position
+  (`seq`) and the hash of the entry before it (`prev`), so an entry can't be
+  replayed, reordered or dropped. Editing the file adds nobody: the first
+  entry that doesn't check out stops the replay, and nothing after it
+  counts. `principals.json` no longer lists approvers, and `jit register`
+  no longer registers one.
+- **The pin.** A run names the root approver key it trusts.
+  - A governed run, or one an agent started (`--started-by`), takes the root
+    only from its deployment config's `approvers.root_public_key`;
+    `--approver-root` and `OPENADAPT_APPROVER_ROOT` are ignored, since whoever
+    starts the run sets them. Without a config pin, every person's answer in
+    that run is refused.
+  - Other commands also accept `--approver-root` or `OPENADAPT_APPROVER_ROOT`;
+    two sources that disagree are refused.
+  - A deployment config that can't be read refuses the run rather than
+    dropping its pin.
+  - The run records the root, the key directory and the roster's head when
+    it starts. After that, an `item-approval` answer or a resume that names
+    another root (its own deployment config's included) or key directory is
+    refused, and so is a pin planted in the run directory before the run.
+    A roster that doesn't extend the recorded head (an older copy put back)
+    is refused (`approver_roster_rolled_back`).
+  - A deployment config can also pin `approvers.key_dir`; a run given
+    another `--key-dir` is then refused.
 - **The first approver.** On a Mac, Desktop sets it up behind Touch ID: the
   root is Desktop's approver key, signed after a presence prompt. Elsewhere,
   a person starts the roster with `openadapt-flow jit approver init`, and

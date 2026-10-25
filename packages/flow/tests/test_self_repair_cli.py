@@ -16,6 +16,8 @@ from typing import Optional
 
 import pytest
 
+from tests._approver_keys import approvers_yaml
+
 from openadapt_flow.__main__ import main
 from openadapt_flow.ir import RunReport
 from openadapt_flow.repair.self_repair import RepairProposal, RepairRequest
@@ -55,7 +57,7 @@ def _config(tmp_path: Path, base_url: str) -> Path:
     config = tmp_path / "deploy.yaml"
     config.write_text(
         f"effects:\n  kind: rest\n  base_url: {base_url}\n"
-        "policy:\n  policy: clinical-write\n"
+        "policy:\n  policy: clinical-write\n" + approvers_yaml()
     )
     return config
 

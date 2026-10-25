@@ -134,6 +134,7 @@ def stored_approval_refusal(
     key_dir: Optional[Path],
     *,
     root: Optional[str] = None,
+    at_least: Optional[tuple[int, str]] = None,
 ) -> Optional[str]:
     """Why a stored resume approval isn't a verified person's, or ``None``.
 
@@ -153,6 +154,7 @@ def stored_approval_refusal(
         payload=approval.signed_payload(),
         key_dir=key_dir,
         root=root,
+        at_least=at_least,
     )
     if code is not None:
         return code
