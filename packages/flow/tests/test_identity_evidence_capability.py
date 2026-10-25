@@ -109,10 +109,28 @@ def test_no_surrounding_text_valid_crop_verifies_where_crops_are_verifiable(
     tmp_path: Path,
 ) -> None:
     step, res = _crop_only_step(tmp_path, _button())
+    # A read-only step: nothing consequential follows it.
+    step.risk = "reversible"
+    step.intent = "click 'View referral'"
     error, check = _gate(tmp_path, step, res, _button(), pixel_verify_enabled=True)
     assert error is None
     assert check is not None
     assert check.status == "verified" and check.mode == "pixel"
+    # A crop alone gives no row text to count look-alikes with; nothing
+    # consequential follows this step, so it runs and records that.
+    assert check.census_status == "cannot_count"
+
+
+def test_a_verified_crop_with_no_row_count_halts_before_a_write(
+    tmp_path: Path,
+) -> None:
+    """The crop matches, but nothing can say no other row shows the same."""
+
+    step, res = _crop_only_step(tmp_path, _button())
+    error, check = _gate(tmp_path, step, res, _button(), pixel_verify_enabled=True)
+    assert error is not None and "identity_uncounted" in error
+    assert check is not None
+    assert check.status == "abstain" and check.ambiguity_halt == "identity_uncounted"
 
 
 def test_crop_that_does_not_match_halts(tmp_path: Path) -> None:
