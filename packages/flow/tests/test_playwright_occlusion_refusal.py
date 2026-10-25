@@ -229,7 +229,9 @@ class _StickyHeaderBackend(FakeBackend):
 
     def locate_structural(self, locator: StructuralLocator) -> StructuralHandle | None:
         if self.under_header:
-            raise StructuralElementNotActionable("target is occluded under sticky header")
+            raise StructuralElementNotActionable(
+                "target is occluded under sticky header"
+            )
         return StructuralHandle(
             point=(100, 150),
             region=(50, 130, 100, 40),
@@ -282,4 +284,3 @@ def test_sticky_header_during_scroll_readiness(tmp_path) -> None:
     )
     assert ready_2 is True
     assert misses_2 == []
-
