@@ -572,3 +572,19 @@ def test_the_recorded_control_and_the_request_it_made_are_in_the_proposal(tmp_pa
     spec = step.api_binding.web_form
     assert reasons == [] and spec.submitter == "#create"
     assert spec.submitter_requests == ["GET /app/dup.php"]
+
+
+def test_a_field_that_isnt_on_screen_makes_the_run_unevaluable(app_page):
+    # Fail closed: only real, trusted key events count.
+    app, page = app_page
+    app.form()
+    app.pages["/new.php"] = (
+        app.pages["/new.php"]
+        .replace('<input name="dob"', '<div style="display:none"><input name="dob"')
+        .replace(
+            'onchange="noteChange(this)">', 'onchange="noteChange(this)"></div>', 1
+        )
+    )
+    result = _evaluate(app, page)
+    assert result.status == "unevaluable" and "dob isn't on screen" in result.reason
+    assert app.writes == []

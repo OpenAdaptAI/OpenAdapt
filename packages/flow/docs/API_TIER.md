@@ -202,8 +202,8 @@ Before it sends the save, the API step:
    - it types the run's typed and picked values with real key events, so
      key handlers (`onkeyup`, `onchange`) run as they do for the person. A
      field that isn't on screen when the form opens (on a tab the person
-     opened first) gets the same events key by key from script; its
-     handlers run, but those events aren't trusted;
+     opened first) can't be typed with real key events, so the run is
+     unevaluable and the GUI steps run;
    - it clicks the control the person clicked (`submitter`) with a real,
      trusted click. When the recording names none it submits the form, and
      a form whose buttons have click handlers is refused. When the click

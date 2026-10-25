@@ -19,8 +19,8 @@ so it runs it, before each save, the way the person's steps would:
 3. type the run's values into the fields the person typed or picked, with
    real key events (``keydown``, ``keyup``, ``input``), so key handlers run
    as they do for the person. A field that isn't on screen when the form
-   opens (on a tab the person opened first) gets the same events key by
-   key from script: its handlers run, but those events aren't trusted;
+   opens (on a tab the person opened first) can't be typed that way, so the
+   run is unevaluable;
 4. click the control the person clicked (``submitter``) with a real
    click; when the recording names none, submit the form, and refuse a form
    whose buttons have click handlers. When the page then shows the recorded
@@ -406,33 +406,6 @@ def evaluate_form(
             pass
 
 
-#: For a control that isn't on screen (a field on a tab the person opened
-#: first): the same events, key by key, dispatched by script. Key handlers
-#: still run; the events are not trusted.
-_SCRIPT_TYPE_JS = """
-(e, value) => {
-  const fire = (type, init) => e.dispatchEvent(new (type.startsWith('key') ? KeyboardEvent : Event)(
-    type, Object.assign({ bubbles: true, cancelable: true }, init || {})));
-  if (e.tagName === 'SELECT') {
-    e.value = value;
-    fire('input'); fire('change');
-    return e.value === value;
-  }
-  e.value = '';
-  for (const ch of value) {
-    if (!fire('keydown', { key: ch })) continue;
-    fire('keypress', { key: ch });
-    e.value = e.value + ch;
-    fire('input');
-    fire('keyup', { key: ch });
-  }
-  fire('change');
-  e.dispatchEvent(new FocusEvent('blur'));
-  return true;
-}
-"""
-
-
 def _type_values(scratch: Any, fields: list[tuple[str, str]]) -> Optional[str]:
     """Type each value the way a person does; why it couldn't be, or None."""
 
@@ -444,9 +417,12 @@ def _type_values(scratch: Any, fields: list[tuple[str, str]]) -> Optional[str]:
         if kind in ("checkbox", "radio", "file", "hidden"):
             return f"{name} is a {kind} the API step doesn't fill"
         if not control.is_visible():
-            if not control.evaluate(_SCRIPT_TYPE_JS, value):
-                return f"{name} has no option with value {value!r}"
-            continue
+            # Only real, trusted input counts; a field the person reached
+            # through another step (a tab, a section) can't be typed here.
+            return (
+                f"{name} isn't on screen when the form opens, so it can't be typed "
+                "with real key events"
+            )
         if tag == "SELECT":
             label = control.evaluate(
                 "(e, v) => { const o = Array.from(e.options).find((x) => x.value === v);"
