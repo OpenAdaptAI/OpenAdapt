@@ -544,3 +544,34 @@ def test_a_compiled_dismiss_that_sent_a_write_keeps_its_risk(tmp_path):
     wf = compile_recording(rec, tmp_path / "bundle", name="notice", mine_effects=True)
     dismiss = wf.steps[0]
     assert dismiss.risk == "irreversible" and not is_local_edit(dismiss)
+
+
+def test_unlabelled_field_click_before_typing_is_a_local_edit():
+    steps = [_click(0, "#dob", "textbox", name=None), _type(1, "dob")]
+    (edit,) = local_edits(steps, _events(2), network=[])
+    assert edit.step_id == "step_000"
+    assert edit.pattern == "focus_field"
+    assert edit.postconditions == [
+        Postcondition(kind=PostconditionKind.LOCAL_EDIT, field_selector="#dob")
+    ]
+
+
+def test_unlabelled_field_click_with_select_all_before_typing_is_a_local_edit():
+    steps = [
+        _click(0, "#dob", "textbox", name=None),
+        _key(1, "Control+a"),
+        _type(2, "dob"),
+    ]
+    edits = local_edits(steps, _events(3), network=[])
+    assert _ids(edits) == {"step_000": "focus_field", "step_001": "select_all"}
+
+
+def test_unlabelled_field_click_without_typing_stays_with_a_person():
+    steps = [_click(0, "#dob", "textbox", name=None), _click(1, "#submit", "button")]
+    assert local_edits(steps, _events(2), network=[]) == []
+
+
+def test_unlabelled_field_click_with_write_request_stays_with_a_person():
+    steps = [_click(0, "#dob", "textbox", name=None), _type(1, "dob")]
+    sent = [{"method": "POST", "t": 0.5, "url": URL + "/check"}]
+    assert local_edits(steps, _events(2), network=sent) == []
