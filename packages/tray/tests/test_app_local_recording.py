@@ -1,5 +1,6 @@
 """Tests for showing and driving local recorders without OpenAdapt Desktop."""
 
+import signal
 from unittest.mock import MagicMock, patch
 
 from openadapt_tray import capture_watch
@@ -150,9 +151,11 @@ class TestStartStopWithoutDesktop:
         app.local_recorder.is_running.return_value = True
         app._on_capture_event(_event(capture_watch.READY))
 
-        app.stop_recording()
+        with patch("openadapt_tray.app.threading.Thread") as thread:
+            app.stop_recording()
 
-        app.local_recorder.stop.assert_called_once_with()
+        assert thread.call_args.kwargs["target"] == app._stop_local_run
+        assert thread.call_args.kwargs["args"] == (app.local_recorder.current,)
         app.ipc.send_stop_recording.assert_not_called()
         assert app.state.current.state == TrayState.RECORDING_STOPPING
 
@@ -291,11 +294,11 @@ class TestReviewRegressions:
         assert app.state.current.can_stop_recording()
 
     def test_quit_while_starting_stops_the_child(self, tmp_path):
-        app, process = self._helper._app_with_child(tmp_path)
+        app, process = _app_with_fake_child(tmp_path, FakeProcess({signal.SIGINT}))
         app.state.transition(TrayState.RECORDING_STARTING, current_capture="x")
-        app.capture_watch = MagicMock()
         app.quit()
-        process.send_signal.assert_called_once()
+        assert process.signals == [signal.SIGINT]
+        assert process.poll() is not None  # quit waited for it to exit
 
     def test_own_recording_still_shows_after_desktop_connects(self, tmp_path):
         app, _ = self._helper._app_with_child(tmp_path)
@@ -330,3 +333,83 @@ class TestReviewRegressions:
 
         assert app.state.current.state == TrayState.RECORDING_STARTING
         assert app.local_recorder.current.log is not None  # new log still open
+
+
+class FakeProcess:
+    """A child that exits on the given signals and ignores the rest."""
+
+    def __init__(self, exits_on):
+        self.exits_on = set(exits_on)
+        self.signals = []
+        self.returncode = None
+
+    def poll(self):
+        return self.returncode
+
+    def send_signal(self, sig):
+        self.signals.append(sig)
+        if sig in self.exits_on:
+            self.returncode = -int(sig)
+
+    def wait(self):
+        return self.returncode
+
+
+def _app_with_fake_child(tmp_path, process):
+    from openadapt_tray.local_record import LocalRecorder
+
+    app = _make_app()
+    app.capture_watch = MagicMock()
+    app.LOCAL_STOP_TIMEOUT_S = 0.2
+    app.LOCAL_QUIT_TIMEOUT_S = 0.2
+    app.LOCAL_TERMINATE_TIMEOUT_S = 0.2
+    app.local_recorder = LocalRecorder(
+        platform="darwin",
+        which=lambda _: "/bin/openadapt-flow",
+        popen=MagicMock(return_value=process),
+    )
+    app.local_recorder.start("login-demo", tmp_path)
+    return app, process
+
+
+class TestBoundedStop:
+    """Coordinator review: stop and quit must not leave a recorder running."""
+
+    def test_quit_while_recording_waits_for_the_recorder(self, tmp_path):
+        app, process = _app_with_fake_child(tmp_path, FakeProcess({signal.SIGINT}))
+        app._on_capture_event(TestTrayOwnedRecording()._own(tmp_path, "ready"))
+        assert app.state.current.state == TrayState.RECORDING
+        app.quit()
+        assert process.signals == [signal.SIGINT]
+        assert process.poll() is not None
+
+    def test_recorder_ignoring_ctrl_c_is_terminated_and_reported(self, tmp_path):
+        app, process = _app_with_fake_child(tmp_path, FakeProcess({signal.SIGTERM}))
+        app._on_capture_event(TestTrayOwnedRecording()._own(tmp_path, "ready"))
+
+        outcome = app._stop_local_run(app.local_recorder.current)
+
+        assert outcome == "terminated"
+        assert process.signals == [signal.SIGINT, signal.SIGTERM]
+        assert app.state.current.state == TrayState.ERROR
+        assert "ignored Ctrl-C" in app.state.current.error_message
+        assert _titles(app)[-1] == "Error"
+
+    def test_recorder_ignoring_everything_but_sigkill_is_killed(self, tmp_path):
+        app, process = _app_with_fake_child(tmp_path, FakeProcess({signal.SIGKILL}))
+        app.quit()
+        assert process.signals == [signal.SIGINT, signal.SIGTERM, signal.SIGKILL]
+        assert "killed" in app.state.current.error_message
+
+    def test_reported_stop_is_enough_while_flow_converts(self, tmp_path):
+        """Once the recorder says it stopped, conversion may take its time."""
+        app, process = _app_with_fake_child(tmp_path, FakeProcess(set()))
+        own = TestTrayOwnedRecording()._own
+        app._on_capture_event(own(tmp_path, "ready"))
+        app._on_capture_event(own(tmp_path, "stopping"))
+
+        outcome = app._stop_local_run(app.local_recorder.current)
+
+        assert outcome == "recorder_stopped"
+        assert process.signals == [signal.SIGINT]  # no escalation
+        assert app.state.current.state == TrayState.RECORDING_STOPPING

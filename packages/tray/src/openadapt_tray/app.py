@@ -22,7 +22,7 @@ import webbrowser
 
 import pystray
 
-from openadapt_tray import capture_watch
+from openadapt_tray import capture_watch, local_record
 from openadapt_tray.capture_watch import CaptureEvent, CaptureWatcher
 from openadapt_tray.config import ConfigLoadError, TrayConfig
 from openadapt_tray.desktop import DesktopLaunchError, launch_native_desktop
@@ -407,10 +407,11 @@ class TrayApplication:
 
         self.state.transition(TrayState.RECORDING_STOPPING)
         if self.local_recorder.is_running():
-            try:
-                self.local_recorder.stop()
-            except LocalRecordError as e:
-                self.state.transition(TrayState.ERROR, error_message=str(e))
+            threading.Thread(
+                target=self._stop_local_run,
+                args=(self.local_recorder.current,),
+                daemon=True,
+            ).start()
             # The capture watcher reports the outcome.
             return
         if self._watched_session is not None and not self.ipc.is_connected():
@@ -495,6 +496,45 @@ class TrayApplication:
             )
         self.state.transition(TrayState.ERROR, error_message=message)
 
+    # Ctrl-C deadlines for a tray-started recording. On quit the tray waits
+    # in place, so the deadline is shorter.
+    LOCAL_STOP_TIMEOUT_S = 30.0
+    LOCAL_QUIT_TIMEOUT_S = 15.0
+    LOCAL_TERMINATE_TIMEOUT_S = 5.0
+
+    def _stop_local_run(self, run: LocalRun, timeout_s: float | None = None) -> str:
+        """Stop a tray-started recording within a deadline.
+
+        Ctrl-C, then SIGTERM, then SIGKILL (see ``LocalRun.stop_within``). If
+        the recorder had to be forced, say so: the capture is not trustworthy.
+        """
+        outcome = run.stop_within(
+            self.LOCAL_STOP_TIMEOUT_S if timeout_s is None else timeout_s,
+            self.LOCAL_TERMINATE_TIMEOUT_S,
+        )
+        messages = {
+            local_record.STOP_TERMINATED: (
+                "The recorder ignored Ctrl-C, so the tray terminated it. "
+                "The capture may be incomplete."
+            ),
+            local_record.STOP_KILLED: (
+                "The recorder ignored Ctrl-C and SIGTERM, so the tray killed "
+                "it. The capture is incomplete."
+            ),
+            local_record.STOP_STILL_RUNNING: (
+                "The recorder did not stop, even after SIGKILL. Check for an "
+                "openadapt-flow record process and end it."
+            ),
+        }
+        message = messages.get(outcome)
+        if message is not None:
+            self.state.transition(
+                TrayState.ERROR,
+                current_capture=run.output_dir.name,
+                error_message=f"{message} See {run.log_path}.",
+            )
+        return outcome
+
     def _stop_watched_session(self, session_id: str) -> None:
         """Stop a recorder the tray did not start, via its control channel."""
         try:
@@ -518,6 +558,8 @@ class TrayApplication:
         ends.
         """
         owned = self.local_recorder.owns(event.capture_dir)
+        if owned:
+            self.local_recorder.current.recorder_stage = event.kind
         watched = event.session_id == self._watched_session
         if not owned and not watched:
             if self.ipc.is_connected() or self.local_recorder.is_running():
@@ -890,12 +932,15 @@ class TrayApplication:
 
     def quit(self) -> None:
         """Quit the application."""
-        # Stop any active recording
-        if self.state.current.is_recording():
-            self.stop_recording()
         # A tray-started recording may be alive in any state (starting, or
-        # after an error); it must not outlive the tray. Sent at most once.
-        self.local_recorder.interrupt_if_running()
+        # after an error). It must not outlive the tray, so wait here until it
+        # has stopped capturing, escalating past the deadline.
+        if self.local_recorder.is_running():
+            self._stop_local_run(
+                self.local_recorder.current, timeout_s=self.LOCAL_QUIT_TIMEOUT_S
+            )
+        elif self.state.current.is_recording():
+            self.stop_recording()
 
         # Cleanup components
         self.hosted.stop()

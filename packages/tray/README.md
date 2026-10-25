@@ -94,9 +94,11 @@ On macOS, **Start Recording** without the desktop app runs
 openadapt-flow record --backend macos --out <captures_directory>/<name> --task <name>
 ```
 
-and **Stop Recording** sends it Ctrl-C. The command's output goes to
+and **Stop Recording** sends it Ctrl-C. If the recorder hasn't stopped
+capturing 30 seconds later, the tray sends SIGTERM, then SIGKILL, and shows an
+error saying the capture may be incomplete. The command's output goes to
 `<captures_directory>/<name>.record.log`, which only you can read. Quitting
-the tray stops a recording it started. For a recording you started in a
+the tray stops a recording it started the same way, with a 15-second deadline. For a recording you started in a
 terminal, **Stop Recording** asks the recorder to stop through its local
 control channel.
 

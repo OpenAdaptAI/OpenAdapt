@@ -126,3 +126,48 @@ def test_unusable_names_are_refused(tmp_path, name):
     with pytest.raises(LocalRecordError):
         recorder.start(name, tmp_path)
     popen.assert_not_called()
+
+
+class TestStopWithin:
+    def _run(self, tmp_path, exits_on):
+        from tests.test_app_local_recording import FakeProcess
+
+        process = FakeProcess(exits_on)
+        recorder = LocalRecorder(
+            platform="darwin",
+            which=lambda _: "/bin/openadapt-flow",
+            popen=MagicMock(return_value=process),
+        )
+        return recorder.start("a", tmp_path), process
+
+    def _stop(self, run):
+        now = [0.0]
+
+        def sleep(seconds):
+            now[0] += seconds
+
+        return run.stop_within(30.0, 10.0, clock=lambda: now[0], sleep=sleep), now[0]
+
+    def test_ctrl_c_obeyed(self, tmp_path):
+        run, process = self._run(tmp_path, {signal.SIGINT})
+        assert self._stop(run) == ("exited", 0.0)
+        assert process.signals == [signal.SIGINT]
+
+    def test_ctrl_c_ignored_escalates_after_the_deadline(self, tmp_path):
+        run, process = self._run(tmp_path, {signal.SIGTERM})
+        outcome, elapsed = self._stop(run)
+        assert outcome == "terminated"
+        assert 30.0 <= elapsed < 31.0
+        assert process.signals == [signal.SIGINT, signal.SIGTERM]
+
+    def test_nothing_obeyed_is_reported(self, tmp_path):
+        run, process = self._run(tmp_path, set())
+        outcome, _ = self._stop(run)
+        assert outcome == "still_running"
+        assert process.signals == [signal.SIGINT, signal.SIGTERM, signal.SIGKILL]
+
+    def test_not_running_does_nothing(self, tmp_path):
+        run, process = self._run(tmp_path, {signal.SIGINT})
+        process.returncode = 0
+        assert self._stop(run)[0] == "not_running"
+        assert process.signals == []

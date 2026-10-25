@@ -17,12 +17,22 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Any
 
 _BACKENDS = {"darwin": "macos"}
+
+# Outcomes of LocalRun.stop_within.
+STOP_RECORDER_STOPPED = "recorder_stopped"  # the recorder stopped capturing
+STOP_EXITED = "exited"
+STOP_TERMINATED = "terminated"  # ignored Ctrl-C; SIGTERM ended it
+STOP_KILLED = "killed"  # ignored SIGTERM too; SIGKILL ended it
+STOP_STILL_RUNNING = "still_running"
+STOP_NOT_RUNNING = "not_running"
 
 
 class LocalRecordError(RuntimeError):
@@ -40,17 +50,89 @@ class LocalRun:
     # Set by the tray when the watcher reports this run's capture as saved.
     capture_saved: bool = False
     interrupted: bool = False
+    _interrupt_lock: threading.Lock = field(
+        default_factory=threading.Lock, repr=False, compare=False
+    )
 
     def interrupt(self) -> bool:
         """Send SIGINT once. A second Ctrl-C could cut finalization short."""
-        if self.interrupted or not self.is_running():
-            return False
-        try:
-            self.process.send_signal(signal.SIGINT)
-        except OSError:
-            return False
-        self.interrupted = True
-        return True
+        with self._interrupt_lock:
+            if self.interrupted or not self.is_running():
+                return False
+            try:
+                self.process.send_signal(signal.SIGINT)
+            except OSError:
+                return False
+            self.interrupted = True
+            return True
+
+    # The latest watcher stage for this run's recorder (capture_watch kinds).
+    recorder_stage: str | None = None
+
+    def recorder_stopped(self) -> bool:
+        """Return True once the watcher saw this run's recorder stop capturing."""
+        return self.recorder_stage in ("stopping", "ended")
+
+    def stop_within(
+        self,
+        interrupt_timeout_s: float = 30.0,
+        terminate_timeout_s: float = 10.0,
+        *,
+        poll_s: float = 0.1,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> str:
+        """Stop the recording, escalating if Ctrl-C is not obeyed in time.
+
+        Ctrl-C (SIGINT) first. That succeeds once the recorder reports it
+        stopped capturing, or the process exits. Finalizing and converting may
+        then take as long as they need. Past the deadline, SIGTERM, then
+        SIGKILL: a recorder that ignores Ctrl-C must not keep capturing.
+
+        Returns:
+            One of the ``STOP_*`` outcomes.
+        """
+        if not self.is_running():
+            return STOP_NOT_RUNNING
+        self.interrupt()
+        if self._wait_until(
+            lambda: self.recorder_stopped() or not self.is_running(),
+            interrupt_timeout_s,
+            poll_s,
+            clock,
+            sleep,
+        ):
+            return STOP_RECORDER_STOPPED if self.is_running() else STOP_EXITED
+        for sig, outcome in ((signal.SIGTERM, STOP_TERMINATED), (signal.SIGKILL, None)):
+            try:
+                self.process.send_signal(sig)
+            except OSError:
+                pass
+            if self._wait_until(
+                lambda: not self.is_running(),
+                terminate_timeout_s,
+                poll_s,
+                clock,
+                sleep,
+            ):
+                return outcome or STOP_KILLED
+        return STOP_STILL_RUNNING
+
+    @staticmethod
+    def _wait_until(
+        condition: Callable[[], bool],
+        timeout_s: float,
+        poll_s: float,
+        clock: Callable[[], float],
+        sleep: Callable[[float], None],
+    ) -> bool:
+        deadline = clock() + timeout_s
+        while True:
+            if condition():
+                return True
+            if clock() >= deadline:
+                return False
+            sleep(poll_s)
 
     def is_running(self) -> bool:
         """Return True while the process has not exited."""
