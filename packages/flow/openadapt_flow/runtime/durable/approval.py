@@ -130,7 +130,10 @@ class ApprovalRecord(BaseModel):
 
 
 def stored_approval_refusal(
-    approval: "ApprovalRecord", key_dir: Optional[Path]
+    approval: "ApprovalRecord",
+    key_dir: Optional[Path],
+    *,
+    root: Optional[str] = None,
 ) -> Optional[str]:
     """Why a stored resume approval isn't a verified person's, or ``None``.
 
@@ -149,6 +152,7 @@ def stored_approval_refusal(
         domain=RESUME_DOMAIN,
         payload=approval.signed_payload(),
         key_dir=key_dir,
+        root=root,
     )
     if code is not None:
         return code

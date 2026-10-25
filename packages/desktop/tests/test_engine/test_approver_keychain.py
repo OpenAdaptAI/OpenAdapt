@@ -69,25 +69,56 @@ class FakeEnclave:
 
 
 class FakeRegistry:
-    """Flow's ``approvers`` role: register overwrites, remove only a match."""
+    """Flow's signed approver roster: a self-signed root, then changes signed
+    by an approver already on it. Every signature is checked."""
 
     def __init__(self) -> None:
         self.approvers: dict[str, str] = {}
+        self.root_key: str | None = None
         self.fail = False
+        self.pin: str | None = None
 
-    def register(self, principal: str, public: str) -> None:
-        if self.fail:
-            raise ApproverKeychainError("approver_key_unusable", "Flow is too old")
-        self.approvers[principal] = public
+    @staticmethod
+    def _check(public: str, message: bytes, signature: str) -> None:
+        Ed25519PublicKey.from_public_bytes(bytes.fromhex(public)).verify(
+            bytes.fromhex(signature.removeprefix("ed25519:")), message
+        )
 
-    def unregister(self, principal: str, public: str) -> bool:
-        if self.approvers.get(principal) != public:
-            return False
-        del self.approvers[principal]
-        return True
+    def root(self) -> str | None:
+        return self.pin
+
+    def is_empty(self) -> bool:
+        return self.root_key is None
 
     def lookup(self, public: str) -> str | None:
+        if self.pin is None or self.pin != self.root_key:
+            return None
         return next((p for p, v in self.approvers.items() if v == public), None)
+
+    def init_root(self, principal, public, sign) -> None:
+        if self.fail:
+            raise ApproverKeychainError("approver_key_unusable", "Flow is too old")
+        message = b"root:" + principal.encode() + public.encode()
+        self._check(public, message, sign(message))
+        self.root_key = public
+        self.pin = public
+        self.approvers = {principal: public}
+
+    def add(self, principal, public, signed_by, sign) -> None:
+        if self.fail:
+            raise ApproverKeychainError("approver_key_unusable", "Flow refused")
+        signer = self.approvers[signed_by]
+        message = b"add:" + principal.encode() + public.encode()
+        self._check(signer, message, sign(message))
+        self.approvers[principal] = public
+
+    def remove(self, principal, public, signed_by, sign) -> None:
+        signer = self.approvers[signed_by]
+        message = b"remove:" + principal.encode() + public.encode()
+        self._check(signer, message, sign(message))
+        if public == self.root_key:
+            raise ApproverKeychainError("approver_key_unusable", "the root stays")
+        del self.approvers[principal]
 
 
 @pytest.fixture
@@ -104,9 +135,7 @@ def registry() -> FakeRegistry:
 def keychain(enclave, registry) -> ApproverKeychain:
     return ApproverKeychain(
         enclave,
-        register=registry.register,
-        unregister=registry.unregister,
-        lookup=registry.lookup,
+        roster=registry,
     )
 
 
@@ -196,7 +225,7 @@ def test_a_failed_registration_leaves_no_key_behind(keychain, registry, fake_key
 
 
 def test_a_mac_without_a_secure_enclave_is_sent_to_the_terminal(registry):
-    keychain = ApproverKeychain(FakeEnclave(available=False), register=registry.register)
+    keychain = ApproverKeychain(FakeEnclave(available=False), roster=registry)
 
     with pytest.raises(ApproverKeychainError) as raised:
         keychain.setup()
@@ -205,17 +234,25 @@ def test_a_mac_without_a_secure_enclave_is_sent_to_the_terminal(registry):
     assert keychain.status()["supported"] is False
 
 
-def test_a_stored_but_unregistered_key_is_registered_again_after_a_prompt(
+def _wipe_roster(registry):
+    registry.approvers.clear()
+    registry.root_key = None
+    registry.pin = None
+
+
+def test_a_stored_key_off_the_roster_starts_it_again_only_behind_a_prompt(
     keychain, enclave, registry
 ):
     stored = keychain.setup()
-    registry.approvers.clear()
+    _wipe_roster(registry)  # the roster file was removed
     enclave.prompts.clear()
 
     assert keychain.status()["set_up"] is False
     keychain.setup()
     assert registry.approvers == {"desktop-approver": stored.public_key}
-    assert enclave.prompts == ["confirm your approver key"]
+    assert registry.pin == stored.public_key
+    # The root signature is made behind the one prompt: that is the proof.
+    assert enclave.prompts == ["set up your approver key"]
 
 
 def test_a_planted_keychain_item_is_never_registered_without_presence(
@@ -226,7 +263,7 @@ def test_a_planted_keychain_item_is_never_registered_without_presence(
     from openadapt_desktop.approver_keychain import StoredKey
 
     keychain.setup()
-    registry.approvers.clear()
+    _wipe_roster(registry)
     planted = StoredKey.from_json(fake_keyring.get_password(SERVICE_NAME, ACCOUNT))
     # The planted item claims Touch ID but the person doesn't confirm.
     enclave.answer = "cancel"
@@ -234,7 +271,7 @@ def test_a_planted_keychain_item_is_never_registered_without_presence(
     with pytest.raises(ApproverKeychainError) as raised:
         keychain.setup()
     assert raised.value.code == "approver_presence_refused"
-    assert registry.approvers == {}
+    assert registry.approvers == {} and registry.pin is None
 
     # An item that admits it has no presence check is refused outright.
     fake_keyring.set_password(
@@ -247,6 +284,29 @@ def test_a_planted_keychain_item_is_never_registered_without_presence(
         keychain.setup()
     assert raised.value.code == "approver_key_unusable"
     assert registry.approvers == {}
+
+
+def test_a_roster_this_mac_didnt_start_needs_an_approver_to_add_the_key(
+    keychain, enclave, registry, fake_keyring
+):
+    """Desktop never adopts the root of a roster it finds."""
+
+    import secrets as _secrets
+
+    other = _secrets.token_hex(32)
+    registry.root_key = other
+    registry.pin = other
+    registry.approvers = {"front-desk": other}
+
+    with pytest.raises(ApproverKeychainError) as raised:
+        keychain.setup()
+
+    assert raised.value.code == "approver_needs_adding"
+    assert "openadapt-flow jit approver add" in str(raised.value)
+    assert set(registry.approvers) == {"front-desk"}
+    # The key is kept, so the setup finishes once an approver adds it.
+    assert fake_keyring.get_password(SERVICE_NAME, ACCOUNT) is not None
+    assert keychain.status()["set_up"] is False
 
 
 # -- signing -----------------------------------------------------------------------
@@ -285,10 +345,10 @@ def test_no_key_means_no_signature(keychain):
 
 
 def test_a_key_stored_without_presence_isnt_used(enclave, registry, fake_keyring):
-    ApproverKeychain(enclave, require_presence=False, register=registry.register).setup()
+    ApproverKeychain(enclave, require_presence=False, roster=registry).setup()
 
     with pytest.raises(ApproverKeychainError) as raised:
-        ApproverKeychain(enclave, register=registry.register).sign(b"m", reason="r")
+        ApproverKeychain(enclave, roster=registry).sign(b"m", reason="r")
 
     assert raised.value.code == "approver_key_unusable"
 
@@ -296,24 +356,34 @@ def test_a_key_stored_without_presence_isnt_used(enclave, registry, fake_keyring
 # -- rotation and removal ----------------------------------------------------------
 
 
-def test_rotation_registers_the_new_key_and_retires_the_old(keychain, enclave, registry):
+def test_rotation_adds_the_new_key_with_the_old_keys_signature(
+    keychain, enclave, registry
+):
     old = keychain.setup()
+    enclave.prompts.clear()
 
     new = keychain.setup(replace=True)
 
     assert new.public_key != old.public_key
-    assert registry.approvers == {"desktop-approver": new.public_key}
+    assert registry.approvers[new.principal] == new.public_key
+    # The root stays on the roster; it is no longer used here.
+    assert registry.approvers["desktop-approver"] == old.public_key
+    assert enclave.prompts == [
+        "set up your new approver key",
+        "approve your new approver key",
+    ]
     _public, signature = keychain.sign(b"m", reason="approve this save")
     _verify(new.public_key, b"m", signature)
 
 
-def test_rotation_to_a_new_name_unregisters_the_old_name(keychain, registry):
-    old = keychain.setup()
+def test_rotating_again_retires_the_previous_non_root_key(keychain, registry):
+    keychain.setup()
+    second = keychain.setup(replace=True)
 
-    new = keychain.setup("front-desk", replace=True)
+    third = keychain.setup(replace=True)
 
-    assert registry.approvers == {"front-desk": new.public_key}
-    assert old.public_key not in registry.approvers.values()
+    assert second.principal not in registry.approvers
+    assert registry.approvers[third.principal] == third.public_key
 
 
 def test_a_failed_rotation_keeps_the_old_key_working(keychain, registry):
@@ -327,17 +397,31 @@ def test_a_failed_rotation_keeps_the_old_key_working(keychain, registry):
     assert registry.approvers == {"desktop-approver": old.public_key}
 
 
-def test_removal_unregisters_and_deletes_the_key(keychain, registry, fake_keyring):
+def test_removing_a_non_root_key_takes_it_off_the_roster(keychain, enclave, registry, fake_keyring):
     keychain.setup()
+    second = keychain.setup(replace=True)
+    enclave.prompts.clear()
 
     assert keychain.remove() is True
 
-    assert registry.approvers == {}
+    assert second.principal not in registry.approvers
+    assert enclave.prompts == ["remove your approver key"]
     assert fake_keyring.get_password(SERVICE_NAME, ACCOUNT) is None
     assert keychain.remove() is False
     with pytest.raises(ApproverKeychainError) as raised:
         keychain.sign(b"m", reason="r")
     assert raised.value.code == "approver_key_missing"
+
+
+def test_removing_the_root_key_deletes_it_here_and_keeps_the_root(
+    keychain, registry, fake_keyring
+):
+    root = keychain.setup()
+
+    assert keychain.remove() is True
+
+    assert registry.approvers == {"desktop-approver": root.public_key}
+    assert fake_keyring.get_password(SERVICE_NAME, ACCOUNT) is None
 
 
 # -- Run it: Flow asks Desktop to sign over a pipe ---------------------------------
@@ -555,7 +639,8 @@ def test_the_window_sets_up_rotates_and_removes_the_key(tmp_path, keychain, regi
     assert rotated["fingerprint"] != first["fingerprint"]
     removed = dispatcher.dispatch("remove_approver_key", {})
     assert removed["removed"] is True and removed["set_up"] is False
-    assert registry.approvers == {}
+    # The rotated-in key is off the roster; the root stays.
+    assert set(registry.approvers) == {"desktop-approver"}
     assert [event for event, _ in audit.events] == [
         "approver_key_setup",
         "approver_key_setup",
@@ -577,13 +662,13 @@ def test_a_cancelled_setup_reaches_the_window(tmp_path, keychain, enclave):
 
 
 def test_another_computer_gets_the_terminal_steps(tmp_path, registry):
-    keychain = ApproverKeychain(FakeEnclave(available=False), register=registry.register)
+    keychain = ApproverKeychain(FakeEnclave(available=False), roster=registry)
     dispatcher, _audit = _dispatcher(tmp_path, keychain)
 
     status = dispatcher.dispatch("get_approver_key", {})
 
     assert status["supported"] is False
-    assert "openadapt-flow jit register --role approver" in status["instructions"]
+    assert "openadapt-flow jit approver init" in status["instructions"]
 
 
 def test_the_key_commands_answer_while_a_run_waits_and_stay_off_the_agent_socket():

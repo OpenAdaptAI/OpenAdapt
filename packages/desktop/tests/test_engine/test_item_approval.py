@@ -594,8 +594,8 @@ def test_bridge_sends_no_answer_without_an_approver_key(monkeypatch, tmp_path: P
     key_path = str(module.approver_key_path())
     assert f"openadapt-flow jit keygen --out {key_path}" in message
     assert "OPENADAPT_JIT_KEY_PASSPHRASE" in message
-    assert "openadapt-flow jit register --role approver --principal" in message
-    assert "--public-key" in message
+    assert "openadapt-flow jit approver init --principal" in message
+    assert "OPENADAPT_APPROVER_ROOT" in message
     assert calls == []  # never an unsigned answer
 
 
@@ -650,8 +650,9 @@ def test_approver_key_setup_is_encrypted_private_and_stable(
     assert again.created is False
     assert again.public_key == approver_key.public_key
     command = again.register_command("front-desk")
-    assert "jit register --role approver --principal front-desk" in command
-    assert approver_key.public_key in command
+    # The Desktop key starts the signed roster as its root.
+    assert "jit approver init --principal front-desk" in command
+    assert str(approver_key.key_path) in command
 
 
 def test_the_portal_gets_its_own_approver_key(tmp_path: Path, approver_key) -> None:
@@ -665,7 +666,11 @@ def test_the_portal_gets_its_own_approver_key(tmp_path: Path, approver_key) -> N
     portal = setup_approver_key("portal")
     assert portal.key_path != approver_key.key_path
     assert portal.public_key != approver_key.public_key
-    assert "--principal decision-portal" in portal.register_command()
+    add = portal.register_command(root=approver_key)
+    # The portal key is added with the Desktop (root) key's signature.
+    assert "jit approver add --principal decision-portal" in add
+    assert f"--signer-key {approver_key.key_path}" in add
+    assert f"--approver-root {approver_key.public_key}" in add
     env = portal_approver_environment()
     assert env["OPENADAPT_PORTAL_APPROVER_KEY"] == str(portal.key_path)
     desktop = approver_key_environment()

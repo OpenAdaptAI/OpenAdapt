@@ -141,13 +141,19 @@ How it works:
   removes it. See `openadapt_desktop/approver_keychain.py`.
 - Elsewhere, set the key up once per computer, at a terminal. With
   `OPENADAPT_JIT_KEY_PASSPHRASE` set, run `openadapt-flow jit keygen --out
-  ~/.openadapt/approver/desktop-approver.pem`, then a person registers the
-  public key it prints: `openadapt-flow jit register --role approver
-  --principal NAME --public-key HEX`. Desktop then needs the same
-  passphrase in its environment. `openadapt-desktop approver-key setup` does
-  the keygen step instead and keeps a random passphrase in the OS keychain;
-  the register step is the same. Until a key is set up and registered,
-  Desktop sends no answer, and Run it shows these steps.
+  ~/.openadapt/approver/desktop-approver.pem`, then start the signed
+  approver roster with it as the root: `openadapt-flow jit approver init
+  --principal NAME --key ~/.openadapt/approver/desktop-approver.pem`. Start
+  Desktop with `OPENADAPT_APPROVER_ROOT` set to that key's public key, which
+  pins the roster's root for Desktop's runs. Each later approver key (the
+  portal's, another person's) is added with an approver's signature:
+  `openadapt-flow jit approver add --principal NAME --public-key HEX
+  --signer-key ROOT_KEY --approver-root ROOT_HEX`. Nothing else adds an
+  approver: editing a file in the key directory, or pointing a run at
+  another key directory, counts for nothing. `openadapt-desktop
+  approver-key setup` makes both keys, keeps their passphrases in the OS
+  keychain and prints these commands. Until a key is set up and on the
+  roster, Desktop sends no answer, and Run it shows these steps.
 - A late answer (the run already stopped waiting) is never turned into a
   save: Desktop doesn't resume the run, and says to run the item again.
 - Before the practice item runs, Desktop calls `openadapt-flow qualify drills

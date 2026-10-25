@@ -49,9 +49,7 @@ def queue(tmp_path: Path, enclave):
     registry = FakeRegistry()
     keychain = ApproverKeychain(
         enclave,
-        register=registry.register,
-        unregister=registry.unregister,
-        lookup=registry.lookup,
+        roster=registry,
     )
     keychain.setup()
     enclave.prompts.clear()
@@ -644,9 +642,7 @@ def test_a_touch_id_mac_without_a_key_never_signs_with_a_file_key(tmp_path, monk
     registry = FakeRegistry()
     keychain = ApproverKeychain(  # supported, nothing set up
         enclave,
-        register=registry.register,
-        unregister=registry.unregister,
-        lookup=registry.lookup,
+        roster=registry,
     )
     disp = EngineDispatcher(
         config,

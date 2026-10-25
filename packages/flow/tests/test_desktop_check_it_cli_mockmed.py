@@ -44,6 +44,7 @@ from openadapt_flow.backends.playwright_backend import PlaywrightBackend  # noqa
 from openadapt_flow.compiler import compile_recording  # noqa: E402
 from openadapt_flow.ir import RunReport, Workflow  # noqa: E402
 from openadapt_flow.jit.authority import KEY_PASSPHRASE_ENV  # noqa: E402
+from openadapt_flow.approval_mode.approver_roster import ROOT_ENV  # noqa: E402
 from openadapt_flow.jit.lifecycle import KEY_DIR_ENV  # noqa: E402
 from openadapt_flow.mockmed.fault_server import serve  # noqa: E402
 from openadapt_flow.qualify.environment import (  # noqa: E402
@@ -195,6 +196,7 @@ def check_it(tmp_path_factory: pytest.TempPathFactory):
             "OPENADAPT_BUNDLE_KEY",
             KEY_DIR_ENV,
             KEY_PASSPHRASE_ENV,
+            ROOT_ENV,
         )
     }
     os.environ["OPENADAPT_HOME"] = str(home)
@@ -205,6 +207,8 @@ def check_it(tmp_path_factory: pytest.TempPathFactory):
     os.environ[KEY_DIR_ENV] = str(key_dir)
     os.environ[KEY_PASSPHRASE_ENV] = approver_keys.PASSPHRASE
     approver_key, _signer = approver_keys.provision(key_dir)
+    # Desktop's runs pin the roster's root (approval_mode/approver_roster).
+    os.environ[ROOT_ENV] = approver_keys.root_of(key_dir)
     env = {
         **os.environ,
         "OPENADAPT_HOME": str(home),

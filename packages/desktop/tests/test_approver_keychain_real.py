@@ -39,11 +39,17 @@ pytestmark = [
 
 @pytest.fixture
 def enclave():
-    from openadapt_desktop.approver_keychain import MacEnclave
+    from openadapt_desktop.approver_keychain import ApproverKeychainError, MacEnclave
 
     real = MacEnclave()
     if not real.available():
         pytest.skip("this Mac has no Secure Enclave")
+    try:
+        real.create(require_presence=False)
+    except ApproverKeychainError as exc:
+        if exc.code == "approver_presence_refused":
+            pytest.skip("this Mac is locked; unlock it to run the real Secure Enclave tests")
+        raise
     return real
 
 
@@ -66,22 +72,13 @@ def test_setup_sign_rotate_and_remove_with_the_real_keychain(enclave, account):
 
     from openadapt_desktop.approver_keychain import ApproverKeychain, ApproverKeychainError
     from openadapt_desktop.auth.store import SERVICE_NAME
+    from tests.test_engine.test_approver_keychain import FakeRegistry
 
-    approvers: dict[str, str] = {}
-
-    def unregister(principal: str, public: str) -> bool:
-        if approvers.get(principal) != public:
-            return False
-        del approvers[principal]
-        return True
-
+    # The Secure Enclave and the login Keychain are real; the roster is the
+    # tests' signature-checking stand-in (Flow's own is tested in Flow).
+    roster = FakeRegistry()
     keychain = ApproverKeychain(
-        enclave,
-        account=account,
-        require_presence=False,
-        register=approvers.__setitem__,
-        unregister=unregister,
-        lookup=lambda public: next((p for p, v in approvers.items() if v == public), None),
+        enclave, account=account, require_presence=False, roster=roster
     )
 
     first = keychain.setup()
@@ -93,7 +90,7 @@ def test_setup_sign_rotate_and_remove_with_the_real_keychain(enclave, account):
 
     second = keychain.setup(replace=True)
     assert second.public_key != first.public_key
-    assert approvers == {"desktop-approver": second.public_key}
+    assert roster.approvers[second.principal] == second.public_key
 
     assert keychain.remove() is True
     assert keyring.get_password(SERVICE_NAME, account) is None

@@ -3154,15 +3154,62 @@ def _approval_wait_seconds(args: argparse.Namespace) -> float:
     return max(0.0, min(float(raw), MAX_APPROVAL_WAIT_S))
 
 
+def _deployment_approvers(args: argparse.Namespace) -> Any:
+    """The deployment config's ``approvers`` section, or ``None``."""
+
+    config = getattr(args, "config", None)
+    if not config:
+        return None
+    from openadapt_flow.deployment import load_deployment
+
+    try:
+        return load_deployment(config, allow_unresolved=True).approvers
+    except (OSError, ValueError):
+        return None
+
+
 def _args_key_dir(args: argparse.Namespace) -> Optional[Path]:
     """The ``--key-dir`` the operator chose, or ``None`` for the default.
 
     Never read from a run directory: the approval files there are writable by
     any process, so a path stored in them would let a forger pick the registry.
+    A deployment config that pins ``approvers.key_dir`` names the only key
+    directory a run accepts: ``--key-dir`` elsewhere is refused.
     """
 
     key_dir = getattr(args, "key_dir", None)
+    pinned = _deployment_approvers(args)
+    if pinned is not None and pinned.key_dir:
+        want = Path(pinned.key_dir).expanduser().resolve()
+        if key_dir and Path(key_dir).expanduser().resolve() != want:
+            raise SystemExit(
+                f"REFUSED (approver_key_dir_mismatch): the deployment config pins "
+                f"the approver key directory {want}; --key-dir names another. "
+                "Nothing was executed."
+            )
+        return want
     return Path(key_dir) if key_dir else None
+
+
+def _args_approver_root(args: argparse.Namespace) -> Optional[str]:
+    """The approver root this command pins (approval_mode/approver_roster).
+
+    The deployment config's ``approvers.root_public_key``, ``--approver-root``
+    and ``OPENADAPT_APPROVER_ROOT``; two that disagree are refused.
+    """
+
+    from openadapt_flow.approval_mode.approver_roster import RosterError, pinned_root
+
+    pinned = _deployment_approvers(args)
+    try:
+        return pinned_root(
+            getattr(args, "approver_root", None),
+            config_root=pinned.root_public_key if pinned is not None else None,
+        )
+    except RosterError as exc:
+        raise SystemExit(
+            f"REFUSED ({exc.code}): {exc}. Nothing was executed."
+        ) from None
 
 
 def _approver_settings(args: argparse.Namespace):
@@ -3226,9 +3273,13 @@ def _prepare_approval_store(
         ItemApprovalStore,
     )
 
-    store = ItemApprovalStore(run_dir, key_dir=_args_key_dir(args))
+    store = ItemApprovalStore(
+        run_dir, key_dir=_args_key_dir(args), approver_root=_args_approver_root(args)
+    )
     loaded, approver = _approver_settings(args)
     try:
+        if record_initiator:
+            store.write_approver_root()
         if loaded is not None and loaded.signed is not None:
             store.write_grant(loaded.signed)
         elif loaded is not None and loaded.refusal is None:
@@ -4106,7 +4157,9 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         stored = store.read_approval()
         if stored is not None:
             code = stored_approval_refusal(
-                stored, _args_key_dir(args) or default_key_dir()
+                stored,
+                _args_key_dir(args) or default_key_dir(),
+                root=_args_approver_root(args),
             )
             if code is not None:
                 print(
@@ -4417,11 +4470,11 @@ def _approver_signer(args: argparse.Namespace, *, method: str) -> Any:
             "jit register --role approver."
         )
         return None
-    key_dir = (
-        Path(args.key_dir) if getattr(args, "key_dir", None) else default_key_dir()
-    )
+    key_dir = _args_key_dir(args) or default_key_dir()
     try:
-        return load_signer(key_path, key_dir, method=method)  # type: ignore[arg-type]
+        return load_signer(  # type: ignore[arg-type]
+            key_path, key_dir, method=method, root=_args_approver_root(args)
+        )
     except AttestationRefused as exc:
         print(f"Approval refused ({exc.code}): {exc}")
         return None
@@ -4582,7 +4635,11 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
     verb = args.item_approval_cmd
     run_dir = Path(args.run_dir)
     key_dir = getattr(args, "key_dir", None)
-    store = ItemApprovalStore(run_dir, key_dir=Path(key_dir) if key_dir else None)
+    store = ItemApprovalStore(
+        run_dir,
+        key_dir=Path(key_dir) if key_dir else None,
+        approver_root=getattr(args, "approver_root", None),
+    )
     if verb == "show":
         rows = [request_summary(store, request) for request in store.requests()]
         if not args.all:
@@ -4678,10 +4735,18 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
             )
         try:
             if public_key:
-                signer = stdio_signer(public_key, store.key_directory(), method=method)
+                signer = stdio_signer(
+                    public_key,
+                    store.key_directory(),
+                    method=method,
+                    root=store.approver_root,
+                )
             else:
                 signer = load_signer(
-                    args.approver_key, store.key_directory(), method=method
+                    args.approver_key,
+                    store.key_directory(),
+                    method=method,
+                    root=store.approver_root,
                 )
         except AttestationRefused as exc:
             return refuse(exc.code, str(exc))
@@ -7641,14 +7706,38 @@ def _add_approver_key_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "--key-dir",
         default=None,
-        help="Key directory with principals.json (default $OPENADAPT_JIT_KEY_DIR "
-        "or ~/.openadapt/jit)",
+        help="Key directory with the approver roster (default "
+        "$OPENADAPT_JIT_KEY_DIR or ~/.openadapt/jit)",
+    )
+    p.add_argument(
+        "--approver-root",
+        default=None,
+        metavar="HEX",
+        help=(
+            "The root approver key (64 hex) this run trusts: a person's answer "
+            "counts only when its signer is on the signed approver roster this "
+            "key vouches for. Also set by the deployment config's "
+            "approvers.root_public_key or OPENADAPT_APPROVER_ROOT; without one, "
+            "a person's answer is refused"
+        ),
     )
 
 
 def _add_approval_flags(p: argparse.ArgumentParser) -> None:
     """Add the per-item approval flags to ``run``, ``resume`` and ``run-case``."""
 
+    p.add_argument(
+        "--approver-root",
+        default=None,
+        metavar="HEX",
+        help=(
+            "The root approver key (64 hex) this run trusts: a person's answer "
+            "counts only when its signer is on the signed approver roster this "
+            "key vouches for. Also set by the deployment config's "
+            "approvers.root_public_key or OPENADAPT_APPROVER_ROOT; without one, "
+            "a person's answer is refused"
+        ),
+    )
     p.add_argument(
         "--key-dir",
         default=None,

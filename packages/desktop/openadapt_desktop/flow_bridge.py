@@ -543,7 +543,16 @@ def _subprocess_env() -> dict[str, str]:
     that package's normal ``sys.executable -m playwright`` call in a freeze.
     """
 
-    return dict(os.environ)
+    env = dict(os.environ)
+    if not env.get("OPENADAPT_APPROVER_ROOT"):
+        # The approver root this Mac set up behind Touch ID: Flow checks every
+        # person's answer against the roster it vouches for.
+        from openadapt_desktop.approver_keychain import pinned_root
+
+        root = pinned_root()
+        if root:
+            env["OPENADAPT_APPROVER_ROOT"] = root
+    return env
 
 
 def _safe_command_for_log(cmd: list[str]) -> str:

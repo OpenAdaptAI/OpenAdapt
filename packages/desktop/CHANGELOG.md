@@ -15,6 +15,7 @@
 ### Bug Fixes
 
 - **desktop**: a locked Mac isn't a Mac without a Secure Enclave
+- **desktop**: the Touch ID setup signs the approver roster's root behind its one prompt and pins that root for Desktop's runs; a key rotation is signed by the old key, and a roster this Mac didn't start needs an approver to add the key
 - **desktop**: re-register a stored approver key only after it opens behind Touch ID
 - **desktop**: a Mac that can keep the key behind Touch ID never falls back to a terminal-made key
 - **desktop**: a stop card that changes during the Touch ID prompt changes nothing
@@ -26,7 +27,7 @@
 
 ### Bug Fixes
 
-- a person's approval needs a registered approver key's signature. Set the key up from a terminal (`jit keygen`, then `jit register --role approver`); an approval that no registered key signed is refused.
+- a person's approval needs the signature of a key on the signed approver roster, whose root the run pins (`OPENADAPT_APPROVER_ROOT` or the deployment config). Set the key up from a terminal (`jit keygen`, then `jit approver init`); every later approver is added with an approver's signature (`jit approver add`). An approval from a key not on the pinned roster is refused.
 - security updates to locked dependencies (pillow 13.0.0, certifi, setuptools, rustls-webpki, webpki-root-certs)
 
 

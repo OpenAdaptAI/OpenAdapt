@@ -96,46 +96,80 @@ openadapt-flow item-approval decline RUN_DIR ... --reason wrong_values
 
 ### The approver key
 
-A person's answer carries an Ed25519 signature over the whole answer, by a
-key registered under `approvers` in the key directory's `principals.json`
-(`$OPENADAPT_JIT_KEY_DIR`, default `~/.openadapt/jit`). The run checks the
-signature on every answer, including an answer file written around the
-command. Each route signs with its own key:
+A person's answer carries an Ed25519 signature over the whole answer. The
+signer must be on the **signed approver roster** (`approvers.json` in the
+key directory, `$OPENADAPT_JIT_KEY_DIR`, default `~/.openadapt/jit`), and the
+run must **pin the roster's root**. The run checks both on every answer,
+including an answer file written around the command
+(`approval_mode/approver_roster.py`).
 
-- Desktop's Run it signs with the Desktop approver key.
+- **The roster.** Its first entry is the root approver key, signed by
+  itself. Every later change, adding or removing an approver, is signed by
+  an approver already on the roster. Editing the file adds nobody: an entry
+  without a valid signature from a current approver counts for nothing, and
+  neither does anything after it. `principals.json` no longer lists
+  approvers, and `jit register` no longer registers one.
+- **The pin.** A run names the root approver key it trusts. The sources are
+  the deployment config's `approvers.root_public_key`, `--approver-root` or
+  `OPENADAPT_APPROVER_ROOT`. If two of them disagree, the run is refused.
+  The run records the root and the key directory in its own run directory
+  when it starts. After that, an `item-approval` answer or a resume that
+  names another root or key directory is refused, and so is a pin planted
+  in the run directory before the run. A deployment config can also pin
+  `approvers.key_dir`; a run given another `--key-dir` is then refused.
+  Without a pin, a person's answer is refused (`approver_root_unpinned`).
+- **The first approver.** On a Mac, Desktop sets it up behind Touch ID: the
+  root is Desktop's approver key, signed after a presence prompt. Elsewhere,
+  a person starts the roster with `openadapt-flow jit approver init`, and
+  the deployment config pins its root.
+
+Each route signs with its own key:
+
+- **Desktop's Run it** signs with the Desktop approver key.
   - On a Mac, a person sets it up in the app, from the approval screen or
     Settings, with one Touch ID or login-password prompt. The key is sealed
-    to a Secure Enclave key that asks for Touch ID or the password on every
-    use, and Desktop registers its public key under `approvers` itself. Flow
-    never sees the key: Desktop runs `item-approval approve|decline` with
-    `--approver-signer stdio --approver-public-key HEX`, Flow writes the
-    exact bytes to sign on stdout, and Desktop checks that they are the
-    person's answer, asks for Touch ID, and writes the signature back on
-    stdin. A cancelled prompt or any other failure is a refusal, and Flow
-    records nothing.
+    to a Secure Enclave key that asks for presence on every use. Setup signs
+    the roster's root with it behind that prompt (or, when a roster exists,
+    an approver adds it). Flow never sees the key: Desktop runs
+    `item-approval approve|decline` with `--approver-signer stdio
+    --approver-public-key HEX`. Flow writes the exact bytes to sign on
+    stdout; Desktop checks that they are the person's answer, asks for
+    Touch ID, and writes the signature back on stdin. A cancelled prompt or
+    any other failure is a refusal, and Flow records nothing.
   - On Windows and Linux, `openadapt-desktop approver-key setup` creates it,
-    keeps the encrypted key in an owner-only file and its passphrase in the OS
-    keychain, and prints the public key for a person to register.
-- The decision portal signs with the key at `OPENADAPT_PORTAL_APPROVER_KEY`
+    keeps the encrypted key in an owner-only file and its passphrase in the
+    OS keychain, and prints the `jit approver` commands that put it on the
+    roster.
+- **The decision portal** signs with the key at `OPENADAPT_PORTAL_APPROVER_KEY`
   after the person answered on their phone. Without it, the portal records
-  no answer.
-- At a terminal, a person passes their own key with `--approver-key`. The
+  no answer. Its key is added to the roster like any other approver.
+- **At a terminal**, a person passes their own key with `--approver-key`. The
   key's passphrase comes from `OPENADAPT_JIT_KEY_PASSPHRASE`, never from the
   command line.
 
-Create a key with `openadapt-flow jit keygen --out KEY.pem` (with the
-passphrase variable set) and have a person register it at a terminal:
+To start a roster and add an approver:
 
 ```bash
-openadapt-flow jit register --role approver --principal front-desk \
-  --public-key PUBLIC_KEY_HEX
+openadapt-flow jit keygen --out ROOT.pem
+openadapt-flow jit approver init --principal front-desk --key ROOT.pem
+openadapt-flow jit approver add --principal night-desk \
+  --public-key PUBLIC_KEY_HEX --signer-key ROOT.pem --approver-root ROOT_HEX
 ```
 
-An approver key holds no other role, and an approver id that names an agent
-or model is refused. The run refuses an answer signed by an unregistered key,
-an agent's key, or the other route's key, an answer changed after it was
-signed, and an answer signed by whoever started the run. Keep the key
-directory and the approver keys away from the agents the run governs.
+Neither command asks for a terminal or a typed confirmation: a change counts
+because an approver signed it.
+
+The run also refuses:
+- a key that holds another role, or an approver id that names an agent or
+  model;
+- an answer signed by the other route's key;
+- an answer changed after it was signed;
+- an answer signed by whoever started the run.
+
+Keep the key directory, the deployment config and the approver keys away
+from the agents the run governs. This pins the runs a deployment governs. A
+process that can rewrite the deployment config itself, or that starts its
+own run with its own pin, is outside it.
 
 The report's `approval` block lists every answer as codes and digests: no
 values, no screenshot and no form state. An item is `approved` only when a

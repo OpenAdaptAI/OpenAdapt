@@ -310,6 +310,9 @@ class GuardedSave:
     #: a person's signed answer. ``None``: ``$OPENADAPT_JIT_KEY_DIR`` or
     #: ``~/.openadapt/jit``. Keep it away from the agent this guard governs.
     key_dir: Optional[Path] = None
+    #: The approver root this guard pins (approval_mode/approver_roster).
+    #: ``None``: ``$OPENADAPT_APPROVER_ROOT``.
+    approver_root: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.approval not in APPROVAL_MODES:
@@ -520,7 +523,9 @@ class Guard:
         from openadapt_flow.approval_mode.model import ApprovalMode
         from openadapt_flow.approval_mode.switch import canonical_json
 
-        store = ItemApprovalStore(self.dir, key_dir=self.owner.key_dir)
+        store = ItemApprovalStore(
+            self.dir, key_dir=self.owner.key_dir, approver_root=self.owner.approver_root
+        )
         if self._request is None:
             if not screenshot_png:
                 raise GuardRefused(

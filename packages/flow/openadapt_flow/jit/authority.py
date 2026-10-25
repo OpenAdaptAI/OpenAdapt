@@ -309,6 +309,11 @@ def register_principal(
 ) -> PrincipalRegistry:
     """Add a key to the registry. A person does this (``jit register``)."""
 
+    if role == "approver":
+        raise AuthorityError(
+            "approvers are on the signed approver roster: an approver adds "
+            "one with openadapt-flow jit approver add"
+        )
     registry = PrincipalRegistry.load(key_dir)
     field_name = _ROLE_FIELDS.get(role)
     if field_name is None:

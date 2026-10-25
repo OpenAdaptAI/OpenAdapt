@@ -536,29 +536,23 @@ def flow_rearm_api() -> dict[str, Any] | None:
 
 
 def registered_approver_keys() -> dict[str, str]:
-    """Flow's registered approvers as {name: base64 raw Ed25519 public key}.
+    """The approvers on the signed roster this Mac pins, as base64 keys.
 
-    The keys a signed re-arm is verified against (``approvers`` in the key
-    directory's ``principals.json``). Empty when Flow or the registry is
-    unavailable, so a re-arm then counts for nothing.
+    ``{name: base64 raw Ed25519 public key}``, from Flow's
+    ``approver_roster.approver_keys_b64`` with Desktop's pinned root. A signed
+    re-arm is verified against these. Empty when Flow, the roster or the pin
+    is unavailable, so a re-arm then counts for nothing.
     """
 
-    import base64
-
     try:
-        from openadapt_flow.jit.authority import PrincipalRegistry
+        from openadapt_flow.approval_mode.approver_roster import approver_keys_b64
         from openadapt_flow.jit.lifecycle import default_key_dir
 
-        approvers = PrincipalRegistry.load(default_key_dir()).approvers
+        from openadapt_desktop.approver_keychain import pinned_root
+
+        return approver_keys_b64(default_key_dir(), pinned_root())
     except Exception:
         return {}
-    keys = {}
-    for name, public in dict(approvers).items():
-        try:
-            keys[str(name)] = base64.b64encode(bytes.fromhex(public)).decode("ascii")
-        except ValueError:
-            continue
-    return keys
 
 
 def _summarize(events: Any) -> Any:

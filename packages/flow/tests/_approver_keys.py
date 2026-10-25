@@ -1,9 +1,12 @@
 """Provision a registered approver key for tests that answer as a person.
 
 A person's answer to a save, and a durable resume approval, count only when a
-key registered under ``approvers`` signs them
-(:mod:`openadapt_flow.approval_mode.human_attestation`). Tests that play the
-person use this throwaway key directory; agents in real use never hold it.
+key on the signed approver roster signs them and the run pins that roster's
+root (:mod:`openadapt_flow.approval_mode.approver_roster`). Tests that play the
+person use this throwaway key directory: the first key provisioned there is
+the roster's root, later ones are added with the root's signature, and the
+fixture pins the root in ``OPENADAPT_APPROVER_ROOT``. Agents in real use never
+hold these keys.
 """
 
 from __future__ import annotations
@@ -18,15 +21,23 @@ from openadapt_flow.approval_mode.human_attestation import (
     ApproverSigner,
     load_signer,
 )
+from openadapt_flow.approval_mode.approver_roster import (
+    ROOT_ENV,
+    add_approver,
+    file_key_signer,
+    init_root,
+)
 from openadapt_flow.jit.authority import (
     KEY_PASSPHRASE_ENV,
     generate_encrypted_key,
-    register_principal,
+    load_encrypted_key,
 )
 from openadapt_flow.jit.lifecycle import KEY_DIR_ENV
 
 PASSPHRASE = "approver-test-passphrase"
 _CURRENT: list[ApproverSigner] = []
+#: key_dir -> (root principal, root private key, root public hex)
+_ROOTS: dict[Path, tuple[str, Any, str]] = {}
 
 
 def provision(
@@ -40,10 +51,36 @@ def provision(
     env = {KEY_PASSPHRASE_ENV: PASSPHRASE}
     key_path = key_dir / f"{principal_id.replace(':', '_')}.approver.pem"
     public = generate_encrypted_key(key_path, env=env)
-    register_principal(
-        key_dir, role="approver", principal_id=principal_id, public_key_hex=public
+    key = load_encrypted_key(key_path, env=env)
+    root = _ROOTS.get(Path(key_dir))
+    if root is None:
+        init_root(
+            key_dir,
+            principal=principal_id,
+            public_key=public,
+            sign=file_key_signer(key),
+        )
+        _ROOTS[Path(key_dir)] = (principal_id, key, public)
+        root_public = public
+    else:
+        root_principal, root_key, root_public = root
+        add_approver(
+            key_dir,
+            root_public,
+            principal=principal_id,
+            public_key=public,
+            signed_by=root_principal,
+            sign=file_key_signer(root_key),
+        )
+    return key_path, load_signer(  # type: ignore[arg-type]
+        key_path, key_dir, method=method, env=env, root=root_public
     )
-    return key_path, load_signer(key_path, key_dir, method=method, env=env)  # type: ignore[arg-type]
+
+
+def root_of(key_dir: Path) -> str:
+    """The roster root :func:`provision` started in ``key_dir`` (hex)."""
+
+    return _ROOTS[Path(key_dir)][2]
 
 
 @pytest.fixture
@@ -58,6 +95,7 @@ def approver(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv(KEY_DIR_ENV, str(key_dir))
     monkeypatch.setenv(KEY_PASSPHRASE_ENV, PASSPHRASE)
     key_path, signer = provision(key_dir)
+    monkeypatch.setenv(ROOT_ENV, root_of(key_dir))
     portal_path, _portal = provision(key_dir, "decision-portal", method="portal_key")
     monkeypatch.setenv(PORTAL_KEY_ENV, str(portal_path))
     _CURRENT.append(signer)

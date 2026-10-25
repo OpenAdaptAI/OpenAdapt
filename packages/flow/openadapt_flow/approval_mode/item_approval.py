@@ -99,6 +99,8 @@ POLICY_FILENAME = "approver-policy.json"
 GRANT_FILENAME = "approver-grant.json"
 #: Who started the run, written once by the run. A delegate never answers a
 #: run it started.
+#: The approver root and key directory the run pinned (approver_roster).
+ROOT_FILENAME = "approver-root.json"
 INITIATOR_FILENAME = "run-initiator.json"
 #: The initiator an agent-started run records when the agent has no id.
 UNIDENTIFIED_AGENT = "agent:unidentified"
@@ -386,6 +388,11 @@ class ApproverContext:
     #: Where registered approver keys are looked up. ``None`` means a
     #: person's answer can't be verified, so it is refused.
     key_dir: Optional[Path] = None
+    #: The approver root this run pinned (:mod:`.approver_roster`).
+    approver_root: Optional[str] = None
+    #: Why the run's pin can't be trusted (another root or key directory
+    #: than the run recorded), or ``None``. A person's answer is then refused.
+    pin_refusal: Optional[str] = None
 
 
 def _as_context(
@@ -447,12 +454,15 @@ def _person_refusal(
 
     if answer.auth_method != "none":
         return "auth_method_unverified"
+    if context.pin_refusal is not None:
+        return context.pin_refusal
     refusal_code = attestation_refusal(
         answer.attestation,
         domain=ANSWER_DOMAIN,
         payload=answer.signed_payload(),
         key_dir=context.key_dir,
         method=ROUTE_METHOD.get(answer.route),
+        root=context.approver_root,
     )
     if refusal_code is not None:
         return refusal_code
@@ -616,12 +626,17 @@ class ItemApprovalStore:
         run_dir: Path | str,
         *,
         key_dir: Optional[Path | str] = None,
+        approver_root: Optional[str] = None,
     ) -> None:
         self.run_dir = Path(run_dir)
         self.dir = self.run_dir / APPROVAL_DIRNAME
         #: Where the signer registry lives (``$OPENADAPT_JIT_KEY_DIR`` or
         #: ``~/.openadapt/jit`` when ``None``). Keep it away from the agents.
         self._key_dir = Path(key_dir) if key_dir is not None else None
+        #: The approver root this caller names (else the environment's pin).
+        self._approver_root = approver_root
+        # The pin this store wrote at run start; once set, the only one used.
+        self._pinned_root: Optional[tuple[str, str]] = None
         # The policy this store wrote at run start. Once set, it is the only
         # policy this store applies, whatever the file says later.
         self._pinned_policy: Optional[ApproverPolicyV1] = None
@@ -727,6 +742,85 @@ class ItemApprovalStore:
             return False, None
         return True, value
 
+    # -- approver root (approver_roster) --------------------------------------
+    def _named_root(self) -> Optional[str]:
+        from openadapt_flow.approval_mode.approver_roster import pinned_root
+
+        return pinned_root(self._approver_root)
+
+    def write_approver_root(self) -> None:
+        """Pin the run's approver root and key directory, once, at run start.
+
+        Every answer in this run is then checked against this root's roster
+        in this key directory. A file already there naming another root or
+        key directory (planted before the run) refuses the run.
+        """
+
+        from openadapt_flow.approval_mode.approver_roster import RosterError
+
+        try:
+            root = self._named_root()
+        except RosterError as exc:
+            raise ItemApprovalRefused(exc.code, str(exc)) from exc
+        if root is None:
+            # No pin: a person's answer will be refused (approver_root_unpinned).
+            return
+        key_dir = str(self._key_directory().resolve())
+        self._checked_dir(create=True)
+        payload = canonical_json({"approver_root": root, "key_dir": key_dir})
+        try:
+            _write_exclusive(self.dir / ROOT_FILENAME, payload)
+        except FileExistsError:
+            if self._recorded_root() != (root, key_dir):
+                raise ItemApprovalRefused(
+                    "approver_root_changed",
+                    "this run already pins another approver root or key directory",
+                ) from None
+        self._pinned_root = (root, key_dir)
+
+    def _recorded_root(self) -> Optional[tuple[str, str]]:
+        try:
+            data = json.loads(_read_regular(self._path(ROOT_FILENAME)))
+        except (OSError, ItemApprovalRefused, ValueError):
+            return None
+        if (
+            not isinstance(data, dict)
+            or set(data) != {"approver_root", "key_dir"}
+            or not all(isinstance(v, str) for v in data.values())
+        ):
+            return None
+        return data["approver_root"], data["key_dir"]
+
+    def _root_pin(self) -> tuple[Optional[str], Optional[str]]:
+        """``(root, refusal)`` this store checks answers against.
+
+        The run's own pin wins. A reader (the ``item-approval`` command, a
+        resume) uses what the run recorded, and is refused when it names
+        another root or key directory than the run did.
+        """
+
+        from openadapt_flow.approval_mode.approver_roster import RosterError
+
+        if self._pinned_root is not None:
+            return self._pinned_root[0], None
+        try:
+            named = self._named_root()
+        except RosterError as exc:
+            return None, exc.code
+        recorded = self._recorded_root()
+        if recorded is None:
+            return named, None
+        root, key_dir = recorded
+        if named is not None and named != root:
+            return None, "approver_root_mismatch"
+        if str(self._key_directory().resolve()) != key_dir:
+            return None, "approver_key_dir_mismatch"
+        return root, None
+
+    @property
+    def approver_root(self) -> Optional[str]:
+        return self._root_pin()[0]
+
     def key_directory(self) -> Path:
         """Where this run's registered keys (``principals.json``) are read."""
 
@@ -748,11 +842,15 @@ class ItemApprovalStore:
 
         known, initiator = self._read_initiator()
 
+        root, pin_refusal = self._root_pin()
+
         def make(**fields: Any) -> ApproverContext:
             return ApproverContext(
                 initiator=initiator,
                 initiator_known=known,
                 key_dir=self._key_directory(),
+                approver_root=root,
+                pin_refusal=pin_refusal,
                 **fields,
             )
 

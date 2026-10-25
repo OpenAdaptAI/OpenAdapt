@@ -45,12 +45,13 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import secrets
 import sys
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Callable, Literal, Protocol
+from typing import Any, Callable, Literal, Protocol
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -144,69 +145,129 @@ class StoredKey:
         )
 
 
-Registrar = Callable[[str, str], None]
-Unregistrar = Callable[[str, str], bool]
-Lookup = Callable[[str], "str | None"]
+#: ``sign(message) -> "ed25519:<hex>"`` with an approver key, behind presence.
+Sign = Callable[[bytes], str]
+#: The login Keychain item holding the approver root this Mac pins.
+ROOT_ACCOUNT = "desktop-approver-root-v1"
+ROOT_ENV = "OPENADAPT_APPROVER_ROOT"
 
 
-def _flow_authority():
+class Roster(Protocol):
+    """Flow's signed approver roster, as Desktop uses it (faked in tests)."""
+
+    def root(self) -> str | None:
+        """The root this Mac pins, or ``None``."""
+        ...
+
+    def is_empty(self) -> bool: ...
+
+    def lookup(self, public_key: str) -> str | None:
+        """The approver name the pinned root vouches for this key under."""
+        ...
+
+    def init_root(self, principal: str, public_key: str, sign: Sign) -> None: ...
+
+    def add(self, principal: str, public_key: str, signed_by: str, sign: Sign) -> None: ...
+
+    def remove(self, principal: str, public_key: str, signed_by: str, sign: Sign) -> None: ...
+
+
+def _flow_roster():
     try:
-        from openadapt_flow.jit import authority, lifecycle
+        from openadapt_flow.approval_mode import approver_roster
+        from openadapt_flow.jit import lifecycle
     except ImportError as exc:
         raise ApproverKeychainError(
             "approver_key_unusable",
-            "OpenAdapt Flow isn't installed with Desktop, so the approver key can't be registered.",
+            "This Desktop's OpenAdapt Flow can't keep a signed approver roster. "
+            "Update Desktop.",
         ) from exc
-    if not hasattr(authority, "remove_principal"):
-        raise ApproverKeychainError(
-            "approver_key_unusable",
-            "This Desktop's OpenAdapt Flow is too old to register an approver key. Update Desktop.",
-        )
-    return authority, lifecycle.default_key_dir()
+    return approver_roster, lifecycle.default_key_dir()
 
 
-def register_with_flow(principal: str, public_key: str) -> None:
-    """``jit register --role approver``, in-process (same function)."""
+class FlowRoster:
+    """The roster in Flow's key directory, pinned by this Mac.
 
-    authority, key_dir = _flow_authority()
-    try:
-        authority.register_principal(
-            key_dir, role="approver", principal_id=principal, public_key_hex=public_key
-        )
-    except (authority.AuthorityError, OSError, ValueError) as exc:
-        raise ApproverKeychainError(
-            "approver_key_unusable", f"Flow didn't register the approver key: {exc}"
-        ) from exc
+    The pin is the root Desktop set up itself (kept in the login Keychain), or
+    one an administrator gives Desktop in ``OPENADAPT_APPROVER_ROOT``. Desktop
+    never adopts the root of a roster it finds: that would trust whoever
+    wrote the file first.
+    """
 
+    def root(self) -> str | None:
+        env = os.environ.get(ROOT_ENV, "").strip().lower()
+        if env:
+            return env
+        stored = _store._kr_get(_store._keyring(), ROOT_ACCOUNT)
+        return stored.strip().lower() if stored else None
 
-def unregister_with_flow(principal: str, public_key: str) -> bool:
-    authority, key_dir = _flow_authority()
-    try:
-        return bool(
-            authority.remove_principal(
-                key_dir,
-                role="approver",
-                principal_id=principal,
-                public_key_hex=public_key,
+    def is_empty(self) -> bool:
+        roster, key_dir = _flow_roster()
+        try:
+            return not roster.load(key_dir).entries
+        except roster.RosterError:
+            return False  # unreadable: never start a new root over it
+
+    def lookup(self, public_key: str) -> str | None:
+        try:
+            roster, key_dir = _flow_roster()
+            found = roster.verified_approvers(key_dir, self.root())
+        except (ApproverKeychainError, ValueError, OSError):
+            return None
+        return next((pid for pid, value in found.items() if value == public_key), None)
+
+    def _call(self, name: str, *args: Any, **kwargs: Any) -> Any:
+        roster, key_dir = _flow_roster()
+        try:
+            return getattr(roster, name)(key_dir, *args, **kwargs)
+        except (roster.RosterError, OSError, ValueError) as exc:
+            raise ApproverKeychainError(
+                "approver_key_unusable", f"Flow refused the roster change: {exc}"
+            ) from exc
+
+    def init_root(self, principal: str, public_key: str, sign: Sign) -> None:
+        self._call("init_root", principal=principal, public_key=public_key, sign=sign)
+        # This Mac set up the root itself, behind presence: pin it.
+        if not _store._kr_set(_store._keyring(), ROOT_ACCOUNT, public_key):
+            raise ApproverKeychainError(
+                "approver_key_unusable",
+                "The login Keychain didn't save the approver root.",
             )
+
+    def add(self, principal: str, public_key: str, signed_by: str, sign: Sign) -> None:
+        self._call(
+            "add_approver",
+            self.root(),
+            principal=principal,
+            public_key=public_key,
+            signed_by=signed_by,
+            sign=sign,
         )
-    except (authority.AuthorityError, OSError, ValueError) as exc:
-        raise ApproverKeychainError(
-            "approver_key_unusable", f"Flow didn't remove the approver key: {exc}"
-        ) from exc
+
+    def remove(self, principal: str, public_key: str, signed_by: str, sign: Sign) -> None:
+        self._call(
+            "remove_approver",
+            self.root(),
+            principal=principal,
+            public_key=public_key,
+            signed_by=signed_by,
+            sign=sign,
+        )
+
+
+def pinned_root() -> str | None:
+    """The approver root Desktop's Flow runs pin (``OPENADAPT_APPROVER_ROOT``)."""
+
+    try:
+        return FlowRoster().root()
+    except Exception:
+        return None
 
 
 def registered_name(public_key: str) -> str | None:
-    """The approver name Flow has for this key, or ``None``."""
+    """The approver name the pinned roster has for this key, or ``None``."""
 
-    try:
-        authority, key_dir = _flow_authority()
-        found = authority.PrincipalRegistry.load(key_dir).lookup(public_key)
-    except (ApproverKeychainError, OSError, ValueError):
-        return None
-    if found is None or found[0] != "approver":
-        return None
-    return str(found[1])
+    return FlowRoster().lookup(public_key)
 
 
 def _public_hex(key: Ed25519PrivateKey) -> str:
@@ -236,16 +297,12 @@ class ApproverKeychain:
         *,
         account: str = ACCOUNT,
         require_presence: bool = True,
-        register: Registrar = register_with_flow,
-        unregister: Unregistrar = unregister_with_flow,
-        lookup: Lookup = registered_name,
+        roster: Roster | None = None,
     ) -> None:
         self._enclave = enclave if enclave is not None else default_enclave()
         self._account = account
         self._presence = require_presence
-        self._register = register
-        self._unregister = unregister
-        self._lookup = lookup
+        self._roster: Roster = roster if roster is not None else FlowRoster()
         self._lock = threading.Lock()
 
     # -- state ------------------------------------------------------------------
@@ -267,7 +324,9 @@ class ApproverKeychain:
 
         supported = self.supported()
         stored = self.stored() if supported else None
-        registered = stored is not None and self._lookup(stored.public_key) == stored.principal
+        registered = (
+            stored is not None and self._roster.lookup(stored.public_key) == stored.principal
+        )
         return {
             "supported": supported,
             "set_up": stored is not None and registered,
@@ -280,11 +339,16 @@ class ApproverKeychain:
     # -- setup, rotation, removal -------------------------------------------------
 
     def setup(self, principal: str = DEFAULT_PRINCIPAL, *, replace: bool = False) -> StoredKey:
-        """Make, prove and register the key. One presence prompt.
+        """Make the key and put it on the signed roster behind presence.
 
-        Returns the existing key when one is set up, unless ``replace`` (key
-        rotation): then the new key is registered first and the old one is
-        retired, so Run it is never left without a working key.
+        * No roster yet: the new key signs the roster's root, behind the one
+          Touch ID prompt, and this Mac pins that root. The signature is the
+          proof that a person was present.
+        * ``replace`` (rotation): the old key signs the new one onto the
+          roster (a prompt each for the new and the old key), then the old
+          one is removed unless it is the root.
+        * A roster this Mac didn't start: an approver on it adds this key.
+          The key is kept, and the refusal says how.
         """
 
         with self._lock:
@@ -297,80 +361,127 @@ class ApproverKeychain:
                 )
             old = self.stored()
             if old is not None and not replace:
-                if self._lookup(old.public_key) != old.principal:
-                    # Stored but not registered (an interrupted setup, or a
-                    # removed registration). Register it again only after the
-                    # key opens behind a presence prompt: a Keychain item
-                    # alone proves nothing, since anything that can write it
-                    # could have put its own public key there.
+                if self._roster.lookup(old.public_key) != old.principal:
+                    # Stored but not on the roster. A Keychain item alone
+                    # proves nothing (anything that can write it could have
+                    # put its own key there): only a signature made behind a
+                    # presence prompt starts a roster.
                     if self._presence and not old.presence:
                         raise ApproverKeychainError(
                             "approver_key_unusable",
                             "The stored approver key doesn't ask for Touch ID. "
                             "Set up a new one.",
                         )
-                    self._sign_with(
-                        old,
-                        SETUP_CHALLENGE + old.public_key.encode() + secrets.token_bytes(16),
-                        reason="confirm your approver key",
-                    )
-                    self._register(old.principal, old.public_key)
+                    self._join(old, signer=None)
                 return old
-            handle, enclave_public = self._enclave.create(require_presence=self._presence)
-            key = Ed25519PrivateKey.generate()
-            public = _public_hex(key)
-            seed = bytearray(
-                key.private_bytes(
-                    serialization.Encoding.Raw,
-                    serialization.PrivateFormat.Raw,
-                    serialization.NoEncryption(),
-                )
-            )
-            del key
-            try:
-                sealed = self._enclave.seal(enclave_public, bytes(seed))
-            finally:
-                _wipe(seed)
-            new = StoredKey(
-                public_key=public,
-                principal=principal,
-                handle=handle,
-                sealed=sealed,
-                presence=self._presence,
-                created_at=datetime.now(timezone.utc).isoformat(),
-            )
-            # The one prompt: proves the key opens, and that a person is here.
-            self._sign_with(
-                new,
-                SETUP_CHALLENGE + public.encode(),
-                reason="set up your approver key",
-            )
+            new = self._make(principal if old is None else f"{principal}-{secrets.token_hex(3)}")
             if not _store._kr_set(_store._keyring(), self._account, new.to_json()):
                 raise ApproverKeychainError(
                     "approver_key_unusable",
                     "The login Keychain didn't save the approver key. Nothing was set up.",
                 )
+            signer = old if old is not None and self._roster.lookup(old.public_key) else None
             try:
-                self._register(principal, public)
-            except Exception:
-                if old is not None:
-                    _store._kr_set(_store._keyring(), self._account, old.to_json())
-                else:
-                    _store._kr_delete(_store._keyring(), self._account)
+                self._join(new, signer=signer)
+            except ApproverKeychainError as exc:
+                if exc.code != "approver_needs_adding":
+                    if old is not None:
+                        _store._kr_set(_store._keyring(), self._account, old.to_json())
+                    else:
+                        _store._kr_delete(_store._keyring(), self._account)
                 raise
-            if old is not None and (old.principal != principal or old.public_key != public):
-                # A different name keeps the old registration unless retired.
-                self._unregister(old.principal, old.public_key)
+            if signer is not None and self._roster.root() != signer.public_key:
+                # Retire the old key; the root can't be removed, it just stops
+                # being used here.
+                self._roster.remove(
+                    signer.principal,
+                    signer.public_key,
+                    new.principal,
+                    self._signer(new, "retire your old approver key"),
+                )
             return new
 
+    def _make(self, principal: str) -> StoredKey:
+        handle, enclave_public = self._enclave.create(require_presence=self._presence)
+        key = Ed25519PrivateKey.generate()
+        public = _public_hex(key)
+        seed = bytearray(
+            key.private_bytes(
+                serialization.Encoding.Raw,
+                serialization.PrivateFormat.Raw,
+                serialization.NoEncryption(),
+            )
+        )
+        del key
+        try:
+            sealed = self._enclave.seal(enclave_public, bytes(seed))
+        finally:
+            _wipe(seed)
+        return StoredKey(
+            public_key=public,
+            principal=principal,
+            handle=handle,
+            sealed=sealed,
+            presence=self._presence,
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    def _signer(self, stored: StoredKey, reason: str) -> Sign:
+        return lambda message: self._sign_with(stored, message, reason=reason)
+
+    def _join(self, key: StoredKey, *, signer: StoredKey | None) -> None:
+        """Put ``key`` on the roster: as its root, or added by ``signer``."""
+
+        if self._roster.is_empty():
+            # The one prompt: the key signs the roster's root, which proves it
+            # opens behind presence and that a person is here.
+            self._roster.init_root(
+                key.principal, key.public_key, self._signer(key, "set up your approver key")
+            )
+            return
+        if signer is None:
+            root = self._roster.root()
+            raise ApproverKeychainError(
+                "approver_needs_adding",
+                "This computer's approver roster already has approvers, so one "
+                "of them adds this Mac's key: openadapt-flow jit approver add "
+                f"--principal {key.principal} --public-key {key.public_key} "
+                "--signer-key THEIR_KEY"
+                + (f" --approver-root {root}" if root else " --approver-root ROOT_HEX")
+                + ". Nothing was approved with it yet.",
+            )
+        # Prove the new key opens behind presence, then the old key adds it.
+        self._sign_with(
+            key,
+            SETUP_CHALLENGE + key.public_key.encode(),
+            reason="set up your new approver key",
+        )
+        self._roster.add(
+            key.principal,
+            key.public_key,
+            signer.principal,
+            self._signer(signer, "approve your new approver key"),
+        )
+
     def remove(self) -> bool:
-        """Retire the key: unregister it, then delete it from the Keychain."""
+        """Retire the key: take it off the roster (its own signature, behind
+        presence), then delete it from the Keychain. The roster's root can't
+        be removed; its key is only deleted here."""
 
         with self._lock:
             old = self.stored()
             if old is None:
                 return False
-            self._unregister(old.principal, old.public_key)
+            if (
+                self._roster.lookup(old.public_key) == old.principal
+                and self._roster.root() != old.public_key
+            ):
+                self._roster.remove(
+                    old.principal,
+                    old.public_key,
+                    old.principal,
+                    self._signer(old, "remove your approver key"),
+                )
             _store._kr_delete(_store._keyring(), self._account)
             return True
 
@@ -778,7 +889,9 @@ __all__ = [
     "StoredKey",
     "default_enclave",
     "default_keychain",
-    "register_with_flow",
+    "FlowRoster",
+    "ROOT_ACCOUNT",
+    "Roster",
+    "pinned_root",
     "registered_name",
-    "unregister_with_flow",
 ]

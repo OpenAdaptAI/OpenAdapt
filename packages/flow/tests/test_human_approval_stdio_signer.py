@@ -29,11 +29,14 @@ from openadapt_flow.approval_mode.human_attestation import (
 )
 from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
 from openadapt_flow.approval_mode.model import ApprovalMode
-from openadapt_flow.jit.authority import (
-    public_hex,
-    register_principal,
-    remove_principal,
+from openadapt_flow.approval_mode.approver_roster import (
+    ROOT_ENV,
+    add_approver,
+    file_key_signer,
+    init_root,
+    remove_approver,
 )
+from openadapt_flow.jit.authority import public_hex
 from openadapt_flow.jit.lifecycle import KEY_DIR_ENV
 
 FRAME = b"\x89PNG\r\n\x1a\nmade-up filled form"
@@ -56,17 +59,18 @@ def _request(store: ItemApprovalStore):
 
 @pytest.fixture
 def held_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """An approver key registered in the key directory but held by 'Desktop'."""
+    """The roster's root approver key, held by 'Desktop'; the run pins it."""
 
     key_dir = tmp_path / "keys"
     monkeypatch.setenv(KEY_DIR_ENV, str(key_dir))
     key = Ed25519PrivateKey.generate()
-    register_principal(
+    init_root(
         key_dir,
-        role="approver",
-        principal_id="front-desk",
-        public_key_hex=public_hex(key),
+        principal="front-desk",
+        public_key=public_hex(key),
+        sign=file_key_signer(key),
     )
+    monkeypatch.setenv(ROOT_ENV, public_hex(key))
     return key_dir, key
 
 
@@ -204,36 +208,39 @@ def test_an_unregistered_public_key_never_asks_for_a_signature(tmp_path, held_ke
 
 
 def test_a_removed_key_no_longer_signs(tmp_path, held_key):
-    key_dir, key = held_key
-    assert remove_principal(
+    key_dir, root = held_key
+    other = Ed25519PrivateKey.generate()
+    add_approver(
         key_dir,
-        role="approver",
-        principal_id="front-desk",
-        public_key_hex=public_hex(key),
+        public_hex(root),
+        principal="night-desk",
+        public_key=public_hex(other),
+        signed_by="front-desk",
+        sign=file_key_signer(root),
+    )
+    assert stdio_signer(public_hex(other), key_dir, method="desktop_key")
+    remove_approver(
+        key_dir,
+        public_hex(root),
+        principal="night-desk",
+        public_key=public_hex(other),
+        signed_by="front-desk",
+        sign=file_key_signer(root),
     )
     with pytest.raises(AttestationRefused) as raised:
-        stdio_signer(public_hex(key), key_dir, method="desktop_key")
+        stdio_signer(public_hex(other), key_dir, method="desktop_key")
     assert raised.value.code == "human_approver_unregistered"
 
 
-def test_removing_an_old_key_leaves_its_replacement(tmp_path, held_key):
-    key_dir, old = held_key
-    new = Ed25519PrivateKey.generate()
-    register_principal(
-        key_dir,
-        role="approver",
-        principal_id="front-desk",
-        public_key_hex=public_hex(new),
-    )
+def test_a_key_the_pinned_root_doesnt_vouch_for_never_signs(
+    tmp_path, held_key, monkeypatch
+):
+    key_dir, root = held_key
+    monkeypatch.setenv(ROOT_ENV, public_hex(Ed25519PrivateKey.generate()))
 
-    assert not remove_principal(
-        key_dir,
-        role="approver",
-        principal_id="front-desk",
-        public_key_hex=public_hex(old),
-    )
-    signer = stdio_signer(public_hex(new), key_dir, method="desktop_key")
-    assert signer.principal_id == "front-desk"
+    with pytest.raises(AttestationRefused) as raised:
+        stdio_signer(public_hex(root), key_dir, method="desktop_key")
+    assert raised.value.code == "approver_root_mismatch"
 
 
 def test_signer_flags_go_together(tmp_path, held_key, capsys):
