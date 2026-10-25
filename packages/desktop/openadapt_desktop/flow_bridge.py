@@ -544,14 +544,15 @@ def _subprocess_env() -> dict[str, str]:
     """
 
     env = dict(os.environ)
-    if not env.get("OPENADAPT_APPROVER_ROOT"):
-        # The approver root this Mac set up behind Touch ID: Flow checks every
-        # person's answer against the roster it vouches for.
-        from openadapt_desktop.approver_keychain import pinned_root
+    # The approver root this Mac set up behind Touch ID (the Keychain's pin
+    # wins; a different OPENADAPT_APPROVER_ROOT raises). A governed run takes
+    # its pin only from its deployment config, which Desktop writes per run;
+    # this covers the commands that read a run's recorded pin.
+    from openadapt_desktop.approver_keychain import pinned_root
 
-        root = pinned_root()
-        if root:
-            env["OPENADAPT_APPROVER_ROOT"] = root
+    root = pinned_root()
+    if root:
+        env["OPENADAPT_APPROVER_ROOT"] = root
     return env
 
 

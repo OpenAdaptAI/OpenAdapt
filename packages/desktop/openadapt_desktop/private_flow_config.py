@@ -229,6 +229,8 @@ def _redactions_for_mapping(
 def prepare_flow_config(
     source: Path | None,
     target: ExecutionTarget | None,
+    *,
+    approver_root: str | None = None,
 ) -> PreparedPrivateYaml | None:
     """Parse, merge, serialize, and derive redactions from one snapshot.
 
@@ -241,6 +243,19 @@ def prepare_flow_config(
     if source is None and target is None:
         return None
     deployment = _merged_config(source, target)
+    if approver_root:
+        # A governed run takes its approver pin only from its deployment
+        # config: write this Mac's pin into the snapshot Flow receives.
+        approvers = deployment.get("approvers")
+        if approvers is not None and not isinstance(approvers, Mapping):
+            raise PrivateFlowConfigError("The deployment config's approvers section is invalid.")
+        existing = (approvers or {}).get("root_public_key")
+        if existing and str(existing).strip().lower() != approver_root:
+            raise PrivateFlowConfigError(
+                "The deployment config pins another approver root than this Mac. "
+                "Nothing was run."
+            )
+        deployment["approvers"] = {**dict(approvers or {}), "root_public_key": approver_root}
     remote_decisions, remote_decision_runner_id = _remote_decision_settings(deployment)
     return PreparedPrivateYaml(
         payload=yaml.safe_dump(deployment, sort_keys=False),

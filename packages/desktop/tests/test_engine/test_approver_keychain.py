@@ -702,3 +702,107 @@ def test_a_mac_that_can_use_touch_id_never_falls_back_to_a_file_key(
     assert answer["setup"] == "in_app"
     assert "in OpenAdapt" in answer["message"]
     assert launched == []
+
+
+# -- the pin this Mac keeps (security review of #1519) -----------------------------
+
+
+class _FlowRosterModule:
+    """Flow's approver_roster as FlowRoster calls it, with a roster head."""
+
+    class RosterError(ValueError):
+        def __init__(self, code, message=""):
+            super().__init__(message)
+            self.code = code
+
+    def __init__(self):
+        self.entries = []  # (principal, public)
+        self.seen_at_least = []
+
+    def load(self, key_dir):
+        return type("R", (), {"entries": list(self.entries)})()
+
+    def head(self, key_dir, root):
+        return len(self.entries), f"sha256:{len(self.entries):064x}"
+
+    def verified_approvers(self, key_dir, root, *, at_least=None):
+        self.seen_at_least.append(at_least)
+        if at_least is not None and at_least[0] > len(self.entries):
+            raise self.RosterError("approver_roster_rolled_back")
+        return dict(self.entries)
+
+    def init_root(self, key_dir, *, principal, public_key, sign):
+        self.entries = [(principal, public_key)]
+
+    def add_approver(self, key_dir, root, *, principal, public_key, signed_by, sign, at_least):
+        self.entries.append((principal, public_key))
+
+
+@pytest.fixture
+def flow_roster(monkeypatch, tmp_path, fake_keyring):
+    from openadapt_desktop import approver_keychain
+
+    module = _FlowRosterModule()
+    monkeypatch.setattr(approver_keychain, "_flow_roster", lambda: (module, tmp_path / "keys"))
+    monkeypatch.delenv("OPENADAPT_APPROVER_ROOT", raising=False)
+    return approver_keychain.FlowRoster(), module
+
+
+def test_the_keychain_pin_wins_and_a_different_env_root_is_refused(flow_roster, monkeypatch):
+    from openadapt_desktop.approver_keychain import ROOT_ACCOUNT, pinned_root
+
+    roster, _module = flow_roster
+    fake = __import__("openadapt_desktop.auth.store", fromlist=["_keyring"])._keyring()
+    fake.set_password(SERVICE_NAME, ROOT_ACCOUNT, "a" * 64)
+    assert roster.root() == "a" * 64
+
+    monkeypatch.setenv("OPENADAPT_APPROVER_ROOT", "b" * 64)
+    with pytest.raises(ApproverKeychainError) as raised:
+        pinned_root()
+    assert raised.value.code == "approver_root_conflict"
+
+    monkeypatch.setenv("OPENADAPT_APPROVER_ROOT", "a" * 64)  # the same: fine
+    assert pinned_root() == "a" * 64
+
+
+def test_an_admin_env_root_counts_only_without_a_keychain_pin(flow_roster, monkeypatch):
+    roster, _module = flow_roster
+    monkeypatch.setenv("OPENADAPT_APPROVER_ROOT", "c" * 64)
+    assert roster.root() == "c" * 64
+
+
+def test_the_roster_head_is_kept_in_the_keychain_and_a_rollback_is_refused(flow_roster):
+    roster, module = flow_roster
+    roster.init_root("desktop-approver", "d" * 64, sign=lambda m: "ed25519:00")
+    roster.add("night-desk", "e" * 64, "desktop-approver", sign=lambda m: "ed25519:00")
+    assert roster.lookup("e" * 64) == "night-desk"
+    assert module.seen_at_least[-1] == (2, f"sha256:{2:064x}")
+
+    module.entries = module.entries[:1]  # an older roster put back
+    assert roster.lookup("d" * 64) is None
+
+
+def test_a_mac_with_a_pin_never_starts_another_root(flow_roster):
+    roster, _module = flow_roster
+    roster.init_root("desktop-approver", "d" * 64, sign=lambda m: "ed25519:00")
+    with pytest.raises(ApproverKeychainError) as raised:
+        roster.init_root("desktop-approver", "f" * 64, sign=lambda m: "ed25519:00")
+    assert raised.value.code == "approver_root_conflict"
+
+
+def test_each_run_config_carries_this_macs_pin(tmp_path):
+    import yaml
+
+    from openadapt_desktop.private_flow_config import (
+        PrivateFlowConfigError,
+        prepare_flow_config,
+    )
+
+    source = tmp_path / "deployment.yaml"
+    source.write_text("name: clinic\n")
+    prepared = prepare_flow_config(source, None, approver_root="a" * 64)
+    assert yaml.safe_load(prepared.payload)["approvers"] == {"root_public_key": "a" * 64}
+
+    source.write_text(f"name: clinic\napprovers:\n  root_public_key: {'b' * 64}\n")
+    with pytest.raises(PrivateFlowConfigError, match="another approver root"):
+        prepare_flow_config(source, None, approver_root="a" * 64)

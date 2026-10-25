@@ -1499,13 +1499,21 @@ class EngineDispatcher:
         invocation_started = False
         log_redactions: tuple[str, ...] = ()
         try:
+            from openadapt_desktop.approver_keychain import (
+                ApproverKeychainError,
+                pinned_root,
+            )
             from openadapt_desktop.private_flow_config import (
                 prepare_flow_config,
                 stage_private_text,
                 stage_private_yaml,
             )
 
-            prepared = prepare_flow_config(base_config, target)
+            try:
+                approver_root = pinned_root()
+            except ApproverKeychainError as exc:
+                return self._pre_action_refusal(str(exc))
+            prepared = prepare_flow_config(base_config, target, approver_root=approver_root)
             # The signed-in browser can also come from the operator's own
             # config file (or the default deployment.json), not only from the
             # target. Decide from the exact snapshot Flow will receive.

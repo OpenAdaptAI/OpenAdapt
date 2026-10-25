@@ -149,6 +149,9 @@ class StoredKey:
 Sign = Callable[[bytes], str]
 #: The login Keychain item holding the approver root this Mac pins.
 ROOT_ACCOUNT = "desktop-approver-root-v1"
+#: The roster head (seq, hash) after this Mac's last change to the roster. A
+#: roster that doesn't extend it (an older copy put back) is refused.
+HEAD_ACCOUNT = "desktop-approver-roster-head-v1"
 ROOT_ENV = "OPENADAPT_APPROVER_ROOT"
 
 
@@ -188,18 +191,44 @@ def _flow_roster():
 class FlowRoster:
     """The roster in Flow's key directory, pinned by this Mac.
 
-    The pin is the root Desktop set up itself (kept in the login Keychain), or
-    one an administrator gives Desktop in ``OPENADAPT_APPROVER_ROOT``. Desktop
-    never adopts the root of a roster it finds: that would trust whoever
-    wrote the file first.
+    The pin is the root Desktop set up itself, behind Touch ID, kept in the
+    login Keychain. ``OPENADAPT_APPROVER_ROOT`` is an administrator's setting
+    for a Mac that didn't start the roster: it counts only when the Keychain
+    holds no pin, and a value that differs from the Keychain's is refused.
+    Desktop never adopts the root of a roster it finds: that would trust
+    whoever wrote the file first. The roster must also extend the head this
+    Mac recorded after its own last change.
     """
 
     def root(self) -> str | None:
-        env = os.environ.get(ROOT_ENV, "").strip().lower()
-        if env:
-            return env
         stored = _store._kr_get(_store._keyring(), ROOT_ACCOUNT)
-        return stored.strip().lower() if stored else None
+        kept = stored.strip().lower() if stored else None
+        env = os.environ.get(ROOT_ENV, "").strip().lower() or None
+        if kept and env and env != kept:
+            raise ApproverKeychainError(
+                "approver_root_conflict",
+                f"{ROOT_ENV} names another approver root than the one this Mac "
+                "set up. Nothing was approved.",
+            )
+        return kept or env
+
+    def _head(self) -> tuple[int, str] | None:
+        raw = _store._kr_get(_store._keyring(), HEAD_ACCOUNT)
+        try:
+            seq, digest = json.loads(raw) if raw else (None, None)
+        except (ValueError, TypeError):
+            raise ApproverKeychainError(
+                "approver_key_unusable", "The recorded approver roster head is unreadable."
+            ) from None
+        return (int(seq), str(digest)) if seq else None
+
+    def _record_head(self) -> None:
+        roster, key_dir = _flow_roster()
+        seq, digest = roster.head(key_dir, self.root())
+        if not _store._kr_set(_store._keyring(), HEAD_ACCOUNT, json.dumps([seq, digest])):
+            raise ApproverKeychainError(
+                "approver_key_unusable", "The login Keychain didn't save the roster head."
+            )
 
     def is_empty(self) -> bool:
         roster, key_dir = _flow_roster()
@@ -211,7 +240,7 @@ class FlowRoster:
     def lookup(self, public_key: str) -> str | None:
         try:
             roster, key_dir = _flow_roster()
-            found = roster.verified_approvers(key_dir, self.root())
+            found = roster.verified_approvers(key_dir, self.root(), at_least=self._head())
         except (ApproverKeychainError, ValueError, OSError):
             return None
         return next((pid for pid, value in found.items() if value == public_key), None)
@@ -226,6 +255,11 @@ class FlowRoster:
             ) from exc
 
     def init_root(self, principal: str, public_key: str, sign: Sign) -> None:
+        if self.root():
+            raise ApproverKeychainError(
+                "approver_root_conflict",
+                "This Mac already pins an approver root; it doesn't start another.",
+            )
         self._call("init_root", principal=principal, public_key=public_key, sign=sign)
         # This Mac set up the root itself, behind presence: pin it.
         if not _store._kr_set(_store._keyring(), ROOT_ACCOUNT, public_key):
@@ -233,6 +267,7 @@ class FlowRoster:
                 "approver_key_unusable",
                 "The login Keychain didn't save the approver root.",
             )
+        self._record_head()
 
     def add(self, principal: str, public_key: str, signed_by: str, sign: Sign) -> None:
         self._call(
@@ -242,7 +277,9 @@ class FlowRoster:
             public_key=public_key,
             signed_by=signed_by,
             sign=sign,
+            at_least=self._head(),
         )
+        self._record_head()
 
     def remove(self, principal: str, public_key: str, signed_by: str, sign: Sign) -> None:
         self._call(
@@ -252,16 +289,20 @@ class FlowRoster:
             public_key=public_key,
             signed_by=signed_by,
             sign=sign,
+            at_least=self._head(),
         )
+        self._record_head()
 
 
 def pinned_root() -> str | None:
-    """The approver root Desktop's Flow runs pin (``OPENADAPT_APPROVER_ROOT``)."""
+    """The approver root this Mac pins for its Flow runs, or ``None``.
 
-    try:
-        return FlowRoster().root()
-    except Exception:
-        return None
+    Raises :class:`ApproverKeychainError` when ``OPENADAPT_APPROVER_ROOT``
+    disagrees with the Keychain's pin: Desktop then starts no run that a
+    person would answer.
+    """
+
+    return FlowRoster().root()
 
 
 def registered_name(public_key: str) -> str | None:
@@ -890,6 +931,7 @@ __all__ = [
     "default_enclave",
     "default_keychain",
     "FlowRoster",
+    "HEAD_ACCOUNT",
     "ROOT_ACCOUNT",
     "Roster",
     "pinned_root",
