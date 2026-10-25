@@ -11,11 +11,14 @@ Ctrl-C, which a tray cannot deliver to a separate console process reliably.
 
 from __future__ import annotations
 
+import os
+import re
 import shutil
 import signal
 import subprocess
 import sys
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Any
 
@@ -24,6 +27,63 @@ _BACKENDS = {"darwin": "macos"}
 
 class LocalRecordError(RuntimeError):
     """``openadapt-flow record`` could not be started or stopped."""
+
+
+@dataclass
+class LocalRun:
+    """One tray-started ``openadapt-flow record`` process and its log."""
+
+    process: Any
+    output_dir: Path
+    log_path: Path
+    log: IO[bytes] | None = field(default=None, repr=False)
+    # Set by the tray when the watcher reports this run's capture as saved.
+    capture_saved: bool = False
+    interrupted: bool = False
+
+    def interrupt(self) -> bool:
+        """Send SIGINT once. A second Ctrl-C could cut finalization short."""
+        if self.interrupted or not self.is_running():
+            return False
+        try:
+            self.process.send_signal(signal.SIGINT)
+        except OSError:
+            return False
+        self.interrupted = True
+        return True
+
+    def is_running(self) -> bool:
+        """Return True while the process has not exited."""
+        return self.process.poll() is None
+
+    def owns(self, capture_dir: str) -> bool:
+        """Return True when capture_dir is inside this run's output folder."""
+        try:
+            Path(capture_dir).resolve().relative_to(self.output_dir.resolve())
+        except ValueError:
+            return False
+        return True
+
+    def wait(self) -> int:
+        """Wait for the process to exit, close its log, return the exit code."""
+        try:
+            return self.process.wait()
+        finally:
+            if self.log is not None:
+                self.log.close()
+                self.log = None
+
+
+def safe_capture_name(name: str) -> str:
+    """Return name as one folder name: no path separators, no leading dots.
+
+    The name comes from a dialog. ``captures_dir / "/abs"`` is ``/abs``, and
+    ``..`` climbs out of the captures folder, so neither may reach a path.
+    """
+    cleaned = re.sub(r"[/\\:\x00]+", "-", name).strip(" .-\t\n")
+    if not cleaned:
+        raise LocalRecordError(f"{name!r} cannot be used as a capture name.")
+    return cleaned
 
 
 def unique_output_dir(captures_dir: Path, name: str) -> Path:
@@ -37,7 +97,7 @@ def unique_output_dir(captures_dir: Path, name: str) -> Path:
 
 
 class LocalRecorder:
-    """One tray-owned ``openadapt-flow record`` process at a time."""
+    """At most one running tray-owned ``openadapt-flow record`` at a time."""
 
     def __init__(
         self,
@@ -56,10 +116,9 @@ class LocalRecorder:
         self._backend = _BACKENDS.get(platform)
         self._which = which
         self._popen = popen
-        self._process: Any | None = None
-        self._log: IO[bytes] | None = None
-        self.output_dir: Path | None = None
-        self.log_path: Path | None = None
+        # The latest run. It stays set after the process exits so a late
+        # watcher event can still be matched to it.
+        self.current: LocalRun | None = None
 
     def executable(self) -> str | None:
         """Return the ``openadapt-flow`` path, or None when it cannot be used."""
@@ -72,24 +131,26 @@ class LocalRecorder:
         return self.executable() is not None
 
     def is_running(self) -> bool:
-        """Return True while the tray-owned process has not exited."""
-        return self._process is not None and self._process.poll() is None
+        """Return True while the latest run's process has not exited."""
+        return self.current is not None and self.current.is_running()
 
-    def start(self, name: str, captures_dir: Path) -> Path:
+    def owns(self, capture_dir: str) -> bool:
+        """Return True when capture_dir belongs to the latest run."""
+        return self.current is not None and self.current.owns(capture_dir)
+
+    def start(self, name: str, captures_dir: Path) -> LocalRun:
         """Start ``openadapt-flow record`` into a new folder under captures_dir.
 
-        Returns:
-            The recording output directory.
-
         Raises:
-            LocalRecordError: A recording is already running, or the command
-                could not be started.
+            LocalRecordError: A recording is already running, the name is
+                unusable, or the command could not be started.
         """
         if self.is_running():
             raise LocalRecordError("A tray recording is already running.")
         executable = self.executable()
         if executable is None:
             raise LocalRecordError("openadapt-flow is not on PATH.")
+        name = safe_capture_name(name)
         captures_dir.mkdir(parents=True, exist_ok=True)
         output_dir = unique_output_dir(captures_dir, name)
         log_path = captures_dir / f"{output_dir.name}.record.log"
@@ -103,9 +164,13 @@ class LocalRecorder:
             "--task",
             name,
         ]
-        log = log_path.open("ab")
+        # The log holds recorder output, so only this user may read it.
+        flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        log = os.fdopen(os.open(log_path, flags, 0o600), "ab")
         try:
-            self._process = self._popen(
+            process = self._popen(
                 command,
                 stdin=subprocess.DEVNULL,
                 stdout=log,
@@ -115,34 +180,21 @@ class LocalRecorder:
         except OSError as e:
             log.close()
             raise LocalRecordError(f"Could not start openadapt-flow: {e}") from e
-        self._log = log
-        self.output_dir = output_dir
-        self.log_path = log_path
-        return output_dir
-
-    def owns(self, capture_dir: str) -> bool:
-        """Return True when capture_dir belongs to the latest tray recording."""
-        if self.output_dir is None:
-            return False
-        try:
-            Path(capture_dir).resolve().relative_to(self.output_dir.resolve())
-        except ValueError:
-            return False
-        return True
+        self.current = LocalRun(
+            process=process, output_dir=output_dir, log_path=log_path, log=log
+        )
+        return self.current
 
     def stop(self) -> None:
         """Send SIGINT, the Ctrl-C that ``openadapt-flow record`` stops on."""
         if not self.is_running():
             raise LocalRecordError("No tray recording is running.")
-        self._process.send_signal(signal.SIGINT)
+        self.current.interrupt()
 
-    def wait(self) -> int:
-        """Wait for the process to exit and return its exit code."""
-        if self._process is None:
-            raise LocalRecordError("No tray recording was started.")
-        try:
-            return self._process.wait()
-        finally:
-            if self._log is not None:
-                self._log.close()
-                self._log = None
+    def interrupt_if_running(self) -> bool:
+        """Send SIGINT if a run is alive, whatever the tray state is.
+
+        Used when the tray quits: the process is in its own session, so it
+        would otherwise keep recording with no menu-bar cue.
+        """
+        return self.current is not None and self.current.interrupt()

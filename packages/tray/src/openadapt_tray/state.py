@@ -13,6 +13,7 @@ workflow while its previous push is still ``SYNCING``, or sit ``IDLE`` while
 sourced from the cloud needs-attention count.
 """
 
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -161,6 +162,10 @@ class StateManager:
     def __init__(self):
         self._state = AppState()
         self._listeners: list[Callable[[AppState], None]] = []
+        # The IPC, capture-watcher and reaper threads all update state. Each
+        # update and its listener calls run as one step, so listeners see
+        # transitions in order. Re-entrant: a listener may update state.
+        self._lock = threading.RLock()
 
     def add_listener(self, callback: Callable[[AppState], None]) -> None:
         """Add a state change listener."""
@@ -192,59 +197,64 @@ class StateManager:
             **kwargs: Optional overrides (``current_capture``, ``error_message``,
                 ``sync_state``, ``break_count``, ``deployment_lane``).
         """
-        # Preserve current_capture across sub-states of an active recording.
-        if "current_capture" not in kwargs and new_state in (
-            TrayState.RECORDING,
-            TrayState.RECORDING_STOPPING,
-            TrayState.COMPILING,
-        ):
-            kwargs.setdefault("current_capture", self._state.current_capture)
+        with self._lock:
+            # Preserve current_capture across sub-states of an active recording.
+            if "current_capture" not in kwargs and new_state in (
+                TrayState.RECORDING,
+                TrayState.RECORDING_STOPPING,
+                TrayState.COMPILING,
+            ):
+                kwargs.setdefault("current_capture", self._state.current_capture)
 
-        # Preserve the orthogonal channels unless explicitly overridden.
-        kwargs.setdefault("sync_state", self._state.sync_state)
-        kwargs.setdefault("break_count", self._state.break_count)
-        kwargs.setdefault("credential", self._state.credential)
-        kwargs.setdefault("deployment_lane", self._state.deployment_lane)
+            # Preserve the orthogonal channels unless explicitly overridden.
+            kwargs.setdefault("sync_state", self._state.sync_state)
+            kwargs.setdefault("break_count", self._state.break_count)
+            kwargs.setdefault("credential", self._state.credential)
+            kwargs.setdefault("deployment_lane", self._state.deployment_lane)
 
-        self._state = AppState(state=new_state, **kwargs)
-        self._emit()
+            self._state = AppState(state=new_state, **kwargs)
+            self._emit()
 
     def set_sync_state(self, sync_state: SyncState) -> None:
         """Update ONLY the sync channel, preserving the recording lifecycle."""
-        if self._state.sync_state == sync_state:
-            return
-        from dataclasses import replace
+        with self._lock:
+            if self._state.sync_state == sync_state:
+                return
+            from dataclasses import replace
 
-        self._state = replace(self._state, sync_state=sync_state)
-        self._emit()
+            self._state = replace(self._state, sync_state=sync_state)
+            self._emit()
 
     def set_break_count(self, count: int) -> None:
         """Update ONLY the break/needs-attention badge count."""
-        count = max(0, int(count))
-        if self._state.break_count == count:
-            return
-        from dataclasses import replace
+        with self._lock:
+            count = max(0, int(count))
+            if self._state.break_count == count:
+                return
+            from dataclasses import replace
 
-        self._state = replace(self._state, break_count=count)
-        self._emit()
+            self._state = replace(self._state, break_count=count)
+            self._emit()
 
     def set_credential_status(self, credential: CredentialStatus) -> None:
         """Update only the hosted credential status."""
-        if self._state.credential == credential:
-            return
-        from dataclasses import replace
+        with self._lock:
+            if self._state.credential == credential:
+                return
+            from dataclasses import replace
 
-        self._state = replace(self._state, credential=credential)
-        self._emit()
+            self._state = replace(self._state, credential=credential)
+            self._emit()
 
     def set_deployment_lane(self, lane: str) -> None:
         """Update ONLY the deployment lane (cloud|byoc)."""
-        if self._state.deployment_lane == lane:
-            return
-        from dataclasses import replace
+        with self._lock:
+            if self._state.deployment_lane == lane:
+                return
+            from dataclasses import replace
 
-        self._state = replace(self._state, deployment_lane=lane)
-        self._emit()
+            self._state = replace(self._state, deployment_lane=lane)
+            self._emit()
 
     @property
     def current(self) -> AppState:

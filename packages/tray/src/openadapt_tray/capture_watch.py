@@ -18,6 +18,7 @@ openadapt-capture is optional. When it is not importable the watcher reports
 from __future__ import annotations
 
 import json
+import os
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -96,17 +97,28 @@ def _outcome_from_status(status: Any) -> tuple[str, str | None]:
     )
 
 
-def read_terminal_outcome(capture_dir: str, session_id: str) -> tuple[str, str | None]:
+def read_terminal_outcome(
+    capture_dir: str,
+    session_id: str,
+    verify_seal: Callable[[str], Any] | None = None,
+) -> tuple[str, str | None]:
     """Read the outcome a recorder left in ``capture-state.json``.
 
-    Only a file for this exact session, marked complete and integrity
-    verified, counts as success. A missing or unreadable file is
-    ``OUTCOME_UNKNOWN``, never success.
+    Success needs all of: an owner-only file for this exact session, marked
+    complete and integrity verified, and a capture seal that ``verify_seal``
+    accepts. The recorder writes "complete" just before it seals, so the file
+    alone is not proof. A missing or unreadable file, or no way to check the
+    seal, is ``OUTCOME_UNKNOWN``, never success.
     """
     path = Path(capture_dir) / _TERMINAL_STATE_FILENAME
     try:
+        details = path.lstat()
         if path.is_symlink():
             return OUTCOME_UNKNOWN, "state_file_unreadable"
+        if os.name == "posix" and (
+            details.st_mode & 0o077 or details.st_uid != os.getuid()
+        ):
+            return OUTCOME_UNKNOWN, "state_file_not_owner_only"
         with path.open("rb") as stream:
             raw = stream.read(_MAX_STATE_BYTES + 1)
         if len(raw) > _MAX_STATE_BYTES:
@@ -127,6 +139,12 @@ def read_terminal_outcome(capture_dir: str, session_id: str) -> tuple[str, str |
         and payload.get("complete") is True
         and payload.get("integrity_verified") is True
     ):
+        if verify_seal is None:
+            return OUTCOME_UNKNOWN, "seal_not_checked"
+        try:
+            verify_seal(capture_dir)
+        except Exception:
+            return OUTCOME_FAILED, "capture_seal_invalid"
         return OUTCOME_COMPLETE, None
     if payload.get("phase") in _TERMINAL_PHASES:
         error = payload.get("error_code") or payload.get("phase")
@@ -141,6 +159,14 @@ def _load_control() -> Any | None:
     except Exception:
         return None
     return control
+
+
+def _load_seal_verifier() -> Callable[[str], Any] | None:
+    try:
+        from openadapt_capture.terminal import verify_capture_artifacts
+    except Exception:
+        return None
+    return verify_capture_artifacts
 
 
 class CaptureWatcher:
@@ -158,6 +184,7 @@ class CaptureWatcher:
         interval_s: float = 0.5,
         control: Any | None = None,
         status_timeout_s: float = 1.0,
+        verify_seal: Callable[[str], Any] | None = None,
     ):
         """Create a watcher.
 
@@ -167,13 +194,20 @@ class CaptureWatcher:
             control: The ``openadapt_capture.control`` module (injectable for
                 tests). Loaded lazily when omitted.
             status_timeout_s: Timeout for one status request.
+            verify_seal: Checks a capture's seal; raises when it is invalid.
+                Defaults to ``openadapt_capture.terminal.verify_capture_artifacts``.
         """
         self._on_event = on_event
         self._interval_s = interval_s
         self._control = control if control is not None else _load_control()
         self._status_timeout_s = status_timeout_s
+        self._verify_seal = (
+            verify_seal if verify_seal is not None else _load_seal_verifier()
+        )
         self._sessions: dict[str, _Tracked] = {}
-        self._poll_lock = threading.Lock()
+        # Held while polling AND while dispatching, so the watcher thread and
+        # a caller of poll_and_dispatch apply events in the order produced.
+        self._poll_lock = threading.RLock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._last_error: str | None = None
@@ -197,12 +231,19 @@ class CaptureWatcher:
             return self._poll_locked()
 
     def poll_and_dispatch(self) -> None:
-        """Poll once and pass each change to ``on_event`` on this thread."""
-        for event in self.poll_once():
-            try:
-                self._on_event(event)
-            except Exception as e:
-                print(f"Error handling capture event: {e}")
+        """Poll once and pass each change to ``on_event`` on this thread.
+
+        Dispatch happens under the poll lock: two threads never interleave
+        their events, so a late "stopping" cannot follow an "ended".
+        """
+        if self._control is None:
+            return
+        with self._poll_lock:
+            for event in self._poll_locked():
+                try:
+                    self._on_event(event)
+                except Exception as e:
+                    print(f"Error handling capture event: {e}")
 
     def _poll_locked(self) -> list[CaptureEvent]:
         try:
@@ -246,7 +287,9 @@ class CaptureWatcher:
             tracked = self._sessions.pop(session_id)
             if tracked.stage == ENDED:
                 continue
-            outcome, error = read_terminal_outcome(tracked.capture_dir, session_id)
+            outcome, error = read_terminal_outcome(
+                tracked.capture_dir, session_id, self._verify_seal
+            )
             events.append(self._event(ENDED, session_id, tracked, outcome, error))
         return events
 

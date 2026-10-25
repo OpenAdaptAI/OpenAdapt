@@ -85,8 +85,8 @@ When OpenAdapt Desktop isn't connected, the tray watches the recorders that
 a terminal. The icon turns red and a **Recording Started** notification appears
 when the recorder reports that it is ready, not when the command starts. A
 full-screen recording can take several seconds to get ready. When the recorder
-ends, the tray shows **Recording Stopped** if the capture was saved and
-verified, or an error with the recorder's reason if it wasn't.
+ends, the tray shows **Recording Stopped** only if the capture was saved and
+its seal checks out. Otherwise it shows an error with the recorder's reason.
 
 On macOS, **Start Recording** without the desktop app runs
 
@@ -95,7 +95,8 @@ openadapt-flow record --backend macos --out <captures_directory>/<name> --task <
 ```
 
 and **Stop Recording** sends it Ctrl-C. The command's output goes to
-`<captures_directory>/<name>.record.log`. For a recording you started in a
+`<captures_directory>/<name>.record.log`, which only you can read. Quitting
+the tray stops a recording it started. For a recording you started in a
 terminal, **Stop Recording** asks the recorder to stop through its local
 control channel.
 

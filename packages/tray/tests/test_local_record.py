@@ -41,8 +41,8 @@ class TestAvailability:
 class TestStartStop:
     def test_runs_the_documented_command(self, tmp_path):
         recorder, popen, _ = _recorder()
-        out = recorder.start("login-demo", tmp_path)
-        assert out == tmp_path / "login-demo"
+        run = recorder.start("login-demo", tmp_path)
+        assert run.output_dir == tmp_path / "login-demo"
         command = popen.call_args.args[0]
         assert command == [
             "/usr/local/bin/openadapt-flow",
@@ -55,7 +55,8 @@ class TestStartStop:
             "login-demo",
         ]
         assert popen.call_args.kwargs["start_new_session"] is True
-        assert recorder.log_path == tmp_path / "login-demo.record.log"
+        assert run.log_path == tmp_path / "login-demo.record.log"
+        assert run.log_path.stat().st_mode & 0o777 == 0o600
         assert recorder.is_running()
 
     def test_refuses_a_second_recording(self, tmp_path):
@@ -68,6 +69,9 @@ class TestStartStop:
         recorder, _, process = _recorder()
         recorder.start("a", tmp_path)
         recorder.stop()
+        process.send_signal.assert_called_once_with(signal.SIGINT)
+        # Quitting afterwards must not send a second Ctrl-C mid-finalization.
+        assert recorder.interrupt_if_running() is False
         process.send_signal.assert_called_once_with(signal.SIGINT)
 
     def test_stop_without_a_recording_raises(self):
@@ -95,3 +99,30 @@ def test_owns_only_its_own_output_dir(tmp_path):
     recorder.start("demo", tmp_path)
     assert recorder.owns(str(tmp_path / "demo" / ".capture"))
     assert not recorder.owns(str(tmp_path / "other" / ".capture"))
+
+
+def test_interrupt_if_running_stops_a_starting_recording(tmp_path):
+    recorder, _, process = _recorder()
+    assert recorder.interrupt_if_running() is False
+    recorder.start("a", tmp_path)
+    assert recorder.interrupt_if_running() is True
+    process.send_signal.assert_called_once_with(signal.SIGINT)
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [("/etc/x", "etc-x"), ("../../up", "up"), ("a/b", "a-b"), ("ok name", "ok name")],
+)
+def test_names_cannot_leave_the_captures_folder(tmp_path, name, expected):
+    recorder, _, _ = _recorder()
+    run = recorder.start(name, tmp_path)
+    assert run.output_dir == tmp_path / expected
+    assert run.output_dir.parent == tmp_path
+
+
+@pytest.mark.parametrize("name", ["..", "/", "  . "])
+def test_unusable_names_are_refused(tmp_path, name):
+    recorder, popen, _ = _recorder()
+    with pytest.raises(LocalRecordError):
+        recorder.start(name, tmp_path)
+    popen.assert_not_called()
