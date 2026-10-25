@@ -245,6 +245,41 @@ this computer"):
    already has one on this computer.
 6. **No approve-and-save path** for an item the switch held for approval.
 
+## Review stops
+
+Needs you has **Review one by one**, which opens Review stops: every stop as
+one card (`openadapt_desktop/stop_queue.py`, screen `src/screens/Stops.tsx`).
+
+| Card | Question | Evidence | Choices |
+| --- | --- | --- | --- |
+| `same_record` | "Same person?" or "Same record?" | The item's values next to each possible match the app listed, each value marked Same or Different, when Flow recorded the rows. Otherwise the row text and the screen where the run stopped. | Same: don't add it (skip); this item shouldn't be done (decline); different: I entered it by hand; not sure, leave it |
+| `confirm_save` | "Did it save?" | The item's values and the record check's differences | I checked: it saved; I checked: nothing saved, run it again; I fixed it by hand; leave it |
+| `halted` | "What should happen to this item?" | The item's values and why it stopped | Run it again; skip; decline; I did it by hand; leave it |
+| `approve_save` | "Approve this save?" | The item's values and the filled form | Approve and save; don't save (three reasons); leave it |
+
+How it answers:
+
+- **It never decides.** A card's id is a digest of everything it shows. The
+  engine rebuilds the cards before it acts, so a card that changed, expired
+  or is gone, or a choice it doesn't offer, changes nothing.
+- **Signed.** An answer to a stopped item is a decision receipt that the
+  approver key signs (Touch ID on a Mac). Then the item's own action runs,
+  with its usual checks. A waiting save is answered through the signed
+  item approval. Receipts go to `stop_decisions.jsonl` with how long each
+  card was on screen (`shown_ms`).
+- **Keys.** 1-9 answer, J and K (or the arrows) move between cards, X adds
+  a card to a batch, Shift+1-9 answers the batch, Esc clears it, and ?
+  lists the keys.
+- **Batches.** Only stops with the same `batch_key` (same kind, task and
+  reason) batch together. A batch takes one choice and one Touch ID, and
+  each card is still checked on its own. One stale card stops the whole
+  batch. Save approvals never batch.
+- **No default.** No choice is styled as the default; the evidence decides.
+
+A stop where nothing was written now also offers "I did it by hand". For a
+possible duplicate that is a different person, running it again would stop
+at the same check.
+
 ## Review stops on a paired phone
 
 A phone paired with the decision portal ([DECISION_PORTAL.md](DECISION_PORTAL.md))
@@ -270,7 +305,9 @@ How a phone's answer counts:
   A card that changed, expired or is gone, or a choice the card doesn't
   offer, changes nothing and returns the dispatcher's code (`card_changed`,
   `choice_not_offered`). A phone answer waits up to two seconds for a
-  command the window started, then returns `busy` and changes nothing.
+  command the window started when its answer runs an item again, then
+  returns `busy` and changes nothing. Closing a stop (skip, done by hand,
+  saved) doesn't wait, so it goes through while a run waits for a save.
 - **View-only on the phone.** A waiting save (`approve_save`) is answered on
   the Decisions page, through the portal's save approval, which the Flow
   console signs with the same portal key. Turning "only ask about problems"

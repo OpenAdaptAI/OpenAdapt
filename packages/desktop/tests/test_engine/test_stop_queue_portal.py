@@ -483,10 +483,7 @@ def test_a_waiting_save_is_view_only_on_the_stop_queue(phone, portal_key, monkey
     assert _receipts(disp) == []
 
 
-def test_a_phone_answer_waits_for_a_running_command(phone, portal_key):
-    app, headers, _pairings, disp, db, _keychain = phone
-    _stop(db, "item-40", lname="Fairwick")
-    (card,) = _phone_cards(app, headers)["cards"]
+def _while_the_window_is_busy(disp, answer):
     held = threading.Event()
     release = threading.Event()
 
@@ -499,18 +496,49 @@ def test_a_phone_answer_waits_for_a_running_command(phone, portal_key):
     worker.start()
     held.wait(5)
     try:
-        status, _h, raw = app.handle(
-            "POST",
-            f"/api/portal/stops/{card['card_id'].removeprefix('sha256:')}/answer",
-            headers,
-            b'{"choice":"same"}',
-        )
+        return answer()
     finally:
         release.set()
         worker.join()
 
+
+def test_an_answer_that_runs_an_item_again_waits_for_the_window(phone, portal_key):
+    app, headers, _pairings, disp, db, _keychain = phone
+    _stop(db, "item-40", lname="Fairwick", reason="a step's target wasn't found")
+    (card,) = _phone_cards(app, headers)["cards"]
+    assert any(c["id"] == "retry" for c in card["choices"])
+
+    status, _h, raw = _while_the_window_is_busy(
+        disp,
+        lambda: app.handle(
+            "POST",
+            f"/api/portal/stops/{card['card_id'].removeprefix('sha256:')}/answer",
+            headers,
+            b'{"choice":"retry"}',
+        ),
+    )
+
     assert status == 503 and json.loads(raw)["code"] == "busy"
     assert db.get_work_item("item-40")["status"] == "open"
+
+
+def test_closing_a_stop_goes_through_while_the_window_is_busy(phone, portal_key):
+    app, headers, _pairings, disp, db, _keychain = phone
+    _stop(db, "item-41", lname="Fairwick")
+    (card,) = _phone_cards(app, headers)["cards"]
+
+    status, _h, raw = _while_the_window_is_busy(
+        disp,
+        lambda: app.handle(
+            "POST",
+            f"/api/portal/stops/{card['card_id'].removeprefix('sha256:')}/answer",
+            headers,
+            b'{"choice":"same"}',
+        ),
+    )
+
+    assert status == 200, raw
+    assert db.get_work_item("item-41")["status"] == "skipped"
 
 
 def test_the_ipc_handler_shares_its_lock_with_the_phone(tmp_path):

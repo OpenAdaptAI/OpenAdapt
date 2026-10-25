@@ -33,6 +33,18 @@ class StopQueueBackend(Protocol):
 
     def list_cards(self) -> dict[str, Any]: ...
 
+    def _runs_again(self, card_ids: list[str], choice: str) -> bool:
+        from openadapt_desktop import stop_queue
+
+        cards = {c["card_id"]: c for c in self._dispatcher.list_stop_cards().get("cards", [])}
+        for card_id in card_ids:
+            card = cards.get(card_id)
+            found = stop_queue.choice_for(card, choice) if card else None
+            # Unknown card or choice: take the lock; the dispatcher refuses it.
+            if found is None or found.action in {"retry", "retry_after_check"}:
+                return True
+        return False
+
     def screenshot(self, card_id: str) -> bytes | None: ...
 
     def answer(
@@ -64,6 +76,18 @@ class DispatcherStopQueue:
             "portal_key": {"ready": approver_key_environment("portal") is not None},
         }
 
+    def _runs_again(self, card_ids: list[str], choice: str) -> bool:
+        from openadapt_desktop import stop_queue
+
+        cards = {c["card_id"]: c for c in self._dispatcher.list_stop_cards().get("cards", [])}
+        for card_id in card_ids:
+            card = cards.get(card_id)
+            found = stop_queue.choice_for(card, choice) if card else None
+            # Unknown card or choice: take the lock; the dispatcher refuses it.
+            if found is None or found.action in {"retry", "retry_after_check"}:
+                return True
+        return False
+
     def screenshot(self, card_id: str) -> bytes | None:
         return self._dispatcher.stop_card_screenshot(card_id)
 
@@ -75,7 +99,14 @@ class DispatcherStopQueue:
         shown_ms: Any,
         device: dict[str, str],
     ) -> dict[str, Any]:
-        lock = getattr(self._dispatcher, "serial_lock", None)
+        # Only an answer that runs an item again can overlap a run the window
+        # started, so only that waits for the window's lock. Closing a stop
+        # (skip, done by hand, saved) goes through while a run waits.
+        lock = (
+            getattr(self._dispatcher, "serial_lock", None)
+            if self._runs_again(card_ids, choice)
+            else None
+        )
         if lock is not None and not lock.acquire(timeout=ANSWER_LOCK_TIMEOUT_S):
             return {
                 "ok": False,

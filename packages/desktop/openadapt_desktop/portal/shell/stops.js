@@ -196,6 +196,30 @@ function showShot(card) {
   );
 }
 
+// One possible match the app listed: field by field, each value marked Same
+// or Different from the item. A row Flow read only as text shows its text.
+function candidate(row, index, count) {
+  const fields = (row && row.fields) || [];
+  if (!fields.length) return el("li", { text: (row && row.text) || String(row) });
+  const title = count > 1 ? `Possible match ${index + 1}` : "Possible match in the app";
+  return el("li", {}, [
+    el("h3", { text: title }),
+    el(
+      "dl",
+      {},
+      fields.map((f) =>
+        el("div", { className: f.same ? "stops-row stops-same" : "stops-row stops-differs" }, [
+          el("dt", { text: label(f.field) }),
+          el("dd", {}, [
+            f.value === "" ? el("em", { text: "Empty" }) : document.createTextNode(f.value),
+            el("span", { className: "stops-flag", text: f.same ? "Same" : "Different" }),
+          ]),
+        ]),
+      ),
+    ),
+  ]);
+}
+
 function evidence(card) {
   const ev = card.evidence || {};
   const diffs = new Map((ev.differences || []).map((d) => [d.field, d]));
@@ -233,7 +257,7 @@ function evidence(card) {
       el(
         "ul",
         { className: "stops-candidates", attrs: { "aria-label": "Possible matches the app listed" } },
-        ev.candidates.map((row) => el("li", { text: row })),
+        ev.candidates.map((row, i) => candidate(row, i, ev.candidates.length)),
       ),
     );
   }
