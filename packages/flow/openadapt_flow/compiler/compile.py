@@ -59,6 +59,7 @@ from openadapt_flow.ir import (
     structural_locator_is_locatable,
 )
 from openadapt_flow.risk import (
+    CONFIRMATION_OPENER_PREFIX,
     PRESUMED_COMMIT_EXPLANATION,
     confirmation_opener_step_ids,
     infer_step_risk,
@@ -2987,9 +2988,7 @@ def _compile_recording(
     for opener_id, confirm_id in confirmation_opener_step_ids(steps):
         opener = by_step_id[opener_id]
         opener.risk = "reversible"
-        opener.risk_explanation = (
-            f"opens a confirmation dialog; the save is the next click ({confirm_id})"
-        )
+        opener.risk_explanation = f"{CONFIRMATION_OPENER_PREFIX} ({confirm_id})"
         opener.risk_review_required = False
         confirm = by_step_id[confirm_id]
         confirm.risk_explanation = (

@@ -106,6 +106,23 @@ def is_sealed_dismiss(step: Step) -> bool:
     )
 
 
+#: ``risk_explanation`` prefix of a confirmation opener step whose save is a
+#: following confirmation click.
+CONFIRMATION_OPENER_PREFIX = "opens a confirmation dialog; the save is the next click"
+
+
+def is_sealed_confirmation_opener(step: Step) -> bool:
+    """A click that only opens a confirmation dialog, sealed with a dialog postcondition."""
+
+    return bool(
+        step.action in _POINTER_ACTIONS
+        and (step.risk_explanation or "").startswith(CONFIRMATION_OPENER_PREFIX)
+        and bool(step.expect)
+        and not step.effects
+        and step.api_binding is None
+    )
+
+
 @dataclass(frozen=True)
 class RiskInference:
     """Compile-time classification plus its qualification disposition."""
@@ -789,6 +806,12 @@ def infer_step_risk(
             "reversible",
             (step.risk_explanation or LOCAL_EDIT_PREFIX)[:512],
             (action_evidence, "pattern:local_edit"),
+        )
+    if is_sealed_confirmation_opener(step):
+        return RiskInference(
+            "reversible",
+            (step.risk_explanation or CONFIRMATION_OPENER_PREFIX)[:512],
+            (action_evidence, "pattern:confirmation_opener"),
         )
     if write_keyword is not None and step.action in {
         ActionKind.CLICK,
