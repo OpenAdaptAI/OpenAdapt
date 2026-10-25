@@ -10816,7 +10816,18 @@ class Replayer:
             census = getter(int(resolution.point[0]), int(resolution.point[1]))
         except Exception:
             return None
-        if not isinstance(census, Mapping) or census.get("uncountable") is not True:
+        if not isinstance(census, Mapping):
+            return None
+        uncountable = census.get("uncountable") is True
+        # Teach saw no row here, but the live page shows one, and the clicked
+        # control's name repeats in other rows: the click cannot be tied to
+        # the recorded record.
+        unrecorded_row = (
+            census.get("row") is not False
+            and bool(census.get("candidates"))
+            and census.get("label_repeats") is True
+        )
+        if not (uncountable or unrecorded_row):
             return None
         if not self._leads_into_consequential(step, workflow):
             return None
@@ -10826,11 +10837,16 @@ class Replayer:
             ambiguity_halt="identity_uncounted",
         )
         result.safety_halt = True
+        why = (
+            "whose identity cannot be read (every row's own label reads the same)"
+            if uncountable
+            else "that teach time did not record as a row, and other rows show "
+            "the same control"
+        )
         return (
             f"Step '{step.id}' ({step.intent}) clicks a control in a repeated "
-            "row whose identity cannot be read (every row's own label reads the "
-            "same), and a consequential write follows (identity_uncounted) — "
-            "acting could open another record; refusing to act"
+            f"row {why}, and a consequential write follows (identity_uncounted) "
+            "— acting could open another record; refusing to act"
         )
 
     @staticmethod

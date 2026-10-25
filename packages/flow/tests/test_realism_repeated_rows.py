@@ -362,3 +362,297 @@ def test_a_menu_of_unique_items_before_a_save_still_runs(
         assert page.locator("#status").inner_text() == "Saved Reports"
     finally:
         page.close()
+
+
+# -- review regressions for #1569 ------------------------------------------------
+#
+# Look-alike rows that differ only in markup (an empty unread dot, an extra
+# class, a lone highlighted row, an MRN in a title or a hidden span) must still
+# be counted; section cards, nested cards and icon-only toolbars must not stop.
+
+
+def _note(*_args: object) -> None:
+    """Diagnostics are carried by the assertion messages."""
+
+
+_P_SAME = "<span>John Smith</span><span>Follow-up</span><span>Dr Lee</span>"
+_P_TEXT = {
+    "1001": _P_SAME,
+    "1002": _P_SAME,
+    "1003": "<span>Maria Garcia</span><span>Intake</span><span>Dr Lee</span>",
+    "1004": "<span>Ana Ruiz</span><span>Follow-up</span><span>Dr Kim</span>",
+}
+_P_SCRIPT = """
+<div id="status">No chart open</div>
+<div id="chart" style="display:none"><button id="sign">Sign visit note</button></div>
+<div id="signed">Nothing signed</div>
+<script>
+let open = null;
+function openChart(b) { open = b.dataset.chart;
+  document.getElementById('status').textContent = 'Opened chart ' + open;
+  document.getElementById('chart').style.display = 'block'; }
+document.getElementById('sign').onclick = () => {
+  document.getElementById('signed').textContent = 'Signed chart ' + open; };
+</script>"""
+
+
+def _p_btn(i, chart, label="Open"):
+    return f'<button id="open-{i}" data-chart="{chart}" onclick="openChart(this)">{label}</button>'
+
+
+def _probe_page(q):
+    s = q["s"][0]
+    order = q.get("order", ["abcd"])[0]
+    charts = [{"a": "1001", "b": "1002", "c": "1003", "d": "1004"}[k] for k in order]
+    rows = []
+    for i, c in enumerate(charts):
+        if s == "iconshape":
+            # 1001 and 1004 carry an empty unread dot; 1002/1003 do not.
+            dot = '<i class="dot"></i>' if c in ("1001", "1004") else ""
+            rows.append(f'<div class="row-item">{dot}{_P_TEXT[c]}{_p_btn(i, c)}</div>')
+        elif s == "stateclass":
+            extra = " unread" if c in ("1001", "1004") else ""
+            rows.append(
+                f'<div class="row-item{extra}">{_P_TEXT[c]}{_p_btn(i, c)}</div>'
+            )
+        elif s == "loneclass":
+            # Only the last-opened row carries a highlight class.
+            extra = " table-active" if c == "1001" else ""
+            rows.append(
+                f'<div class="row-item{extra}">{_P_TEXT[c]}{_p_btn(i, c)}</div>'
+            )
+        elif s == "attr":
+            # Identical text; the MRN only in a title attribute.
+            rows.append(
+                f'<div class="row-item"><span title="MRN {c}">&#9679;</span>'
+                f"{_P_TEXT[c]}{_p_btn(i, c)}</div>"
+            )
+        elif s == "hidden":
+            rows.append(
+                f'<div class="row-item">{_P_TEXT[c]}<span style="display:none">{c}</span>'
+                f"{_p_btn(i, c)}</div>"
+            )
+    body = "".join(rows)
+    if s == "nested":
+        # Patient cards; each holds repeated document lines with "Open".
+        names = {
+            "1001": "John Smith",
+            "1002": "Ana Ruiz",
+            "1003": "Maria Garcia",
+            "1004": "Li Wei",
+        }
+        cards = []
+        for i, c in enumerate(charts[:2]):
+            cards.append(
+                f'<section class="card"><h3>{names[c]}</h3>'
+                f'<div class="line"><span>Visit note</span>{_p_btn(i, c)}</div>'
+                f'<div class="line"><span>Labs</span>'
+                f'<button onclick="0">Open</button></div></section>'
+            )
+        body = "".join(cards)
+    if s == "icontoolbar":
+        body = (
+            '<div class="toolbar">'
+            + "".join(
+                f'<span class="tool"><button id="t{k}" title="{k}" '
+                f"onclick=\"document.getElementById('fmt').textContent='{k}'\">"
+                f'<svg width="16" height="16"><rect width="16" height="16"/></svg>'
+                f"</button></span>"
+                for k in ("bold", "italic", "under")
+            )
+            + '</div><div id="fmt">none</div>'
+            '<button id="save" onclick="document.getElementById(\'status\').textContent='
+            "'Saved '+document.getElementById('fmt').textContent\">Save</button>"
+            '<div id="status">Not saved</div>'
+        )
+        return f"<!doctype html><html><head><style>{_STYLE}</style></head><body>{body}</body></html>"
+    if s == "sections":
+        # OpenEMR-like dashboard: section cards, each with an Edit button and
+        # patient-specific content.  pid picks the patient.
+        pid = q.get("pid", ["A"])[0]
+        data = {
+            "A": ("Penicillin", "Metformin 500mg", "Asthma"),
+            "B": ("None known", "Lisinopril 10mg", "Hypertension"),
+        }[pid]
+        secs = "".join(
+            f'<div class="section"><div class="hdr"><span>{t}</span>'
+            f'<a href="#" id="edit-{k}" onclick="ed(\'{t}\');return false">Edit</a></div>'
+            f'<div class="body">{d}</div></div>'
+            for k, (t, d) in enumerate(
+                zip(("Allergies", "Medications", "Problems"), data)
+            )
+        )
+        return f"""<!doctype html><html><head><style>{_STYLE}</style></head><body>
+<h1>Patient {pid}</h1>{secs}
+<div id="editor" style="display:none"><input id="val"><button id="save">Save</button></div>
+<div id="status">Not saved</div>
+<script>let sec=null;function ed(t){{sec=t;document.getElementById('editor').style.display='block';}}
+document.getElementById('save').onclick=()=>{{document.getElementById('status').textContent=
+'Saved '+sec+' '+document.getElementById('val').value;}};</script></body></html>"""
+    return (
+        f"<!doctype html><html><head><style>{_STYLE}"
+        ".row-item{padding:8px;border:1px solid #888;margin:6px;width:560px}"
+        ".row-item span{margin-right:14px} .dot{display:inline-block;width:8px;"
+        "height:8px;background:blue;border-radius:4px;margin-right:6px}"
+        ".card{border:1px solid #555;margin:8px;padding:8px;width:400px}"
+        f"</style></head><body><h1>Worklist</h1>{_P_SCRIPT}"
+        f'<div class="rows">{body}</div></body></html>'
+    )
+
+
+class _ProbeHandler(BaseHTTPRequestHandler):
+    def do_GET(self):  # noqa: N802
+        b = _probe_page(parse_qs(urlparse(self.path).query)).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html")
+        self.send_header("Content-Length", str(len(b)))
+        self.end_headers()
+        self.wfile.write(b)
+
+    def log_message(self, *a):
+        pass
+
+
+@pytest.fixture(scope="module")
+def probe_app():
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), _ProbeHandler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}/p"
+    srv.shutdown()
+
+
+def _summ(report):
+    out = []
+    for r in report.results:
+        idn = r.identity
+        out.append(
+            f"{r.step_id} ok={r.ok} halt={getattr(idn, 'ambiguity_halt', None)} "
+            f"status={getattr(idn, 'status', None)} err={(r.error or '')[:160]}"
+        )
+    return "\n".join(out)
+
+
+def _rec_open_sign(probe_app, browser, root, s, order, chart):
+    url = f"{probe_app}?s={s}&order={order}"
+    page = _page(browser, url)
+    try:
+        rec = _recorder(page, root, url)
+        rec.click(*_center(page, f"button[data-chart='{chart}']"))
+        rec.click(*_center(page, "#sign"))
+        assert page.locator("#signed").inner_text() == f"Signed chart {chart}"
+        recording = rec.finish()
+    finally:
+        page.close()
+    compile_recording(recording, root / "bundle", name="w")
+    return root / "bundle"
+
+
+@pytest.mark.parametrize(
+    "s", ["iconshape", "stateclass", "loneclass", "attr", "hidden"]
+)
+def test_look_alike_rows_that_differ_in_markup_never_sign_the_other_chart(
+    probe_app, browser, tmp_path, s
+):
+    bundle = _rec_open_sign(probe_app, browser, tmp_path / "rec", s, "abcd", "1001")
+    report, page = _replay(
+        browser, f"{probe_app}?s={s}&order=bacd", bundle, tmp_path / "run"
+    )
+    signed = page.locator("#signed").inner_text()
+    _note(f"\n[{s}] success={report.success} signed={signed!r}\n{_summ(report)}")
+    page.close()
+    assert signed in {"Nothing signed", "Signed chart 1001"}, f"WRONG RECORD: {signed}"
+
+
+@pytest.mark.parametrize("s", ["iconshape", "stateclass", "attr", "hidden"])
+def test_look_alike_markup_rows_in_the_recorded_order_still_verify(
+    probe_app, browser, tmp_path, s
+):
+    bundle = _rec_open_sign(probe_app, browser, tmp_path / "rec", s, "cbad", "1003")
+    report, page = _replay(
+        browser, f"{probe_app}?s={s}&order=cbad", bundle, tmp_path / "run"
+    )
+    signed = page.locator("#signed").inner_text()
+    _note(f"\n[{s} same] success={report.success} signed={signed!r}\n{_summ(report)}")
+    page.close()
+    assert report.success and signed == "Signed chart 1003"
+
+
+def test_nested_patient_cards_in_the_recorded_order_still_verify(
+    probe_app, browser, tmp_path
+):
+    bundle = _rec_open_sign(
+        probe_app, browser, tmp_path / "rec", "nested", "abcd", "1001"
+    )
+    report, page = _replay(
+        browser, f"{probe_app}?s=nested&order=abcd", bundle, tmp_path / "run"
+    )
+    signed = page.locator("#signed").inner_text()
+    _note(
+        f"\n[nested same] success={report.success} signed={signed!r}\n{_summ(report)}"
+    )
+    page.close()
+    assert report.success and signed == "Signed chart 1001"
+
+
+def test_nested_patient_cards_that_swap_never_sign_the_other_chart(
+    probe_app, browser, tmp_path
+):
+    bundle = _rec_open_sign(
+        probe_app, browser, tmp_path / "rec", "nested", "abcd", "1001"
+    )
+    report, page = _replay(
+        browser, f"{probe_app}?s=nested&order=bacd", bundle, tmp_path / "run"
+    )
+    signed = page.locator("#signed").inner_text()
+    _note(
+        f"\n[nested swap] success={report.success} signed={signed!r}\n{_summ(report)}"
+    )
+    page.close()
+    assert signed in {"Nothing signed", "Signed chart 1001"}
+
+
+def test_an_icon_only_toolbar_before_a_save_still_runs(probe_app, browser, tmp_path):
+    url = f"{probe_app}?s=icontoolbar"
+    page = _page(browser, url)
+    rec = _recorder(page, tmp_path, url)
+    rec.click(*_center(page, "#titalic"))
+    rec.click(*_center(page, "#save"))
+    assert page.locator("#status").inner_text() == "Saved italic"
+    recording = rec.finish()
+    page.close()
+    compile_recording(recording, tmp_path / "bundle", name="t")
+    report, page = _replay(browser, url, tmp_path / "bundle", tmp_path / "run")
+    st = page.locator("#status").inner_text()
+    _note(f"\n[icontoolbar] success={report.success} status={st!r}\n{_summ(report)}")
+    page.close()
+    assert report.success and st == "Saved italic"
+
+
+@pytest.mark.parametrize("replay_pid", ["A", "B"])
+def test_section_cards_edit_on_another_patient_still_runs(
+    probe_app, browser, tmp_path, replay_pid
+):
+    url = f"{probe_app}?s=sections&pid=A"
+    page = _page(browser, url)
+    rec = _recorder(page, tmp_path, url)
+    rec.click(*_center(page, "#edit-1"))
+    rec.click(*_center(page, "#val"))
+    rec.type_text("Aspirin", param="med")
+    rec.click(*_center(page, "#save"))
+    assert page.locator("#status").inner_text() == "Saved Medications Aspirin"
+    recording = rec.finish()
+    page.close()
+    compile_recording(recording, tmp_path / "bundle", name="sec")
+    report, page = _replay(
+        browser,
+        f"{probe_app}?s=sections&pid={replay_pid}",
+        tmp_path / "bundle",
+        tmp_path / "run",
+        params={"med": "Ibuprofen"},
+    )
+    st = page.locator("#status").inner_text()
+    _note(
+        f"\n[sections {replay_pid}] success={report.success} status={st!r}\n{_summ(report)}"
+    )
+    page.close()
+    assert report.success and st == "Saved Medications Ibuprofen"

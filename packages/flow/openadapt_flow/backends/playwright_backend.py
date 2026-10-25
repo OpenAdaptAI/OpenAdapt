@@ -185,35 +185,50 @@ class _FramePoint:
 # the target's own cell (the same identity boundary as ``structured_text_at``).
 # Repeated sibling structures count as record rows too (#1559): many apps build
 # a worklist from div rows, CSS-grid rows or cards, with no tr, li or role.
-# A row is the nearest ancestor of the target whose parent holds at least one
-# more child with the same tag, the same class signature (state classes such
-# as active or selected ignored) and the same child shape. A control is never
-# its own row, and repeated groups that each hold a data-entry field are form
-# field groups, not rows.
+# Two siblings are peers when they share a tag, at least one class (state
+# classes such as active or selected ignored; two class-less siblings match)
+# and the same shape, counting only children that carry text or a control (an
+# empty unread dot or an icon does not change the shape). A control is never
+# its own row, and peers that each hold a data-entry field are form field
+# groups, not rows. Peers are loose on purpose: over-counting look-alike rows
+# fails closed, under-counting signs the wrong chart.
 _REPEATED_ROW_HELPERS_JS = r"""
+    const cleanText = (value) => (value || '').replace(/\s+/g, ' ').trim();
     const STATE_CLASS = /^(?:active|selected|hover|hovered|focus|focused|disabled|open|opened|expanded|collapsed|checked|current|highlighted|even|odd|first|last|visible|hidden|show|shown|(?:is|has)-.+)$/i;
-    const signatureOf = (el) => el.tagName + '|' + Array.from(el.classList)
-        .filter((name) => !STATE_CLASS.test(name)).sort().join('.');
-    const shapeOf = (el) => Array.from(el.children).map((child) => child.tagName).join(',');
+    const classesOf = (el) => Array.from(el.classList).filter((name) => !STATE_CLASS.test(name));
     const FIELD = 'input:not([type="button"]):not([type="submit"]):not([type="reset"])' +
         ':not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="image"]),' +
         ' select, textarea, [contenteditable=""], [contenteditable="true"], [role="textbox"]';
     const CONTROL = 'button, a[href], input, select, textarea, [role="button"],' +
         ' [role="link"], [role="menuitem"], [role="tab"], [role="checkbox"], [role="radio"]';
+    const meaningful = (child) => cleanText(child.textContent) !== '' ||
+        child.matches(CONTROL) || child.querySelector(CONTROL) !== null;
+    const shapeOf = (el) => Array.from(el.children).filter(meaningful)
+        .map((child) => child.tagName).join(',');
+    const alike = (a, b) => {
+        if (a.tagName !== b.tagName) return false;
+        const ca = classesOf(a);
+        const cb = classesOf(b);
+        const classes = (ca.length === 0 && cb.length === 0) ||
+            ca.some((name) => cb.includes(name));
+        return classes && shapeOf(a) === shapeOf(b);
+    };
     const repeatedPeers = (el) => {
         const parent = el.parentElement;
         if (!parent || parent === document.documentElement) return [];
-        const signature = signatureOf(el);
-        const shape = shapeOf(el);
-        return Array.from(parent.children).filter(
-            (child) => signatureOf(child) === signature && shapeOf(child) === shape
-        );
+        return Array.from(parent.children).filter((child) => alike(child, el));
     };
+    // What a person reads as the control's name: aria-label, title, text,
+    // value, alt.
+    const accessibleName = (el) => cleanText(
+        el.getAttribute('aria-label') || el.getAttribute('title') ||
+        el.textContent || el.getAttribute('value') || el.getAttribute('alt') || ''
+    );
     const repeatedRows = (node) => {
         const found = [];
         if (node.matches(FIELD)) return found;
         let cursor = node;
-        for (let depth = 0; cursor && depth < 8; depth += 1) {
+        for (let depth = 0; cursor && depth < 10; depth += 1) {
             if (cursor === document.body || cursor === document.documentElement) break;
             if (!(cursor === node && cursor.matches(CONTROL))) {
                 const peers = repeatedPeers(cursor);
@@ -225,6 +240,22 @@ _REPEATED_ROW_HELPERS_JS = r"""
         }
         return found;
     };
+    // A row's heading: an h1-h6, role=heading or legend in it, or the first
+    // text of a header-like first child (a container of several children).
+    const headingOf = (row, own) => {
+        const heading = row.querySelector('h1, h2, h3, h4, h5, h6, [role="heading"], legend');
+        if (heading && !heading.contains(own) && !own.contains(heading)) {
+            return cleanText(heading.textContent);
+        }
+        const first = row.firstElementChild;
+        if (first && first.children.length > 1) {
+            const label = Array.from(first.children).find((child) =>
+                cleanText(child.textContent) && !child.contains(own) &&
+                !child.matches(CONTROL) && !child.querySelector(CONTROL));
+            if (label) return cleanText(label.textContent);
+        }
+        return '';
+    };
 """
 
 _DESCRIBE_TARGET_JS = (
@@ -235,7 +266,7 @@ _DESCRIBE_TARGET_JS = (
     + r"""
     const own = node.closest(
         'td, th, [role="cell"], [role="gridcell"]'
-    ) || node;
+    ) || node.closest(CONTROL) || node;
     const identityOf = (row) => {
         // A row/list item with an explicit accessible name has already
         // declared its record identity. Prefer that stable application-owned
@@ -268,40 +299,63 @@ _DESCRIBE_TARGET_JS = (
     let rowIdentity = row ? identityOf(row) : '';
     let repeated = false;
     let rowUncountable = false;
+    // The outermost element the identity was read from (the row itself, or
+    // the outer level a nested row's identity was combined with).
+    let scope = row;
     if (!row) {
-        // No table or list markup: the nearest repeated sibling structure
-        // with readable identity text is the row.
-        const candidates = repeatedRows(node);
-        for (const candidate of candidates) {
-            const text = identityOf(candidate);
-            if (text) {
-                row = candidate;
-                rowIdentity = text;
-                repeated = true;
-                break;
+        // No table or list markup: the nearest repeated sibling structure is
+        // the row. Its identity is its heading when every peer's heading is
+        // unique (section cards: "Medications", whatever the patient), else
+        // its text minus the clicked cell. When that identity repeats across
+        // the document (a "Visit note" line in every patient card), the next
+        // repeated level up is added until it doesn't or no level is left.
+        const levels = repeatedRows(node).filter((level) => level.contains(own) || level === own);
+        const levelIdentity = (level) => {
+            const peers = repeatedPeers(level);
+            const heads = peers.map((peer) => headingOf(peer, own));
+            if (heads.every((head) => head) && new Set(heads).size === heads.length) {
+                return headingOf(level, own);
             }
+            return identityOf(level);
+        };
+        const repeatsInDocument = (level) => {
+            const text = clean(level.textContent);
+            let count = 0;
+            for (const other of document.getElementsByTagName(level.tagName)) {
+                if (alike(other, level) && clean(other.textContent) === text) count += 1;
+                if (count > 1) return true;
+            }
+            return false;
+        };
+        for (let index = 0; index < levels.length; index += 1) {
+            const text = levelIdentity(levels[index]);
+            if (!text) continue;
+            row = levels[index];
+            rowIdentity = text;
+            repeated = true;
+            let level = index;
+            while (repeatsInDocument(levels[level]) && level + 1 < levels.length) {
+                level += 1;
+                const outer = levelIdentity(levels[level]);
+                if (outer) rowIdentity = rowIdentity + ' | ' + outer;
+            }
+            scope = levels[level];
+            break;
         }
         // A repeated structure with no readable identity is a row nothing
-        // can count only when the clicked control's own label repeats too
-        // (every row's button reads "Open"). A menu of uniquely labelled
-        // items is not a worklist.
-        if (!row && candidates.length > 0) {
-            const nearest = candidates[0];
-            const path = [];
-            let cursor = own;
-            while (cursor && cursor !== nearest) {
-                const parent = cursor.parentElement;
-                if (!parent) break;
-                path.unshift(Array.prototype.indexOf.call(parent.children, cursor));
-                cursor = parent;
+        // can count only when the clicked control's accessible name repeats
+        // too (every row's button reads "Open"). A menu or toolbar of
+        // uniquely named items is not a worklist.
+        if (!row && levels.length > 0) {
+            const control = node.closest(CONTROL) || node;
+            const name = accessibleName(control);
+            if (name) {
+                let same = 0;
+                for (const other of document.getElementsByTagName(control.tagName)) {
+                    if (accessibleName(other) === name) same += 1;
+                }
+                rowUncountable = same >= 2;
             }
-            const ownText = clean(own.textContent);
-            const sameLabel = repeatedPeers(nearest).filter((peer) => {
-                let match = peer;
-                for (const index of path) match = match && match.children[index];
-                return match && clean(match.textContent) === ownText;
-            });
-            rowUncountable = sameLabel.length >= 2;
         }
     }
     const ancestry = [];
@@ -353,6 +407,7 @@ _DESCRIBE_TARGET_JS = (
         row: row,
         repeated: repeated,
         rowUncountable: rowUncountable,
+        scope: scope,
     };
 }"""
 )
@@ -847,9 +902,15 @@ _RECORD_KEY_JS = r"""(row, node) => {
                             /^(?:id|pid|mrn)$/i.test(k)) ids.push(k + '=' + v);
                 }
                 ids.sort();
-                const here = url.pathname === location.pathname && !ids.length;
+                // A link back to this same document ("#", "#top") names no
+                // record, even when the page's own URL carries ids.
+                const sameDocument = url.origin === location.origin &&
+                    url.pathname === location.pathname && url.search === location.search;
+                const fragmentOnly = sameDocument && (!url.hash || url.hash === '#' ||
+                    url.hash === location.hash);
                 const value = url.pathname + (ids.length ? '?' + ids.join('&') : '') + url.hash;
-                if (!(here && !url.hash) && value.length <= 512 && !positional(value)) {
+                if (!fragmentOnly && !(sameDocument && !url.hash) &&
+                        value.length <= 512 && !positional(value)) {
                     parts.push('href=' + value);
                 }
             }
@@ -860,10 +921,16 @@ _RECORD_KEY_JS = r"""(row, node) => {
 }"""
 
 # Every shown row whose record identity equals the identity of the row under
-# the point, with each row's stable record id and position. The identity is
-# computed exactly as ``structured_text_at`` does, for the cell at the same
-# place in each row. ``{row: false}`` when the point has no row identity (a
-# form field group, a standalone control): there is no row to compare.
+# the point, with each row's stable record id and position. Candidates start
+# from the clicked control: every shown control with the same tag and
+# accessible name ("Open") anywhere in the document, each read with the same
+# row identity as the target. A look-alike whose own row reads differently
+# only in ways the identity ignores still counts through a backstop: any
+# ancestor of it whose whole text equals the target row's. Over-counting fails
+# closed. A control with no accessible name falls back to the rows at the same
+# child path. ``{row: false}`` when the point has no row identity;
+# ``{row: true, uncountable: true}`` for a row no identity can be read from.
+# ``label_repeats`` says whether another shown control has the same name.
 _IDENTITY_CANDIDATES_AT_JS = (
     r"""([px, py, cap]) => {
     const el = document.elementFromPoint(px, py);
@@ -874,22 +941,13 @@ _IDENTITY_CANDIDATES_AT_JS = (
     const recordKey = """
     + _RECORD_KEY_JS
     + r""";
+"""
+    + _REPEATED_ROW_HELPERS_JS
+    + r"""
     const target = describe(el);
-    // A repeated row structure whose identity cannot be read cannot be
-    // counted, which is not the same as no row at all.
     if (target.rowUncountable) return {row: true, uncountable: true};
     if (!target.rowIdentity || !target.row) return {row: false};
     const row = target.row;
-    const own = el.closest('td, th, [role="cell"], [role="gridcell"]') || el;
-    const path = [];
-    let cursor = own;
-    while (cursor && cursor !== row) {
-        const parent = cursor.parentElement;
-        if (!parent) break;
-        path.unshift(Array.prototype.indexOf.call(parent.children, cursor));
-        cursor = parent;
-    }
-    const ownInRow = cursor === row;
     const shown = (node) => {
         if (!node.isConnected) return false;
         if (typeof node.checkVisibility === 'function') {
@@ -899,44 +957,89 @@ _IDENTITY_CANDIDATES_AT_JS = (
         const style = window.getComputedStyle(node);
         return style.visibility !== 'hidden' && style.display !== 'none';
     };
-    let rows = Array.from(
-        document.querySelectorAll('tr, [role="row"], li, [role="listitem"]')
-    );
-    if (target.repeated) {
-        // Every element anywhere in the document with the row's tag, class
-        // signature and child shape: a look-alike row in another list counts.
-"""
-    + _REPEATED_ROW_HELPERS_JS
-    + r"""
-        const signature = signatureOf(row);
-        const shape = shapeOf(row);
-        rows = Array.from(document.getElementsByTagName(row.tagName)).filter(
-            (candidate) => signatureOf(candidate) === signature &&
-                shapeOf(candidate) === shape
-        );
-    }
-    const rowRect = row.getBoundingClientRect();
+    // The backstop compares whole text at the identity's own scope: for a
+    // nested row that is the outer card, not the line that repeats in every
+    // card by design.
+    const scope = target.scope || row;
+    const rowText = cleanText(scope.textContent);
+    const found = new Map([[row, el]]);
+    const control = el.closest(CONTROL) || el;
+    const name = accessibleName(control);
     const result = {
         record_key: recordKey(row, el),
-        incomplete: rows.length > cap,
+        incomplete: false,
+        label_repeats: false,
         candidates: [],
     };
-    if (result.incomplete) return result;
-    for (const candidate of rows) {
-        if (candidate !== row && !shown(candidate)) continue;
-        let node = candidate;
-        if (ownInRow) {
-            for (const index of path) node = node && node.children[index];
+    if (name) {
+        const alikes = Array.from(document.getElementsByTagName(control.tagName)).filter(
+            (other) => other !== control && !control.contains(other) &&
+                !other.contains(control) && accessibleName(other) === name && shown(other)
+        );
+        result.label_repeats = alikes.length > 0;
+        if (alikes.length > cap) {
+            result.incomplete = true;
+            return result;
         }
-        if (!node) continue;
-        const observed = candidate === row ? target : describe(node);
-        if (observed.row !== candidate || observed.rowIdentity !== target.rowIdentity) {
-            continue;
+        for (const other of alikes) {
+            const observed = describe(other);
+            if (observed.row && observed.rowIdentity === target.rowIdentity) {
+                if (!found.has(observed.row)) found.set(observed.row, other);
+                continue;
+            }
+            let ancestor = other.parentElement;
+            for (let depth = 0; ancestor && depth < 12; depth += 1) {
+                if (ancestor === document.body) break;
+                if (ancestor !== scope && !ancestor.contains(row) &&
+                        cleanText(ancestor.textContent) === rowText) {
+                    if (!found.has(ancestor)) found.set(ancestor, other);
+                    break;
+                }
+                ancestor = ancestor.parentElement;
+            }
         }
+    } else {
+        // No accessible name to match controls by: read every table or list
+        // row (and, for a repeated row, every element like it) at the
+        // target's child path.
+        const own = el.closest('td, th, [role="cell"], [role="gridcell"]') || el;
+        const path = [];
+        let cursor = own;
+        while (cursor && cursor !== row) {
+            const parent = cursor.parentElement;
+            if (!parent) break;
+            path.unshift(Array.prototype.indexOf.call(parent.children, cursor));
+            cursor = parent;
+        }
+        const ownInRow = cursor === row;
+        let rows = target.repeated
+            ? Array.from(document.getElementsByTagName(row.tagName)).filter(
+                (candidate) => alike(candidate, row))
+            : Array.from(document.querySelectorAll('tr, [role="row"], li, [role="listitem"]'));
+        if (rows.length > cap) {
+            result.incomplete = true;
+            return result;
+        }
+        for (const candidate of rows) {
+            if (candidate === row || !shown(candidate)) continue;
+            let node = candidate;
+            if (ownInRow) {
+                for (const index of path) node = node && node.children[index];
+            }
+            if (!node) continue;
+            const observed = describe(node);
+            if (observed.rowIdentity === target.rowIdentity ||
+                    (scope === row && cleanText(candidate.textContent) === rowText)) {
+                found.set(candidate, node);
+            }
+        }
+    }
+    const rowRect = row.getBoundingClientRect();
+    for (const [candidate, hit] of found) {
         const rect = candidate.getBoundingClientRect();
         result.candidates.push({
             self: candidate === row,
-            record_key: candidate === row ? result.record_key : recordKey(candidate, node),
+            record_key: candidate === row ? result.record_key : recordKey(candidate, hit),
             dx: rect.x - rowRect.x,
             dy: rect.y - rowRect.y,
         });
