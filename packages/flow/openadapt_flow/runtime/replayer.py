@@ -167,6 +167,7 @@ from openadapt_flow.runtime.authorization import (
     runtime_param_text,
     runtime_params_for_gui,
 )
+from openadapt_flow.runtime.core import ACTION_EXECUTORS, ActionContext
 from openadapt_flow.runtime.durable.approval import StateDiverged
 from openadapt_flow.runtime.durable.program_checkpoint import (
     TOP_GRAPH_ID,
@@ -12447,6 +12448,25 @@ class Replayer:
             self._active_delivery_acknowledgers = tuple(acknowledgers)
         return refusal
 
+    def _authorize_delivery(
+        self,
+        workflow: Workflow,
+        params: Mapping[str, RuntimeParamScalar],
+        step: Step,
+        result: StepResult,
+    ) -> Optional[str]:
+        """Every governance check at the last point before input, in order.
+
+        The gate the core action executors call before they deliver input:
+        delivery authorization first, then the qualification environment
+        (which raises when it is no longer current).
+        """
+        refusal = self._delivery_authorization_refusal(workflow, params, step, result)
+        if refusal is not None:
+            return refusal
+        self._require_qualification_environment_current()
+        return None
+
     def _begin_approval_item(
         self,
         report: RunReport,
@@ -13841,65 +13861,25 @@ class Replayer:
                 allow_retry=not guarded_type,
             )
 
-        if step.action in (ActionKind.KEY, ActionKind.HOTKEY):
-            if not step.key:
-                return (
-                    f"Step '{step.id}' ({step.intent}) is a "
-                    f"{step.action.value} step with no key"
-                )
-            key = (
-                "+".join([*step.modifiers, step.key])
-                if step.action is ActionKind.HOTKEY
-                else step.key
-            )
-            requires_atomic_keyboard = self._requires_atomic_identity_keyboard(
-                step, workflow
-            )
-            guarded_key = (
-                requires_atomic_keyboard
-                and not isinstance(self.backend, RemoteActuationBackend)
-                and isinstance(self.backend, GuardedKeyboardActionBackend)
-            )
-            if guarded_key:
-                refusal = self._delivery_authorization_refusal(
-                    workflow, params, step, result
-                )
-                if refusal is not None:
-                    return refusal
-                self._require_qualification_environment_current()
-                result.delivery_receipt = self._deliver_backend_call(
-                    result,
-                    lambda: cast(
-                        GuardedKeyboardActionBackend, self.backend
-                    ).press_guarded(
-                        key,
-                        expected_frame_sha256=hashlib.sha256(before_png).hexdigest(),
+        executor = ACTION_EXECUTORS.get(step.action)
+        if executor is not None:
+            # KEY, HOTKEY and WAIT run in the governance-free core; the gates
+            # it must pass before input come from here.
+            return executor(
+                ActionContext(
+                    step=step,
+                    result=result,
+                    backend=self.backend,
+                    before_png=before_png,
+                    authorize=lambda: self._authorize_delivery(
+                        workflow, params, step, result
+                    ),
+                    deliver=self._deliver_backend_call,
+                    requires_atomic_keyboard=lambda: (
+                        self._requires_atomic_identity_keyboard(step, workflow)
                     ),
                 )
-                result.actuation = "guarded_keyboard"
-            elif requires_atomic_keyboard and not isinstance(
-                self.backend, RemoteActuationBackend
-            ):
-                result.safety_halt = True
-                result.failure_category = "safety_halt"
-                return (
-                    f"Step '{step.id}' ({step.intent}) lost its guarded keyboard "
-                    "capability before delivery — refusing unguarded key input; "
-                    "run aborted"
-                )
-            else:
-                refusal = self._delivery_authorization_refusal(
-                    workflow, params, step, result
-                )
-                if refusal is not None:
-                    return refusal
-                self._require_qualification_environment_current()
-                self._deliver_backend_call(result, lambda: self.backend.press(key))
-            return None
-
-        if step.action is ActionKind.WAIT:
-            # WAIT means wait_settled only; the post-action settle handles it.
-            return None
+            )
 
         if step.action is ActionKind.SCROLL:
             return self._act_scroll(
