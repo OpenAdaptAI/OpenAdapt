@@ -78,6 +78,10 @@ frame:
     record_field: patient_id        # the audit entry's record reference
     actor_field: user
     self: [{param: bot_user}]       # the bot's own user or session ids
+    scope_field: comments           # what the entry wrote (a table)
+    scope_encoding: base64
+    scope_pattern: ...              # a regex with a (?P<scope>...) group
+    writes: [patient_data, history_data]  # the tables the save writes
 ```
 
 The slice is the verifier's read set: the records it returns before and after
@@ -105,6 +109,9 @@ the whole contract, not once per effect:
 - An audit entry by the bot for a record that no effect declares is
   collateral, even if the record looks unchanged in the read. The log shows a
   write the contract does not cover.
+- An audit entry by the bot for a declared record is excused only for a table
+  in `writes`. An entry for the saved patient in any other table, or one whose
+  table can't be read, is collateral (OpenAdaptAI/OpenAdapt#1505).
 
 Collateral refutes the frame. The outcome is `reconciliation_required`, the
 same as a wrong value, and the reason names the records and fields.

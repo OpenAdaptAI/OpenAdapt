@@ -24,6 +24,11 @@ Every change outside the declared records is attributed:
 
 An audit entry by the bot for a record no effect declares is collateral even
 when the read shows nothing: the log shows a write the contract doesn't cover.
+An audit entry by the bot for a declared record is excused only when it writes
+one of the tables the frame says the save writes (``writes``). An entry on the
+saved patient for any other table (an insurance row, an allergy, a note) is
+collateral, and so is one whose table can't be read from the entry
+(OpenAdaptAI/OpenAdapt#1505).
 
 Only evidence the bot can't write counts (the safety review of #1443):
 
@@ -44,8 +49,11 @@ an unresolved self id makes the frame ``not_checked``, never ``held``.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
@@ -77,7 +85,10 @@ class FrameAttribution(BaseModel):
     feed. Entries present after the save and not before are the window's
     entries. ``record_field`` names the entry field that refers to a record
     (compared with :attr:`FrameSpec.identity_field`), ``actor_field`` the
-    user or session.
+    user or session. ``scope_field`` names the entry field that says what the
+    entry wrote (a table, a resource type, or the logged statement, read with
+    ``scope_encoding`` and ``scope_pattern``), and ``writes`` lists the
+    scopes the save itself writes for a declared record.
 
     ``record_field`` attribution: each record carries its last modifier in
     ``actor_field`` and, optionally, a version or ETag in ``version_field``.
@@ -97,6 +108,18 @@ class FrameAttribution(BaseModel):
     #: ``audit_read`` only: the read-only read of the log, as an ``effects:``
     #: verifier section. Built by the caller (``verify-run``).
     read: Optional[dict[str, Any]] = None
+    #: ``audit_read`` only: the entry field saying what the entry wrote.
+    scope_field: Optional[str] = None
+    #: ``audit_read`` only: how ``scope_field`` is stored. OpenEMR stores the
+    #: logged statement base64-encoded.
+    scope_encoding: Literal["plain", "base64"] = "plain"
+    #: ``audit_read`` only: a regular expression with a ``scope`` group that
+    #: finds the scope in the (decoded) value. Unset: the whole value.
+    scope_pattern: Optional[str] = None
+    #: ``audit_read`` only: the scopes (tables, resource types) the save
+    #: writes for a declared record. A bot entry on a declared record for any
+    #: other scope is collateral.
+    writes: list[str] = Field(default_factory=list)
     #: ``record_field`` only: a version, revision or ETag on each record.
     version_field: Optional[str] = None
     #: ``record_field`` only: the record fields this app sets on the server
@@ -127,11 +150,33 @@ class FrameAttribution(BaseModel):
                 raise ValueError("version_field applies to record_field attribution")
             if self.server_set:
                 raise ValueError("server_set applies to record_field attribution")
+            if not self.scope_field or not self.writes:
+                # Without them a bot entry on the saved record is excused
+                # whatever it wrote (OpenAdaptAI/OpenAdapt#1505).
+                raise ValueError(
+                    "audit_read attribution needs scope_field and writes: which "
+                    "entry field says what was written, and the tables the save "
+                    "writes for a declared record"
+                )
+            if self.scope_pattern is not None:
+                try:
+                    groups = re.compile(self.scope_pattern).groupindex
+                except re.error as exc:
+                    raise ValueError(f"scope_pattern does not compile: {exc}") from exc
+                if "scope" not in groups:
+                    raise ValueError("scope_pattern needs a (?P<scope>...) group")
         else:
-            if self.read is not None or self.record_field is not None:
+            if (
+                self.read is not None
+                or self.record_field is not None
+                or self.scope_field is not None
+                or self.scope_pattern is not None
+                or self.writes
+            ):
                 raise ValueError(
                     "record_field attribution reads the records themselves; "
-                    "read and record_field apply to audit_read"
+                    "read, record_field, scope_field, scope_pattern and writes "
+                    "apply to audit_read"
                 )
             needed = {self.actor_field} | (
                 {self.version_field} if self.version_field else set()
@@ -143,6 +188,25 @@ class FrameAttribution(BaseModel):
                     "(fields no user or API client can write): " + ", ".join(missing)
                 )
         return self
+
+    def scope_of(self, entry: Mapping[str, Any]) -> Optional[str]:
+        """What ``entry`` wrote, or None when the entry doesn't say."""
+
+        value = get_path(entry, self.scope_field or "")
+        if value in (None, ""):
+            return None
+        text = str(value)
+        if self.scope_encoding == "base64":
+            try:
+                text = base64.b64decode(text, validate=True).decode("utf-8")
+            except (binascii.Error, UnicodeDecodeError):
+                return None
+        if self.scope_pattern is None:
+            return text.strip() or None
+        match = re.search(self.scope_pattern, text)
+        if match is None or not match.group("scope"):
+            return None
+        return match.group("scope")
 
 
 class FrameSpec(BaseModel):
@@ -197,6 +261,9 @@ class FrameChange:
     audit_only: bool = False
     #: True when another actor changed a record this save declares.
     other_on_target: bool = False
+    #: A bot audit entry on a declared record: the scope it wrote that the
+    #: save doesn't (``"unknown"`` when the entry doesn't say).
+    scope: Optional[str] = None
     #: In memory only, for the operator's console; never put in a receipt.
     key: Any = None
 
@@ -226,6 +293,9 @@ class FrameVerdict:
             "concurrent_count": len(self.concurrent),
             "collateral_fields": sorted({f for c in self.collateral for f in c.fields}),
             "collateral_kinds": sorted({c.change for c in self.collateral}),
+            "collateral_scopes": sorted(
+                {c.scope for c in self.collateral if c.scope is not None}
+            ),
             "unattributed_count": sum(
                 1 for c in self.collateral if c.attribution == "unattributed"
             ),
@@ -575,13 +645,36 @@ def judge_frame(
             # the bot's own log entries can't be checked: say so.
             mode = "audit_read_unavailable"
         else:
+            assert attribution is not None
             moved = {str(c.key) for c in collateral + concurrent}
+            allowed = set(attribution.writes)
+            stray: set[tuple[str, str]] = set()
             for entry in window_entries:
-                actor = get_path(entry, attribution.actor_field)  # type: ignore[union-attr]
-                ref = get_path(entry, attribution.record_field or "")  # type: ignore[union-attr]
+                actor = get_path(entry, attribution.actor_field)
+                ref = get_path(entry, attribution.record_field or "")
                 if actor is None or str(actor) not in self_ids:
                     continue
-                if str(ref) in declared_keys or str(ref) in moved:
+                if str(ref) in declared_keys:
+                    # The saved record: excused only for a table the save
+                    # writes. An insurance row, an allergy or a note for the
+                    # new patient is collateral (#1505).
+                    scope = attribution.scope_of(entry) or "unknown"
+                    if scope in allowed or (str(ref), scope) in stray:
+                        continue
+                    stray.add((str(ref), scope))
+                    collateral.append(
+                        FrameChange(
+                            "",
+                            "changed",
+                            "self",
+                            audit_only=True,
+                            on_target=True,
+                            scope=scope,
+                            key=ref,
+                        )
+                    )
+                    continue
+                if str(ref) in moved:
                     continue
                 moved.add(str(ref))
                 collateral.append(
@@ -606,7 +699,10 @@ def _reason(verdict: FrameVerdict) -> str:
         by_kind: dict[str, int] = {}
         for change in verdict.collateral:
             label = (
-                "written by this run per the audit log"
+                "written by this run per the audit log, to a table the save "
+                "doesn't write"
+                if change.audit_only and change.on_target
+                else "written by this run per the audit log"
                 if change.audit_only
                 else "saved record changed by another actor (the saved value may "
                 "not stand)"
@@ -618,6 +714,7 @@ def _reason(verdict: FrameVerdict) -> str:
             by_kind[label] = by_kind.get(label, 0) + 1
         kinds = ", ".join(f"{n} {k}" for k, n in sorted(by_kind.items()))
         fields = sorted({f for c in verdict.collateral for f in c.fields})
+        scopes = sorted({c.scope for c in verdict.collateral if c.scope})
         unattributed = sum(
             1 for c in verdict.collateral if c.attribution == "unattributed"
         )
@@ -630,6 +727,7 @@ def _reason(verdict: FrameVerdict) -> str:
                 if fields
                 else ""
             )
+            + (f"; table(s): {', '.join(scopes)}" if scopes else "")
             + f"); {unattributed} of them no actor explains -- collateral, a "
             "person should reconcile before anything is retried or undone"
         )

@@ -104,11 +104,24 @@ frame:
     actor_field: user
     record_field: patient_id
     self: [{param: bot_user}]  # the bot's own user or session ids
+    scope_field: comments    # audit_read: the entry field saying what was written
+    scope_encoding: base64   # OpenEMR stores the statement base64-encoded
+    scope_pattern: '(?i)^\s*(?:insert\s+(?:ignore\s+)?into|replace\s+into|update|delete\s+from)\s+`?(?P<scope>[A-Za-z0-9_]+)'
+    writes: [patient_data, history_data]  # the tables the save writes
     read:                    # a second read-only read: the app's audit log
       kind: sql
       sql_driver: pymysql
-      sql_query: SELECT id, user, patient_id FROM log WHERE event LIKE 'patient-record-%'
+      sql_query: SELECT id, user, patient_id, comments FROM log WHERE event LIKE 'patient-record-%'
 ```
+
+With `audit_read`, the frame needs `scope_field` and `writes`. A log entry by
+the bot for a record the save declares is excused only when the table it
+wrote is in `writes`. An entry for the saved patient in any other table (an
+insurance row, an allergy, a note) is collateral, and so is an entry whose
+table can't be read. `evidence.frame.collateral_scopes` names those tables
+(OpenAdaptAI/OpenAdapt#1505). The fields of the read set's own records are
+compared field by field, as below; a table in `writes` that the read set
+doesn't return is checked at the table level only.
 
 Each change outside the declared delta is attributed. A change that the
 audit log (`audit_read`) or the record's own modified-by field with a new

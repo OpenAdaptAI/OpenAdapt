@@ -206,6 +206,8 @@ def _audit_spec() -> FrameSpec:
             actor_field="user",
             record_field="record",
             read={"kind": "sql"},
+            scope_field="table",
+            writes=["chart"],
             **{"self": ["bot"]},
         ),
     )
@@ -263,7 +265,7 @@ def test_a_bot_log_entry_on_an_undeclared_record_is_collateral() -> None:
     # read doesn't return), but the log says the bot wrote record 1.
     entries = [
         {"id": 101, "user": "bot", "record": 1},
-        {"id": 102, "user": "bot", "record": 2},
+        {"id": 102, "user": "bot", "record": 2, "table": "chart"},
     ]
     verdict = _judge(
         _state(OTHER),
@@ -301,8 +303,31 @@ def test_attribution_shape_is_validated() -> None:
                 actor_field="user",
                 record_field="record",
                 read={"kind": "sql"},
+                scope_field="table",
+                writes=["chart"],
                 **{"self": ["bot"]},
             )
+        )
+    # #1505: without the tables the save writes, a bot entry on the saved
+    # record would be excused whatever it wrote.
+    with pytest.raises(ValueError, match="scope_field and writes"):
+        FrameAttribution(
+            kind="audit_read",
+            actor_field="user",
+            record_field="record",
+            read={"kind": "sql"},
+            **{"self": ["bot"]},
+        )
+    with pytest.raises(ValueError, match="scope"):
+        FrameAttribution(
+            kind="audit_read",
+            actor_field="user",
+            record_field="record",
+            read={"kind": "sql"},
+            scope_field="statement",
+            scope_pattern="INSERT INTO (\\w+)",
+            writes=["chart"],
+            **{"self": ["bot"]},
         )
 
 
@@ -414,9 +439,10 @@ def test_verify_run_attributes_through_an_audit_read(tmp_path: Path) -> None:
     con = sqlite3.connect(db)
     con.executescript(
         "CREATE TABLE chart (id INTEGER PRIMARY KEY, lname TEXT, phone TEXT);"
-        "CREATE TABLE log (id INTEGER PRIMARY KEY, user TEXT, chart_id INTEGER);"
+        "CREATE TABLE log (id INTEGER PRIMARY KEY, user TEXT, chart_id INTEGER, "
+        "tbl TEXT DEFAULT 'chart');"
         "INSERT INTO chart VALUES (1, 'Priorchart', '555-0188');"
-        "INSERT INTO log VALUES (1, 'clinic2', 1);"
+        "INSERT INTO log (id, user, chart_id) VALUES (1, 'clinic2', 1);"
     )
     con.commit()
 
@@ -442,11 +468,13 @@ def test_verify_run_attributes_through_an_audit_read(tmp_path: Path) -> None:
                     "kind": "audit_read",
                     "actor_field": "user",
                     "record_field": "chart_id",
+                    "scope_field": "tbl",
+                    "writes": ["chart"],
                     "self": [self_user],
                     "read": {
                         "kind": "sql",
                         "sqlite_database": str(db),
-                        "sql_query": "SELECT id, user, chart_id FROM log",
+                        "sql_query": "SELECT id, user, chart_id, tbl FROM log",
                     },
                 },
             },
@@ -673,7 +701,7 @@ def test_an_audited_edit_of_the_saved_record_by_another_user_blocks() -> None:
     user blocks, while one on an undeclared record is a concurrent edit."""
 
     entries = [
-        {"id": 101, "user": "bot", "record": 2},
+        {"id": 101, "user": "bot", "record": 2, "table": "chart"},
         {"id": 102, "user": "clinic3", "record": 2},
     ]
     verdict = _judge(
@@ -686,3 +714,256 @@ def test_an_audited_edit_of_the_saved_record_by_another_user_blocks() -> None:
     assert verdict.status == "refuted"
     assert verdict.collateral[0].other_on_target
     assert verdict.evidence(_audit_spec())["target_changed_by_other"] == 1
+
+
+# -- #1505: a bot write for the saved patient, in a table the save doesn't write --
+
+#: OpenEMR's ``log`` keeps each statement base64-encoded in ``comments``
+#: (as the pinned fixture's own rows do), with ``user`` and ``patient_id``.
+OPENEMR_SCOPE = (
+    r"(?i)^\s*(?:insert\s+(?:ignore\s+)?into|replace\s+into|update|delete\s+from)"
+    r"\s+`?(?P<scope>[A-Za-z0-9_]+)"
+)
+
+
+def _openemr_frame(db: Path) -> dict:
+    return {
+        "identity_field": "pid",
+        "attribution": {
+            "kind": "audit_read",
+            "actor_field": "user",
+            "record_field": "patient_id",
+            "scope_field": "comments",
+            "scope_encoding": "base64",
+            "scope_pattern": OPENEMR_SCOPE,
+            "writes": ["patient_data", "history_data"],
+            "self": ["openadapt_actor"],
+            "read": {
+                "kind": "sql",
+                "sqlite_database": str(db),
+                "sql_query": (
+                    "SELECT id, user, patient_id, comments FROM log "
+                    "WHERE event LIKE 'patient-record-%' "
+                    "AND event <> 'patient-record-select' AND patient_id > 0"
+                ),
+            },
+        },
+    }
+
+
+def _openemr_store(tmp_path: Path) -> Path:
+    """The tables, columns and log format of the pinned OpenEMR fixture."""
+
+    db = tmp_path / "openemr.sqlite"
+    con = sqlite3.connect(db)
+    con.executescript(
+        "CREATE TABLE patient_data (id INTEGER PRIMARY KEY, pid INTEGER, "
+        "fname TEXT, lname TEXT, DOB TEXT);"
+        "CREATE TABLE history_data (id INTEGER PRIMARY KEY, pid INTEGER, date TEXT);"
+        "CREATE TABLE insurance_data (id INTEGER PRIMARY KEY, type TEXT, "
+        "provider TEXT, pid INTEGER, date TEXT);"
+        "CREATE TABLE log (id INTEGER PRIMARY KEY, date TEXT, event TEXT, "
+        "category TEXT, user TEXT, groupname TEXT, comments TEXT, patient_id INTEGER, "
+        "success INTEGER, log_from TEXT);"
+        "INSERT INTO patient_data VALUES (1, 1, 'Owen', 'Priorchart', '1970-01-02');"
+        "INSERT INTO history_data VALUES (1, 1, '2026-01-01');"
+    )
+    con.commit()
+    con.close()
+    return db
+
+
+def _log(con, user: str, event: str, pid: int, statement: str) -> None:
+    import base64
+
+    con.execute(
+        "INSERT INTO log (date, event, category, user, groupname, comments, "
+        "patient_id, success, log_from) VALUES ('2026-10-24 12:00:00', ?, "
+        "'Patient Demographics', ?, 'Default', ?, ?, 1, 'open-emr')",
+        (event, user, base64.b64encode(statement.encode()).decode(), pid),
+    )
+
+
+def _new_patient(con, user: str = "openadapt_actor") -> int:
+    """The New Patient save: a patient_data row and its history_data row."""
+
+    con.execute(
+        "INSERT INTO patient_data (pid, fname, lname, DOB) "
+        "VALUES (2, 'Ada', 'Quill', '1984-03-07')"
+    )
+    _log(
+        con,
+        user,
+        "patient-record-insert",
+        2,
+        "INSERT INTO patient_data SET `pid` = ?, `fname` = ?, `lname` = ?, "
+        "`DOB` = ? ('2','Ada','Quill','1984-03-07')",
+    )
+    con.execute("INSERT INTO history_data (pid, date) VALUES (2, '2026-10-24')")
+    _log(
+        con,
+        user,
+        "patient-record-insert",
+        2,
+        "INSERT INTO `history_data` (`pid`, `date`) VALUES (?, NOW()) ('2')",
+    )
+    return 2
+
+
+def _openemr_verify(tmp_path: Path, db: Path, name: str, write) -> dict:
+    doc = {
+        "schema_version": "openadapt.verify/v1",
+        "verifier": {
+            "kind": "sql",
+            "sqlite_database": str(db),
+            "sql_query": "SELECT pid, fname, lname, DOB FROM patient_data",
+        },
+        "effects": [
+            {
+                "kind": "record_written",
+                "match": {
+                    "fname": {"param": "fname"},
+                    "lname": {"param": "lname"},
+                    "DOB": {"param": "DOB"},
+                },
+                "count_new_only": True,
+                "timeout_s": 0.2,
+            }
+        ],
+        "frame": _openemr_frame(db),
+    }
+    params = {"fname": "Ada", "lname": "Quill", "DOB": "1984-03-07"}
+    cfg = parse_verify_config(doc)
+    baseline = tmp_path / f"{name}.json"
+    capture_baseline(cfg, params, baseline)
+    con = sqlite3.connect(db)
+    try:
+        write(con)
+        con.commit()
+    finally:
+        con.close()
+    return verify_run(
+        cfg,
+        params=params,
+        run_record={"executor_kind": "agent", "executor_id": "test-agent"},
+        authorization_ref="ticket-0000-1505",
+        baseline_path=baseline,
+        private_dir=tmp_path / name,
+    )
+
+
+def test_openemr_clean_new_patient_save_verifies(tmp_path: Path) -> None:
+    db = _openemr_store(tmp_path)
+    result = _openemr_verify(tmp_path, db, "clean", _new_patient)
+    assert result["receipt"]["outcome"] == "verified", result["evidence"]["frame"]
+    assert result["evidence"]["frame"]["collateral_scopes"] == []
+
+
+def test_openemr_insurance_row_for_the_new_patient_is_collateral(
+    tmp_path: Path,
+) -> None:
+    """The #1505 case: the save is right, and the bot also adds an
+    insurance_data row for the new patient, which the read can't see."""
+
+    db = _openemr_store(tmp_path)
+
+    def write(con) -> None:
+        pid = _new_patient(con)
+        con.execute(
+            "INSERT INTO insurance_data (type, provider, pid, date) "
+            "VALUES ('primary', '0', ?, '2026-10-24')",
+            (pid,),
+        )
+        _log(
+            con,
+            "openadapt_actor",
+            "patient-record-insert",
+            pid,
+            "INSERT INTO insurance_data SET `type` = ?, `provider` = ?, `pid` = ? "
+            "('primary','0','2')",
+        )
+
+    result = _openemr_verify(tmp_path, db, "insurance", write)
+    frame = result["evidence"]["frame"]
+    assert result["receipt"]["checked"]["frame"] == "refuted"
+    assert result["receipt"]["outcome"] == "reconciliation_required"
+    assert frame["collateral_scopes"] == ["insurance_data"]
+    assert frame["collateral_count"] == 1
+
+
+@pytest.mark.parametrize(
+    "table,statement",
+    [
+        ("lists", "INSERT INTO lists SET `type` = ?, `title` = ?, `pid` = ?"),
+        ("pnotes", "INSERT INTO `pnotes` (`body`, `pid`) VALUES (?, ?)"),
+        ("history_delete", "DELETE FROM `insurance_data` WHERE pid = ?"),
+    ],
+)
+def test_any_other_table_for_the_saved_patient_is_collateral(
+    tmp_path: Path, table: str, statement: str
+) -> None:
+    db = _openemr_store(tmp_path)
+
+    def write(con) -> None:
+        pid = _new_patient(con)
+        _log(con, "openadapt_actor", "patient-record-insert", pid, statement)
+
+    result = _openemr_verify(tmp_path, db, table, write)
+    assert result["receipt"]["outcome"] == "reconciliation_required"
+    assert result["evidence"]["frame"]["collateral_scopes"] != []
+
+
+def test_a_bot_entry_that_names_no_table_is_collateral(tmp_path: Path) -> None:
+    """An entry whose statement is empty or unreadable (the live harness's
+    insurance row) can't be shown to be part of the save."""
+
+    db = _openemr_store(tmp_path)
+
+    def write(con) -> None:
+        pid = _new_patient(con)
+        con.execute(
+            "INSERT INTO log (date, event, category, user, groupname, comments, "
+            "patient_id, success, log_from) VALUES ('2026-10-24 12:00:01', "
+            "'patient-record-insert', 'Insurance', 'openadapt_actor', 'Default', '', "
+            "?, 1, 'open-emr')",
+            (pid,),
+        )
+
+    result = _openemr_verify(tmp_path, db, "unnamed", write)
+    assert result["receipt"]["outcome"] == "reconciliation_required"
+    assert result["evidence"]["frame"]["collateral_scopes"] == ["unknown"]
+
+
+def test_another_users_entry_for_another_table_stays_concurrent() -> None:
+    """Narrowing applies to the bot's own entries only: another user's entry
+    on an undeclared record is still a concurrent edit."""
+
+    edited = {**OTHER, "phone_home": "555-0199"}
+    entries = [{"id": 101, "user": "clinic3", "record": 1, "table": "notes"}]
+    verdict = _judge(
+        _state(OTHER),
+        [edited, dict(TARGET)],
+        spec=_audit_spec(),
+        audit_before=[],
+        audit_after=entries,
+    )
+    assert verdict.status == "held" and len(verdict.concurrent) == 1
+
+
+def test_scope_reading() -> None:
+    import base64
+
+    spec = FrameAttribution.model_validate(_openemr_frame(Path("x"))["attribution"])
+
+    def entry(statement: str) -> dict:
+        return {"comments": base64.b64encode(statement.encode()).decode()}
+
+    assert spec.scope_of(entry("INSERT INTO `patient_data` (`pid`) VALUES (?)")) == (
+        "patient_data"
+    )
+    assert spec.scope_of(entry("update history_data SET a=? WHERE pid=?")) == (
+        "history_data"
+    )
+    assert spec.scope_of(entry("SELECT * FROM patient_data")) is None
+    assert spec.scope_of({"comments": "not base64!"}) is None
+    assert spec.scope_of({}) is None
