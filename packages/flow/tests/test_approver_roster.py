@@ -991,3 +991,61 @@ def test_a_relative_config_path_stays_pinned_after_a_chdir(tmp_path, monkeypatch
         assert seen["root"] == first
     finally:
         _PINNED_CONFIG_BYTES.clear()
+
+
+def test_a_config_without_approvers_runs_and_refuses_only_person_answers(
+    tmp_path, monkeypatch
+):
+    """Desktop with no Keychain pin hands Flow a config with no approvers
+    section: the run starts as normal, and only a person's answer is refused."""
+    import hashlib
+
+    from openadapt_flow import __main__ as cli
+    from openadapt_flow.deployment import _PINNED_CONFIG_BYTES
+
+    config = tmp_path / "deployment.yaml"
+    config.write_text("name: clinic\n")
+    digest = hashlib.sha256(config.read_bytes()).hexdigest()
+    seen: dict = {}
+
+    def fake_func(args):
+        seen["pin"] = cli._approver_pin(args, config_only=True)
+        return 0
+
+    try:
+        original_parse = argparse.ArgumentParser.parse_args
+
+        def parse(self, argv=None, namespace=None):
+            ns = original_parse(self, argv, namespace)
+            ns.func = fake_func
+            return ns
+
+        monkeypatch.setattr(argparse.ArgumentParser, "parse_args", parse)
+        code = cli.main(
+            [
+                "run",
+                str(tmp_path / "bundle"),
+                "--config",
+                str(config),
+                "--config-sha256",
+                digest,
+            ]
+        )
+        assert code == 0  # a run with no gate proceeds
+        assert seen["pin"]["config_root"] is None
+    finally:
+        _PINNED_CONFIG_BYTES.clear()
+
+    run = ItemApprovalStore(tmp_path / "run", config_root=None, config_only=True)
+    run.write_approver_root()
+    assert run.context().pin_refusal == "approver_root_unpinned"
+
+
+def test_an_approvers_section_without_a_root_is_unreadable(tmp_path):
+    """Why Desktop drops the whole section: key_dir alone isn't a valid one."""
+    from openadapt_flow.deployment import load_deployment
+
+    config = tmp_path / "deployment.yaml"
+    config.write_text("approvers:\n  key_dir: /tmp/keys\n")
+    with pytest.raises(ValueError):
+        load_deployment(str(config), allow_unresolved=True)

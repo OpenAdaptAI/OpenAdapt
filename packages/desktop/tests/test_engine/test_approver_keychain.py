@@ -848,12 +848,13 @@ def test_without_a_keychain_pin_the_config_names_no_root(tmp_path):
     )
     prepared = prepare_flow_config(source, None, approver_root=None)
     payload = yaml.safe_load(prepared.payload)
-    assert payload["approvers"] == {"key_dir": "/tmp/attacker"}
-    assert "b" * 64 not in prepared.payload
-
-    source.write_text('{"name": "clinic", "approvers": {"root_public_key": "%s"}}' % ("b" * 64))
-    payload = yaml.safe_load(prepare_flow_config(source, None).payload)
+    # The whole section goes: Flow then runs as normal and refuses only a
+    # person's answer (approver_root_unpinned); a key_dir alone would make
+    # the config unreadable and refuse every run.
     assert "approvers" not in payload
+    assert payload["name"] == "clinic"
+    assert "b" * 64 not in prepared.payload
+    assert "/tmp/attacker" not in prepared.payload
 
 
 def test_flow_never_inherits_an_approver_root_from_the_environment(monkeypatch):

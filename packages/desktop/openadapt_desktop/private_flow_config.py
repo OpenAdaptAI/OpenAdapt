@@ -247,17 +247,13 @@ def prepare_flow_config(
     approvers = deployment.get("approvers")
     if approvers is not None and not isinstance(approvers, Mapping):
         raise PrivateFlowConfigError("The deployment config's approvers section is invalid.")
-    if not approver_root and approvers is not None:
+    if not approver_root:
         # Without this Mac's Keychain pin there is no trusted root. The base
-        # config is a file the agent's user can write, so a root or head in
-        # it never reaches Flow: Flow then refuses every person's answer.
-        stripped = {
-            k: v for k, v in dict(approvers).items() if k not in ("root_public_key", "head")
-        }
-        if stripped:
-            deployment["approvers"] = stripped
-        else:
-            deployment.pop("approvers", None)
+        # config is a file the agent's user can write, so none of its
+        # approvers section reaches Flow (a section without a root is also
+        # unreadable to Flow, which would refuse the whole run). Flow runs
+        # normally and refuses only a person's answer (approver_root_unpinned).
+        deployment.pop("approvers", None)
     if approver_root:
         # A governed run takes its approver pin only from its deployment
         # config: write this Mac's pin into the snapshot Flow receives.
