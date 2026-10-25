@@ -526,8 +526,9 @@ def verify_form_identity(
     """Return None when the live form still identifies the record.
 
     ``observation`` is the live control's observation against the fields this
-    run typed into; ``changed_fields`` counts those fields in its form whose
-    value differs from what the run left in them. Otherwise return the first
+    run typed into; ``changed_fields`` counts those fields in its form that
+    did not end up holding exactly what the run typed (a controlled input
+    that reformatted it) or changed since. Otherwise return the first
     difference, in plain words.
     """
 
@@ -546,8 +547,8 @@ def verify_form_identity(
         )
     if changed_fields:
         return (
-            f"{changed_fields} field(s) of the form no longer hold the value this "
-            "run typed"
+            f"{changed_fields} field(s) of the form don't hold exactly the value "
+            "this run typed"
         )
     return None
 

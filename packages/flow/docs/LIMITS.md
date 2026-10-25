@@ -386,9 +386,14 @@ a run requires that the button's form holds exactly the fields that run typed
 into, and that each still holds the value the run left in it. A field the page
 rewrote after typing, a field that is gone, or a button of another form halts
 before the click (identity mode `form`). A backend that can't read the page
-leaves the identity unreadable, which halts too. A field whose own script
-reformats its value when it loses focus (a phone-number mask, for example)
-also halts, because its value no longer matches what was typed.
+leaves the identity unreadable, which halts too. Each field must hold exactly
+what the run typed, so a controlled input that reformats the value halts: one
+that reformats on every keystroke stops at the typed-value read-back, and one
+that reformats when it loses focus (a phone-number mask, for example) stops at
+the form check. A submit button outside the `<form>` element counts when its
+`form=` attribute names that form. One with no form owner at all (a React
+portal that submits from script) gets no form identity, so its save stays
+unarmed.
 
 For consequential or entity-sensitive workflows, require a policy that refuses
 unarmed actions, review the inferred risk and tags, and test identity against

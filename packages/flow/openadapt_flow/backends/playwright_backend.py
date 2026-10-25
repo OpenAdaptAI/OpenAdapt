@@ -480,18 +480,31 @@ _REGISTER_FILLED_FIELD_JS = (
 }"""
 )
 
-# Remember what a field holds once the run has finished typing into it, for
-# a create-new form's identity check (openadapt_flow.ir.FormIdentity). The
-# WeakMap lives in the field's own document under a per-backend random key and
-# is only ever compared in the page; no value is returned to Python.
-_SNAPSHOT_FILLED_VALUE_JS = r"""(el, key) => {
-    let values = window[key];
+# Remember what a field holds once the run has finished typing into it, and
+# whether that is exactly what the run typed, for a create-new form's identity
+# check (openadapt_flow.ir.FormIdentity). A select holds what was typed when
+# its chosen option's label is the typed text. A field that reformatted the
+# typed text (a controlled input, a mask) does not. The WeakMap lives in the
+# field's own document under a per-backend random key and is only compared in
+# the page; no value is returned to Python.
+_SNAPSHOT_FILLED_VALUE_JS = r"""(el, args) => {
+    let values = window[args.key];
     if (!(values instanceof WeakMap)) {
         values = new WeakMap();
-        Object.defineProperty(window, key, {value: values, configurable: true});
+        Object.defineProperty(window, args.key, {value: values, configurable: true});
     }
+    const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
     const value = ('value' in el) ? String(el.value) : String(el.innerText || '');
-    values.set(el, value);
+    let typed;
+    if (el.localName === 'select') {
+        const option = el.options[el.selectedIndex];
+        typed = Boolean(option) && clean(option.text) === clean(args.typed);
+    } else if ('value' in el) {
+        typed = value === String(args.typed);
+    } else {
+        typed = clean(value) === clean(args.typed);
+    }
+    values.set(el, {value: value, typed: typed});
     return true;
 }"""
 
@@ -521,10 +534,8 @@ _FORM_IDENTITY_AT_JS = (
         if (owner !== form) continue;
         const now = ('value' in field) ? String(field.value)
             : String(field.innerText || '');
-        if (!(values instanceof WeakMap) || !values.has(field) ||
-                values.get(field) !== now) {
-            changed += 1;
-        }
+        const left = (values instanceof WeakMap) ? values.get(field) : null;
+        if (!left || !left.typed || left.value !== now) changed += 1;
     }
     return {observation: out.observation, changed: changed};
 }"""
@@ -1993,17 +2004,20 @@ class PlaywrightBackend:
             _REGISTER_FILLED_FIELD_JS, arg=self._fill_store_key, with_arg=True
         )
 
-    def _snapshot_focused_field(self) -> None:
-        """Remember what the focused field holds now that typing is done.
+    def _snapshot_focused_field(self, typed: str) -> None:
+        """Remember what the focused field holds now that ``typed`` is in,
+        and whether that is exactly ``typed``.
 
         A create-new form's identity check compares each filled field with
-        this snapshot before the save. A field with no snapshot counts as
-        changed, so a failure here makes that check refuse: the safe
-        direction.
+        this snapshot before the save. A field with no snapshot, or one that
+        did not end up holding exactly what was typed, counts as changed, so
+        a failure here makes that check refuse: the safe direction.
         """
 
         self._focused_element_call(
-            _SNAPSHOT_FILLED_VALUE_JS, arg=self._fill_value_key, with_arg=True
+            _SNAPSHOT_FILLED_VALUE_JS,
+            arg={"key": self._fill_value_key, "typed": typed},
+            with_arg=True,
         )
 
     def form_identity_at(self, x: int, y: int, identity: FormIdentity) -> Optional[str]:
@@ -3256,7 +3270,7 @@ class PlaywrightBackend:
             # keyboard, so delivery stays bound to the checked target.
             deliver=lambda locator: locator.press_sequentially(text, timeout=1000),
         )
-        self._snapshot_focused_field()
+        self._snapshot_focused_field(text)
         return receipt
 
     def _handle_screenshot_frame_lifecycle(self, _frame: Any = None) -> None:
@@ -3832,7 +3846,7 @@ class PlaywrightBackend:
         self._assert_qualification_environment_current()
         self._register_focused_field()
         self._deliver_text(text, lambda: self.page.keyboard.type(text))
-        self._snapshot_focused_field()
+        self._snapshot_focused_field(text)
 
     def press(self, key: str) -> None:
         """Press a key or chord, e.g. ``'Enter'`` or ``'Meta+a'``."""
