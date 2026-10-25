@@ -10,6 +10,7 @@ real-browser tests (tests/test_realism_browser.py).
 from __future__ import annotations
 
 import types
+import uuid
 from typing import Any, Optional
 
 import pytest
@@ -167,11 +168,52 @@ def test_positional_ids_never_tell_rows_apart(ids) -> None:
     assert _decide(census).verdict == "ambiguous"
 
 
-def test_record_ids_survive_the_positional_filter() -> None:
+_STABLE_ID_FAMILIES = {
+    "uuid4": lambda r: str(uuid.UUID(int=r.getrandbits(128), version=4)),
+    "uuid4 without dashes": lambda r: uuid.UUID(int=r.getrandbits(128)).hex,
+    "encounter uuid": lambda r: f"encounter-{uuid.UUID(int=r.getrandbits(128))}",
+    "MRN-A1234": lambda r: f"MRN-A{r.randint(1000, 99999)}",
+    "zero-padded MRN": lambda r: f"{r.randint(1, 99_999_999):08d}",
+    "chart-1001": lambda r: f"chart-{r.randint(1000, 999_999)}",
+    "patient_N": lambda r: f"patient_{r.randint(100, 999_999)}",
+    "ENC2024-000123": lambda r: (
+        f"ENC{r.randint(2015, 2026)}-{r.randint(1, 999_999):06d}"
+    ),
+    "FHIR Patient/123": lambda r: f"Patient/{r.randint(1, 99_999)}",
+    "dated visit": lambda r: f"visit-2026-10-{r.randint(10, 28)}-{r.randint(1, 99)}",
+    "ObjectId": lambda r: "%024x" % r.getrandbits(96),
+    "ULID": lambda r: (
+        "01H" + "".join(r.choice("0123456789ABCDEFGHJKMNPQRSTVWXYZ") for _ in range(23))
+    ),
+}
+
+
+@pytest.mark.parametrize("family", sorted(_STABLE_ID_FAMILIES))
+def test_stable_record_ids_are_never_dropped_as_positional(family) -> None:
+    """Measured: 0 of 1000 ids per family read as a position."""
+
+    import random
+
     from openadapt_flow.runtime.identity_census import positional_id
 
-    for value in ("chart-1001", "patient_1001", "MRN-A1234", "rec-77"):
-        assert not positional_id(value, 0), value
+    rng = random.Random(family)
+    values = [_STABLE_ID_FAMILIES[family](rng) for _ in range(1000)]
+    dropped = [v for i, v in enumerate(values) if positional_id(v, i % 50)]
+    assert dropped == []
+
+
+def test_the_windows_agent_drops_the_same_ids() -> None:
+    import random
+
+    from openadapt_flow.runtime.identity_census import positional_id
+
+    rng = random.Random(3)
+    values = [g(rng) for g in _STABLE_ID_FAMILIES.values() for _ in range(50)]
+    values += ["row-3", "r3c2", "item_12", "row-3-col-1", "3-1", "ListViewItem-0", "7"]
+    for index, value in enumerate(values):
+        assert server._positional_id(value, index % 9) == positional_id(
+            value, index % 9
+        ), value
 
 
 @pytest.mark.parametrize("scrolls", [True, None])

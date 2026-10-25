@@ -742,19 +742,23 @@ _CENSUS_ROW_TYPES = frozenset(
 _MAX_CENSUS_ROWS = 2000
 _SINGLE_NUMBER = re.compile(r"^\D*(\d+)\D*$")
 # Mirror of identity_census.positional_id.
-_POSITION_WORD = re.compile(
-    r"(?:^|[^a-z])(?:row|r|item|idx|index|cell|col|c|line|pos|position|"
-    r"listviewitem|node|child)[-_ :#]?\d+",
-    re.IGNORECASE,
+_POSITION_WORDS = (
+    "row|item|idx|index|cell|col|column|line|pos|position|listviewitem|node|child"
 )
+_POSITION_TOKEN = re.compile(rf"^(?:(?:{_POSITION_WORDS})\d+|r\d+c\d+)$", re.IGNORECASE)
+_POSITION_WORD_TOKEN = re.compile(rf"^(?:{_POSITION_WORDS}|r|c)$", re.IGNORECASE)
 
 
 def _positional_id(value: str, index: int) -> bool:
     """Whether a row id names a position (``row-3``, ``r3c2``) not a record."""
 
-    if len(re.findall(r"\d+", value)) > 1:
+    tokens = [t for t in re.split(r"[^A-Za-z0-9]+", value) if t]
+    if any(_POSITION_TOKEN.match(t) for t in tokens):
         return True
-    if _POSITION_WORD.search(value):
+    for word, following in zip(tokens, tokens[1:]):
+        if _POSITION_WORD_TOKEN.match(word) and following.isdigit():
+            return True
+    if len(tokens) > 1 and all(t.isdigit() and len(t) <= 3 for t in tokens):
         return True
     match = _SINGLE_NUMBER.match(value)
     return bool(match and int(match.group(1)) in (index, index + 1))

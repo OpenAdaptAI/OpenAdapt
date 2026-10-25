@@ -713,9 +713,16 @@ _RECORD_KEY_JS = r"""(row, node) => {
     const index = parent ? Array.prototype.indexOf.call(parent.children, row) : -1;
     // Mirror of identity_census.positional_id: an id that names a position
     // (row-3, r3c2, item_12, the row's own index) moves with the row.
+    const WORDS = 'row|item|idx|index|cell|col|column|line|pos|position|listviewitem|node|child';
+    const POSITION_TOKEN = new RegExp('^(?:(?:' + WORDS + ')\\d+|r\\d+c\\d+)$', 'i');
+    const POSITION_WORD = new RegExp('^(?:' + WORDS + '|r|c)$', 'i');
     const positional = (value) => {
-        if ((value.match(/\d+/g) || []).length > 1) return true;
-        if (/(?:^|[^a-z])(?:row|r|item|idx|index|cell|col|c|line|pos|position|listviewitem|node|child)[-_ :#]?\d+/i.test(value)) return true;
+        const tokens = value.split(/[^A-Za-z0-9]+/).filter(Boolean);
+        if (tokens.some((t) => POSITION_TOKEN.test(t))) return true;
+        for (let i = 0; i + 1 < tokens.length; i += 1) {
+            if (POSITION_WORD.test(tokens[i]) && /^\d+$/.test(tokens[i + 1])) return true;
+        }
+        if (tokens.length > 1 && tokens.every((t) => /^\d{1,3}$/.test(t))) return true;
         const m = /^\D*(\d+)\D*$/.exec(value);
         if (!m) return false;
         const n = Number(m[1]);

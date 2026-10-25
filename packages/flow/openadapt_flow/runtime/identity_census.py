@@ -157,11 +157,13 @@ def count_matching_rows(
 TREE_CENSUS_ROW_CAP = 2000
 
 _SINGLE_NUMBER = re.compile(r"^\D*(\d+)\D*$")
-_POSITION_WORD = re.compile(
-    r"(?:^|[^a-z])(?:row|r|item|idx|index|cell|col|c|line|pos|position|"
-    r"listviewitem|node|child)[-_ :#]?\d+",
-    re.IGNORECASE,
+_POSITION_WORDS = (
+    "row|item|idx|index|cell|col|column|line|pos|position|listviewitem|node|child"
 )
+# A whole token that is a position word with its number (row3, item_12 is
+# split into item + 12) or a grid coordinate (r3c2).
+_POSITION_TOKEN = re.compile(rf"^(?:(?:{_POSITION_WORDS})\d+|r\d+c\d+)$", re.IGNORECASE)
+_POSITION_WORD_TOKEN = re.compile(rf"^(?:{_POSITION_WORDS}|r|c)$", re.IGNORECASE)
 
 
 def positional_id(value: str, index: int) -> bool:
@@ -169,14 +171,21 @@ def positional_id(value: str, index: int) -> bool:
 
     Such an id moves with the row (``row-3``, ``r3c2``, ``item_12``, a bare
     ``3``): after the rows reorder or scroll it points at whichever record now
-    sits there, so it never tells rows apart. True for an id whose only number
-    is the row's index (0- or 1-based), for an id that spells a position
-    (``row``, ``item``, ``cell``, ``col`` ... followed by a number), and for an
-    id with more than one number (grid coordinates).
+    sits there, so it never tells rows apart. The id is split into
+    alphanumeric tokens. It is positional when a token is a position word with
+    its number (``row3``, ``r3c2``), when a position word token is followed by
+    a number token (``row-3``, ``item_12``, ``row-3-col-1``), when every token
+    is a short number (grid coordinates such as ``3-1``), or when its only
+    number is the row's index (0- or 1-based). UUIDs, ULIDs, MRNs and
+    composite record ids (``ENC2024-000123``) are not.
     """
-    if len(re.findall(r"\d+", value)) > 1:
+    tokens = [t for t in re.split(r"[^A-Za-z0-9]+", value) if t]
+    if any(_POSITION_TOKEN.match(t) for t in tokens):
         return True
-    if _POSITION_WORD.search(value):
+    for word, following in zip(tokens, tokens[1:]):
+        if _POSITION_WORD_TOKEN.match(word) and following.isdigit():
+            return True
+    if len(tokens) > 1 and all(t.isdigit() and len(t) <= 3 for t in tokens):
         return True
     match = _SINGLE_NUMBER.match(value)
     return bool(match and int(match.group(1)) in (index, index + 1))
