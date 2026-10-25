@@ -60,6 +60,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from benchmark.lifecycle.paths import relative_paths
+from benchmark.lifecycle_proof.approver import FixtureApprover
 
 HERE = Path(__file__).resolve().parent
 FLOW = HERE.parents[1]
@@ -186,18 +187,15 @@ def _config_and_hooks() -> tuple[Any, Any, dict[str, Any]]:
 
 
 class ScriptedPerson:
-    """Answers every waiting approval request, and counts each answer."""
+    """Answers every waiting approval request, and counts each answer.
 
-    APPROVE = dict(
-        decision="approve",
-        decided_by="human",
-        route="desktop_run_it",
-        approver_id="lifecycle-proof-operator",
-        auth_method="cloud_aal2",
-    )
+    Every answer is signed by the run's fixture approver
+    (:mod:`benchmark.lifecycle_proof.approver`); an unsigned one is refused.
+    """
 
-    def __init__(self, ledger: Ledger) -> None:
+    def __init__(self, ledger: Ledger, approver: Any = None) -> None:
         self.ledger = ledger
+        self.approver = approver
         self.stores: list[Any] = []
         self.seen: set[str] = set()
         self.touches = 0
@@ -207,14 +205,14 @@ class ScriptedPerson:
 
     def sleep(self, seconds: float) -> None:
         time.sleep(min(seconds, 0.5))
-        from openadapt_flow.approval_mode.item_approval import make_answer
-
         for store in list(self.stores):
             for request in store.requests():
                 if request.request_id in self.seen:
                     continue
                 self.seen.add(request.request_id)
-                store.write_answer(make_answer(request, **self.APPROVE))
+                store.write_answer(
+                    answer_signed(self.ledger, self.approver, store, request, True)
+                )
                 self.touches += 1
                 self.ledger.add(
                     "person",
@@ -222,6 +220,26 @@ class ScriptedPerson:
                     request_id=request.request_id,
                     store=str(store.root) if hasattr(store, "root") else "",
                 )
+
+
+def answer_signed(
+    ledger: Any, approver: Any, store: Any, request: Any, approve: bool
+) -> Any:
+    """The fixture approver's signed answer; a refusal is logged, then raised."""
+
+    from openadapt_flow.approval_mode.item_approval import ItemApprovalRefused
+
+    try:
+        if approver is None:
+            raise ItemApprovalRefused(
+                "human_answer_unsigned", "no fixture approver for this run"
+            )
+        return approver.answer(store, request, approve=approve)
+    except ItemApprovalRefused as exc:
+        ledger.add(
+            "person_answer_refused", request_id=request.request_id, code=exc.code
+        )
+        raise
 
 
 class LocalStatusAuthority:
@@ -352,14 +370,13 @@ class Item:
 
     def approval_gate(self, bundle: Path, page: Any) -> Any:
         from openadapt_flow.approval_mode.gate import ApprovalGate
-        from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
         from openadapt_flow.approval_mode.model import (
             DESKTOP_LIST_WITH_HEADER,
             ItemContext,
         )
 
         ctx = self.ctx
-        store = ItemApprovalStore(self.run_dir)
+        store = ctx["approver"].store(self.run_dir)
         ctx["person"].watch(store)
 
         return ApprovalGate(
@@ -392,7 +409,6 @@ class Item:
         )
 
     def authorization(self, workflow: Any, bundle: Path, verifier: Any) -> Any:
-        from openadapt_flow.deployment import DeploymentConfig, PolicySection
         from openadapt_flow.execution_profiles import (
             ExecutionProfile,
             execution_profile_contract,
@@ -406,7 +422,7 @@ class Item:
         gate = evaluate_run_gate(
             workflow,
             bundle_dir=bundle,
-            deployment=DeploymentConfig(policy=PolicySection(policy=POLICY)),
+            deployment=self.ctx["approver"].deployment(),
             effect_verifier=verifier,
             profile_contract=execution_profile_contract(ExecutionProfile.REGULATED),
             effective_durable=True,
@@ -520,6 +536,8 @@ def _context(out: Path, keys_dir: Path, ledger: Ledger) -> dict[str, Any]:
     keys = _keys(keys_dir)
     _env(app, keys)
     config, hooks, lookup = _config_and_hooks()
+    approver = FixtureApprover.for_run(out, policy=POLICY)
+    ledger.add("fixture_approver", **approver.ledger_fields())
     ctx: dict[str, Any] = {
         "app": app,
         "keys": keys,
@@ -527,7 +545,8 @@ def _context(out: Path, keys_dir: Path, ledger: Ledger) -> dict[str, Any]:
         "hooks": hooks,
         "lookup": lookup,
         "ledger": ledger,
-        "person": ScriptedPerson(ledger),
+        "approver": approver,
+        "person": ScriptedPerson(ledger, approver),
         "store": out / "repair-store",
         "out": out,
     }
@@ -1018,9 +1037,8 @@ def phase_drift(ctx: dict[str, Any], trials: int, agent: Any) -> dict[str, Any]:
         admission_key_dir=ctx["keys"]["admission_key_dir"],
         sleep=ctx["person"].sleep,
     )
-    from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
 
-    ctx["person"].watch(ItemApprovalStore(run_dir))
+    ctx["person"].watch(ctx["approver"].store(run_dir))
     t0 = time.time()
     result = repair.run(ctx["bundle"], run_dir)
     evidence = result.evidence
