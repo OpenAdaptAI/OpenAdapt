@@ -594,10 +594,10 @@ that:
 <!-- size-ratchet:begin -->
 | File | Line budget |
 |---|---:|
-| `packages/flow/openadapt_flow/runtime/replayer.py` | 18258 |
+| `packages/flow/openadapt_flow/runtime/replayer.py` | 18300 |
 | `packages/flow/openadapt_flow/__main__.py` | 11970 |
 | `packages/flow/openadapt_flow/qualification.py` | 5775 |
-| `packages/flow/openadapt_flow/ir.py` | 5765 |
+| `packages/flow/openadapt_flow/ir.py` | 5798 |
 | `packages/desktop/openadapt_desktop/dispatch.py` | 5686 |
 | `packages/capture/openadapt_capture/recorder.py` | 4532 |
 | `packages/flow/openadapt_flow/interactive_recorder.py` | 4524 |

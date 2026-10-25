@@ -1,0 +1,148 @@
+{
+  "schema": "openadapt.flow.sections/v1",
+  "note": "Display metadata: named groups of steps for program maps. Execution and the outcome classifier ignore this file, and it is outside the content digest and the workflow contract hash.",
+  "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e",
+  "sections": [
+    {
+      "id": "fields-step_000",
+      "title": "Sign in to MockMed",
+      "title_source": "ui",
+      "kind": "fields",
+      "steps": [
+        "step_000",
+        "step_001",
+        "step_002",
+        "step_003"
+      ],
+      "fields": [
+        "username",
+        "password"
+      ],
+      "params": []
+    },
+    {
+      "id": "fields-step_004",
+      "title": "Triage",
+      "title_source": "ui",
+      "kind": "fields",
+      "steps": [
+        "step_004",
+        "step_005",
+        "step_006",
+        "step_007",
+        "step_008",
+        "step_009"
+      ],
+      "fields": [
+        "note"
+      ],
+      "params": [
+        "note"
+      ]
+    },
+    {
+      "id": "save-step_010",
+      "title": "Save Encounter",
+      "title_source": "ui",
+      "kind": "save",
+      "steps": [
+        "step_010"
+      ],
+      "fields": [],
+      "params": []
+    }
+  ],
+  "compiled": [
+    {
+      "id": "fields-step_000",
+      "title": "Sign in to MockMed",
+      "title_source": "ui",
+      "kind": "fields",
+      "steps": [
+        "step_000",
+        "step_001",
+        "step_002",
+        "step_003"
+      ],
+      "fields": [
+        "username",
+        "password"
+      ],
+      "params": []
+    },
+    {
+      "id": "fields-step_004",
+      "title": "Triage",
+      "title_source": "ui",
+      "kind": "fields",
+      "steps": [
+        "step_004",
+        "step_005",
+        "step_006",
+        "step_007",
+        "step_008",
+        "step_009"
+      ],
+      "fields": [
+        "note"
+      ],
+      "params": [
+        "note"
+      ]
+    },
+    {
+      "id": "save-step_010",
+      "title": "Save Encounter",
+      "title_source": "ui",
+      "kind": "save",
+      "steps": [
+        "step_010"
+      ],
+      "fields": [],
+      "params": []
+    }
+  ],
+  "edits": [],
+  "context": {
+    "step_000": {
+      "container": "Sign in to MockMed",
+      "kind": "heading",
+      "header": false
+    },
+    "step_002": {
+      "container": "Sign in to MockMed",
+      "kind": "heading",
+      "header": false
+    },
+    "step_004": {
+      "container": "Sign in to MockMed",
+      "kind": "heading",
+      "header": false
+    },
+    "step_005": {
+      "container": "Referral Tasks",
+      "kind": "heading",
+      "header": false
+    },
+    "step_006": {
+      "container": "Jane Sample \u2014 MRN P1 \u2014 DOB 1980-01-01",
+      "kind": "landmark",
+      "header": false
+    },
+    "step_007": {
+      "container": "Jane Sample \u2014 MRN P1 \u2014 DOB 1980-01-01",
+      "kind": "landmark",
+      "header": false
+    },
+    "step_008": {
+      "container": "Jane Sample \u2014 MRN P1 \u2014 DOB 1980-01-01",
+      "kind": "landmark",
+      "header": false
+    },
+    "step_010": {
+      "container": "Jane Sample \u2014 MRN P1 \u2014 DOB 1980-01-01",
+      "kind": "landmark",
+      "header": false
+    }
+  }
+}

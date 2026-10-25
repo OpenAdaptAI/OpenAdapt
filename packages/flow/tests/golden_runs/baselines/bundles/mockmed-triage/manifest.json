@@ -1,0 +1,40 @@
+{
+  "schema_version": 2,
+  "content_digest": "fec73dc2a5e5839b60a7460c7d2d9e698e647a3b62c49abf1ed531d8c5a8238f",
+  "file_hashes": {
+    "templates/layout_fingerprint.json": "1e07a218d3cbbe592419e702af84049e04c308ee3e1c1d78444a0637847355e5",
+    "templates/step_000.png": "b355da2f01f2311032460231a15b025d5ebad7dd49cee26b422bc1b08a8c2022",
+    "templates/step_000_expect.png": "29e54a82c2f7df3554d2487d9bad748fc0abd86191416d39343c1eb866c486d1",
+    "templates/step_001_expect.png": "e2e203b8bbc4bf0a31aebd56a1303077243a3ff602708bbe9eae46d45460ebdf",
+    "templates/step_002.png": "b355da2f01f2311032460231a15b025d5ebad7dd49cee26b422bc1b08a8c2022",
+    "templates/step_002_expect.png": "68a0aa31d3b7fba1139c05d729f49252174481dfca5a8693cb5b6440f8976fe6",
+    "templates/step_003_expect.png": "3068277f51d8dfbfd1ba50b31afee93e76dcacb67b11d4610b6dcdf681597eed",
+    "templates/step_004.png": "d0082e004cf2a2c03668ca1c6630001eda69bdcf169d05d58839dcbddbc56773",
+    "templates/step_004_expect.png": "230b56796f24b36637d77ba395e6031bf39cbfab898da61c1c41f23f1b57e396",
+    "templates/step_005.png": "e38e9760b48c63a08e6618b2624c6796620ce58b5f7d7a2ff63f678aa25bb3e2",
+    "templates/step_005_expect.png": "76696ff4ec85753e45b5378638fa7c19f4f7fddb1cf35ee99cf6baee11844803",
+    "templates/step_006.png": "97568daf732ecb6109d858dd09cdcf78b031830c819b6f4b6a50ae60a72ada10",
+    "templates/step_006_expect.png": "d0e310e05830227867e94a9b288e6265fa28c375558d58555e79bfb002095134",
+    "templates/step_007.png": "7f6817a19ffe49b31a05a70a23f3fcdb2a71b93b3f4ec6a7b997126b4e0ff16c",
+    "templates/step_007_expect.png": "ac9ee10ba2354bca0db66fbf3bf93ca80b62a650d3f19e8b71dcc6038a4d057f",
+    "templates/step_008.png": "b6b06e1ed6155ed74899d0a42bf23df672bf930bfb6f830ab69e6d89ca6fedd3",
+    "templates/step_008_expect.png": "d1f13cae697465c2ec07310adc38d7780f7d7c0146257679b7c559716b992a31",
+    "templates/step_010.png": "31193461982dc5b438be9e459f1ce17f2b5dca4109c206428c7d8135bf60643a",
+    "templates/step_010_expect.png": "5fcb6891641b02953b9baeaa75581a3a9fa1db6c7bd39d432f1d4d06d04c8856"
+  },
+  "provenance": {
+    "compiler_version": "2.3.0",
+    "source_recording_sha256": null,
+    "compiler_config_sha256": "43f5f0d9a4d87c9637138dc24dcf8a163094ab400b760cee8c2567a0760be695",
+    "created_at": "2026-10-24T19:14:58.653368+00:00",
+    "policy_name": null,
+    "certified": false,
+    "certification_status": null,
+    "certified_at": null,
+    "expires_at": null,
+    "certification_invalidated_at": null,
+    "certification_invalidation_reason": null,
+    "governed_authorization_template": null
+  },
+  "encrypted": false
+}

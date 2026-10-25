@@ -1,0 +1,1649 @@
+{
+ "app_state": {
+  "banner": "Encounter saved — Golden triage booking three months",
+  "enc_item": "Triage — Golden triage booking three months",
+  "hash": "#patient/p1"
+ },
+ "artifacts": {
+  "steps/step_000_after.png": "f917f98c929db9d01b6fccaec9cb75444f22ded9f16ddaac14215e82773d7941",
+  "steps/step_000_before.png": "44b3ccdad5dc59cb4b715b3959f091466cb19e189460aab855be90b0830dba9e",
+  "steps/step_001_after.png": "3c9e14147c193c97233b4cf6d526812e0885b09567627e1f3e3dfb327299bdf0",
+  "steps/step_001_before.png": "f917f98c929db9d01b6fccaec9cb75444f22ded9f16ddaac14215e82773d7941",
+  "steps/step_002_after.png": "3d2f31855f80e268f691b848fc0214545270a4d0deb5670c41c6d2b86a6b34f4",
+  "steps/step_002_before.png": "3c9e14147c193c97233b4cf6d526812e0885b09567627e1f3e3dfb327299bdf0",
+  "steps/step_003_after.png": "d9afea150060e7bfef36886e195d4f991078ad4a297cf124346b66e34d86d11a",
+  "steps/step_003_before.png": "3d2f31855f80e268f691b848fc0214545270a4d0deb5670c41c6d2b86a6b34f4",
+  "steps/step_004_after.png": "f55f1b301c4f53b7a2d9690e8583358911a33a16903ab93b7a09567a8e7158f0",
+  "steps/step_004_before.png": "d9afea150060e7bfef36886e195d4f991078ad4a297cf124346b66e34d86d11a",
+  "steps/step_005_after.png": "6ed64995b2131adb06af1588e7ab4ce5e52330a69979b7eab352f90180608e94",
+  "steps/step_005_before.png": "f55f1b301c4f53b7a2d9690e8583358911a33a16903ab93b7a09567a8e7158f0",
+  "steps/step_006_after.png": "9f111dfcf3956a3646132a20b2d61cc8bc4a34de2a75c36ae9c570b94afd406c",
+  "steps/step_006_before.png": "6ed64995b2131adb06af1588e7ab4ce5e52330a69979b7eab352f90180608e94",
+  "steps/step_007_after.png": "fdb39ebb842417e7cdbc13f025ee0cac5bc19316391f2147962774db642ea573",
+  "steps/step_007_before.png": "9f111dfcf3956a3646132a20b2d61cc8bc4a34de2a75c36ae9c570b94afd406c",
+  "steps/step_008_after.png": "bb50aae30b8867916889a006993b1b77b263bd1f6105d293bda773d3f7dbb3fd",
+  "steps/step_008_before.png": "fdb39ebb842417e7cdbc13f025ee0cac5bc19316391f2147962774db642ea573",
+  "steps/step_009_after.png": "5cab0fd7bacf22db87e424fb5d11478e8e0e436d831d7bf47aeebf827708032a",
+  "steps/step_009_before.png": "bb50aae30b8867916889a006993b1b77b263bd1f6105d293bda773d3f7dbb3fd",
+  "steps/step_010_after.png": "b67a417320935e61795d3fc117b99c301045cfb1cc9cfb1f51515d4ecc36e5b9",
+  "steps/step_010_before.png": "493c9ad4fc4e8ffbdb8d0f8db10fda32ad5645fdaf3cee58a2149177371872ef"
+ },
+ "environment": {
+  "platform": "linux",
+  "playwright": "1.64.1"
+ },
+ "report": {
+  "approved_unverified_effect_step_ids": [],
+  "attended_program_transition_evidence": [],
+  "bundle_content_digest": "fec73dc2a5e5839b60a7460c7d2d9e698e647a3b62c49abf1ed531d8c5a8238f",
+  "business_decision_evidence": [],
+  "canceled": false,
+  "change_ledger": [
+   {
+    "attempt_state": "delivered",
+    "effects": [],
+    "intent": "click 'Save Encounter'",
+    "may_need_undo": true,
+    "position": 11,
+    "status": "unknown",
+    "step_id": "step_010",
+    "undo_id": null
+   }
+  ],
+  "effect_journal": [
+   {
+    "approved_unverified": false,
+    "attempt_state": "delivered",
+    "collateral_reconciliation_actions": 0,
+    "consequential": true,
+    "effect_verified": null,
+    "intended_effect_contract_hashes": [],
+    "intent": "click 'Save Encounter'",
+    "observed_at": null,
+    "observed_effect": "unknown",
+    "step_id": "step_010",
+    "verification_performed": false
+   }
+  ],
+  "est_model_cost_usd": 0.0,
+  "execution_completed": true,
+  "execution_entry_url": null,
+  "execution_origin": null,
+  "execution_outcome": "COMPLETED_UNVERIFIED",
+  "execution_profile": "demo",
+  "execution_target_kind": null,
+  "external_network_calls": "unknown",
+  "governed_approval_source": null,
+  "governed_authorization_created_at": null,
+  "governed_authorization_id": null,
+  "governed_authorized_effect_contracts": {},
+  "governed_minimum_effect_tier": null,
+  "governed_policy_contract_sha256": null,
+  "governed_policy_name": null,
+  "governed_qualification_campaign_id_sha256": null,
+  "governed_qualification_case_action_paths": {},
+  "governed_qualification_case_id_sha256": null,
+  "governed_qualification_case_input_sha256": null,
+  "governed_qualification_case_kind": null,
+  "governed_qualification_fault_driver_contract_sha256": null,
+  "governed_qualification_fault_driver_id": null,
+  "governed_qualification_fault_driver_key_id": null,
+  "governed_qualification_fault_step_id_sha256": null,
+  "governed_qualification_project_contract_sha256": null,
+  "governed_qualification_project_id": null,
+  "governed_qualification_project_revision": null,
+  "governed_qualification_run_id_sha256": null,
+  "governed_qualified_effect_requirements": [],
+  "governed_runtime_inputs_digest": null,
+  "halt": null,
+  "heal_count": 0,
+  "idempotency_key": null,
+  "idempotent_replay": false,
+  "identity_applicable_steps": 8,
+  "identity_armed_steps": 6,
+  "identity_unarmed": [
+   {
+    "intent": "click recorded visual target",
+    "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+    "step_id": "step_002"
+   },
+   {
+    "intent": "click 'Sign In'",
+    "reason": "the only readable row text is the target's own label (mutable evidence, excluded from identity)",
+    "step_id": "step_004"
+   }
+  ],
+  "loop_iterations": [],
+  "model_calls": 0,
+  "observed_application_sha256": null,
+  "observed_application_version_sha256": null,
+  "observed_environment_binding_sha256": null,
+  "observed_environment_digest": null,
+  "observed_session_sha256": null,
+  "outcome_envelope": {
+   "compensation_actions": 0,
+   "evidence_classes": [
+    "identity",
+    "postcondition"
+   ],
+   "execution_completed": true,
+   "external_network_calls": "unknown",
+   "model_calls": 0,
+   "outcome": "COMPLETED_UNVERIFIED",
+   "passed_contracts": {
+    "authorization": 0,
+    "effect": 0,
+    "identity": 0,
+    "postcondition": 18
+   },
+   "postcondition_evidence": [
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "9b70a2ea1d1071b2c015a04a98d61ad59df9bcb7effe10f57a12ee424e599bff",
+     "result_index": 0,
+     "step_contract_sha256": "ad733b23a93a715e2f7c2d7ae19d478fbb3a750e79251091ac3108e93f919ec4",
+     "step_index": 0,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "413db21ba6d670be4f009c8dde2f4fa55689a10030fcc3e63e76089471826851",
+     "result_index": 1,
+     "step_contract_sha256": "4ae2e4caf76ef8d8186d29714205f90eae14563338629aed2916ffbd6a6cbd8f",
+     "step_index": 1,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 1,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "8b7ec3528a0177f5906c7d35ea926a33d34163ffe00ac78d0223f96a2f5f6305",
+     "result_index": 1,
+     "step_contract_sha256": "4ae2e4caf76ef8d8186d29714205f90eae14563338629aed2916ffbd6a6cbd8f",
+     "step_index": 1,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "intrinsic_input_readback",
+     "contract_sha256": "30ec7e6323daa8163a947eff64c13f233a9f0a6d777b1e56c5afe2985b1d9678",
+     "result_index": 1,
+     "step_contract_sha256": "4ae2e4caf76ef8d8186d29714205f90eae14563338629aed2916ffbd6a6cbd8f",
+     "step_index": 1,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "c6fe8f33b0f09512b3630bce04b9d767ce6731e0df0d80c1586fe8c68d41181c",
+     "result_index": 2,
+     "step_contract_sha256": "22d10edc9d6f99243f77deebfe68788d9fcdb0c7be627c6283b174dba1d06c98",
+     "step_index": 2,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "88ee8c8854dabf9f68d60f9bf2631a62fa20c2ce7b88e222c1c204f41f451b1b",
+     "result_index": 3,
+     "step_contract_sha256": "220e1213396c1757eef59719aeca4939ceffe092d162399710526ad89184b138",
+     "step_index": 3,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "intrinsic_input_readback",
+     "contract_sha256": "2598944e8f84487aba9ba67d8f2f2251c9f1933344da14683b1d874c1001da3d",
+     "result_index": 3,
+     "step_contract_sha256": "220e1213396c1757eef59719aeca4939ceffe092d162399710526ad89184b138",
+     "step_index": 3,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "0f5ef1420b664d8df9756bf111b26f251174831c86a49e38c7a443084b41b1e0",
+     "result_index": 4,
+     "step_contract_sha256": "fcbb75f7b55036dca7872930278067f20d71e04eb2deaa5cdac1bb0d6f436eee",
+     "step_index": 4,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 1,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "1f8c7b0448198eb740574e60056cbcada97ac5474bed63621b25c7b880936db1",
+     "result_index": 4,
+     "step_contract_sha256": "fcbb75f7b55036dca7872930278067f20d71e04eb2deaa5cdac1bb0d6f436eee",
+     "step_index": 4,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "cc2415e172e0ced5562033dfdfeec6680302a387ca1c8efc4835a0a5af690cb7",
+     "result_index": 5,
+     "step_contract_sha256": "194377af8436dbb73879a5897e09c263b1e132dd8aed9d5b3d5dc3af74fbbf98",
+     "step_index": 5,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 1,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "c8feb3cd195999d286e8cd28144535e4a2b627663d1244cb2ae9d47c767bffa8",
+     "result_index": 5,
+     "step_contract_sha256": "194377af8436dbb73879a5897e09c263b1e132dd8aed9d5b3d5dc3af74fbbf98",
+     "step_index": 5,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "f1bf5232224f4712713aaa98b0829338ade16ccb31cfeeb85478c20979cfbc13",
+     "result_index": 6,
+     "step_contract_sha256": "2fbdf7578afac1e16ef4a2dcf328448e5d119eceb775d764e4ee2600c76391f5",
+     "step_index": 6,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 1,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "5e431b3af5511f4247712a25b31f132a7941847776d868538f5fdf42c4fc0267",
+     "result_index": 6,
+     "step_contract_sha256": "2fbdf7578afac1e16ef4a2dcf328448e5d119eceb775d764e4ee2600c76391f5",
+     "step_index": 6,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "b729d202ac50c922dfc33ae952f4cbb0eae3a5673501a75eb7a9e859c44ec56f",
+     "result_index": 7,
+     "step_contract_sha256": "094990618971380c5d7ad0d802cb8b7fcb30ae4d216df6a2b0cd401883cb5b67",
+     "step_index": 7,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "ce73e998bb3089d35cdffe12030fc58a177f94cacfc0527db6913750c6260d64",
+     "result_index": 8,
+     "step_contract_sha256": "4e06e5799eee27ea75a2b2771b30c69302d9dc98cfa6fd86012f149fcde770d2",
+     "step_index": 8,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "type",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "intrinsic_input_readback",
+     "contract_sha256": "b1b605cc937f012e7bc7734465f55fd8b99129646b2053f4ca79e6f47630f623",
+     "result_index": 9,
+     "step_contract_sha256": "0d8dee0302ab7bff3f02cf90ed448ce68b6bc63e766b71a259ce5ae7ee12af68",
+     "step_index": 9,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 0,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "f4bd81dab3bcda3ee22a9070c6b00ce7c7d449cc5438781e03037ccd67b824b2",
+     "result_index": 10,
+     "step_contract_sha256": "a6a09d357efcba1c9d1f74eafc5ff1ca91c6315357c5c89df6ba6e9c3512f87c",
+     "step_index": 10,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    },
+    {
+     "action_kind": "click",
+     "actuation_path": "gui",
+     "contract_index": 1,
+     "contract_kind": "explicit_predicate",
+     "contract_sha256": "5020fabe218ee38bc028999f9916d61471fd3f51f783202177b1bf23b0e3f366",
+     "result_index": 10,
+     "step_contract_sha256": "a6a09d357efcba1c9d1f74eafc5ff1ca91c6315357c5c89df6ba6e9c3512f87c",
+     "step_index": 10,
+     "verdict": "passed",
+     "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+    }
+   ],
+   "production_eligible": false,
+   "profile": "demo",
+   "required_contracts": {
+    "authorization": 0,
+    "effect": 0,
+    "identity": 0,
+    "postcondition": 18
+   },
+   "version": "openadapt.execution-outcome/v1",
+   "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e"
+  },
+  "parameter_schema_sha256": "b9706e023d1b70651493a1b2b68bb1939f7173f74b5e574d4f9fa57acc89fc6d",
+  "params": {
+   "note": "Golden triage booking three months"
+  },
+  "production_eligible": false,
+  "program_exception_evidence": [],
+  "program_transition_evidence": [],
+  "qualification_environment_observer_contract_sha256": null,
+  "qualification_environment_observer_id": null,
+  "qualification_evidence_only": false,
+  "qualification_fault_mutations": [],
+  "readback": null,
+  "recorded_surface": null,
+  "render_scale": null,
+  "required_identity_step_ids": [],
+  "results": [
+   {
+    "actuation": "dom",
+    "after_png": "steps/step_000_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_000_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": {
+     "delivered_at": "<delivered_at>",
+     "native": false,
+     "operation": "dom_click",
+     "outcome_verified": false,
+     "receipt_id": "<receipt_id#1>",
+     "status": "delivered",
+     "target_fingerprint": "<target_fingerprint#1>"
+    },
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": {
+     "abstain_reason": null,
+     "coverage": 1.0,
+     "expected": "<structured identity template>",
+     "hover": null,
+     "known_id_evidence": null,
+     "known_id_halt": null,
+     "look_halt": null,
+     "looks": [],
+     "mode": "structured",
+     "observed": "Username Password Sign In",
+     "param": null,
+     "pixel_evidence": null,
+     "quorum_required": null,
+     "quorum_verified": null,
+     "signal_evidence": [],
+     "status": "verified"
+    },
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click recorded visual target",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 1.0,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      214,
+      195
+     ],
+     "rung": "structural",
+     "structural_handle": {
+      "candidate_count": 1,
+      "confidence": 1.0,
+      "point": [
+       214,
+       195
+      ],
+      "region": [
+       49,
+       177,
+       330,
+       36
+      ],
+      "supported_operations": [
+       "dom_click",
+       "dom_double_click",
+       "dom_drag"
+      ],
+      "target_fingerprint": "<target_fingerprint#1>"
+     }
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_000",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_001_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_001_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": null,
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": true,
+    "intent": "type 'nurse.demo'",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": null,
+    "risk": "reversible",
+    "risk_explanation": "action has no retained consequential commit signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_001",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": "dom",
+    "after_png": "steps/step_002_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_002_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": {
+     "delivered_at": "<delivered_at>",
+     "native": false,
+     "operation": "dom_click",
+     "outcome_verified": false,
+     "receipt_id": "<receipt_id#2>",
+     "status": "delivered",
+     "target_fingerprint": "<target_fingerprint#2>"
+    },
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": null,
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click recorded visual target",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 1.0,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      214,
+      264
+     ],
+     "rung": "structural",
+     "structural_handle": {
+      "candidate_count": 1,
+      "confidence": 1.0,
+      "point": [
+       214,
+       264
+      ],
+      "region": [
+       49,
+       246,
+       330,
+       36
+      ],
+      "supported_operations": [
+       "dom_click",
+       "dom_double_click",
+       "dom_drag"
+      ],
+      "target_fingerprint": "<target_fingerprint#2>"
+     }
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_002",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_003_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_003_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": null,
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": true,
+    "intent": "type 'mockmed-demo-pass'",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": null,
+    "risk": "reversible",
+    "risk_explanation": "action has no retained consequential commit signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_003",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": "dom",
+    "after_png": "steps/step_004_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_004_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": {
+     "delivered_at": "<delivered_at>",
+     "native": false,
+     "operation": "dom_click",
+     "outcome_verified": false,
+     "receipt_id": "<receipt_id#3>",
+     "status": "delivered",
+     "target_fingerprint": "<target_fingerprint#3>"
+    },
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": null,
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click 'Sign In'",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 1.0,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      119,
+      324
+     ],
+     "rung": "structural",
+     "structural_handle": {
+      "candidate_count": 1,
+      "confidence": 1.0,
+      "point": [
+       119,
+       324
+      ],
+      "region": [
+       49,
+       304,
+       140,
+       40
+      ],
+      "supported_operations": [
+       "dom_click",
+       "dom_double_click",
+       "dom_drag"
+      ],
+      "target_fingerprint": "<target_fingerprint#3>"
+     }
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_004",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": "dom",
+    "after_png": "steps/step_005_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_005_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": {
+     "delivered_at": "<delivered_at>",
+     "native": false,
+     "operation": "dom_click",
+     "outcome_verified": false,
+     "receipt_id": "<receipt_id#4>",
+     "status": "delivered",
+     "target_fingerprint": "<target_fingerprint#4>"
+    },
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": {
+     "abstain_reason": null,
+     "coverage": 1.0,
+     "expected": "<structured identity template>",
+     "hover": null,
+     "known_id_evidence": null,
+     "known_id_halt": null,
+     "look_halt": null,
+     "looks": [],
+     "mode": "structured",
+     "observed": "Jane SampleKnee pain referralHigh",
+     "param": null,
+     "pixel_evidence": null,
+     "quorum_required": null,
+     "quorum_verified": null,
+     "signal_evidence": [],
+     "status": "verified"
+    },
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click 'Open'",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 1.0,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      776,
+      186
+     ],
+     "rung": "structural",
+     "structural_handle": {
+      "candidate_count": 1,
+      "confidence": 1.0,
+      "point": [
+       776,
+       186
+      ],
+      "region": [
+       731,
+       168,
+       90,
+       36
+      ],
+      "supported_operations": [
+       "dom_click",
+       "dom_double_click",
+       "dom_drag"
+      ],
+      "target_fingerprint": "<target_fingerprint#4>"
+     }
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_005",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": "dom",
+    "after_png": "steps/step_006_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_006_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": {
+     "delivered_at": "<delivered_at>",
+     "native": false,
+     "operation": "dom_click",
+     "outcome_verified": false,
+     "receipt_id": "<receipt_id#5>",
+     "status": "delivered",
+     "target_fingerprint": "<target_fingerprint#5>"
+    },
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": {
+     "abstain_reason": null,
+     "coverage": 1.0,
+     "expected": "<structured identity template>",
+     "hover": null,
+     "known_id_evidence": null,
+     "known_id_halt": null,
+     "look_halt": null,
+     "looks": [],
+     "mode": "structured",
+     "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
+     "param": null,
+     "pixel_evidence": null,
+     "quorum_required": null,
+     "quorum_verified": null,
+     "signal_evidence": [],
+     "status": "verified"
+    },
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click 'New Encounter'",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 1.0,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      114,
+      159
+     ],
+     "rung": "structural",
+     "structural_handle": {
+      "candidate_count": 1,
+      "confidence": 1.0,
+      "point": [
+       114,
+       159
+      ],
+      "region": [
+       24,
+       139,
+       180,
+       40
+      ],
+      "supported_operations": [
+       "dom_click",
+       "dom_double_click",
+       "dom_drag"
+      ],
+      "target_fingerprint": "<target_fingerprint#5>"
+     }
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_006",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": "dom",
+    "after_png": "steps/step_007_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_007_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": {
+     "delivered_at": "<delivered_at>",
+     "native": false,
+     "operation": "dom_click",
+     "outcome_verified": false,
+     "receipt_id": "<receipt_id#6>",
+     "status": "delivered",
+     "target_fingerprint": "<target_fingerprint#6>"
+    },
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": {
+     "abstain_reason": null,
+     "coverage": 1.0,
+     "expected": "<structured identity template>",
+     "hover": null,
+     "known_id_evidence": null,
+     "known_id_halt": null,
+     "look_halt": null,
+     "looks": [],
+     "mode": "structured",
+     "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
+     "param": null,
+     "pixel_evidence": null,
+     "quorum_required": null,
+     "quorum_verified": null,
+     "signal_evidence": [],
+     "status": "verified"
+    },
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click recorded visual target",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 1.0,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      85,
+      214
+     ],
+     "rung": "structural",
+     "structural_handle": {
+      "candidate_count": 1,
+      "confidence": 1.0,
+      "point": [
+       85,
+       214
+      ],
+      "region": [
+       25,
+       195,
+       120,
+       38
+      ],
+      "supported_operations": [
+       "dom_click",
+       "dom_double_click",
+       "dom_drag"
+      ],
+      "target_fingerprint": "<target_fingerprint#6>"
+     }
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_007",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": "dom",
+    "after_png": "steps/step_008_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_008_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": {
+     "delivered_at": "<delivered_at>",
+     "native": false,
+     "operation": "dom_click",
+     "outcome_verified": false,
+     "receipt_id": "<receipt_id#7>",
+     "status": "delivered",
+     "target_fingerprint": "<target_fingerprint#7>"
+    },
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": {
+     "abstain_reason": null,
+     "coverage": 1.0,
+     "expected": "<structured identity template>",
+     "hover": null,
+     "known_id_evidence": null,
+     "known_id_halt": null,
+     "look_halt": null,
+     "looks": [],
+     "mode": "structured",
+     "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
+     "param": null,
+     "pixel_evidence": null,
+     "quorum_required": null,
+     "quorum_verified": null,
+     "signal_evidence": [],
+     "status": "verified"
+    },
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click recorded visual target",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 1.0,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      344,
+      350
+     ],
+     "rung": "structural",
+     "structural_handle": {
+      "candidate_count": 1,
+      "confidence": 1.0,
+      "point": [
+       344,
+       350
+      ],
+      "region": [
+       24,
+       281,
+       640,
+       138
+      ],
+      "supported_operations": [
+       "dom_click",
+       "dom_double_click",
+       "dom_drag"
+      ],
+      "target_fingerprint": "<target_fingerprint#7>"
+     }
+    },
+    "risk": "reversible",
+    "risk_explanation": "control label has no retained consequential-write signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_008",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": null,
+    "after_png": "steps/step_009_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_009_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": null,
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": null,
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": true,
+    "intent": "type <note>",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": null,
+    "program_scope": [],
+    "resolution": null,
+    "risk": "reversible",
+    "risk_explanation": "action has no retained consequential commit signal",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_009",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   },
+   {
+    "actuation": "dom",
+    "after_png": "steps/step_010_after.png",
+    "api_fallback": null,
+    "before_png": "steps/step_010_before.png",
+    "delivery_attempted": true,
+    "delivery_receipt": {
+     "delivered_at": "<delivered_at>",
+     "native": false,
+     "operation": "dom_click",
+     "outcome_verified": false,
+     "receipt_id": "<receipt_id#8>",
+     "status": "delivered",
+     "target_fingerprint": "<target_fingerprint#8>"
+    },
+    "delivery_uncertainty": null,
+    "drag_end_resolution": null,
+    "drift_oracle_calls": 0,
+    "effect_approved_unverified": false,
+    "effect_contract_hashes": [],
+    "effect_evidence": [],
+    "effect_results": [],
+    "effect_verified": null,
+    "elapsed_ms": "<elapsed_ms>",
+    "error": null,
+    "exception_handled": false,
+    "failure_category": null,
+    "field_read": null,
+    "fresh_actuation_events": [],
+    "heal": null,
+    "identity": {
+     "abstain_reason": null,
+     "coverage": 1.0,
+     "expected": "<structured identity template>",
+     "hover": null,
+     "known_id_evidence": null,
+     "known_id_halt": null,
+     "look_halt": null,
+     "looks": [],
+     "mode": "structured",
+     "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
+     "param": null,
+     "pixel_evidence": null,
+     "quorum_required": null,
+     "quorum_verified": null,
+     "signal_evidence": [],
+     "status": "verified"
+    },
+    "identity_first_frame_png": null,
+    "identity_first_read": null,
+    "identity_reobserved": false,
+    "input_retried": false,
+    "input_verified": null,
+    "intent": "click 'Save Encounter'",
+    "interstitial_actions": [],
+    "ok": true,
+    "postcondition_drift_rescues": [],
+    "postcondition_page_scale": null,
+    "postconditions_ok": true,
+    "program_scope": [],
+    "resolution": {
+     "confidence": 1.0,
+     "elapsed_ms": "<elapsed_ms>",
+     "point": [
+      134,
+      457
+     ],
+     "rung": "structural",
+     "structural_handle": {
+      "candidate_count": 1,
+      "confidence": 1.0,
+      "point": [
+       134,
+       457
+      ],
+      "region": [
+       24,
+       437,
+       220,
+       40
+      ],
+      "supported_operations": [
+       "dom_click",
+       "dom_double_click",
+       "dom_drag"
+      ],
+      "target_fingerprint": "<target_fingerprint#8>"
+     }
+    },
+    "risk": "irreversible",
+    "risk_explanation": "retained action context names a consequential state change",
+    "risk_review_required": false,
+    "safety_halt": false,
+    "safety_refusal_evidence": null,
+    "skipped": false,
+    "starting_state_settled": null,
+    "step_id": "step_010",
+    "submit_binding_verified": null,
+    "timings": "<timings>"
+   }
+  ],
+  "run_id_sha256": "<run_id_sha256>",
+  "rung_counts": {
+   "structural": 8
+  },
+  "screenshots_may_leave_box": false,
+  "source_recording_sha256": null,
+  "started_at": "<started_at>",
+  "success": true,
+  "surface_override": false,
+  "terminal_outcome": null,
+  "total_ms": "<total_ms>",
+  "transaction_billable": false,
+  "transaction_outcome": "COMPLETED_UNVERIFIED",
+  "transaction_platform_fault": false,
+  "visited_states": [],
+  "workflow_contract_sha256": "2d6f7fcad4dfd6506ba82ee3de7027b62f10f348c0dbd79df2dc924fa5e6a07e",
+  "workflow_name": "golden-triage"
+ },
+ "trace": [
+  {
+   "args": [
+    null
+   ],
+   "call": "set_qualification_input_guard"
+  },
+  {
+   "args": [
+    {
+     "automation_id": null,
+     "frame_path": null,
+     "name": "Username",
+     "role": "textbox",
+     "selector": "#username",
+     "type": "StructuralLocator",
+     "window_name": null
+    },
+    {
+     "candidate_count": 1,
+     "confidence": 1.0,
+     "point": [
+      214,
+      195
+     ],
+     "region": [
+      49,
+      177,
+      330,
+      36
+     ],
+     "supported_operations": [
+      "dom_click",
+      "dom_double_click",
+      "dom_drag"
+     ],
+     "target_fingerprint": "<target_fingerprint#1>",
+     "type": "StructuralHandle"
+    }
+   ],
+   "call": "act_structural",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    "nurse.demo"
+   ],
+   "call": "type_text"
+  },
+  {
+   "args": [
+    {
+     "automation_id": null,
+     "frame_path": null,
+     "name": "Password",
+     "role": "textbox",
+     "selector": "#password",
+     "type": "StructuralLocator",
+     "window_name": null
+    },
+    {
+     "candidate_count": 1,
+     "confidence": 1.0,
+     "point": [
+      214,
+      264
+     ],
+     "region": [
+      49,
+      246,
+      330,
+      36
+     ],
+     "supported_operations": [
+      "dom_click",
+      "dom_double_click",
+      "dom_drag"
+     ],
+     "target_fingerprint": "<target_fingerprint#2>",
+     "type": "StructuralHandle"
+    }
+   ],
+   "call": "act_structural",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    "mockmed-demo-pass"
+   ],
+   "call": "type_text"
+  },
+  {
+   "args": [
+    {
+     "automation_id": null,
+     "frame_path": null,
+     "name": "Sign In",
+     "role": "button",
+     "selector": "#signin",
+     "type": "StructuralLocator",
+     "window_name": null
+    },
+    {
+     "candidate_count": 1,
+     "confidence": 1.0,
+     "point": [
+      119,
+      324
+     ],
+     "region": [
+      49,
+      304,
+      140,
+      40
+     ],
+     "supported_operations": [
+      "dom_click",
+      "dom_double_click",
+      "dom_drag"
+     ],
+     "target_fingerprint": "<target_fingerprint#3>",
+     "type": "StructuralHandle"
+    }
+   ],
+   "call": "act_structural",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    {
+     "automation_id": null,
+     "frame_path": null,
+     "name": "Open",
+     "role": "button",
+     "selector": "#open-p1",
+     "type": "StructuralLocator",
+     "window_name": null
+    },
+    {
+     "candidate_count": 1,
+     "confidence": 1.0,
+     "point": [
+      776,
+      186
+     ],
+     "region": [
+      731,
+      168,
+      90,
+      36
+     ],
+     "supported_operations": [
+      "dom_click",
+      "dom_double_click",
+      "dom_drag"
+     ],
+     "target_fingerprint": "<target_fingerprint#4>",
+     "type": "StructuralHandle"
+    }
+   ],
+   "call": "act_structural",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    {
+     "automation_id": null,
+     "frame_path": null,
+     "name": "New Encounter",
+     "role": "button",
+     "selector": "#new-encounter",
+     "type": "StructuralLocator",
+     "window_name": null
+    },
+    {
+     "candidate_count": 1,
+     "confidence": 1.0,
+     "point": [
+      114,
+      159
+     ],
+     "region": [
+      24,
+      139,
+      180,
+      40
+     ],
+     "supported_operations": [
+      "dom_click",
+      "dom_double_click",
+      "dom_drag"
+     ],
+     "target_fingerprint": "<target_fingerprint#5>",
+     "type": "StructuralHandle"
+    }
+   ],
+   "call": "act_structural",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    {
+     "automation_id": null,
+     "frame_path": null,
+     "name": "Triage",
+     "role": "button",
+     "selector": "#type-triage",
+     "type": "StructuralLocator",
+     "window_name": null
+    },
+    {
+     "candidate_count": 1,
+     "confidence": 1.0,
+     "point": [
+      85,
+      214
+     ],
+     "region": [
+      25,
+      195,
+      120,
+      38
+     ],
+     "supported_operations": [
+      "dom_click",
+      "dom_double_click",
+      "dom_drag"
+     ],
+     "target_fingerprint": "<target_fingerprint#6>",
+     "type": "StructuralHandle"
+    }
+   ],
+   "call": "act_structural",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    {
+     "automation_id": null,
+     "frame_path": null,
+     "name": "Note",
+     "role": "textbox",
+     "selector": "#note",
+     "type": "StructuralLocator",
+     "window_name": null
+    },
+    {
+     "candidate_count": 1,
+     "confidence": 1.0,
+     "point": [
+      344,
+      350
+     ],
+     "region": [
+      24,
+      281,
+      640,
+      138
+     ],
+     "supported_operations": [
+      "dom_click",
+      "dom_double_click",
+      "dom_drag"
+     ],
+     "target_fingerprint": "<target_fingerprint#7>",
+     "type": "StructuralHandle"
+    }
+   ],
+   "call": "act_structural",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    "Golden triage booking three months"
+   ],
+   "call": "type_text"
+  },
+  {
+   "call": "cancel_pending_structural_guards"
+  },
+  {
+   "args": [
+    {
+     "automation_id": null,
+     "frame_path": null,
+     "name": "Save Encounter",
+     "role": "button",
+     "selector": "#save-encounter",
+     "type": "StructuralLocator",
+     "window_name": null
+    },
+    {
+     "candidate_count": 1,
+     "confidence": 1.0,
+     "point": [
+      134,
+      457
+     ],
+     "region": [
+      24,
+      437,
+      220,
+      40
+     ],
+     "supported_operations": [
+      "dom_click",
+      "dom_double_click",
+      "dom_drag"
+     ],
+     "target_fingerprint": "<target_fingerprint#8>",
+     "type": "StructuralHandle"
+    }
+   ],
+   "call": "act_structural",
+   "kwargs": {
+    "double": false
+   }
+  },
+  {
+   "args": [
+    null
+   ],
+   "call": "set_qualification_input_guard"
+  }
+ ]
+}
