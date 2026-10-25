@@ -34,6 +34,28 @@ HERE = Path(__file__).resolve().parent
 PROTOCOL_VERSION = "lifecycle/2026-10-20.1"
 
 
+class ItemTimedOut(BaseException):
+    """An item ran past ``--item-timeout``. A BaseException, so no arm's
+    ``except Exception`` swallows it; the runner records the item and goes on."""
+
+
+def _arm_item_alarm(seconds: Optional[float]) -> None:
+    import signal
+
+    def _raise(signum: int, frame: Any) -> None:
+        raise ItemTimedOut(f"item ran past {seconds:.0f} s")
+
+    if seconds:
+        signal.signal(signal.SIGALRM, _raise)
+        signal.setitimer(signal.ITIMER_REAL, float(seconds))
+
+
+def _disarm_item_alarm() -> None:
+    import signal
+
+    signal.setitimer(signal.ITIMER_REAL, 0)
+
+
 def load_1m() -> Optional[float]:
     try:
         return round(os.getloadavg()[0], 1)
@@ -96,6 +118,7 @@ def run_arm(
     out: Path,
     cost_name: str,
     stop_after: Optional[int] = None,
+    item_timeout_s: Optional[float] = None,
     say: Callable[[str], None] = print,
 ) -> None:
     arm = load_arm(arm_spec, arm_options)
@@ -210,7 +233,28 @@ def run_arm(
         load_start = load_1m()
         started = time.time()
         try:
-            result = arm.run_item(item, env, operator)
+            _arm_item_alarm(item_timeout_s)
+            try:
+                result = arm.run_item(item, env, operator)
+            finally:
+                _disarm_item_alarm()
+        except ItemTimedOut as exc:
+            # A stall fails this item and the run goes on; the arm gets a
+            # chance to drop what the stalled item held.
+            recover = getattr(arm, "recover_after_timeout", None)
+            if callable(recover):
+                try:
+                    recover()
+                except Exception:  # noqa: BLE001 - recovery is best effort
+                    pass
+            ledger.write({"type": "item_timeout", "seq": item.seq, "reason": str(exc)})
+            say(f"[{arm.name}] item {item.seq} timed out: {exc}")
+            result = ItemResult(
+                item_id=item.item_id,
+                claimed="error",
+                product_status=f"ItemTimedOut: {exc}",
+                wall_s=time.time() - started,
+            )
         except Exception as exc:  # noqa: BLE001 - an arm crash is a result
             if type(exc).__name__ == "SpendCapReached":
                 stop_during.set()
@@ -350,6 +394,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="replace the drift schedule: apply UI change KIND before item SEQ "
         "(repeatable), e.g. relabel_save@26",
     )
+    p.add_argument(
+        "--item-timeout",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="fail an item that runs longer than this and go on (a watchdog "
+        "for a stalled browser or app)",
+    )
     p.add_argument("--cost-model", default=V1.version, choices=sorted(MODELS))
     p.add_argument("--out", type=Path, required=True)
     args = p.parse_args(argv)
@@ -401,6 +453,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 out=out,
                 cost_name=args.cost_model,
                 stop_after=args.stop_after,
+                item_timeout_s=args.item_timeout,
             )
     finally:
         ledger.write({"type": "run_end"})

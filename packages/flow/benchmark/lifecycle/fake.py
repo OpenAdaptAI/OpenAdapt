@@ -215,3 +215,26 @@ def naive(options: dict[str, Any]) -> NaiveArm:
 
 def careful(options: dict[str, Any]) -> CarefulArm:
     return CarefulArm(options)
+
+
+class StallingArm(CarefulArm):
+    """The careful arm, except one item hangs (for the runner's watchdog)."""
+
+    name = "stalling"
+
+    def __init__(self, options: dict[str, Any]) -> None:
+        super().__init__(options)
+        self.stall_seq = int(options.get("stall_seq", 2))
+        self.recovered = 0
+
+    def run_item(self, item: Any, env: Any, operator: Any) -> ItemResult:
+        if item.seq == self.stall_seq:
+            time.sleep(30)
+        return super().run_item(item, env, operator)
+
+    def recover_after_timeout(self) -> None:
+        self.recovered += 1
+
+
+def stalling(options: dict[str, Any]) -> StallingArm:
+    return StallingArm(options)

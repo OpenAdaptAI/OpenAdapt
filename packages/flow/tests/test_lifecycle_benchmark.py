@@ -176,3 +176,38 @@ def test_end_to_end_on_the_fake_app(tmp_path: Path) -> None:
     from lifecycle.report import results
 
     assert json.loads(json.dumps(results(out), sort_keys=True)) == res
+
+
+def test_a_stalled_item_times_out_and_the_run_goes_on(tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    started = __import__("time").time()
+    assert (
+        run.main(
+            [
+                "--app",
+                "fake",
+                "--arm",
+                "lifecycle.fake:stalling",
+                "--items",
+                "5",
+                "--days",
+                "1",
+                "--item-timeout",
+                "0.5",
+                "--out",
+                str(out),
+            ]
+        )
+        == 0
+    )
+    assert __import__("time").time() - started < 20  # never waited out the stall
+    rows = [
+        json.loads(line) for line in (out / "ledger.jsonl").read_text().splitlines()
+    ]
+    items = [r for r in rows if r["type"] == "item_result"]
+    assert [r["seq"] for r in items] == [1, 2, 3, 4, 5]
+    stalled = next(r for r in items if r["seq"] == 2)
+    assert stalled["claimed"] == "error"
+    assert stalled["product_status"].startswith("ItemTimedOut")
+    assert [r["seq"] for r in rows if r["type"] == "item_timeout"] == [2]
+    assert all(r["claimed"] != "error" for r in items if r["seq"] != 2)

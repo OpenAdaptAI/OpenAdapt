@@ -805,6 +805,23 @@ class ProductionArm:
             detail=detail,
         )
 
+    def recover_after_timeout(self) -> None:
+        """After the runner timed an item out: drop its browser and pipeline."""
+
+        from openadapt_flow.runtime.readback_pipeline import ReadbackPipeline
+
+        for close in self.ctx.pop("closers", []):
+            try:
+                close()
+            except Exception:  # noqa: BLE001
+                pass
+        if self.pipeline is not None:
+            try:
+                self.pipeline.close()
+            except Exception:  # noqa: BLE001
+                pass
+        self.pipeline = ReadbackPipeline()
+
     def after_drift(
         self, event: dict[str, Any], env: Env, operator: Any
     ) -> list[dict[str, Any]]:
