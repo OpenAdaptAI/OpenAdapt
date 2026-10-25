@@ -57,6 +57,7 @@ from verification_coverage.independent.run import (  # noqa: E402
     provenance_for,
     referral_text,
     score,
+    told_values,
 )
 
 #: OpenEMR's New Patient form stores street and city in capitals, so the
@@ -453,7 +454,7 @@ def run_case(case: dict[str, Any], out: Path, container: str) -> dict[str, Any]:
     cdir.mkdir(parents=True, exist_ok=True)
     reset()
     ids = seed()
-    told = {**REFERRAL, **case.get("told", {})}
+    told = {**REFERRAL, **told_values(case)}
     doc = cdir / "referral.txt"
     doc.write_text(referral_text(REFERRAL))
     documents = read_sources([doc])

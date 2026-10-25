@@ -108,7 +108,7 @@ cases:
   - id: misread_wrong_provider
     class: misread_source
     clauses: [P2]
-    told: {provider: "Dr. Owen Hale"}
+    told: {providerID: "Dr. Owen Hale"}
     steps:
       - {actor: bot, op: register_referral, values: told}
     expect: fault

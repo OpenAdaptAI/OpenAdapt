@@ -217,6 +217,16 @@ AUDIT_QUERY = (
 )
 
 
+def told_values(case: dict[str, Any]) -> dict[str, str]:
+    """A case's misread inputs, keyed by referral field (``providerID`` in the
+    suite names the referral's provider)."""
+
+    told = dict(case.get("told", {}))
+    if "providerID" in told:
+        told["provider"] = told.pop("providerID")
+    return told
+
+
 def referral_text(values: dict[str, str]) -> str:
     lines = ["Referral (synthetic test document)", "Referred to: Example Family Clinic"]
     lines += [f"{label}: {values[name]}" for name, label in LABELS]
@@ -451,7 +461,7 @@ def run_case(case: dict[str, Any], work: Path, synth: dict[str, Any]) -> dict[st
     db = standin.copy(work / "baseline.sqlite", cdir / "case.sqlite")
     store = standin.Store(db)
     ids = seed(store)
-    told = {**REFERRAL, **case.get("told", {})}
+    told = {**REFERRAL, **told_values(case)}
     doc_path = cdir / "referral.txt"
     doc_path.write_text(referral_text(REFERRAL))
     documents = read_sources([doc_path])
