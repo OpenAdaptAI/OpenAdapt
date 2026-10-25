@@ -43,8 +43,9 @@ right.
 
 ## What must be true after the run
 
-**P1. Exactly one new chart.** Exactly one `patient_data` row exists whose
-`pid` was not present before the run, and it was created by the bot.
+**P1. Exactly one new chart by the bot.** Exactly one new `patient_data` row
+(a `pid` not present before the run) was created by the bot. Rows another
+user creates in the window are F4's, not the run's.
 
 **P2. The chart matches the document.** Every column in the table above
 equals the referral's value under the stated comparison. A value that matches
@@ -111,3 +112,16 @@ path writes that this spec did not predict is recorded in `WITNESS.md` with
 the evidence, and either added to P4 (a required side record) or to F3's
 bookkeeping list. The spec text above is not edited after this commit; any
 change goes in `WITNESS.md` as an amendment with its reason.
+
+## Changes before freezing (2026-10-25, review of #1530)
+
+Two corrections from review, made before this file landed on main, and
+recorded here because the text above says it is not edited after commit:
+
+- P1 said "exactly one new row", which contradicted F4's case of another
+  user registering a patient in the same window. It now counts rows created
+  by the bot.
+- In `faults.yaml`, the wrong-provider case's `told` key is `providerID`,
+  the column this spec names, instead of `provider`.
+
+From here on, changes go in `WITNESS.md` as amendments.
