@@ -156,7 +156,30 @@ def count_matching_rows(
 #: Rows read before a census gives up and reports ``incomplete``.
 TREE_CENSUS_ROW_CAP = 2000
 
-_POSITIONAL_ID = re.compile(r"^\D*(\d+)\D*$")
+_SINGLE_NUMBER = re.compile(r"^\D*(\d+)\D*$")
+_POSITION_WORD = re.compile(
+    r"(?:^|[^a-z])(?:row|r|item|idx|index|cell|col|c|line|pos|position|"
+    r"listviewitem|node|child)[-_ :#]?\d+",
+    re.IGNORECASE,
+)
+
+
+def positional_id(value: str, index: int) -> bool:
+    """Whether a row id names a position rather than a record.
+
+    Such an id moves with the row (``row-3``, ``r3c2``, ``item_12``, a bare
+    ``3``): after the rows reorder or scroll it points at whichever record now
+    sits there, so it never tells rows apart. True for an id whose only number
+    is the row's index (0- or 1-based), for an id that spells a position
+    (``row``, ``item``, ``cell``, ``col`` ... followed by a number), and for an
+    id with more than one number (grid coordinates).
+    """
+    if len(re.findall(r"\d+", value)) > 1:
+        return True
+    if _POSITION_WORD.search(value):
+        return True
+    match = _SINGLE_NUMBER.match(value)
+    return bool(match and int(match.group(1)) in (index, index + 1))
 
 
 class TreeView(Protocol):
@@ -166,7 +189,9 @@ class TreeView(Protocol):
     coordinates, or None when it cannot be mapped. ``id_attributes`` lists the
     node's candidate record ids as ``(name, value)`` pairs (an AX identifier,
     an AT-SPI ``id`` attribute, a URL). ``row_count`` is the number of rows the
-    container says it has, when it says (None otherwise).
+    container says it has, when it says (None otherwise). ``scrollable`` says
+    whether a container without a row count can scroll rows out of view;
+    anything but a definite False makes the census ``incomplete``.
     """
 
     def parent(self, node: Any) -> Any: ...
@@ -180,6 +205,10 @@ class TreeView(Protocol):
     def id_attributes(self, node: Any) -> list[tuple[str, str]]: ...
 
     def row_count(self, container: Any) -> Optional[int]: ...
+
+    def scrollable(self, container: Any) -> Optional[bool]:
+        """Whether the container can scroll rows out of view; None unknown."""
+        ...
 
 
 def _same(view: TreeView, a: Any, b: Any) -> bool:
@@ -217,8 +246,7 @@ def _record_key(view: TreeView, row: Any, path: list[int], index: int) -> Option
             value = (value or "").strip()
             if not value or len(value) > 256:
                 continue
-            match = _POSITIONAL_ID.match(value)
-            if match and int(match.group(1)) in (index, index + 1):
+            if positional_id(value, index):
                 continue
             parts.add(f"{name}={value}")
     return "\n".join(sorted(parts)) or None
@@ -292,7 +320,18 @@ def tree_row_census(
     row_role = view.role(row)
     rows = [c for c in siblings if _same(view, c, row) or view.role(c) == row_role]
     declared = view.row_count(container) if container is not None else None
-    incomplete = len(rows) > max_rows or (declared is not None and declared > len(rows))
+    if declared is not None:
+        hidden_rows = declared > len(rows)
+    elif container is None:
+        hidden_rows = False
+    else:
+        # No row count to check against: only a container that cannot
+        # scroll shows every row it has. Unknown scrollability is incomplete.
+        try:
+            hidden_rows = view.scrollable(container) is not False
+        except Exception:
+            hidden_rows = True
+    incomplete = len(rows) > max_rows or hidden_rows
     row_index = next((i for i, c in enumerate(rows) if _same(view, c, row)), 0)
     result: dict[str, Any] = {
         "record_key": _record_key(view, row, path, row_index),

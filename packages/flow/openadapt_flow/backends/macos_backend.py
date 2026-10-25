@@ -656,6 +656,21 @@ class _AXTreeView:
         except TypeError:
             return None
 
+    def scrollable(self, container: Any) -> Optional[bool]:
+        """True when an enclosing AXScrollArea has a vertical scroll bar."""
+        from ApplicationServices import kAXVerticalScrollBarAttribute
+
+        node = container
+        for _ in range(3):
+            if node is None:
+                return False
+            if self.role(node) == "AXScrollArea":
+                return (
+                    self._client._attr(node, kAXVerticalScrollBarAttribute) is not None
+                )
+            node = self.parent(node)
+        return False
+
 
 _NATIVE_MODIFIER_FLAGS = {
     "ctrl": "control",

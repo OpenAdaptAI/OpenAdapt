@@ -1624,3 +1624,16 @@ class _AtspiTreeView:
             return int(count) if count is not None else None
         except (TypeError, ValueError):
             return None
+
+    def scrollable(self, container: Any) -> Optional[bool]:
+        """True when an enclosing scroll pane holds a scroll bar."""
+        node = container
+        for _ in range(3):
+            if node is None:
+                return False
+            if self.role(node) == "scroll pane":
+                return any(
+                    self.role(child) == "scroll bar" for child in self.children(node)
+                )
+            node = self.parent(node)
+        return False

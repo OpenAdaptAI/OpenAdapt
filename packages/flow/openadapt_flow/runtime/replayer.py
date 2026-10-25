@@ -15704,14 +15704,21 @@ class Replayer:
         workflow: Workflow,
         bundle_dir: Optional[Path],
     ) -> census_mod.CensusDecision:
-        """Count the places on the frame where the identifier crop verifies.
+        """Count the places on the frame that could show the identifier crop.
 
-        For a pixel identity with no OCR band (a remote display): every
-        place the recorded identifier crop could match is cut from the frame
-        and checked with the same pixel verifier the ladder used. More than
-        one verifying place means another row shows the same identifier.
+        For a pixel identity with no OCR band (a remote display): every place
+        the recorded identifier crop matches is cut from the frame and checked
+        with the ladder's pixel verifier. Only a clear ``mismatch`` rules a
+        place out; a verify, an abstain (drift, the uncertain band, verify
+        turned off) or no verdict counts it as a look-alike. The census is
+        ``uncounted`` when the frame has too many places, when a place cannot
+        be cut, or when the target's own place is not among them (the frame
+        renders at another scale than the recorded crop).
         """
-        from openadapt_flow.vision.match import template_peaks
+        from openadapt_flow.vision.match import (
+            AMBIGUITY_SUSPICION_SCORE,
+            template_peaks,
+        )
 
         anchor = step.anchor
         assert anchor is not None
@@ -15721,7 +15728,9 @@ class Replayer:
         if recorded is None or live is None or anchor.identifier_region is None:
             return census_mod.CensusDecision("cannot_count")
         try:
-            peaks = template_peaks(before_png, recorded)
+            peaks = template_peaks(
+                before_png, recorded, threshold=AMBIGUITY_SUSPICION_SCORE
+            )
         except Exception:
             return census_mod.CensusDecision("cannot_count")
         if peaks is None:
@@ -15731,19 +15740,25 @@ class Replayer:
             anchor, resolution, before_png, bundle_dir, workflow=workflow
         )
         target = (rx + dx, ry + dy)
+
+        def is_target(x: int, y: int) -> bool:
+            return abs(x - target[0]) < max(1, rw // 2) and abs(y - target[1]) < max(
+                1, rh // 2
+            )
+
+        if not any(is_target(x, y) for x, y in peaks):
+            return census_mod.CensusDecision("uncounted")
         count = 1
         for x, y in peaks:
-            if abs(x - target[0]) < max(1, rw // 2) and abs(y - target[1]) < max(
-                1, rh // 2
-            ):
-                continue  # the target itself
+            if is_target(x, y):
+                continue
             crop = identity_mod.crop_region(before_png, (x, y, rw, rh))
             if crop is None:
-                continue
+                return census_mod.CensusDecision("uncounted")
             verdict = identity_mod.verify_pixel_identity(
                 recorded, crop, enable_verify=self.pixel_verify_enabled
             )
-            if verdict is not None and verdict.status == "verified":
+            if verdict is None or verdict.status != "mismatch":
                 count += 1
         if count > 1:
             return census_mod.CensusDecision("ambiguous", count)

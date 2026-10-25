@@ -60,6 +60,7 @@ class Node:
         self.parent: Optional[Node] = None
         self.kids: list[Node] = []
         self.declared_rows: Optional[int] = None
+        self.scrolls: Optional[bool] = False
 
     def add(self, *children: "Node") -> "Node":
         for child in children:
@@ -86,6 +87,9 @@ class View:
 
     def row_count(self, container: Node) -> Optional[int]:
         return container.declared_rows
+
+    def scrollable(self, container: Node) -> Optional[bool]:
+        return container.scrolls
 
 
 def _table(*rows: tuple[tuple[str, ...], tuple[str, ...]]) -> Node:
@@ -144,12 +148,38 @@ def test_a_control_outside_any_row_is_not_a_row() -> None:
     assert _census(window.kids[0]) == {"row": False}
 
 
-def test_positional_ids_never_tell_rows_apart() -> None:
-    table = _table((ROW, ("row-0",)), (ROW, ("row-1",)))
+@pytest.mark.parametrize(
+    "ids",
+    [
+        ("row-0", "row-1"),
+        ("r1c2", "r2c2"),
+        ("row-3-col-1", "row-4-col-1"),
+        ("row-53", "row-54"),  # absolute positions in a longer list
+        ("item_12", "item_13"),
+        ("0", "1"),
+    ],
+)
+def test_positional_ids_never_tell_rows_apart(ids) -> None:
+    table = _table((ROW, (ids[0],)), (ROW, (ids[1],)))
     census = _census(table.kids[0].kids[0])
     assert census is not None
     assert [c["record_key"] for c in census["candidates"]] == [None, None]
     assert _decide(census).verdict == "ambiguous"
+
+
+def test_record_ids_survive_the_positional_filter() -> None:
+    from openadapt_flow.runtime.identity_census import positional_id
+
+    for value in ("chart-1001", "patient_1001", "MRN-A1234", "rec-77"):
+        assert not positional_id(value, 0), value
+
+
+@pytest.mark.parametrize("scrolls", [True, None])
+def test_a_list_without_a_row_count_that_may_scroll_is_incomplete(scrolls) -> None:
+    table = _table((ROW, ()), (OTHER, ()))
+    table.scrolls = scrolls  # no row count, and rows may be out of view
+    census = _census(table.kids[1].kids[0])
+    assert census is not None and census["incomplete"] is True
 
 
 def test_a_table_with_more_rows_than_it_exposes_is_incomplete() -> None:
@@ -329,6 +359,7 @@ class UiaControl:
         self.children: list[UiaControl] = []
         self.grid_rows: Optional[int] = None
         self.virtual = False
+        self.broken = False
 
     def add(self, *kids: "UiaControl") -> "UiaControl":
         for kid in kids:
@@ -343,8 +374,10 @@ class UiaControl:
         return list(self.children)
 
     def GetGridPattern(self):
+        if self.broken:
+            raise RuntimeError("provider failed")
         if self.grid_rows is None:
-            raise RuntimeError("no grid pattern")
+            return None  # unsupported, as uiautomation reports it
         return types.SimpleNamespace(RowCount=self.grid_rows)
 
     def GetScrollPattern(self):
@@ -415,6 +448,24 @@ def test_windows_virtualized_or_short_grids_are_incomplete() -> None:
     listing.virtual = True
     census = server._identity_candidates_at(
         _auto(listing.children[1].children[0]), 5, 45
+    )
+    assert _decide(census).verdict == "uncounted"
+
+
+def test_windows_a_failing_provider_is_incomplete() -> None:
+    listing = _uia_list((ROW, ""), (OTHER, ""))
+    listing.broken = True
+    census = server._identity_candidates_at(
+        _auto(listing.children[1].children[0]), 5, 45
+    )
+    assert _decide(census).verdict == "uncounted"
+
+
+def test_windows_a_row_without_cells_is_incomplete() -> None:
+    listing = _uia_list((ROW, ""), (OTHER, ""))
+    listing.add(UiaControl("DataItemControl", top=80))  # not built yet
+    census = server._identity_candidates_at(
+        _auto(listing.children[0].children[0]), 5, 5
     )
     assert _decide(census).verdict == "uncounted"
 
@@ -558,3 +609,157 @@ def test_replay_runs_a_unique_native_row() -> None:
     backend, _ = _native([(ROW, ()), (OTHER, ())])
     check = _verify(backend, _step(None), (50, 20))
     assert check.status == "verified" and check.candidate_count == 1
+
+
+# -- pixel census (remote display, no OCR band) ---------------------------------
+
+
+def _crop_png(bar: int = 60, height: int = 48, width: int = 240) -> Any:
+    import numpy as np
+
+    img = np.full((height, width), 255, np.uint8)
+    img[8:40, bar : bar + 6] = 0
+    img[8:40, bar + 40 : bar + 44] = 0
+    return img
+
+
+def _png(arr: Any) -> bytes:
+    import cv2
+
+    ok, buf = cv2.imencode(".png", arr)
+    assert ok
+    return buf.tobytes()
+
+
+def test_template_peaks_lists_every_place_and_refuses_a_crowded_frame() -> None:
+    import numpy as np
+
+    from openadapt_flow.vision.match import MAX_PEAKS, template_peaks
+
+    crop = _crop_png()
+    gap = np.full((10, crop.shape[1]), 255, np.uint8)
+    frame = np.vstack([crop, gap, crop, gap, _crop_png(bar=150)])
+    peaks = template_peaks(_png(frame), _png(crop), threshold=0.9)
+    assert peaks is not None and sorted(y for _x, y in peaks) == [0, 58]
+    crowded = np.vstack([np.vstack([crop, gap])] * (MAX_PEAKS + 1))
+    assert template_peaks(_png(crowded), _png(crop), threshold=0.9) is None
+    assert template_peaks(_png(crop[:10, :10]), _png(crop)) is None  # too small
+
+
+def _pixel_step(tmp_path, recorded: bytes) -> Step:
+    (tmp_path / "templates").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "templates" / "id.png").write_bytes(recorded)
+    (tmp_path / "templates" / "t.png").write_bytes(recorded)
+    return Step(
+        id="open",
+        intent="click 'Open referral'",
+        action=ActionKind.CLICK,
+        identity_armed=True,
+        anchor=Anchor(
+            template="templates/t.png",
+            region=(0, 0, 240, 48),
+            click_point=(0, 0),
+            identifier_crop="templates/id.png",
+            identifier_region=(0, 0, 240, 48),
+        ),
+    )
+
+
+class _PixelBackend:
+    viewport = (240, 400)
+
+    def screenshot(self) -> bytes:
+        return b""
+
+
+def _pixel_census(
+    tmp_path, frame: Any, *, verify: bool, monkeypatch=None, verdict=None
+):
+    from openadapt_flow.runtime import identity as identity_mod
+
+    if verdict is not None:
+        assert monkeypatch is not None
+        monkeypatch.setattr(
+            identity_mod, "verify_pixel_identity", lambda *a, **k: verdict
+        )
+    replayer = Replayer(
+        _PixelBackend(),
+        vision=object(),
+        poll_interval_s=0.01,
+        pixel_verify_enabled=verify,
+    )
+    step = _pixel_step(tmp_path, _png(_crop_png()))
+    resolution = Resolution(rung="template", point=(0, 0), confidence=1.0, elapsed_ms=1)
+    return replayer._pixel_census(
+        step, resolution, _png(frame), Workflow(name="wf"), tmp_path
+    )
+
+
+def _two_copies() -> Any:
+    import numpy as np
+
+    gap = np.full((10, 240), 255, np.uint8)
+    return np.vstack([_crop_png(), gap, _crop_png()])
+
+
+def test_pixel_census_counts_a_second_copy(tmp_path) -> None:
+    decision = _pixel_census(tmp_path, _two_copies(), verify=True)
+    assert decision == CensusDecision("ambiguous", 2)
+
+
+def test_pixel_census_counts_a_copy_when_verify_is_off(tmp_path) -> None:
+    """Verify disabled never yields 'verified'; the copy must still count."""
+
+    decision = _pixel_census(tmp_path, _two_copies(), verify=False)
+    assert decision == CensusDecision("ambiguous", 2)
+
+
+@pytest.mark.parametrize(
+    "verdict",
+    [None, IdentityCheck(status="abstain", mode="pixel")],
+    ids=["no-verdict", "abstain"],
+)
+def test_pixel_census_counts_anything_short_of_a_mismatch(
+    tmp_path, monkeypatch, verdict
+) -> None:
+    decision = _pixel_census(
+        tmp_path, _two_copies(), verify=True, monkeypatch=monkeypatch, verdict=verdict
+    )
+    assert decision.verdict == "ambiguous"
+
+
+def test_pixel_census_rules_out_a_clear_mismatch(tmp_path, monkeypatch) -> None:
+    decision = _pixel_census(
+        tmp_path,
+        _two_copies(),
+        verify=True,
+        monkeypatch=monkeypatch,
+        verdict=IdentityCheck(status="mismatch", mode="pixel"),
+    )
+    assert decision == CensusDecision("unique", 1)
+
+
+def test_pixel_census_is_uncounted_at_another_scale(tmp_path) -> None:
+    """The target's own place is not found at the recorded scale."""
+
+    import cv2
+
+    frame = cv2.resize(_two_copies(), None, fx=1.3, fy=1.3)
+    decision = _pixel_census(tmp_path, frame, verify=True)
+    assert decision.verdict == "uncounted"
+
+
+def test_pixel_census_is_uncounted_when_a_place_cannot_be_cut(
+    tmp_path, monkeypatch
+) -> None:
+    from openadapt_flow.runtime import identity as identity_mod
+
+    real = identity_mod.crop_region
+    # The target's own crop cuts; the second place does not.
+    monkeypatch.setattr(
+        identity_mod,
+        "crop_region",
+        lambda png, region: real(png, region) if region[1] == 0 else None,
+    )
+    decision = _pixel_census(tmp_path, _two_copies(), verify=True)
+    assert decision.verdict == "uncounted"

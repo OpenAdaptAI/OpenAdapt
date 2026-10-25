@@ -740,7 +740,24 @@ _CENSUS_ROW_TYPES = frozenset(
     {"DataItemControl", "ListItemControl", "TreeItemControl", "TableRowControl"}
 )
 _MAX_CENSUS_ROWS = 2000
-_POSITIONAL_ID = re.compile(r"^\D*(\d+)\D*$")
+_SINGLE_NUMBER = re.compile(r"^\D*(\d+)\D*$")
+# Mirror of identity_census.positional_id.
+_POSITION_WORD = re.compile(
+    r"(?:^|[^a-z])(?:row|r|item|idx|index|cell|col|c|line|pos|position|"
+    r"listviewitem|node|child)[-_ :#]?\d+",
+    re.IGNORECASE,
+)
+
+
+def _positional_id(value: str, index: int) -> bool:
+    """Whether a row id names a position (``row-3``, ``r3c2``) not a record."""
+
+    if len(re.findall(r"\d+", value)) > 1:
+        return True
+    if _POSITION_WORD.search(value):
+        return True
+    match = _SINGLE_NUMBER.match(value)
+    return bool(match and int(match.group(1)) in (index, index + 1))
 
 
 def _row_identity(row: object, excluded: Optional[int]) -> Optional[str]:
@@ -773,8 +790,7 @@ def _census_record_key(
         value = str(_control_value(control, "AutomationId", "") or "").strip()
         if not value or len(value) > 256:
             continue
-        match = _POSITIONAL_ID.match(value)
-        if match and int(match.group(1)) in (index, index + 1):
+        if _positional_id(value, index):
             continue
         keys.add(f"automation-id={value}")
     return "\n".join(sorted(keys)) or None
@@ -855,22 +871,22 @@ def _identity_candidates_at(auto: Any, x: int, y: int) -> Optional[dict[str, Any
     row_index = next((i for i, c in enumerate(rows) if same(c, row)), None)
     incomplete = len(rows) > _MAX_CENSUS_ROWS or row_index is None
     if container is not None and not incomplete:
-        grid = _control_value(container, "GetGridPattern", None)
+        # A provider that fails while answering is not a complete answer.
         try:
-            declared = int(grid().RowCount) if callable(grid) else None
+            grid_get = _control_value(container, "GetGridPattern", None)
+            grid = grid_get() if callable(grid_get) else None
+            declared = int(grid.RowCount) if grid is not None else None
+            scroll_get = _control_value(container, "GetScrollPattern", None)
+            scroll = scroll_get() if callable(scroll_get) else None
+            scrollable = (
+                bool(scroll.VerticallyScrollable) if scroll is not None else False
+            )
+            items_get = _control_value(container, "GetItemContainerPattern", None)
+            realizes = callable(items_get) and items_get() is not None
         except Exception:  # noqa: BLE001
-            declared = None
+            declared, scrollable, realizes, incomplete = None, True, True, True
         if declared is not None and declared > len(rows):
             incomplete = True
-        scroll = _control_value(container, "GetScrollPattern", None)
-        items = _control_value(container, "GetItemContainerPattern", None)
-        try:
-            scrollable = (
-                bool(scroll().VerticallyScrollable) if callable(scroll) else False
-            )
-            realizes = callable(items) and items() is not None
-        except Exception:  # noqa: BLE001
-            scrollable, realizes = False, False
         if scrollable and realizes:
             incomplete = True
     result: dict[str, Any] = {
@@ -890,6 +906,11 @@ def _identity_candidates_at(auto: Any, x: int, y: int) -> Optional[dict[str, Any
         else:
             observed = _row_identity(candidate, excluded)
             kids = _children(candidate)
+            if row_children and not kids:
+                # A row whose cells are not built yet: it cannot be read.
+                result["incomplete"] = True
+                result["candidates"] = []
+                return result
             candidate_branch = (
                 kids[excluded]
                 if excluded is not None and excluded < len(kids)

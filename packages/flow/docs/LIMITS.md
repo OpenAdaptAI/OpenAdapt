@@ -199,13 +199,20 @@ time, or halts. How each surface counts:
   counted, and a row pick before a write halts;
 - macOS (AX): the rows of the `AXTable`, `AXOutline` or `AXList` around the
   element, with the AX identifier and URL as record ids. A table that reports
-  more `AXRows` than it exposes cannot be counted;
+  more `AXRows` than it exposes, or a list with no row count inside a scroll
+  area with a scroll bar, cannot be counted;
 - Linux (AT-SPI): the sibling list items, table rows or tree items of the
-  clicked row, with AT-SPI accessible ids as record ids. GTK 3 list boxes and
+  clicked row, with AT-SPI accessible ids as record ids. A list with no Table
+  row count inside a scroll pane with a scroll bar cannot be counted. GTK 3
+  list boxes and
   tree views expose no row identity under the structured reading (one child
   per row, or cells without a row), so the identity check there rests on OCR;
-- pixel-only displays: the OCR rows of the frame, or, with no OCR band, the
-  places the identifier crop verifies.
+- pixel-only displays: the OCR rows of the frame, or, with no OCR band, every
+  place the identifier crop matches. Only a clear pixel mismatch rules a place
+  out; a frame at another scale than the recording cannot be counted.
+
+Ids that name a position (`row-3`, `r3c2`, `item_12`, the row's own index)
+never tell rows apart.
 
 A surface that cannot count the rows halts any row pick that leads into a
 write.

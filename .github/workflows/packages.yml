@@ -478,9 +478,8 @@ jobs:
 
   # Real native list apps read through the row census (identical rows halt,
   # record ids pick the row, a unique row runs): a WPF ListBox over UI
-  # Automation on Windows, which must run with no skips, and a Swift
-  # NSTableView over AX on macOS, which skips when the hosted runner gives the
-  # job no Accessibility access (the step summary says so).
+  # Automation on Windows and a Swift NSTableView over AX on macOS. Both legs
+  # must run every real-app test; the step summary lists each outcome.
   flow-native-census:
     name: flow native row census (${{ matrix.os }})
     needs: scope
@@ -518,18 +517,31 @@ jobs:
           mkdir -p runs
           pytest -v -rs tests/test_native_identity_census.py \
             tests/test_native_census_real_apps.py --junitxml=runs/native-junit.xml
-      - name: The Windows real-app tests ran
-        if: runner.os == 'Windows'
+      - name: The real-app tests ran (no skips)
         run: |
           python - <<'PY'
+          import os
           import sys
           import xml.etree.ElementTree as ET
+          prefix = {"Windows": "test_windows_wpf_", "macOS": "test_macos_table_"}[
+              os.environ["RUNNER_OS"]
+          ]
           cases = [
               c for c in ET.parse("runs/native-junit.xml").getroot().iter("testcase")
-              if c.get("name", "").startswith("test_windows_wpf_")
+              if c.get("name", "").startswith(prefix)
           ]
+          lines = [f"### Native row census, real app ({os.environ['RUNNER_OS']})", ""]
+          for case in cases:
+              skip = case.find("skipped")
+              failed = case.find("failure") is not None or case.find("error") is not None
+              state = "skipped: " + (skip.get("message") or "") if skip is not None else (
+                  "failed" if failed else "passed"
+              )
+              lines.append(f"- `{case.get('name')}`: {state}")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
+              out.write("\n".join(lines) + "\n")
+          print("\n".join(lines))
           skipped = [c.get("name") for c in cases if c.find("skipped") is not None]
-          print(f"{len(cases)} WPF tests, skipped: {skipped}")
           sys.exit(1 if not cases or skipped else 0)
           PY
 
