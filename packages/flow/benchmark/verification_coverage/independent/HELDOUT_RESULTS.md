@@ -86,6 +86,31 @@ contract never reads:
 The candidate scores 17 of 17 on the original suite, but its fixes were
 written knowing those cases. The held-out score is the one that counts.
 
+## The whole-database frame, commit e0728d03a
+
+All three misses come from one cause: the frame compared only the tables the
+contract reads, so a write anywhere else passed. The fix is not a check per
+case. `frame.database` (#1581) diffs every table and column, with a reviewed
+allow-list for OpenEMR's own bookkeeping instead of a read-list. The
+contract is `lifecycle_proof/verify.database.yaml` (`--contract whole`).
+
+| suite | production | candidate (read-list) | whole database |
+|---|---|---|---|
+| held-out | 4/17 | 14/17 | 17/17, **not counted** |
+| original | 7/17 | 17/17 | 17/17 |
+
+**The 17/17 on this held-out set doesn't count as a pass.** The set's
+misses shaped the design, and two false alarms found while running it were
+fixed before this score:
+- a database default computed at insert (`last_updated`);
+- another user's new chart's `contact` row, which names the chart through
+  `foreign_id`.
+
+The score that counts comes from a second held-out set written blind after
+this change. In the whole-database runs, every frame was read (none was
+"not checked"). Each case's verdict came from the frame or the record check,
+never from a failed read.
+
 ## Live OpenEMR
 
 Pending: queued for the fixture lease.
