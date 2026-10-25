@@ -49,6 +49,9 @@ class Unit:
     lineno: int
     dump: str
     is_function: bool
+    # A statement that documents or declares but does nothing at run time:
+    # a docstring, or an annotation with no value (a protocol attribute).
+    is_declaration: bool = False
 
 
 @dataclass
@@ -138,7 +141,16 @@ def units(source: str, file: str) -> tuple[list[Unit], dict[str, list[str]]]:
                 walk(node.body, name + ".")
             else:
                 label = f"{prefix}<statement line {node.lineno}>"
-                out.append(Unit(file, label, node.lineno, _dump(node), False))
+                declaration = (
+                    isinstance(node, ast.AnnAssign) and node.value is None
+                ) or (
+                    isinstance(node, ast.Expr)
+                    and isinstance(node.value, ast.Constant)
+                    and isinstance(node.value.value, str)
+                )
+                out.append(
+                    Unit(file, label, node.lineno, _dump(node), False, declaration)
+                )
 
     walk(tree.body, "")
     return out, bases
@@ -256,11 +268,8 @@ def verify(root: Path, base: str, search: list[str]) -> Result:
             if base_units[unit.dump] > 0:
                 base_units[unit.dump] -= 1  # moved here from a changed file
                 continue
-            # A protocol attribute declaration (``backend: Backend``) is a stub.
-            declaration = (
-                unit.dump.startswith("AnnAssign(") and "value=" not in unit.dump
-            )
-            if unit.dump in stubs or unit.dump in reexports or declaration:
+            # Protocol attribute declarations and docstrings are not logic.
+            if unit.dump in stubs or unit.dump in reexports or unit.is_declaration:
                 result.new_stubs.append(unit)
             else:
                 result.new_bodies.append(unit)

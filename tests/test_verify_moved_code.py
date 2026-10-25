@@ -60,13 +60,16 @@ class Replayer(IdentityChecks):
 '''
 
 MIXIN = """\
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Optional, Protocol
 
 LIMIT = 3
 
 
 class _IdentityHost(Protocol):
+    "What the identity checks read from the host."
+
     backend: str
+    frames: Optional[dict[str, Any]]
 
     def run(self) -> bool: ...
 
@@ -82,6 +85,8 @@ def helper(x):
 
 
 class IdentityChecks(_Base):
+    "Identity checks."
+
     def _check(self):
         return len(self.backend) > 0
 """
@@ -127,6 +132,8 @@ def test_a_pure_move_into_a_mixin_passes(repo: Path) -> None:
     )
     stubs = {unit.qualname for unit in result.new_stubs}
     assert {"_IdentityHost.run"} <= stubs
+    # Docstrings and attribute declarations, even with nested types, are stubs.
+    assert len(result.new_stubs) == 5
     assert verify_moved_code.main(["--root", str(repo), "--base", "HEAD"]) == 0
 
 
