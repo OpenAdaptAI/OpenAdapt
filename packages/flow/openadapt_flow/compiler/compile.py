@@ -2275,6 +2275,15 @@ def _compile_recording(
             # OCR context band; replay prefers it (no OCR glyph ambiguity) and
             # falls back to the band on pixel-only substrates.
             structured_identity = event.get("structured_identity") or None
+            # The row's stable record id (a DOM data-* id, the row link's
+            # path), captured with the structured identity. Hashed into the
+            # identity template so replay acts only on the row with this id.
+            record_key = (
+                event.get("record_key") or None if structured_identity else None
+            )
+            structured_row = event.get("structured_row")
+            if not structured_identity or not isinstance(structured_row, bool):
+                structured_row = None
             # Structural locator (DOM selector / role+name, or UIA identifiers)
             # of the clicked element, captured by the recorder when the
             # recording backend exposed it (StructuralActionBackend). Drives the
@@ -2382,6 +2391,8 @@ def _compile_recording(
                 ocr_text=anchor_ocr_text,
                 context_text=context_text,
                 structured_identity=structured_identity,
+                record_key=record_key,
+                structured_row=structured_row,
                 structural=structural,
                 landmarks=anchor_landmarks,
                 identifier_crop=identifier_crop_rel,
@@ -3594,9 +3605,13 @@ def _phi_free_identity(workflow: Workflow) -> None:
             structured_identity=anchor.structured_identity,
             param_examples=workflow.params,
             salt_hex=salt,
+            record_key=anchor.record_key,
+            structured_row=anchor.structured_row,
         )
         if template is None:
             continue
         anchor.identity_template = template
         anchor.context_text = None
         anchor.structured_identity = None
+        anchor.record_key = None
+        anchor.structured_row = None

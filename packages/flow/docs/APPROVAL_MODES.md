@@ -229,6 +229,10 @@ and a missing or broken log also reads as off.
 These thresholds are the public defaults. A deployment can only make them
 stricter.
 
+While the switch reads off, each item waits for a person to approve it before
+the save, as in `each_item`, when the run has an approval store. Without one,
+the item stops before the save and nothing is saved.
+
 ## Requirements
 
 `evaluate_requirements` in `openadapt_flow/approval_mode/requirements.py`

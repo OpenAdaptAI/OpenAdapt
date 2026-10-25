@@ -1214,6 +1214,18 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
             page.records,
             substrate=self.substrate,
         )
+        if verdict.confirmed and not page.records:
+            # A search that finds nothing never proves anything, so it never
+            # confirms (for example an effect that expects no record).
+            return EffectVerdict(
+                verdict=Verdict.INDETERMINATE,
+                kind=effect.kind,
+                substrate=self.substrate,
+                reason=(
+                    "the record page shows no records; a search that finds nothing is "
+                    "not proof of what was saved; HALT"
+                ),
+            )
         return without_absence_claim(_relabel(verdict))
 
     # -- adapter lifecycle -------------------------------------------------------------

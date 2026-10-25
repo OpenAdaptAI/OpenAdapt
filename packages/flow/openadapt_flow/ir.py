@@ -323,6 +323,23 @@ class IdentityTemplate(BaseModel):
     )
     param_token_indices: dict[str, list[int]] = Field(default_factory=dict)
     rests_on_confusable_identifier: bool = False
+    record_key: Optional[str] = Field(
+        default=None,
+        description=(
+            "Salted hash of the stable record id the target's row carried at "
+            "teach time (app-owned DOM data-* ids, the row link's path). When "
+            "set, replay acts only on the shown row with the same id."
+        ),
+    )
+    structured_row: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Whether the structured identity came from a record row at teach "
+            "time. False lets a replay surface that cannot count look-alike "
+            "rows still act on the target (a form field, a button); None "
+            "(unknown) is treated as a row."
+        ),
+    )
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -341,6 +358,10 @@ class IdentityTemplate(BaseModel):
             data.pop("signal_hashes", None)
         if not self.context_params:
             data.pop("context_params", None)
+        if self.record_key is None:
+            data.pop("record_key", None)
+        if self.structured_row is None:
+            data.pop("structured_row", None)
         return data
 
 
@@ -400,6 +421,21 @@ class Anchor(BaseModel):
             " ladder then falls back to the OCR context_text tier."
         ),
     )
+    record_key: Optional[str] = Field(
+        default=None,
+        description=(
+            "Stable record id of the target's row at record time (plaintext,"
+            " compile-time only). The PHI-free pass hashes it into"
+            " ``identity_template.record_key`` and clears this field."
+        ),
+    )
+    structured_row: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Whether ``structured_identity`` came from a record row (compile-"
+            "time only; moved to ``identity_template.structured_row``)."
+        ),
+    )
     identity_template: Optional[IdentityTemplate] = Field(
         default=None,
         description=(
@@ -451,6 +487,16 @@ class Anchor(BaseModel):
         description="Pixels of padding around `region` for the local search",
     )
 
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Leave unset census metadata out, so older bundle bytes stay equal."""
+        data: dict[str, Any] = handler(self)
+        if self.record_key is None:
+            data.pop("record_key", None)
+        if self.structured_row is None:
+            data.pop("structured_row", None)
+        return data
+
 
 class PostconditionKind(str, Enum):
     TEXT_PRESENT = "text_present"
@@ -474,6 +520,14 @@ class PostconditionKind(str, Enum):
     # The focused dropdown shows the run's value of ``param`` (its selected
     # option's label, whitespace-squashed and case-insensitive).
     FIELD_VALUE = "field_value"
+    # An app's possible-duplicate list (rows matching ``candidate_rows`` in
+    # the frame ``candidate_frame_path``) has finished loading and names no
+    # real candidate: no listed row carries this run's value of any of
+    # ``candidate_params`` (for example the last name or the date of birth).
+    # An empty list passes only with its "no matches" marker (``text``)
+    # shown, so a list that has not loaded yet never passes. Unreadable rows
+    # fail the check.
+    NO_DUPLICATE_CANDIDATE = "no_duplicate_candidate"
 
 
 class Postcondition(BaseModel):
@@ -497,6 +551,15 @@ class Postcondition(BaseModel):
     param: Optional[str] = Field(
         default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}$"
     )
+    #: NO_DUPLICATE_CANDIDATE: the CSS selector of one listed candidate row.
+    candidate_rows: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    #: NO_DUPLICATE_CANDIDATE: the frame chain the list is in (outermost first).
+    candidate_frame_path: Optional[tuple[str, ...]] = Field(default=None, max_length=8)
+    #: NO_DUPLICATE_CANDIDATE: parameters whose value in any row makes it a
+    #: real candidate.
+    candidate_params: Optional[tuple[str, ...]] = Field(
+        default=None, min_length=1, max_length=8
+    )
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -508,6 +571,9 @@ class Postcondition(BaseModel):
             data.pop("field_selector", None)
         if self.param is None:
             data.pop("param", None)
+        for name in ("candidate_rows", "candidate_frame_path", "candidate_params"):
+            if getattr(self, name) is None:
+                data.pop(name, None)
         return data
 
 
@@ -3786,6 +3852,48 @@ class IdentityCheck(BaseModel):
             "identifier it read. The step halts."
         ),
     )
+    candidate_count: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description=(
+            "How many shown rows carry the same record identity as the "
+            "resolved target, the target included (runtime.identity_census). "
+            "None when the backend cannot count them."
+        ),
+    )
+    ambiguity_halt: Optional[
+        Literal["identical_candidates", "candidates_uncounted", "identity_uncounted"]
+    ] = Field(
+        default=None,
+        description=(
+            "Set when the identity matched but does not pick one record: "
+            "another shown row has the same identity and no stable record id "
+            "tells them apart (identical_candidates), there were too many rows "
+            "to count (candidates_uncounted), or this surface cannot count the "
+            "rows at all and the step leads into a consequential write "
+            "(identity_uncounted). The step halts whatever its risk."
+        ),
+    )
+    census_status: Optional[Literal["not_a_row", "cannot_count"]] = Field(
+        default=None,
+        description=(
+            "Set when the identity verified without a candidate count: the "
+            "target is not a row (not_a_row), or the surface cannot count rows "
+            "and nothing consequential follows the step (cannot_count)."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Leave unset census fields out, so older report bytes stay equal."""
+        data: dict[str, Any] = handler(self)
+        if self.candidate_count is None:
+            data.pop("candidate_count", None)
+        if self.ambiguity_halt is None:
+            data.pop("ambiguity_halt", None)
+        if self.census_status is None:
+            data.pop("census_status", None)
+        return data
 
 
 class HealEvent(BaseModel):
