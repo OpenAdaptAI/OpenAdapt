@@ -30,7 +30,7 @@
 
 ### Bug Fixes
 
-- a person's approval needs the signature of a key on the signed approver roster, whose root the run pins (`OPENADAPT_APPROVER_ROOT` or the deployment config). Set the key up from a terminal (`jit keygen`, then `jit approver init`); every later approver is added with an approver's signature (`jit approver add`). An approval from a key not on the pinned roster is refused.
+- a person's approval needs the signature of a key on the signed approver roster, whose root the run pins from the deployment config's `approvers.root_public_key` (a governed run takes it from nowhere else, so an environment variable can't pin it). Set the key up from a terminal (`jit keygen`, then `jit approver init`); every later approver is added with an approver's signature (`jit approver add`). An approval from a key not on the pinned roster is refused.
 - security updates to locked dependencies (pillow 13.0.0, certifi, setuptools, rustls-webpki, webpki-root-certs)
 
 
