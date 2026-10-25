@@ -138,3 +138,45 @@ def count_matching_rows(
         if abs(y - target_y) >= same_row_px and text.strip() and verifies(text)
     )
     return others + 1
+
+
+# Structural roles (backend-neutral, as the recorder stores them) of a form
+# field or a control. A target recorded with one of these is not a record row.
+CONTROL_ROLES = frozenset(
+    {
+        "textbox",
+        "searchbox",
+        "combobox",
+        "checkbox",
+        "radio",
+        "spinbutton",
+        "switch",
+        "slider",
+        "button",
+        "tab",
+        "menuitem",
+    }
+)
+
+
+def teach_time_role(step: Any) -> Literal["row", "control", "unknown"]:
+    """What teach time recorded the step's target as.
+
+    ``row`` when the recorder saw a record row (the census at record time),
+    ``control`` when it saw no row there, or when the target's structural
+    locator names a form-field or control role (:data:`CONTROL_ROLES`).
+    ``unknown`` otherwise, which the runtime counts like a row: a link, a
+    cell, a list item, or a target with no recorded role.
+    """
+    anchor = getattr(step, "anchor", None)
+    if anchor is None:
+        return "unknown"
+    template = getattr(anchor, "identity_template", None)
+    recorded_row = getattr(template, "structured_row", None)
+    if recorded_row is True:
+        return "row"
+    if recorded_row is False:
+        return "control"
+    structural = getattr(anchor, "structural", None)
+    role = (getattr(structural, "role", None) or "").strip().casefold()
+    return "control" if role in CONTROL_ROLES else "unknown"
