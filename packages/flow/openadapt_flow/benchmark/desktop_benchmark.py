@@ -233,7 +233,7 @@ class DesktopHarness:
         import tempfile
 
         tmp = Path(tempfile.mkdtemp()) / "pn_env.json"
-        tmp.write_text(json.dumps(cfg))
+        tmp.write_text(json.dumps(cfg), encoding="utf-8")
         self.vm.push_file(str(tmp), f"{GUEST_DIR}/pn_env.json")
         os.unlink(tmp)
 
@@ -774,8 +774,10 @@ def render_chart(results: dict, path: Path) -> None:
 def write_outputs(results: dict, out_dir: str | Path) -> None:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "results.json").write_text(json.dumps(results, indent=2) + "\n")
-    (out_dir / "BENCHMARK.md").write_text(render_markdown(results))
+    (out_dir / "results.json").write_text(
+        json.dumps(results, indent=2) + "\n", encoding="utf-8"
+    )
+    (out_dir / "BENCHMARK.md").write_text(render_markdown(results), encoding="utf-8")
     from openadapt_flow.benchmark.chart_fonts import safe_render
 
     safe_render(render_chart, results, out_dir / "outcomes.png")

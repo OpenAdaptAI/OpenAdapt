@@ -1255,7 +1255,7 @@ def load_deployment(
     if not path.is_file():
         raise FileNotFoundError(f"deployment config {source!r} is not an existing file")
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as e:  # pragma: no cover - passthrough
         raise ValueError(f"could not parse deployment YAML {path}: {e}") from e
     if not isinstance(data, dict):

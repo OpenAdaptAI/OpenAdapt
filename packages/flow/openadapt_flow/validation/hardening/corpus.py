@@ -124,7 +124,7 @@ def build_corpus(rows: list[ResultRow]) -> dict[str, Any]:
 
 
 def load_corpus() -> dict[str, Any]:
-    return json.loads(corpus_path().read_text())
+    return json.loads(corpus_path().read_text(encoding="utf-8"))
 
 
 def ratchet_max() -> int:

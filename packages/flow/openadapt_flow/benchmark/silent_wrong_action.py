@@ -656,8 +656,12 @@ def render_chart(results: dict[str, Any], out_png: Path) -> Path:
 def write_outputs(results: dict[str, Any], out_dir: Path) -> None:
     """Write ``results.json``, ``SILENT_WRONG_ACTION.md``, and the chart PNG."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "results.json").write_text(json.dumps(results, indent=2) + "\n")
-    (out_dir / "SILENT_WRONG_ACTION.md").write_text(render_markdown(results))
+    (out_dir / "results.json").write_text(
+        json.dumps(results, indent=2) + "\n", encoding="utf-8"
+    )
+    (out_dir / "SILENT_WRONG_ACTION.md").write_text(
+        render_markdown(results), encoding="utf-8"
+    )
     from openadapt_flow.benchmark.chart_fonts import safe_render
 
     safe_render(render_chart, results, out_dir / "silent_wrong_action.png")

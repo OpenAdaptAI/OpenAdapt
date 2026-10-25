@@ -332,7 +332,9 @@ def guard_task(
             "notes": notes,
         }
     )
-    (out / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True))
+    (out / "summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8"
+    )
     return GuardRun(
         out_dir=out,
         verdict=guard.summary.verdict,

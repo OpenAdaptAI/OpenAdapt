@@ -114,7 +114,7 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _read_json(path: Path) -> Optional[dict[str, Any]]:
     try:
-        value = json.loads(path.read_text())
+        value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     return value if isinstance(value, dict) else None
@@ -605,7 +605,8 @@ class RepairDesk:
         (frames / "0000_before.png").write_bytes(before)
         (frames / "0000_after.png").write_bytes(after)
         (directory / "events.jsonl").write_text(
-            json.dumps({"i": 0, "kind": "click", "x": x, "y": y, "t": 1.0}) + "\n"
+            json.dumps({"i": 0, "kind": "click", "x": x, "y": y, "t": 1.0}) + "\n",
+            encoding="utf-8",
         )
         width, height = screen.viewport()
         (directory / "meta.json").write_text(
@@ -617,7 +618,8 @@ class RepairDesk:
                     "app_url": "",
                     "params": {},
                 }
-            )
+            ),
+            encoding="utf-8",
         )
 
     def teach(self, token: Any, demonstration: Any) -> dict[str, Any]:

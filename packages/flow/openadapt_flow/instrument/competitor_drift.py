@@ -878,8 +878,8 @@ def write_outputs(report: InstrumentReport, out_dir: Path | str) -> None:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     payload = assert_anonymized(json.dumps(report.to_dict(), indent=2) + "\n")
-    (out / "results.json").write_text(payload)
-    (out / "COMPETITOR_DRIFT.md").write_text(render_markdown(report))
+    (out / "results.json").write_text(payload, encoding="utf-8")
+    (out / "COMPETITOR_DRIFT.md").write_text(render_markdown(report), encoding="utf-8")
 
 
 # --------------------------------------------------------------------------

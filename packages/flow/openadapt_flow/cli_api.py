@@ -84,7 +84,7 @@ def cmd_api_show(args: argparse.Namespace) -> int:
     reasons: list[str] = []
     sidecar = bundle / "api_proposal.json"
     if sidecar.is_file():
-        reasons = json.loads(sidecar.read_text()).get("reasons") or []
+        reasons = json.loads(sidecar.read_text(encoding="utf-8")).get("reasons") or []
     if args.as_json:
         rows = []
         for s in found:
@@ -144,7 +144,8 @@ def cmd_api_propose(args: argparse.Namespace) -> int:
             },
             indent=2,
         )
-        + "\n"
+        + "\n",
+        encoding="utf-8",
     )
     if step is None:
         print(f"No API step proposed: {'; '.join(reasons)}.")

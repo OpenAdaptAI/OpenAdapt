@@ -371,7 +371,7 @@ def cmd_canary_record(args: argparse.Namespace) -> int:
     if not report_path.is_file():
         print(f"REFUSED: no report.json under {args.run_dir}")
         return 1
-    report = RunReport.model_validate_json(report_path.read_text())
+    report = RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))
     observation = observation_from_report(report)
     try:
         candidate = store.record_canary_run(args.candidate_id, observation)

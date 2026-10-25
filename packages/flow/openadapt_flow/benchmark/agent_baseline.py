@@ -128,7 +128,7 @@ def load_api_key() -> str:
         return key
     path = Path.home() / ".anthropic" / "api_key"
     if path.is_file():
-        key = path.read_text().strip()
+        key = path.read_text(encoding="utf-8").strip()
         if key:
             return key
     raise RuntimeError(

@@ -42,7 +42,7 @@ class RecordedTrajectoryAgent:
 
     @classmethod
     def from_file(cls, path: Path | str) -> "RecordedTrajectoryAgent":
-        raw = json.loads(Path(path).read_text())
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
         return cls(
             dialect=str(raw["dialect"]),
             task_id=str(raw["task_id"]),

@@ -239,7 +239,7 @@ def _run_holding(cmd: list[str], run_dir: Path, timeout_s: float) -> _Finished:
     while proc.poll() is None:
         if hold_file.is_file():
             try:
-                held = json.loads(hold_file.read_text())
+                held = json.loads(hold_file.read_text(encoding="utf-8"))
                 code = held.get("exit_code")
                 held_code = code if isinstance(code, int) else 1
             except (OSError, json.JSONDecodeError):
@@ -843,7 +843,7 @@ class FlowRunner:
         report: Optional[dict] = None
         if report_path.is_file():
             try:
-                report = json.loads(report_path.read_text())
+                report = json.loads(report_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 report = None
 

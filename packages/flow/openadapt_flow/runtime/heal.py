@@ -287,7 +287,9 @@ def persist_heal(
     (heal_dir / _HEAL_TEMPLATE_NAME).write_bytes(_scrub_png(crop_png))
     (heal_dir / _HEAL_SCREEN_NAME).write_bytes(_scrub_png(frame_png))
     event.screenshot = f"heals/{event.step_id}/{_HEAL_SCREEN_NAME}"
-    (heal_dir / _HEAL_JSON_NAME).write_text(event.model_dump_json(indent=2))
+    (heal_dir / _HEAL_JSON_NAME).write_text(
+        event.model_dump_json(indent=2), encoding="utf-8"
+    )
     return heal_dir
 
 

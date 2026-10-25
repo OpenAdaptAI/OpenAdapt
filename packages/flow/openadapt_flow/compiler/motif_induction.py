@@ -501,10 +501,10 @@ def write_candidate(candidate: MotifCandidate, out_dir: Path) -> Path:
     meta = candidate.model_dump(mode="json", exclude={"draft"})
     meta["draft_file"] = DRAFT_FILENAME if candidate.draft is not None else None
     (out / CANDIDATE_FILENAME).write_text(
-        json.dumps(meta, indent=2, sort_keys=True) + "\n"
+        json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     if candidate.draft is not None:
         (out / DRAFT_FILENAME).write_text(
-            candidate.draft.model_dump_json(indent=2) + "\n"
+            candidate.draft.model_dump_json(indent=2) + "\n", encoding="utf-8"
         )
     return out

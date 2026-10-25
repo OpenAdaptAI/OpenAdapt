@@ -516,7 +516,7 @@ class CheckpointStore:
             )
             return json.loads(decrypted)  # type: ignore[no-any-return]
         if path.is_file():
-            return json.loads(path.read_text())  # type: ignore[no-any-return]
+            return json.loads(path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
         return None
 
     @staticmethod
@@ -552,7 +552,7 @@ class CheckpointStore:
             pending_payload["status"] = "pending"
         claim_path = self.run_dir / CLAIM_FILENAME
         try:
-            claim = json.loads(claim_path.read_text())
+            claim = json.loads(claim_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             claim = None
 
@@ -780,7 +780,7 @@ class CheckpointStore:
 
         claim_path = self.run_dir / CLAIM_FILENAME
         try:
-            raw = json.loads(claim_path.read_text())
+            raw = json.loads(claim_path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             from openadapt_flow.runtime.durable.approval import StateDiverged
 

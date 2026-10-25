@@ -187,7 +187,7 @@ class FleetHub:
     def _state(self) -> dict[str, Any]:
         path = self.root / "state.json"
         if path.is_file():
-            return json.loads(path.read_text())
+            return json.loads(path.read_text(encoding="utf-8"))
         return {
             "registrations": {},
             "revoked_key_ids": [],
@@ -212,7 +212,7 @@ class FleetHub:
             return []
         return [
             json.loads(line)
-            for line in self.audit_path.read_text().splitlines()
+            for line in self.audit_path.read_text(encoding="utf-8").splitlines()
             if line
         ]
 
@@ -344,7 +344,9 @@ class FleetHub:
             return out
         state = self._state()
         for path in sorted(held_dir.glob("*.json")):
-            contribution = PatchContribution.model_validate_json(path.read_text())
+            contribution = PatchContribution.model_validate_json(
+                path.read_text(encoding="utf-8")
+            )
             if contribution.chain.signer.payload.subject in state["revoked_subjects"]:
                 continue
             base = contribution.payload.patch.app_before.fingerprint_sha256()

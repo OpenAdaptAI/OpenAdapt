@@ -2288,7 +2288,9 @@ class SelfRepair:
             pass
         if status != "not_needed":
             work.mkdir(parents=True, exist_ok=True)
-            (work / "self-repair.json").write_text(evidence.model_dump_json(indent=2))
+            (work / "self-repair.json").write_text(
+                evidence.model_dump_json(indent=2), encoding="utf-8"
+            )
         return SelfRepairResult(
             status=status,
             report=report,

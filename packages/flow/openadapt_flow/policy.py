@@ -693,7 +693,7 @@ def _load_policy_file(path: Path) -> Policy:
     import yaml
 
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as e:  # pragma: no cover - passthrough
         raise ValueError(f"could not parse policy YAML {path}: {e}") from e
     if not isinstance(data, dict):

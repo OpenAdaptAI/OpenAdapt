@@ -509,7 +509,7 @@ class SandboxEngine:
         path = run_dir / "report.json"
         if path.is_file() and not path.is_symlink():
             try:
-                value = json.loads(path.read_text())
+                value = json.loads(path.read_text(encoding="utf-8"))
                 if isinstance(value, dict):
                     return value
             except (OSError, ValueError):

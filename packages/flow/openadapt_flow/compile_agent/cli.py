@@ -220,7 +220,7 @@ def _agent(args: argparse.Namespace) -> Any:
             effort=args.effort,
             max_cost_usd=args.max_cost,
         )
-    raw = json.loads(Path(args.agent).read_text())
+    raw = json.loads(Path(args.agent).read_text(encoding="utf-8"))
     if "scripts" in raw:
         from openadapt_flow.compile_agent.code_action import ScriptedCodeAgent
 

@@ -128,7 +128,7 @@ def persist_patch(patch: HealPatch, run_dir: Path) -> Path:
     heal_dir = Path(run_dir) / "heals" / patch.step_id
     heal_dir.mkdir(parents=True, exist_ok=True)
     path = heal_dir / _PATCH_JSON_NAME
-    path.write_text(patch.model_dump_json(indent=2))
+    path.write_text(patch.model_dump_json(indent=2), encoding="utf-8")
     return path
 
 

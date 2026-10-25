@@ -81,7 +81,11 @@ def mark_dialog_in_recording(
 
     recording = Path(recording_dir)
     events_path = recording / "events.jsonl"
-    lines = [line for line in events_path.read_text().splitlines() if line.strip()]
+    lines = [
+        line
+        for line in events_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
     marked = 0
     out = []
     for line in lines:
@@ -99,5 +103,5 @@ def mark_dialog_in_recording(
                 event["identifier_scope"] = "dialog"
                 marked += 1
         out.append(json.dumps(event))
-    events_path.write_text("\n".join(out) + "\n")
+    events_path.write_text("\n".join(out) + "\n", encoding="utf-8")
     return marked
