@@ -396,6 +396,44 @@ GUARDED_ACTIONABLE_SELECTOR = (
     ' [role="radio"], [role="switch"]'
 )
 
+#: The focused element's own facts, in its document (``focus_identity``).
+_FOCUS_IDENTITY_JS = r"""(el) => {
+    const doc = el.ownerDocument;
+    if (el === doc.body || el === doc.documentElement) return {none: true};
+    const count = (sel) => {
+        try { return doc.querySelectorAll(sel).length; } catch (e) { return 0; }
+    };
+    const testid = el.getAttribute('data-testid') || null;
+    const id = el.id || null;
+    let active = false;
+    const activeId = el.getAttribute('aria-activedescendant');
+    if (activeId && doc.getElementById(activeId)) active = true;
+    if (!active) {
+        for (const attr of ['aria-controls', 'aria-owns']) {
+            const ref = el.getAttribute(attr);
+            const box = ref ? doc.getElementById(ref) : null;
+            if (box && box.querySelector('[role="option"][aria-selected="true"]')) {
+                active = true;
+                break;
+            }
+        }
+    }
+    let top = false;
+    try { top = doc.defaultView === doc.defaultView.top; } catch (e) { top = false; }
+    return {
+        none: false,
+        tag: el.localName,
+        testid: testid,
+        testid_count: testid ? count('[data-testid="' + CSS.escape(testid) + '"]') : 0,
+        id: id,
+        id_count: id ? count('#' + CSS.escape(id)) : 0,
+        active_option: active,
+        top: top,
+    };
+}"""
+#: The first line of an ARIA snapshot: ``- role "name"``.
+_ARIA_LINE = re.compile(r'^\s*-\s+([a-z]+)(?:\s+"((?:[^"\\]|\\.)*)")?')
+
 _BIND_COORDINATE_TARGET_JS = (
     r"""(args) => {
     const hit = document.elementFromPoint(args.x, args.y);
@@ -1869,6 +1907,61 @@ class PlaywrightBackend:
             with_arg=True,
         )
         return result if isinstance(result, bool) else None
+
+    def focus_identity(self) -> Optional[dict[str, Any]]:
+        """Who has the focus: its testid, id, role and name, and how many share them.
+
+        For the ``focus_on`` postcondition. ``testid_count`` / ``id_count``
+        count the elements with the same ``data-testid`` / ``id`` in the
+        focused element's document; ``role_name_count`` counts the elements
+        with the same role and accessible name on the page (Playwright's own
+        accessibility tree, as replay resolves a role and a name). Role and
+        name are read only in the top document. ``active_option`` is whether
+        an option of the focused control is active: its
+        ``aria-activedescendant`` names an element, or the listbox it
+        controls has an ``aria-selected`` option. ``{"none": True}`` when
+        nothing has the focus; None when it can't be read.
+        """
+
+        info = self._focused_element_call(_FOCUS_IDENTITY_JS)
+        if not isinstance(info, dict):
+            return None
+        if info.get("none"):
+            return {"none": True}
+        role: Optional[str] = None
+        name: Optional[str] = None
+        role_name_count = 0
+        if info.get("top"):
+            try:
+                snapshot = self.page.locator(":focus").aria_snapshot(timeout=1000)
+            except Exception:  # noqa: BLE001 - no snapshot: no role and name
+                snapshot = ""
+            first = snapshot.splitlines()[0] if snapshot else ""
+            match = _ARIA_LINE.match(first)
+            if match:
+                role = match.group(1)
+                name = (match.group(2) or "").replace('\\"', '"').strip() or None
+            if role and name:
+                try:
+                    role_name_count = self.page.get_by_role(
+                        role,  # type: ignore[arg-type]
+                        name=name,
+                        exact=True,
+                    ).count()
+                except Exception:  # noqa: BLE001 - uncountable is not unique
+                    role_name_count = 0
+        return {
+            "none": False,
+            "tag": info.get("tag"),
+            "testid": info.get("testid"),
+            "testid_count": int(info.get("testid_count") or 0),
+            "id": info.get("id"),
+            "id_count": int(info.get("id_count") or 0),
+            "role": role,
+            "name": name,
+            "role_name_count": role_name_count,
+            "active_option": info.get("active_option") is True,
+        }
 
     def element_texts(
         self, selector: str, frame_path: tuple[str, ...] = ()

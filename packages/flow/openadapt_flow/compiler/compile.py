@@ -1125,7 +1125,77 @@ def _structural_postconditions(event: dict) -> list[Postcondition]:
         pcs.append(Postcondition(kind=PostconditionKind.URL_CHANGED))
     elif title_before and title_after and title_before != title_after:
         pcs.append(Postcondition(kind=PostconditionKind.TITLE_CHANGED))
+    if not pcs and event.get("kind") in ("key", "hotkey"):
+        focus = _focus_postcondition(
+            event.get("focus_before"), event.get("focus_after")
+        )
+        if focus is not None:
+            pcs.append(focus)
     return pcs
+
+
+def _focus_postcondition(before: Any, after: Any) -> Optional[Postcondition]:
+    """A ``focus_on`` check for a key that moved the focus, or None.
+
+    Only when the element focused after the key has a specific identity that
+    no other element on the page shared at teach time: a ``data-testid``,
+    then an ``id``, then a role with a non-empty accessible name. A tag, or
+    a role with no name, is not specific, and the step keeps no check. The
+    key must have moved the focus or made an option active; a key that
+    changed neither proves nothing about it.
+    """
+
+    if not isinstance(after, dict) or after.get("none") is not False:
+        return None
+    before = before if isinstance(before, dict) else {}
+
+    def ident(o: dict) -> tuple:
+        return (
+            o.get("tag"),
+            o.get("testid"),
+            o.get("id"),
+            o.get("role"),
+            o.get("name"),
+        )
+
+    moved = ident(before) != ident(after)
+    activated = after.get("active_option") is True and not (
+        not moved and before.get("active_option") is True
+    )
+    if not (moved or activated):
+        return None
+    common: dict[str, Any] = {"focus_active_option": activated}
+    testid, ident_id = after.get("testid"), after.get("id")
+    role, name = after.get("role"), after.get("name")
+    if isinstance(testid, str) and testid.strip() and after.get("testid_count") == 1:
+        return Postcondition(
+            kind=PostconditionKind.FOCUS_ON,
+            focus_by="testid",
+            focus_value=testid,
+            **common,
+        )
+    if isinstance(ident_id, str) and ident_id.strip() and after.get("id_count") == 1:
+        return Postcondition(
+            kind=PostconditionKind.FOCUS_ON,
+            focus_by="id",
+            focus_value=ident_id,
+            **common,
+        )
+    if (
+        isinstance(role, str)
+        and role.strip()
+        and isinstance(name, str)
+        and name.strip()
+        and after.get("role_name_count") == 1
+    ):
+        return Postcondition(
+            kind=PostconditionKind.FOCUS_ON,
+            focus_by="role_name",
+            focus_role=role,
+            focus_name=name,
+            **common,
+        )
+    return None
 
 
 def lint_param_leakage(workflow: Workflow, param_values: tuple[str, ...]) -> list[str]:
@@ -1164,6 +1234,12 @@ def lint_param_leakage(workflow: Workflow, param_values: tuple[str, ...]) -> lis
     violations: list[str] = []
     for step in workflow.steps:
         for pc in step.expect:
+            for focus in (pc.focus_name, pc.focus_value):
+                if focus and _contains_excluded(focus, values):
+                    violations.append(
+                        f"{step.id}: focus_on postcondition {focus!r} embeds a "
+                        "demo parameter value"
+                    )
             if pc.text and _contains_excluded(pc.text, values):
                 violations.append(
                     f"{step.id}: {pc.kind.value} postcondition "
