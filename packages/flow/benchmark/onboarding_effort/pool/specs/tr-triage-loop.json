@@ -1,0 +1,40 @@
+{
+  "id": "tr-triage-loop",
+  "app": "trac",
+  "intent": "Open the saved report 'Untriaged intake'; for each ticket in it, open it, set its milestone, add the comment 'Triaged.', submit, and go back to the report through View Tickets, until none are left.",
+  "shape": "loop_search",
+  "batch_run": true,
+  "inputs": [
+    "milestone"
+  ],
+  "keys": [
+    "ticket"
+  ],
+  "policy": "permissive",
+  "second_installation": "the Trac UI in German (trac.ini [trac] default_language = de)",
+  "second_kind": "locale",
+  "viewport": {
+    "first": [
+      1280,
+      900
+    ],
+    "second": [
+      1280,
+      900
+    ]
+  },
+  "device_scale": {
+    "first": 1.0,
+    "second": 1.0
+  },
+  "verify_yaml": {
+    "first": "schema_version: openadapt.verify/v1\napp:\n  name: Trac service desk (local test copy)\n  url: http://127.0.0.1:9485/report/9\n  version: trac@1.6\n  session: benchmark.onboarding_effort.hooks:open_session\n  reset:\n    python: benchmark.onboarding_effort.hooks:reset\nverifier:\n  kind: sql\n  sqlite_database: /Users/abrichr/oa/scratch/onboarding-effort/trac-db/trac.db\n  sql_query: \"SELECT '#' || id AS ticket, milestone, component FROM ticket\"\neffects:\n  - kind: field_equals\n    match: {ticket: {param: ticket}}\n    field: milestone\n    value: {param: milestone}\nsave_step: auto\ninputs:\n  source: recorded\ncampaign:\n  id: onboarding-tr-triage-loop-first\n  trials: 3\n  policy: permissive\n",
+    "second": "schema_version: openadapt.verify/v1\napp:\n  name: Trac service desk (local test copy)\n  url: http://127.0.0.1:9485/report/9\n  version: trac@1.6\n  session: benchmark.onboarding_effort.hooks:open_session\n  reset:\n    python: benchmark.onboarding_effort.hooks:reset\nverifier:\n  kind: sql\n  sqlite_database: /Users/abrichr/oa/scratch/onboarding-effort/trac-db/trac.db\n  sql_query: \"SELECT '#' || id AS ticket, milestone, component FROM ticket\"\neffects:\n  - kind: field_equals\n    match: {ticket: {param: ticket}}\n    field: milestone\n    value: {param: milestone}\nsave_step: auto\ninputs:\n  source: recorded\ncampaign:\n  id: onboarding-tr-triage-loop-second\n  trials: 3\n  policy: permissive\n"
+  },
+  "oracle_source_sha256": "38e0b3cda4ca1caca44048e0c24fe8d22b2e18a5eac903354711138e3a8f71a1",
+  "heldout_items_sha256": {
+    "first": "28c85250ffc16f3161601363fd2304a9c498b5110be0737f406cf22cec53b5eb",
+    "second": "749a015215a6df0d272b8d2c1bdfdebc8df0a3a3aab45acf8e02f37924550ec1"
+  },
+  "heldout_n": 25
+}

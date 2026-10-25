@@ -1,0 +1,40 @@
+{
+  "id": "nb-ip-paginated",
+  "app": "netbox",
+  "intent": "Go through every IP address tagged onb-audit, ten to a page: open each one, set its description to the audit note, save, and return to the list; then the next page.",
+  "shape": "paginated",
+  "batch_run": true,
+  "inputs": [
+    "description"
+  ],
+  "keys": [
+    "host"
+  ],
+  "policy": "permissive",
+  "second_installation": "screen 1600x1000 at device scale 2",
+  "second_kind": "screen",
+  "viewport": {
+    "first": [
+      1280,
+      900
+    ],
+    "second": [
+      1600,
+      1000
+    ]
+  },
+  "device_scale": {
+    "first": 1.0,
+    "second": 2.0
+  },
+  "verify_yaml": {
+    "first": "schema_version: openadapt.verify/v1\napp:\n  name: NetBox (local test copy)\n  url: http://127.0.0.1:9486/ipam/ip-addresses/?tag=onb-audit&per_page=10&ordering=address\n  version: netbox@4.1.11\n  session: benchmark.onboarding_effort.hooks:open_session\n  reset:\n    python: benchmark.onboarding_effort.hooks:reset\nverifier:\n  kind: sql\n  sql_driver: pg8000.dbapi\n  sql_connect_args: {host: 127.0.0.1, port: 9489, user: nb_reader, database: netbox}\n  sql_password_env: NB_READER_PASSWORD\n  sql_query: \"SELECT host(address) AS host, description FROM ipam_ipaddress\"\neffects:\n  - kind: field_equals\n    match: {host: {param: host}}\n    field: description\n    value: {param: description}\nsave_step: auto\ninputs:\n  source: recorded\ncampaign:\n  id: onboarding-nb-ip-paginated-first\n  trials: 3\n  policy: permissive\n",
+    "second": "schema_version: openadapt.verify/v1\napp:\n  name: NetBox (local test copy)\n  url: http://127.0.0.1:9486/ipam/ip-addresses/?tag=onb-audit&per_page=10&ordering=address\n  version: netbox@4.1.11\n  session: benchmark.onboarding_effort.hooks:open_session\n  reset:\n    python: benchmark.onboarding_effort.hooks:reset\nverifier:\n  kind: sql\n  sql_driver: pg8000.dbapi\n  sql_connect_args: {host: 127.0.0.1, port: 9489, user: nb_reader, database: netbox}\n  sql_password_env: NB_READER_PASSWORD\n  sql_query: \"SELECT host(address) AS host, description FROM ipam_ipaddress\"\neffects:\n  - kind: field_equals\n    match: {host: {param: host}}\n    field: description\n    value: {param: description}\nsave_step: auto\ninputs:\n  source: recorded\ncampaign:\n  id: onboarding-nb-ip-paginated-second\n  trials: 3\n  policy: permissive\n"
+  },
+  "oracle_source_sha256": "c787116ad396dcd38359343cc9fe4af4024d5de495bc88dafa88b0b72c44bb06",
+  "heldout_items_sha256": {
+    "first": "a629a0af0850279e9afe14e6b6ee90f36c5a790bc7fecde19a91b99c1b7b0907",
+    "second": "31edf34eacda6293085fc2e2afb37e352b287d817a730d483cef6f4d3b7aff76"
+  },
+  "heldout_n": 25
+}
