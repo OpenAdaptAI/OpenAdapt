@@ -82,7 +82,7 @@ def test_a_symlinked_folder_is_refused(tmp_path: Path) -> None:
     real = base / "real"
     _write(real / approver_anchor.ANCHOR_NAME)
     (base / "OpenAdapt").symlink_to(real)
-    with pytest.raises(AnchorError, match="symlink"):
+    with pytest.raises(AnchorError, match="without following links"):
         _read_anchor(base / "OpenAdapt" / approver_anchor.ANCHOR_NAME, trusted_uids=_me())
 
 
@@ -128,7 +128,7 @@ def test_an_unreadable_anchor_is_refused(anchor: Path, content: str) -> None:
 
 @posix_only
 def test_real_system_folders_pass_the_folder_check() -> None:
-    approver_anchor._check_posix_dirs(Path("/usr/bin"), frozenset({0}))
+    os.close(approver_anchor._open_folder(Path("/usr/bin"), frozenset({0})))
 
 
 @posix_only
@@ -145,6 +145,72 @@ def test_the_anchor_lives_where_only_an_administrator_writes() -> None:
         "/Library/Application Support/OpenAdapt/approver-root.json"
     )
     assert str(approver_anchor.anchor_path("linux")) == "/etc/openadapt/approver-root.json"
+
+
+# -- macOS extended ACLs ---------------------------------------------------------
+
+mac_only = pytest.mark.skipif(sys.platform != "darwin", reason="macOS extended ACLs")
+
+
+def _chmod_acl(path: Path, entry: str) -> None:
+    import subprocess
+
+    subprocess.run(["/bin/chmod", "+a", entry, str(path)], check=True)
+
+
+@mac_only
+def test_an_acl_letting_everyone_write_the_anchor_is_refused(anchor: Path) -> None:
+    """Attack: mode bits say 0644, but an extended ACL lets everyone write."""
+    _write(anchor)
+    _chmod_acl(anchor, "everyone allow write,append")
+    with pytest.raises(AnchorError, match="access list"):
+        _read_anchor(anchor, trusted_uids=_me())
+
+
+@mac_only
+@pytest.mark.parametrize(
+    "entry",
+    ["everyone allow add_file", "everyone allow delete_child", "everyone allow writesecurity"],
+)
+def test_an_acl_letting_everyone_change_the_folder_is_refused(anchor: Path, entry: str) -> None:
+    """Attack: an ACL on the folder lets the agent add, replace or re-permission files."""
+    _write(anchor)
+    _chmod_acl(anchor.parent, entry)
+    with pytest.raises(AnchorError, match="access list"):
+        _read_anchor(anchor, trusted_uids=_me())
+
+
+@mac_only
+def test_pinning_strips_an_inherited_acl(tmp_path: Path) -> None:
+    """A folder above can hand new folders and files an ACL that grants
+    writes (only_inherit: it doesn't apply to the folder itself). Pinning
+    strips it, so the anchor reads back."""
+    import subprocess
+
+    parent = tmp_path.resolve() / "Support"
+    parent.mkdir()
+    _chmod_acl(
+        parent,
+        "everyone allow write,add_file,delete_child,file_inherit,directory_inherit,only_inherit",
+    )
+    target = parent / "OpenAdapt" / approver_anchor.ANCHOR_NAME
+    _write(target)
+    assert _read_anchor(target, trusted_uids=_me()) == ROOT
+    listed = subprocess.run(["/bin/ls", "-led", str(target.parent)], capture_output=True, text=True)
+    assert "allow" not in listed.stdout
+
+
+def test_mac_acl_text_is_read_entry_by_entry() -> None:
+    everyone = "group:ABCDEFAB-CDEF-ABCD-EFAB-CDEF0000000C:everyone:12"
+    text = (
+        "!#acl 1\n"
+        f"{everyone}:allow:read,list\n"
+        f"{everyone}:deny:write,delete\n"
+        f"{everyone}:allow,file_inherit,directory_inherit,only_inherit:write,delete_child\n"
+    )
+    assert approver_anchor.mac_acl_write_grants(text) == []
+    inherited = f"{everyone}:allow,inherited,file_inherit,directory_inherit:write,delete_child"
+    assert approver_anchor.mac_acl_write_grants(text + inherited + "\n") == [inherited]
 
 
 # -- Windows access control ------------------------------------------------------
@@ -170,6 +236,35 @@ def test_only_administrators_writing_is_admin_only() -> None:
 )
 def test_anyone_else_able_to_change_it_is_refused(owner, aces, reason) -> None:
     assert reason in (dacl_admin_only(owner, aces) or "")
+
+
+@pytest.mark.parametrize("ace_type", [5, 9, 11])  # object, callback, callback object
+def test_every_kind_of_allow_entry_is_checked(ace_type: int) -> None:
+    """Attack: grant a user write through an allow entry of another type."""
+    aces = [Ace(0, 0, FULL, ADMINS), Ace(ace_type, 0, 0x0002, ME)]
+    assert ME in (dacl_admin_only(ADMINS, aces) or "")
+
+
+@pytest.mark.parametrize("ace_type", [4, 17, 99])
+def test_an_entry_of_an_unknown_type_refuses(ace_type: int) -> None:
+    aces = [Ace(0, 0, FULL, ADMINS), Ace(ace_type, 0, READ, ME)]
+    assert "doesn't know" in (dacl_admin_only(ADMINS, aces) or "")
+
+
+def test_a_folder_above_may_let_users_add_but_not_replace() -> None:
+    """ProgramData lets users create folders; only replacing entries counts above."""
+    replace = approver_anchor._REPLACE_RIGHTS
+    adds = [Ace(0, 0, FULL, SYSTEM), Ace(0, 0, 0x0004 | 0x0002, USERS)]
+    assert dacl_admin_only(SYSTEM, adds, rights=replace) is None
+    assert dacl_admin_only(SYSTEM, adds) is not None  # but never on the anchor's own folder
+    deletes = adds + [Ace(0, 0, 0x0040, USERS)]  # FILE_DELETE_CHILD
+    assert USERS in (dacl_admin_only(SYSTEM, deletes, rights=replace) or "")
+
+
+def test_the_anchor_folder_is_created_admin_only() -> None:
+    sddl = approver_anchor.ANCHOR_FOLDER_SDDL
+    assert sddl.startswith("O:BAD:P")  # owned by Administrators, protected DACL
+    assert "(A;OICI;0x1200a9;;;BU)" in sddl  # Users read and execute only
 
 
 def test_inherit_only_and_deny_entries_grant_nothing_here() -> None:

@@ -182,10 +182,24 @@ Each route signs with its own key:
       `OpenAdapt\approver-root.json` in the ProgramData known folder
       (Windows). An administrator writes it with `sudo openadapt-desktop
       approver-pin ROOT` (on Windows, from an elevated prompt). Desktop
-      trusts it only when the file and every folder above it are owned by
-      root (or Administrators, SYSTEM or TrustedInstaller on Windows), none
-      is a symlink or reparse point, and no one else can write any of them;
-      otherwise it counts no person's answer.
+      trusts it only when no one but an administrator can change it or what
+      leads to it:
+      - macOS and Linux: Desktop opens it one folder at a time from `/`
+        without following links. Every folder and the file must be owned by
+        root and writable by no one else, with no extended ACL granting a
+        write (macOS). The file must have a single link. Pinning strips any
+        ACL the new folder or file would inherit.
+      - Windows: the file and its folder must be owned by Administrators,
+        SYSTEM or TrustedInstaller, with no access entry of any kind letting
+        anyone else write. An entry of a type the check doesn't know refuses
+        the pin. No folder above may let anyone else replace what's inside,
+        and there are no links, junctions or extra hard links. Pinning never
+        reuses a folder that's already there (whoever made it could keep a
+        handle open through any permission change). It moves that folder
+        aside and creates a new one, owned by Administrators, with a
+        protected access list: full control for Administrators and SYSTEM,
+        read for Users.
+      Otherwise Desktop counts no person's answer.
     - **On a Mac without an anchor, the Keychain**: the root Desktop set up
       itself behind Touch ID. Desktop reads it with Keychain prompts turned
       off, so an item another program planted or rewrote reads as no pin
