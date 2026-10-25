@@ -30,6 +30,56 @@ married name plus a mistyped day of birth.
 Each item meets the existing charts, every earlier item's right outcome from
 the soak's truth, and another clerk's chart for `concurrent_same`.
 
+## The exact numbers
+
+A miss is a second chart for a patient who already has one.
+
+**Test set (extended stream):** 676 items, 440 new patients and 223 true
+duplicates.
+- 47 duplicates come from the soak's own seed-7 generator: 12 existing
+  patients referred again, 19 resends, 10 same people with a mistyped date of
+  birth, and 6 registered by another clerk moments before.
+- 176 are planted variants of the existing patients.
+
+The first report's "12 of 110" was the same stream before the second and
+third rounds of planted kinds were added. Each round grew the set; the misses
+below are on the full 223.
+
+| | screen check | record check |
+|---|---:|---:|
+| missed, of 223 | 30 | 24 |
+| missed, of the 47 from the generator | 0 | 0 |
+| missed, of the 176 planted | 30 | 24 |
+| false stops, of 440 new patients | 252 | 2 |
+
+The record check's 24 misses, all a known limit (uncatchable without extra
+data):
+- 12 `limit_married_moved_dob_typo`: a new last name, a new address, phone
+  and email, and a mistyped day of birth;
+- 12 `limit_new_name_moved_same_dob`: new first and last names and new
+  contact details, with the same date of birth.
+
+The referral shares nothing with the chart except, in the second kind, a date
+of birth that thousands of patients share. Catching them needs an MRN, an
+insurance member id, or a person. The screen stops the second kind only
+because it stops every new patient who shares a date of birth with anyone.
+
+The screen check's 30 misses:
+- 12 `heldout_married_dob_typo`;
+- 12 `limit_married_moved_dob_typo`;
+- 6 `r2_prior_name_moved_dob_typo`.
+
+The record check catches the first and third of these.
+
+The soak's own 55 items with the same planting: 231 items, 184 true
+duplicates (8 from the generator, 176 planted). Screen: 30 missed, 10 false
+stops. Record: 24 missed (the same two limit kinds), 0 false stops.
+
+The planted kinds not in the table below (all caught by both checks):
+- `planted_married`: a married name, everything else the same;
+- `heldout_first_typo` and `heldout_last_typo`: one transposed letter;
+- 12 of each.
+
 ## Results (2026-10-24, second round)
 
 The first version of the record check missed 12 of 110 planted duplicates,
