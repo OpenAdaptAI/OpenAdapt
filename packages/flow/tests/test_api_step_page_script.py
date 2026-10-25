@@ -458,3 +458,33 @@ def test_the_script_fingerprint_covers_handler_source_and_script_urls():
     assert any(f.startswith("form onsubmit ") for f in found)
     edited = html.replace("return pastDate", "return true || pastDate")
     assert page_scripts(edited, "/save.php", ["dob"], None) != found
+
+
+def test_the_recorded_control_and_the_request_it_made_are_in_the_proposal(tmp_path):
+    import json
+
+    from openadapt_flow import network_capture as nc
+    from openadapt_flow.compiler.api_proposal import propose_api_step
+    from tests.test_api_tier_web_form import _recording, _workflow
+
+    rec = _recording(tmp_path)
+    # Without a button on the form, no control is recorded.
+    _wf, step, _ = propose_api_step(_workflow(), rec)
+    assert step.api_binding.web_form.submitter is None
+    # The person clicks the form's #create button, which opens the
+    # duplicate search; the save is confirmed in that dialog.
+    events = [json.loads(x) for x in (rec / "events.jsonl").read_text().splitlines()]
+    events[6]["structural"] = {"selector": "#create", "role": "button"}
+    (rec / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
+    rows = [json.loads(x) for x in (rec / nc.NETWORK_FILE).read_text().splitlines()]
+    for row in rows[1:]:
+        if "<form" in (row.get("response_text") or ""):
+            row["response_text"] = row["response_text"].replace(
+                "</form></body>",
+                '<button type="button" id="create">Create</button></form></body>',
+            )
+    (rec / nc.NETWORK_FILE).write_text("".join(json.dumps(r) + "\n" for r in rows))
+    _wf, step, reasons = propose_api_step(_workflow(), rec)
+    spec = step.api_binding.web_form
+    assert reasons == [] and spec.submitter == "#create"
+    assert spec.submitter_requests == ["GET /app/dup.php"]

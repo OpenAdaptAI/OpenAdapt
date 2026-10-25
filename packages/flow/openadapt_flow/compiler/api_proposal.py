@@ -247,21 +247,29 @@ def _success_pattern(line: dict[str, Any]) -> Optional[str]:
 
 
 def _in_page(selector: str, html: str) -> bool:
-    """Whether a recorded ``#id`` or ``[name="..."]`` selector names an element of ``html``."""
+    """Whether a recorded ``#id`` or ``[name="..."]`` selector names a control
+    of ``html`` that can start a submit (a ``<button>``, or an ``<input>`` of
+    type submit, button or image)."""
 
     m = re.fullmatch(r"#([A-Za-z][\w:.-]*)", selector)
-    if m:
-        return (
-            re.search(r"""\bid\s*=\s*["']%s["']""" % re.escape(m.group(1)), html)
-            is not None
-        )
-    m = re.fullmatch(r"""\[name=["']?([^"'\]]+)["']?\]""", selector)
-    if m:
-        return (
-            re.search(r"""\bname\s*=\s*["']%s["']""" % re.escape(m.group(1)), html)
-            is not None
-        )
-    return False
+    attr, value = ("id", m.group(1)) if m else (None, None)
+    if attr is None:
+        m = re.fullmatch(r"""\[name=["']?([^"'\]]+)["']?\]""", selector)
+        attr, value = ("name", m.group(1)) if m else (None, None)
+    if attr is None:
+        return False
+    tag = re.search(
+        r"""<(button|input)\b[^>]*\b%s\s*=\s*["']%s["'][^>]*>"""
+        % (attr, re.escape(value)),
+        html,
+        re.I,
+    )
+    if tag is None:
+        return False
+    if tag.group(1).lower() == "button":
+        return True
+    kind = re.search(r"""\btype\s*=\s*["']?(\w+)""", tag.group(0), re.I)
+    return bool(kind) and kind.group(1).lower() in ("submit", "button", "image")
 
 
 def _submitter(
@@ -269,8 +277,15 @@ def _submitter(
     events: list[dict[str, Any]],
     lines: list[dict[str, Any]],
     form_html: str,
+    post: dict[str, Any],
 ) -> tuple[Optional[str], list[str]]:
-    """The last folded click on a control of the form page, and what it requested."""
+    """The last folded click on a control of the form page, and what it requested.
+
+    A recorded event is stamped once the screen has settled, so the requests
+    a click made fall between the previous event and the next one. Requests
+    from the save on belong to the save, so only the save step itself (when
+    it is the control) counts the save request.
+    """
 
     for step in reversed(folded):
         if step.action not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
@@ -283,16 +298,16 @@ def _submitter(
             selector = (events[i].get("structural") or {}).get("selector")
         if not selector or not _in_page(selector, form_html) or i is None:
             continue
-        lo = float(events[i]["t"]) if i < len(events) else float("-inf")
+        lo = float(events[i - 1]["t"]) if 0 < i <= len(events) else float("-inf")
         hi = float(events[i + 1]["t"]) if i + 1 < len(events) else float("inf")
-        made = sorted(
-            {
-                f"{ln['method']} {_path(ln['url'])}"
-                for ln in lines
-                if lo <= float(ln["t"]) < hi
-            }
-        )
-        return selector, made
+        made = {
+            f"{ln['method']} {_path(ln['url'])}"
+            for ln in lines
+            if lo < float(ln["t"]) < min(hi, float(post["t"]))
+        }
+        if step is folded[-1]:
+            made.add(f"POST {_path(post['url'])}")
+        return selector, sorted(made)
     return None, []
 
 
@@ -646,7 +661,7 @@ def propose_api_step(
             ],
         )
     submitter, submitter_requests = _submitter(
-        folded, events, lines, form_line["response_text"]
+        folded, events, lines, form_line["response_text"], post
     )
     spec = WebFormSpec(
         form_path=form_path,
