@@ -55,6 +55,7 @@ PART_FILES = (
     "channel.json",
     "verify.yaml",
     "check_coverage.json",
+    "identity_mapping.json",
     "duplicate_rule.json",
     "inputs.json",
     "parts.review.md",
@@ -138,6 +139,7 @@ class BuildResult:
     seconds: dict[str, float] = field(default_factory=dict)
     problems: list[str] = field(default_factory=list)
     adoption: Any = None
+    identity: Optional[dict[str, Any]] = None
 
     @property
     def admitted(self) -> bool:
@@ -180,6 +182,7 @@ def build(
     expected_records: Optional[int] = None,
     reference_duplicate_check: Any = None,
     false_stop_budget: float = 0.02,
+    reference_identity: Any = None,
 ) -> BuildResult:
     """Generate and verify every part. ``test_copy``: a fault-gate copy of the
     app (``openadapt_flow.fault_gate.TestCopy``); without one, a replica.
@@ -318,6 +321,12 @@ def build(
     (out_dir / "duplicate_rule.json").write_text(
         json.dumps(rule_doc, indent=2, default=str) + "\n"
     )
+    identity = _identity_mapping(
+        demonstrations, gated, list(demonstrations[-1].after), reference_identity
+    )
+    (out_dir / "identity_mapping.json").write_text(
+        json.dumps(identity, indent=2, default=str) + "\n"
+    )
     seconds["identity"] = round(time.perf_counter() - started, 2)
 
     # 4. Input types and conversions, from the source documents.
@@ -350,12 +359,82 @@ def build(
         out_dir, chosen, reports, gated, rule, inputs, trips, {}, seconds, problems
     )
     result.adoption = adoption
+    result.identity = identity
     (out_dir / "parts.review.md").write_text(render_review(result, name))
     result.manifest = write_manifest(out_dir)
     return result
 
 
 # -- review and approval ---------------------------------------------------------
+
+
+def _identity_mapping(
+    demonstrations: Sequence[Demonstration],
+    gated: Optional[GatedContract],
+    rows: list[dict[str, Any]],
+    reference: Any,
+) -> dict[str, Any]:
+    """The template plus the generated per-site mapping, verified.
+
+    ``reference(rows) -> template records`` is the site's hand-written source
+    adapter, when there is one; the generated mapping is used only if it does
+    no worse on the perturbation suite.
+    """
+
+    from openadapt_flow.generate.contract import _delta, _target, identity_field_of
+    from openadapt_flow.generate.identity_template import (
+        WANT_TO_RECORD,
+        Template,
+        TemplateUnavailable,
+        adopt_mapping,
+        check_demos,
+        generate_mapping,
+        perturbation_suite,
+        run_suite,
+    )
+
+    key = identity_field_of(demonstrations)
+    demos = [(d.params, _target(d, _delta(d, key), key)[0]) for d in demonstrations]
+    mapping = generate_mapping(
+        rows, demos, bound=gated.contract.bound() if gated is not None else None
+    )
+    out: dict[str, Any] = {
+        "mapping": mapping.as_dict(),
+        "demos_agree": check_demos(mapping, demos),
+        "demos": len(demos),
+    }
+    try:
+        template = Template(mapping.template)
+    except TemplateUnavailable as exc:
+        out["suite"] = None
+        out["note"] = f"{exc}: the perturbation suite was not run"
+        return out
+
+    def person(row: Mapping[str, Any]) -> dict[str, str]:
+        slots = mapping.record_slots(row)
+        who = {w: slots[r] for w, r in WANT_TO_RECORD.items() if slots.get(r)}
+        if slots.get("prior_lname"):
+            who["prior_lname"] = slots["prior_lname"]
+        return who
+
+    from openadapt_flow.generate.name_variants import load
+
+    nicknames = {k: sorted(v) for k, v in load().items()}
+    cases = perturbation_suite(rows, person, nicknames=nicknames)
+
+    def decide(want: Mapping[str, str], records: Sequence[Any]) -> str:
+        return template.decide_records(
+            {k: v for k, v in want.items() if k != "prior_lname"}, records
+        )
+
+    out["suite"] = run_suite(
+        cases, [template.record(mapping.record_slots(r)) for r in rows], decide
+    )
+    ref = run_suite(cases, reference(rows), decide) if reference is not None else None
+    adoption = adopt_mapping(out["suite"], ref)
+    out["suite_reference"] = ref
+    out["adoption"] = {"use": adoption.use, "why": adoption.why}
+    return out
 
 
 def render_review(result: BuildResult, name: str) -> str:
@@ -420,6 +499,42 @@ def render_review(result: BuildResult, name: str) -> str:
             lines.append(f"- Unresolved: {item}.")
     lines.append("")
     lines.append("## When a new record is already there")
+    identity = result.identity
+    if identity is not None:
+        mapping = identity["mapping"]
+        lines.append(
+            f"- The reviewed template {mapping['template']} decides; this system's "
+            "fields feed it as follows:"
+        )
+        for slot, path in sorted(mapping["record"].items()):
+            lines.append(f"  - {slot} from {path!r}")
+        if mapping.get("dob_format"):
+            lines.append(f"  - dates of birth are stored {mapping['dob_format']}")
+        agree = identity["demos_agree"]
+        lines.append(
+            f"- Every demonstration's saved record read back as typed for "
+            f"{sum(1 for n in agree.values() if n == identity['demos'])} of "
+            f"{len(agree)} inputs."
+        )
+        suite = identity.get("suite")
+        if suite:
+            lines.append(
+                f"- On {suite['duplicates']} made-up duplicates of this system's records "
+                f"it missed {suite['missed']}; it stopped {suite['false_stops']} of "
+                f"{suite['distinct']} existing records posed as new."
+            )
+        if identity.get("adoption"):
+            lines.append(
+                f"- Mapping: {identity['adoption']['use']} ({identity['adoption']['why']})."
+            )
+        if identity.get("note"):
+            lines.append(f"- {identity['note']}.")
+        for note in mapping.get("notes") or []:
+            lines.append(f"- {note}.")
+        lines.append("")
+        lines.append(
+            "A rule calibrated on this system's records alone, for comparison:"
+        )
     adoption = result.adoption
     if adoption is not None and adoption.use == "reference":
         lines.append(f"- The hand-built duplicate check stays: {adoption.why}.")

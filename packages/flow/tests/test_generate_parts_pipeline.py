@@ -77,6 +77,12 @@ def test_build_admits_parts_and_a_person_approves_them(app, tmp_path: Path) -> N
     assert dob["kind"] == "date" and dob["date_format"] == "MM/DD/YYYY"
     assert all(t["result"] == "match" for t in inputs["round_trip"])
 
+    identity = json.loads((out / "identity_mapping.json").read_text())
+    assert identity["mapping"]["record"]["fname"] == "fname"
+    assert identity["mapping"]["want"]["DOB"] == "DOB"
+    assert all(n == 3 for n in identity["demos_agree"].values())
+    assert "reviewed template" in review
+
     with pytest.raises(BuildError, match="person"):
         approve(out, "agent:claude")
     approve(out, "Dana Reyes", at="2026-10-24T12:00:00+00:00")

@@ -12,7 +12,7 @@ approves the workflow.
 |---|---|---|
 | Read channel: how to read the system of record | the network traffic captured while teaching (`network.jsonl`), an OpenAPI document, or a FHIR CapabilityStatement | the channel test: reads back exactly the records each demonstration created or changed, across every page, and reads as unreadable (never as empty) when auth, paging or a response is broken |
 | Record contract: what a save must do and must not do | the before/after difference in the system of record across two or three varied demonstrations | the fault gate (`fault_gate.py`): wrong record, wrong value, unrelated change, missing write, partial write, duplicate, delayed write, with coverage per class |
-| Identity and duplicate rule: when a new record is already there | the record schema plus a profile of the records already in the system | calibration on the system's own data: the fewest misses within a false-stop budget, a small sample a person labels; anything the rule can't decide goes to a person. It replaces a hand-built check only if it misses no more on the same calibration set |
+| Identity and duplicate rule: when a new record is already there | a reviewed template (`patient-identity/1`, never generated) plus a generated mapping of this system's fields onto it | the demonstrations (each saved record reads back as typed) and a perturbation suite built from the system's own records; the mapping replaces a hand-written source adapter only if it does no worse on the suite |
 | Input types and conversion | sample source documents | the round trip (`provenance.py`): every converted value must read back from its source; an ambiguous value halts |
 
 Never generated: the safety policy. That is the execution profile, approval
@@ -85,6 +85,8 @@ told from a constant, and the review says so.
 The back-test against the hand-built OpenEMR referral parts, including where
 generation is worse, is in `benchmark/generated_parts/`. On #1516's
 duplicate stream (676 items, 223 true duplicates), the generated duplicate
-rule missed 52 to 54 duplicates at every false-stop budget and stopped no
-new patient; the hand-built record check missed 24 and stopped 2. The
-adoption rule keeps the hand-built check there.
+rule missed 52 to 54 duplicates at every false-stop budget, against the
+hand-built check's 24, so identity is a vetted template plus a generated
+mapping. On the same stream, rendered as #1516's rows, OpenEMR REST rows and
+FHIR resources, the generated mapping matched the hand-written adapters
+exactly (24 missed, 2 false stops).

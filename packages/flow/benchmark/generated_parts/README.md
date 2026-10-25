@@ -4,7 +4,80 @@ Measures `openadapt-flow generate-parts`
 ([`docs/GENERATED_PARTS.md`](../../docs/GENERATED_PARTS.md)) against the parts
 written by hand for the OpenEMR referral workflow.
 
-## Duplicates: the generated rule against #1516's record check
+## Identity: a vetted template, and a generated per-site mapping
+
+Calibrating a matching rule on one site's records can't learn which
+near-matches are the same person: on #1516's stream a rule calibrated on the
+30 existing charts misses 52 to 54 of 223 duplicates at every false-stop
+budget, against the hand-built check's 24 (measured below). So identity is
+built from two parts:
+
+1. **A template, never generated.** `patient-identity/1` is #1516's record
+   check (`openadapt_flow.runtime.checks.duplicate_record`): exact, close,
+   prior-name and nickname clauses with fixed thresholds. It is reviewed,
+   versioned code, owned like the safety policy, and named in the parts
+   (`openadapt_flow/generate/identity_template.py`, `TEMPLATES`).
+2. **A mapping, generated per site.** Which of this system's record fields
+   feed each template slot (given and family name, a prior last name, date of
+   birth and its stored format, MRN, phone, email, street), and which task
+   parameter feeds each input. A field is chosen because its value is what
+   the person typed in every demonstration, it is named like the slot, and
+   its values look like the slot's (an email has an @); FHIR's coded lists
+   are read by code (`telecom[system=email].value`, `name[use=old].family`).
+
+The mapping is verified, never calibrated on the live table:
+
+- **against the demonstrations**: each saved record, read through the
+  mapping, must give back what was typed, input by input;
+- **on a perturbation suite** built from the site's own records: generated
+  duplicates (a typo in one or both names, a nickname, day and month
+  swapped, a digit wrong in the date, a changed or hyphenated last name, an
+  initial, swapped names), each with the contact details kept and changed;
+  one case per slot that only that slot can catch (a referral under the
+  prior last name with a mistyped day and new contact details; a new last
+  name with a mistyped day and only the email, or only the phone, kept); and
+  every existing record posed as a new patient.
+
+**Adoption rule** (`identity_template.adopt_mapping`, enforced by
+`generate-parts build --reference-identity`): a generated mapping is used
+only if template plus mapping misses no more duplicates and stops no more
+existing records on the suite than template plus the reference mapping (the
+site's hand-written source adapter). Otherwise the reference stays and the
+review says why. The same rule governs a generated duplicate rule
+(`identity.adopt`, `--reference-duplicate-check`).
+
+### Measured: the generated mapping against #1516's hand-written adapters
+
+`identity_mapping_backtest.py` renders #1516's people (the existing charts
+and every new chart the stream creates) in each site shape, generates the
+mapping from the site's rows and three demonstrations, and runs the
+template, from a checkout of #1516, with each mapping.
+
+| Site shape | Demonstrations read back | Suite misses, of 580 | Suite stops of 30 existing | Adopted | Stream misses, of 223 | Stream false stops, of 440 |
+|---|---|---:|---:|---|---:|---:|
+| #1516's rows | 6 of 6 inputs | 5 (reference 5) | 12 (12) | generated | 24 (reference 24) | 2 (2) |
+| OpenEMR REST rows | 6 of 6 | 5 (5) | 12 (12) | generated | 24 (24) | 2 (2) |
+| FHIR Patient | 6 of 6 | 5 (5) | 12 (12) | generated | 24 (24) | 2 (2) |
+| FHIR, read by first list item only | 5 of 5 (no email) | **30** (5) | 12 (12) | **reference** | 30 (24) | 2 (2) |
+
+The generated mapping matches the hand-written adapter on all three
+shapes, on the suite and on the 676-item stream. The fourth row is the
+reason for the suite: read by the first list item only, a FHIR mapping loses
+the email and the prior name. The demonstrations can't show that, the suite
+does (30 misses against 5), and the adoption rule keeps the reference; on
+the stream that mapping would have missed 30 of 223, against 24.
+
+The suite's misses that the reference shares (5 of 580: nicknames the
+template's own table doesn't list) and its 12 stops (the six pairs of
+existing charts that share a first name and a date of birth, which the
+template stops by design) are the template's, not the mapping's.
+
+Two mapping bugs were found by tests, not by this table: grounded matching
+once let the email slot take the street (fixed: the values must look like
+the slot's), and the last name once took an old name's given name (fixed:
+the field or the parameter must be named like the slot).
+
+## A rule calibrated on one site's records (the approach this replaces)
 
 `dup_backtest.py` runs both checks on #1516's own streams
 (`benchmark/dup_check/measure.py` at `09d0298dc`, read from a checkout of that

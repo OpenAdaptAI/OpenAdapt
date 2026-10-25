@@ -157,6 +157,7 @@ def cmd_build(args: argparse.Namespace) -> int:
             verify_tls=not args.insecure_tls,
             expected_records=args.expected_records,
             reference_duplicate_check=_reference(args.reference_duplicate_check),
+            reference_identity=_reference(args.reference_identity),
             false_stop_budget=args.false_stop_budget,
         )
     except BuildError as exc:
@@ -245,6 +246,13 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         metavar="MODULE:FUNCTION",
         help="The system's hand-built duplicate check, (new, table) -> bool. The "
         "generated rule replaces it only if it misses no more on the calibration set",
+    )
+    b.add_argument(
+        "--reference-identity",
+        metavar="MODULE:FUNCTION",
+        help="The site's hand-written source adapter, rows -> template records. "
+        "The generated identity mapping is used only if it does no worse on the "
+        "perturbation suite",
     )
     b.add_argument(
         "--false-stop-budget",

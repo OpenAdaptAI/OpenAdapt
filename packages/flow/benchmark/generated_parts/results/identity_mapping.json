@@ -1,0 +1,278 @@
+{
+  "fhir": {
+    "adoption": {
+      "use": "generated",
+      "why": "on the perturbation suite it misses 5 and stops 12 distinct records, the reference 5 and 12"
+    },
+    "demos": 3,
+    "demos_agree": {
+      "DOB": 3,
+      "email": 3,
+      "fname": 3,
+      "lname": 3,
+      "phone_home": 3,
+      "street": 3
+    },
+    "mapping": {
+      "dob_format": null,
+      "notes": [],
+      "record": {
+        "dob": "birthDate",
+        "email": "telecom[system=email].value",
+        "fname": "name[use=official].given",
+        "lname": "name[use=official].family",
+        "mrn": "identifier.value",
+        "phone": "telecom[system=phone].value",
+        "prior_lname": "name[use=old].family",
+        "record_id": "id",
+        "street": "address.line"
+      },
+      "schema_version": "openadapt.identity-mapping/v1",
+      "template": "patient-identity/1",
+      "want": {
+        "DOB": "DOB",
+        "email": "email",
+        "fname": "fname",
+        "lname": "lname",
+        "phone_home": "phone_home",
+        "street": "street"
+      }
+    },
+    "stream_generated": {
+      "dups": 223,
+      "false_stops": 2,
+      "missed": 24,
+      "new": 440
+    },
+    "stream_reference": {
+      "dups": 223,
+      "false_stops": 2,
+      "missed": 24,
+      "new": 440
+    },
+    "suite_generated": {
+      "distinct": 30,
+      "duplicates": 580,
+      "false_stops": 12,
+      "missed": 5,
+      "missed_by_kind": {
+        "first_nickname+contact_changed": 5
+      }
+    },
+    "suite_reference": {
+      "distinct": 30,
+      "duplicates": 580,
+      "false_stops": 12,
+      "missed": 5,
+      "missed_by_kind": {
+        "first_nickname+contact_changed": 5
+      }
+    }
+  },
+  "fhir_first_item": {
+    "adoption": {
+      "use": "reference",
+      "why": "on the perturbation suite the generated mapping misses 30 and stops 12 distinct records, the reference 5 and 12: the reference stays"
+    },
+    "demos": 3,
+    "demos_agree": {
+      "DOB": 3,
+      "fname": 3,
+      "lname": 3,
+      "phone_home": 3,
+      "street": 3
+    },
+    "mapping": {
+      "dob_format": null,
+      "notes": [],
+      "record": {
+        "dob": "birthDate",
+        "fname": "name.given",
+        "lname": "name.family",
+        "mrn": "identifier.value",
+        "phone": "telecom.value",
+        "record_id": "id",
+        "street": "address.line"
+      },
+      "schema_version": "openadapt.identity-mapping/v1",
+      "template": "patient-identity/1",
+      "want": {
+        "DOB": "DOB",
+        "fname": "fname",
+        "lname": "lname",
+        "phone_home": "phone_home",
+        "street": "street"
+      }
+    },
+    "stream_generated": {
+      "dups": 223,
+      "false_stops": 2,
+      "missed": 30,
+      "new": 440
+    },
+    "stream_reference": {
+      "dups": 223,
+      "false_stops": 2,
+      "missed": 24,
+      "new": 440
+    },
+    "suite_generated": {
+      "distinct": 30,
+      "duplicates": 580,
+      "false_stops": 12,
+      "missed": 30,
+      "missed_by_kind": {
+        "first_nickname+contact_changed": 5,
+        "only_email_kept+contact_kept": 25
+      }
+    },
+    "suite_reference": {
+      "distinct": 30,
+      "duplicates": 580,
+      "false_stops": 12,
+      "missed": 5,
+      "missed_by_kind": {
+        "first_nickname+contact_changed": 5
+      }
+    }
+  },
+  "openemr_rest": {
+    "adoption": {
+      "use": "generated",
+      "why": "on the perturbation suite it misses 5 and stops 12 distinct records, the reference 5 and 12"
+    },
+    "demos": 3,
+    "demos_agree": {
+      "DOB": 3,
+      "email": 3,
+      "fname": 3,
+      "lname": 3,
+      "phone_home": 3,
+      "street": 3
+    },
+    "mapping": {
+      "dob_format": null,
+      "notes": [],
+      "record": {
+        "dob": "DOB",
+        "email": "email",
+        "fname": "fname",
+        "lname": "lname",
+        "mrn": "pubpid",
+        "phone": "phone_home",
+        "prior_lname": "birth_lname",
+        "record_id": "id",
+        "street": "street"
+      },
+      "schema_version": "openadapt.identity-mapping/v1",
+      "template": "patient-identity/1",
+      "want": {
+        "DOB": "DOB",
+        "email": "email",
+        "fname": "fname",
+        "lname": "lname",
+        "phone_home": "phone_home",
+        "street": "street"
+      }
+    },
+    "stream_generated": {
+      "dups": 223,
+      "false_stops": 2,
+      "missed": 24,
+      "new": 440
+    },
+    "stream_reference": {
+      "dups": 223,
+      "false_stops": 2,
+      "missed": 24,
+      "new": 440
+    },
+    "suite_generated": {
+      "distinct": 30,
+      "duplicates": 580,
+      "false_stops": 12,
+      "missed": 5,
+      "missed_by_kind": {
+        "first_nickname+contact_changed": 5
+      }
+    },
+    "suite_reference": {
+      "distinct": 30,
+      "duplicates": 580,
+      "false_stops": 12,
+      "missed": 5,
+      "missed_by_kind": {
+        "first_nickname+contact_changed": 5
+      }
+    }
+  },
+  "rows": {
+    "adoption": {
+      "use": "generated",
+      "why": "on the perturbation suite it misses 5 and stops 12 distinct records, the reference 5 and 12"
+    },
+    "demos": 3,
+    "demos_agree": {
+      "DOB": 3,
+      "email": 3,
+      "fname": 3,
+      "lname": 3,
+      "phone_home": 3,
+      "street": 3
+    },
+    "mapping": {
+      "dob_format": null,
+      "notes": [],
+      "record": {
+        "dob": "DOB",
+        "email": "email",
+        "fname": "fname",
+        "lname": "lname",
+        "phone": "phone_home",
+        "prior_lname": "prior_lname",
+        "record_id": "id",
+        "street": "street"
+      },
+      "schema_version": "openadapt.identity-mapping/v1",
+      "template": "patient-identity/1",
+      "want": {
+        "DOB": "DOB",
+        "email": "email",
+        "fname": "fname",
+        "lname": "lname",
+        "phone_home": "phone_home",
+        "street": "street"
+      }
+    },
+    "stream_generated": {
+      "dups": 223,
+      "false_stops": 2,
+      "missed": 24,
+      "new": 440
+    },
+    "stream_reference": {
+      "dups": 223,
+      "false_stops": 2,
+      "missed": 24,
+      "new": 440
+    },
+    "suite_generated": {
+      "distinct": 30,
+      "duplicates": 580,
+      "false_stops": 12,
+      "missed": 5,
+      "missed_by_kind": {
+        "first_nickname+contact_changed": 5
+      }
+    },
+    "suite_reference": {
+      "distinct": 30,
+      "duplicates": 580,
+      "false_stops": 12,
+      "missed": 5,
+      "missed_by_kind": {
+        "first_nickname+contact_changed": 5
+      }
+    }
+  }
+}
