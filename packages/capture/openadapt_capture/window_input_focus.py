@@ -60,6 +60,13 @@ def _point_in_bounds(x: float, y: float, bounds: tuple[float, float, float, floa
     return left <= x < left + width and top <= y < top + height
 
 
+# Quartz window levels: kCGNormalWindowLevel and kCGStatusWindowLevel.
+# A window between them is raised above document windows: a floating panel
+# (3), a modal panel such as an NSAlert or password prompt (8), a torn-off
+# menu (3). The status level and above are the menu bar, status items and
+# system overlays, which never take an app's keyboard focus.
+_MACOS_NORMAL_LAYER = 0
+_MACOS_STATUS_LAYER = 25
 # Accessibility subroles of a focused window that is a dialog, not a
 # document window. Typing there never counts as typing into the target.
 _MACOS_DIALOG_SUBROLES = frozenset({"AXDialog", "AXSystemDialog"})
@@ -99,7 +106,9 @@ class MacOSInputFocusProbe:
     top-left origin, the same space the macOS resolver binds.
 
     The focused window is the front-most on-screen layer-0 window of the
-    frontmost application. When Accessibility can name the application's
+    frontmost application. A raised window of that application (a modal or
+    floating panel) in front of it takes keyboard focus, so it is reported
+    as a dialog. When Accessibility can name the application's
     ``AXFocusedWindow``, it must agree with that window, and a focused dialog
     or sheet is reported as such.
     """
@@ -116,7 +125,12 @@ class MacOSInputFocusProbe:
 
     @staticmethod
     def _onscreen_app_windows() -> Iterator[dict]:
-        """Yield on-screen layer-0 windows front to back, lazily."""
+        """Yield on-screen app windows front to back, lazily.
+
+        These are document windows (layer 0) and the raised windows above
+        them up to, not including, the status level: floating panels and
+        modal panels. Each item carries its ``layer``.
+        """
         import Quartz
 
         options = (
@@ -124,7 +138,8 @@ class MacOSInputFocusProbe:
         )
         windows = Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID)
         for info in windows or []:
-            if int(info.get("kCGWindowLayer", 0) or 0) != 0:
+            layer = int(info.get("kCGWindowLayer", 0) or 0)
+            if not _MACOS_NORMAL_LAYER <= layer < _MACOS_STATUS_LAYER:
                 continue  # menu bar, status items, overlays
             if float(info.get("kCGWindowAlpha", 1.0) or 0.0) <= 0.0:
                 continue  # invisible windows do not receive clicks
@@ -141,6 +156,7 @@ class MacOSInputFocusProbe:
                 "window_id": int(info.get("kCGWindowNumber", 0) or 0),
                 "pid": int(info.get("kCGWindowOwnerPID", 0) or 0),
                 "bounds": bounds,
+                "layer": layer,
             }
 
     @staticmethod
@@ -193,15 +209,28 @@ class MacOSInputFocusProbe:
         application window must belong to that process. ``NSWorkspace`` is
         updated through the main run loop and can be stale in a process that
         does not run one, so a disagreement is reported as unknown. That
-        window is the focused window, unless Accessibility names a different
-        focused window (unknown) or a dialog or sheet.
+        window is the focused window, unless one of the application's raised
+        windows is in front of it (a dialog), or Accessibility names a
+        different focused window (unknown) or a dialog or sheet.
         """
         pid = self._frontmost_pid()
         if pid is None or at_receipt:
             return None if pid is None else FocusOwner(pid=pid)
-        front = next(self._onscreen_app_windows(), None)
+        raised: dict | None = None
+        front: dict | None = None
+        for info in self._onscreen_app_windows():
+            if info["layer"] != _MACOS_NORMAL_LAYER:
+                if info["pid"] == pid and raised is None:
+                    raised = info
+                continue
+            front = info
+            break
         if front is None or front["pid"] != pid:
             return None
+        if raised is not None:
+            # A modal or floating panel of the app sits over its document
+            # windows. Keys typed while it is up go to the panel.
+            return FocusOwner(window_id=raised["window_id"] or None, pid=pid, dialog=True)
         window_id = front["window_id"] or None
         focused = self._ax_focused_window(pid)
         if focused is not None:
@@ -213,7 +242,11 @@ class MacOSInputFocusProbe:
         return FocusOwner(window_id=window_id, pid=pid)
 
     def window_at(self, x: float, y: float) -> FocusOwner | None:
-        """Return the first front-to-back layer-0 window containing the point."""
+        """Return the first front-to-back app window containing the point.
+
+        A raised panel over the target (a modal password prompt) is returned
+        as itself, so a click on it never counts as a click on the target.
+        """
         for info in self._onscreen_app_windows():
             if _point_in_bounds(x, y, info["bounds"]):
                 return FocusOwner(window_id=info["window_id"], pid=info["pid"])

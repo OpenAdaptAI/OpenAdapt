@@ -13,6 +13,7 @@ import json
 import multiprocessing
 import os
 import sqlite3
+import sys
 import threading
 import time
 import uuid
@@ -705,6 +706,28 @@ def test_macos_probe_names_the_front_window_and_checks_accessibility(fake_macos)
     assert probe.keyboard_focus() == FocusOwner(window_id=43, pid=1234, dialog=True)
 
 
+def test_macos_probe_treats_the_apps_modal_panel_as_a_dialog(fake_macos):
+    """An NSAlert-style password panel sits above layer 0 and takes the keys.
+
+    Accessibility is unavailable here, so only Quartz can see the panel.
+    """
+    from openadapt_capture.window_input_focus import MacOSInputFocusProbe
+
+    probe = MacOSInputFocusProbe()
+    fake_macos.windows = [
+        _quartz_window(1, 99, (0, 0, 2000, 25), layer=25),  # menu bar extra
+        _quartz_window(9, 1234, (500, 300, 400, 200), layer=8),  # modal panel
+        _quartz_window(42, 1234, (300, 150, 800, 600)),
+    ]
+    assert probe.keyboard_focus() == FocusOwner(window_id=9, pid=1234, dialog=True)
+    # A click on the panel is a click on the panel, not on the target below.
+    assert probe.window_at(600.0, 400.0) == FocusOwner(window_id=9, pid=1234)
+    assert probe.window_at(310.0, 170.0) == FocusOwner(window_id=42, pid=1234)
+    # Another app's floating panel does not take the target app's keys.
+    fake_macos.windows[1] = _quartz_window(9, 777, (1500, 300, 200, 200), layer=3)
+    assert probe.keyboard_focus() == FocusOwner(window_id=42, pid=1234)
+
+
 def test_macos_probe_window_at_is_front_to_back_layer_zero(fake_macos):
     from openadapt_capture.window_input_focus import MacOSInputFocusProbe
 
@@ -837,3 +860,90 @@ def test_x11_probe_reports_active_window_and_point_owner():
     assert probe.keyboard_focus() == FocusOwner(window_id=42, pid=1234)
     assert probe.window_at(400.4, 300.9) == FocusOwner(window_id=7, pid=555)
     assert probe.window_at(0, 0) is None
+
+
+# ---------------------------------------------------------------------------
+# Live macOS check: two real windows of one app and a modal-level panel
+# ---------------------------------------------------------------------------
+
+
+_LIVE_MACOS = sys.platform == "darwin" and os.environ.get("OPENADAPT_CAPTURE_MACOS_FOCUS_CHECK") == "1"
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    not _LIVE_MACOS,
+    reason="set OPENADAPT_CAPTURE_MACOS_FOCUS_CHECK=1 on a logged-in macOS desktop",
+)
+def test_live_macos_focus_names_the_window_and_the_modal_panel():
+    """Real Cocoa windows: the probe names the key window and flags the panel.
+
+    Run by hand on a logged-in desktop; it activates a small helper app.
+    """
+    import subprocess
+
+    from openadapt_capture.window_capture import TargetWindow
+    from openadapt_capture.window_input_focus import MacOSInputFocusProbe
+
+    helper = subprocess.Popen(
+        [sys.executable, str(Path(__file__).with_name("macos_focus_helper.py"))],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    probe = MacOSInputFocusProbe()
+
+    def send(command: str) -> dict:
+        assert helper.stdin is not None and helper.stdout is not None
+        helper.stdin.write(command + "\n")
+        helper.stdin.flush()
+        reply = json.loads(helper.stdout.readline())
+        time.sleep(0.5)  # let the window server apply the activation
+        return reply
+
+    try:
+        assert helper.stdout is not None
+        ids = json.loads(helper.stdout.readline())
+        target = TargetWindow(
+            window_id=ids["A"],
+            owner="Python",
+            title="OA focus A",
+            pid=ids["pid"],
+            bounds=(100.0, 200.0, 420.0, 300.0),
+            process_start_time=1.0,
+        )
+        scope = WindowCaptureScope(
+            WindowTarget(owner="Python"),
+            resolver=lambda _target: target,
+            capturer=lambda _window: None,
+            focus_probe=probe,
+        )
+        observed = {}
+
+        send("front A")
+        observed["front A"] = probe.keyboard_focus()
+        assert observed["front A"] == FocusOwner(window_id=ids["A"], pid=ids["pid"])
+        assert scope.assert_input_on_target(target) == FOCUS_EVIDENCE_WINDOW
+
+        send("front B")
+        observed["front B"] = probe.keyboard_focus()
+        assert observed["front B"] == FocusOwner(window_id=ids["B"], pid=ids["pid"])
+        with pytest.raises(WindowInputNotOnTarget) as excinfo:
+            scope.assert_input_on_target(target)
+        assert excinfo.value.reason == INPUT_KEYBOARD_FOCUS_ELSEWHERE
+
+        send("front A")
+        send("panel")
+        observed["panel"] = probe.keyboard_focus()
+        assert observed["panel"] is not None and observed["panel"].dialog
+        with pytest.raises(WindowInputNotOnTarget) as excinfo:
+            scope.assert_input_on_target(target)
+        assert excinfo.value.reason == INPUT_KEYBOARD_FOCUS_IN_DIALOG
+        print(json.dumps({key: vars(value) for key, value in observed.items()}))
+    finally:
+        try:
+            send("quit")
+        except Exception:
+            pass
+        helper.kill()
+        helper.wait(timeout=10)
