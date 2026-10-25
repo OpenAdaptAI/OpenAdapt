@@ -3164,8 +3164,13 @@ def _deployment_approvers(args: argparse.Namespace) -> Any:
 
     try:
         return load_deployment(config, allow_unresolved=True).approvers
-    except (OSError, ValueError):
-        return None
+    except (OSError, ValueError) as exc:
+        # A config that can't be read must not quietly drop its pin and let
+        # a caller-set root count instead.
+        raise SystemExit(
+            f"REFUSED (deployment_config_unreadable): {config} can't be read, so "
+            f"its approver pin can't be checked ({exc}). Nothing was executed."
+        ) from None
 
 
 def _args_key_dir(args: argparse.Namespace) -> Optional[Path]:
@@ -3189,6 +3194,29 @@ def _args_key_dir(args: argparse.Namespace) -> Optional[Path]:
             )
         return want
     return Path(key_dir) if key_dir else None
+
+
+def _approver_pin(args: argparse.Namespace, *, config_only: bool) -> dict[str, Any]:
+    """The pin a run's item-approval store checks answers against.
+
+    ``config_only`` (a governed run, or one an agent started): only the
+    deployment config's ``approvers.root_public_key`` counts; ``--approver-root``
+    and ``OPENADAPT_APPROVER_ROOT`` are ignored, since whoever starts the run
+    sets them. Without a config pin such a run refuses every person's answer.
+    """
+
+    pinned = _deployment_approvers(args)
+    return {
+        "approver_root": getattr(args, "approver_root", None),
+        "config_root": pinned.root_public_key if pinned is not None else None,
+        "config_only": config_only,
+    }
+
+
+def _run_is_config_pinned(args: argparse.Namespace) -> bool:
+    return bool(getattr(args, "started_by", None)) or (
+        getattr(args, "_governed_run_authorization", None) is not None
+    )
 
 
 def _args_approver_root(args: argparse.Namespace) -> Optional[str]:
@@ -3274,7 +3302,9 @@ def _prepare_approval_store(
     )
 
     store = ItemApprovalStore(
-        run_dir, key_dir=_args_key_dir(args), approver_root=_args_approver_root(args)
+        run_dir,
+        key_dir=_args_key_dir(args),
+        **_approver_pin(args, config_only=_run_is_config_pinned(args)),
     )
     loaded, approver = _approver_settings(args)
     try:
@@ -4156,10 +4186,26 @@ def _cmd_resume(args: argparse.Namespace) -> int:
 
         stored = store.read_approval()
         if stored is not None:
-            code = stored_approval_refusal(
+            from openadapt_flow.approval_mode.item_approval import (
+                ItemApprovalStore as _PinStore,
+            )
+
+            # The run's own recorded pin and roster head when it has one; a
+            # governed run's resume otherwise takes only the config's root.
+            pin = _PinStore(
+                run_dir,
+                key_dir=_args_key_dir(args) or default_key_dir(),
+                **_approver_pin(
+                    args,
+                    config_only=manifest.governed_authorization is not None,
+                ),
+            )
+            root, head, pin_refusal = pin._root_pin()
+            code = pin_refusal or stored_approval_refusal(
                 stored,
                 _args_key_dir(args) or default_key_dir(),
-                root=_args_approver_root(args),
+                root=root,
+                at_least=head,
             )
             if code is not None:
                 print(
@@ -4466,8 +4512,8 @@ def _approver_signer(args: argparse.Namespace, *, method: str) -> Any:
         print(
             "A person's approval is signed with their registered approver key: "
             "pass --approver-key (with OPENADAPT_JIT_KEY_PASSPHRASE set). "
-            "Create one with jit keygen, and register it at a terminal with "
-            "jit register --role approver."
+            "Create one with jit keygen; an approver on the roster adds it with "
+            "jit approver add (or jit approver init starts the roster)."
         )
         return None
     key_dir = _args_key_dir(args) or default_key_dir()
@@ -7697,8 +7743,8 @@ def _add_approver_key_flags(p: argparse.ArgumentParser) -> None:
         "--approver-key",
         default=None,
         help=(
-            "The person's encrypted approver key (jit keygen; registered with "
-            "jit register --role approver). Its passphrase comes from "
+            "The person's encrypted approver key (jit keygen; on the approver "
+            "roster via jit approver init or add). Its passphrase comes from "
             "OPENADAPT_JIT_KEY_PASSPHRASE. A person's approval is signed with "
             "it; without it the approval is refused"
         ),
@@ -7742,7 +7788,7 @@ def _add_approval_flags(p: argparse.ArgumentParser) -> None:
         "--key-dir",
         default=None,
         help=(
-            "Key directory with the approver registry (principals.json) that "
+            "Key directory with the signed approver roster (approvers.json) that "
             "approvals are checked against; use the one you approved with "
             "(default $OPENADAPT_JIT_KEY_DIR or ~/.openadapt/jit)"
         ),

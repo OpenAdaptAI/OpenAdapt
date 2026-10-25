@@ -451,8 +451,8 @@ def cmd_run_self_repair(
                     "--route desktop_run_it --unauthenticated "
                     "--approver-key YOUR_APPROVER_KEY.pem"
                 )
-                + "\n(with OPENADAPT_JIT_KEY_PASSPHRASE set; the key is registered "
-                "with jit register --role approver)",
+                + "\n(with OPENADAPT_JIT_KEY_PASSPHRASE set; the key is on the "
+                "approver roster: jit approver add)",
                 flush=True,
             )
 

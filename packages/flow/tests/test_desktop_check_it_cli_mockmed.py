@@ -369,6 +369,9 @@ def check_it(tmp_path_factory: pytest.TempPathFactory):
                 base_url,
                 "--approval-wait",
                 "120",
+                # A governed run takes its approver pin only from its config.
+                "--config",
+                str(approver_keys.approver_config(work / "approvers.yaml")),
             ]
             with DesktopRunIt(run_dir, env, approver_key) as person:
                 exit_code = main.main(argv)
@@ -581,6 +584,8 @@ def test_run_it_saves_once_after_approval_and_never_saves_a_form_nobody_sees(
         base_url,
         "--params-file",
         str(params_file),
+        "--config",
+        str(approver_keys.approver_config(check_it.bundle.parent / "approvers.yaml")),
     ]
 
     def run(run_dir: Path, wait_s: str) -> int:

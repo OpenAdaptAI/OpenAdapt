@@ -101,7 +101,10 @@ def test_an_unsigned_edit_to_the_roster_adds_nobody(started):
     path = key_dir / roster.ROSTER_FILE
     data = json.loads(path.read_text())
     # Signed by the agent's own key, claiming the root signed it.
+    first = roster.load(key_dir).entries[0]
     forged = roster.RosterEntry(
+        seq=2,
+        prev=roster.entry_hash(first),
         action="add",
         principal="helper",
         public_key=agent_public,
@@ -410,3 +413,178 @@ def test_jit_approver_needs_a_signature_not_a_terminal(tmp_path, monkeypatch, ca
         "front-desk": root,
         "night-nurse": new_public,
     }
+
+
+# -- the security review's attacks ------------------------------------------------
+
+
+def _add(key_dir, root, root_key, principal, public):
+    return roster.add_approver(
+        key_dir,
+        root,
+        principal=principal,
+        public_key=public,
+        signed_by="front-desk",
+        sign=roster.file_key_signer(root_key),
+    )
+
+
+def _remove(key_dir, root, root_key, principal, public):
+    return roster.remove_approver(
+        key_dir,
+        root,
+        principal=principal,
+        public_key=public,
+        signed_by="front-desk",
+        sign=roster.file_key_signer(root_key),
+    )
+
+
+def test_a_replayed_add_after_a_remove_doesnt_bring_the_approver_back(started):
+    key_dir, root_key, root = started
+    _a, a_public = _key()
+    added = _add(key_dir, root, root_key, "a-nurse", a_public)
+    _remove(key_dir, root, root_key, "a-nurse", a_public)
+    path = key_dir / roster.ROSTER_FILE
+    data = json.loads(path.read_text())
+    data["entries"].append(added.model_dump(mode="json"))  # same signature, replayed
+    path.write_text(json.dumps(data))
+
+    assert "a-nurse" not in roster.verified_approvers(key_dir, root)
+
+
+def test_dropping_a_removal_from_the_middle_is_caught_by_the_recorded_head(started):
+    key_dir, root_key, root = started
+    _a, a_public = _key()
+    _b, b_public = _key()
+    _add(key_dir, root, root_key, "a-nurse", a_public)
+    _remove(key_dir, root, root_key, "a-nurse", a_public)
+    _add(key_dir, root, root_key, "b-nurse", b_public)
+    recorded = roster.head(key_dir, root)
+    path = key_dir / roster.ROSTER_FILE
+    data = json.loads(path.read_text())
+    del data["entries"][2]  # the removal of a-nurse
+    path.write_text(json.dumps(data))
+
+    # The chain breaks after the removed entry: b-nurse no longer counts...
+    assert "b-nurse" not in roster.verified_approvers(key_dir, root)
+    # ...and against the head a run recorded, the edited roster is refused.
+    with pytest.raises(RosterError) as raised:
+        roster.verified_approvers(key_dir, root, at_least=recorded)
+    assert raised.value.code == "approver_roster_rolled_back"
+
+
+def test_an_older_roster_put_back_is_refused(started):
+    key_dir, root_key, root = started
+    _a, a_public = _key()
+    _add(key_dir, root, root_key, "a-nurse", a_public)
+    older = (key_dir / roster.ROSTER_FILE).read_text()
+    _remove(key_dir, root, root_key, "a-nurse", a_public)
+    recorded = roster.head(key_dir, root)
+    (key_dir / roster.ROSTER_FILE).write_text(older)  # a-nurse is back in this copy
+
+    with pytest.raises(RosterError) as raised:
+        roster.verified_approvers(key_dir, root, at_least=recorded)
+    assert raised.value.code == "approver_roster_rolled_back"
+
+
+def test_an_agent_pinned_fresh_root_counts_for_nothing_on_a_governed_run(
+    tmp_path, monkeypatch
+):
+    """The agent starts its own roster and pins it with the env var and flag."""
+
+    agent_key, agent_public = _key()
+    agent_keys = tmp_path / "agent-keys"
+    roster.init_root(
+        agent_keys,
+        principal="front-desk",
+        public_key=agent_public,
+        sign=roster.file_key_signer(agent_key),
+    )
+    monkeypatch.setenv(roster.ROOT_ENV, agent_public)
+    run = ItemApprovalStore(
+        tmp_path / "run",
+        key_dir=agent_keys,
+        approver_root=agent_public,
+        config_root=None,
+        config_only=True,
+    )
+    run.write_approver_root()
+
+    context = run.context()
+    assert context.approver_root is None
+    assert context.pin_refusal == "approver_root_unpinned"
+    # A reader can't supply the pin the run lacked.
+    reader = ItemApprovalStore(
+        tmp_path / "run", key_dir=agent_keys, approver_root=agent_public
+    )
+    assert reader.context().pin_refusal == "approver_root_unpinned"
+
+
+def test_a_governed_run_uses_only_the_config_pin(started, tmp_path, monkeypatch):
+    key_dir, _root_key, root = started
+    _agent, agent_public = _key()
+    monkeypatch.setenv(roster.ROOT_ENV, agent_public)
+    run = ItemApprovalStore(
+        tmp_path / "run",
+        key_dir=key_dir,
+        approver_root=agent_public,
+        config_root=root,
+        config_only=True,
+    )
+    run.write_approver_root()
+
+    assert run.context().approver_root == root
+    assert run.context().pin_refusal is None
+
+
+def test_a_reader_with_a_different_config_pin_is_refused(started, tmp_path):
+    key_dir, _root_key, root = started
+    run = ItemApprovalStore(
+        tmp_path / "run", key_dir=key_dir, config_root=root, config_only=True
+    )
+    run.write_approver_root()
+    _other, other_public = _key()
+
+    reader = ItemApprovalStore(
+        tmp_path / "run", key_dir=key_dir, config_root=other_public, config_only=True
+    )
+    assert reader.context().pin_refusal == "approver_root_mismatch"
+
+
+def test_a_run_refuses_a_roster_rolled_back_after_it_started(started, tmp_path):
+    key_dir, root_key, root = started
+    _a, a_public = _key()
+    _add(key_dir, root, root_key, "a-nurse", a_public)
+    older = (key_dir / roster.ROSTER_FILE).read_text()
+    _remove(key_dir, root, root_key, "a-nurse", a_public)
+    run = ItemApprovalStore(
+        tmp_path / "run", key_dir=key_dir, config_root=root, config_only=True
+    )
+    run.write_approver_root()
+    (key_dir / roster.ROSTER_FILE).write_text(older)
+
+    from openadapt_flow.approval_mode.human_attestation import (
+        approvers,
+        AttestationRefused,
+    )
+
+    context = run.context()
+    with pytest.raises(AttestationRefused) as raised:
+        approvers(key_dir, context.approver_root, at_least=context.approver_head)
+    assert raised.value.code == "approver_roster_rolled_back"
+
+
+def test_a_malformed_deployment_config_refuses_instead_of_dropping_its_pin(
+    tmp_path, monkeypatch
+):
+    from openadapt_flow.__main__ import _approver_pin
+
+    _k, public = _key()
+    monkeypatch.setenv(roster.ROOT_ENV, public)
+    config = tmp_path / "deployment.yaml"
+    config.write_text("approvers: [this is: not valid")
+    with pytest.raises(SystemExit, match="deployment_config_unreadable"):
+        _approver_pin(
+            argparse.Namespace(config=str(config), approver_root=None), config_only=True
+        )

@@ -77,6 +77,26 @@ def provision(
     )
 
 
+def approvers_yaml(root: str | None = None) -> str:
+    """The deployment config section that pins the approver root.
+
+    A governed run takes its pin only from its deployment config. Without an
+    argument, the root the active ``approver`` fixture pinned.
+    """
+
+    import os
+
+    pinned = root or os.environ[ROOT_ENV]
+    return f"approvers:\n  root_public_key: {pinned}\n"
+
+
+def approver_config(path: Path, root: str | None = None) -> Path:
+    """A deployment config that only pins the approver root."""
+
+    path.write_text(approvers_yaml(root))
+    return path
+
+
 def root_of(key_dir: Path) -> str:
     """The roster root :func:`provision` started in ``key_dir`` (hex)."""
 
