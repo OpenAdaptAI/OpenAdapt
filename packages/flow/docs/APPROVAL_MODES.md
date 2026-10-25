@@ -270,8 +270,12 @@ The log's `rearmed` event records:
 - what they saw;
 - the off event it answers.
 
-A gate honours it only with that approver key pinned for the runner
-(`ApprovalGate(pinned_approver_keys=...)`). Without the pinned key, a forged,
+A gate honours it only when the signing key is an approver key it trusts.
+By default, those are the approvers registered in the key directory's
+principal registry (`jit register --role approver`; Desktop's approver key is
+one). `ApprovalGate(pinned_approver_keys=...)` names them explicitly instead.
+Desktop can sign with a key that never leaves its keychain: `rearm_to_sign`
+returns the bytes to sign, and `rearm_evidence` wraps the signature. Without the pinned key, a forged,
 tampered or early re-arm is ignored, and the switch stays off. Each reader
 checks the re-arm again against the log before it. A later problem turns the
 switch off again, and the count starts over.

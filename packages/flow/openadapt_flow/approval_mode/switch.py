@@ -682,19 +682,35 @@ def turn_off(
 # -- re-arming a switched-off switch -------------------------------------------
 
 
-def _last_off(events: list[SwitchLogEvent]) -> Optional[SwitchLogEvent]:
-    """The ``switched_off`` event that holds the switch off now, if any."""
+def _last_off(
+    events: list[SwitchLogEvent],
+    approver_keys: Optional[Mapping[str, str]] = None,
+) -> Optional[SwitchLogEvent]:
+    """The ``switched_off`` event that holds the switch off now, if any.
+
+    Only a re-arm that verifies against the log before it (with
+    ``approver_keys``) ends an off period; a forged or early one doesn't.
+    """
 
     off: Optional[SwitchLogEvent] = None
-    for event in events:
+    for index, event in enumerate(events):
         if event.kind == "switched_off" and off is None:
             off = event
-        elif event.kind == "rearmed":
+        elif (
+            event.kind == "rearmed"
+            and off is not None
+            and event.rearm is not None
+            and approver_keys
+            and rearm_refusal(events[:index], event.rearm, approver_keys) is None
+        ):
             off = None
     return off
 
 
-def clean_streak(events: list[SwitchLogEvent]) -> tuple[str, ...]:
+def clean_streak(
+    events: list[SwitchLogEvent],
+    approver_keys: Optional[Mapping[str, str]] = None,
+) -> tuple[str, ...]:
     """Run refs of the consecutive verified items since the switch went off.
 
     The trailing run of ``item_finished`` events after the off event whose
@@ -702,7 +718,7 @@ def clean_streak(events: list[SwitchLogEvent]) -> tuple[str, ...]:
     finished item resets it; an item still open after the last one does too.
     """
 
-    off = _last_off(events)
+    off = _last_off(events, approver_keys)
     if off is None:
         return ()
     streak: list[str] = []
@@ -717,6 +733,37 @@ def clean_streak(events: list[SwitchLogEvent]) -> tuple[str, ...]:
             else:
                 streak = []
     return () if started else tuple(streak)
+
+
+def _public_key_bytes(encoded: str) -> bytes:
+    """A raw Ed25519 public key, given as hex (the principal registry's form)
+    or base64 (the pinned-key form status keys use)."""
+
+    import re as _re
+
+    if _re.fullmatch(r"[0-9a-f]{64}", encoded):
+        return bytes.fromhex(encoded)
+    return base64.b64decode(encoded, validate=True)
+
+
+def registry_approver_keys(key_dir: Optional[Path] = None) -> dict[str, str]:
+    """Approver keys registered in the JIT key directory's principal registry.
+
+    ``approvers`` maps a person's approver name (for example Desktop's
+    ``desktop-approver``) to its hex public key (``jit register --role
+    approver``). An unreadable registry, or one with no approvers, gives no
+    keys, and then no re-arm counts.
+    """
+
+    try:
+        from openadapt_flow.jit.authority import PrincipalRegistry
+        from openadapt_flow.jit.lifecycle import default_key_dir
+
+        registry = PrincipalRegistry.load(key_dir or default_key_dir())
+    except Exception:  # noqa: BLE001 - no registry proves nothing
+        return {}
+    approvers = getattr(registry, "approvers", None) or {}
+    return {str(name): str(key) for name, key in dict(approvers).items()}
 
 
 def rearm_signing_payload(
@@ -734,20 +781,28 @@ def rearm_signing_payload(
     )
 
 
-def rearm_request(log: SwitchLog, *, cause: str) -> dict[str, Any]:
+def rearm_request(
+    log: SwitchLog,
+    *,
+    cause: str,
+    approver_keys: Optional[Mapping[str, str]] = None,
+) -> dict[str, Any]:
     """What a person is shown before re-arming, or raise when it isn't offered.
 
     Offered only while the switch is off and after
     :data:`REARM_CLEAN_ITEMS` consecutive verified items since it went off.
-    Returns the unsigned fields the person's key signs (without
-    ``approver_id``, ``key_id``, ``signed_at``).
+    ``approver_keys`` are the keys the gate trusts (by default the registered
+    approvers, :func:`registry_approver_keys`): a re-arm already in the log
+    counts only if it verifies with them. Returns the unsigned fields the
+    person's key signs (without ``approver_id``, ``key_id``, ``signed_at``).
     """
 
+    keys = registry_approver_keys() if approver_keys is None else approver_keys
     events = log.read()
-    off = _last_off(events)
+    off = _last_off(events, keys)
     if off is None:
         raise SwitchLogError("the switch is on; there is nothing to re-arm")
-    streak = clean_streak(events)
+    streak = clean_streak(events, keys)
     if len(streak) < REARM_CLEAN_ITEMS:
         raise SwitchLogError(
             f"{len(streak)} consecutive verified items since the switch went "
@@ -762,6 +817,40 @@ def rearm_request(log: SwitchLog, *, cause: str) -> dict[str, Any]:
     }
 
 
+def rearm_to_sign(
+    log: SwitchLog,
+    request: Mapping[str, Any],
+    *,
+    approver_id: str,
+    key_id: str,
+    signed_at: Optional[str] = None,
+) -> tuple[dict[str, Any], bytes]:
+    """The fields to sign and their exact bytes, for a key held elsewhere.
+
+    For a key that never leaves a keychain: sign the returned bytes there,
+    then pass the fields and the base64 signature to :func:`rearm_evidence`.
+    """
+
+    first = log.read()[0]
+    assert first.switch_record_sha256 is not None
+    fields = {
+        **dict(request),
+        "approver_id": approver_id,
+        "key_id": key_id,
+        "signed_at": signed_at or _utc_now(),
+    }
+    return fields, rearm_signing_payload(
+        first.switch_id, first.switch_record_sha256, fields
+    )
+
+
+def rearm_evidence(fields: Mapping[str, Any], signature_b64: str) -> RearmEvidence:
+    """The re-arm from :func:`rearm_to_sign`'s fields and a signature made
+    elsewhere. :func:`rearm` verifies it; nothing is trusted here."""
+
+    return RearmEvidence.model_validate({**dict(fields), "signature": signature_b64})
+
+
 def sign_rearm(
     log: SwitchLog,
     request: Mapping[str, Any],
@@ -773,20 +862,11 @@ def sign_rearm(
 ) -> RearmEvidence:
     """A person's approver key signs the re-arm they were shown."""
 
-    first = log.read()[0]
-    assert first.switch_record_sha256 is not None
-    fields = {
-        **dict(request),
-        "approver_id": approver_id,
-        "key_id": key_id,
-        "signed_at": signed_at or _utc_now(),
-    }
-    signature = private_key.sign(
-        rearm_signing_payload(first.switch_id, first.switch_record_sha256, fields)
+    fields, payload = rearm_to_sign(
+        log, request, approver_id=approver_id, key_id=key_id, signed_at=signed_at
     )
-    return RearmEvidence.model_validate(
-        {**fields, "signature": base64.b64encode(signature).decode("ascii")}
-    )
+    signature = private_key.sign(payload)
+    return rearm_evidence(fields, base64.b64encode(signature).decode("ascii"))
 
 
 def rearm_refusal(
@@ -801,14 +881,18 @@ def rearm_refusal(
 
     if not events or events[0].switch_record_sha256 is None:
         return "the switch log is not readable"
-    off = _last_off(events)
+    if rearm.approver_id != rearm.key_id:
+        # The key is registered under the approver's own name; a re-arm that
+        # names one person and is signed with another's key proves nothing.
+        return "the re-arm's approver is not the key's registered approver"
+    off = _last_off(events, approver_keys)
     if off is None:
         return "the switch is on; there is nothing to re-arm"
     if rearm.off_seq != off.seq or rearm.off_sha256 != off.sha256:
         return "the re-arm names another switch-off"
     if rearm.off_reason != off.reason:
         return "the re-arm names another off reason"
-    streak = clean_streak(events)
+    streak = clean_streak(events, approver_keys)
     if len(streak) < REARM_CLEAN_ITEMS:
         return (
             f"{len(streak)} consecutive verified items since the switch went off; "
@@ -820,9 +904,7 @@ def rearm_refusal(
     if not encoded:
         return "the re-arm is not signed by a registered approver key"
     try:
-        public_key = Ed25519PublicKey.from_public_bytes(
-            base64.b64decode(encoded, validate=True)
-        )
+        public_key = Ed25519PublicKey.from_public_bytes(_public_key_bytes(encoded))
         public_key.verify(
             base64.b64decode(rearm.signature, validate=True),
             rearm_signing_payload(
