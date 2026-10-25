@@ -3,8 +3,9 @@
 Flow counts an answer from Desktop's Run it, or from the paired phone through
 the decision portal, as a person's only when it carries an Ed25519 signature
 by a key on Flow's signed approver roster, and the run pins that roster's
-root (``OPENADAPT_APPROVER_ROOT`` or the deployment config's
-``approvers.root_public_key``; see Flow's ``approval_mode/approver_roster``).
+root (the deployment config's ``approvers.root_public_key``, or
+``--approver-root``; see Flow's ``approval_mode/approver_roster``). Desktop
+pins only the root kept in this Mac's Keychain.
 Desktop keeps one such key
 for each route (``desktop`` for Run it, ``portal`` for the phone's answers,
 which the Flow console it starts signs). For each:
@@ -218,10 +219,13 @@ def setup_instructions(route: Route = "desktop") -> str:
         f"{PASSPHRASE_ENV} set, run `openadapt-flow jit keygen --out {path}`, "
         "then start the approver roster with it: "
         f"`openadapt-flow jit approver init --principal {name} --key {path}`. "
-        "Start Desktop with OPENADAPT_APPROVER_ROOT set to the public key "
-        f"keygen printed, and the same {PASSPHRASE_ENV}; or run "
+        "Pin the public key keygen printed as approvers.root_public_key in "
+        "the deployment config you pass to `openadapt-flow run --config`, "
+        f"with the same {PASSPHRASE_ENV}; or run "
         "`openadapt-desktop approver-key setup` instead of keygen to keep the "
-        "passphrase in this computer's keychain."
+        "passphrase in this computer's keychain. Desktop counts a person's "
+        "answer only with a root pinned in this Mac's Keychain, which "
+        "OpenAdapt sets up behind Touch ID."
     )
 
 

@@ -946,3 +946,48 @@ def test_the_cli_takes_the_approver_pin_from_the_pinned_bytes(tmp_path, monkeypa
         assert seen["pin"] == first
     finally:
         _PINNED_CONFIG_BYTES.clear()
+
+
+def test_a_relative_config_path_stays_pinned_after_a_chdir(tmp_path, monkeypatch):
+    """Attack: pin a relative --config, then chdir to a directory holding a
+    different deployment.yaml; the later load must still see the pinned bytes."""
+    import hashlib
+    import os
+
+    from openadapt_flow import __main__ as cli
+    from openadapt_flow.deployment import _PINNED_CONFIG_BYTES, load_deployment
+
+    _a, first = _key()
+    _b, agent = _key()
+    home = tmp_path / "home"
+    other = tmp_path / "other"
+    home.mkdir()
+    other.mkdir()
+    (home / "deployment.yaml").write_text(f"approvers:\n  root_public_key: {first}\n")
+    (other / "deployment.yaml").write_text(f"approvers:\n  root_public_key: {agent}\n")
+    digest = hashlib.sha256((home / "deployment.yaml").read_bytes()).hexdigest()
+    seen: dict = {}
+
+    def fake_func(args):
+        os.chdir(other)
+        seen["config"] = args.config
+        seen["root"] = load_deployment(args.config).approvers.root_public_key
+        return 0
+
+    monkeypatch.chdir(home)
+    try:
+        original_parse = argparse.ArgumentParser.parse_args
+
+        def parse(self, argv=None, namespace=None):
+            ns = original_parse(self, argv, namespace)
+            ns.func = fake_func
+            return ns
+
+        monkeypatch.setattr(argparse.ArgumentParser, "parse_args", parse)
+        cli.main(
+            ["run", "bundle", "--config", "deployment.yaml", "--config-sha256", digest]
+        )
+        assert seen["config"] == str(home / "deployment.yaml")
+        assert seen["root"] == first
+    finally:
+        _PINNED_CONFIG_BYTES.clear()

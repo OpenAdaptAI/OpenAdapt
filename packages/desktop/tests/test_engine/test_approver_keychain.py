@@ -833,6 +833,36 @@ def test_each_run_config_carries_this_macs_pin(tmp_path):
         prepare_flow_config(source, None, approver_root="a" * 64)
 
 
+def test_without_a_keychain_pin_the_config_names_no_root(tmp_path):
+    """Attack: delete the Keychain items, then write your own root and head
+    into <data_dir>/deployment.json, a file the agent's user can write.
+    Desktop must not hand Flow that root under a trusted digest."""
+    import yaml
+
+    from openadapt_desktop.private_flow_config import prepare_flow_config
+
+    source = tmp_path / "deployment.json"
+    source.write_text(
+        '{"name": "clinic", "approvers": {"root_public_key": "%s", '
+        '"head": [1, "sha256:%s"], "key_dir": "/tmp/attacker"}}' % ("b" * 64, "c" * 64)
+    )
+    prepared = prepare_flow_config(source, None, approver_root=None)
+    payload = yaml.safe_load(prepared.payload)
+    assert payload["approvers"] == {"key_dir": "/tmp/attacker"}
+    assert "b" * 64 not in prepared.payload
+
+    source.write_text('{"name": "clinic", "approvers": {"root_public_key": "%s"}}' % ("b" * 64))
+    payload = yaml.safe_load(prepare_flow_config(source, None).payload)
+    assert "approvers" not in payload
+
+
+def test_flow_never_inherits_an_approver_root_from_the_environment(monkeypatch):
+    from openadapt_desktop.flow_bridge import _subprocess_env
+
+    monkeypatch.setenv("OPENADAPT_APPROVER_ROOT", "b" * 64)
+    assert "OPENADAPT_APPROVER_ROOT" not in _subprocess_env()
+
+
 def test_each_run_config_carries_this_macs_roster_head(tmp_path):
     import yaml
 

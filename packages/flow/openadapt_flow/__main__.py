@@ -12316,8 +12316,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not getattr(args, "config", None):
             print("REFUSED: --config-sha256 needs --config", file=sys.stderr)
             return 2
+        # Pin by the absolute path: a relative path plus a later chdir would
+        # otherwise name a different, unpinned file.
+        import os
+
         from openadapt_flow.deployment import pin_deployment_bytes
 
+        args.config = os.path.abspath(args.config)
         try:
             # Read the config once, check it, and parse only those bytes.
             pin_deployment_bytes(args.config, args.config_sha256)

@@ -527,9 +527,11 @@ def cmd_approver_key(args: argparse.Namespace, engine: types.SimpleNamespace) ->
             root = setup
     print(
         "A person runs these commands (with OPENADAPT_JIT_KEY_PASSPHRASE set to "
-        "the key's passphrase), then starts Desktop with "
-        f"OPENADAPT_APPROVER_ROOT={root.public_key if root else '<root>'}. Until "
-        "then, Flow refuses answers from this computer."
+        "the key's passphrase), then pins the root "
+        f"{root.public_key if root else '<root>'} as approvers.root_public_key "
+        "in the deployment config passed to `openadapt-flow run --config`. "
+        "Desktop counts a person's answer only with a root pinned in this "
+        "Mac's Keychain; until then, Flow refuses answers from Desktop."
     )
 
 

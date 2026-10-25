@@ -297,9 +297,9 @@ class FlowRoster:
 def pinned_root() -> str | None:
     """The approver root this Mac pins for its Flow runs, or ``None``.
 
-    Raises :class:`ApproverKeychainError` when ``OPENADAPT_APPROVER_ROOT``
-    disagrees with the Keychain's pin: Desktop then starts no run that a
-    person would answer.
+    Only the Keychain's pin counts (see :meth:`FlowRoster.root`). With none,
+    Desktop removes any root or head from the config it hands Flow, so Flow
+    refuses every person's answer.
     """
 
     return FlowRoster().root()

@@ -544,15 +544,11 @@ def _subprocess_env() -> dict[str, str]:
     """
 
     env = dict(os.environ)
-    # The approver root this Mac set up behind Touch ID (the Keychain's pin
-    # wins; a different OPENADAPT_APPROVER_ROOT raises). A governed run takes
-    # its pin only from its deployment config, which Desktop writes per run;
-    # this covers the commands that read a run's recorded pin.
-    from openadapt_desktop.approver_keychain import pinned_root
-
-    root = pinned_root()
-    if root:
-        env["OPENADAPT_APPROVER_ROOT"] = root
+    # Flow never takes an approver root from the environment: a governed run
+    # takes it from the config snapshot Desktop writes, and the answer
+    # commands from --approver-root. Drop any inherited value so no Flow
+    # version or helper can read one.
+    env.pop("OPENADAPT_APPROVER_ROOT", None)
     return env
 
 
