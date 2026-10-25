@@ -8262,9 +8262,14 @@ def build_parser() -> argparse.ArgumentParser:
         "induce",
         help=(
             "Induce a parameterized PROGRAM bundle from MULTIPLE recordings "
-            "(multi-trace induction: infer params / loops / branches). REFUSES "
-            "(nonzero exit, no bundle) when intent is underdetermined, printing "
-            "a record-next worklist of missing demonstrations"
+            "(multi-trace induction: infer params / loops / branches). Loops: "
+            "back-to-back repeats and search, open, act, return worklists, "
+            "including rows that differ; not pagination (a next-page step "
+            "between rows) or a list nested inside each row. Certified and "
+            "governed runs refuse a looped program until qualification covers "
+            "it. REFUSES (nonzero exit, no bundle) when intent is "
+            "underdetermined, printing a record-next worklist of missing "
+            "demonstrations"
         ),
     )
     p.add_argument(
@@ -8289,8 +8294,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--held-out",
         action="store_true",
         help=(
-            "Also run leave-one-out held-out validation and print the per-fold "
-            "reproduction scores (needs >= 2 traces)"
+            "Also print the leave-one-out STRUCTURAL held-out coverage (needs "
+            ">= 2 traces). It compares program shape with each held-out trace, "
+            "executes nothing and checks neither identity nor effects; for a "
+            "generalization claim run held-out items with openadapt_flow."
+            "validation.behavioral_generalization"
         ),
     )
     p.add_argument(
