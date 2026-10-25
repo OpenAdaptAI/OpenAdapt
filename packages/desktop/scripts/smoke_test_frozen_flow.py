@@ -507,7 +507,9 @@ def _verify_portal_deployment_target(
     return result
 
 
-def _verify_flow_command_contract(flow: list[str], root: Path, env: dict[str, str], bundle: Path) -> dict:
+def _verify_flow_command_contract(
+    flow: list[str], root: Path, env: dict[str, str], bundle: Path
+) -> dict:
     """Every command line Desktop builds gets past the bundled Flow's parser,
     and the config pin Desktop sends is enforced, not just accepted.
 

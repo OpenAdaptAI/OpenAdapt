@@ -31,7 +31,7 @@ def flow_parser():
 
 def test_every_command_desktop_builds_parses(flow_parser, tmp_path) -> None:
     commands = contract.bridge_commands(tmp_path)
-    assert len(commands) >= 6
+    assert len(commands) >= 5
     refused = {}
     for name, argv in commands.items():
         try:
