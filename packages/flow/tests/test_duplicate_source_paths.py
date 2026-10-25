@@ -323,3 +323,27 @@ def test_a_passing_or_unrelated_step_serializes_as_before() -> None:
         "duplicate_check"
         not in StepResult(step_id="s", intent="x", ok=True).model_dump()
     )
+
+
+def test_a_program_can_choose_fhir_beside_an_openemr_rest_check() -> None:
+    source = resolve_duplicate_source(_rest(), pinned_record=True, channel="fhir")
+    assert isinstance(source, FhirPatientSource)
+    assert source.base_url == "https://emr.example.test/apis/default/fhir"
+    assert source._headers()["Authorization"] == "Bearer t"
+    # Asked for REST with a FHIR check, or FHIR with an unrelated REST read:
+    # no source, so a record-pinned program fails closed.
+    assert resolve_duplicate_source(_fhir(), pinned_record=True, channel="rest") is None
+    other = RestRecordVerifier("https://x.test", records_path="/api/db")
+    assert resolve_duplicate_source(other, pinned_record=True, channel="fhir") is None
+
+
+def test_the_channel_choice_serializes_only_when_set() -> None:
+    pc = Postcondition(
+        kind=PostconditionKind.NO_DUPLICATE_CANDIDATE,
+        text="x",
+        candidate_rows="tr",
+        candidate_params=("lname",),
+        candidate_source="record",
+        candidate_channel="fhir",
+    )
+    assert pc.model_dump()["candidate_channel"] == "fhir"

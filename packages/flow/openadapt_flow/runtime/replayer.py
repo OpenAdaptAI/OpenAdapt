@@ -17763,7 +17763,11 @@ class Replayer:
         self._last_duplicate_check = None
         pinned = getattr(pc, "candidate_source", None)
         source = (
-            None if pinned == "screen" else self._duplicate_source(pinned == "record")
+            None
+            if pinned == "screen"
+            else self._duplicate_source(
+                pinned == "record", getattr(pc, "candidate_channel", None)
+            )
         )
         if pinned == "record" and source is None:
             # The program was qualified with the record check; without a
@@ -17836,7 +17840,9 @@ class Replayer:
             getattr(self, "_last_duplicate_outcome", None) or "unreadable"
         )
 
-    def _duplicate_source(self, pinned_record: bool = False) -> Any:
+    def _duplicate_source(
+        self, pinned_record: bool = False, channel: Any = None
+    ) -> Any:
         """This run's duplicate-check record source, or None (the screen)."""
 
         from openadapt_flow.runtime.checks.duplicate_record import (
@@ -17847,6 +17853,7 @@ class Replayer:
             self.effect_verifier,
             getattr(self, "_duplicate_requested", "auto"),
             pinned_record=pinned_record,
+            channel=channel,
         )
 
     def _no_duplicate_record(
