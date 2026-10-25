@@ -930,17 +930,44 @@ _STRUCTURAL_LOCATOR_AT_JS = (
             '#' + CSS.escape(id)).length === 1) {
         selector = '#' + CSS.escape(id);
     }
+    // No unique id: the same unique attributes the interactive recorder uses,
+    // then a button's own label (`input[type=submit][value=...]`). Many save
+    // buttons have only a name (`<input type=submit name=submit>`,
+    // `<button name=_create>`).
+    const inputType = tag === 'input'
+        ? (actionable.getAttribute('type') || 'text').toLowerCase() : '';
+    const isButtonInput = ['submit', 'button', 'reset', 'image']
+        .indexOf(inputType) >= 0;
+    const unique = (candidate) => {
+        try { return document.querySelectorAll(candidate).length === 1; }
+        catch (_) { return false; }
+    };
+    for (const attr of ['data-testid', 'data-test', 'name']) {
+        if (selector) break;
+        const value = actionable.getAttribute(attr);
+        if (!value) continue;
+        const candidate = tag + '[' + attr + '="' + CSS.escape(value) + '"]';
+        if (unique(candidate)) selector = candidate;
+    }
+    if (!selector && isButtonInput && actionable.getAttribute('value')) {
+        const candidate = 'input[type="' + inputType + '"][value="' +
+            CSS.escape(actionable.getAttribute('value')) + '"]';
+        if (unique(candidate)) selector = candidate;
+    }
     let role = actionable.getAttribute('role');
     if (!role) {
         const map = {button: 'button', a: 'link', input: 'textbox',
             select: 'combobox', textarea: 'textbox'};
         role = map[tag] || null;
         if (tag === 'a' && !actionable.getAttribute('href')) role = null;
+        if (isButtonInput) role = 'button';
+        if (inputType === 'checkbox' || inputType === 'radio') role = inputType;
     }
     const fieldLabel = """
     + _FIELD_LABEL_JS
     + r""";
     let name = actionable.getAttribute('aria-label');
+    if (!name && isButtonInput) name = actionable.getAttribute('value') || null;
     if (!name) name = fieldLabel(actionable);
     if (!name) {
         const text = (actionable.textContent || '').replace(/\s+/g, ' ').trim();

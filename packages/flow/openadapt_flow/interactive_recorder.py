@@ -434,6 +434,9 @@ _INIT_JS = r"""
   const SECRET_MARKER = __SECRET_MARKER__;
   const IDENT_NAMES = __IDENT_NAMES__;
   const SPECIAL = __SPECIAL_KEYS__;
+  const SELECT_KEYS = [
+    'Enter', ' ', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown',
+  ];
   // Submit binding (openadapt_flow.submit_binding): the fields this document
   // received typed input in, as element references only (never a value), and
   // the structural observer that relates a clicked unlabeled control to them.
@@ -2013,14 +2016,41 @@ _INIT_JS = r"""
   listen('change', (e) => {
     commitSecretValueFor(inputEventTarget(e));
     // A native <select> commits its option through browser-native dropdown UI
-    // that produces no recordable action events, so the demonstrated choice
-    // would be silently absent from the compiled workflow and replay would
-    // proceed with whatever value the field happens to hold. Refuse loudly at
-    // the moment the operator makes the selection.
+    // that produces no other recordable event, so the choice is recorded
+    // here, as the option's label typed into the select. Replay types it and
+    // reads the select's chosen label back (focused_select_label_at). No
+    // Enter follows: Enter on a select inside a form submits the form.
     const el = deepEventTarget(e);
-    if (el && el.matches && el.matches('select')) {
+    if (!el || !el.matches || !el.matches('select')) return;
+    // A change the page's own script dispatched (a TomSelect or Select2
+    // widget updating its hidden select) is an echo of clicks and typing
+    // already recorded on the visible widget.
+    if (!e.isTrusted) return;
+    const fs = frameSpace();
+    if (fs === null) { refuseFrame(); return; }
+    const option = el.multiple ? null : el.options[el.selectedIndex];
+    const text = option ? String(option.text).replace(/\s+/g, ' ').trim() : '';
+    if (!text || secretStateForInput(el)) {
       emit({kind: 'control_refusal', control: 'select'});
+      return;
     }
+    const localRect = el.getBoundingClientRect();
+    identityWithheldReason = null;
+    const rawField = elementName(el) || el.id || null;
+    const field = identityTextOrNull(rawField);
+    const o = {
+      kind: 'select',
+      field: field,
+      label: fieldLabel(el),
+      value: text,
+      __oaflow_input_session: inputSessionFor(el),
+      rect: [Math.round(localRect.left + fs.dx), Math.round(localRect.top + fs.dy),
+             Math.round(localRect.width), Math.round(localRect.height)],
+    };
+    if (rawField !== null && field === null) {
+      o.identity_withheld = identityWithheldReason;
+    }
+    emitInFrameSpace(o);
   });
   listen('focusout', (e) => commitSecretValueFor(inputEventTarget(e)));
   listen('submit', commitSecretValues);
@@ -2177,6 +2207,12 @@ _INIT_JS = r"""
       return;
     }
     if (SPECIAL.indexOf(e.key) < 0) return;
+    // Keys that move or commit a native select's choice: the change event
+    // records the chosen option. An Enter that submits the form shows up as
+    // the click on the form's button.
+    if (el && el.matches && el.matches('select') && SELECT_KEYS.indexOf(e.key) >= 0) {
+      return;
+    }
     emitInFrameSpace({kind: 'key', key: e.key});
   });
 
@@ -3413,7 +3449,7 @@ class InteractiveRecorder:
             self.done = True
             return
         raw_input_session = event.pop("__oaflow_input_session", None)
-        if kind == "input":
+        if kind in ("input", "select"):
             expected_prefix = f"{self._session_id}:input:"
             if (
                 not isinstance(raw_input_session, str)
@@ -3482,6 +3518,7 @@ class InteractiveRecorder:
             "right_click",
             "drag",
             "input",
+            "select",
             "key",
             "hotkey",
             "scroll",
@@ -3883,7 +3920,7 @@ class InteractiveRecorder:
                 and same_point
             ):
                 return
-        if kinds == {"input"}:
+        if kinds == {"input"} or kinds == {"select"}:
             sessions = {event.get("_oaflow_input_session") for event in batch}
             fields = {event.get("field") for event in batch}
             if len(sessions) == 1 and None not in sessions and len(fields) == 1:
@@ -3969,6 +4006,14 @@ class InteractiveRecorder:
             self._flush_type()
             self._flush_scroll()
             self._record_key(ev)
+        elif kind == "select":
+            # A native select's choice: its label typed into the select (see
+            # the page's change listener). Type-ahead changes the choice once
+            # per letter; like keystrokes in one field, the run keeps the
+            # last one.
+            self._flush_click()
+            self._flush_scroll()
+            self._accumulate_input({**ev, "kind": "input", "secret": False})
 
     def _flush_click(self) -> None:
         pending = self._pending_click
