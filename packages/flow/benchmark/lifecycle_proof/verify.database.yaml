@@ -1,0 +1,109 @@
+# CANDIDATE (not admitted): the OpenEMR referral contract with a whole-database
+# frame. verify.yaml is the admitted one; verify.frame.yaml is the earlier
+# candidate, whose frame covered only the tables it read.
+#
+# The frame diffs every table and column of the OpenEMR database before and
+# after the save (frame.database). Any row added, removed or changed is
+# collateral unless the record contract, the chart's history row
+# (side_records) or a concurrent writer named by OpenEMR's audit trail
+# explains it. contact is the chart's address link, a side record per
+# WITNESS.md, not bookkeeping. A new chart or history row that sets a column the contract
+# doesn't name, outside new_row_fields, is collateral too.
+#
+# allow_tables is the reviewed list of tables OpenEMR writes on its own for any
+# signed-in user: SPEC.md F3's bookkeeping list, and the tables the witness run
+# found the New Patient path writing (WITNESS.md).
+#
+# Needs #1570, #1571, #1572, #1576 and the whole-database frame. Made-up
+# patients only.
+schema_version: openadapt.verify/v1
+environment_id: openemr-local-fixture-7c96c8eefe46
+minimum_effect_strength: independent_system_of_record
+
+verifier:
+  kind: surfaces
+  surfaces:
+    patient:
+      kind: rest
+      base_url: ${OPENEMR_API_URL:-https://127.0.0.1:9300}
+      records_path: /apis/default/api/patient?_limit=1000
+      records_key: data
+      auth:
+        bearer_env: OPENEMR_ORACLE_TOKEN
+
+record:
+  name: patient
+  surface: patient
+  match: [email, lname]
+  duplicate_key: email
+  exact_new_set: true
+  identity_field: uuid
+  fields:
+    email: email
+    lname: lname
+    title: title
+    fname: fname
+    DOB: DOB
+    sex: sex
+    street: street
+    city: city
+    state: {param: state_label, map: {Massachusetts: MA}}
+    postal_code: postal_code
+    phone_home: phone_home
+    country_code: country_code
+    # The fixture's two providers (users.id as seeded by the suite).
+    providerID: {param: provider, map: {"Dr. Iris Holt": "6", "Dr. Owen Hale": "7"}}
+
+frame:
+  identity_field: id
+  side_records:
+    - {surface: history_data, link_field: pid, of_surface: patient, of_field: pid}
+    - {surface: contact, link_field: foreign_id, of_surface: patient, of_field: pid}
+  attribution:
+    kind: audit_read
+    actor_field: user
+    record_field: patient_id
+    record_key: pid
+    self: [openadapt_actor]
+    read:
+      kind: sql
+      sql_driver: benchmark.lifecycle_proof.readonly_db
+      sql_connect_args: &db
+        container: ${OPENEMR_DB_CONTAINER}
+        user: ${OPENEMR_READONLY_DB_USER:-oa_audit_reader}
+        database: openemr
+      sql_password_env: OPENEMR_READONLY_DB_PASSWORD
+      sql_query: >-
+        SELECT CONCAT('log-', id) AS id, user, patient_id FROM log
+        WHERE event LIKE 'patient-record-%' AND event <> 'patient-record-select'
+        AND patient_id > 0 AND user <> ''
+        UNION ALL
+        SELECT CONCAT('api-', a.id) AS id, u.username AS user, a.patient_id
+        FROM api_log a JOIN users u ON u.id = a.user_id
+        WHERE a.method IN ('POST', 'PUT', 'PATCH', 'DELETE') AND a.patient_id > 0
+  database:
+    dialect: mysql
+    read:
+      sql_driver: benchmark.lifecycle_proof.readonly_db
+      sql_connect_args: *db
+      sql_password_env: OPENEMR_READONLY_DB_PASSWORD
+    allow_tables:
+      # SPEC.md F3: bookkeeping for any signed-in user.
+      - log
+      - log_comment_encrypt
+      - api_log
+      - sessions
+      - users_secure
+      - uuid_registry
+      - uuid_mapping
+      - sequences
+      # WITNESS.md amendment 1: per-user UI state, written on opening a chart.
+      - recent_patients
+      - user_settings
+      - clinical_rules_log
+    views: {patient_data: patient}
+    new_row_fields:
+      # Set by OpenEMR on every new chart: ids, the creation dates.
+      patient_data: [pid, pubpid, uuid, date, regdate]
+      history_data: [uuid, date]
+      contact: [foreign_table_name]

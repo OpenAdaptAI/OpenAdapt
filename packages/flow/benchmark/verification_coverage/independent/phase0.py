@@ -18,6 +18,11 @@ configuration declares neither.
 required history row, the provider checked, audit attribution keyed by
 ``pid``), with the provenance round trip against the referral.
 
+``--contract whole`` is the whole-database candidate,
+``benchmark/lifecycle_proof/verify.database.yaml``: the frame diffs every
+table and column, with a reviewed allow-list, instead of the tables a
+contract reads.
+
 ``standin`` reads an SQLite copy of the pinned fixture's baseline (writes
 emulated by ``standin.py``). ``live`` runs on the pinned OpenEMR fixture
 (the bot's save through the form, other writes through each user's REST
@@ -50,6 +55,7 @@ from verification_coverage.independent import run, standin  # noqa: E402
 
 VERIFY_YAML = BENCH / "lifecycle_proof" / "verify.yaml"
 FRAME_YAML = BENCH / "lifecycle_proof" / "verify.frame.yaml"
+DATABASE_YAML = BENCH / "lifecycle_proof" / "verify.database.yaml"
 PARAMS = (
     "title",
     "fname",
@@ -127,6 +133,28 @@ def plus_doc(
     }
 
 
+def whole_doc(
+    patient: dict[str, Any], audit: dict[str, Any], database: dict[str, Any]
+) -> dict[str, Any]:
+    """The whole-database candidate (``lifecycle_proof/verify.database.yaml``).
+
+    Its record and frame are used as written; only the reads (the patient,
+    the audit trail, the database connection) are this environment's.
+    """
+
+    doc = yaml.safe_load(DATABASE_YAML.read_text())
+    frame = copy.deepcopy(doc["frame"])
+    frame["attribution"]["read"] = audit
+    frame["database"].update(database)
+    return {
+        "schema_version": "openadapt.verify/v1",
+        "minimum_effect_strength": doc["minimum_effect_strength"],
+        "verifier": {"kind": "surfaces", "surfaces": {"patient": patient}},
+        "record": copy.deepcopy(doc["record"]),
+        "frame": frame,
+    }
+
+
 def _source(cdir: Path, told: dict[str, str], referral: dict[str, str]) -> Any:
     """Provenance as a first reader would cite the referral, and its text."""
 
@@ -167,9 +195,13 @@ def _doc(
     patient: dict[str, Any],
     table: Callable[[str], dict[str, Any]],
     audit: dict[str, Any],
+    database: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     if contract == "production":
         return production_doc(patient)
+    if contract == "whole":
+        assert database is not None
+        return whole_doc(patient, audit, database)
     side = {name: table(t) for name, t in SIDE_TABLES.items()}
     return plus_doc(patient, side, audit)
 
@@ -193,6 +225,7 @@ def standin_case(case: dict[str, Any], work: Path, contract: str) -> dict[str, A
             sql("SELECT * FROM patient_data"),
             lambda t: sql(f"SELECT * FROM {t}"),
             sql(AUDIT_LOG_SQL),
+            {"dialect": "sqlite", "read": {"sqlite_database": str(db)}},
         )
     )
     source = None if contract == "production" else _source(cdir, told, run.REFERRAL)
@@ -240,9 +273,14 @@ def live_case(case: dict[str, Any], work: Path, contract: str) -> dict[str, Any]
         "records_key": "data",
         "auth": {"bearer_env": TOKEN_ENV},
     }
+    read = {k: v for k, v in sql("").items() if k not in ("kind", "sql_query")}
     cfg = parse_verify_config(
         _doc(
-            contract, patient, lambda t: sql(f"SELECT * FROM {t}"), sql(AUDIT_LIVE_SQL)
+            contract,
+            patient,
+            lambda t: sql(f"SELECT * FROM {t}"),
+            sql(AUDIT_LIVE_SQL),
+            {"dialect": "mysql", "read": read},
         )
     )
     source = None if contract == "production" else _source(cdir, told, live.REFERRAL)
@@ -273,7 +311,7 @@ def main() -> int:
         "--suite", type=Path, default=HERE / "faults.yaml", help="the fault suite"
     )
     parser.add_argument(
-        "--contract", choices=("production", "plus"), default="production"
+        "--contract", choices=("production", "plus", "whole"), default="production"
     )
     args = parser.parse_args()
     suite = yaml.safe_load(args.suite.read_text())
