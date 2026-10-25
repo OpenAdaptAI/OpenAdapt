@@ -46,7 +46,6 @@ runtime plumbing, with ``substrate="onscreen"``.
 
 from __future__ import annotations
 
-import difflib
 import re
 from typing import Any, Optional
 
@@ -262,26 +261,22 @@ def _normalize(text: str) -> str:
 def value_matches(
     haystack: str, expected: str, *, min_ratio: float = READBACK_MIN_RATIO
 ) -> bool:
-    """Whether ``expected`` is present in normalized ``haystack`` at ``min_ratio``."""
+    """Whether ``expected`` is in ``haystack`` exactly once, as whole tokens.
+
+    Exact after normalization (``readback_values.token_occurrences``): a
+    number is a whole number (``250`` is not in ``$1,250.00``), a name is whole
+    words (``Ann Smith`` is not in ``Ann Smithers``), and a value shown twice
+    is two records, not one. No fuzzy matching: an OCR misread fails the
+    read-back rather than confirming a near value. ``min_ratio`` is kept for
+    callers and no longer used.
+    """
+
     from openadapt_flow.runtime.effects.readback_values import token_occurrences
 
     want = _normalize(expected)
     if not want:
         return False
-    # Whole tokens (a number as a whole number), never a substring: "250" is
-    # not in "$1,250.00". Shown twice is two records, not one confirmation.
-    runs = token_occurrences(haystack, want)
-    if runs:
-        return runs == 1
-    if any(c.isdigit() for c in want):
-        return False  # no fuzzy matching for a value with digits
-    # Longest contiguous run (tolerant of the value embedded in surrounding
-    # label text, e.g. "saved note for patient 3" containing the value).
-    squashed_want = "".join(want.split())
-    squashed_hay = "".join(haystack.split())
-    matcher = difflib.SequenceMatcher(None, squashed_want, squashed_hay, autojunk=False)
-    longest = max((b.size for b in matcher.get_matching_blocks()), default=0)
-    return longest >= min_ratio * len(squashed_want)
+    return token_occurrences(haystack, want) == 1
 
 
 class OnScreenReadbackVerifier(VerifierAdapterBase):
@@ -859,7 +854,19 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
             )
             == "match"
         )
-        if not matched and (comparison == "ambiguous" or contained):
+        twice = (
+            not matched
+            and compare_value(
+                observed,
+                expected,
+                kind=value_kind,  # type: ignore[arg-type]
+                source="structure",
+                date_order=date_order,
+                exact=False,
+            )
+            == "ambiguous"
+        )
+        if not matched and (comparison == "ambiguous" or contained or twice):
             # The element holds more than the field (an accessibility row,
             # a container) or a date that reads two ways: not proof either way.
             return EffectVerdict(

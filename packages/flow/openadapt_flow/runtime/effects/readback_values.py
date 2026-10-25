@@ -84,9 +84,14 @@ _MONTH_DAY = ("%m/%d/%Y", "%m-%d-%Y", "%m.%d.%Y")
 
 #: A plain number: digits, optional thousands commas, optional decimals.
 _PLAIN_NUMBER = re.compile(r"^[+-]?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$")
-#: A number or an amount inside a longer read, kept whole.
-_NUMBER_TOKEN = re.compile(r"[$€£¥]?\(?[+-]?\d[\d,]*(?:\.\d+)?\)?")
 _TOKEN_EDGES = ".,:;!?()[]{}\"'"
+
+
+def _plain_number(value: str) -> bool:
+    """A value that is only a number (and no identifier with a leading zero)."""
+
+    text = value.strip()
+    return bool(_PLAIN_NUMBER.match(text)) and not _leading_zero(text)
 
 
 def _tokens(value: str) -> list[str]:
@@ -102,19 +107,40 @@ def _token_runs(seen: list[str], want: list[str]) -> int:
     return sum(1 for i in range(len(seen) - n + 1) if seen[i : i + n] == want)
 
 
-def _amount_runs(seen: str, want: Decimal) -> int:
-    """How many whole numbers or amounts in ``seen`` equal ``want``."""
+def _amount_runs(seen: str, want: Decimal, *, keep_zeros: bool = False) -> int:
+    """How many whole tokens of ``seen`` are amounts equal to ``want``.
 
-    return sum(1 for token in _NUMBER_TOKEN.findall(seen) if _amount(token) == want)
+    A number joined to a hyphen or a letter (``250-1``, ``A250``) is part of a
+    code, not a number. With ``keep_zeros`` (a value compared as a number only
+    because it looks like one), a token with a leading zero is an identifier
+    and never equals a number.
+    """
+
+    words = seen.split()
+    tokens = [w.strip(_TOKEN_EDGES.replace("(", "").replace(")", "")) for w in words]
+    # A currency symbol or code may stand apart from its number: "USD 1,250".
+    joined = tokens + [f"{a} {b}" for a, b in zip(tokens, tokens[1:])]
+    count = 0
+    for token in tokens:
+        if keep_zeros and _leading_zero(token.lstrip("$€£¥")):
+            continue
+        if _amount(token) == want:
+            count += 1
+    if count == 0:
+        count = sum(1 for t in joined[len(tokens) :] if _amount(t) == want)
+    return count
 
 
 def token_occurrences(seen: str, want: str, kind: ValueKind = "text") -> int:
     """How many times ``want`` appears in ``seen`` as whole tokens (or, for a
     number or an amount, as a whole number), after normalizing by kind."""
 
-    if kind in ("currency", "number") or _PLAIN_NUMBER.match(want.strip()):
+    declared = kind in ("currency", "number")
+    if declared or _plain_number(want):
         amount = _amount(want)
-        return 0 if amount is None else _amount_runs(seen, amount)
+        return (
+            0 if amount is None else _amount_runs(seen, amount, keep_zeros=not declared)
+        )
     norm = _code if kind == "code" else _text
     return _token_runs(
         [norm(t) for t in _tokens(seen)], [norm(t) for t in _tokens(want)]
@@ -154,24 +180,40 @@ def _dates(value: str, order: Optional[str]) -> set[date]:
     return found
 
 
+#: A well-formed amount: an optional currency symbol or code, an optional
+#: sign or parentheses, and digits with valid thousands grouping and decimals,
+#: or a decimal comma with two places. ``1,2,5`` and ``12 50`` don't parse.
+_STRICT_AMOUNT = re.compile(
+    r"^(?P<pre>[$€£¥]|USD|CAD|EUR|GBP)?\s?(?P<open>\()?(?P<sign>[+-])?\s?"
+    r"(?P<num>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\d+,\d{2})"
+    r"(?P<close>\))?\s?(?P<post>USD|CAD|EUR|GBP)?$",
+    re.IGNORECASE,
+)
+
+
 def _amount(value: str) -> Optional[Decimal]:
-    match = _CURRENCY.match(value.strip())
-    if match is None:
+    """A well-formed amount or number as a Decimal, else None."""
+
+    match = _STRICT_AMOUNT.match(value.strip())
+    if match is None or bool(match["open"]) != bool(match["close"]):
         return None
-    sign, digits = match.groups()
-    digits = digits.replace(" ", "")
-    if "," in digits and "." in digits:
-        digits = digits.replace(",", "")
-    elif digits.count(",") == 1 and len(digits.split(",")[1]) == 2:
-        digits = digits.replace(",", ".")  # 12,50 written with a decimal comma
+    num = match["num"]
+    if re.fullmatch(r"\d+,\d{2}", num):
+        num = num.replace(",", ".")  # 12,50 written with a decimal comma
     else:
-        digits = digits.replace(",", "")
+        num = num.replace(",", "")
     try:
-        amount = Decimal(digits)
+        amount = Decimal(num)
     except InvalidOperation:
         return None
-    negative = bool(sign) or value.strip().startswith("(")
+    negative = match["sign"] == "-" or bool(match["open"])
     return -amount if negative else amount
+
+
+def _leading_zero(value: str) -> bool:
+    """``007``, ``0012345``: an identifier, not a number."""
+
+    return re.match(r"^[+-]?0\d", value.strip()) is not None
 
 
 def normalize_value(
@@ -218,7 +260,8 @@ def compare_value(
     """
 
     ocr = source == "ocr"
-    if kind == "text" and _PLAIN_NUMBER.match(expected.strip()):
+    promoted = kind == "text" and _plain_number(expected)
+    if promoted:
         kind = "number"
     if kind == "date":
         seen = _dates(observed, date_order)
@@ -236,11 +279,15 @@ def compare_value(
         if want_amount is None:
             return "mismatch"
         if exact:
-            seen_amount = _amount(observed)
+            whole = observed.strip()
+            if promoted and (not _PLAIN_NUMBER.match(whole) or _leading_zero(whole)):
+                seen_amount = None  # "MRN 12345", "0012345": not this number
+            else:
+                seen_amount = _amount(whole)
             if seen_amount is not None:
                 return "match" if seen_amount == want_amount else "mismatch"
         else:
-            runs = _amount_runs(observed, want_amount)
+            runs = _amount_runs(observed, want_amount, keep_zeros=promoted)
             if runs == 1:
                 return "match"
             if runs > 1:
@@ -250,7 +297,7 @@ def compare_value(
             if exact:
                 if _amount(folded) == want_amount:
                     return "ambiguous"
-            elif _amount_runs(folded, want_amount):
+            elif _amount_runs(folded, want_amount, keep_zeros=promoted):
                 return "ambiguous"
         return "mismatch"
     if kind == "code":

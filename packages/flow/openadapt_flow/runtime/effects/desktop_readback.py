@@ -780,7 +780,12 @@ def _present(surface: DesktopReadSurface, ref: ControlRef) -> bool:
         return surface.locate(ref).status == "ok"
     if seen.status != "ok" or seen.item is None or not seen.item.text.strip():
         return False
-    return ref.shows is None or _norm(ref.shows) in _norm(seen.item.text)
+    if ref.shows is None:
+        return True
+    from openadapt_flow.runtime.effects.readback_values import token_occurrences
+
+    # Whole tokens: a marker "Saved" is not shown by "Unsaved".
+    return token_occurrences(_norm(seen.item.text), _norm(ref.shows)) >= 1
 
 
 def _view(surface: DesktopReadSurface, spec: DesktopReadbackSpec) -> tuple[Any, ...]:

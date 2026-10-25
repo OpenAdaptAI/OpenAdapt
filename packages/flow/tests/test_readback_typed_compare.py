@@ -88,8 +88,9 @@ def test_the_fuzzy_screen_match_takes_no_partial_numbers_or_duplicates() -> None
     assert value_matches("order 1250 placed", "250") is False
     assert value_matches("order 250 placed", "250") is True
     assert value_matches("ada quill ada quill", "ada quill") is False
-    # Free text without digits keeps its OCR tolerance.
-    assert value_matches("savednote for patient", "saved note for patient") is True
+    # No fuzzy matching at all: a near name is not the name.
+    assert value_matches("ann smithers", "ann smith") is False
+    assert value_matches("patient: ann smith", "ann smith") is True
 
 
 class _Line:
@@ -116,5 +117,62 @@ def test_the_screen_read_back_refutes_a_partial_number_and_holds_on_a_duplicate(
 ):
     assert _read_back("Balance $1,250.00", "250") is Verdict.REFUTED
     assert _read_back("Balance $250.00", "250") is Verdict.CONFIRMED
-    assert _read_back("Ada Quill  Ada Quill", "Ada Quill") is not Verdict.CONFIRMED
+    assert _read_back("Ada Quill  Ada Quill", "Ada Quill") is Verdict.INDETERMINATE
+    assert _read_back("Patient: Ann Smithers", "Ann Smith") is Verdict.REFUTED
     assert _read_back("Ada Quill", "Ada Quill") is Verdict.CONFIRMED
+
+
+@pytest.mark.parametrize(
+    ("observed", "expected", "exact"),
+    [
+        ("0012345", "12345", True),  # a leading zero is an identifier
+        ("0012345", "12345", False),
+        ("MRN 12345", "12345", True),  # a whole field must be the number
+        ("12345", "0012345", True),
+        ("Order 250-1", "250", False),  # joined to a hyphen: a code
+        ("A250", "250", False),
+    ],
+)
+def test_identifiers_are_not_numbers(observed, expected, exact) -> None:
+    assert (
+        compare_value(observed, expected, exact=exact, source="structure") == "mismatch"
+    )
+
+
+def test_a_label_before_a_number_still_reads_it() -> None:
+    assert compare_value("MRN 12345", "12345", exact=False) == "match"
+    assert compare_value("007", "007", source="structure") == "match"
+    # Declared a number, a leading zero is just a zero.
+    assert (
+        compare_value("0012345", "12345", kind="number", source="structure") == "match"
+    )
+
+
+@pytest.mark.parametrize("malformed", ["1,2,5", "12 50", "(250", "$$250"])
+def test_malformed_numbers_do_not_parse(malformed) -> None:
+    from openadapt_flow.runtime.effects.readback_values import normalize_value
+
+    assert normalize_value(malformed, "number") is None
+    assert (
+        compare_value(malformed, "125", kind="number", source="structure") == "mismatch"
+    )
+
+
+def test_the_structure_read_holds_on_a_value_shown_twice() -> None:
+    class _Structure:
+        def screenshot(self) -> bytes:
+            return b"x"
+
+        def displayed_text_at(self, x: int, y: int) -> str:
+            return "Ada Quill Ada Quill"
+
+    verifier = OnScreenReadbackVerifier(_Structure(), region=(0, 0, 10, 10))
+    verdict = verifier._read_structure("Ada Quill", (0, 0, 10, 10))
+    assert verdict.verdict is Verdict.INDETERMINATE
+
+
+def test_presence_checks_take_whole_tokens() -> None:
+    from openadapt_flow.runtime.effects.readback_values import token_occurrences
+
+    assert token_occurrences("changes unsaved", "saved") == 0
+    assert token_occurrences("record saved.", "saved") == 1
