@@ -343,6 +343,21 @@ The binding ties the click to the entry the run made. It doesn't check that
 the entry is right: the values typed come from the run's parameters, and only
 a record check can confirm what the application saved.
 
+A labelled save on a create-new form (Trac's **Create ticket**, NetBox's
+**Create**) has the same problem: no existing record is on screen next to it,
+so it compiled with no identity check, and a policy that refuses unarmed saves
+refused it. Its record is the one the run is typing into the form. When the
+recording shows the save is a button of the one form that owns every field
+typed since the last save, the compiler gives it a **form identity**
+(`Anchor.form_identity`; counts and tokens only, no values). Before the click,
+a run requires that the button's form holds exactly the fields that run typed
+into, and that each still holds the value the run left in it. A field the page
+rewrote after typing, a field that is gone, or a button of another form halts
+before the click (identity mode `form`). A backend that can't read the page
+leaves the identity unreadable, which halts too. A field whose own script
+reformats its value when it loses focus (a phone-number mask, for example)
+also halts, because its value no longer matches what was typed.
+
 For consequential or entity-sensitive workflows, require a policy that refuses
 unarmed actions, review the inferred risk and tags, and test identity against
 real near-match and same-name records. Pure-pixel substrates should expect more

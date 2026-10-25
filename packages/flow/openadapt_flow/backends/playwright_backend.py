@@ -31,6 +31,7 @@ if TYPE_CHECKING:  # pragma: no cover
 from openadapt_flow.backend import ActionDeliveryUncertain, StructuralResolutionRefused
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
+    FormIdentity,
     StructuralHandle,
     StructuralLocator,
     SubmitBinding,
@@ -43,6 +44,7 @@ from openadapt_flow.submit_binding import (
     OBSERVE_SUBMIT_BINDING_JS,
     SUBMIT_BINDING_FIELD_SELECTOR,
     observation_from_page,
+    verify_form_identity,
     verify_submit_binding,
 )
 
@@ -501,6 +503,56 @@ _REGISTER_FILLED_FIELD_JS = (
     }
     if (fills.indexOf(el) < 0) fills.push(el);
     return true;
+}"""
+)
+
+# Remember what a field holds once the run has finished typing into it, for
+# a create-new form's identity check (openadapt_flow.ir.FormIdentity). The
+# WeakMap lives in the field's own document under a per-backend random key and
+# is only ever compared in the page; no value is returned to Python.
+_SNAPSHOT_FILLED_VALUE_JS = r"""(el, key) => {
+    let values = window[key];
+    if (!(values instanceof WeakMap)) {
+        values = new WeakMap();
+        Object.defineProperty(window, key, {value: values, configurable: true});
+    }
+    const value = ('value' in el) ? String(el.value) : String(el.innerText || '');
+    values.set(el, value);
+    return true;
+}"""
+
+# A create-new form's identity at a point: the submit-binding observation of
+# the control there against the fields this run typed into, and how many of
+# those fields in the control's form no longer hold what the run left in them
+# (or were never snapshotted). Counts only: no value leaves the page.
+_FORM_IDENTITY_AT_JS = (
+    r"""(args) => {
+    const hit = document.elementFromPoint(args.x, args.y);
+    if (!hit) return null;
+    const control = hit.closest("""
+    + json.dumps(GUARDED_ACTIONABLE_SELECTOR)
+    + r""");
+    if (!control) return null;
+    const observe = """
+    + OBSERVE_SUBMIT_BINDING_JS
+    + r""";
+    const fills = Array.isArray(window[args.fillKey]) ? window[args.fillKey] : [];
+    const out = observe(control, fills);
+    const values = window[args.valueKey];
+    const form = control.form || control.closest('form');
+    let changed = 0;
+    for (const field of fills) {
+        if (!field || !field.isConnected || !form) continue;
+        const owner = field.form || field.closest('form');
+        if (owner !== form) continue;
+        const now = ('value' in field) ? String(field.value)
+            : String(field.innerText || '');
+        if (!(values instanceof WeakMap) || !values.has(field) ||
+                values.get(field) !== now) {
+            changed += 1;
+        }
+    }
+    return {observation: out.observation, changed: changed};
 }"""
 )
 
@@ -1186,6 +1238,7 @@ class PlaywrightBackend:
         # Fields this backend typed into, kept page-side per document (element
         # references only) for submit bindings. A new backend starts empty.
         self._fill_store_key = f"__oaflow_filled_{uuid.uuid4().hex}"
+        self._fill_value_key = f"__oaflow_filled_values_{uuid.uuid4().hex}"
         self._structural_tokens: dict[str, _StructuralGuard] = {}
         self._guarded_coordinate: Optional[_CoordinateGuard] = None
         # One-shot expectation that the next click closes this page surface
@@ -1786,6 +1839,51 @@ class PlaywrightBackend:
         self._focused_element_call(
             _REGISTER_FILLED_FIELD_JS, arg=self._fill_store_key, with_arg=True
         )
+
+    def _snapshot_focused_field(self) -> None:
+        """Remember what the focused field holds now that typing is done.
+
+        A create-new form's identity check compares each filled field with
+        this snapshot before the save. A field with no snapshot counts as
+        changed, so a failure here makes that check refuse: the safe
+        direction.
+        """
+
+        self._focused_element_call(
+            _SNAPSHOT_FILLED_VALUE_JS, arg=self._fill_value_key, with_arg=True
+        )
+
+    def form_identity_at(self, x: int, y: int, identity: FormIdentity) -> Optional[str]:
+        """Check a create-new form's identity for the control at a point.
+
+        Returns None when the control's form owns exactly the fields this run
+        typed into, the control plays the recorded submit role, and every one
+        of those fields still holds what the run typed. Otherwise the reason,
+        in plain words, including when the page can't be read.
+        """
+
+        try:
+            point = self._frame_point(int(x), int(y))
+            if point is None:
+                return "the resolved point has no readable page"
+            raw = point.scope.evaluate(
+                _FORM_IDENTITY_AT_JS,
+                {
+                    "x": point.x,
+                    "y": point.y,
+                    "fillKey": self._fill_store_key,
+                    "valueKey": self._fill_value_key,
+                },
+            )
+            if not isinstance(raw, dict):
+                return "no control at the resolved point"
+            observation = observation_from_page(raw.get("observation"))
+            changed = int(raw.get("changed", -1))
+        except Exception:
+            return "could not read the form at the resolved point"
+        if changed < 0:
+            return "could not read the form's field values"
+        return verify_form_identity(identity, observation, changed_fields=changed)
 
     def _focused_element_call(
         self, js: str, *, arg: Any = None, with_arg: bool = False
@@ -2998,7 +3096,7 @@ class PlaywrightBackend:
         """Type through the pre-identity focused-element lease."""
 
         self._register_focused_field()
-        return self._act_guarded_keyboard(
+        receipt = self._act_guarded_keyboard(
             expected_frame_sha256=expected_frame_sha256,
             operation="guarded_dom_type",
             # Keys go through the leased element itself, never the page
@@ -3008,6 +3106,8 @@ class PlaywrightBackend:
                 or locator.press_sequentially(text, timeout=1000)
             ),
         )
+        self._snapshot_focused_field()
+        return receipt
 
     def _handle_screenshot_frame_lifecycle(self, _frame: Any = None) -> None:
         """Advance the irreversible frame-tree generation."""
@@ -3585,6 +3685,7 @@ class PlaywrightBackend:
         self._assert_qualification_environment_current()
         self._register_focused_field()
         self._deliver_text(text, lambda: self.page.keyboard.type(text))
+        self._snapshot_focused_field()
 
     def press(self, key: str) -> None:
         """Press a key or chord, e.g. ``'Enter'`` or ``'Meta+a'``."""
