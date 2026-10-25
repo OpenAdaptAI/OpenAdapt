@@ -1,5 +1,698 @@
 {
  "assumptions": "economic-comparison/2026-10-24.1",
+ "openemr": [
+  {
+   "arm": "openadapt-production-relabel",
+   "label": "3. OpenAdapt, Regulated + problems_only, durable, pipelined read-back, relabel repair (engine of measure/production-lifecycle; the API step is refused on this form, so the GUI save runs)",
+   "kind": "program",
+   "source": "lifecycle/results/production-2026-10-24/after",
+   "partial": false,
+   "items": 55,
+   "verified": 53,
+   "automated": 41,
+   "by_hand": 14,
+   "outcomes": {
+    "correct": 30,
+    "false_stop": 9,
+    "flagged_wrong": 2,
+    "right_stop": 10,
+    "stopped_saved": 1,
+    "data_stop": 2,
+    "fault_stop": 1
+   },
+   "silent_wrong": 0,
+   "false_stop": 9,
+   "false_stop_of": 35,
+   "drift_events": 1,
+   "median_s": 118.53,
+   "p90_s": 236.89,
+   "model_usd_total": 0.0,
+   "setup": {
+    "model_usd": 0.0,
+    "agent_min": 13.3,
+    "operator_min": 22.0,
+    "engineer_min": 30.0
+   },
+   "per_item": {
+    "model_usd": 0.0,
+    "compute_usd": 0.009216363636363637,
+    "operator_min": 2.1454545454545455
+   },
+   "per_change": {
+    "model_usd": 0.0,
+    "operator_min": 7.5,
+    "engineer_min": 0.0,
+    "fixes": 0
+   },
+   "per_item_cleanup_min": 0.0,
+   "totals": {
+    "10": {
+     "setup_usd": 61.0,
+     "per_item_usd": 10.82,
+     "ui_changes_usd": 0.15,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 71.97,
+     "people_min": 73.8,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 61.0,
+     "per_item_usd": 108.19,
+     "ui_changes_usd": 1.5,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 170.69,
+     "people_min": 269.5,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 61.0,
+     "per_item_usd": 1081.94,
+     "ui_changes_usd": 15.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 1157.94,
+     "people_min": 2227.5,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x0.5": {
+    "10": {
+     "setup_usd": 30.5,
+     "per_item_usd": 5.46,
+     "ui_changes_usd": 0.07,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 36.03,
+     "people_min": 36.9,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 30.5,
+     "per_item_usd": 54.56,
+     "ui_changes_usd": 0.75,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 85.81,
+     "people_min": 134.8,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 30.5,
+     "per_item_usd": 545.58,
+     "ui_changes_usd": 7.5,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 583.58,
+     "people_min": 1113.7,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x2": {
+    "10": {
+     "setup_usd": 122.0,
+     "per_item_usd": 21.55,
+     "ui_changes_usd": 0.3,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 143.85,
+     "people_min": 147.5,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 122.0,
+     "per_item_usd": 215.47,
+     "ui_changes_usd": 3.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 340.47,
+     "people_min": 539.1,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 122.0,
+     "per_item_usd": 2154.67,
+     "ui_changes_usd": 30.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 2306.67,
+     "people_min": 4454.9,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    }
+   }
+  },
+  {
+   "arm": "openadapt-production",
+   "label": "3 on main. Same configuration, current main's engine (the run was stopped at 27 items)",
+   "kind": "program",
+   "source": "lifecycle/results/production-2026-10-24/before",
+   "partial": true,
+   "items": 27,
+   "verified": 27,
+   "automated": 4,
+   "by_hand": 23,
+   "outcomes": {
+    "false_stop": 19,
+    "data_stop": 3,
+    "right_stop": 4,
+    "fault_stop": 1
+   },
+   "silent_wrong": 0,
+   "false_stop": 19,
+   "false_stop_of": 20,
+   "drift_events": 1,
+   "median_s": 226.86,
+   "p90_s": 226.94,
+   "model_usd_total": 0.0,
+   "setup": {
+    "model_usd": 0.0,
+    "agent_min": 13.4,
+    "operator_min": 22.0,
+    "engineer_min": 30.0
+   },
+   "per_item": {
+    "model_usd": 0.0,
+    "compute_usd": 0.011818518518518518,
+    "operator_min": 4.555555555555555
+   },
+   "per_change": {
+    "model_usd": 0.0,
+    "operator_min": 0.0,
+    "engineer_min": 0.0,
+    "fixes": 0
+   },
+   "per_item_cleanup_min": 0.0,
+   "totals": {
+    "10": {
+     "setup_usd": 61.0,
+     "per_item_usd": 22.9,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 83.9,
+     "people_min": 97.6,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 61.0,
+     "per_item_usd": 228.96,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 289.96,
+     "people_min": 507.6,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 61.0,
+     "per_item_usd": 2289.6,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 2350.6,
+     "people_min": 4607.6,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x0.5": {
+    "10": {
+     "setup_usd": 30.5,
+     "per_item_usd": 11.51,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 42.01,
+     "people_min": 48.8,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 30.5,
+     "per_item_usd": 115.07,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 145.57,
+     "people_min": 253.8,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 30.5,
+     "per_item_usd": 1150.71,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 1181.21,
+     "people_min": 2303.8,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x2": {
+    "10": {
+     "setup_usd": 122.0,
+     "per_item_usd": 45.67,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 167.67,
+     "people_min": 195.1,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 122.0,
+     "per_item_usd": 456.74,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 578.74,
+     "people_min": 1015.1,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 122.0,
+     "per_item_usd": 4567.37,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 4689.37,
+     "people_min": 9215.1,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    }
+   }
+  },
+  {
+   "arm": "agent_tools",
+   "label": "1. Agent with structured tools and REST read-back (Claude Sonnet 5.5)",
+   "kind": "agent",
+   "source": "lifecycle/results/economics-2026-10-24/agent_tools",
+   "partial": false,
+   "items": 55,
+   "verified": 55,
+   "automated": 49,
+   "by_hand": 6,
+   "outcomes": {
+    "correct": 39,
+    "right_stop": 10,
+    "false_stop": 5,
+    "data_stop": 1
+   },
+   "silent_wrong": 0,
+   "false_stop": 5,
+   "false_stop_of": 35,
+   "drift_events": 1,
+   "median_s": 24.27,
+   "p90_s": 27.8,
+   "model_usd_total": 2.7678,
+   "setup": {
+    "model_usd": 0.0,
+    "agent_min": 0.0,
+    "operator_min": 0.0,
+    "engineer_min": 60.0
+   },
+   "per_item": {
+    "model_usd": 0.05032363636363636,
+    "compute_usd": 0.0015454545454545456,
+    "operator_min": 0.9090909090909091
+   },
+   "per_change": {
+    "model_usd": 0.0,
+    "operator_min": 0.0,
+    "engineer_min": 0.0,
+    "fixes": 0
+   },
+   "per_item_cleanup_min": 0.0,
+   "totals": {
+    "10": {
+     "setup_usd": 100.0,
+     "per_item_usd": 5.06,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 105.06,
+     "people_min": 69.1,
+     "model_usd": 0.5,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 100.0,
+     "per_item_usd": 50.64,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 150.64,
+     "people_min": 150.9,
+     "model_usd": 5.03,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 100.0,
+     "per_item_usd": 506.41,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 606.41,
+     "people_min": 969.1,
+     "model_usd": 50.32,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x0.5": {
+    "10": {
+     "setup_usd": 50.0,
+     "per_item_usd": 2.79,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 52.79,
+     "people_min": 34.5,
+     "model_usd": 0.5,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 50.0,
+     "per_item_usd": 27.91,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 77.91,
+     "people_min": 75.5,
+     "model_usd": 5.03,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 50.0,
+     "per_item_usd": 279.14,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 329.14,
+     "people_min": 484.5,
+     "model_usd": 50.32,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x2": {
+    "10": {
+     "setup_usd": 200.0,
+     "per_item_usd": 9.61,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 209.61,
+     "people_min": 138.2,
+     "model_usd": 0.5,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 200.0,
+     "per_item_usd": 96.1,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 296.1,
+     "people_min": 301.8,
+     "model_usd": 5.03,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 200.0,
+     "per_item_usd": 960.96,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 1160.96,
+     "people_min": 1938.2,
+     "model_usd": 50.32,
+     "silent_wrong_expected": 0.0
+    }
+   }
+  },
+  {
+   "arm": "agent_script",
+   "label": "2. (hung after 16 items) Agent-written Playwright + REST script with read-back and duplicate check, agent-maintained (Claude Sonnet 5.5)",
+   "kind": "script",
+   "source": "lifecycle/results/economics-2026-10-24/agent_script",
+   "partial": true,
+   "items": 16,
+   "verified": 16,
+   "automated": 7,
+   "by_hand": 9,
+   "outcomes": {
+    "false_stop": 7,
+    "correct": 5,
+    "data_stop": 1,
+    "right_stop": 2,
+    "fault_stop": 1
+   },
+   "silent_wrong": 0,
+   "false_stop": 7,
+   "false_stop_of": 12,
+   "drift_events": 0,
+   "median_s": 5.32,
+   "p90_s": 6.56,
+   "model_usd_total": 0.8569,
+   "setup": {
+    "model_usd": 0.8569,
+    "agent_min": 2.6,
+    "operator_min": 0.0,
+    "engineer_min": 70.0,
+    "debug_fixes": 4
+   },
+   "per_item": {
+    "model_usd": 0.0,
+    "compute_usd": 0.000525,
+    "operator_min": 2.4375
+   },
+   "per_change": {
+    "model_usd": 0.0,
+    "operator_min": 0.0,
+    "engineer_min": 0.0,
+    "fixes": 0,
+    "not_measured": true
+   },
+   "per_item_cleanup_min": 0.0,
+   "totals": {
+    "10": {
+     "setup_usd": 117.52,
+     "per_item_usd": 12.19,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 129.72,
+     "people_min": 94.4,
+     "model_usd": 0.86,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 117.52,
+     "per_item_usd": 121.93,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 239.45,
+     "people_min": 313.8,
+     "model_usd": 0.86,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 117.52,
+     "per_item_usd": 1219.28,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 1336.8,
+     "people_min": 2507.5,
+     "model_usd": 0.86,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x0.5": {
+    "10": {
+     "setup_usd": 59.19,
+     "per_item_usd": 6.1,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 65.29,
+     "people_min": 47.2,
+     "model_usd": 0.86,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 59.19,
+     "per_item_usd": 60.99,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 120.18,
+     "people_min": 156.9,
+     "model_usd": 0.86,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 59.19,
+     "per_item_usd": 609.9,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 669.09,
+     "people_min": 1253.8,
+     "model_usd": 0.86,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x2": {
+    "10": {
+     "setup_usd": 234.19,
+     "per_item_usd": 24.38,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 258.57,
+     "people_min": 188.8,
+     "model_usd": 0.86,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 234.19,
+     "per_item_usd": 243.8,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 477.99,
+     "people_min": 627.5,
+     "model_usd": 0.86,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 234.19,
+     "per_item_usd": 2438.03,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 2672.22,
+     "people_min": 5015.0,
+     "model_usd": 0.86,
+     "silent_wrong_expected": 0.0
+    }
+   }
+  },
+  {
+   "arm": "all_manual",
+   "label": "Reference: a person enters every item (cost model V1)",
+   "kind": "manual",
+   "source": "cost model",
+   "partial": false,
+   "items": null,
+   "verified": null,
+   "automated": 0,
+   "by_hand": null,
+   "outcomes": {},
+   "silent_wrong": 0,
+   "false_stop": null,
+   "false_stop_of": null,
+   "drift_events": 0,
+   "median_s": 210.0,
+   "p90_s": null,
+   "model_usd_total": 0.0,
+   "setup": {
+    "model_usd": 0.0,
+    "agent_min": 0.0,
+    "operator_min": 0.0,
+    "engineer_min": 0.0
+   },
+   "per_item": {
+    "model_usd": 0.0,
+    "compute_usd": 0.0,
+    "operator_min": 3.5
+   },
+   "per_change": {
+    "model_usd": 0.0,
+    "operator_min": 0.0,
+    "engineer_min": 0.0,
+    "fixes": 0
+   },
+   "per_item_cleanup_min": 0.0,
+   "totals": {
+    "10": {
+     "setup_usd": 0.0,
+     "per_item_usd": 17.5,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 17.5,
+     "people_min": 35.0,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 0.0,
+     "per_item_usd": 175.0,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 175.0,
+     "people_min": 350.0,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 0.0,
+     "per_item_usd": 1750.0,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 1750.0,
+     "people_min": 3500.0,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x0.5": {
+    "10": {
+     "setup_usd": 0.0,
+     "per_item_usd": 8.75,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 8.75,
+     "people_min": 17.5,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 0.0,
+     "per_item_usd": 87.5,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 87.5,
+     "people_min": 175.0,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 0.0,
+     "per_item_usd": 875.0,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 875.0,
+     "people_min": 1750.0,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    }
+   },
+   "totals_people_x2": {
+    "10": {
+     "setup_usd": 0.0,
+     "per_item_usd": 35.0,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 35.0,
+     "people_min": 70.0,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "100": {
+     "setup_usd": 0.0,
+     "per_item_usd": 350.0,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 350.0,
+     "people_min": 700.0,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    },
+    "1000": {
+     "setup_usd": 0.0,
+     "per_item_usd": 3500.0,
+     "ui_changes_usd": 0.0,
+     "silent_wrong_cleanup_usd": 0.0,
+     "total_usd": 3500.0,
+     "people_min": 7000.0,
+     "model_usd": 0.0,
+     "silent_wrong_expected": 0.0
+    }
+   }
+  }
+ ],
  "mockmed": [
   {
    "arm": "cua_alone",
@@ -377,8 +1070,8 @@
     "stopped_when_no_save_possible": 5,
     "model_usd_total": 1.4546,
     "model_calls_total": 756,
-    "control_median_s": 12.12,
-    "control_median_host_load": 149.6,
+    "control_median_s": 13.66,
+    "control_median_host_load": 15.4,
     "control_model_usd_per_item": 0.01318
    },
    "setup": {
@@ -737,8 +1430,8 @@
     "stopped_when_no_save_possible": 5,
     "model_usd_total": 0.264,
     "model_calls_total": 36,
-    "control_median_s": 0.89,
-    "control_median_host_load": 77.2,
+    "control_median_s": 0.8,
+    "control_median_host_load": 5.7,
     "control_model_usd_per_item": 0.0
    },
    "setup": {
@@ -1097,8 +1790,8 @@
     "stopped_when_no_save_possible": 5,
     "model_usd_total": 0.0,
     "model_calls_total": 0,
-    "control_median_s": 26.68,
-    "control_median_host_load": 238.6,
+    "control_median_s": 7.31,
+    "control_median_host_load": 7.5,
     "control_model_usd_per_item": 0.0
    },
    "setup": {
@@ -2162,5 +2855,9 @@
    }
   }
  ],
- "mockmed_missing": []
+ "mockmed_missing": [],
+ "openemr_missing": [
+  "human_script",
+  "cua_alone"
+ ]
 }

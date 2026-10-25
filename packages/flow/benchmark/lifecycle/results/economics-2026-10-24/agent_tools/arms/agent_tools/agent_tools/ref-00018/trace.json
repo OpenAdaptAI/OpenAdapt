@@ -1,0 +1,231 @@
+[
+ {
+  "turn": 1,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "find_patients",
+    "input": {
+     "lname": "Caldford"
+    }
+   },
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "[]",
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}, {\"ref\": \"10\", \"text\": \"Rafael Hartton (28)\", \"id\": null}, {\"ref\": \"11\", \"text\": \"Close Patient Chart\", \"id\": null}, {\"ref\": \"12\", \"text\": \"Visit History\", \"id\": null}, {\"ref\": \"13\", \"text\": \"Select Encounter\\u00a0 (0)\", \"id\": \"pastEncounters\"}, {\"ref\": \"14\", \"text\": \"New Encounter\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"15\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Unassigned\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"16\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"17\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"19\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"20\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"21\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"22\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"23\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"24\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"25\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Unassigned\", \"options\""
+  ]
+ },
+ {
+  "turn": 2,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "15",
+     "value": "Mr."
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "16",
+     "value": "Wen"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "18",
+     "value": "Caldford"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "24",
+     "value": "1993-11-19"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "25",
+     "value": "Male"
+    }
+   },
+   {
+    "name": "click",
+    "input": {
+     "ref": "42"
+    }
+   }
+  ],
+  "results": [
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "clicked; call read_screen to see the result"
+  ]
+ },
+ {
+  "turn": 3,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}, {\"ref\": \"10\", \"text\": \"Rafael Hartton (28)\", \"id\": null}, {\"ref\": \"11\", \"text\": \"Close Patient Chart\", \"id\": null}, {\"ref\": \"12\", \"text\": \"Visit History\", \"id\": null}, {\"ref\": \"13\", \"text\": \"Select Encounter\\u00a0 (0)\", \"id\": \"pastEncounters\"}, {\"ref\": \"14\", \"text\": \"New Encounter\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"15\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Mr.\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"16\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"Wen\"}, {\"ref\": \"17\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"Caldford\"}, {\"ref\": \"19\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"20\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"21\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"22\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"23\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"24\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"1993-11-19\"}, {\"ref\": \"25\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Male\", \""
+  ]
+ },
+ {
+  "turn": 4,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "40",
+     "value": "419 Orchard Lane Harbor"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "42",
+     "value": "Exampleton"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "43",
+     "value": "Massachusetts"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "44",
+     "value": "02139"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "45",
+     "value": "USA"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "50",
+     "value": "555-0168"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "53",
+     "value": "wen.caldford.18@example.invalid"
+    }
+   },
+   {
+    "name": "click",
+    "input": {
+     "ref": "68"
+    }
+   }
+  ],
+  "results": [
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "clicked; call read_screen to see the result"
+  ]
+ },
+ {
+  "turn": 5,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}, {\"ref\": \"10\", \"text\": \"Rafael Hartton (28)\", \"id\": null}, {\"ref\": \"11\", \"text\": \"Close Patient Chart\", \"id\": null}, {\"ref\": \"12\", \"text\": \"Visit History\", \"id\": null}, {\"ref\": \"13\", \"text\": \"Select Encounter\\u00a0 (0)\", \"id\": \"pastEncounters\"}, {\"ref\": \"14\", \"text\": \"New Encounter\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"15\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Mr.\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"16\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"Wen\"}, {\"ref\": \"17\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"Caldford\"}, {\"ref\": \"19\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"20\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"21\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"22\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"23\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"24\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"1993-11-19\"}, {\"ref\": \"25\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Male\", \""
+  ]
+ },
+ {
+  "turn": 6,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "find_patients",
+    "input": {
+     "fname": "Wen"
+    }
+   },
+   {
+    "name": "find_patients",
+    "input": {
+     "DOB": "1993-11-19"
+    }
+   }
+  ],
+  "results": [
+   "[]",
+   "[]"
+  ]
+ },
+ {
+  "turn": 7,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "69"
+    }
+   },
+   {
+    "name": "find_patients",
+    "input": {
+     "lname": "Caldford"
+    }
+   }
+  ],
+  "results": [
+   "clicked; call read_screen to see the result",
+   "[{\"uuid\": \"a30fd8da-3591-4e47-bffe-464b62a0e304\", \"pid\": 29, \"title\": \"Mr.\", \"fname\": \"Wen\", \"lname\": \"Caldford\", \"DOB\": \"1993-11-19\", \"sex\": \"Male\", \"street\": \"419 ORCHARD LANE HARBOR\", \"city\": \"EXAMPLETON\", \"state\": \"MA\", \"postal_code\": \"02139\", \"phone_home\": \"555-0168\", \"email\": \"wen.caldford.18@example.invalid\"}]"
+  ]
+ },
+ {
+  "turn": 8,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "finish",
+    "input": {
+     "result": "SAVED",
+     "reason": "No existing chart matched before saving. Created one new chart for Wen Caldford (pid 29) and confirmed it with find_patients."
+    }
+   }
+  ]
+ }
+]

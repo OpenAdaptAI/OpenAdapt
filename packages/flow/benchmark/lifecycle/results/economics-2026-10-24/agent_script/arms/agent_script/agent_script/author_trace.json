@@ -1,0 +1,101 @@
+{
+ "trace": [
+  {
+   "turn": 1,
+   "stop": "tool_use",
+   "tools": [
+    "read_screen"
+   ]
+  },
+  {
+   "turn": 2,
+   "stop": "tool_use",
+   "tools": [
+    "dry_run"
+   ]
+  },
+  {
+   "turn": 3,
+   "stop": "tool_use",
+   "tools": [
+    "dry_run",
+    "find_patients"
+   ]
+  },
+  {
+   "turn": 4,
+   "stop": "tool_use",
+   "tools": [
+    "dry_run"
+   ]
+  },
+  {
+   "turn": 5,
+   "stop": "tool_use",
+   "tools": [
+    "find_patients"
+   ]
+  },
+  {
+   "turn": 6,
+   "stop": "tool_use",
+   "tools": [
+    "dry_run"
+   ]
+  },
+  {
+   "turn": 7,
+   "stop": "tool_use",
+   "tools": [
+    "dry_run"
+   ]
+  },
+  {
+   "turn": 8,
+   "stop": "tool_use",
+   "tools": [
+    "dry_run"
+   ]
+  },
+  {
+   "turn": 9,
+   "stop": "tool_use",
+   "tools": [
+    "submit"
+   ]
+  }
+ ],
+ "dry_runs": [
+  {
+   "result": "ERROR",
+   "reason": "rejected: attribute __name__ is not allowed",
+   "save_requests_blocked": 0
+  },
+  {
+   "result": "NOT SAVED",
+   "reason": "DRY RUN reached confirm",
+   "save_requests_blocked": 0
+  },
+  {
+   "result": "NOT SAVED",
+   "reason": "probe",
+   "save_requests_blocked": 0
+  },
+  {
+   "result": "NOT SAVED",
+   "reason": "probe",
+   "save_requests_blocked": 0
+  },
+  {
+   "result": "NOT SAVED",
+   "reason": "UNEXPECTED: duplicate-check popup with confirm button not found.",
+   "save_requests_blocked": 0
+  },
+  {
+   "result": "NOT SAVED",
+   "reason": "DRY RUN reached confirm",
+   "save_requests_blocked": 0
+  }
+ ],
+ "error": ""
+}

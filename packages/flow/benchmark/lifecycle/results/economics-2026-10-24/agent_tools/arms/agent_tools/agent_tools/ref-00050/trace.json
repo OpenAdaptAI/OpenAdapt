@@ -1,0 +1,271 @@
+[
+ {
+  "turn": 1,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "find_patients",
+    "input": {
+     "lname": "Jesswick"
+    }
+   },
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "[{\"uuid\": \"a30fdd35-60ae-4923-8532-e28574084eba\", \"pid\": 54, \"title\": \"Mrs.\", \"fname\": \"Leilani\", \"lname\": \"Jesswick\", \"DOB\": \"1962-11-16\", \"sex\": \"Female\", \"street\": \"150 BEACON TERRACE STATION\", \"city\": \"EXAMPLETON\", \"state\": \"MA\", \"postal_code\": \"02139\", \"phone_home\": \"555-0159\", \"email\": \"leilani.jesswick.48@example.invalid\"}]",
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}, {\"ref\": \"10\", \"text\": \"Leilani Jesswick (54)\", \"id\": null}, {\"ref\": \"11\", \"text\": \"Close Patient Chart\", \"id\": null}, {\"ref\": \"12\", \"text\": \"Visit History\", \"id\": null}, {\"ref\": \"13\", \"text\": \"Select Encounter\\u00a0 (0)\", \"id\": \"pastEncounters\"}, {\"ref\": \"14\", \"text\": \"New Encounter\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"15\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Unassigned\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"16\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"17\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"19\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"20\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"21\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"22\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"23\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"24\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"25\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Unassigned\", \"option"
+  ]
+ },
+ {
+  "turn": 2,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "find_patients",
+    "input": {
+     "fname": "Oren"
+    }
+   }
+  ],
+  "results": [
+   "[{\"uuid\": \"a30fd65e-e05f-4dfb-9f11-7bb9d030d143\", \"pid\": 8, \"title\": \"Ms.\", \"fname\": \"Oren\", \"lname\": \"Jessmere\", \"DOB\": \"1950-09-14\", \"sex\": \"Female\", \"street\": \"86 AVENUE MILL ROAD\", \"city\": \"EXAMPLETON\", \"state\": \"MA\", \"postal_code\": \"02139\", \"phone_home\": \"555-0162\", \"email\": \"oren.jessmere.9007@example.invalid\"}, {\"uuid\": \"a30fd987-bd95-4247-b117-ea35373b4584\", \"pid\": 33, \"title\": \"Mrs.\", \"fname\": \"Soren\", \"lname\": \"Thornford\", \"DOB\": \"1992-03-14\", \"sex\": \"Female\", \"street\": \"64 ORCHARD LANE HARBOR\", \"city\": \"EXAMPLETON\", \"state\": \"MA\", \"postal_code\": \"02139\", \"phone_home\": \"555-0140\", \"email\": \"soren.thornford.23@example.invalid\"}, {\"uuid\": \"a30fdb4f-00b8-4d80-9ea1-55aa8ad2a694\", \"pid\": 45, \"title\": \"Mrs.\", \"fname\": \"Soren\", \"lname\": \"Oakcombe\", \"DOB\": \"1942-02-22\", \"sex\": \"Female\", \"street\": \"432 ORCHARD LANE HARBOR\", \"city\": \"EXAMPLETON\", \"state\": \"MA\", \"postal_code\": \"02139\", \"phone_home\": \"555-0176\", \"email\": \"soren.oakcombe.37@example.invalid\"}]"
+  ]
+ },
+ {
+  "turn": 3,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "15",
+     "value": "Mr."
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "16",
+     "value": "Oren"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "18",
+     "value": "Jesswick"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "24",
+     "value": "1961-04-03"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "25",
+     "value": "Male"
+    }
+   },
+   {
+    "name": "click",
+    "input": {
+     "ref": "42"
+    }
+   }
+  ],
+  "results": [
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "Error: Locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator(\"[data-ar=\\\"42\\\"]\").first\n    - locator resolved to <button data-ar=\"42\" type=\"button\" aria-controls=\"2\" data-target=\"#div_2\" aria-expanded=\"true\" data-toggle=\"collapse\" class=\"btn btn-link btn-block text-light text-left\">Contact</button>\n  - attempting click action\n    - waiting for element to be visible, enabled an"
+  ]
+ },
+ {
+  "turn": 4,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}, {\"ref\": \"10\", \"text\": \"Leilani Jesswick (54)\", \"id\": null}, {\"ref\": \"11\", \"text\": \"Close Patient Chart\", \"id\": null}, {\"ref\": \"12\", \"text\": \"Visit History\", \"id\": null}, {\"ref\": \"13\", \"text\": \"Select Encounter\\u00a0 (0)\", \"id\": \"pastEncounters\"}, {\"ref\": \"14\", \"text\": \"New Encounter\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"15\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Mr.\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"16\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"Oren\"}, {\"ref\": \"17\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"Jesswick\"}, {\"ref\": \"19\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"20\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"21\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"22\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"23\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"24\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"1961-04-03\"}, {\"ref\": \"25\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Male\""
+  ]
+ },
+ {
+  "turn": 5,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "click_text",
+    "input": {
+     "text": "Contact"
+    }
+   },
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "Error: \"no visible element with the text 'Contact'\"",
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}, {\"ref\": \"10\", \"text\": \"Leilani Jesswick (54)\", \"id\": null}, {\"ref\": \"11\", \"text\": \"Close Patient Chart\", \"id\": null}, {\"ref\": \"12\", \"text\": \"Visit History\", \"id\": null}, {\"ref\": \"13\", \"text\": \"Select Encounter\\u00a0 (0)\", \"id\": \"pastEncounters\"}, {\"ref\": \"14\", \"text\": \"New Encounter\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"15\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Mr.\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"16\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"Oren\"}, {\"ref\": \"17\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"Jesswick\"}, {\"ref\": \"19\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"20\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"21\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"22\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"23\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"24\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"1961-04-03\"}, {\"ref\": \"25\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Male\""
+  ]
+ },
+ {
+  "turn": 6,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "51"
+    }
+   },
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "clicked; call read_screen to see the result",
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}, {\"ref\": \"10\", \"text\": \"Leilani Jesswick (54)\", \"id\": null}, {\"ref\": \"11\", \"text\": \"Close Patient Chart\", \"id\": null}, {\"ref\": \"12\", \"text\": \"Visit History\", \"id\": null}, {\"ref\": \"13\", \"text\": \"Select Encounter\\u00a0 (0)\", \"id\": \"pastEncounters\"}, {\"ref\": \"14\", \"text\": \"New Encounter\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"15\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Mr.\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"16\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"Oren\"}, {\"ref\": \"17\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"Jesswick\"}, {\"ref\": \"19\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"20\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"21\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"22\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"23\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"24\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"1961-04-03\"}, {\"ref\": \"25\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Male\""
+  ]
+ },
+ {
+  "turn": 7,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "42"
+    }
+   },
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "Error: Locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator(\"[data-ar=\\\"42\\\"]\").first\n    - locator resolved to <button data-ar=\"42\" type=\"button\" aria-controls=\"2\" data-target=\"#div_2\" aria-expanded=\"true\" data-toggle=\"collapse\" class=\"btn btn-link btn-block text-light text-left\">Contact</button>\n  - attempting click action\n    - waiting for element to be visible, enabled an",
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}, {\"ref\": \"10\", \"text\": \"Leilani Jesswick (54)\", \"id\": null}, {\"ref\": \"11\", \"text\": \"Close Patient Chart\", \"id\": null}, {\"ref\": \"12\", \"text\": \"Visit History\", \"id\": null}, {\"ref\": \"13\", \"text\": \"Select Encounter\\u00a0 (0)\", \"id\": \"pastEncounters\"}, {\"ref\": \"14\", \"text\": \"New Encounter\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"15\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Mr.\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"16\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"Oren\"}, {\"ref\": \"17\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"Jesswick\"}, {\"ref\": \"19\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"20\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"21\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"22\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"23\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"24\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"1961-04-03\"}, {\"ref\": \"25\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Male\""
+  ]
+ },
+ {
+  "turn": 8,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "40"
+    }
+   },
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "Error: Locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator(\"[data-ar=\\\"40\\\"]\").first\n    - locator resolved to <button data-ar=\"40\" type=\"button\" aria-controls=\"1\" data-target=\"#div_1\" aria-expanded=\"true\" data-toggle=\"collapse\" class=\"btn btn-link btn-block text-light text-left\">Who</button>\n  - attempting click action\n    2 \u00d7 waiting for element to be visible, enabled and ",
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}, {\"ref\": \"10\", \"text\": \"Leilani Jesswick (54)\", \"id\": null}, {\"ref\": \"11\", \"text\": \"Close Patient Chart\", \"id\": null}, {\"ref\": \"12\", \"text\": \"Visit History\", \"id\": null}, {\"ref\": \"13\", \"text\": \"Select Encounter\\u00a0 (0)\", \"id\": \"pastEncounters\"}, {\"ref\": \"14\", \"text\": \"New Encounter\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"15\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Mr.\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"16\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"Oren\"}, {\"ref\": \"17\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"Jesswick\"}, {\"ref\": \"19\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"20\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"21\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"22\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"23\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"24\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"1961-04-03\"}, {\"ref\": \"25\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Male\""
+  ]
+ },
+ {
+  "turn": 9,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "click_text",
+    "input": {
+     "text": "Cancel"
+    }
+   },
+   {
+    "name": "click",
+    "input": {
+     "ref": "42"
+    }
+   }
+  ],
+  "results": [
+   "clicked; call read_screen to see the result",
+   "Error: Locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator(\"[data-ar=\\\"42\\\"]\").first\n    - locator resolved to <button data-ar=\"42\" type=\"button\" aria-controls=\"2\" data-target=\"#div_2\" aria-expanded=\"true\" data-toggle=\"collapse\" class=\"btn btn-link btn-block text-light text-left\">Contact</button>\n  - attempting click action\n    2 \u00d7 waiting for element to be visible, enabled "
+  ]
+ },
+ {
+  "turn": 10,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "2"
+    }
+   },
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "Error: Locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator(\"[data-ar=\\\"2\\\"]\").first\n    - locator resolved to <div data-ar=\"2\" role=\"button\" aria-haspopup=\"true\" aria-expanded=\"false\" data-bind=\"text:label\" data-toggle=\"dropdown\" class=\"menuLabel px-1 dropdown-toggle oe-dropdown-toggle\">Patient</div>\n  - attempting click action\n    2 \u00d7 waiting for element to be visible, enab",
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}, {\"ref\": \"10\", \"text\": \"Leilani Jesswick (54)\", \"id\": null}, {\"ref\": \"11\", \"text\": \"Close Patient Chart\", \"id\": null}, {\"ref\": \"12\", \"text\": \"Visit History\", \"id\": null}, {\"ref\": \"13\", \"text\": \"Select Encounter\\u00a0 (0)\", \"id\": \"pastEncounters\"}, {\"ref\": \"14\", \"text\": \"New Encounter\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"15\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Mr.\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"16\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"Oren\"}, {\"ref\": \"17\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"Jesswick\"}, {\"ref\": \"19\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"20\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"21\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"22\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"23\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"24\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"1961-04-03\"}, {\"ref\": \"25\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Male\""
+  ]
+ },
+ {
+  "turn": 11,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "49"
+    }
+   }
+  ],
+  "results": [
+   "Error: Locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator(\"[data-ar=\\\"49\\\"]\").first\n    - locator resolved to <button id=\"create\" data-ar=\"49\" type=\"button\" name=\"create\" value=\"Create New Patient\" class=\"btn btn-primary btn-save\">\u21b5                        Create New Patient      \u2026</button>\n  - attempting click action\n    2 \u00d7 waiting for element to be visible, enabled and st"
+  ]
+ },
+ {
+  "turn": 12,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "find_patients",
+    "input": {
+     "fname": "Oren",
+     "lname": "Jesswick"
+    }
+   }
+  ],
+  "results": [
+   "[]"
+  ]
+ },
+ {
+  "turn": 13,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "finish",
+    "input": {
+     "result": "NOT SAVED",
+     "reason": "No existing chart matched Oren Jesswick. The only other Jesswick is Leilani, a different person. I filled in name, title, DOB and sex. After that the OpenEMR page stopped responding. The Contact section, Create button and menus all timed out as not visible, so I couldn't enter the address and phone or save. A final search shows no chart for Oren Jesswick, so no chart was created."
+    }
+   }
+  ]
+ }
+]

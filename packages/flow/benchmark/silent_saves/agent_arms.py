@@ -114,7 +114,9 @@ class _Browser:
         self._pw = sync_playwright().start()
         self.browser = self._pw.chromium.launch(headless=True)
 
-    def page(self, url: str, *, block_save: bool = False) -> tuple[Any, Any, dict[str, int]]:
+    def page(
+        self, url: str, *, block_save: bool = False
+    ) -> tuple[Any, Any, dict[str, int]]:
         ctx = self.browser.new_context(viewport={"width": 1280, "height": 800})
         ctx.set_default_timeout(5000)
         blocked = {"n": 0}
@@ -142,8 +144,14 @@ def _screen(page: Any) -> dict[str, Any]:
     return page.evaluate(READ_JS)
 
 
-def _call(client: Any, meter: budget.Meter, system: str, tools: list[dict[str, Any]],
-          messages: list[dict[str, Any]], max_tokens: int = 8000) -> Any:
+def _call(
+    client: Any,
+    meter: budget.Meter,
+    system: str,
+    tools: list[dict[str, Any]],
+    messages: list[dict[str, Any]],
+    max_tokens: int = 8000,
+) -> Any:
     approx_in = 2000 + sum(len(json.dumps(m, default=str)) for m in messages) // 3
     meter.before_call(MODEL, budget.max_call_usd(MODEL, approx_in, max_tokens))
     response = client.messages.create(
@@ -179,18 +187,54 @@ not there, the type is not offered), do not guess: report saved=false.
 Call finish exactly once."""
 
 AGENT_TOOLS: list[dict[str, Any]] = [
-    {"name": "read_screen", "description": "List the page's visible controls, buttons and text, with a ref for each control.",
-     "input_schema": {"type": "object", "properties": {}, "additionalProperties": False}},
-    {"name": "click", "description": "Click a button or link by its ref.",
-     "input_schema": {"type": "object", "properties": {"ref": {"type": "string"}}, "required": ["ref"], "additionalProperties": False}},
-    {"name": "fill", "description": "Set a text field or text area (by ref) to exactly this text.",
-     "input_schema": {"type": "object", "properties": {"ref": {"type": "string"}, "text": {"type": "string"}},
-                      "required": ["ref", "text"], "additionalProperties": False}},
-    {"name": "read_records", "description": "Read every saved encounter from the system of record (GET /api/db).",
-     "input_schema": {"type": "object", "properties": {}, "additionalProperties": False}},
-    {"name": "finish", "description": "Report the outcome once, at the end.",
-     "input_schema": {"type": "object", "properties": {"saved": {"type": "boolean"}, "summary": {"type": "string"}},
-                      "required": ["saved", "summary"], "additionalProperties": False}},
+    {
+        "name": "read_screen",
+        "description": "List the page's visible controls, buttons and text, with a ref for each control.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "click",
+        "description": "Click a button or link by its ref.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"ref": {"type": "string"}},
+            "required": ["ref"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "fill",
+        "description": "Set a text field or text area (by ref) to exactly this text.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"ref": {"type": "string"}, "text": {"type": "string"}},
+            "required": ["ref", "text"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "read_records",
+        "description": "Read every saved encounter from the system of record (GET /api/db).",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "finish",
+        "description": "Report the outcome once, at the end.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"saved": {"type": "boolean"}, "summary": {"type": "string"}},
+            "required": ["saved", "summary"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 
@@ -206,40 +250,81 @@ class AgentTools:
         self._b = _Browser()
 
     def run(self, task: Task) -> Report:
-        meter = budget.Meter(f"silent-saves agent-tools item {task.item}", self.item_budget_usd)
+        meter = budget.Meter(
+            f"silent-saves agent-tools item {task.item}", self.item_budget_usd
+        )
         ctx, page, _ = self._b.page(task.url)
         origin = _origin(task.url)
         trace: list[dict[str, Any]] = []
         try:
             client = budget.client(MODEL)
-            messages: list[dict[str, Any]] = [{"role": "user", "content": (
-                f"Task: {task.instruction}\n\n" + API_DOC.format(origin="the app"))}]
+            messages: list[dict[str, Any]] = [
+                {
+                    "role": "user",
+                    "content": (
+                        f"Task: {task.instruction}\n\n"
+                        + API_DOC.format(origin="the app")
+                    ),
+                }
+            ]
             for turn in range(1, self.max_turns + 1):
                 try:
-                    response = _call(client, meter, TOOLS_SYSTEM, AGENT_TOOLS, messages, 4000)
+                    response = _call(
+                        client, meter, TOOLS_SYSTEM, AGENT_TOOLS, messages, 4000
+                    )
                 except budget.ItemBudgetExceeded as exc:
                     return self._report(False, f"item budget: {exc}", meter, trace)
                 messages.append({"role": "assistant", "content": response.content})
                 uses = [b for b in response.content if b.type == "tool_use"]
-                trace.append({"turn": turn, "calls": [{"name": b.name, "input": b.input} for b in uses]})
+                trace.append(
+                    {
+                        "turn": turn,
+                        "calls": [{"name": b.name, "input": b.input} for b in uses],
+                    }
+                )
                 if not uses:
-                    messages.append({"role": "user", "content": "Call finish to report the outcome."})
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": "Call finish to report the outcome.",
+                        }
+                    )
                     continue
                 results = []
                 for b in uses:
                     if b.name == "finish":
-                        return self._report(bool(b.input.get("saved")), str(b.input.get("summary", "")), meter, trace)
+                        return self._report(
+                            bool(b.input.get("saved")),
+                            str(b.input.get("summary", "")),
+                            meter,
+                            trace,
+                        )
                     try:
                         out = self._tool(page, origin, b.name, dict(b.input))
-                        results.append({"type": "tool_result", "tool_use_id": b.id,
-                                        "content": json.dumps(out, default=str)[:12000]})
+                        results.append(
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": b.id,
+                                "content": json.dumps(out, default=str)[:12000],
+                            }
+                        )
                     except Exception as exc:  # noqa: BLE001 - the agent sees the error
-                        results.append({"type": "tool_result", "tool_use_id": b.id,
-                                        "content": f"Error: {exc}"[:400], "is_error": True})
+                        results.append(
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": b.id,
+                                "content": f"Error: {exc}"[:400],
+                                "is_error": True,
+                            }
+                        )
                 messages.append({"role": "user", "content": results})
-            return self._report(False, f"no finish within {self.max_turns} turns", meter, trace)
+            return self._report(
+                False, f"no finish within {self.max_turns} turns", meter, trace
+            )
         finally:
-            (task.work_dir / "agent-trace.json").write_text(json.dumps(trace, default=str, indent=1))
+            (task.work_dir / "agent-trace.json").write_text(
+                json.dumps(trace, default=str, indent=1)
+            )
             ctx.close()
 
     def _tool(self, page: Any, origin: str, name: str, args: dict[str, Any]) -> Any:
@@ -257,9 +342,16 @@ class AgentTools:
             return "filled"
         raise ValueError(f"unknown tool {name}")
 
-    def _report(self, saved: bool, text: str, meter: budget.Meter, trace: list[Any]) -> Report:
-        return Report(saved, final_text=text[:2000], model_calls=meter.calls,
-                      cost_usd=round(meter.usd, 6), extra={"turns": len(trace), "model": MODEL})
+    def _report(
+        self, saved: bool, text: str, meter: budget.Meter, trace: list[Any]
+    ) -> Report:
+        return Report(
+            saved,
+            final_text=text[:2000],
+            model_calls=meter.calls,
+            cost_usd=round(meter.usd, 6),
+            extra={"turns": len(trace), "model": MODEL},
+        )
 
     def close(self) -> None:
         self._b.close()
@@ -319,18 +411,56 @@ to inspect the live page, write the script, and dry-run it. Submit only a script
 whose dry run reaches the save. Be economical: a few dry runs, then submit."""
 
 SCRIPT_TOOLS: list[dict[str, Any]] = [
-    {"name": "read_screen", "description": "Open the app's start page fresh and list its controls, buttons and text. With 'clicks', first click these CSS selectors in order (to look at later screens).",
-     "input_schema": {"type": "object", "properties": {"clicks": {"type": "array", "items": {"type": "string"}}},
-                      "additionalProperties": False}},
-    {"name": "dry_run", "description": "Run a script once on a fresh page with the save request blocked. Returns its result, reason, log and any traceback.",
-     "input_schema": {"type": "object", "properties": {"source": {"type": "string"}}, "required": ["source"], "additionalProperties": False}},
-    {"name": "submit", "description": "Submit the final script.",
-     "input_schema": {"type": "object", "properties": {"source": {"type": "string"}}, "required": ["source"], "additionalProperties": False}},
+    {
+        "name": "read_screen",
+        "description": "Open the app's start page fresh and list its controls, buttons and text. With 'clicks', first click these CSS selectors in order (to look at later screens).",
+        "input_schema": {
+            "type": "object",
+            "properties": {"clicks": {"type": "array", "items": {"type": "string"}}},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "dry_run",
+        "description": "Run a script once on a fresh page with the save request blocked. Returns its result, reason, log and any traceback.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"source": {"type": "string"}},
+            "required": ["source"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "submit",
+        "description": "Submit the final script.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"source": {"type": "string"}},
+            "required": ["source"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 ALLOWED_IMPORTS = {"re", "time", "json"}
-FORBIDDEN = {"open", "exec", "eval", "compile", "__import__", "globals", "locals", "os", "sys",
-             "subprocess", "importlib", "builtins", "__builtins__", "breakpoint", "input", "urllib"}
+FORBIDDEN = {
+    "open",
+    "exec",
+    "eval",
+    "compile",
+    "__import__",
+    "globals",
+    "locals",
+    "os",
+    "sys",
+    "subprocess",
+    "importlib",
+    "builtins",
+    "__builtins__",
+    "breakpoint",
+    "input",
+    "urllib",
+}
 
 
 def check_source(source: str) -> None:
@@ -374,7 +504,9 @@ class _Ctx:
         self.lines.append(str(msg)[:400])
 
 
-def run_script(b: _Browser, source: str, url: str, params: dict[str, str], *, commit: bool) -> dict[str, Any]:
+def run_script(
+    b: _Browser, source: str, url: str, params: dict[str, str], *, commit: bool
+) -> dict[str, Any]:
     ctx, page, blocked = b.page(url, block_save=not commit)
     c = _Ctx(page, _origin(url), commit)
     t0 = time.monotonic()
@@ -391,7 +523,11 @@ def run_script(b: _Browser, source: str, url: str, params: dict[str, str], *, co
         if not commit:
             page.wait_for_timeout(300)
         ctx.close()
-    res.update(seconds=round(time.monotonic() - t0, 3), log=c.lines[-40:], blocked_saves=blocked["n"])
+    res.update(
+        seconds=round(time.monotonic() - t0, 3),
+        log=c.lines[-40:],
+        blocked_saves=blocked["n"],
+    )
     return res
 
 
@@ -405,8 +541,12 @@ class AgentScript:
     name = "agent-script"
     paid = True
 
-    def __init__(self, session_budget_usd: float = 1.50, max_turns: int = 16,
-                 max_repairs_per_signature: int = 2) -> None:
+    def __init__(
+        self,
+        session_budget_usd: float = 1.50,
+        max_turns: int = 16,
+        max_repairs_per_signature: int = 2,
+    ) -> None:
         self.session_budget_usd = session_budget_usd
         self.max_turns = max_turns
         self.max_repairs = max_repairs_per_signature
@@ -428,10 +568,22 @@ class AgentScript:
         if self.source is None:
             s = self._session("author", task, None)
             sessions.append(s)
-            events.append({"kind": "script_review", "phase": "setup", "minutes": 0, "by": "scripted"})
+            events.append(
+                {
+                    "kind": "script_review",
+                    "phase": "setup",
+                    "minutes": 0,
+                    "by": "scripted",
+                }
+            )
             if self.source is None:
-                return Report(False, final_text="the agent submitted no script", model_calls=s["calls"],
-                              cost_usd=s["usd"], extra={"human_events": events, "sessions": sessions})
+                return Report(
+                    False,
+                    final_text="the agent submitted no script",
+                    model_calls=s["calls"],
+                    cost_usd=s["usd"],
+                    extra={"human_events": events, "sessions": sessions},
+                )
         res = run_script(self._b, self.source, task.url, self.params(task), commit=True)
         first = res
         if broke(res):
@@ -441,79 +593,137 @@ class AgentScript:
                 s = self._session("repair", task, res)
                 sessions.append(s)
                 if s.get("submitted"):
-                    events.append({"kind": "script_review", "phase": "maintenance", "minutes": 0, "by": "scripted"})
-                    res = run_script(self._b, self.source, task.url, self.params(task), commit=True)
+                    events.append(
+                        {
+                            "kind": "script_review",
+                            "phase": "maintenance",
+                            "minutes": 0,
+                            "by": "scripted",
+                        }
+                    )
+                    res = run_script(
+                        self._b, self.source, task.url, self.params(task), commit=True
+                    )
         calls = sum(s["calls"] for s in sessions)
         usd = sum(s["usd"] for s in sessions)
         if sessions:
             (task.work_dir / "sessions.json").write_text(json.dumps(sessions, indent=1))
         return Report(
             res["result"] == "SAVED",
-            final_text=f'{res["result"]}: {res["reason"]}'[:2000],
+            final_text=f"{res['result']}: {res['reason']}"[:2000],
             model_calls=calls,
             cost_usd=round(usd, 6),
             error=None if res["result"] != "ERROR" else res["reason"][-400:],
-            extra={"human_events": events, "sessions": sessions, "script_version": self.versions,
-                   "first_attempt": {k: first[k] for k in ("result", "reason", "seconds")},
-                   "script_s": res["seconds"]},
+            extra={
+                "human_events": events,
+                "sessions": sessions,
+                "script_version": self.versions,
+                "first_attempt": {k: first[k] for k in ("result", "reason", "seconds")},
+                "script_s": res["seconds"],
+            },
         )
 
     # One authoring or repair session with the coding agent.
-    def _session(self, kind: str, task: Task, failure: Optional[dict[str, Any]]) -> dict[str, Any]:
-        meter = budget.Meter(f"silent-saves agent-script {kind} item {task.item}", self.session_budget_usd)
+    def _session(
+        self, kind: str, task: Task, failure: Optional[dict[str, Any]]
+    ) -> dict[str, Any]:
+        meter = budget.Meter(
+            f"silent-saves agent-script {kind} item {task.item}",
+            self.session_budget_usd,
+        )
         t0 = time.monotonic()
         client = budget.client(MODEL)
         if kind == "author":
-            prompt = (f"{DEMONSTRATION}\n\n{API_DOC.format(origin='the app')}\n\n{CONTRACT}\n\n"
-                      f"The task each run does: {task.instruction.replace(task.params['note'], '<note>')}")
+            prompt = (
+                f"{DEMONSTRATION}\n\n{API_DOC.format(origin='the app')}\n\n{CONTRACT}\n\n"
+                f"The task each run does: {task.instruction.replace(task.params['note'], '<note>')}"
+            )
         else:
-            prompt = (f"The script below broke on a run. Fix it so it does the task on the app as it is now, "
-                      f"keeping every required check.\n\n{CONTRACT}\n\nFailure: {failure['result']}: "
-                      f"{failure['reason']}\nLog: {json.dumps(failure.get('log', []))}\n\n"
-                      f"Current script:\n```python\n{self.source}\n```")
+            prompt = (
+                f"The script below broke on a run. Fix it so it does the task on the app as it is now, "
+                f"keeping every required check.\n\n{CONTRACT}\n\nFailure: {failure['result']}: "
+                f"{failure['reason']}\nLog: {json.dumps(failure.get('log', []))}\n\n"
+                f"Current script:\n```python\n{self.source}\n```"
+            )
         messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
         submitted = False
         dry_runs = 0
         for _turn in range(self.max_turns):
             try:
-                response = _call(client, meter, SCRIPT_SYSTEM, SCRIPT_TOOLS, messages, 12000)
+                response = _call(
+                    client, meter, SCRIPT_SYSTEM, SCRIPT_TOOLS, messages, 12000
+                )
             except budget.ItemBudgetExceeded:
                 break
             messages.append({"role": "assistant", "content": response.content})
             uses = [b for b in response.content if b.type == "tool_use"]
             if not uses:
-                messages.append({"role": "user", "content": "Use the tools; finish by calling submit."})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "Use the tools; finish by calling submit.",
+                    }
+                )
                 continue
             results = []
             done = False
             for b in uses:
                 try:
                     if b.name == "read_screen":
-                        out: Any = self._look(task.url, list(b.input.get("clicks") or []))
+                        out: Any = self._look(
+                            task.url, list(b.input.get("clicks") or [])
+                        )
                     elif b.name == "dry_run":
                         dry_runs += 1
-                        out = run_script(self._b, b.input["source"], task.url, self.params(task), commit=False)
+                        out = run_script(
+                            self._b,
+                            b.input["source"],
+                            task.url,
+                            self.params(task),
+                            commit=False,
+                        )
                     elif b.name == "submit":
                         check_source(b.input["source"])
                         self.source = b.input["source"]
                         self.versions += 1
                         if self._dir:
-                            (self._dir / f"v{self.versions:02d}-{kind}-item{task.item:03d}.py").write_text(self.source)
+                            (
+                                self._dir
+                                / f"v{self.versions:02d}-{kind}-item{task.item:03d}.py"
+                            ).write_text(self.source)
                         submitted = done = True
                         out = "submitted"
                     else:
                         raise ValueError(f"unknown tool {b.name}")
-                    results.append({"type": "tool_result", "tool_use_id": b.id,
-                                    "content": json.dumps(out, default=str)[:12000]})
+                    results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": b.id,
+                            "content": json.dumps(out, default=str)[:12000],
+                        }
+                    )
                 except Exception as exc:  # noqa: BLE001 - the agent sees the error
-                    results.append({"type": "tool_result", "tool_use_id": b.id,
-                                    "content": f"Error: {exc}"[:600], "is_error": True})
+                    results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": b.id,
+                            "content": f"Error: {exc}"[:600],
+                            "is_error": True,
+                        }
+                    )
             if done:
                 break
             messages.append({"role": "user", "content": results})
-        return {"kind": kind, "item": task.item, "submitted": submitted, "dry_runs": dry_runs,
-                "calls": meter.calls, "usd": round(meter.usd, 6), "agent_s": round(time.monotonic() - t0, 2),
-                "version": self.versions}
+        return {
+            "kind": kind,
+            "item": task.item,
+            "submitted": submitted,
+            "dry_runs": dry_runs,
+            "calls": meter.calls,
+            "usd": round(meter.usd, 6),
+            "agent_s": round(time.monotonic() - t0, 2),
+            "version": self.versions,
+        }
 
     def _look(self, url: str, clicks: list[str]) -> dict[str, Any]:
         ctx, page, _ = self._b.page(url, block_save=True)

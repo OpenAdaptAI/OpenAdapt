@@ -1,0 +1,193 @@
+[
+ {
+  "turn": 1,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "find_patients",
+    "input": {
+     "lname": "Jesswood"
+    }
+   },
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "[]",
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"10\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Unassigned\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"11\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"12\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"13\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"14\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"15\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"16\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"17\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"19\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"20\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Unassigned\", \"options\": [\"Unassigned\", \"Female\", \"Male\", \"Unknown\"]}, {\"ref\": \"21\", \"id\": \"form_gender_identity\", \"label\": \"Gender Identity\", \"type\": \"select\", \"value\": \"Unassigned\", \"options\": [\"Unassigned\", \"Identifies as Male\", \"Identifies as Female\", \"Female-to-Male (FTM)/Transgender Male/Trans Man\", \"Male-to-Fema"
+  ]
+ },
+ {
+  "turn": 2,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "10",
+     "value": "Mrs."
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "11",
+     "value": "Rosalind"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "13",
+     "value": "Jesswood"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "19",
+     "value": "1990-09-09"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "20",
+     "value": "Female"
+    }
+   },
+   {
+    "name": "click",
+    "input": {
+     "ref": "37"
+    }
+   },
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "clicked; call read_screen to see the result",
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"10\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Mrs.\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"11\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"Rosalind\"}, {\"ref\": \"12\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"13\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"Jesswood\"}, {\"ref\": \"14\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"15\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"16\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"17\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"19\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"1990-09-09\"}, {\"ref\": \"20\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Female\", \"options\": [\"Unassigned\", \"Female\", \"Male\", \"Unknown\"]}, {\"ref\": \"21\", \"id\": \"form_gender_identity\", \"label\": \"Gender Identity\", \"type\": \"select\", \"value\": \"Unassigned\", \"options\": [\"Unassigned\", \"Identifies as Male\", \"Identifies as Female\", \"Female-to-Male (FTM)/Transgender Male/Trans Man"
+  ]
+ },
+ {
+  "turn": 3,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "35",
+     "value": "363 Orchard Lane Harbor"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "37",
+     "value": "Exampleton"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "38",
+     "value": "Massachusetts"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "39",
+     "value": "02139"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "40",
+     "value": "USA"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "45",
+     "value": "555-0187"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "48",
+     "value": "rosalind.jesswood.1@example.invalid"
+    }
+   },
+   {
+    "name": "click",
+    "input": {
+     "ref": "63"
+    }
+   },
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "clicked; call read_screen to see the result",
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"10\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Mrs.\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"11\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"Rosalind\"}, {\"ref\": \"12\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"13\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"Jesswood\"}, {\"ref\": \"14\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"15\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"16\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"17\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"19\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"1990-09-09\"}, {\"ref\": \"20\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Female\", \"options\": [\"Unassigned\", \"Female\", \"Male\", \"Unknown\"]}, {\"ref\": \"21\", \"id\": \"form_gender_identity\", \"label\": \"Gender Identity\", \"type\": \"select\", \"value\": \"Unassigned\", \"options\": [\"Unassigned\", \"Identifies as Male\", \"Identifies as Female\", \"Female-to-Male (FTM)/Transgender Male/Trans Man"
+  ]
+ },
+ {
+  "turn": 4,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "64"
+    }
+   },
+   {
+    "name": "find_patients",
+    "input": {
+     "lname": "Jesswood"
+    }
+   }
+  ],
+  "results": [
+   "clicked; call read_screen to see the result",
+   "[{\"uuid\": \"a30fd67f-a0ef-4d19-81bc-68714bd0b119\", \"pid\": 13, \"title\": \"Mrs.\", \"fname\": \"Rosalind\", \"lname\": \"Jesswood\", \"DOB\": \"1990-09-09\", \"sex\": \"Female\", \"street\": \"363 ORCHARD LANE HARBOR\", \"city\": \"EXAMPLETON\", \"state\": \"MA\", \"postal_code\": \"02139\", \"phone_home\": \"555-0187\", \"email\": \"rosalind.jesswood.1@example.invalid\"}]"
+  ]
+ },
+ {
+  "turn": 5,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "finish",
+    "input": {
+     "result": "SAVED",
+     "reason": "No existing chart found beforehand; created one chart for Rosalind Jesswood (pid 13), confirmed by search."
+    }
+   }
+  ]
+ }
+]

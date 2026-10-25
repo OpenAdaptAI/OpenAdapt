@@ -1,0 +1,232 @@
+[
+ {
+  "turn": 1,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "find_patients",
+    "input": {
+     "fname": "Odile",
+     "lname": "Hartgate"
+    }
+   },
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "[]",
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"10\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Unassigned\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"11\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"12\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"13\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"14\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"15\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"16\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"17\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"19\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"20\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Unassigned\", \"options\": [\"Unassigned\", \"Female\", \"Male\", \"Unknown\"]}, {\"ref\": \"21\", \"id\": \"form_gender_identity\", \"label\": \"Gender Identity\", \"type\": \"select\", \"value\": \"Unassigned\", \"options\": [\"Unassigned\", \"Identifies as Male\", \"Identifies as Female\", \"Female-to-Male (FTM)/Transgender Male/Trans Man\", \"Male-to-Fema"
+  ]
+ },
+ {
+  "turn": 2,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "find_patients",
+    "input": {
+     "DOB": "1998-07-03"
+    }
+   },
+   {
+    "name": "find_patients",
+    "input": {
+     "lname": "Hartgate"
+    }
+   }
+  ],
+  "results": [
+   "[]",
+   "[]"
+  ]
+ },
+ {
+  "turn": 3,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "10",
+     "value": "Mr."
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "11",
+     "value": "Odile"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "13",
+     "value": "Hartgate"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "19",
+     "value": "1998-07-03"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "20",
+     "value": "Male"
+    }
+   },
+   {
+    "name": "click",
+    "input": {
+     "ref": "37"
+    }
+   }
+  ],
+  "results": [
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "clicked; call read_screen to see the result"
+  ]
+ },
+ {
+  "turn": 4,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"10\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Mr.\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"11\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"Odile\"}, {\"ref\": \"12\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"13\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"Hartgate\"}, {\"ref\": \"14\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"15\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"16\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"17\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"19\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"1998-07-03\"}, {\"ref\": \"20\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Male\", \"options\": [\"Unassigned\", \"Female\", \"Male\", \"Unknown\"]}, {\"ref\": \"21\", \"id\": \"form_gender_identity\", \"label\": \"Gender Identity\", \"type\": \"select\", \"value\": \"Unassigned\", \"options\": [\"Unassigned\", \"Identifies as Male\", \"Identifies as Female\", \"Female-to-Male (FTM)/Transgender Male/Trans Man\", \"Ma"
+  ]
+ },
+ {
+  "turn": 5,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "35",
+     "value": "247 Beacon Terrace Station"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "37",
+     "value": "Exampleton"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "38",
+     "value": "Massachusetts"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "39",
+     "value": "02139"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "40",
+     "value": "USA"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "45",
+     "value": "555-0178"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "48",
+     "value": "odile.hartgate.46@example.invalid"
+    }
+   },
+   {
+    "name": "click",
+    "input": {
+     "ref": "63"
+    }
+   }
+  ],
+  "results": [
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "clicked; call read_screen to see the result"
+  ]
+ },
+ {
+  "turn": 6,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"10\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Mr.\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"11\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"Odile\"}, {\"ref\": \"12\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"13\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"Hartgate\"}, {\"ref\": \"14\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"15\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"16\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"17\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"19\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"1998-07-03\"}, {\"ref\": \"20\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Male\", \"options\": [\"Unassigned\", \"Female\", \"Male\", \"Unknown\"]}, {\"ref\": \"21\", \"id\": \"form_gender_identity\", \"label\": \"Gender Identity\", \"type\": \"select\", \"value\": \"Unassigned\", \"options\": [\"Unassigned\", \"Identifies as Male\", \"Identifies as Female\", \"Female-to-Male (FTM)/Transgender Male/Trans Man\", \"Ma"
+  ]
+ },
+ {
+  "turn": 7,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "64"
+    }
+   },
+   {
+    "name": "find_patients",
+    "input": {
+     "lname": "Hartgate"
+    }
+   }
+  ],
+  "results": [
+   "clicked; call read_screen to see the result",
+   "[{\"uuid\": \"a30fdced-6b68-4496-b778-d2fb7007780a\", \"pid\": 52, \"title\": \"Mr.\", \"fname\": \"Odile\", \"lname\": \"Hartgate\", \"DOB\": \"1998-07-03\", \"sex\": \"Male\", \"street\": \"247 BEACON TERRACE STATION\", \"city\": \"EXAMPLETON\", \"state\": \"MA\", \"postal_code\": \"02139\", \"phone_home\": \"555-0178\", \"email\": \"odile.hartgate.46@example.invalid\"}]"
+  ]
+ },
+ {
+  "turn": 8,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "finish",
+    "input": {
+     "result": "SAVED",
+     "reason": "No existing chart found before saving. Created one chart for Odile Hartgate (pid 52) and confirmed it with a search afterward."
+    }
+   }
+  ]
+ }
+]

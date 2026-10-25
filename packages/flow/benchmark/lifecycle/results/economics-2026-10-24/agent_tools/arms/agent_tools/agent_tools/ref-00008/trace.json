@@ -1,0 +1,15 @@
+[
+ {
+  "turn": 1,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "finish",
+    "input": {
+     "result": "NOT SAVED",
+     "reason": "The referral for Bo Jessby has no date of birth. No chart was created, and the referral goes back to the sender."
+    }
+   }
+  ]
+ }
+]

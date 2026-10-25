@@ -1,0 +1,231 @@
+[
+ {
+  "turn": 1,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "find_patients",
+    "input": {
+     "lname": "Hartbrook"
+    }
+   },
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "[]",
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}, {\"ref\": \"10\", \"text\": \"Esme Iversbrook (34)\", \"id\": null}, {\"ref\": \"11\", \"text\": \"Close Patient Chart\", \"id\": null}, {\"ref\": \"12\", \"text\": \"Visit History\", \"id\": null}, {\"ref\": \"13\", \"text\": \"Select Encounter\\u00a0 (0)\", \"id\": \"pastEncounters\"}, {\"ref\": \"14\", \"text\": \"New Encounter\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"15\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Unassigned\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"16\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"17\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"19\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"20\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"21\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"22\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"23\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"24\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"25\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Unassigned\", \"options"
+  ]
+ },
+ {
+  "turn": 2,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "find_patients",
+    "input": {
+     "fname": "Farida"
+    }
+   },
+   {
+    "name": "find_patients",
+    "input": {
+     "DOB": "1990-09-13"
+    }
+   }
+  ],
+  "results": [
+   "[]",
+   "[]"
+  ]
+ },
+ {
+  "turn": 3,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "15",
+     "value": "Ms."
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "16",
+     "value": "Farida"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "18",
+     "value": "Hartbrook"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "24",
+     "value": "1990-09-13"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "25",
+     "value": "Female"
+    }
+   },
+   {
+    "name": "click",
+    "input": {
+     "ref": "42"
+    }
+   }
+  ],
+  "results": [
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "clicked; call read_screen to see the result"
+  ]
+ },
+ {
+  "turn": 4,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}, {\"ref\": \"10\", \"text\": \"Esme Iversbrook (34)\", \"id\": null}, {\"ref\": \"11\", \"text\": \"Close Patient Chart\", \"id\": null}, {\"ref\": \"12\", \"text\": \"Visit History\", \"id\": null}, {\"ref\": \"13\", \"text\": \"Select Encounter\\u00a0 (0)\", \"id\": \"pastEncounters\"}, {\"ref\": \"14\", \"text\": \"New Encounter\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"15\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Ms.\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"16\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"Farida\"}, {\"ref\": \"17\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"Hartbrook\"}, {\"ref\": \"19\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"20\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"21\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"22\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"23\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"24\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"1990-09-13\"}, {\"ref\": \"25\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Fem"
+  ]
+ },
+ {
+  "turn": 5,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "40",
+     "value": "175 Orchard Lane Harbor"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "42",
+     "value": "Exampleton"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "43",
+     "value": "Massachusetts"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "44",
+     "value": "02139"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "45",
+     "value": "USA"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "50",
+     "value": "555-0145"
+    }
+   },
+   {
+    "name": "set_field",
+    "input": {
+     "ref": "53",
+     "value": "farida.hartbrook.26@example.invalid"
+    }
+   },
+   {
+    "name": "click",
+    "input": {
+     "ref": "68"
+    }
+   }
+  ],
+  "results": [
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "ok",
+   "clicked; call read_screen to see the result"
+  ]
+ },
+ {
+  "turn": 6,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "read_screen",
+    "input": {}
+   }
+  ],
+  "results": [
+   "{\"frames\": [{\"frame\": \"main.php\", \"controls\": [{\"ref\": \"1\", \"id\": \"anySearchBox\", \"label\": \"Search by any demographics\", \"type\": \"text\", \"value\": \"\"}], \"buttons\": [{\"ref\": \"2\", \"text\": \"Patient\", \"id\": null}, {\"ref\": \"3\", \"text\": \"Fees\", \"id\": null}, {\"ref\": \"4\", \"text\": \"Modules\", \"id\": null}, {\"ref\": \"5\", \"text\": \"Procedures\", \"id\": null}, {\"ref\": \"6\", \"text\": \"Admin\", \"id\": null}, {\"ref\": \"7\", \"text\": \"Reports\", \"id\": null}, {\"ref\": \"8\", \"text\": \"Miscellaneous\", \"id\": null}, {\"ref\": \"9\", \"text\": \"Popups\", \"id\": null}, {\"ref\": \"10\", \"text\": \"Esme Iversbrook (34)\", \"id\": null}, {\"ref\": \"11\", \"text\": \"Close Patient Chart\", \"id\": null}, {\"ref\": \"12\", \"text\": \"Visit History\", \"id\": null}, {\"ref\": \"13\", \"text\": \"Select Encounter\\u00a0 (0)\", \"id\": \"pastEncounters\"}, {\"ref\": \"14\", \"text\": \"New Encounter\", \"id\": null}]}, {\"frame\": \"new_comprehensive.php\", \"controls\": [{\"ref\": \"15\", \"id\": \"form_title\", \"label\": \"Title\", \"type\": \"select\", \"value\": \"Ms.\", \"options\": [\"Unassigned\", \"Mr.\", \"Mrs.\", \"Ms.\", \"Dr.\"]}, {\"ref\": \"16\", \"id\": \"form_fname\", \"label\": \"First Name\", \"type\": \"text\", \"value\": \"Farida\"}, {\"ref\": \"17\", \"id\": \"form_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"18\", \"id\": \"form_lname\", \"label\": \"Last Name\", \"type\": \"text\", \"value\": \"Hartbrook\"}, {\"ref\": \"19\", \"id\": \"form_suffix\", \"label\": \"Name Suffix\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"20\", \"id\": \"form_preferred_name\", \"label\": \"Patient preferred name or name patient is commonly known.\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"21\", \"id\": \"form_birth_fname\", \"label\": \"Birth First Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"22\", \"id\": \"form_birth_mname\", \"label\": \"Middle Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"23\", \"id\": \"form_birth_lname\", \"label\": \"Birth Last Name\", \"type\": \"text\", \"value\": \"\"}, {\"ref\": \"24\", \"id\": \"form_DOB\", \"label\": \"Date of Birth\", \"type\": \"text\", \"value\": \"1990-09-13\"}, {\"ref\": \"25\", \"id\": \"form_sex\", \"label\": \"Birth Sex\", \"type\": \"select\", \"value\": \"Fem"
+  ]
+ },
+ {
+  "turn": 7,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "click",
+    "input": {
+     "ref": "69"
+    }
+   },
+   {
+    "name": "find_patients",
+    "input": {
+     "lname": "Hartbrook"
+    }
+   }
+  ],
+  "results": [
+   "clicked; call read_screen to see the result",
+   "[{\"uuid\": \"a30fd9e3-7508-4fa0-86c9-e2bc8fbad166\", \"pid\": 35, \"title\": \"Ms.\", \"fname\": \"Farida\", \"lname\": \"Hartbrook\", \"DOB\": \"1990-09-13\", \"sex\": \"Female\", \"street\": \"175 ORCHARD LANE HARBOR\", \"city\": \"EXAMPLETON\", \"state\": \"MA\", \"postal_code\": \"02139\", \"phone_home\": \"555-0145\", \"email\": \"farida.hartbrook.26@example.invalid\"}]"
+  ]
+ },
+ {
+  "turn": 8,
+  "stop": "tool_use",
+  "calls": [
+   {
+    "name": "finish",
+    "input": {
+     "result": "SAVED",
+     "reason": "No existing chart found; created one chart for Farida Hartbrook (pid 35) and confirmed it by search."
+    }
+   }
+  ]
+ }
+]

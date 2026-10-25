@@ -1,11 +1,31 @@
+## OpenEMR referral intake (seed 7, 55 items, one app change: the save button relabeled at item 26)
+
+| Arm | Items | Verified in the end | Automated (no hand entry) | Silent wrong | False stops | Median s/item | Model $/item | Operator min/item | Maintenance for the change (people min / model $) | Setup people min | Setup agent min / $ |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 3. OpenAdapt, Regulated + problems_only, durable, pipelined read-back, relabel repair (engine of measure/production-lifecycle; the API step is refused on this form, so the GUI save runs) | 55 | 53 | 41 | 0 | 9 of 35 | 118.5 | 0.000 | 2.15 | 7.5 / 0.00 | 52 | 13.3 / 0.00 |
+| 3 on main. Same configuration, current main's engine (the run was stopped at 27 items) | 27 | 27 | 4 | 0 | 19 of 20 | 226.9 | 0.000 | 4.56 | 0.0 / 0.00 | 52 | 13.4 / 0.00 |
+| 1. Agent with structured tools and REST read-back (Claude Sonnet 5.5) | 55 | 55 | 49 | 0 | 5 of 35 | 24.3 | 0.050 | 0.91 | 0.0 / 0.00 | 60 | 0.0 / 0.00 |
+| 2. (hung after 16 items) Agent-written Playwright + REST script with read-back and duplicate check, agent-maintained (Claude Sonnet 5.5) | 16 | 16 | 7 | 0 | 7 of 12 | 5.3 | 0.000 | 2.44 | not reached | 70 | 2.6 / 0.86 |
+| Reference: a person enters every item (cost model V1) | None | None | 0 | 0 | None of None | 210.0 | 0.000 | 3.50 | 0.0 / 0.00 | 0 | 0.0 / 0.00 |
+
+### Totals (people time priced at the assumed rates; x0.5 and x2 in brackets)
+
+| Arm | 10 items: total $ | people min | 100 items: total $ | people min | 1000 items: total $ | people min |
+|---|---|---|---|---|---|---|
+| openadapt-production-relabel | 72 [36-144] | 74 | 171 [86-340] | 270 | 1,158 [584-2,307] | 2,228 |
+| openadapt-production | 84 [42-168] | 98 | 290 [146-579] | 508 | 2,351 [1,181-4,689] | 4,608 |
+| agent_tools | 105 [53-210] | 69 | 151 [78-296] | 151 | 606 [329-1,161] | 969 |
+| agent_script | 130 [65-259] | 94 | 239 [120-478] | 314 | 1,337 [669-2,672] | 2,508 |
+| all_manual | 18 [9-35] | 35 | 175 [88-350] | 350 | 1,750 [875-3,500] | 3,500 |
+
 ## MockMed, fault set 1.1.0 (100 items, 10 UI changes, 5 server faults)
 
 | Arm | Verified (of 90) | Silent wrong | False stops | Faults claimed saved (of 5) | Stopped when no save possible (of 5) | Control s/item (load) | Model $/item | Setup people min | Setup agent min / $ |
 |---|---|---|---|---|---|---|---|---|---|
 | 4. Computer-use agent, screenshots only (Claude Sonnet 5.5) | 90 | 5 | 0 | 5 | 5 | 22.5 (17) | 0.0386 | 30 | 0.0 / 0.000 |
-| 1. Agent with structured tools and record read-back (Claude Sonnet 5.5) | 90 | 0 | 0 | 0 | 5 | 12.1 (150) | 0.0132 | 60 | 0.0 / 0.000 |
-| 2. Agent-written Playwright script with read-back and duplicate guard, agent-maintained | 90 | 0 | 0 | 0 | 5 | 0.9 (77) | 0.0000 | 30 | 0.4 / 0.026 |
-| 3. OpenAdapt admitted program, read-back on, no model calls | 71 | 0 | 19 | 0 | 5 | 26.7 (239) | 0.0000 | 52 | 0.0 / 0.000 |
+| 1. Agent with structured tools and record read-back (Claude Sonnet 5.5) | 90 | 0 | 0 | 0 | 5 | 13.7 (15) | 0.0132 | 60 | 0.0 / 0.000 |
+| 2. Agent-written Playwright script with read-back and duplicate guard, agent-maintained | 90 | 0 | 0 | 0 | 5 | 0.8 (6) | 0.0000 | 30 | 0.4 / 0.026 |
+| 3. OpenAdapt admitted program, read-back on, no model calls | 71 | 0 | 19 | 0 | 5 | 7.3 (8) | 0.0000 | 52 | 0.0 / 0.000 |
 | 3r. OpenAdapt program with self-repair (engine of 2026-10-19) | 62 | 0 | 28 | 0 | 5 | 7.4 (10) | 0.0000 | 52 | 0.0 / 0.000 |
 | 4 + OpenAdapt read-back: the same agent runs, each claim gated on verify-run | 90 | 0 | 0 | 0 | 5 | 22.5 (17) | 0.0386 | 30 | 0.0 / 0.000 |
 
