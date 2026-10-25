@@ -205,13 +205,48 @@ def test_a_mac_without_a_secure_enclave_is_sent_to_the_terminal(registry):
     assert keychain.status()["supported"] is False
 
 
-def test_a_stored_but_unregistered_key_is_registered_again(keychain, registry):
+def test_a_stored_but_unregistered_key_is_registered_again_after_a_prompt(
+    keychain, enclave, registry
+):
     stored = keychain.setup()
     registry.approvers.clear()
+    enclave.prompts.clear()
 
     assert keychain.status()["set_up"] is False
     keychain.setup()
     assert registry.approvers == {"desktop-approver": stored.public_key}
+    assert enclave.prompts == ["confirm your approver key"]
+
+
+def test_a_planted_keychain_item_is_never_registered_without_presence(
+    keychain, enclave, registry, fake_keyring
+):
+    """Something that can write the Keychain item plants its own key."""
+
+    from openadapt_desktop.approver_keychain import StoredKey
+
+    keychain.setup()
+    registry.approvers.clear()
+    planted = StoredKey.from_json(fake_keyring.get_password(SERVICE_NAME, ACCOUNT))
+    # The planted item claims Touch ID but the person doesn't confirm.
+    enclave.answer = "cancel"
+
+    with pytest.raises(ApproverKeychainError) as raised:
+        keychain.setup()
+    assert raised.value.code == "approver_presence_refused"
+    assert registry.approvers == {}
+
+    # An item that admits it has no presence check is refused outright.
+    fake_keyring.set_password(
+        SERVICE_NAME,
+        ACCOUNT,
+        StoredKey(**{**planted.__dict__, "presence": False}).to_json(),
+    )
+    enclave.answer = "confirm"
+    with pytest.raises(ApproverKeychainError) as raised:
+        keychain.setup()
+    assert raised.value.code == "approver_key_unusable"
+    assert registry.approvers == {}
 
 
 # -- signing -----------------------------------------------------------------------
@@ -558,3 +593,27 @@ def test_the_key_commands_answer_while_a_run_waits_and_stay_off_the_agent_socket
     keys = {"get_approver_key", "set_up_approver_key", "remove_approver_key"}
     assert keys <= CONCURRENT_COMMANDS
     assert not keys & _SOCKET_COMMANDS
+
+
+def test_a_mac_that_can_use_touch_id_never_falls_back_to_a_file_key(
+    monkeypatch, tmp_path, keychain, registry
+):
+    """A terminal-made key asks for no presence; on such a Mac it doesn't count."""
+
+    from openadapt_desktop import approver_key
+
+    monkeypatch.setattr(approver_key, "KEY_DIR", tmp_path / "approver")
+    assert approver_key.setup_approver_key().created is True
+    assert approver_key.approver_key_environment() is not None
+    launched: list = []
+    bridge = _bridge(monkeypatch, keychain, registry, _payload(), launched)
+
+    answer = bridge.item_approval_answer(
+        tmp_path, decision="approve", request_id=REQUEST_ID, request_sha256=REQUEST_SHA
+    )
+
+    assert answer["ok"] is False
+    assert answer["code"] == "approver_key_missing"
+    assert answer["setup"] == "in_app"
+    assert "in OpenAdapt" in answer["message"]
+    assert launched == []

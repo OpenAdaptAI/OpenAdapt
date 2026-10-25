@@ -115,8 +115,8 @@ export function ApproverKeyCard() {
           !status.supported
             ? "Approvals from this computer need a key set up once at a terminal."
             : status.set_up
-              ? "Set up. Each approval asks for your Touch ID or login password."
-              : "Not set up. Approvals from this computer are refused until it is."
+              ? "Set up. Each approval asks for your Touch ID or login password. On this Mac, only this key counts; a key made at a terminal doesn't."
+              : "Not set up. Approvals from this computer are refused until it is. On this Mac, a key made at a terminal doesn't count."
         }
       />
       {!status.supported && status.instructions && (

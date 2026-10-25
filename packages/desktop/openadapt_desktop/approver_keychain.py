@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import base64
 import json
+import secrets
 import sys
 import threading
 from dataclasses import dataclass
@@ -64,6 +65,8 @@ DEFAULT_PRINCIPAL = "desktop-approver"
 #: Flow signs a person's answer under this domain
 #: (``openadapt_flow.approval_mode.human_attestation.ANSWER_DOMAIN``).
 ANSWER_DOMAIN = b"openadapt-flow.approval.human-answer/v1\x00"
+#: What setup signs to prove the key opens behind a presence prompt.
+SETUP_CHALLENGE = b"openadapt-desktop.approver-setup/v1\x00"
 _SCHEMA = 1
 
 Code = Literal[
@@ -296,7 +299,21 @@ class ApproverKeychain:
             if old is not None and not replace:
                 if self._lookup(old.public_key) != old.principal:
                     # Stored but not registered (an interrupted setup, or a
-                    # removed registration): register it again.
+                    # removed registration). Register it again only after the
+                    # key opens behind a presence prompt: a Keychain item
+                    # alone proves nothing, since anything that can write it
+                    # could have put its own public key there.
+                    if self._presence and not old.presence:
+                        raise ApproverKeychainError(
+                            "approver_key_unusable",
+                            "The stored approver key doesn't ask for Touch ID. "
+                            "Set up a new one.",
+                        )
+                    self._sign_with(
+                        old,
+                        SETUP_CHALLENGE + old.public_key.encode() + secrets.token_bytes(16),
+                        reason="confirm your approver key",
+                    )
                     self._register(old.principal, old.public_key)
                 return old
             handle, enclave_public = self._enclave.create(require_presence=self._presence)
@@ -325,7 +342,7 @@ class ApproverKeychain:
             # The one prompt: proves the key opens, and that a person is here.
             self._sign_with(
                 new,
-                b"openadapt-desktop.approver-setup/v1\x00" + public.encode(),
+                SETUP_CHALLENGE + public.encode(),
                 reason="set up your approver key",
             )
             if not _store._kr_set(_store._keyring(), self._account, new.to_json()):

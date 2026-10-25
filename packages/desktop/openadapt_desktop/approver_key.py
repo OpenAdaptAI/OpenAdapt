@@ -185,7 +185,12 @@ def sign_with_file_key(message: bytes, route: Route = "desktop") -> tuple[str, s
 
 
 def setup_instructions(route: Route = "desktop") -> str:
-    """The one-time terminal steps that make this computer's answers count."""
+    """The one-time terminal steps that make this computer's answers count.
+
+    For computers where the app can't keep the key behind a presence check
+    (Windows, Linux, a Mac without a Secure Enclave). On a Mac that can, the
+    key is set up in OpenAdapt and a file key isn't used.
+    """
 
     path = approver_key_path(route)
     name = _ROUTES[route][2]

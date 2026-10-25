@@ -1140,7 +1140,9 @@ class FlowBridge:
         the key. Otherwise Desktop passes the terminal-made key
         (:mod:`openadapt_desktop.approver_key`) with ``--approver-key`` and
         puts its passphrase in the Flow child's environment, never on its
-        command line. Without a key, nothing is sent: the answer is
+        command line; only where the app can't keep the key (Windows, Linux,
+        a Mac without a Secure Enclave). Without a key, nothing is sent: the
+        answer is
         ``{"ok": False, "code": "approver_key_missing", "setup": "in_app"}``
         where the app can set one up, else ``"human_answer_unsigned"`` with
         the terminal steps.
@@ -1193,18 +1195,20 @@ class FlowBridge:
                 request_id=request_id,
                 request_sha256=request_sha256,
             )
+        if in_app:
+            # A Mac that can keep the key behind Touch ID never falls back to
+            # a terminal-made file key, which asks for no presence.
+            return {
+                "ok": False,
+                "code": "approver_key_missing",
+                "setup": "in_app",
+                "message": (
+                    "Set up your approver key in OpenAdapt to approve saves on "
+                    "this Mac. Nothing was approved."
+                ),
+            }
         key = approver_key_environment()
         if key is None:
-            if in_app:
-                return {
-                    "ok": False,
-                    "code": "approver_key_missing",
-                    "setup": "in_app",
-                    "message": (
-                        "Set up your approver key to approve saves on this Mac. "
-                        "Nothing was approved."
-                    ),
-                }
             return {
                 "ok": False,
                 "code": "human_answer_unsigned",
