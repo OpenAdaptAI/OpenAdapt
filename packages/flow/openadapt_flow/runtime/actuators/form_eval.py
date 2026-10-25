@@ -12,10 +12,12 @@ so it runs it, before each save, the way the person's steps would:
    request of every page in it routed, every WebSocket closed, and
    EventSource and RTCPeerConnection stubbed out;
 2. while the page loads, let only same-origin GET requests through (no
-   other origin at all). Once it has loaded, block every request except
-   same-origin scripts and stylesheets and the reads the person's click
-   made in the recording (``submitter_requests``, such as OpenEMR's
-   duplicate search), so nothing the page does can write;
+   other origin at all). Once it has loaded, block every request except the
+   exact scripts and stylesheets the page loaded, the reads the person's
+   click made in the recording (``submitter_requests``, such as OpenEMR's
+   duplicate search) and the static ``.js``/``.css`` files of a recorded
+   read's own frame, so nothing the page does can write; a form submit or a
+   blocked channel in any frame counts as the page sending;
 3. type the run's values into the fields the person typed or picked, with
    real key events (``keydown``, ``keyup``, ``input``), so key handlers run
    as they do for the person. A field that isn't on screen when the form
@@ -202,7 +204,37 @@ def evaluate_form(
     phase = {"loaded": False}
     origin = up.urlsplit(base_url).netloc
     reads = {r.split(" ", 1)[1] for r in submitter_requests if r.startswith("GET ")}
+    #: Exact script and stylesheet URLs the form page loaded.
+    loaded_code: set[str] = set()
     context = None
+
+    def _allowed_after_load(req: Any, parts: Any) -> bool:
+        """Once loaded, only what the person's steps also load gets through.
+
+        The exact scripts and stylesheets the form page loaded; the reads the
+        person's click made in the recording (the API step makes them too, as
+        pre-checks); and the static ``.js``/``.css`` files a recorded read's
+        own frame loads (the dialog it shows). A script or stylesheet a
+        handler adds at another URL is the page sending something.
+        """
+
+        if parts.path in reads and req.resource_type in ("document", "xhr", "fetch"):
+            return True
+        if req.resource_type not in ("script", "stylesheet"):
+            return False
+        if req.url in loaded_code:
+            return True
+        try:
+            frame_path = up.urlsplit(req.frame.url).path
+        except Exception:  # noqa: BLE001 - no frame
+            return False
+        return (
+            frame_path in reads
+            and not parts.query
+            and parts.path.endswith(
+                ".css" if req.resource_type == "stylesheet" else ".js"
+            )
+        )
 
     def route(r: Any) -> None:
         req = r.request
@@ -215,17 +247,13 @@ def evaluate_form(
             return
         if not phase["loaded"]:
             if req.method in ("GET", "HEAD") and same_origin:
+                if req.resource_type in ("script", "stylesheet"):
+                    loaded_code.add(req.url)
                 r.continue_()
             else:
                 r.abort()
             return
-        if (
-            same_origin
-            and req.method == "GET"
-            and (req.resource_type in ("script", "stylesheet") or parts.path in reads)
-        ):
-            # Static code, or a read the person's click made in the
-            # recording (the API step makes it too, as a pre-check).
+        if same_origin and req.method == "GET" and _allowed_after_load(req, parts):
             r.continue_()
             return
         try:
@@ -348,7 +376,7 @@ def evaluate_form(
                 "() => document.querySelector('form[data-openadapt-eval]').requestSubmit()"
             )
         scratch.wait_for_timeout(settle_ms)
-        state = scratch.evaluate(_COLLECT_JS)
+        state = _collect(scratch)
         if confirm and not _submitted(state, late, action_path):
             # The recorded reads ran; the person confirmed in what they
             # showed. Confirm the same way, wherever the control is.
@@ -360,7 +388,7 @@ def evaluate_form(
             if frame is not None:
                 frame.locator(confirm).first.click(timeout=_ACT_TIMEOUT_MS)
                 scratch.wait_for_timeout(settle_ms)
-                state = scratch.evaluate(_COLLECT_JS)
+                state = _collect(scratch)
         return _verdict(state, late, errors, dialogs, stray, action_path, done)
     except Exception as exc:  # noqa: BLE001 - a failure to run is unevaluable
         return done("unevaluable", f"the scratch page failed ({type(exc).__name__})")
@@ -411,6 +439,39 @@ def _type_values(scratch: Any, fields: list[tuple[str, str]]) -> Optional[str]:
     return None
 
 
+#: What a frame other than the form's did: its own form submits and the
+#: channels it tried, all of which count as the page sending.
+_FRAME_JS = """
+() => {
+  const state = window.__openadaptFormEval;
+  if (!state) return { uninstrumented: true };
+  return { programmatic: state.programmatic.length, submits: state.submits.length,
+           channels: state.channels };
+}
+"""
+
+
+def _collect(scratch: Any) -> dict[str, Any]:
+    """The form frame's record, plus anything any other frame did."""
+
+    state = scratch.evaluate(_COLLECT_JS)
+    for frame in scratch.frames:
+        if frame == scratch.main_frame:
+            continue
+        try:
+            other = frame.evaluate(_FRAME_JS)
+        except Exception:  # noqa: BLE001 - a detached or cross-origin frame
+            other = {"uninstrumented": True}
+        url = frame.url or "a frame"
+        if other.get("uninstrumented") and url not in ("", "about:blank"):
+            state.setdefault("channels", []).append(f"a frame it can't read ({url})")
+        for channel in other.get("channels") or []:
+            state.setdefault("channels", []).append(f"{channel} in {url}")
+        if other.get("programmatic") or other.get("submits"):
+            state.setdefault("channels", []).append(f"a form submit in {url}")
+    return state
+
+
 def _frame_with(scratch: Any, selector: str) -> Any:
     for frame in scratch.frames:
         try:
@@ -455,7 +516,7 @@ def _verdict(
     if channels:
         return done(
             "unevaluable",
-            f"the form's script opened {channels[0]} while it ran (blocked)",
+            f"the form's script reached outside the scratch run ({channels[0]}; blocked)",
         )
     if errors:
         return done("unevaluable", f"the form's script raised an error ({errors[0]})")

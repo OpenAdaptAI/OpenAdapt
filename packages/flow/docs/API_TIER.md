@@ -146,10 +146,12 @@ Before it sends the save, the API step:
      every WebSocket is closed, and EventSource, RTCPeerConnection,
      `sendBeacon` and `window.open` do nothing. While the page loads, only
      same-origin GET requests go through. Once it has loaded, everything is
-     blocked except same-origin scripts and stylesheets and the reads the
-     person's click made in the recording (`submitter_requests`; on OpenEMR,
-     the duplicate search), so nothing the page does there can write. A
-     popup or new tab makes the run unevaluable;
+     blocked except the exact scripts and stylesheets the page loaded, the
+     reads the person's click made in the recording (`submitter_requests`;
+     on OpenEMR, the duplicate search) and the static `.js` and `.css` files
+     of a recorded read's own frame, so nothing the page does there can
+     write. A popup or new tab, and a form submit or a blocked channel in
+     any frame, make the run unevaluable;
    - it types the run's typed and picked values with real key events, so
      key handlers (`onkeyup`, `onchange`) run as they do for the person. A
      field that isn't on screen when the form opens (on a tab the person
