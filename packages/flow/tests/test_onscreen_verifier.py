@@ -302,14 +302,12 @@ def test_is_default_readback_effect_gate() -> None:
     assert not is_default_readback_effect(Effect(kind=EffectKind.RECORD_WRITTEN))
 
 
-def test_single_glyph_difference_not_discriminated_same_surface_limit() -> None:
-    """DOCUMENTED HONEST LIMIT: fuzzy same-surface read-back cannot tell a
-    single trailing-glyph difference apart (patient "3" vs "8") — the same
-    glyph-collapse that defeats OCR identity. This is precisely why the pixel
-    -only safety guarantee rests on the IDENTITY GATE (right record) and
-    halt-on-ambiguity, NOT on this read-back. Asserting the real behavior keeps
-    the proof honest rather than claiming a discrimination it does not have."""
+def test_single_glyph_difference_in_a_number_is_refuted_same_surface() -> None:
+    """The fuzzy same-surface read-back used to CONFIRM "patient 3" on a screen
+    showing "patient 8": one trailing glyph off. A value with digits is no
+    longer matched fuzzily; its tokens must match exactly, so the read
+    REFUTES. Free text without digits keeps its OCR tolerance. The identity
+    gate stays the safety guarantee on pixel-only surfaces."""
     v = _verifier([_Line("Saved note for patient 8")], min_ratio=0.9)
     verdict = v.read_back("Saved note for patient 3")
-    # It CONFIRMS the near-identical string — a coarse consistency signal only.
-    assert verdict.verdict is Verdict.CONFIRMED
+    assert verdict.verdict is Verdict.REFUTED

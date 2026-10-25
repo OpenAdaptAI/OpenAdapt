@@ -263,11 +263,18 @@ def value_matches(
     haystack: str, expected: str, *, min_ratio: float = READBACK_MIN_RATIO
 ) -> bool:
     """Whether ``expected`` is present in normalized ``haystack`` at ``min_ratio``."""
+    from openadapt_flow.runtime.effects.readback_values import token_occurrences
+
     want = _normalize(expected)
     if not want:
         return False
-    if want in haystack:
-        return True
+    # Whole tokens (a number as a whole number), never a substring: "250" is
+    # not in "$1,250.00". Shown twice is two records, not one confirmation.
+    runs = token_occurrences(haystack, want)
+    if runs:
+        return runs == 1
+    if any(c.isdigit() for c in want):
+        return False  # no fuzzy matching for a value with digits
     # Longest contiguous run (tolerant of the value embedded in surrounding
     # label text, e.g. "saved note for patient 3" containing the value).
     squashed_want = "".join(want.split())
