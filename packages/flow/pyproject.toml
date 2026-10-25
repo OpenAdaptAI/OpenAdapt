@@ -94,6 +94,8 @@ browser = [
 dev = [
     "pytest>=8",
     "pytest-timeout>=2.2",
+    # CI runs the unit shards with `pytest -n auto --dist loadfile`.
+    "pytest-xdist>=3.6",
     # Property-based (fuzz) testing of the identity gate's never-false-accept
     # invariant (tests/test_identity_fuzz.py).
     "hypothesis>=6.100",

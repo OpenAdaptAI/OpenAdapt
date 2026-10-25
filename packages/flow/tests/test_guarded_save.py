@@ -66,9 +66,9 @@ def _rows(db) -> list[dict]:
 # -- the three cases ----------------------------------------------------------
 
 
-def test_correct_save_is_verified(sor, agent, tmp_path):
+def test_correct_save_is_verified(sor, agent, tmp_path, approver):
     guarded = _guarded(sor, tmp_path)
-    out = run_case("correct", guarded, agent)
+    out = run_case("correct", guarded, agent, signer=approver[1])
     assert out["verdict"] == "VERIFIED"
     assert out["outcome"] == "verified"
     assert out["retry_allowed"] is False
@@ -86,9 +86,9 @@ def test_correct_save_is_verified(sor, agent, tmp_path):
     assert evidence_problem(doc["evidence"], receipt) is None
 
 
-def test_wrong_patient_is_refused_before_the_write(sor, agent, tmp_path):
+def test_wrong_patient_is_refused_before_the_write(sor, agent, tmp_path, approver):
     guarded = _guarded(sor, tmp_path)
-    out = run_case("wrong_patient", guarded, agent)
+    out = run_case("wrong_patient", guarded, agent, signer=approver[1])
     assert out["refused"] == "identity_mismatch"
     assert out["saved"] is False
     assert _rows(sor[1]) == []
@@ -96,9 +96,11 @@ def test_wrong_patient_is_refused_before_the_write(sor, agent, tmp_path):
     assert guarded.task_state("demo-wrong_patient-0001") is None
 
 
-def test_dropped_save_needs_reconciliation_and_is_never_retried(sor, agent, tmp_path):
+def test_dropped_save_needs_reconciliation_and_is_never_retried(
+    sor, agent, tmp_path, approver
+):
     guarded = _guarded(sor, tmp_path)
-    out = run_case("dropped", guarded, agent)
+    out = run_case("dropped", guarded, agent, signer=approver[1])
     assert out["saved"] is True
     assert out["verdict"] == "RECONCILIATION_REQUIRED"
     assert out["outcome"] == "reconciliation_required"
@@ -173,7 +175,7 @@ def test_record_changed_before_commit_is_refused(sor, agent, tmp_path):
     assert guarded.task_state("demo-moved-0001") is None
 
 
-def test_declined_save_is_refused(sor, agent, tmp_path):
+def test_declined_save_is_refused(sor, agent, tmp_path, approver):
     from openadapt_flow.approval_mode.item_approval import (
         ItemApprovalStore,
         make_answer,
@@ -198,6 +200,7 @@ def test_declined_save_is_refused(sor, agent, tmp_path):
             approver_id=None,
             auth_method="none",
             policy=store.context(),
+            signer=approver[1],
         )
     )
     with pytest.raises(GuardRefused):
@@ -322,7 +325,7 @@ def _write_task(tasks: Path, task_id: str, patient_id: str = "p1") -> None:
     )
 
 
-def test_mcp_tools_end_to_end(sor, agent, tmp_path):
+def test_mcp_tools_end_to_end(sor, agent, tmp_path, approver):
     tasks = tmp_path / "tasks"
     _write_task(tasks, "mcp-task-0001")
     bridge = GuardBridge(_guarded(sor, tmp_path), tasks)
@@ -343,6 +346,7 @@ def test_mcp_tools_end_to_end(sor, agent, tmp_path):
         waiting["approval_run_dir"],
         waiting["approval_request_id"],
         waiting["approval_request_sha256"],
+        signer=approver[1],
     )
     go = bridge.dispatch("guard_commit", {"guard_id": begun["guard_id"]})
     assert go["status"] == "go"

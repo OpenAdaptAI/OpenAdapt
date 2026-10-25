@@ -282,7 +282,9 @@ def _server_instructions(
         from openadapt_flow.agent.guard_tools import GUARD_INSTRUCTIONS
 
         text += " " + GUARD_INSTRUCTIONS
-    if teach is not None:
+    if teach is not None and getattr(teach, "instructions", None):
+        text += " " + teach.instructions
+    elif teach is not None:
         text += (
             " To add a workflow, teach it: call teach_start with the task, then "
             "teach_observe and teach_act until it is done, then teach_finish. "
@@ -457,10 +459,9 @@ def build_server(
             # actions synchronously submit to their own non-async backend-owner
             # thread, so every MCP call can leave the event loop responsive.
             result = await anyio.to_thread.run_sync(call)
-            if (
-                teaching
-                and name == "teach_admit"
-                and result.get("status") == "admitted"
+            if teaching and (
+                (name == "teach_admit" and result.get("status") == "admitted")
+                or (name == "teach_finish" and result.get("new_tool"))
             ):
                 await _notify_tools_changed(context)
         except BridgeError as exc:

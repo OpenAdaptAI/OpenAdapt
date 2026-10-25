@@ -299,10 +299,14 @@ def application_risk_rules_from_data(value: object) -> tuple[ApplicationRiskRule
 # "Add note" but NOT "address", and `post` (were it present) would not match
 # "postal". Ordered roughly by how common they are on real controls.
 #
+# "sign" counts in its writing sense ("Sign visit note", "Co-sign", "Signed"),
+# the clinical attestation that locks a note, but never as "sign in" or "sign
+# on", and "sign out" / "log out" only with a clinical object ("Sign out
+# patient"), never as the session's own "Sign out".
+#
 # Deliberately EXCLUDED to avoid noisy false positives on navigation chrome:
-# bare "sign" (collides with "sign in"; the writing sense is covered by
-# save/submit/confirm and the explicit "sign up" below), bare "post"/"order"/
-# "book"/"complete" (collide with "Posts"/"Orders"/"Bookings"/"Completed" tabs).
+# bare "post"/"order"/"book"/"complete" (collide with "Posts"/"Orders"/
+# "Bookings"/"Completed" tabs).
 _WRITE_STEMS: tuple[str, ...] = (
     r"sav(?:e|es|ing)",
     r"submit(?:s|ted|ting)?",
@@ -319,6 +323,15 @@ _WRITE_STEMS: tuple[str, ...] = (
     r"pay(?:s|ing)?",
     r"sign[\s\-_]?up",
     r"signup",
+    r"(?:co[\-_]?|e[\-_]?)?sign(?:s|ed|ing)?(?![\s\-_]*(?:in|on|out)\b)",
+    # "Sign out patient", "Log out Jane Doe": signing out a record (a
+    # discharge or check-out) is a write. Only a bare "sign out" / "log out",
+    # or one that names the session ("sign out of OpenAdapt", "sign out now"),
+    # is session chrome.
+    r"(?:sign|log)(?:s|ged|ging|ed|ing)?[\s\-_]*out[\s\-_]+"
+    r"(?!(?:of|now|here|and|from|all|everywhere|completely|securely|safely)\b)"
+    r"[a-z]+",
+    r"discharg(?:e|es|ed|ing)",
     r"regist(?:er|ers|ering|ration)",
     r"enroll(?:s|ed|ing|ment)?",
     r"add(?:s|ed|ing)?",
@@ -601,7 +614,9 @@ def step_text(step: Step) -> str:
     drag_end_structural = drag_end.structural if drag_end is not None else None
     if drag_end_structural is not None and drag_end_structural.name:
         parts.append(drag_end_structural.name)
-    return " ".join(parts)
+    # " | " keeps a write phrase from spanning two labels: "Sign out" twice
+    # must not read as "sign out Sign".
+    return " | ".join(parts)
 
 
 def infer_step_risk(

@@ -90,8 +90,17 @@ class Campaign:
     def __init__(self, *, passes: bool = True, field: str = "note") -> None:
         self.passes, self.field, self.calls = passes, field, []
 
-    def __call__(self, candidate, config, *, out, cases, trials, certify, hooks):
-        self.calls.append({"cases": cases, "certify": certify, "trials": trials})
+    def __call__(
+        self, candidate, config, *, out, cases, trials, certify, hooks, run_id_prefix
+    ):
+        self.calls.append(
+            {
+                "cases": cases,
+                "certify": certify,
+                "trials": trials,
+                "run_id_prefix": run_id_prefix,
+            }
+        )
         if not self.passes:
             raise RuntimeError("the representative case halted")
         label = Workflow.load(candidate).steps[0].anchor.ocr_text
@@ -161,14 +170,15 @@ def test_a_repair_is_requalified_and_readmitted_with_lineage(tmp_path, keys):
         tmp_path, store, root, keys, label="Save record", campaign=campaign
     )
 
-    # The parent's own campaign: same policy, same cases.
-    assert campaign.calls == [
-        {
-            "cases": list(requalified.case_ids),
-            "certify": "clinical-write",
-            "trials": 1,
-        }
-    ]
+    # The parent's own campaign: same policy, same cases, under fresh run ids
+    # (each case's authorization id is its run id, consumed once per process).
+    [call] = campaign.calls
+    assert call.pop("run_id_prefix").startswith("requalify-")
+    assert call == {
+        "cases": list(requalified.case_ids),
+        "certify": "clinical-write",
+        "trials": 1,
+    }
     assert requalified.digest != _digest(root)
     assert record["hop"] == 1 and record["parent_digest"] == _digest(root)
     assert record["policy_name"] == "clinical-write"
@@ -446,3 +456,21 @@ def test_the_readmission_step_signs_lineage_after_approval(tmp_path, keys):
     assert (
         lineage_refusal(store, _digest(root), requalified.digest, key_dir=keys) is None
     )
+
+
+def test_each_requalification_names_its_runs_afresh(tmp_path, keys):
+    # A process that qualified the parent refuses its run ids again, so two
+    # re-qualifications must never share a run-id prefix.
+    root = _certified(tmp_path / "root")
+    campaign = Campaign()
+    for label in ("Save record", "Store record"):
+        _repair(
+            tmp_path,
+            tmp_path / f"store-{label}",
+            root,
+            keys,
+            label=label,
+            campaign=campaign,
+        )
+    prefixes = [call["run_id_prefix"] for call in campaign.calls]
+    assert len(set(prefixes)) == 2
