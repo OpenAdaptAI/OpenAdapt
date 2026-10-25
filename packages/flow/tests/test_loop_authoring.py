@@ -544,10 +544,14 @@ def test_poisoned_record_identity_mismatch_halts_no_wrong_click(dirs):
 
     backend = FakeBackend()
     # Consequential identity-gated actions are checked once during ordinary
-    # replay and again against the freshly armed actuation target. Both reads
-    # for iteration 1 match; iteration 2 then names another entity and HALTs.
+    # replay and again against the freshly armed actuation target, and each
+    # verified read is followed by the candidate census's whole-frame read
+    # (runtime.identity_census). Every read for iteration 1 matches; iteration
+    # 2 then names another entity and HALTs.
     vision = _ScriptedIdentityVision(
         bands=[
+            "Jane Sample Knee pain referral High",
+            "Jane Sample Knee pain referral High",
             "Jane Sample Knee pain referral High",
             "Jane Sample Knee pain referral High",
             "Taylor Duplicate Knee pain referral High",
