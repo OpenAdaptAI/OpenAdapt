@@ -8,3 +8,4 @@
 {"app": "fhir", "at": 1792887849.225984, "event": "stop", "note": "", "step": "contract"}
 {"app": "openimis", "at": 1792887849.245452, "event": "start", "note": "verify.yaml (sql on tblClaim), claims oracle role, hooks, signed-in probe (offline draft)", "step": "contract"}
 {"app": "openimis", "at": 1792887932.2611232, "event": "stop", "note": "", "step": "contract"}
+{"app": "both", "at": 1792887988.1452, "event": "start", "note": "FHIR and openIMIS soak adapters (offline drafts)", "step": "harness"}
