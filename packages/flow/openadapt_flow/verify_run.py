@@ -145,6 +145,8 @@ _STRENGTH_RANK = {
 #: Where the baseline keeps the audit log read for frame attribution. Not a
 #: surface name: those are plain identifiers.
 FRAME_AUDIT_DETAIL = "openadapt:frame_audit"
+#: Where the baseline keeps the whole-database snapshot (``frame.database``).
+FRAME_DB_DETAIL = "openadapt:frame_database"
 
 #: ``checked`` (``docs/VERIFICATION_COVERAGE.md``): which parts of the claim
 #: behind ``verified`` were checked, and how each came out.
@@ -337,6 +339,14 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
                 "frame.attribution.read must be one read-only system-of-record "
                 "read (rest, sql, fhir, graphql, ...)"
             )
+    database = cfg.frame.database if cfg.frame is not None else None
+    if database is not None:
+        surfaces = set(cfg.verifier.surfaces) or {""}
+        unknown = sorted(set(database.views.values()) - surfaces)
+        if unknown:
+            raise VerifyRunError(
+                "frame.database.views names no such surface: " + ", ".join(unknown)
+            )
     for effect in cfg.effects:
         if effect.needs_operator_confirmation:
             raise VerifyRunError(
@@ -398,6 +408,101 @@ def _audit_verifier(cfg: VerifyConfig, params: Mapping[str, object]) -> Any:
         )
     except ValueError as exc:
         raise VerifyRunError(f"cannot build the audit read: {exc}") from exc
+
+
+def _db_connect(read: Mapping[str, Any]) -> Any:
+    """A connect function for ``frame.database.read`` (read-only)."""
+
+    if read.get("sqlite_database"):
+        import sqlite3
+
+        uri = Path(str(read["sqlite_database"])).resolve().as_uri() + "?mode=ro"
+        return lambda: sqlite3.connect(uri, uri=True)
+    import importlib
+
+    from openadapt_flow.deployment import _require_env
+
+    module = importlib.import_module(str(read["sql_driver"]))
+    args = dict(read.get("sql_connect_args") or {})
+    if read.get("sql_password_env"):
+        args["password"] = _require_env(
+            str(read["sql_password_env"]), "frame.database.read.sql_password_env"
+        )
+    return lambda: module.connect(**args)
+
+
+def _read_database(cfg: VerifyConfig) -> Optional[dict[str, Any]]:
+    """The whole-database snapshot, or None when it can't be read."""
+
+    from openadapt_flow.runtime.effects.db_snapshot import take_snapshot
+
+    database = cfg.frame.database if cfg.frame is not None else None
+    if database is None:
+        return None
+    try:
+        snap = take_snapshot(
+            _db_connect(database.read),
+            database.dialect,
+            skip=database.allow_tables,
+            max_rows=database.max_rows,
+        )
+    except Exception:  # noqa: BLE001 - unreadable -> the frame is not checked
+        return None
+    return snap.to_json()
+
+
+DatabaseSlices = tuple[
+    dict[str, tuple[EffectState, Optional[list[dict[str, Any]]]]],
+    dict[str, dict[str, Optional[str]]],
+    list[str],
+]
+
+
+def _database_slices(
+    cfg: VerifyConfig, before: EffectState
+) -> Optional[DatabaseSlices]:
+    """Slices for every table, their column defaults, and tables moved unread.
+
+    None when there is no ``frame.database``. A baseline without a readable
+    snapshot, or an unreadable post-save read, gives one unreachable slice, so
+    the frame is not checked.
+    """
+
+    from openadapt_flow.runtime.effects.db_snapshot import (
+        ANY_VALUE,
+        Snapshot,
+        keyed_rows,
+    )
+
+    if cfg.frame is None or cfg.frame.database is None:
+        return None
+    stored = (
+        before.detail.get(FRAME_DB_DETAIL) if isinstance(before.detail, dict) else None
+    )
+    after_json = _read_database(cfg)
+    if not isinstance(stored, dict) or after_json is None:
+        unreachable = EffectState(substrate="database", reachable=False, records=[])
+        return {"database": (unreachable, None)}, {}, []
+    old, new = Snapshot.from_json(stored), Snapshot.from_json(after_json)
+    slices: dict[str, tuple[EffectState, Optional[list[dict[str, Any]]]]] = {}
+    defaults: dict[str, dict[str, Optional[str]]] = {}
+    unread: list[str] = []
+    for name in sorted(set(old.tables) | set(new.tables)):
+        a, b = old.tables.get(name), new.tables.get(name)
+        if a is None or b is None or a.columns != b.columns:
+            unread.append(name)  # created, dropped or altered in the window
+            continue
+        if a.rows is None or b.rows is None:
+            if (a.count, a.digest) != (b.count, b.digest):
+                unread.append(name)
+            continue
+        slices[name] = (
+            EffectState(substrate="database", reachable=True, records=keyed_rows(a)),
+            keyed_rows(b),
+        )
+        # The primary key is the row's identity: every new row sets it.
+        defaults[name] = {**b.defaults, **dict.fromkeys(b.primary_key, ANY_VALUE)}
+    return slices, defaults, unread
 
 
 def _read_audit(verifier: Any) -> Optional[list[dict[str, Any]]]:
@@ -469,6 +574,28 @@ def judge_run_frame(
             )
     else:
         slices[""] = (before, _post_records(after))
+    identities: Optional[dict[str, str]] = None
+    defaults: Optional[dict[str, dict[str, Optional[str]]]] = None
+    unread: list[str] = []
+    database = _database_slices(cfg, before)
+    if database is not None:
+        from openadapt_flow.runtime.effects.db_snapshot import KEY
+
+        db_slices, defaults, unread = database
+        clash = sorted(set(db_slices) & set(slices))
+        if clash:
+            return FrameVerdict(
+                status="not_checked",
+                reason="a table has the same name as a surface: " + ", ".join(clash),
+            )
+        if routes is None:
+            routes = {str(i): [""] for i in range(len(bound_effects))}
+        views = spec.database.views if spec.database is not None else {}
+        routes = {k: list(v) for k, v in routes.items()}
+        for own in routes.values():
+            own.extend(t for t, surface in views.items() if surface in own)
+        slices.update(db_slices)
+        identities = {name: KEY for name in db_slices}
     audit_before: Optional[list[dict[str, Any]]] = None
     audit_after: Optional[list[dict[str, Any]]] = None
     if audit_verifier is not None:
@@ -489,6 +616,9 @@ def judge_run_frame(
         audit_before=audit_before,
         audit_after=audit_after,
         run_actors=run_actors,
+        identities=identities,
+        new_row_defaults=defaults,
+        unread_changes=unread,
     )
 
 
@@ -782,6 +912,12 @@ def capture_baseline(
                 }
             }
         )
+    if cfg.frame is not None and cfg.frame.database is not None:
+        snapshot = _read_database(cfg)
+        if snapshot is not None:
+            state = state.model_copy(
+                update={"detail": {**state.detail, FRAME_DB_DETAIL: snapshot}}
+            )
     payload = {
         "schema_version": BASELINE_SCHEMA,
         "execution_id": execution_id,

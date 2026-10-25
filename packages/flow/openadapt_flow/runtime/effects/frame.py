@@ -171,6 +171,49 @@ class FrameSideRecord(BaseModel):
     count: int = Field(default=1, ge=1)
 
 
+class FrameDatabase(BaseModel):
+    """``frame.database``: diff the whole database, not only what is read.
+
+    Every table and column is snapshotted before and after the save
+    (``db_snapshot.py``), and each table is judged as one more slice: a row
+    added, removed or changed is collateral unless a declared effect, a
+    declared side record or an attributed concurrent writer explains it. A
+    new declared or side row that sets a column the effects don't name, and
+    that ``new_row_fields`` doesn't list, is collateral too.
+
+    ``allow_tables`` replaces a read-list with a reviewed allow-list: the
+    tables the app writes on its own for any signed-in user (logs, sessions,
+    id registries). Everything else is compared.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dialect: Literal["sqlite", "mysql"]
+    #: The read-only connection: ``sqlite_database``, or ``sql_driver`` with
+    #: ``sql_connect_args`` and ``sql_password_env``, as in a ``kind: sql``
+    #: verifier (no query: every table is read).
+    read: dict[str, Any]
+    #: Tables not compared: the app's own bookkeeping. Reviewed per app.
+    allow_tables: list[str] = Field(default_factory=list)
+    #: Table -> the surface whose records it holds (``patient_data`` ->
+    #: ``patient``): an effect routed to the surface declares rows here too.
+    views: dict[str, str] = Field(default_factory=dict)
+    #: Table -> columns a new declared or side row may set beyond the fields
+    #: the effects name (ids, creation dates, columns the app's form fills
+    #: on its own). Any other column must hold its default.
+    new_row_fields: dict[str, list[str]] = Field(default_factory=dict)
+    #: Tables over this many rows are fingerprinted, not compared row by row.
+    max_rows: int = Field(default=20000, ge=1)
+
+    @model_validator(mode="after")
+    def _connection(self) -> "FrameDatabase":
+        if not (self.read.get("sqlite_database") or self.read.get("sql_driver")):
+            raise ValueError("frame.database.read needs sqlite_database or sql_driver")
+        if self.read.get("sql_query"):
+            raise ValueError("frame.database.read reads every table; drop sql_query")
+        return self
+
+
 class FrameSpec(BaseModel):
     """``frame:`` in ``verify.yaml``: the slice that must otherwise not move."""
 
@@ -187,6 +230,8 @@ class FrameSpec(BaseModel):
     attribution: Optional[FrameAttribution] = None
     #: Rows the save adds beside each new declared record (``FrameSideRecord``).
     side_records: list[FrameSideRecord] = Field(default_factory=list)
+    #: Diff the whole database (``FrameDatabase``).
+    database: Optional[FrameDatabase] = None
 
     @model_validator(mode="after")
     def _identity_for_audit(self) -> "FrameSpec":
@@ -352,6 +397,9 @@ def judge_frame(
     audit_before: Optional[list[dict[str, Any]]] = None,
     audit_after: Optional[list[dict[str, Any]]] = None,
     run_actors: Sequence[str] = (),
+    identities: Optional[Mapping[str, str]] = None,
+    new_row_defaults: Optional[Mapping[str, Mapping[str, Optional[str]]]] = None,
+    unread_changes: Sequence[str] = (),
 ) -> FrameVerdict:
     """Judge the frame of ``effects`` over ``slices``.
 
@@ -368,6 +416,13 @@ def judge_frame(
         audit_after: ``audit_read`` entries read after the save.
         run_actors: More ids of this run (the executor's), never "another
             actor".
+        identities: Slice -> its identity field, where it isn't
+            ``spec.identity_field`` (a database table's row key).
+        new_row_defaults: Slice -> column defaults, for slices whose new
+            declared and side rows must set nothing undeclared (database
+            tables, ``spec.database``).
+        unread_changes: Tables that moved but were fingerprinted, not read
+            row by row (or whose schema changed). Each is collateral.
     """
 
     attribution = spec.attribution
@@ -383,7 +438,9 @@ def judge_frame(
             )
         self_ids = resolved | {str(a) for a in run_actors if str(a)}
 
-    ignore = set(spec.ignore_fields)
+    from openadapt_flow.runtime.effects.db_snapshot import KEY, is_default
+
+    ignore = set(spec.ignore_fields) | {KEY}
     if attribution is not None and attribution.kind == "record_field":
         # Server-set bookkeeping moves on every write; it says who, not what.
         ignore |= set(attribution.server_set)
@@ -399,11 +456,34 @@ def judge_frame(
             attribution = None
             mode = "attribution_refused"
 
-    def key_of(record: Mapping[str, Any]) -> Any:
-        if spec.identity_field:
-            value = record.get(spec.identity_field)
+    def identity_of(name: str) -> Optional[str]:
+        if identities is not None and name in identities:
+            return identities[name]
+        return spec.identity_field
+
+    def key_of(record: Mapping[str, Any], name: str = "") -> Any:
+        identity = identity_of(name)
+        if identity:
+            value = record.get(identity)
             return None if value is None else str(value)
         return stable_id(_without(record, ignore))
+
+    row_fields = spec.database.new_row_fields if spec.database is not None else {}
+
+    def undeclared_columns(
+        name: str, record: Mapping[str, Any], also: Sequence[str] = ()
+    ) -> list[str]:
+        """Columns a new row sets that nothing declares (database slices)."""
+
+        defaults = (new_row_defaults or {}).get(name)
+        if defaults is None:
+            return []
+        allowed = written | set(row_fields.get(name, ())) | ignore | set(also)
+        return sorted(
+            c
+            for c, v in record.items()
+            if c not in allowed and not is_default(v, defaults.get(c))
+        )
 
     window_entries: Optional[list[dict[str, Any]]] = None
     if mode == "audit_read":
@@ -520,9 +600,9 @@ def judge_frame(
         before_state, after_records = slices.get(side.of_surface, (None, None))
         if before_state is not None and after_records is not None:
             sels = selectors_for(side.of_surface)
-            old = {key_of(r) for r in before_state.records}
+            old = {key_of(r, side.of_surface) for r in before_state.records}
             for record in after_records:
-                if key_of(record) in old:
+                if key_of(record, side.of_surface) in old:
                     continue
                 if any(record_matches(dict(record), s) for s in sels):
                     value = record.get(side.of_field)
@@ -555,16 +635,16 @@ def judge_frame(
             ("post-save", after_records, after_map),
         ):
             for record in records:
-                key = key_of(record)
+                key = key_of(record, name)
                 if key is None:
                     return _not_checked(
-                        f"a {label} record carries no {spec.identity_field!r}; "
+                        f"a {label} record carries no {identity_of(name)!r}; "
                         "the slice can't be compared record by record",
                         mode,
                     )
-                if key in into and spec.identity_field:
+                if key in into and identity_of(name):
                     return _not_checked(
-                        f"two {label} records share one {spec.identity_field!r}; "
+                        f"two {label} records share one {identity_of(name)!r}; "
                         "the slice can't be compared record by record",
                         mode,
                     )
@@ -593,6 +673,20 @@ def judge_frame(
                         )
                     )
                     continue
+                if before is None and after is not None:
+                    extra = undeclared_columns(name, after)
+                    if extra:
+                        # The new record sets a column nothing declares.
+                        collateral.append(
+                            FrameChange(
+                                name,
+                                "added",
+                                attribute(key, None, after),
+                                extra,
+                                on_target=True,
+                                key=key,
+                            )
+                        )
                 if before is None or after is None:
                     continue  # a new or removed target: the delta check's case
                 stray = [
@@ -624,9 +718,22 @@ def judge_frame(
                 )
                 if side_index is not None:
                     # A side record of a new declared record: part of the save.
-                    link = str(after.get(spec.side_records[side_index].link_field))
+                    side = spec.side_records[side_index]
+                    link = str(after.get(side.link_field))
                     side_found[side_index][link] += 1
                     declared_keys.add(str(ref_of(key, None, after)))
+                    extra = undeclared_columns(name, after, (side.link_field,))
+                    if extra:
+                        collateral.append(
+                            FrameChange(
+                                name,
+                                "added",
+                                attribute(key, None, after),
+                                extra,
+                                on_target=True,
+                                key=key,
+                            )
+                        )
                     continue
                 note(
                     FrameChange(
@@ -653,6 +760,13 @@ def judge_frame(
                             key=key,
                         )
                     )
+
+    for table in unread_changes:
+        # Fingerprinted, not read row by row: it moved, and nothing can say
+        # which rows or who moved them.
+        collateral.append(
+            FrameChange(table, "changed", "unattributed", ["rows not compared"])
+        )
 
     for i, side in enumerate(spec.side_records):
         for link, found in side_found[i].items():
