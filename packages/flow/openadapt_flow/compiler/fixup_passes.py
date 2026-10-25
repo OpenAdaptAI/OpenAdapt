@@ -166,6 +166,7 @@ def _has_identity_evidence(step: Step) -> bool:
             or anchor.structured_identity
             or anchor.identity_template
             or anchor.identifier_crop
+            or anchor.form_identity
         )
     )
 

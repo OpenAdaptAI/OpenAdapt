@@ -344,6 +344,31 @@ class IdentityTemplate(BaseModel):
         return data
 
 
+class FormIdentity(BaseModel):
+    """Record identity of a save on a create-new form: the form it submits
+    holds exactly what this run typed.
+
+    A form that creates a record shows no existing record next to its save
+    button: the record is the one the run is entering. So the save's identity
+    is the form itself. The recorder observes, right before the demonstrated
+    click on a labelled save, that the control belongs to the same HTML form
+    as every field typed into since the last save (and is not in a table row
+    or a single field's own widget). Before the click at run time, the
+    replayer requires the same: the control's form owns exactly
+    ``filled_fields`` fields this run typed into, the control has the same
+    ``submit_role``, and every one of those fields still holds the value it
+    held when the run finished typing it. Anything else halts before the
+    click.
+
+    Counts and closed-vocabulary tokens only; no field text or value.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    filled_fields: int = Field(ge=1, le=10_000)
+    submit_role: Literal["form_submit", "form_control"]
+
+
 class Anchor(BaseModel):
     """Redundant evidence for locating a step's target on screen.
 
@@ -443,6 +468,14 @@ class Anchor(BaseModel):
             " by the recorded region's offset from the recorded click point,"
             " exactly as the OCR band's exclude region is) so the pixel/VLM"
             " tiers compare like-for-like. Set iff `identifier_crop` is set."
+        ),
+    )
+    form_identity: Optional[FormIdentity] = Field(
+        default=None,
+        description=(
+            "A labelled save on a create-new form: before the click, its form"
+            " must hold exactly the fields this run typed, with the values"
+            " typed. See FormIdentity. None everywhere else."
         ),
     )
     landmarks: list[Landmark] = Field(default_factory=list)
@@ -3664,6 +3697,7 @@ class IdentityCheck(BaseModel):
         "vlm",
         "signal_quorum",
         "hover",
+        "form",
     ] = "context"
     coverage: float = 0.0
     expected: str = ""

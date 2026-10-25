@@ -54,6 +54,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from openadapt_flow.ir import (
     SUBMIT_BINDING_PATH_PATTERN,
     SUBMIT_BINDING_TOKEN_PATTERN,
+    FormIdentity,
     SubmitBinding,
 )
 
@@ -62,9 +63,11 @@ __all__ = [
     "SUBMIT_BINDING_ACTIONABLE_SELECTOR",
     "SUBMIT_BINDING_FIELD_SELECTOR",
     "SubmitBindingObservation",
+    "decide_form_identity",
     "decide_submit_binding",
     "describe_submit_binding",
     "observation_from_page",
+    "verify_form_identity",
     "verify_submit_binding",
 ]
 
@@ -250,12 +253,12 @@ _OBSERVE_SUBMIT_BINDING_TEMPLATE = r"""(control, fields) => {
         counted: null,
         icon: null,
     };
-    // A labelled control is identified by its name, not bound. Stop before
-    // reading anything else about it: its text never leaves the page.
-    if (result.labelled) {
-        return {observation: result, canon: JSON.stringify(result)};
-    }
-    result.icon = iconGeometry(control);
+    // A labelled control is identified by its name, not bound, so its icon,
+    // position and uniqueness are not read. Its form relation still is: a
+    // labelled save on a create-new form is tied to the record by the form
+    // it submits (openadapt_flow.ir.FormIdentity). Its text never leaves the
+    // page.
+    if (!result.labelled) result.icon = iconGeometry(control);
 
     const seen = new Set();
     const live = [];
@@ -315,6 +318,9 @@ _OBSERVE_SUBMIT_BINDING_TEMPLATE = r"""(control, fields) => {
     const afterAll = live.every((field) => follows(field, control));
     const beforeAll = live.every((field) => follows(control, field));
     result.order = afterAll ? 'after' : (beforeAll ? 'before' : 'between');
+    if (result.labelled) {
+        return {observation: result, canon: JSON.stringify(result)};
+    }
 
     let top = Infinity;
     let left = Infinity;
@@ -461,6 +467,87 @@ def _unbindable_reason(observation: SubmitBindingObservation) -> Optional[str]:
         return (
             f"{observation.candidates} unlabeled controls follow the filled "
             "fields, so which one submits them is ambiguous"
+        )
+    return None
+
+
+def _no_form_identity_reason(observation: SubmitBindingObservation) -> Optional[str]:
+    """Why a labelled control's form can't identify the record, or None."""
+
+    if not observation.labelled:
+        return "the control has no name, so a submit binding identifies it"
+    if observation.in_row:
+        return (
+            "the control is inside a table row or list item, whose own identity "
+            "ties it to a record"
+        )
+    if observation.fields <= 0:
+        return "no field the program typed into is on the page"
+    if observation.form_owner != "shared":
+        return "the control is not in the form that owns the filled fields"
+    if observation.fields_in_scope is not True:
+        return "a filled field lies outside the control's form"
+    if observation.field_local is not False:
+        return "the control belongs to a single field's own widget"
+    if observation.submit_role not in ("form_submit", "form_control"):
+        return "the control is not a button of that form"
+    return None
+
+
+def decide_form_identity(
+    observation: SubmitBindingObservation,
+) -> tuple[Optional[FormIdentity], Optional[str]]:
+    """A labelled save's form identity from the demonstration, or a reason.
+
+    Returns ``(identity, None)`` when the control is a button of the one form
+    that owns every field typed into since the last save, else
+    ``(None, reason)``.
+    """
+
+    reason = _no_form_identity_reason(observation)
+    if reason is not None:
+        return None, reason
+    assert observation.submit_role in ("form_submit", "form_control")
+    return (
+        FormIdentity(
+            filled_fields=observation.fields,
+            submit_role=observation.submit_role,
+        ),
+        None,
+    )
+
+
+def verify_form_identity(
+    identity: FormIdentity,
+    observation: SubmitBindingObservation,
+    *,
+    changed_fields: int,
+) -> Optional[str]:
+    """Return None when the live form still identifies the record.
+
+    ``observation`` is the live control's observation against the fields this
+    run typed into; ``changed_fields`` counts those fields in its form whose
+    value differs from what the run left in them. Otherwise return the first
+    difference, in plain words.
+    """
+
+    reason = _no_form_identity_reason(observation)
+    if reason is not None:
+        return reason
+    if observation.fields != identity.filled_fields:
+        return (
+            f"this run has typed into {observation.fields} field(s) still on the "
+            f"page; the demonstration had typed into {identity.filled_fields}"
+        )
+    if observation.submit_role != identity.submit_role:
+        return (
+            f"the control's submit role is {observation.submit_role!r}, it was "
+            f"{identity.submit_role!r}"
+        )
+    if changed_fields:
+        return (
+            f"{changed_fields} field(s) of the form no longer hold the value this "
+            "run typed"
         )
     return None
 

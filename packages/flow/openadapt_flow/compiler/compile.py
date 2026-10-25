@@ -3529,11 +3529,18 @@ def _attach_submit_bindings(steps: list[Step], observations: dict[str, object]) 
     carried a submit-binding observation. Each such step gets either a
     binding (every condition in :mod:`openadapt_flow.submit_binding` held in
     the demonstration) or a plain-language reason it could not be bound.
-    Steps without an observation (pixel recordings, labelled controls,
-    recordings made before this capability) are left unchanged.
+
+    A consequential click on a labelled control that compiled with no
+    identity evidence, after fields were typed, and whose observation shows
+    it is a button of the one form owning those fields, gets a
+    :class:`~openadapt_flow.ir.FormIdentity` instead: a create-new form's
+    save. Steps without an observation (pixel recordings, recordings made
+    before this capability) are left unchanged.
     """
 
+    from openadapt_flow.policy import is_identity_armed
     from openadapt_flow.submit_binding import (
+        decide_form_identity,
         decide_submit_binding,
         observation_from_page,
     )
@@ -3564,6 +3571,24 @@ def _attach_submit_bindings(steps: list[Step], observations: dict[str, object]) 
                 )
                 step.submit_binding = binding
                 step.submit_binding_unbound_reason = reason
+        elif (
+            raw is not None
+            and step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+            and step.risk == "irreversible"
+            and step.anchor is not None
+            and typed_since_commit
+            and not is_identity_armed(step)
+        ):
+            # A labelled save with no record on screen to check: a create-new
+            # form. The record is the one the run typed into the form.
+            try:
+                form_identity, _ = decide_form_identity(observation_from_page(raw))
+            except ValueError:
+                form_identity = None
+            if form_identity is not None:
+                step.anchor.form_identity = form_identity
+                step.identity_armed = True
+                step.identity_unarmed_reason = None
         if step.risk == "irreversible":
             # A consequential step closes the entry it committed.
             typed_since_commit = []

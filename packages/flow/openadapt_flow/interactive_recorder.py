@@ -1927,10 +1927,10 @@ _INIT_JS = r"""
     emitInFrameSpace(dragEvent);
   });
 
-  // How the clicked control relates to the fields typed into so far. Only an
-  // unlabeled control yields an observation; it is structure only (tags,
-  // roles, counts, relation words, icon geometry), captured before the page
-  // reacts to the click.
+  // How the clicked control relates to the fields typed into so far: for an
+  // unlabeled control, or a labelled one inside the form those fields belong
+  // to. It is structure only (tags, roles, counts, relation words, icon
+  // geometry), captured before the page reacts to the click.
   function submitBindingEvidence(target) {
     try {
       const control = target && target.closest
@@ -1938,7 +1938,11 @@ _INIT_JS = r"""
       if (!control || control.matches(
           'canvas, input[type="range"], [role="slider"]')) return null;
       const out = observeSubmitBinding(control, filledFields);
-      if (!out || !out.observation || out.observation.labelled) return null;
+      if (!out || !out.observation) return null;
+      // A labelled control matters only as the save of the form the fields
+      // were typed into (openadapt_flow.ir.FormIdentity).
+      if (out.observation.labelled
+          && out.observation.form_owner !== 'shared') return null;
       return out.observation;
     } catch (e) { return null; }
   }
@@ -4139,15 +4143,12 @@ class InteractiveRecorder:
             event["section"] = {
                 k: section[k] for k in ("kind", "text", "header") if k in section
             }
-        if (
-            kind in ("click", "double_click")
-            and ev.get("submit_binding")
-            and not _locatable_structural(ev.get("structural"))
-        ):
-            # An unlabeled control (no usable locator). Structure only: the
-            # icon geometry becomes its SHA-256 here, and a malformed
-            # observation is dropped (no binding, so a later consequential
-            # click on that control is refused).
+        if kind in ("click", "double_click") and ev.get("submit_binding"):
+            # An unlabeled control (no usable locator), or a labelled one in
+            # the form the run typed into (a create-new form's save).
+            # Structure only: the icon geometry becomes its SHA-256 here, and
+            # a malformed observation is dropped (no binding or form identity,
+            # so a later consequential click on that control is refused).
             try:
                 event["submit_binding"] = observation_from_page(
                     ev["submit_binding"]
