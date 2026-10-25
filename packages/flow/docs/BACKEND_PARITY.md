@@ -159,6 +159,8 @@ and `--log-url`, the transparency log) are not app URLs.
 | `openadapt-flow validate-hosted` | `--target-url` | The surface comes from the signed run report. A non-web report refuses a target URL ("Target URL is web-only and must be omitted"). |
 | `openadapt-agent authoring connect` | `--url` | `--url` opens a fresh browser. Without it the command pins the local app window (one macOS or Linux window). Windows, RDP and Citrix are coach-only on the mailbox: the person drives and Capture records (`COACH_ONLY_BACKENDS` in `agent/mailbox.py`). |
 | `openadapt-agent seal keys pin` | `--url` | The seal key server's address, not an app. |
+| `openadapt-flow generate-parts channels` | `--base-url` | The system of record's API, read once to list candidate read channels; no surface is driven. |
+| `openadapt-flow generate-parts channels` | `--fhir-base-url` | The system of record's FHIR API, read once to list candidate read channels; no surface is driven. |
 
 ## Open gaps
 

@@ -9393,6 +9393,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_intake_parser(sub)
 
+    from openadapt_flow.generate.cli import add_parser as _add_generate_parser
+
+    _add_generate_parser(sub)
+
     from openadapt_flow.decision.cli import add_parser as _add_triage_parser
 
     _add_triage_parser(sub)

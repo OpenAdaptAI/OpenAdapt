@@ -67,6 +67,31 @@ DEFAULT_OBSERVATION_PATHS: dict[str, str] = {
 }
 
 
+#: A search result longer than this many pages reads as unreadable, never as
+#: the first pages.
+MAX_PAGES = 50
+
+
+def _next_link(bundle: dict[str, Any]) -> Optional[str]:
+    """The Bundle's ``next`` page URL, if any."""
+
+    links = bundle.get("link")
+    if not isinstance(links, list):
+        return None
+    for link in links:
+        if isinstance(link, dict) and link.get("relation") == "next":
+            url = link.get("url")
+            return url if isinstance(url, str) and url else None
+    return None
+
+
+def _same_origin(url: str, base_url: str) -> bool:
+    from urllib.parse import urlsplit
+
+    a, b = urlsplit(url), urlsplit(base_url)
+    return (a.scheme, a.netloc) == (b.scheme, b.netloc)
+
+
 class AccessTokenSource(Protocol):
     """Supplies bearer tokens that can expire."""
 
@@ -240,19 +265,45 @@ class FhirEffectVerifier(VerifierAdapterBase):
             bundle = resp.json()
         except Exception:  # noqa: BLE001 - unparseable body is unreadable
             return None
-        if not isinstance(bundle, dict) or bundle.get("resourceType") != "Bundle":
-            return None
-        entries = bundle.get("entry", [])
-        if not isinstance(entries, list):
-            return None
         out: list[dict[str, Any]] = []
-        for entry in entries:
-            if not isinstance(entry, dict):
+        total: Any = None
+        for page in range(MAX_PAGES):
+            if not isinstance(bundle, dict) or bundle.get("resourceType") != "Bundle":
                 return None
-            resource = entry.get("resource")
-            if not isinstance(resource, dict):
+            if page == 0:
+                total = bundle.get("total")
+            entries = bundle.get("entry", [])
+            if not isinstance(entries, list):
                 return None
-            out.append(self._flatten(resource))
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    return None
+                resource = entry.get("resource")
+                if not isinstance(resource, dict):
+                    return None
+                out.append(self._flatten(resource))
+            next_url = _next_link(bundle)
+            if next_url is None:
+                break
+            if not _same_origin(next_url, self.base_url):
+                return None  # a next page elsewhere is not this system of record
+            try:
+                resp = session.get(
+                    next_url, headers=headers, timeout=self.timeout_s, **tls_kwargs
+                )
+            except Exception:  # noqa: BLE001 - a lost page makes the set partial
+                return None
+            if resp.status_code // 100 != 2:
+                return None
+            try:
+                bundle = resp.json()
+            except Exception:  # noqa: BLE001
+                return None
+        else:
+            return None  # more pages than MAX_PAGES: never a truncated read
+        if isinstance(total, int) and not isinstance(total, bool) and total > len(out):
+            # The server says there are more matches than it returned.
+            return None
         return drop_record_fields(out, self.drop_fields)
 
     # -- EffectVerifier protocol --------------------------------------------
