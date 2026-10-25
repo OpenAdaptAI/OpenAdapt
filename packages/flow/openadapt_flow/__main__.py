@@ -4738,6 +4738,7 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
     """
     import json
 
+    from openadapt_flow.approval_mode.human_attestation import AttestationRefused
     from openadapt_flow.approval_mode.item_approval import (
         ItemApprovalRefused,
         ItemApprovalStore,
@@ -4822,26 +4823,46 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
     if delegate is None:
         from openadapt_flow.approval_mode.human_attestation import (
             ROUTE_METHOD,
-            AttestationRefused,
             load_signer,
+            stdio_signer,
         )
 
         method = ROUTE_METHOD.get(args.route)
         if method is None:
             return refuse("route_not_allowed", "a person answers from desktop_run_it")
-        if not getattr(args, "approver_key", None):
+        public_key = getattr(args, "approver_public_key", None)
+        external = getattr(args, "approver_signer", None)
+        if bool(public_key) != bool(external):
+            return refuse(
+                "approver_invalid",
+                "--approver-signer stdio and --approver-public-key go together",
+            )
+        if public_key and getattr(args, "approver_key", None):
+            return refuse(
+                "approver_invalid",
+                "pass --approver-key or --approver-signer stdio, not both",
+            )
+        if not public_key and not getattr(args, "approver_key", None):
             return refuse(
                 "human_answer_unsigned",
                 "a person's answer is signed with the Desktop approver key: pass "
                 "--approver-key. --decided-by human on its own proves nothing",
             )
         try:
-            signer = load_signer(
-                args.approver_key,
-                store.key_directory(),
-                method=method,
-                root=store.approver_root,
-            )
+            if public_key:
+                signer = stdio_signer(
+                    public_key,
+                    store.key_directory(),
+                    method=method,
+                    root=store.approver_root,
+                )
+            else:
+                signer = load_signer(
+                    args.approver_key,
+                    store.key_directory(),
+                    method=method,
+                    root=store.approver_root,
+                )
         except AttestationRefused as exc:
             return refuse(exc.code, str(exc))
     try:
@@ -4873,7 +4894,7 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
             signer=signer,
         )
         store.write_answer(answer)
-    except ItemApprovalRefused as exc:
+    except (ItemApprovalRefused, AttestationRefused) as exc:
         return refuse(exc.code, str(exc))
     resume_required = _answer_durable_item_pause(run_dir, request, answer)
     print(
@@ -9649,6 +9670,21 @@ def build_parser() -> argparse.ArgumentParser:
         )
         _add_approver_key_flags(q)
         q.add_argument(
+            "--approver-signer",
+            choices=["stdio"],
+            default=None,
+            help=(
+                "The process that started this one holds the approver key and "
+                "signs over stdin/stdout (Desktop's Keychain key). Flow writes "
+                "one sign request line and reads one response line"
+            ),
+        )
+        q.add_argument(
+            "--approver-public-key",
+            default=None,
+            help="With --approver-signer: the registered approver key's public key (hex)",
+        )
+        q.add_argument(
             "--approver-head",
             default=None,
             metavar="SEQ:SHA256",
@@ -12289,8 +12325,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not getattr(args, "config", None):
             print("REFUSED: --config-sha256 needs --config", file=sys.stderr)
             return 2
+        # Pin by the absolute path: a relative path plus a later chdir would
+        # otherwise name a different, unpinned file.
+        import os
+
         from openadapt_flow.deployment import pin_deployment_bytes
 
+        args.config = os.path.abspath(args.config)
         try:
             # Read the config once, check it, and parse only those bytes.
             pin_deployment_bytes(args.config, args.config_sha256)

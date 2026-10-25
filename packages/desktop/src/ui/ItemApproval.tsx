@@ -9,12 +9,15 @@
 // record before it saves.
 //
 // Desktop has no person-level sign-in, so every approval is recorded without
-// a name. The screen never offers Approve without the filled form to compare.
+// a name; this computer's approver key signs it. On a Mac without that key
+// yet, the screen offers its one-step setup instead of Approve. The screen
+// never offers Approve without the filled form to compare.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DECLINED } from "../lib/approvalMode";
 import { CMD, EVT, engineInvoke, engineTry, onEngineEvent } from "../lib/engine";
 import { humanizeInput, sentenceCase } from "../lib/outcomes";
 import type { ItemApprovalAnswer, ItemApprovalState } from "../lib/types";
+import { ApproverKeySetup, useApproverKey } from "./ApproverKey";
 import { Button } from "./primitives";
 import { Icon } from "./simple";
 
@@ -90,6 +93,11 @@ export function ItemApprovalPanel({
   const [reason, setReason] = useState<DeclineReason | "">("");
   const [error, setError] = useState("");
   const [sent, setSent] = useState<"approved" | "declined" | null>(null);
+  const { status: keyStatus, refresh: refreshKey } = useApproverKey();
+  // The engine said the key is missing on a Mac that can set it up here.
+  const [needsKey, setNeedsKey] = useState(false);
+  const showSetup =
+    needsKey || Boolean(keyStatus?.supported && keyStatus.set_up === false);
 
   useEffect(() => {
     setBusy(false);
@@ -117,6 +125,10 @@ export function ItemApprovalPanel({
         ...(decision === "decline" ? { reason } : {}),
       });
       if (!response.ok) {
+        if (response.setup === "in_app") {
+          setNeedsKey(true);
+          return;
+        }
         setError(response.error || "OpenAdapt couldn't send your answer. Nothing was saved.");
         return;
       }
@@ -196,6 +208,13 @@ export function ItemApprovalPanel({
                 : "OpenAdapt won't save it."}
             </span>
           </p>
+        ) : showSetup ? (
+          <ApproverKeySetup
+            onReady={async () => {
+              setNeedsKey(false);
+              await refreshKey();
+            }}
+          />
         ) : declining ? (
           <fieldset className="approval-decline">
             <legend>Why shouldn't it save?</legend>

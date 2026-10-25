@@ -296,6 +296,14 @@ class PrincipalRegistry(BaseModel):
         return None
 
 
+_ROLE_FIELDS: dict[str, str] = {
+    "policy_signer": "policy_signers",
+    "admitter_key": "admitter_keys",
+    "agent": "agents",
+    "approver": "approvers",
+}
+
+
 def register_principal(
     key_dir: Path, *, role: Role, principal_id: str, public_key_hex: str
 ) -> PrincipalRegistry:
@@ -307,12 +315,7 @@ def register_principal(
             "one with openadapt-flow jit approver add"
         )
     registry = PrincipalRegistry.load(key_dir)
-    field_name = {
-        "policy_signer": "policy_signers",
-        "admitter_key": "admitter_keys",
-        "agent": "agents",
-        "approver": "approvers",
-    }.get(role)
+    field_name = _ROLE_FIELDS.get(role)
     if field_name is None:
         raise AuthorityError(f"unknown role {role!r}")
     data = registry.model_dump(by_alias=True)
@@ -323,6 +326,30 @@ def register_principal(
         raise AuthorityError(str(exc)) from exc
     updated.save(key_dir)
     return updated
+
+
+def remove_principal(
+    key_dir: Path, *, role: Role, principal_id: str, public_key_hex: str
+) -> bool:
+    """Remove one registered key, only if it is still the one registered.
+
+    Returns whether anything was removed. A principal that has since been
+    registered with a different key is left alone, so retiring an old key
+    can't take away its replacement.
+    """
+
+    field_name = _ROLE_FIELDS.get(role)
+    if field_name is None:
+        raise AuthorityError(f"unknown role {role!r}")
+    registry = PrincipalRegistry.load(key_dir)
+    entries = dict(getattr(registry, field_name))
+    if entries.get(principal_id) != public_key_hex.lower():
+        return False
+    del entries[principal_id]
+    data = registry.model_dump(by_alias=True)
+    data[field_name] = entries
+    PrincipalRegistry.model_validate(data).save(key_dir)
+    return True
 
 
 # -- standard repairs ------------------------------------------------------------

@@ -151,6 +151,47 @@ ITEM_APPROVAL_ROUTE = "desktop_run_it"
 DECLINE_REASONS = frozenset({"wrong_values", "wrong_record", "screen_problem"})
 _REQUEST_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _REQUEST_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+#: Flow's ``--approver-signer stdio`` lines
+#: (``openadapt_flow.approval_mode.human_attestation``).
+_SIGN_REQUEST_SCHEMA = "openadapt-flow.approver-sign-request/v1"
+_SIGN_RESPONSE_SCHEMA = "openadapt-flow.approver-sign-response/v1"
+
+
+def _sign_refusal(code: str, message: str) -> dict:
+    return {"schema": _SIGN_RESPONSE_SCHEMA, "refused": code, "message": message}
+
+
+def _is_this_answer(
+    message: bytes, *, decision: str, request_id: str, request_sha256: str
+) -> bool:
+    """Whether ``message`` is exactly a person's answer to this request.
+
+    Flow signs the answer domain, then the answer as canonical JSON. Desktop
+    reads it back before Touch ID, so the prompt can only ever approve the
+    answer the person chose.
+    """
+
+    from openadapt_desktop.approver_keychain import ANSWER_DOMAIN
+
+    if not message.startswith(ANSWER_DOMAIN):
+        return False
+    body = message[len(ANSWER_DOMAIN) :]
+    try:
+        payload = json.loads(body)
+    except ValueError:
+        return False
+    if not isinstance(payload, dict):
+        return False
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return (
+        canonical == body
+        and payload.get("request_id") == request_id
+        and payload.get("request_sha256") == request_sha256
+        and payload.get("decision") == decision
+        and payload.get("decided_by") == "human"
+        and payload.get("route") == ITEM_APPROVAL_ROUTE
+    )
+
 
 
 def _contract_counts(value: object) -> dict[str, int] | None:
@@ -502,7 +543,13 @@ def _subprocess_env() -> dict[str, str]:
     that package's normal ``sys.executable -m playwright`` call in a freeze.
     """
 
-    return dict(os.environ)
+    env = dict(os.environ)
+    # Flow never takes an approver root from the environment: a governed run
+    # takes it from the config snapshot Desktop writes, and the answer
+    # commands from --approver-root. Drop any inherited value so no Flow
+    # version or helper can read one.
+    env.pop("OPENADAPT_APPROVER_ROOT", None)
+    return env
 
 
 def _safe_command_for_log(cmd: list[str]) -> str:
@@ -561,15 +608,27 @@ class FlowBridge:
         flow_bin: str = FLOW_BIN,
         runner=subprocess.run,
         popen=subprocess.Popen,
+        approver_keychain=None,
     ) -> None:
         self.flow_bin = flow_bin
         self._runner = runner
         self._popen = popen
+        self._approver_keychain = approver_keychain
         self._run_auth_support: bool | None = None
         self._attached_browser_support: bool | None = None
         self._push_json_support: bool | None = None
         self._approval_gate_support: bool | None = None
         self._local_drill_support: bool | None = None
+
+    @property
+    def approver_keychain(self):
+        """This Mac's in-app approver key (:mod:`.approver_keychain`)."""
+
+        if self._approver_keychain is None:
+            from openadapt_desktop.approver_keychain import default_keychain
+
+            self._approver_keychain = default_keychain()
+        return self._approver_keychain
 
     @staticmethod
     def hosted_runner_contract() -> ModuleType:
@@ -926,8 +985,13 @@ class FlowBridge:
         env_overrides: dict[str, str] | None = None,
         approval_mode: str | None = None,
         approval_wait_s: int | None = None,
+        config_sha256: str | None = None,
     ) -> FlowResult:
         """Run a bundle under a deployment config.
+
+        ``config_sha256`` is the digest of the config bytes Desktop wrote:
+        Flow reads the file once, refuses it if it differs, and parses only
+        those bytes (``--config-sha256``), so it can't be swapped mid-run.
 
         ``authorization_file`` forwards a cloud-minted GovernedRunAuthorization
         JSON to ``openadapt-flow run --authorization-file`` -- pass it only when
@@ -941,6 +1005,8 @@ class FlowBridge:
         unless the caller passes the mode, so Desktop always passes it.
         """
         args = ["run", str(bundle_dir), "--config", str(config)]
+        if config_sha256:
+            args += ["--config-sha256", config_sha256]
         if out_dir:
             args += ["--run-dir", str(out_dir)]
         if authorization_file:
@@ -971,6 +1037,7 @@ class FlowBridge:
         url: str | None = None,
         env_overrides: dict[str, str] | None = None,
         approval_wait_s: int | None = None,
+        config_sha256: str | None = None,
     ) -> FlowResult:
         """Run one qualification case through Flow-owned authorization.
 
@@ -997,6 +1064,7 @@ class FlowBridge:
             str(out_dir),
             "--config",
             str(config),
+            *(["--config-sha256", config_sha256] if config_sha256 else []),
         ]
         if url:
             args += ["--url", url]
@@ -1081,10 +1149,18 @@ class FlowBridge:
         """Answer one waiting request as the person at this computer.
 
         Flow counts the answer as a person's only when Desktop's approver key
-        signs it (:mod:`openadapt_desktop.approver_key`), so Desktop passes
-        ``--approver-key`` and puts the key's passphrase in the Flow child's
-        environment, never on its command line. Without a key, nothing is sent
-        and the answer is ``{"ok": False, "code": "human_answer_unsigned"}``.
+        signs it. On a Mac with the key set up in the app
+        (:mod:`openadapt_desktop.approver_keychain`), Flow asks Desktop for the
+        signature over a pipe and Desktop signs after Touch ID; Flow never sees
+        the key. Otherwise Desktop passes the terminal-made key
+        (:mod:`openadapt_desktop.approver_key`) with ``--approver-key`` and
+        puts its passphrase in the Flow child's environment, never on its
+        command line; only where the app can't keep the key (Windows, Linux,
+        a Mac without a Secure Enclave). Without a key, nothing is sent: the
+        answer is
+        ``{"ok": False, "code": "approver_key_missing", "setup": "in_app"}``
+        where the app can set one up, else ``"human_answer_unsigned"`` with
+        the terminal steps.
         Desktop has no person-level sign-in (its Cloud credential belongs to
         the organization), so the answer carries no Cloud name
         (``--unauthenticated``); the signature names the registered approver.
@@ -1119,16 +1195,57 @@ class FlowBridge:
             args += ["--reason", str(reason)]
         elif reason is not None:
             raise ValueError("An approval has no reason")
+        from openadapt_desktop.approver_keychain import (
+            ApproverKeychainError,
+            pinned_head,
+            pinned_root,
+        )
+
+        try:
+            root = pinned_root()
+        except ApproverKeychainError as exc:
+            return {"ok": False, "code": exc.code, "message": str(exc)}
+        if root:
+            # The reader brings its own pin; the run directory's record must
+            # match it, and is never trusted on its own. The head this Mac
+            # recorded goes with it, so Flow refuses a roster Desktop would.
+            args += ["--approver-root", root]
+            head = pinned_head()
+            if head is not None:
+                args += ["--approver-head", f"{head[0]}:{head[1]}"]
         from openadapt_desktop.approver_key import (
             approver_key_environment,
             setup_instructions,
         )
 
+        keychain = self.approver_keychain
+        in_app = keychain.supported()
+        if in_app and keychain.stored() is not None:
+            return self._answer_signed_in_app(
+                args,
+                keychain,
+                decision=decision,
+                request_id=request_id,
+                request_sha256=request_sha256,
+            )
+        if in_app:
+            # A Mac that can keep the key behind Touch ID never falls back to
+            # a terminal-made file key, which asks for no presence.
+            return {
+                "ok": False,
+                "code": "approver_key_missing",
+                "setup": "in_app",
+                "message": (
+                    "Set up your approver key in OpenAdapt to approve saves on "
+                    "this Mac. Nothing was approved."
+                ),
+            }
         key = approver_key_environment()
         if key is None:
             return {
                 "ok": False,
                 "code": "human_answer_unsigned",
+                "setup": "terminal",
                 "message": (
                     "This computer has no approver key, so nothing was approved. "
                     + setup_instructions()
@@ -1137,8 +1254,12 @@ class FlowBridge:
         key_path, key_env = key
         args += ["--approver-key", str(key_path)]
         result = self._run(args, timeout=60, env_overrides=key_env)
+        return self._read_answer(result.stdout, result.returncode)
+
+    def _read_answer(self, stdout: str, returncode: int) -> dict:
+        lines = [line for line in (stdout or "").splitlines() if line.strip()]
         try:
-            answer = json.loads(result.stdout)
+            answer = json.loads(lines[-1]) if lines else None
         except json.JSONDecodeError:
             answer = None
         if not isinstance(answer, dict) or not isinstance(answer.get("ok"), bool):
@@ -1147,13 +1268,131 @@ class FlowBridge:
                 "code": "unreadable",
                 "message": "Flow's answer couldn't be read, so nothing was approved.",
             }
-        if answer["ok"] and result.returncode != 0:
+        if answer["ok"] and returncode != 0:
             return {
                 "ok": False,
                 "code": "inconsistent",
                 "message": "Flow's answer and exit code disagree.",
             }
         return answer
+
+    def _answer_signed_in_app(
+        self,
+        args: list[str],
+        keychain,
+        *,
+        decision: str,
+        request_id: str,
+        request_sha256: str,
+        timeout: float = 180,
+    ) -> dict:
+        """Run the answer with Flow asking Desktop to sign over a pipe.
+
+        Flow writes one sign request; Desktop checks that the bytes are this
+        answer (the request, the decision, a person at Run it), asks for
+        Touch ID, signs and writes one response. Any check or prompt that
+        fails is sent to Flow as a refusal, so Flow records nothing.
+        """
+
+        import threading
+
+        from openadapt_desktop.approver_keychain import ApproverKeychainError
+
+        stored = keychain.stored()
+        if stored is None:
+            return {
+                "ok": False,
+                "code": "approver_key_missing",
+                "setup": "in_app",
+                "message": "Set up your approver key to approve saves on this Mac.",
+            }
+        prefix = _flow_command(self.flow_bin)
+        if prefix is None:
+            raise FlowNotAvailableError(
+                f"openadapt-flow isn't available: {flow_problem(self.flow_bin)}"
+            )
+        cmd = [
+            *prefix,
+            *args,
+            "--approver-signer",
+            "stdio",
+            "--approver-public-key",
+            stored.public_key,
+        ]
+        logger.debug("flow: {cmd}", cmd=_safe_command_for_log(cmd))
+        proc = self._popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            env=_subprocess_env(),
+        )
+        out: list[str] = []
+
+        def respond(line: str) -> dict:
+            try:
+                sign_request = json.loads(line)
+                message = bytes.fromhex(str(sign_request["message_hex"]))
+            except (ValueError, KeyError, TypeError):
+                return _sign_refusal(
+                    "approver_payload_refused", "Flow's sign request couldn't be read."
+                )
+            if sign_request.get("public_key") != stored.public_key or not (
+                _is_this_answer(
+                    message,
+                    decision=decision,
+                    request_id=request_id,
+                    request_sha256=request_sha256,
+                )
+            ):
+                return _sign_refusal(
+                    "approver_payload_refused",
+                    "Flow asked Desktop to sign something other than your "
+                    "answer, so nothing was signed.",
+                )
+            reason = (
+                "approve this save"
+                if decision == "approve"
+                else "record that this item shouldn't save"
+            )
+            try:
+                _public, signature = keychain.sign(message, reason=reason)
+            except ApproverKeychainError as exc:
+                return _sign_refusal(exc.code, str(exc))
+            return {"schema": _SIGN_RESPONSE_SCHEMA, "signature": signature}
+
+        def talk() -> None:
+            assert proc.stdout is not None and proc.stdin is not None
+            first = proc.stdout.readline()
+            try:
+                is_request = json.loads(first).get("schema") == _SIGN_REQUEST_SCHEMA
+            except (ValueError, AttributeError):
+                is_request = False
+            if is_request:
+                proc.stdin.write(json.dumps(respond(first)) + "\n")
+                proc.stdin.flush()
+            else:
+                out.append(first)
+            out.append(proc.stdout.read())
+            proc.stdin.close()
+
+        worker = threading.Thread(target=talk, name="approver-sign", daemon=True)
+        worker.start()
+        worker.join(timeout)
+        if worker.is_alive():
+            proc.kill()
+            return {
+                "ok": False,
+                "code": "timeout",
+                "message": "The approval took too long, so nothing was approved.",
+            }
+        try:
+            returncode = proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            returncode = -9
+        return self._read_answer("".join(out), returncode)
 
     def supports_approval_gate(self) -> bool:
         """Probe (once) whether Flow can stop before each save for a person.

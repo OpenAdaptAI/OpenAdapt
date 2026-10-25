@@ -3,8 +3,9 @@
 Flow counts an answer from Desktop's Run it, or from the paired phone through
 the decision portal, as a person's only when it carries an Ed25519 signature
 by a key on Flow's signed approver roster, and the run pins that roster's
-root (``OPENADAPT_APPROVER_ROOT`` or the deployment config's
-``approvers.root_public_key``; see Flow's ``approval_mode/approver_roster``).
+root (the deployment config's ``approvers.root_public_key``, or
+``--approver-root``; see Flow's ``approval_mode/approver_roster``). Desktop
+pins only the root kept in this Mac's Keychain.
 Desktop keeps one such key
 for each route (``desktop`` for Run it, ``portal`` for the phone's answers,
 which the Flow console it starts signs). For each:
@@ -185,8 +186,31 @@ def approver_key_environment(
     return path, {PASSPHRASE_ENV: passphrase}
 
 
+def sign_with_file_key(message: bytes, route: Route = "desktop") -> tuple[str, str] | None:
+    """Sign one message with the terminal-made key, or ``None`` without one.
+
+    Returns ``(public_key_hex, "ed25519:<hex>")``. The key is opened for this
+    one signature and dropped.
+    """
+
+    found = approver_key_environment(route)
+    if found is None:
+        return None
+    path, env = found
+    key = _open(path, env[PASSPHRASE_ENV])
+    try:
+        return _public_hex(key), "ed25519:" + key.sign(message).hex()
+    finally:
+        del key
+
+
 def setup_instructions(route: Route = "desktop") -> str:
-    """The one-time terminal steps that make this computer's answers count."""
+    """The one-time terminal steps that make this computer's answers count.
+
+    For computers where the app can't keep the key behind a presence check
+    (Windows, Linux, a Mac without a Secure Enclave). On a Mac that can, the
+    key is set up in OpenAdapt and a file key isn't used.
+    """
 
     path = approver_key_path(route)
     name = _ROUTES[route][2]
@@ -195,10 +219,13 @@ def setup_instructions(route: Route = "desktop") -> str:
         f"{PASSPHRASE_ENV} set, run `openadapt-flow jit keygen --out {path}`, "
         "then start the approver roster with it: "
         f"`openadapt-flow jit approver init --principal {name} --key {path}`. "
-        "Start Desktop with OPENADAPT_APPROVER_ROOT set to the public key "
-        f"keygen printed, and the same {PASSPHRASE_ENV}; or run "
+        "Pin the public key keygen printed as approvers.root_public_key in "
+        "the deployment config you pass to `openadapt-flow run --config`, "
+        f"with the same {PASSPHRASE_ENV}; or run "
         "`openadapt-desktop approver-key setup` instead of keygen to keep the "
-        "passphrase in this computer's keychain."
+        "passphrase in this computer's keychain. Desktop counts a person's "
+        "answer only with a root pinned in this Mac's Keychain, which "
+        "OpenAdapt sets up behind Touch ID."
     )
 
 
@@ -224,4 +251,5 @@ __all__ = [
     "portal_approver_environment",
     "setup_approver_key",
     "setup_instructions",
+    "sign_with_file_key",
 ]

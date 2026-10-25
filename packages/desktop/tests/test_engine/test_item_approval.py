@@ -595,7 +595,8 @@ def test_bridge_sends_no_answer_without_an_approver_key(monkeypatch, tmp_path: P
     assert f"openadapt-flow jit keygen --out {key_path}" in message
     assert "OPENADAPT_JIT_KEY_PASSPHRASE" in message
     assert "openadapt-flow jit approver init --principal" in message
-    assert "OPENADAPT_APPROVER_ROOT" in message
+    assert "approvers.root_public_key" in message
+    assert "OPENADAPT_APPROVER_ROOT" not in message
     assert calls == []  # never an unsigned answer
 
 

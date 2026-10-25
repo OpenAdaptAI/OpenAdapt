@@ -162,6 +162,25 @@ including an answer file written around the command
 Each route signs with its own key:
 
 - **Desktop's Run it** signs with the Desktop approver key.
+  - On a Mac, a person sets it up in the app, from the approval screen or
+    Settings, with one Touch ID or login-password prompt. The key is sealed
+    to a Secure Enclave key that asks for presence on every use. Setup signs
+    the roster's root with it behind that prompt (or, when a roster exists,
+    an approver adds it). Flow never sees the key: Desktop runs
+    `item-approval approve|decline` with `--approver-signer stdio
+    --approver-public-key HEX`. Flow writes the exact bytes to sign on
+    stdout; Desktop checks that they are the person's answer, asks for
+    Touch ID, and writes the signature back on stdin. A cancelled prompt or
+    any other failure is a refusal, and Flow records nothing.
+  - On a Mac, Desktop's pin is the root it set up behind Touch ID, kept in
+    the login Keychain; nothing else names it (not the environment, not a
+    file the user can write). A process running as the same user can delete
+    the Keychain items; Desktop then has no pin, and no person's answer
+    counts until someone sets the key up again behind Touch ID.
+  - On Windows and Linux, `openadapt-desktop approver-key setup` creates it,
+    keeps the encrypted key in an owner-only file and its passphrase in the
+    OS keychain, and prints the `jit approver` commands that put it on the
+    roster.
 - **The decision portal** signs with the key at `OPENADAPT_PORTAL_APPROVER_KEY`
   after the person answered on their phone. Without it, the portal records
   no answer. Its key is added to the roster like any other approver.
