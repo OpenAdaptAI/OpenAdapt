@@ -49,6 +49,7 @@ class _App:
     def __init__(self) -> None:
         self.pages: dict[str, str] = {"/": "<html><body>home</body></html>"}
         self.writes: list[str] = []
+        self.paths: list[str] = []
         self.loads = 0
         app = self
 
@@ -58,6 +59,7 @@ class _App:
 
             def do_GET(self) -> None:  # noqa: N802
                 path = self.path.split("?")[0]
+                app.paths.append(path)
                 if path in app.pages:
                     app.loads += 1
                     body = app.pages[path].replace("{n}", str(app.loads)).encode()
@@ -385,7 +387,11 @@ def test_an_onsubmit_rewrite_is_in_the_body_compared(app_page):
         form_attrs='onsubmit="this.lname.value = this.lname.value.toUpperCase(); return true"'
     )
     result = _evaluate(app, page)
-    assert result.status == "valid" and result.via == "submit"
+    assert result.status == "valid" and result.via in (
+        "listener",
+        "POST",
+        "form.submit()",
+    )
     assert ("lname", "MARSH") in result.serialized
 
 
@@ -405,36 +411,114 @@ def test_a_click_handler_on_a_button_needs_the_recorded_control(app_page):
     assert app.writes == []
 
 
-def test_a_click_that_goes_on_to_the_recorded_request_counts(app_page):
-    app, page = app_page
-    app.pages["/dup.php"] = "<html>No matches</html>"
+DIALOG = """<html><body>{body}<script>
+function confirmCreate() {{ parent.force_submit = true; parent.check(); }}
+</script></body></html>"""
+
+
+def _dup_flow(app: _App, matches: bool) -> None:
+    """The OpenEMR shape: #create validates, opens the duplicate search in a
+    dialog frame, and the person confirms there; then the form submits."""
+
+    app.pages["/dup.php"] = DIALOG.format(
+        body="<p>Rosa Delgado 1958-03-27</p>"
+        if matches
+        else '<p>No matches were found.</p><button id="confirmCreate" onclick="confirmCreate()">Confirm</button>'
+    )
     app.form(
         form_attrs="",
-        lname_attrs="",
-        script="function check() { if (pastDate(document.forms[0].dob.value)) {"
-        " const f = document.createElement('iframe'); f.src = '/dup.php?lname=x';"
-        " document.body.appendChild(f); } }",
+        script="var force_submit = false;"
+        " function check() { const f = document.forms[0];"
+        " if (!pastDate(f.dob.value)) return;"
+        " if (force_submit) { f.submit(); return; }"
+        " const d = document.createElement('iframe'); d.id = 'modalframe'; d.src = '/dup.php?lname=x';"
+        " document.body.appendChild(d); }",
     )
-    page_html = app.pages["/new.php"].replace(
+    app.pages["/new.php"] = app.pages["/new.php"].replace(
         '<button type="submit">Save</button>',
         '<button type="button" id="create" onclick="check()">Save</button>',
     )
-    app.pages["/new.php"] = page_html
-    loads = app.loads
-    ok = _evaluate(app, page, submitter="#create", submitter_requests=("GET /dup.php",))
-    assert ok.status == "valid" and ok.via == "GET /dup.php"
-    # The duplicate search was blocked: only the form page itself loaded.
-    assert app.loads == loads + 1
+
+
+DUP = {
+    "submitter": "#create",
+    "submitter_requests": ("GET /dup.php",),
+    "confirm": "#confirmCreate",
+}
+
+
+def test_the_recorded_read_completes_and_the_page_must_then_submit(app_page):
+    app, page = app_page
+    _dup_flow(app, matches=False)
+    ok = _evaluate(app, page, **DUP)
+    assert ok.status == "valid" and ok.via == "form.submit()", ok.reason
+    assert ("lname", "Marsh") in ok.serialized
     bad = [("lname", "Marsh"), ("dob", "2999-01-01"), ("state", "CA")]
-    refused = _evaluate(
-        app, page, bad, submitter="#create", submitter_requests=("GET /dup.php",)
+    refused = _evaluate(app, page, bad, **DUP)
+    assert refused.status == "invalid" and "didn't submit" in refused.reason
+    assert app.writes == []
+
+
+def test_a_duplicate_search_that_finds_a_match_is_not_valid(app_page):
+    # Review hole 5: the read's answer decides, not that it was made.
+    app, page = app_page
+    _dup_flow(app, matches=True)
+    result = _evaluate(app, page, **DUP)
+    assert result.status == "invalid" and "didn't submit" in result.reason
+    assert app.writes == []
+
+
+def test_a_popup_is_routed_too_and_makes_the_run_unevaluable(app_page):
+    # Review hole 1: a target=_blank form submitted past every listener.
+    app, page = app_page
+    app.form(
+        form_attrs='target="_blank"',
+        script="document.forms[0].addEventListener('submit', e => e.stopPropagation())",
     )
-    assert refused.status == "invalid" and "neither submitted" in refused.reason
-    # A request the recording didn't make is refused.
-    other = _evaluate(
-        app, page, submitter="#create", submitter_requests=("GET /else.php",)
+    result = _evaluate(app, page)
+    assert result.status == "unevaluable"
+    assert app.writes == []
+
+
+def test_a_websocket_opened_by_the_page_is_closed_and_unevaluable(app_page):
+    # Review hole 2.
+    app, page = app_page
+    port = app.base.rsplit(":", 1)[1]
+    app.form(
+        script="document.forms[0].dob.addEventListener('change', () => {"
+        f" try {{ new WebSocket('ws://127.0.0.1:{port}/ws'); }} catch (e) {{}} }});"
     )
-    assert other.status == "unevaluable" and "GET /dup.php" in other.reason
+    result = _evaluate(app, page)
+    assert result.status == "unevaluable" and "WebSocket" in result.reason
+    assert app.writes == [] and "/ws" not in app.paths
+
+
+def test_key_handlers_run_as_the_person_types(app_page):
+    # Review hole 3: an onkeyup uppercaser.
+    app, page = app_page
+    app.form(lname_attrs='onkeyup="this.value = this.value.toUpperCase()"')
+    result = _evaluate(app, page)
+    assert result.status == "valid" and ("lname", "MARSH") in result.serialized
+
+
+def test_the_click_is_trusted(app_page):
+    # Review hole 4: a handler that validates only trusted clicks.
+    app, page = app_page
+    app.form(
+        form_attrs="",
+        script="document.querySelector('button').addEventListener('click', e => {"
+        " if (e.isTrusted && !pastDate(document.forms[0].dob.value)) e.preventDefault(); })",
+    )
+    bad = [("lname", "Marsh"), ("dob", "2999-01-01"), ("state", "CA")]
+    assert _evaluate(app, page, bad, submitter="button").status == "invalid"
+    assert _evaluate(app, page, submitter="button").status == "valid"
+
+
+def test_a_page_that_submits_twice_is_unevaluable(app_page):
+    app, page = app_page
+    app.form(form_attrs='onsubmit="this.submit(); return true"')
+    result = _evaluate(app, page)
+    assert result.status == "unevaluable" and "2 times" in result.reason
 
 
 def test_no_request_leaves_after_the_page_has_loaded(app_page):

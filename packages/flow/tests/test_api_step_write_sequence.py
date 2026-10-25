@@ -317,3 +317,48 @@ def test_a_step_write_the_page_wouldnt_send_keeps_the_save_on_the_gui(tmp_path):
     assert out.status is ActuationStatus.UNAVAILABLE
     assert "didn't send POST /app/draft.php" in out.reason
     assert t.posts == [] and t.step_writes == ("POST /app/draft.php",)
+
+
+def test_two_declared_writes_need_two_sends_from_the_page(tmp_path):
+    second = dict(DRAFT, t=6.2)
+    wf, _step, reasons = propose_api_step(_workflow(), _rec(tmp_path, DRAFT, second))
+    assert reasons == [] and len(wf.steps[-1].api_binding.web_form.writes) == 2
+    wf = _with_step_effect(_with_step_effect(wf, "step_003"), "step_005")
+    wf, _ = admit_api_step(wf, admitted_by="reviewer")
+    # The page's script sends the draft once; one request can't match two.
+    t = SequenceTransport()
+    out = WebFormActuator(t).actuate(wf.steps[-1].api_binding, RUN)
+    assert out.status is ActuationStatus.UNAVAILABLE and "didn't send" in out.reason
+    assert t.posts == []
+
+
+def test_the_scratch_run_captures_a_step_write_the_page_sends_and_blocks_it(tmp_path):
+    pytest.importorskip("playwright.sync_api")
+    from playwright.sync_api import sync_playwright
+
+    from openadapt_flow.runtime.actuators.web_form import PlaywrightSessionTransport
+    from tests.test_api_step_page_script import _App
+
+    app = _App()
+    app.form(
+        script="document.forms[0].lname.addEventListener('change', e => fetch('/draft.php', {"
+        " method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},"
+        " body: 'form_lname=' + encodeURIComponent(e.target.value) }));"
+    )
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto(app.base + "/")
+            result = PlaywrightSessionTransport(page).evaluate_form(
+                "/new.php",
+                "/save.php",
+                [("lname", "Marsh"), ("dob", "1979-06-14"), ("state", "CA")],
+                step_writes=("POST /draft.php",),
+            )
+            browser.close()
+    finally:
+        app.server.shutdown()
+    assert result.status == "valid", result.reason
+    assert result.writes == [("POST /draft.php", [("form_lname", "Marsh")])]
+    assert app.writes == []

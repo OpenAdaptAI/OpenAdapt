@@ -274,6 +274,17 @@ def _in_page(selector: str, html: str) -> bool:
     return bool(kind) and kind.group(1).lower() in ("submit", "button", "image")
 
 
+def _selector(step: Step, events: list[dict[str, Any]]) -> Optional[str]:
+    """The CSS selector a recorded click targeted, when it has one."""
+
+    if step.anchor is not None and step.anchor.structural is not None:
+        return step.anchor.structural.selector
+    i = _event_index(step)
+    if i is not None and i < len(events):
+        return (events[i].get("structural") or {}).get("selector")
+    return None
+
+
 def _submitter(
     folded: list[Step],
     events: list[dict[str, Any]],
@@ -293,11 +304,7 @@ def _submitter(
         if step.action not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
             continue
         i = _event_index(step)
-        selector = None
-        if step.anchor is not None and step.anchor.structural is not None:
-            selector = step.anchor.structural.selector
-        elif i is not None and i < len(events):
-            selector = (events[i].get("structural") or {}).get("selector")
+        selector = _selector(step, events)
         if not selector or not _in_page(selector, form_html) or i is None:
             continue
         lo = float(events[i - 1]["t"]) if 0 < i <= len(events) else float("-inf")
@@ -783,6 +790,9 @@ def propose_api_step(
     submitter, submitter_requests = _submitter(
         folded, events, lines, form_line["response_text"], post
     )
+    confirm = _selector(save, events) if submitter is not None else None
+    if confirm == submitter:
+        confirm = None
     spec = WebFormSpec(
         form_path=form_path,
         fields=fields,
@@ -791,6 +801,7 @@ def propose_api_step(
         client_scripts=client_scripts,
         submitter=submitter,
         submitter_requests=submitter_requests,
+        confirm=confirm,
         prechecks=prechecks,
         success_pattern=_success_pattern(post),
         replaces_steps=[s.id for s in folded],

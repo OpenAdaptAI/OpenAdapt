@@ -532,6 +532,7 @@ class PlaywrightSessionTransport:
         *,
         submitter: Optional[str] = None,
         submitter_requests: tuple[str, ...] = (),
+        confirm: Optional[str] = None,
         step_writes: tuple[str, ...] = (),
     ) -> Any:
         from openadapt_flow.runtime.actuators.form_eval import evaluate_form
@@ -544,6 +545,7 @@ class PlaywrightSessionTransport:
             fields,
             submitter=submitter,
             submitter_requests=submitter_requests,
+            confirm=confirm,
             step_writes=step_writes,
             timeout_s=self._timeout_ms / 1000.0,
         )
@@ -891,12 +893,11 @@ class WebFormActuator:
     ) -> Optional[str]:
         """Run the form's own script on the run's values; why not to send, or None.
 
-        The fields the person typed or picked go into a scratch copy of the
-        form, and the recorded control is clicked (form_eval). The save is
-        sent only when the page submits, or goes on to a request the click
-        made in the recording, and the body it submits is exactly ``body``
-        apart from the session values the scratch page was issued for
-        itself. Any difference keeps the save on the GUI.
+        The fields the person typed or picked are typed into a scratch copy
+        of the form, and the recorded controls are clicked (form_eval). The
+        save is sent only when the page submits, once, and the body it
+        submits is exactly ``body`` apart from the session values the scratch
+        page was issued for itself. Any difference keeps the save on the GUI.
         """
 
         evaluate = getattr(self.transport, "evaluate_form", None)
@@ -909,6 +910,7 @@ class WebFormActuator:
             [(k, v) for k, v in body if k in typed],
             submitter=spec.submitter,
             submitter_requests=tuple(spec.submitter_requests),
+            confirm=spec.confirm,
             step_writes=tuple(f"{w.method} {up.urlsplit(w.path).path}" for w in writes),
         )
         self.log.append(
@@ -939,19 +941,26 @@ class WebFormActuator:
             want_w = sorted((k, v) for k, v in write.body if k not in session)
             match = next(
                 (
-                    b
-                    for w, b in sent
+                    i
+                    for i, (w, b) in enumerate(sent)
                     if w == what
                     and b is not None
                     and sorted((k, v) for k, v in b if k not in session) == want_w
                 ),
                 None,
             )
+            if match is not None:
+                sent.pop(match)  # each request the page sent matches one write
             if match is None:
                 return (
                     f"the page's script didn't send {what} with the body the API step "
                     "built when it ran on these values"
                 )
+        if sent:
+            return (
+                "the page's script sent more step writes than the API step would "
+                f"({', '.join(w for w, _ in sent[:3])})"
+            )
         return None
 
     def send(self, binding: Any, prepared: "PreparedSave") -> ApiActuationResult:

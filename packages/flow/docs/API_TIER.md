@@ -137,8 +137,10 @@ proposal (`web_form.writes`), in recorded order, with one of two roles:
   values in its URL or another value, that went to another origin, or that
   wasn't accepted when recorded refuses the proposal. Before each save the
   page's own script must send each step write itself, with the same body,
-  when it runs on the run's values in the scratch page (the request is
-  blocked there); otherwise the GUI steps run. Each step write is
+  when it runs on the run's values in the scratch page (there the request
+  never reaches the app; the page gets an empty 200, as the recorded write
+  was accepted), and each request it sent matches one step write;
+  otherwise the GUI steps run. Each step write is
   read back by the record check declared on the step it was sent during:
   admission refuses one whose step has none, and the binding's record check
   is the save's followed by those steps' checks. If a write fails or answers
@@ -185,30 +187,39 @@ Before it sends the save, the API step:
    submits: native HTML constraints (`required`, `minlength`, `maxlength`,
    `pattern`, `min`, `max`, and the `email`, `url`, `number` and `date`
    input types) and the page's validate.js rules;
-5. when the page has any script, **runs it** (`runtime/actuators/form_eval.py`):
+5. when the page has any script, **runs it** (`runtime/actuators/form_eval.py`),
+   the way the person's steps would:
    - it opens the form page in a scratch copy of the live session: a
      separate browser context with the session's cookies and no service
-     workers. While the page loads, only same-origin GET requests go
-     through; once it has loaded, every request is blocked, so nothing the
-     page does there can write or reach the session;
-   - it puts the run's typed and picked values into the form with the same
-     `input`, `change` and `blur` events a browser fires;
-   - it starts the submit as the person did: it clicks the control the
-     person clicked (`submitter`, from the recording). When the recording
-     names none it submits the form, and a form whose buttons have click
-     handlers is refused;
-   - the page must then submit the form, or make a request the person's
-     click made in the recording (`submitter_requests`; on OpenEMR, the
-     duplicate search). The body compared is the one the page submits,
-     taken at the moment it submits (a last `submit` listener, the form's
-     own `submit()`, or the browser's POST, which the route blocks); when
-     the page goes on to a recorded request instead, it is the form as the
-     page left it. Declared validate.js `constraints` run too;
-   - the save goes ahead only when the page submitted or went on as
-     recorded, raised no error, showed no dialog, tried to send nothing
-     else, and the body equals the one the API step built (session values
-     aside). Any difference, and anything else, is a reason, and the GUI
-     steps run;
+     workers. Every request of every page in it goes through one route,
+     every WebSocket is closed, and EventSource, RTCPeerConnection,
+     `sendBeacon` and `window.open` do nothing. While the page loads, only
+     same-origin GET requests go through. Once it has loaded, everything is
+     blocked except same-origin scripts and stylesheets and the reads the
+     person's click made in the recording (`submitter_requests`; on OpenEMR,
+     the duplicate search), so nothing the page does there can write. A
+     popup or new tab makes the run unevaluable;
+   - it types the run's typed and picked values with real key events, so
+     key handlers (`onkeyup`, `onchange`) run as they do for the person. A
+     field that isn't on screen when the form opens (on a tab the person
+     opened first) gets the same events key by key from script; its
+     handlers run, but those events aren't trusted;
+   - it clicks the control the person clicked (`submitter`) with a real,
+     trusted click. When the recording names none it submits the form, and
+     a form whose buttons have click handlers is refused. When the click
+     shows a dialog from the recorded reads, it clicks the control the
+     person clicked to confirm (`confirm`; on OpenEMR, `#confirmCreate`),
+     in whichever frame has it;
+   - the page must then submit the form, exactly once: a last `submit`
+     listener sees it go through, the form's own `submit()` is called, or
+     the browser's POST reaches the route (blocked). The body compared is
+     the one the page submits, taken when it submits. Declared validate.js
+     `constraints` run too;
+   - the save goes ahead only when the page submitted once, raised no
+     error, showed no dialog, opened no window or socket, tried to send
+     nothing else, and the body equals the one the API step built (session
+     values aside). Any difference, and anything else, is a reason, and the
+     GUI steps run;
 6. runs the pre-checks.
 
 Each of these refusals means the save wasn't sent, so the GUI steps run.
