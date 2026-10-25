@@ -245,6 +245,53 @@ this computer"):
    already has one on this computer.
 6. **No approve-and-save path** for an item the switch held for approval.
 
+## Review stops on a paired phone
+
+A phone paired with the decision portal ([DECISION_PORTAL.md](DECISION_PORTAL.md))
+shows the same stop cards as Review stops, at `/stops` on the portal's
+address. The Decisions page links to it.
+
+| Where | What the person sees | Routes (all need an approved device session) |
+| --- | --- | --- |
+| `/stops` | One card at a time: the question, the item's values next to what the app shows with the differences marked, the screen where the run stopped, and each choice with what it does. Similar stops have checkboxes; the picked stops get one answer, which takes a second tap to confirm. | `GET /api/portal/stops`, `GET /api/portal/stops/<card>/screenshot`, `POST /api/portal/stops/<card>/answer`, `POST /api/portal/stops/answer` (a batch: `card_ids` and one `choice`) |
+
+How a phone's answer counts:
+
+- **Signed with the portal's key.** The phone can't reach Touch ID on the
+  computer. Desktop signs the decision receipt with the decision portal's
+  approver key (route `portal`, which `openadapt-desktop approver-key setup`
+  creates; a person registers it as `decision-portal`). The receipt in `stop_decisions.jsonl`
+  records `"key": "portal"` and the device session (`device.id`, the id the
+  computer lists and revokes devices by, and its label). The window can't
+  ask for this key: the portal calls a dispatcher method that no command
+  registers. Without the key, the phone shows a warning and every answer
+  changes nothing (`approver_key_missing`).
+- **Same checks as the window.** Desktop rebuilds every card before it acts.
+  A card that changed, expired or is gone, or a choice the card doesn't
+  offer, changes nothing and returns the dispatcher's code (`card_changed`,
+  `choice_not_offered`). A phone answer waits up to two seconds for a
+  command the window started, then returns `busy` and changes nothing.
+- **View-only on the phone.** A waiting save (`approve_save`) is answered on
+  the Decisions page, through the portal's save approval, which the Flow
+  console signs with the same portal key. Turning "only ask about problems"
+  back on is answered on the computer.
+- **Requests.** Answers need the portal's origin, the session's CSRF token
+  and a JSON body, like the portal's other decisions. Reads need the session
+  and are refused when `Origin` or `Sec-Fetch-Site` says another site sent
+  them. Every response is `no-store`, and the service worker caches none of
+  it.
+
+### Remote access
+
+The portal binds `127.0.0.1` by default, so only this computer can open it.
+To answer stops from a phone elsewhere, use the existing customer ingress:
+an HTTPS origin on the clinic's own reverse proxy, VPN or ZTNA
+(`OPENADAPT_PORTAL_INGRESS_MODE=customer_ingress` with an explicit
+`OPENADAPT_PORTAL_PUBLIC_ORIGIN`), then pair the phone with the one-use QR
+code and confirm its code on the computer. Every route except the pairing
+claim needs that pairing. OpenAdapt runs no relay for the portal: the cards,
+screenshots and answers stay between the phone and the clinic's network.
+
 ## Screenshots
 
 `docs/assets/operator/` holds the README's screenshots. They come from
