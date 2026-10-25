@@ -6,6 +6,8 @@ name: Desktop dependency audit
 
 on:
   pull_request:
+    # Drafts run nothing (each job checks `draft`); marking one ready runs CI.
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths:
       - "packages/desktop/**"
@@ -39,6 +41,7 @@ defaults:
 jobs:
   scope:
     name: Select the audit scope
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-22.04
     outputs:
       run: ${{ steps.scope.outputs.run }}
@@ -68,13 +71,16 @@ jobs:
   python:
     name: Python locked dependencies
     needs: scope
-    if: needs.scope.outputs.run == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.run == 'true')
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "packages/desktop/uv.lock"
       - name: Set up Python 3.12
         run: uv python install 3.12
       - name: Export the exact locked dependency set
@@ -91,13 +97,16 @@ jobs:
     name: Python locked dependencies (macOS Intel)
     needs: scope
     # Queue tier: the merge queue, main, the weekly run and dispatches.
-    if: needs.scope.outputs.run == 'true' && github.event_name != 'pull_request'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.run == 'true' && github.event_name != 'pull_request')
     runs-on: macos-15-intel
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "packages/desktop/uv.lock"
       - name: Set up Python 3.12
         run: uv python install 3.12
       - name: Export the exact Intel macOS dependency set
@@ -113,7 +122,7 @@ jobs:
   npm:
     name: npm locked dependencies
     needs: scope
-    if: needs.scope.outputs.run == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.run == 'true')
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -130,14 +139,22 @@ jobs:
   rust:
     name: Rust locked dependencies
     needs: scope
-    if: needs.scope.outputs.run == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.run == 'true')
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+      # A cached binary skips compiling cargo-audit from source on every run.
+      - name: Cache cargo-audit
+        id: cargo-audit-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: ${{ runner.os }}-cargo-audit-0.22.1
       - name: Install the RustSec scanner
+        if: steps.cargo-audit-cache.outputs.cache-hit != 'true'
         run: cargo install cargo-audit --version 0.22.1 --locked
       - name: Audit Rust dependencies
         run: cargo audit --file src-tauri/Cargo.lock

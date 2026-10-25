@@ -61,6 +61,8 @@ name: Packages
 
 on:
   pull_request:
+    # Drafts run nothing (each job checks `draft`); marking one ready runs CI.
+    types: [opened, synchronize, reopened, ready_for_review]
   # The merge queue tests each group before it lands on main.
   merge_group:
   push:
@@ -105,6 +107,7 @@ env:
 jobs:
   scope:
     name: scope (packages/** filter)
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -190,14 +193,14 @@ jobs:
   types:
     name: types (py${{ matrix.python-version }})
     needs: scope
-    if: needs.scope.outputs.types == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.types == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         # PR tier: one Python; the merge queue and main add the oldest.
-        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.10", "3.12"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || (github.event_name == 'push' && github.actor == 'github-merge-queue[bot]')) && '["3.12"]' || '["3.10", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/types
@@ -234,14 +237,14 @@ jobs:
   agent:
     name: agent shim (py${{ matrix.python-version }})
     needs: scope
-    if: needs.scope.outputs.agent == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.agent == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         # PR tier: one Python; the merge queue and main add the oldest.
-        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.10", "3.12"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || (github.event_name == 'push' && github.actor == 'github-merge-queue[bot]')) && '["3.12"]' || '["3.10", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/agent
@@ -271,7 +274,7 @@ jobs:
   flow-lint:
     name: flow core lint (ruff, mypy)
     needs: scope
-    if: needs.scope.outputs.flow == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     defaults:
@@ -337,15 +340,17 @@ jobs:
             openadapt_flow/compiler/loop_authoring.py
 
   flow-unit:
-    name: flow core unit (shard ${{ matrix.shard }}/4)
+    name: flow core unit (shard ${{ matrix.shard }}/${{ matrix.of }})
     needs: scope
-    if: needs.scope.outputs.flow == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        # PR tier: two larger shards, because each job pays about five minutes
+        # of setup and runners are capped. The merge queue runs four.
+        include: ${{ fromJSON((github.event_name == 'pull_request' || (github.event_name == 'push' && github.actor == 'github-merge-queue[bot]')) && '[{"shard":1,"of":2},{"shard":2,"of":2}]' || '[{"shard":1,"of":4},{"shard":2,"of":4},{"shard":3,"of":4},{"shard":4,"of":4}]') }}
     defaults:
       run:
         working-directory: packages/flow
@@ -390,6 +395,7 @@ jobs:
       - name: Select this shard's test files
         env:
           SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ matrix.of }}
         run: |
           set -euo pipefail
           # Same scope as Flow's own PR gate: everything outside tests/e2e,
@@ -399,7 +405,7 @@ jobs:
           find tests -name 'test_*.py' -not -path 'tests/e2e/*' \
             -not -path 'tests/test_install_playwright_browser.py' \
             -not -path 'tests/test_qualification_gate_campaign.py' \
-            | LC_ALL=C sort | awk -v s="$SHARD" 'NR % 4 == s % 4' > "$RUNNER_TEMP/shard.txt"
+            | LC_ALL=C sort | awk -v s="$SHARD" -v n="$SHARDS" 'NR % n == s % n' > "$RUNNER_TEMP/shard.txt"
           wc -l < "$RUNNER_TEMP/shard.txt"
       - name: Test
         run: |
@@ -411,7 +417,7 @@ jobs:
   flow-critical:
     name: flow core critical (golden VERIFIED, zero model calls)
     needs: scope
-    if: needs.scope.outputs.flow == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 50
     defaults:
@@ -486,7 +492,7 @@ jobs:
   capture-linux:
     name: capture (linux, py${{ matrix.python-version }})
     needs: scope
-    if: needs.scope.outputs.capture == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.capture == 'true')
     # Exercise the oldest Python on pre-2.80 GLib without adding a matrix leg.
     runs-on: ${{ matrix.python-version == '3.10' && 'ubuntu-22.04' || 'ubuntu-latest' }}
     timeout-minutes: 30
@@ -494,7 +500,7 @@ jobs:
       fail-fast: false
       matrix:
         # PR tier: one Python; the merge queue and main run all three.
-        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || (github.event_name == 'push' && github.actor == 'github-merge-queue[bot]')) && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/capture
@@ -503,6 +509,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "packages/capture/uv.lock"
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
       - name: Install system dependencies
@@ -555,7 +564,7 @@ jobs:
     name: capture (macos, py3.12)
     needs: scope
     # Merge queue and main only; the PR tier runs capture on Linux.
-    if: needs.scope.outputs.capture == 'true' && github.event_name != 'pull_request'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.capture == 'true' && github.event_name != 'pull_request' && !(github.event_name == 'push' && github.actor == 'github-merge-queue[bot]'))
     runs-on: macos-latest
     timeout-minutes: 30
     defaults:
@@ -566,6 +575,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "packages/capture/uv.lock"
       - name: Set up Python
         run: uv python install 3.12
       - name: Install external video tools
@@ -585,7 +597,7 @@ jobs:
     name: capture (windows, py3.12)
     needs: scope
     # Merge queue and main only; the PR tier runs capture on Linux.
-    if: needs.scope.outputs.capture == 'true' && github.event_name != 'pull_request'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.capture == 'true' && github.event_name != 'pull_request' && !(github.event_name == 'push' && github.actor == 'github-merge-queue[bot]'))
     runs-on: windows-latest
     timeout-minutes: 45
     defaults:
@@ -596,6 +608,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "packages/capture/uv.lock"
       - name: Set up Python
         run: uv python install 3.12
       - name: Install external video tools
@@ -616,7 +631,7 @@ jobs:
   capture-contract:
     name: capture lint and release contract
     needs: scope
-    if: needs.scope.outputs.capture == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.capture == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -627,6 +642,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "packages/capture/uv.lock"
       - name: Set up Python
         run: uv python install 3.12
       - name: Install
@@ -647,14 +665,14 @@ jobs:
   privacy:
     name: privacy (py${{ matrix.python-version }})
     needs: scope
-    if: needs.scope.outputs.privacy == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.privacy == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         # PR tier: one Python; the merge queue and main run all three.
-        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || (github.event_name == 'push' && github.actor == 'github-merge-queue[bot]')) && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/privacy
@@ -663,6 +681,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "packages/privacy/uv.lock"
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
       - name: Install
@@ -673,7 +694,7 @@ jobs:
   privacy-presidio:
     name: privacy (py3.12, Presidio)
     needs: scope
-    if: needs.scope.outputs.privacy == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.privacy == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -684,6 +705,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "packages/privacy/uv.lock"
       - name: Set up Python
         run: uv python install 3.12
       - name: Install with Presidio and the spaCy model
@@ -697,7 +721,7 @@ jobs:
   privacy-contract:
     name: privacy lint and release contract
     needs: scope
-    if: needs.scope.outputs.privacy == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.privacy == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -708,6 +732,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "packages/privacy/uv.lock"
       - name: Set up Python
         run: uv python install 3.12
       - name: Install
@@ -724,25 +751,25 @@ jobs:
   desktop-test:
     name: desktop test
     needs: scope
-    if: needs.scope.outputs.desktop == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.desktop == 'true')
     uses: ./.github/workflows/desktop-test.yml
 
   desktop-build:
     name: desktop build
     needs: scope
-    if: needs.scope.outputs.desktop == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.desktop == 'true')
     uses: ./.github/workflows/desktop-build.yml
 
   tray:
     name: tray (${{ matrix.os }}, py${{ matrix.python-version }})
     needs: scope
-    if: needs.scope.outputs.tray == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.tray == 'true')
     strategy:
       fail-fast: false
       matrix:
         # PR tier: Linux on Python 3.12. The merge queue and main add 3.10,
         # 3.11, macOS and Windows, where the tray's platform handlers differ.
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-latest","python-version":"3.12"}]' || '[{"os":"ubuntu-latest","python-version":"3.10"},{"os":"ubuntu-latest","python-version":"3.11"},{"os":"ubuntu-latest","python-version":"3.12"},{"os":"macos-latest","python-version":"3.12"},{"os":"windows-latest","python-version":"3.12"}]') }}
+        include: ${{ fromJSON((github.event_name == 'pull_request' || (github.event_name == 'push' && github.actor == 'github-merge-queue[bot]')) && '[{"os":"ubuntu-latest","python-version":"3.12"}]' || '[{"os":"ubuntu-latest","python-version":"3.10"},{"os":"ubuntu-latest","python-version":"3.11"},{"os":"ubuntu-latest","python-version":"3.12"},{"os":"macos-latest","python-version":"3.12"},{"os":"windows-latest","python-version":"3.12"}]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     defaults:
@@ -753,6 +780,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "packages/tray/uv.lock"
       - name: Set up Python
         run: uv python install ${{ matrix.python-version }}
       - name: Install
@@ -767,7 +797,7 @@ jobs:
   tray-contract:
     name: tray lint and release contract
     needs: scope
-    if: needs.scope.outputs.tray == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.tray == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -778,6 +808,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "packages/tray/uv.lock"
       - name: Set up Python
         run: uv python install 3.12
       - name: Install
@@ -797,7 +830,7 @@ jobs:
     # commit. desktop-test.yml runs the same test when Desktop changes.
     name: tray and desktop IPC contract
     needs: scope
-    if: needs.scope.outputs.tray == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.tray == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -808,6 +841,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "packages/desktop/uv.lock"
       - name: Set up Python
         run: uv python install 3.12
       - name: Install Desktop
@@ -820,7 +856,7 @@ jobs:
   program-graph:
     name: program-graph (test, build, vendor)
     needs: scope
-    if: needs.scope.outputs.program_graph == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.program_graph == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -856,7 +892,7 @@ jobs:
     # a budget: docs/monorepo/INSTALL_WEIGHT.md.
     name: install weight (each package alone)
     needs: scope
-    if: needs.scope.outputs.weight == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.weight == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -865,6 +901,8 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
           version: "0.11.29"
       - name: Set up Python 3.12
         run: uv python install 3.12
@@ -886,7 +924,7 @@ jobs:
     # a real click and typed text under Xvfb, and reads them back.
     name: capture record and read without extras (Linux, Xvfb)
     needs: scope
-    if: needs.scope.outputs.capture == 'true'
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.capture == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -904,7 +942,7 @@ jobs:
   desktop-release-intent:
     name: desktop release intent
     needs: scope
-    if: github.event_name == 'pull_request' && needs.scope.outputs.desktop == 'true'
+    if: github.event.pull_request.draft != true && (github.event_name == 'pull_request' && needs.scope.outputs.desktop == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -949,7 +987,7 @@ jobs:
       - install-weight
       - capture-core-record
       - desktop-release-intent
-    if: always()
+    if: github.event.pull_request.draft != true && (always())
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -957,12 +995,17 @@ jobs:
         env:
           RESULTS: ${{ toJSON(needs) }}
           EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
         run: |
           python3 - <<'PY'
           import json, os, sys
 
           needs = json.loads(os.environ["RESULTS"])
-          pr_tier = os.environ["EVENT_NAME"] == "pull_request"
+          event = os.environ["EVENT_NAME"]
+          pr_tier = event == "pull_request"
+          # The merge queue pushes the exact commit its group just tested, so
+          # that push runs the PR-tier lane instead of the queue tier again.
+          queue_push = event == "push" and os.environ["ACTOR"] == "github-merge-queue[bot]"
           # The scope output that selects each job. A selected job must run and
           # pass, except where its tier says it does not run on this event.
           selects = {
@@ -988,8 +1031,9 @@ jobs:
               "program-graph": "program_graph",
               "install-weight": "weight",
           }
-          # Queue tier only: skipped on a pull request, required in the merge
-          # queue, on main and on dispatch.
+          # Queue tier only: skipped on a pull request and on the merge queue's
+          # own push to main; required in the merge queue, on any other push to
+          # main and on dispatch.
           queue_only = {"capture-macos", "capture-windows"}
           # PR tier only: checks a pull request's own diff.
           pr_only = {"desktop-release-intent"}
@@ -1008,7 +1052,9 @@ jobs:
                   continue
               # A job missing from `selects` keeps the old rule: skipped is fine.
               selected = name in selects and outputs.get(selects[name]) == "true"
-              off_tier = (pr_tier and name in queue_only) or (not pr_tier and name in pr_only)
+              off_tier = ((pr_tier or queue_push) and name in queue_only) or (
+                  not pr_tier and name in pr_only
+              )
               if result == "skipped" and selected and not off_tier:
                   bad[name] = "skipped although selected"
           if bad:

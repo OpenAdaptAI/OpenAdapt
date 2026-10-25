@@ -40,6 +40,8 @@ on:
     workflows: ["Release and PyPI Publish", "Release package", "Desktop release"]
     types: [completed]
   pull_request:
+    # Drafts run nothing (each job checks `draft`); marking one ready runs CI.
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'scripts/check_release_health.py'
       - '.github/release-health.json'
@@ -58,7 +60,7 @@ permissions:
 jobs:
   self-test:
     name: Prove the detectors fire and stay quiet
-    if: github.event_name == 'pull_request'
+    if: github.event.pull_request.draft != true && (github.event_name == 'pull_request')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

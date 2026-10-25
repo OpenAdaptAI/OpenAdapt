@@ -6,6 +6,8 @@ on:
     branches: [main]
   # Every pull request, whatever its base, plus each merge queue group.
   pull_request:
+    # Drafts run nothing (each job checks `draft`); marking one ready runs CI.
+    types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
   schedule:
     - cron: "23 5 * * 1"
@@ -25,6 +27,7 @@ concurrency:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     permissions:
       security-events: write

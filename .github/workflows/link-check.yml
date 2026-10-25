@@ -9,6 +9,8 @@ name: Link check
 # summary. Frozen history (legacy/, CHANGELOG.md) and .github/ are skipped.
 on:
   pull_request:
+    # Drafts run nothing (each job checks `draft`); marking one ready runs CI.
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "**/*.md"
       - ".github/workflows/link-check.yml"
@@ -41,7 +43,7 @@ env:
 jobs:
   internal:
     name: Internal links and anchors
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    if: github.event.pull_request.draft != true && (github.event_name == 'pull_request' || github.event_name == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -78,7 +80,7 @@ jobs:
 
   external:
     name: External links
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event.pull_request.draft != true && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

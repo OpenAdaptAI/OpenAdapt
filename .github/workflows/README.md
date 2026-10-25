@@ -11,8 +11,18 @@ pull request for runners. To keep pull requests fast, CI runs in three tiers:
   change reaches main. That covers macOS and Windows jobs, older Python
   versions, native installers and the macOS Intel audit. The merge queue
   tests each group on top of main and merges only a group that passes.
-- **Main** (`push` to `main`, `workflow_dispatch`, schedules): the queue tier
-  again on the merged commit, plus release and monitoring workflows.
+- **Main** (`push` to `main`, `workflow_dispatch`, schedules): release and
+  monitoring workflows. When the merge queue pushes the commit its group just
+  tested (actor `github-merge-queue[bot]`), the Python, Linux-matrix and
+  capture macOS/Windows jobs run only the PR-tier lane, so the heavy jobs run
+  once per batch, in the queue. A push by anyone else runs the full queue
+  tier. Desktop's jobs always run in full on main, because
+  `desktop-release.yml` reads its release evidence from the Packages push run.
+
+**Drafts run nothing.** Every job in a workflow that runs on pull requests
+checks `github.event.pull_request.draft != true`, and `ready_for_review` is a
+trigger, so marking a draft ready starts CI. Required checks don't report on a
+draft, and a draft can't merge anyway.
 
 Nothing that used to run before merge was dropped: every job removed from the
 PR tier runs in the queue tier.
@@ -50,7 +60,8 @@ to branch protection would make them blocking.
 | main.yml | `run-ci` | ubuntu-latest, Python 3.12 | ubuntu-latest and macos-latest, Python 3.10 to 3.12 |
 | main.yml | `unsupported-python-guard` | no | Python 3.13 and 3.14 |
 | packages.yml | `types`, `agent` | Python 3.12 | Python 3.10 and 3.12 |
-| packages.yml | `flow-lint`, `flow-unit` (4 shards), `flow-critical` | yes | yes |
+| packages.yml | `flow-lint`, `flow-critical` | yes | yes |
+| packages.yml | `flow-unit` | 2 shards | 4 shards |
 | packages.yml | `capture-linux` | Python 3.12 | Python 3.10 (ubuntu-22.04), 3.11, 3.12 |
 | packages.yml | `capture-macos`, `capture-windows` | no | yes |
 | packages.yml | `capture-contract`, `capture-core-record` | yes | yes |
@@ -96,6 +107,26 @@ Three kinds of workflow keep their own groups:
   Desktop may cancel an older one, because `desktop-release.yml` waits only
   for runs on commits that touch Desktop. Queue groups and dispatches are never
   cancelled.
+
+## Caches
+
+pip jobs use `actions/setup-python` with `cache: pip`. Every `setup-uv` step
+sets `enable-cache: true` and keys the cache on its package's own `uv.lock`.
+npm uses `cache: npm`. The Tauri builds use `Swatinem/rust-cache`, and the
+Rust audit caches its `cargo-audit` binary. The release workflows keep caching
+off on purpose: release builds start from a clean cache.
+
+## Merge queue settings
+
+How many queue runs happen per merged pull request is a repository setting,
+not a workflow one. With "Maximum pull requests to build" at 3, the queue
+builds up to three overlapping groups at once ([A], [A,B], [A,B,C]), and each
+runs the full queue tier. To run the heavy jobs once per batch, build one
+group at a time and let it collect several pull requests, for example: build
+1, merge at least 1 and at most 10, and wait 5 minutes to fill a group. Those
+are branch-protection settings, so an admin changes them. How GitHub fills a
+group at those values hasn't been tested here; check the result on the next
+few queue runs.
 
 ## Dependabot
 

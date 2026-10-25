@@ -6,6 +6,8 @@ name: Noncanonical docs guard
 # artifact or claim the canonical custom domain.
 on:
   pull_request:
+    # Drafts run nothing (each job checks `draft`); marking one ready runs CI.
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "docs/**"
       - "mkdocs.yml"
@@ -29,6 +31,7 @@ permissions:
 
 jobs:
   guard:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

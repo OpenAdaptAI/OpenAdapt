@@ -2,6 +2,8 @@ name: Python CI
 
 on:
   pull_request:
+    # Drafts run nothing (each job checks `draft`); marking one ready runs CI.
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - '**'
   # The merge queue tests each group before it lands on main.
@@ -19,6 +21,7 @@ concurrency:
 
 jobs:
   run-ci:
+    if: github.event.pull_request.draft != true
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -29,8 +32,8 @@ jobs:
         # PR tier: one lane, the required run-ci (ubuntu-latest, 3.12). The
         # merge queue and main run every supported Python on Linux and macOS,
         # so nothing reaches main untested on them.
-        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest"]') }}
-        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
+        os: ${{ fromJSON((github.event_name == 'pull_request' || (github.event_name == 'push' && github.actor == 'github-merge-queue[bot]')) && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || (github.event_name == 'push' && github.actor == 'github-merge-queue[bot]')) && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
 
     steps:
       - name: Checkout code
@@ -120,7 +123,7 @@ jobs:
   # and that each engine command prints the Python 3.12 install fix.
   unsupported-python-guard:
     # Merge queue and main only (PR tier runs one lane).
-    if: github.event_name != 'pull_request'
+    if: github.event.pull_request.draft != true && (github.event_name != 'pull_request')
     runs-on: ubuntu-latest
     permissions:
       contents: read
