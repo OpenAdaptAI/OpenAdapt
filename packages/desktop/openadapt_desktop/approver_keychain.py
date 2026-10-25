@@ -444,7 +444,9 @@ class NoEnclave:
 
 # LocalAuthentication and Security error codes that mean the person didn't
 # confirm: cancelled, failed, locked out, no UI allowed, or no passcode.
-_PRESENCE_REFUSED = frozenset({-1, -2, -4, -5, -6, -7, -8, -9, -1004, -128, -25308})
+_PRESENCE_REFUSED = frozenset({-1, -2, -4, -5, -6, -7, -8, -9, -1004, -128})
+#: errSecInteractionNotAllowed: the Mac is locked (or no prompt can show).
+_INTERACTION_NOT_ALLOWED = -25308
 
 
 class MacEnclave:
@@ -478,6 +480,12 @@ class MacEnclave:
             try:
                 handle, _public = self.create(require_presence=False)
                 self._available = bool(handle)
+            except ApproverKeychainError as exc:
+                if exc.code == "approver_presence_refused":
+                    # The Mac is locked: the Secure Enclave is there but won't
+                    # make a key now. Don't remember that; ask again later.
+                    return True
+                self._available = False
             except Exception:  # no Secure Enclave, or Security.framework differs
                 self._available = False
         return self._available
@@ -664,6 +672,12 @@ class _MacLib:
         if not result:
             code = self.cf.CFErrorGetCode(error) if error.value else 0
             self.release(error.value)
+            if code == _INTERACTION_NOT_ALLOWED:
+                raise ApproverKeychainError(
+                    "approver_presence_refused",
+                    "This Mac is locked or can't show the Touch ID prompt right "
+                    "now. Unlock it and try again. Nothing changed.",
+                )
             if code in _PRESENCE_REFUSED:
                 raise ApproverKeychainError(
                     "approver_presence_refused",

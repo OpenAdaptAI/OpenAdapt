@@ -394,9 +394,7 @@ def read_switch(
     note = _read_turned_off(root)
     try:
         events = api["SwitchLog"](root / "switch.log").read()
-        from openadapt_flow.approval_mode.switch import summarize_events
-
-        state = summarize_events(events)
+        state = _summarize(events)
     except api["SwitchLogError"]:
         if note is not None:
             return closed("turned_off", note.get("at"), here=True)
@@ -500,6 +498,155 @@ def turn_off(data_dir: Path, bundle_id: str) -> dict[str, Any]:
         "moved_aside": moved_aside,
         "at": now,
     }
+
+
+# ------------------------------------------------------------------- re-arm
+
+#: The cause a re-arm card shows and the person's key signs, per off reason.
+#: Signed as shown: a different sentence fails verification.
+REARM_CAUSES: dict[str, str] = {
+    "uncertain_result": "A save's result was uncertain.",
+    "wrong_item_found": "The right-record check found a different record.",
+    "too_many_problems": "Too many items needed a person.",
+    "screen_changed": "The app's screen changed.",
+    "record_check_lost": "The record check stopped working.",
+    "spot_checks_overdue": "Spot checks were overdue.",
+    "version_changed": "The task version changed.",
+    "environment_changed": "This computer's setup changed.",
+    "admission_lost": "The task's admission lapsed.",
+    "setup_lapsed": "The runner setup lapsed.",
+    "turned_off": "A person turned it off.",
+}
+
+
+def flow_rearm_api() -> dict[str, Any] | None:
+    """Flow's signed re-arm for a key held elsewhere, or None without it."""
+
+    try:
+        from openadapt_flow.approval_mode import switch
+    except ImportError:
+        return None
+    names = ("rearm_request", "rearm_to_sign", "rearm_evidence", "rearm", "clean_streak")
+    if not all(hasattr(switch, name) for name in names):
+        return None
+    return {name: getattr(switch, name) for name in names} | {
+        "SwitchLog": switch.SwitchLog,
+        "SwitchLogError": switch.SwitchLogError,
+    }
+
+
+def registered_approver_keys() -> dict[str, str]:
+    """Flow's registered approvers as {name: base64 raw Ed25519 public key}.
+
+    The keys a signed re-arm is verified against (``approvers`` in the key
+    directory's ``principals.json``). Empty when Flow or the registry is
+    unavailable, so a re-arm then counts for nothing.
+    """
+
+    import base64
+
+    try:
+        from openadapt_flow.jit.authority import PrincipalRegistry
+        from openadapt_flow.jit.lifecycle import default_key_dir
+
+        approvers = PrincipalRegistry.load(default_key_dir()).approvers
+    except Exception:
+        return {}
+    keys = {}
+    for name, public in dict(approvers).items():
+        try:
+            keys[str(name)] = base64.b64encode(bytes.fromhex(public)).decode("ascii")
+        except ValueError:
+            continue
+    return keys
+
+
+def _summarize(events: Any) -> Any:
+    """Flow's switch state, honouring a re-arm signed by a registered approver."""
+
+    import inspect
+
+    from openadapt_flow.approval_mode.switch import summarize_events
+
+    if "approver_keys" in inspect.signature(summarize_events).parameters:
+        return summarize_events(events, approver_keys=registered_approver_keys())
+    return summarize_events(events)
+
+
+def rearm_offer(data_dir: Path, bundle_id: str) -> dict[str, Any] | None:
+    """What a person sees and signs to turn the switch back on, or None.
+
+    None unless this Flow can re-arm with a key held elsewhere, the switch is
+    off, and enough consecutive items since then were verified (Flow decides).
+    """
+
+    api = flow_rearm_api()
+    if api is None:
+        return None
+    root = store_dir(data_dir, bundle_id)
+    log = api["SwitchLog"](root / "switch.log")
+    try:
+        events = log.read()
+        off = next((e for e in reversed(events) if e.kind == "switched_off"), None)
+        reason = off.reason if off is not None else ""
+        request = api["rearm_request"](
+            log, cause=REARM_CAUSES.get(str(reason), "It turned off.")
+        )
+    except (api["SwitchLogError"], OSError, ValueError):
+        return None
+    return {"request": request, "off_at": off.at if off is not None else None}
+
+
+def rearm_available(data_dir: Path, bundle_id: str) -> bool:
+    return rearm_offer(data_dir, bundle_id) is not None
+
+
+def rearm(
+    data_dir: Path,
+    bundle_id: str,
+    *,
+    shown: Mapping[str, Any],
+    approver_id: str,
+    approver_keys: Mapping[str, str],
+    sign: Any,
+) -> dict[str, Any]:
+    """Turn the switch back on with the person's signed re-arm.
+
+    ``shown`` is the request the card showed; if Flow's request now differs
+    (another item finished, another switch-off), nothing changes. ``sign``
+    signs the exact bytes (Touch ID) and returns ``"ed25519:<hex>"``.
+    ``approver_keys`` maps registered approver names to base64 public keys;
+    Flow verifies the signature against them before it appends ``rearmed``.
+    """
+
+    import base64
+
+    api = flow_rearm_api()
+    offer = rearm_offer(data_dir, bundle_id)
+    if api is None or offer is None:
+        return {"ok": False, "error": "The switch can't be turned back on now."}
+    if dict(offer["request"]) != dict(shown):
+        return {
+            "ok": False,
+            "error": "What you saw has changed. Nothing changed; look at it again.",
+        }
+    root = store_dir(data_dir, bundle_id)
+    log = api["SwitchLog"](root / "switch.log")
+    fields, payload = api["rearm_to_sign"](
+        log, offer["request"], approver_id=approver_id, key_id=approver_id
+    )
+    signature = str(sign(payload))
+    raw = bytes.fromhex(signature.removeprefix("ed25519:"))
+    evidence = api["rearm_evidence"](fields, base64.b64encode(raw).decode("ascii"))
+    try:
+        api["rearm"](log, evidence, approver_keys=dict(approver_keys))
+    except api["SwitchLogError"] as exc:
+        return {"ok": False, "error": f"Flow didn't turn it back on: {exc}"}
+    note = root / "turned_off.json"
+    if note.exists():
+        # The person's own switch-off note would keep the view off.
+        note.replace(root / f"turned_off.rearmed-{datetime.now(timezone.utc):%Y%m%dT%H%M%S}.json")
+    return {"ok": True}
 
 
 def stored_switch_ids(data_dir: Path) -> list[str]:

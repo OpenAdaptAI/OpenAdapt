@@ -4442,25 +4442,36 @@ class EngineDispatcher:
                 if card is not None:
                     cards.append(card)
         for switch in self._approval_switches(names):
-            switch["rearm_available"] = self._rearm_available(switch["workflow_id"])
+            switch["rearm"] = self._rearm_offer(switch["workflow_id"])
             card = stop_queue.card_for_rearm(switch)
             if card is not None:
                 cards.append(card)
         return stop_queue.sort_cards(cards)
 
-    def _rearm_available(self, workflow_id: str) -> bool:
-        """Whether this build can re-arm a task's switch with a signed answer."""
+    def _rearm_offer(self, workflow_id: str) -> dict | None:
+        """Flow's re-arm offer for a task's switch, with the clean items named."""
+
+        import hashlib
 
         from openadapt_desktop import approval_mode
 
-        check = getattr(approval_mode, "rearm_available", None)
-        if not callable(check):
-            return False
         try:
-            return bool(check(self.config.data_dir, workflow_id))
+            offer = approval_mode.rearm_offer(self.config.data_dir, workflow_id)
         except Exception:
-            logger.exception("Could not check whether the switch can be re-armed")
-            return False
+            logger.exception("Could not read whether the switch can be re-armed")
+            return None
+        if offer is None:
+            return None
+        # Flow names each verified item by the SHA-256 of its run id.
+        labels: dict[str, str] = {}
+        for row in self.services.db.list_work_items(workflow_id=workflow_id, limit=500):
+            run_id = str(row.get("run_id") or "")
+            if run_id:
+                ref = hashlib.sha256(run_id.encode("utf-8")).hexdigest()
+                labels[ref] = str(row.get("label") or row["item_id"])
+        refs = offer["request"]["clean_run_refs"]
+        offer["clean_items"] = [labels.get(ref, ref[:8]) for ref in refs]
+        return offer
 
     def list_stop_cards(self, **_params: Any) -> dict:
         """The stop-review queue: one card per stop, oldest first.
@@ -4736,6 +4747,14 @@ class EngineDispatcher:
             }
         if choice_id == "leave":
             return {"ok": True, "results": [], "changed": 0}
+        if any(card["kind"] == "rearm_problems_only" for card in cards):
+            if len(cards) != 1 or device is not None:
+                return {
+                    "ok": False,
+                    "code": "answer_on_computer",
+                    "error": "Turn the switch back on from the computer, on its own.",
+                }
+            return self._answer_rearm(cards[0], shown_ms=shown_ms)
         decided_at = datetime.now(timezone.utc).isoformat()
         message = stop_queue.decision_message(card_ids, choice_id, decided_at=decided_at)
         try:
@@ -4796,17 +4815,102 @@ class EngineDispatcher:
             ),
         }
 
-    def _rearm(self, workflow_id: str, signature: dict) -> dict:
-        from openadapt_desktop import approval_mode
+    def _answer_rearm(self, card: dict, *, shown_ms: Any) -> dict:
+        """Turn a task's switch back on with one Touch ID.
 
-        rearm = getattr(approval_mode, "rearm", None)
-        if not callable(rearm):
-            return {"ok": False, "error": "This build can't turn the switch back on."}
+        The approver key signs Flow's own re-arm bytes for exactly the
+        request the card showed, so no separate decision receipt is signed.
+        Flow verifies the signature against the key registered under
+        ``approvers`` before it appends ``rearmed``.
+        """
+
+        import base64
+        from datetime import datetime, timezone
+
+        from openadapt_desktop import approval_mode, stop_queue
+        from openadapt_desktop.approver_keychain import (
+            ApproverKeychainError,
+        )
+
+        keychain = self.services.flow_bridge.approver_keychain
+        stored = keychain.stored() if keychain.supported() else None
+        if stored is None:
+            return {
+                "ok": False,
+                "code": "approver_key_missing",
+                "error": (
+                    "Turning it back on needs your approver key behind Touch ID. "
+                    "Set it up in Settings. Nothing changed."
+                ),
+            }
+        name = self._approver_lookup(stored.public_key)
+        if name is None:
+            return {
+                "ok": False,
+                "code": "human_approver_unregistered",
+                "error": "Your approver key isn't registered. Nothing changed.",
+            }
+        # Verified against Flow's approvers registry, never a key list built
+        # from the signer's own key.
+        keys = approval_mode.registered_approver_keys()
+        expected = base64.b64encode(bytes.fromhex(stored.public_key)).decode("ascii")
+        if keys.get(name) != expected:
+            return {
+                "ok": False,
+                "code": "human_approver_unregistered",
+                "error": "Your approver key isn't registered. Nothing changed.",
+            }
+
+        def sign(payload: bytes) -> str:
+            return keychain.sign(
+                payload, reason='turn "only ask about problems" back on'
+            )[1]
+
         try:
-            return dict(rearm(self.config.data_dir, workflow_id, decision=signature))
+            outcome = approval_mode.rearm(
+                self.config.data_dir,
+                card["workflow_id"],
+                shown=card["source"]["request"],
+                approver_id=name,
+                approver_keys=keys,
+                sign=sign,
+            )
+        except ApproverKeychainError as exc:
+            return {"ok": False, "code": exc.code, "error": str(exc)}
         except Exception:
             logger.exception("Could not re-arm the switch")
             return {"ok": False, "error": "Desktop couldn't turn the switch back on."}
+        ok = bool(outcome.get("ok"))
+        self._record_stop_decision(
+            {
+                "schema": stop_queue.DECISION_SCHEMA,
+                "card_ids": [card["card_id"]],
+                "kinds": ["rearm_problems_only"],
+                "choice": "rearm",
+                "decided_at": datetime.now(timezone.utc).isoformat(),
+                # Flow's switch log holds the signed re-arm itself.
+                "key": "flow_rearm",
+                "public_key": stored.public_key,
+                "shown_ms": self._timings({"shown_ms": shown_ms}, [card["card_id"]]),
+                "results": [{"card_id": card["card_id"], "ok": ok}],
+            }
+        )
+        if ok:
+            self.services.audit.log("switch_rearmed", workflow_id=card["workflow_id"])
+            return {
+                "ok": True,
+                "results": [{"card_id": card["card_id"], "ok": True, "error": None}],
+                "changed": 1,
+            }
+        return {"ok": False, "error": outcome.get("error") or "Nothing changed."}
+
+    @staticmethod
+    def _approver_lookup(public_key: str) -> str | None:
+        """The approver name Flow's registry has for this key (patched in tests)."""
+
+        from openadapt_desktop.approver_keychain import registered_name
+
+        return registered_name(public_key)
 
     def answer_stop_approval(self, **params: Any) -> dict:
         """Answer one waiting save from its card (Flow signs the answer).

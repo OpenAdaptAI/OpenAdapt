@@ -256,6 +256,7 @@ one card (`openadapt_desktop/stop_queue.py`, screen `src/screens/Stops.tsx`).
 | `confirm_save` | "Did it save?" | The item's values and the record check's differences | I checked: it saved; I checked: nothing saved, run it again; I fixed it by hand; leave it |
 | `halted` | "What should happen to this item?" | The item's values and why it stopped | Run it again; skip; decline; I did it by hand; leave it |
 | `approve_save` | "Approve this save?" | The item's values and the filled form | Approve and save; don't save (three reasons); leave it |
+| `rearm_problems_only` | "Turn "only ask about problems" back on?" | Why it went off, when, and the items saved and checked in a row since (Flow offers it only after 10) | Turn it back on; leave it |
 
 How it answers:
 
@@ -275,6 +276,13 @@ How it answers:
   each card is still checked on its own. One stale card stops the whole
   batch. Save approvals never batch.
 - **No default.** No choice is styled as the default; the evidence decides.
+- **Re-arm.** Turning the switch back on is one Touch ID over Flow's own
+  re-arm bytes (`rearm_to_sign`) for exactly the request the card showed;
+  if another item finished since, the card changed and nothing happens.
+  Flow verifies the signature against the key registered under `approvers`,
+  never a key Desktop supplies for itself. Desktop's switch view honours a
+  re-arm signed by a registered approver. It is answered on the computer
+  only, and needs a Flow with signed re-arm (#1517).
 
 A stop where nothing was written now also offers "I did it by hand". For a
 possible duplicate that is a different person, running it again would stop

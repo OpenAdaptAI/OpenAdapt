@@ -450,3 +450,158 @@ def test_the_queue_commands_answer_while_a_run_waits_and_stay_off_the_agent_sock
     # Batch answers can run an item again, so they wait their turn.
     assert "answer_stop_cards" not in CONCURRENT_COMMANDS
     assert not {"list_stop_cards", "answer_stop_cards", "answer_stop_approval"} & (_SOCKET_COMMANDS)
+
+
+# -- re-arm "only ask about problems" --------------------------------------------
+
+
+class _FakeRearm:
+    """Flow's re-arm for a key held elsewhere, verifying as #1517's does."""
+
+    def __init__(self) -> None:
+        self.refs = [f"{i:064x}" for i in range(10)]
+        self.rearmed: list = []
+
+    def offer(self):
+        return {
+            "request": {
+                "off_seq": 7,
+                "off_sha256": "sha256:" + "e" * 64,
+                "off_reason": "screen_changed",
+                "cause": "The app's screen changed.",
+                "clean_run_refs": list(self.refs),
+            },
+            "off_at": "2026-10-24T10:00:00+00:00",
+        }
+
+    def payload(self, fields):
+        return (
+            b"openadapt.approval-mode-rearm/v1\n"
+            + json.dumps(
+                {k: v for k, v in fields.items() if k != "signature"},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        )
+
+    def rearm(self, data_dir, bundle_id, *, shown, approver_id, approver_keys, sign):
+        import base64
+
+        offer = self.offer()
+        if dict(shown) != offer["request"]:
+            return {"ok": False, "error": "What you saw has changed."}
+        fields = {**offer["request"], "approver_id": approver_id, "key_id": approver_id}
+        signature = bytes.fromhex(sign(self.payload(fields)).removeprefix("ed25519:"))
+        public = base64.b64decode(approver_keys[approver_id])
+        Ed25519PublicKey.from_public_bytes(public).verify(signature, self.payload(fields))
+        self.rearmed.append((bundle_id, approver_id))
+        return {"ok": True}
+
+
+@pytest.fixture
+def switched_off(queue, monkeypatch):
+    disp, db, keychain = queue
+    fake = _FakeRearm()
+    from openadapt_desktop import approval_mode
+
+    monkeypatch.setattr(approval_mode, "rearm_offer", lambda _d, _b: fake.offer())
+    monkeypatch.setattr(approval_mode, "rearm", fake.rearm)
+    import base64
+
+    registered = {
+        "desktop-approver": base64.b64encode(bytes.fromhex(keychain.stored().public_key)).decode(
+            "ascii"
+        )
+    }
+    monkeypatch.setattr(approval_mode, "registered_approver_keys", lambda: dict(registered))
+    monkeypatch.setattr(
+        disp,
+        "_approval_switches",
+        lambda names: [
+            {
+                "workflow_id": "wf-ref",
+                "task_name": "New patient referral",
+                "state": "off",
+                "off_reason": "screen_changed",
+                "off_at": "2026-10-24T10:00:00+00:00",
+                "off_step": "",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        type(disp), "_approver_lookup", staticmethod(lambda public: "desktop-approver")
+    )
+    return disp, fake, keychain
+
+
+def test_a_switched_off_task_offers_a_rearm_card_showing_what_is_signed(switched_off):
+    disp, fake, _keychain = switched_off
+
+    (card,) = _cards(disp)
+
+    assert card["kind"] == "rearm_problems_only"
+    assert card["source"]["request"] == fake.offer()["request"]
+    assert "The app's screen changed." in card["summary"]
+    assert [c["id"] for c in card["choices"]] == ["rearm", "leave"]
+
+
+def test_rearm_is_one_touch_id_over_flows_own_bytes(switched_off, enclave):
+    disp, fake, _keychain = switched_off
+    (card,) = _cards(disp)
+
+    answer = disp.dispatch("answer_stop_cards", {"card_ids": [card["card_id"]], "choice": "rearm"})
+
+    assert answer["ok"] is True
+    assert fake.rearmed == [("wf-ref", "desktop-approver")]
+    assert enclave.prompts == ['turn "only ask about problems" back on']
+
+
+def test_a_rearm_after_another_item_finished_changes_nothing(switched_off, enclave):
+    disp, fake, _keychain = switched_off
+    (card,) = _cards(disp)
+    fake.refs = fake.refs[1:] + ["f" * 64]  # a newer verified item
+
+    answer = disp.dispatch("answer_stop_cards", {"card_ids": [card["card_id"]], "choice": "rearm"})
+
+    assert answer["code"] == "card_changed"
+    assert fake.rearmed == [] and enclave.prompts == []
+
+
+def test_a_cancelled_rearm_prompt_changes_nothing(switched_off, enclave):
+    disp, fake, _keychain = switched_off
+    (card,) = _cards(disp)
+    enclave.answer = "cancel"
+
+    answer = disp.dispatch("answer_stop_cards", {"card_ids": [card["card_id"]], "choice": "rearm"})
+
+    assert answer["ok"] is False and answer["code"] == "approver_presence_refused"
+    assert fake.rearmed == []
+
+
+def test_an_unregistered_key_cant_rearm(switched_off, monkeypatch, enclave):
+    disp, fake, _keychain = switched_off
+    monkeypatch.setattr(type(disp), "_approver_lookup", staticmethod(lambda public: None))
+    (card,) = _cards(disp)
+
+    answer = disp.dispatch("answer_stop_cards", {"card_ids": [card["card_id"]], "choice": "rearm"})
+
+    assert answer["code"] == "human_approver_unregistered"
+    assert fake.rearmed == [] and enclave.prompts == []
+
+
+def test_a_rearm_is_verified_against_the_registry_not_the_signers_key(
+    switched_off, monkeypatch, enclave
+):
+    from openadapt_desktop import approval_mode
+
+    disp, fake, _keychain = switched_off
+    # The registry holds another key under this name.
+    monkeypatch.setattr(
+        approval_mode, "registered_approver_keys", lambda: {"desktop-approver": "AAAA"}
+    )
+    (card,) = _cards(disp)
+
+    answer = disp.dispatch("answer_stop_cards", {"card_ids": [card["card_id"]], "choice": "rearm"})
+
+    assert answer["code"] == "human_approver_unregistered"
+    assert fake.rearmed == [] and enclave.prompts == []

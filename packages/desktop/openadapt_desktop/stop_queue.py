@@ -426,45 +426,63 @@ def card_for_approval(state: dict) -> dict[str, Any] | None:
 
 
 def card_for_rearm(switch: dict) -> dict[str, Any] | None:
-    """A task whose problems-only switch went off, when it can be re-armed."""
+    """A task whose problems-only switch went off, when Flow offers a re-arm.
 
-    if switch.get("state") != "off" or not switch.get("rearm_available"):
+    ``switch["rearm"]`` is Flow's offer (``approval_mode.rearm_offer``): the
+    exact request the person's key signs, plus the clean items by name. The
+    card shows all of it, and its id covers the request, so a re-arm can only
+    sign what the person saw.
+    """
+
+    offer = switch.get("rearm")
+    if switch.get("state") != "off" or not isinstance(offer, dict):
         return None
+    request = offer["request"]
+    clean = [str(name) for name in offer.get("clean_items") or []]
     card = {
         "schema": CARD_SCHEMA,
         "kind": "rearm_problems_only",
-        "source": {"type": "switch", "id": switch["workflow_id"]},
+        "source": {"type": "switch", "id": switch["workflow_id"], "request": request},
         "workflow_id": switch["workflow_id"],
         "task_name": switch.get("task_name") or "",
         "label": "",
         "question": 'Turn "only ask about problems" back on?',
         "summary": (
-            "It went off, so every save of this task waits for a person. "
-            "Turn it back on only if the reason it went off is fixed."
+            f"It went off: {request['cause']} Since then, the last "
+            f"{len(request['clean_run_refs'])} items were saved and checked in a "
+            "row. Turn it back on only if the reason it went off is fixed."
         ),
         "evidence": {
-            "source": [],
+            "source": [
+                {"field": "cause", "label": "Why it went off", "value": request["cause"]},
+                {"field": "off_at", "label": "When", "value": str(offer.get("off_at") or "")},
+                {
+                    "field": "clean_items",
+                    "label": "Checked items since",
+                    "value": ", ".join(clean) or f"{len(request['clean_run_refs'])} items",
+                },
+            ],
             "record": [],
             "differences": [],
             "candidates": [],
-            "reason": str(switch.get("off_reason") or ""),
+            "reason": str(request.get("off_reason") or ""),
             "step": str(switch.get("off_step") or ""),
             "expected": "",
             "observed": "",
             "screenshot": None,
-            "off_at": switch.get("off_at"),
         },
         "choices": [
             Choice(
                 "rearm",
                 "Turn it back on",
-                "Saves without a problem go through without asking again.",
+                "Saves without a problem go through without asking. Any problem "
+                "still comes to you, and turns it off again.",
                 "rearm",
             ).public(),
             _LEAVE.public(),
         ],
         "expires_at": None,
-        "created_at": switch.get("off_at"),
+        "created_at": offer.get("off_at"),
         "batch_key": None,
         "status": "off",
     }
