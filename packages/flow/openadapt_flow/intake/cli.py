@@ -81,8 +81,15 @@ def cmd_intake(args: argparse.Namespace) -> int:
         )
         return 2
     Path(args.out).write_text(json.dumps(result.to_params(), indent=2) + "\n")
+    # Where each value came from: the document's digest and the line, so a
+    # later check can compare the saved record with the document itself.
+    from openadapt_flow.provenance import document_sha256, from_intake
+
+    prov_path = Path(args.out).with_suffix(".provenance.json")
+    prov = from_intake(result, document_sha256(args.document))
+    prov_path.write_text(prov.model_dump_json(indent=2) + "\n")
     print(
-        f"Wrote {args.out}. Run: "
+        f"Wrote {args.out} and {prov_path}. Run: "
         + command(f"run {args.bundle} --params-file {args.out}")
     )
     return 0

@@ -61,9 +61,16 @@ from openadapt_types.approval import (
     CHECKED_HOW_VALUES,
     checked_how_for_flow_tier,
 )
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+from openadapt_flow.fault_gate import (
+    AdmissionPolicy,
+    CoverageRecord,
+    GateError,
+    check_digest,
+    load_coverage,
+)
 from openadapt_flow.qualify.result import verify_config_sha256
 from openadapt_flow.runtime.effects.adapter import verifier_identity
 from openadapt_flow.runtime.effects.effect import (
@@ -73,6 +80,7 @@ from openadapt_flow.runtime.effects.effect import (
     EffectVerdict,
     Verdict,
 )
+from openadapt_flow.runtime.effects.frame import FrameSpec, FrameVerdict, judge_frame
 from openadapt_flow.verification import (
     EffectContractMutationError,
     VerificationTier,
@@ -134,6 +142,18 @@ _STRENGTH_RANK = {
     "independent_system_of_record": 4,
 }
 
+#: Where the baseline keeps the audit log read for frame attribution. Not a
+#: surface name: those are plain identifiers.
+FRAME_AUDIT_DETAIL = "openadapt:frame_audit"
+
+#: ``checked`` (``docs/VERIFICATION_COVERAGE.md``): which parts of the claim
+#: behind ``verified`` were checked, and how each came out.
+CHECKED_PARTS: tuple[str, ...] = ("delta", "frame", "source")
+#: ``checked.coverage``, present only under an admission policy.
+COVERAGE_KEYS = frozenset({"killed", "applicable", "sha256", "policy"})
+CHECKED_VALUES = ("held", "refuted", "not_checked")
+SOURCE_VALUES = CHECKED_VALUES + ("instruction",)
+
 #: Receipt fields beyond Execute v1. The last two are optional.
 _NEW_RECEIPT_FIELDS = (
     "executor_kind",
@@ -188,6 +208,24 @@ class VerifyConfig(BaseModel):
     verifier: EffectsConfig
     #: Same shape as ``effect_contract.yaml`` ``effects:``.
     effects: list[Effect] = Field(min_length=1)
+    #: What else in the read set must stay unchanged, and who may change it
+    #: (``runtime/effects/frame.py``). Unset: the default frame (the whole
+    #: read set, compared by ``id``, no attribution).
+    frame: Optional[FrameSpec] = None
+    #: The check's admission policy: its fault-gate coverage record and the
+    #: minimum it must meet (``openadapt_flow/fault_gate.py``). Unset: no
+    #: coverage is required or stated.
+    admission: Optional[AdmissionPolicy] = None
+    #: Where ``admission.coverage`` resolves (the file's directory).
+    _base_dir: Optional[Path] = PrivateAttr(default=None)
+
+    def coverage_path(self) -> Optional[Path]:
+        if self.admission is None:
+            return None
+        path = Path(self.admission.coverage)
+        if not path.is_absolute() and self._base_dir is not None:
+            path = self._base_dir / path
+        return path
 
 
 def load_verify_config(path: str | Path) -> VerifyConfig:
@@ -200,7 +238,9 @@ def load_verify_config(path: str | Path) -> VerifyConfig:
         data = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as exc:
         raise VerifyRunError(f"cannot parse {source}: {exc}") from exc
-    return parse_verify_config(data, source=f"verify config {source}")
+    cfg = parse_verify_config(data, source=f"verify config {source}")
+    cfg._base_dir = source.resolve().parent
+    return cfg
 
 
 #: ``openadapt.verify/v1`` sections only qualify reads (RFC-0002, Qualify-only
@@ -286,6 +326,17 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
         )
     if cfg.verifier.candidates:
         raise VerifyRunError("verify-run does not support verifier candidates yet")
+    attribution = cfg.frame.attribution if cfg.frame is not None else None
+    if attribution is not None and attribution.read is not None:
+        try:
+            audit = EffectsConfig.model_validate(attribution.read)
+        except Exception as exc:
+            raise VerifyRunError(f"invalid frame.attribution.read: {exc}") from exc
+        if audit.kind in _NOT_INDEPENDENT or audit.surfaces or audit.candidates:
+            raise VerifyRunError(
+                "frame.attribution.read must be one read-only system-of-record "
+                "read (rest, sql, fhir, graphql, ...)"
+            )
     for effect in cfg.effects:
         if effect.needs_operator_confirmation:
             raise VerifyRunError(
@@ -315,6 +366,195 @@ def _audit_effect(effect: Effect, bound: Effect) -> Effect:
     ):
         return bound
     return bound.model_copy(update={"forbid_collateral_change": True})
+
+
+def _frame_effect(effect: Effect, bound: Effect) -> Effect:
+    """The effect as verify-run judges it when the frame is judged.
+
+    The frame judge covers every record outside the declared delta, once for
+    the whole contract, so the per-effect collateral rules would only repeat
+    it -- and, judged one effect at a time, flag another effect's target. They
+    stay on only where the file sets them explicitly.
+    """
+
+    if "forbid_collateral_loss" in effect.model_fields_set:
+        return bound
+    return bound.model_copy(update={"forbid_collateral_loss": False})
+
+
+def _post_records(state: Any) -> Optional[list[dict[str, Any]]]:
+    if not isinstance(state, EffectState) or not state.reachable:
+        return None
+    return list(state.records)
+
+
+def _audit_verifier(cfg: VerifyConfig, params: Mapping[str, object]) -> Any:
+    attribution = cfg.frame.attribution if cfg.frame is not None else None
+    if attribution is None or attribution.read is None:
+        return None
+    try:
+        return build_effect_verifier(
+            EffectsConfig.model_validate(attribution.read), params
+        )
+    except ValueError as exc:
+        raise VerifyRunError(f"cannot build the audit read: {exc}") from exc
+
+
+def _read_audit(verifier: Any) -> Optional[list[dict[str, Any]]]:
+    if verifier is None:
+        return None
+    try:
+        return _post_records(verifier.capture_pre_state())
+    except Exception:  # noqa: BLE001 - an unreadable log attributes nothing
+        return None
+
+
+def judge_run_frame(
+    cfg: VerifyConfig,
+    verifier: Any,
+    before: EffectState,
+    bound_effects: Sequence[Effect],
+    params: Mapping[str, object],
+    *,
+    audit_verifier: Any = None,
+    run_actors: Sequence[str] = (),
+) -> FrameVerdict:
+    """Read the slice after the save and judge the frame against ``before``."""
+
+    from openadapt_flow.runtime.effects.surfaces import surface_of
+
+    spec = cfg.frame or FrameSpec()
+    try:
+        capture = getattr(verifier, "capture_post_state", None) or (
+            verifier.capture_pre_state
+        )
+        after = capture()
+    except Exception:  # noqa: BLE001 - unreadable -> not checked
+        after = None
+    routed = getattr(verifier, "verifiers", None)
+    slices: dict[str, tuple[EffectState, Optional[list[dict[str, Any]]]]] = {}
+    routes: Optional[dict[str, list[str]]] = None
+    if isinstance(routed, dict) and routed:
+        # Surfaces that differ only in dropped fields (a content twin) are
+        # views of one read: a record an effect declares in one is declared
+        # in each.
+        def read_of(name: str) -> str:
+            sub = cfg.verifier.surfaces.get(name)
+            if sub is None:
+                return name
+            shape = sub.model_dump(mode="json", exclude={"records_drop_fields"})
+            return json.dumps(shape, sort_keys=True, default=str)
+
+        views: dict[str, list[str]] = {}
+        for name in routed:
+            views.setdefault(read_of(name), []).append(name)
+        routes = {}
+        for i, effect in enumerate(bound_effects):
+            own = surface_of(effect) or ""
+            routes[str(i)] = views.get(read_of(own), [own]) if own in routed else [own]
+        for name in routed:
+            sub = before.detail.get(name, {}) if isinstance(before.detail, dict) else {}
+            post = (
+                after.detail.get(name, {})
+                if isinstance(after, EffectState) and isinstance(after.detail, dict)
+                else {}
+            )
+            slices[name] = (
+                EffectState(
+                    substrate=str(sub.get("substrate", "")),
+                    reachable=bool(before.reachable and sub.get("reachable", False)),
+                    records=list(sub.get("records", [])),
+                ),
+                list(post.get("records", [])) if post.get("reachable") else None,
+            )
+    else:
+        slices[""] = (before, _post_records(after))
+    audit_before: Optional[list[dict[str, Any]]] = None
+    audit_after: Optional[list[dict[str, Any]]] = None
+    if audit_verifier is not None:
+        stored = (
+            before.detail.get(FRAME_AUDIT_DETAIL)
+            if isinstance(before.detail, dict)
+            else None
+        )
+        if isinstance(stored, dict) and stored.get("reachable"):
+            audit_before = list(stored.get("records", []))
+        audit_after = _read_audit(audit_verifier)
+    return judge_frame(
+        spec,
+        bound_effects,
+        slices,
+        params=params,
+        routes=routes,
+        audit_before=audit_before,
+        audit_after=audit_after,
+        run_actors=run_actors,
+    )
+
+
+def _target_record(
+    effects: Sequence[Effect], verdicts: Sequence[EffectVerdict]
+) -> Optional[dict[str, Any]]:
+    """The one record every confirmed write/read-back effect matched, if any."""
+
+    from openadapt_flow.runtime.effects.effect import stable_id
+
+    found: Optional[dict[str, Any]] = None
+    for effect, verdict in zip(effects, verdicts):
+        if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
+            continue
+        if effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0:
+            continue  # a guard: "nothing here"
+        if not verdict.confirmed or len(verdict.matched_records) != 1:
+            return None
+        record = verdict.matched_records[0]
+        if found is not None and stable_id(found) != stable_id(record):
+            return None
+        found = record
+    return found
+
+
+def _judge_source(
+    provenance: Optional[Any],
+    documents: Mapping[str, Any],
+    second: Optional[Any],
+    params: Mapping[str, object],
+    effects: Sequence[Effect],
+    verdicts: Sequence[EffectVerdict],
+    delta_held: bool,
+) -> tuple[str, dict[str, Any]]:
+    """``checked.source`` and its evidence (counts and names, no values)."""
+
+    from openadapt_flow.provenance import (
+        bound_fields,
+        default_extractor,
+        round_trip,
+    )
+
+    if provenance is None or not provenance.has_documents():
+        return "instruction", {"status": "instruction"}
+    differ = provenance.matches(params)
+    if differ:
+        # The values checked are not the values the source provenance records.
+        return "refuted", {
+            "status": "refuted",
+            "params_differ_from_provenance": differ,
+        }
+    extractor = second or default_extractor(provenance)
+    record = _target_record(effects, verdicts) if delta_held else None
+    result = round_trip(provenance, record, bound_fields(effects), documents, extractor)
+    evidence = result.summary()
+    evidence["first_extractors"] = sorted(
+        {p.extractor for p in provenance.params.values()}
+    )
+    evidence["documents"] = len(provenance.documents())
+    return result.status, evidence
+
+
+def _part(verdict: EffectVerdictLabel, proved: bool) -> str:
+    if proved:
+        return "held"
+    return "refuted" if verdict == "REFUTED" else "not_checked"
 
 
 # -- hashing ------------------------------------------------------------------
@@ -447,6 +687,20 @@ def capture_baseline(
     state = verifier.capture_pre_state()
     if not isinstance(state, EffectState):
         raise VerifyRunError("verifier returned no readable baseline")
+    audit_verifier = _audit_verifier(cfg, params)
+    if audit_verifier is not None:
+        entries = _read_audit(audit_verifier)
+        state = state.model_copy(
+            update={
+                "detail": {
+                    **state.detail,
+                    FRAME_AUDIT_DETAIL: {
+                        "reachable": entries is not None,
+                        "records": entries or [],
+                    },
+                }
+            }
+        )
     payload = {
         "schema_version": BASELINE_SCHEMA,
         "execution_id": execution_id,
@@ -638,6 +892,10 @@ def verify_run(
     remediates: Optional[str] = None,
     correlation_id: Optional[str] = None,
     write_attempted: bool = False,
+    coverage: Optional[CoverageRecord] = None,
+    provenance: Optional[Any] = None,
+    documents: Optional[Mapping[str, Any]] = None,
+    second_extractor: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Read the system of record and return ``{"receipt", "evidence"}``.
 
@@ -726,6 +984,7 @@ def verify_run(
     contract_digest = verify_config_sha256(identity, list(cfg.effects))
     verdicts: list[EffectVerdict] = []
     rows: list[dict[str, Any]] = []
+    bound_effects: list[Effect] = []
     weakest: Optional[VerificationTier] = None
     tiers: list[Optional[VerificationTier]] = []
     for effect in cfg.effects:
@@ -742,7 +1001,12 @@ def verify_run(
             )
         except (KeyError, ValueError) as exc:
             raise VerifyRunError(f"effect contract cannot bind params: {exc}") from exc
-        judged = _audit_effect(effect, bound)
+        judged = (
+            _frame_effect(effect, bound)
+            if baseline is not None
+            else _audit_effect(effect, bound)
+        )
+        bound_effects.append(bound)
         tier = verifier_effect_tier(verifier, judged)
         try:
             verdict = verify_effect_without_mutation(verifier, judged, before)
@@ -773,12 +1037,41 @@ def verify_run(
                 "expected_count": verdict.expected_count,
                 "unavailable": verdict.unavailable,
                 "stale": verdict.stale,
-                "collateral_change_checked": judged.forbid_collateral_change,
+                # With a baseline the frame judge covers every record outside
+                # the delta (evidence.frame); without one nothing can.
+                "collateral_change_checked": judged.forbid_collateral_change
+                or baseline is not None,
             }
         )
 
-    effect_verdict = _aggregate(verdicts)
+    delta_verdict = _aggregate(verdicts)
     observed_effect = _observed(verdicts)
+    # The frame: nothing outside the declared delta moved. Without a baseline
+    # it can't be known, so it is not checked and the run is not verified.
+    frame_spec = cfg.frame or FrameSpec()
+    if baseline is not None:
+        frame = judge_run_frame(
+            cfg,
+            verifier,
+            before,
+            bound_effects,
+            params,
+            audit_verifier=_audit_verifier(cfg, params),
+            # The executor's own id is this run, never "another user".
+            run_actors=[str(run_record.get("executor_id") or "")],
+        )
+    else:
+        frame = FrameVerdict(
+            status="not_checked",
+            reason="no baseline, so what else changed can't be known",
+        )
+    # A record outside the declared delta moved: the save's effect on the
+    # store is not the declared one, whatever the per-effect reads say.
+    effect_verdict: EffectVerdictLabel = (
+        "REFUTED" if frame.status == "refuted" else delta_verdict
+    )
+    if frame.status == "refuted" and observed_effect in ("absent", "present"):
+        observed_effect = "conflicting"
     verification_tier = readback_class(verdicts, tiers)
     unread = verification_tier == "unchecked"
     # The check level the weakest read reached (RFC-0002 open question 5):
@@ -808,21 +1101,69 @@ def verify_run(
 
     delivery_uncertain = False
     read_proves_write = (
-        effect_verdict == "CONFIRMED"
+        delta_verdict == "CONFIRMED"
         and verification_tier == "independent_readback"
         and strong_enough
         and oracle_tier in (2, 3)
     )
-    if read_proves_write and self_approved is True:
+    # The source part: with provenance, the record as read back must match
+    # the source document (a round trip). Without it the inputs are the
+    # authorized instruction itself (``--params``).
+    source_status, source_evidence = _judge_source(
+        provenance,
+        documents or {},
+        second_extractor,
+        params,
+        # Unbound: the field each parameter was written to is named by its
+        # ``{param: ...}`` reference, which binding replaces with the value.
+        list(cfg.effects),
+        verdicts,
+        read_proves_write,
+    )
+    checked: dict[str, Any] = {
+        "delta": _part(delta_verdict, read_proves_write),
+        "frame": frame.status,
+        "source": source_status,
+    }
+    admitted = True
+    if cfg.admission is not None:
+        # The check must have been shown to catch the faults it claims.
+        record = coverage
+        problem: Optional[str] = None
+        if record is None:
+            path = cfg.coverage_path()
+            try:
+                record = load_coverage(path) if path is not None else None
+            except GateError:
+                record = None
+        if record is None:
+            problem = "coverage_missing"
+        else:
+            problem = cfg.admission.problem(record, check_digest(cfg))
+        admitted = problem is None
+        checked["coverage"] = {
+            "killed": record.killed if record is not None else 0,
+            "applicable": record.applicable if record is not None else 0,
+            "sha256": record.digest() if record is not None else None,
+            "policy": "met" if admitted else str(problem),
+        }
+    claim_holds = (
+        read_proves_write
+        and frame.held
+        and checked["source"] in ("held", "instruction")
+        and admitted
+    )
+    if claim_holds and self_approved is True:
         # The write landed, but the executor approved its own write: no
         # oversight separate from itself. Never verified.
         outcome = ExecuteTerminalOutcomeV1.REJECTED_POLICY
-    elif read_proves_write:
+    elif claim_holds:
         outcome = ExecuteTerminalOutcomeV1.VERIFIED
     elif (
         effect_verdict == "REFUTED"
         and observed_effect == "absent"
         and not write_attempted
+        and frame.status != "refuted"
     ):
         # The store shows nothing landed, whatever the executor said.
         outcome = ExecuteTerminalOutcomeV1.HALTED_BEFORE_EFFECT
@@ -832,6 +1173,7 @@ def verify_run(
         delivery_uncertain = True
     verified = outcome is ExecuteTerminalOutcomeV1.VERIFIED
     landed = read_proves_write
+    frame_held = frame.held
 
     evidence = {
         "schema_version": EFFECT_EVIDENCE_SCHEMA,
@@ -870,6 +1212,9 @@ def verify_run(
             "max_execution_window_s": cfg.max_execution_window_s,
             "effects": rows,
         },
+        "frame": frame.evidence(frame_spec),
+        "source": source_evidence,
+        "checked": checked,
         "verifier": {
             "name": "openadapt-flow verify-run",
             "model_calls": 0,
@@ -882,7 +1227,8 @@ def verify_run(
         authorization_passed=verified,
         # Identity is the contract's record selector, judged in the store.
         identity_passed=landed,
-        postcondition_passed=landed,
+        # The postcondition includes the frame: nothing else moved.
+        postcondition_passed=landed and frame_held,
         effect_passed=landed,
         minimum_effect_strength=EffectStrengthV1(cfg.minimum_effect_strength),
         observed_effect_strength=(
@@ -917,6 +1263,7 @@ def verify_run(
     receipt["effect_verdict"] = effect_verdict
     receipt["verification_tier"] = verification_tier
     receipt["checked_how"] = checked_how
+    receipt["checked"] = checked
     if remediates is not None:
         receipt["remediates"] = remediates
     if correlation_id is not None:
@@ -955,7 +1302,7 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
         v1_names
         | set(_NEW_RECEIPT_FIELDS)
         | set(_OPTIONAL_RECEIPT_FIELDS)
-        | {"checked_how"}
+        | {"checked_how", "checked"}
     )
     if set(receipt) - allowed:
         return "unknown_field"
@@ -991,6 +1338,39 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
     ):
         return "checked_how"
     outcome = receipt.get("outcome")
+    # Optional: receipts issued before docs/VERIFICATION_COVERAGE.md lack it.
+    if "checked" in receipt:
+        parts = receipt["checked"]
+        cover = parts.get("coverage") if isinstance(parts, Mapping) else None
+        if (
+            not isinstance(parts, Mapping)
+            or set(parts) - {"coverage"} != set(CHECKED_PARTS)
+            or (
+                "coverage" in parts
+                and (
+                    not isinstance(cover, Mapping)
+                    or set(cover) != COVERAGE_KEYS
+                    or not isinstance(cover.get("killed"), int)
+                    or not isinstance(cover.get("applicable"), int)
+                    or not isinstance(cover.get("policy"), str)
+                    or (
+                        cover.get("sha256") is not None
+                        and not _DIGEST.match(str(cover.get("sha256")))
+                    )
+                )
+            )
+            or parts.get("delta") not in CHECKED_VALUES
+            or parts.get("frame") not in CHECKED_VALUES
+            or parts.get("source") not in SOURCE_VALUES
+        ):
+            return "checked"
+        if outcome in ("verified", "rolled_back_verified") and (
+            parts["delta"] != "held"
+            or parts["frame"] != "held"
+            or parts["source"] not in ("held", "instruction")
+            or (cover is not None and cover.get("policy") != "met")
+        ):
+            return "verified_without_every_part"
     if outcome in ("verified", "rolled_back_verified") and (
         receipt["effect_verdict"] != "CONFIRMED"
         or receipt["verification_tier"] != "independent_readback"
@@ -1021,6 +1401,13 @@ def evidence_problem(
         or executor.get("kind") != receipt.get("executor_kind")
         or readback.get("verification_tier") != receipt.get("verification_tier")
         or readback.get("checked_how") != receipt.get("checked_how")
+        or evidence.get("checked") != receipt.get("checked")
+    ):
+        return "evidence_mismatch"
+    frame = evidence.get("frame")
+    if "checked" in receipt and (
+        not isinstance(frame, Mapping)
+        or frame.get("status") != receipt["checked"].get("frame")
     ):
         return "evidence_mismatch"
     if salting.get("scheme") != SALT_SCHEME or not _DIGEST.match(

@@ -518,6 +518,7 @@ def build_record_check(
     recording: Optional[Path] = None,
     bundle: Optional[Path] = None,
     complete_read: bool = False,
+    fault_gate: bool = False,
 ) -> Optional[RecordCheckResult]:
     """Build, fault-test and write a proposed record check.
 
@@ -525,6 +526,11 @@ def build_record_check(
     ``recording`` / ``bundle`` (a bundle alone holds no reads, and identity
     coverage needs both). Returns ``None`` when no read returns the saved
     record, so the caller can fall back to the TODO draft.
+
+    ``fault_gate`` with ``db`` runs the fault gate on a copy of the database
+    (``openadapt_flow/fault_gate.py``): the faults are written to the copy and
+    the check reads them through its own read. A fault it misses keeps the
+    check a draft. Either way ``check_coverage.json`` is written.
     """
 
     import tempfile
@@ -567,7 +573,11 @@ def build_record_check(
             )
     try:
         proposal = rcs.synthesize(
-            recording_dir, db_path=db, verifier=section, complete_read=complete_read
+            recording_dir,
+            db_path=db,
+            verifier=section,
+            complete_read=complete_read,
+            fault_gate=fault_gate,
         )
     except rcs.SynthesisError as exc:
         if db is None and section is None:

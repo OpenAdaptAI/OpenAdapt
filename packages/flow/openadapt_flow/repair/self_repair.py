@@ -626,6 +626,13 @@ class SelfRepair:
         standard_changes: A signed repair policy
             (:class:`~openadapt_flow.repair.standard_change.StandardChanges`).
             A fix it allows applies without a person; any other goes to one.
+        requalification: Re-qualify every fix on a test copy before anyone is
+            asked (:class:`~openadapt_flow.repair.readmission.Requalification`).
+            The item then resumes on the certified copy, which is re-admitted
+            with signed lineage to the bundle it repairs, so a pin to that
+            bundle accepts it. A fix that fails re-qualification is refused.
+        admission_key_dir: The local admission key that signs the lineage
+            (the JIT key directory by default).
     """
 
     def __init__(
@@ -644,6 +651,8 @@ class SelfRepair:
         canary_runs: int = 5,
         on_approval_request: Optional[Callable[[Path, str, str], None]] = None,
         standard_changes: Any = None,
+        requalification: Any = None,
+        admission_key_dir: Optional[Path] = None,
         vision: Any = None,
         sleep: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
@@ -688,6 +697,8 @@ class SelfRepair:
         self.canary_runs = int(canary_runs)
         self.on_approval_request = on_approval_request
         self.standard_changes = standard_changes
+        self.requalification = requalification
+        self.admission_key_dir = admission_key_dir
         #: Added to the approval request, e.g. how many queued items it releases.
         self.approval_note = ""
         if vision is None:
@@ -1302,6 +1313,7 @@ class SelfRepair:
             path = bundle_out / target.anchor.template
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(crop)
+        _uncertify_patch(patched)
         patched.save(bundle_out, encrypt=bool(workflow.encrypted))
         run_dir = attempt_dir.parent.parent
         halted_report = run_dir / "report.json"
@@ -1625,6 +1637,41 @@ class SelfRepair:
             RepairLifecycleError,
         )
 
+        requalified = None
+        if self.requalification is not None:
+            from openadapt_flow.repair.readmission import ReadmissionRefused
+
+            try:
+                patch, requalified = self._requalify(bundle_dir, patch, work)
+            except (ReadmissionRefused, SelfRepairRefused) as exc:
+                evidence.steps.append(
+                    SelfRepairStepRecord(
+                        stage="requalify",
+                        passed=False,
+                        detail=f"{exc}; the pinned bundle stays, nothing was saved"[
+                            :1024
+                        ],
+                    )
+                )
+                return self._finish(
+                    "no_fix",
+                    f"the fix failed re-qualification: {exc}",
+                    evidence,
+                    halted_report,
+                    run_dir,
+                    work,
+                    halted_report=halted_report,
+                    patched_bundle=patch.bundle_dir,
+                )
+            evidence.steps.append(
+                SelfRepairStepRecord(
+                    stage="requalify",
+                    passed=True,
+                    detail=f"passed {requalified.policy_name} on a test copy "
+                    f"({', '.join(requalified.case_ids)}); certified copy "
+                    f"{requalified.digest[:16]}",
+                )
+            )
         candidate = self.store.add_candidate(patch.candidate)
         evidence.candidate_id = candidate.candidate_id
         evidence.patched_bundle_digest = candidate.proposed_content_digest
@@ -1684,14 +1731,25 @@ class SelfRepair:
             )
             if standard is not None:
                 change = evidence.standard_change
+                approver = STANDARD_CHANGE_APPROVER + (
+                    change.policy_id if change is not None else "unknown"
+                )
                 _carry_admission(
                     bundle_dir,
                     patch.bundle_dir,
                     standard.candidate_id,
-                    approved_by=STANDARD_CHANGE_APPROVER
-                    + (change.policy_id if change is not None else "unknown"),
+                    approved_by=approver,
                     route="standard_change",
                 )
+                if requalified is not None:
+                    self._readmit(
+                        bundle_dir,
+                        standard,
+                        requalified,
+                        approved_by=approver,
+                        route="standard_change",
+                        evidence=evidence,
+                    )
                 return self._resume(
                     patch, probe, standard, halted_report, run_dir, work, evidence, None
                 )
@@ -1787,8 +1845,99 @@ class SelfRepair:
                 f"({route})",
             )
         )
+        if requalified is not None:
+            self._readmit(
+                bundle_dir,
+                candidate,
+                requalified,
+                approved_by=candidate.approval.approved_by,
+                route=route,
+                evidence=evidence,
+            )
         return self._resume(
             patch, probe, candidate, halted_report, run_dir, work, evidence, request_id
+        )
+
+    def _requalify(
+        self, bundle_dir: Path, patch: _Patch, work: Path
+    ) -> "tuple[_Patch, Any]":
+        """Re-qualify the fix on a test copy; the certified copy is the patch.
+
+        The campaigns, the person's approval and the resumed run then all use
+        the certified copy, never the unqualified one.
+        """
+
+        import dataclasses
+
+        from openadapt_flow.repair.readmission import requalify
+        from openadapt_flow.repair.registration import build_candidate
+
+        requalified = dataclasses.replace(
+            requalify(
+                bundle_dir,
+                patch.bundle_dir,
+                work / f"requalify-{patch.attempt}",
+                self.requalification,
+            ),
+            candidate_digest=patch.candidate.proposed_content_digest,
+        )
+        candidate = build_candidate(
+            bundle_dir,
+            requalified.bundle_dir,
+            source=patch.candidate.source,
+            evidence_run_dir=patch.evidence_dir,
+        )
+        if candidate.state == "rejected":
+            raise SelfRepairRefused(
+                candidate.rejection_reason or "the certified copy weakens the contract"
+            )
+        candidate.taught_steps = list(patch.candidate.taught_steps)
+        candidate.provenance = patch.candidate.provenance
+        return (
+            dataclasses.replace(
+                patch,
+                workflow=Workflow.load(requalified.bundle_dir),
+                bundle_dir=requalified.bundle_dir,
+                candidate=candidate,
+            ),
+            requalified,
+        )
+
+    def _readmit(
+        self,
+        bundle_dir: Path,
+        candidate: RepairCandidate,
+        requalified: Any,
+        *,
+        approved_by: str,
+        route: str,
+        evidence: SelfRepairEvidence,
+    ) -> None:
+        """Sign the lineage that re-admits the certified copy (or raise)."""
+
+        from openadapt_flow.repair.readmission import admit
+
+        record = admit(
+            self.store.root,
+            parent_bundle=bundle_dir,
+            candidate_digest=(
+                requalified.candidate_digest or candidate.proposed_content_digest
+            ),
+            candidate_id=candidate.candidate_id,
+            requalified=requalified,
+            approved_by=approved_by,
+            route=route,
+            key_dir=self.admission_key_dir,
+        )
+        evidence.readmitted_bundle_digest = requalified.digest
+        evidence.lineage_hop = int(record["hop"])
+        evidence.steps.append(
+            SelfRepairStepRecord(
+                stage="readmit",
+                passed=True,
+                detail=f"re-admitted {requalified.digest[:16]} as repair "
+                f"{record['hop']} of {record['parent_digest'][:16]} ({route})",
+            )
         )
 
     def _resume(
@@ -2265,6 +2414,26 @@ def _carry_admission(
             "the program was compiled from an agent run and admitted, and its "
             f"admission can't carry to this repair: {exc}"
         ) from None
+
+
+def _uncertify_patch(patched: Workflow) -> None:
+    """A patch of a qualified bundle is uncertified until it is re-qualified.
+
+    The qualified bundle's certification and authorization template are bound
+    to its contract, and a patch is a new contract: the template could not be
+    rebuilt on load. The patch keeps the prior policy as provenance only;
+    re-qualification (repair/readmission.py) certifies a copy of it.
+    """
+
+    manifest = patched.manifest
+    if manifest is None or manifest.provenance.governed_authorization_template is None:
+        return
+    from openadapt_flow.bundle_sealing import _invalidate_prior_certification
+
+    _invalidate_prior_certification(
+        patched, reason="self-repair changed the workflow contract"
+    )
+    manifest.provenance.governed_authorization_template = None
 
 
 def _patched_structural(step: Step, structural: Any) -> Any:

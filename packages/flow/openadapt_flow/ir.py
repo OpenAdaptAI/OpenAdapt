@@ -1636,6 +1636,19 @@ class Step(BaseModel):
             "never replayed directly."
         ),
     )
+    target_param: Optional[str] = Field(
+        default=None,
+        description=(
+            "CLICK/DOUBLE_CLICK only: the run parameter whose value names the"
+            " record this click selects (a search result, a worklist row)."
+            " When the run's value differs from the demonstrated one, the"
+            " runtime looks for the run's value instead of the demonstrated"
+            " label and skips the demonstrated crop; the identity check then"
+            " verifies the row in parameter mode. A step without identity"
+            " evidence, or with an empty value, halts before acting. None"
+            " (the default) clicks the demonstrated target, as before."
+        ),
+    )
     key: Optional[str] = None  # for KEY/HOTKEY, e.g. "Enter" or "s"
     modifiers: list[str] = Field(
         default_factory=list,
@@ -1799,6 +1812,26 @@ class Step(BaseModel):
             raise ValueError(
                 "SWITCH_SURFACE delivers no input and carries no " + ", ".join(present)
             )
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Keep steps without a selected-record parameter byte-identical."""
+        data: dict[str, Any] = handler(self)
+        if self.target_param is None:
+            data.pop("target_param", None)
+        return data
+
+    @model_validator(mode="after")
+    def _validate_target_param(self) -> "Step":
+        if self.target_param is None:
+            return self
+        if self.action not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
+            raise ValueError("target_param is valid only on CLICK/DOUBLE_CLICK")
+        if self.anchor is None:
+            raise ValueError("a target_param click needs an anchor")
+        if not self.target_param.strip():
+            raise ValueError("target_param must name a parameter")
         return self
 
     @model_validator(mode="after")
@@ -4981,7 +5014,7 @@ class SelfRepairStepRecord(BaseModel):
     """One stage of a self-repair (:mod:`openadapt_flow.repair.self_repair`).
 
     ``stage`` is a closed word (``halt``, ``propose``, ``patch``, ``probe``,
-    ``campaign``, ``approval``, ``resume``). ``model_calls`` and
+    ``requalify``, ``campaign``, ``approval``, ``readmit``, ``resume``). ``model_calls`` and
     ``est_model_cost_usd`` are what the repair agent reported for this stage;
     every other stage is deterministic and records zero.
     """
@@ -4989,7 +5022,15 @@ class SelfRepairStepRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     stage: Literal[
-        "halt", "propose", "patch", "probe", "campaign", "approval", "resume"
+        "halt",
+        "propose",
+        "patch",
+        "probe",
+        "requalify",
+        "campaign",
+        "approval",
+        "readmit",
+        "resume",
     ]
     passed: bool
     detail: str = Field(default="", max_length=1024)
@@ -5057,6 +5098,13 @@ class SelfRepairEvidence(BaseModel):
     steps: list[SelfRepairStepRecord] = Field(default_factory=list)
     #: Set when the fix applied without a person, under a signed policy.
     standard_change: Optional[StandardChangeEvidence] = None
+    #: Set when the repaired bundle was re-qualified and re-admitted with
+    #: signed lineage (``openadapt_flow.repair.readmission``): the bundle the
+    #: item resumed on, and how many repairs it is from a person's admission.
+    readmitted_bundle_digest: Optional[str] = Field(
+        default=None, pattern="^[a-f0-9]{64}$"
+    )
+    lineage_hop: Optional[int] = Field(default=None, ge=1, le=3)
 
 
 _CheckLevelName = Literal[

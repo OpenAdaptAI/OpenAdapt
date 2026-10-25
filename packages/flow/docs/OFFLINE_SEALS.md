@@ -444,8 +444,8 @@ from a timestamp authority is a second, independent time, signed by the
 TSA's certificate. Sigstore's TSA (`timestamp.sigstore.dev`) is the default.
 
 ```bash
-openadapt-flow local-seal timestamp runs/job-0007            # writes runs/job-0007/seal.tsa.json
-openadapt-flow local-seal timestamp auth/                    # writes auth/run-authorization.tsa.json
+openadapt-flow local-seal timestamp runs/job-0007   # writes seal.tsr and seal.tsa.json
+openadapt-flow local-seal timestamp auth/           # writes run-authorization.tsr and .tsa.json
 openadapt-flow local-seal verify runs/job-0007 --keys site-keys.json --require-timestamp
 ```
 
@@ -456,9 +456,17 @@ Each request sends only a 32-byte SHA-256 imprint and a random nonce:
   `canonical_json({"run_authorization_sha256", "signature_sha256"})`, which
   covers the statement and the signature together.
 
-The token file (`openadapt.record-timestamp/v1`) holds the record's digest
-fields, `imprint_sha256`, `tsa`, `token` (base64 DER TimeStampToken) and
-`gen_time`. `timestamp` checks the token offline before writing it.
+The token is stored in its standard binary form: DER, as returned by the
+TSA, in `seal.tsr` next to `seal.json` (`run-authorization.tsr` for an
+authorization). `openssl ts -reply -in seal.tsr -token_in -text` reads it.
+A small JSON file beside it, `seal.tsa.json` (`openadapt.record-timestamp/v1`),
+holds:
+
+- the record's digest fields and `imprint_sha256`;
+- `tsa`, the authority's URL;
+- `tsr_file`, a bare file name beside the JSON;
+- `tsr_sha256`, the SHA-256 of the `.tsr` bytes;
+- `gen_time`. `timestamp` checks the token offline before writing it.
 `--require-timestamp` checks it again, against the Sigstore TSA root shipped
 with OpenAdapt, or the certificates you pass with `--tsa-cert`. Strict
 no-outbound mode refuses to send. To cover many Seals with one token instead,

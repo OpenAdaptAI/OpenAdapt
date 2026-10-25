@@ -1923,6 +1923,7 @@ def _compile_recording(
     pixel_verify_enabled: bool = False,
     bind_effect_params: bool = False,
     drop_redundant_keys: bool = False,
+    phi_free_identity: bool = True,
 ) -> Workflow:
     """Compile a recording directory into a workflow bundle.
 
@@ -3471,8 +3472,11 @@ def _compile_recording(
     # (openadapt_flow.runtime.identity_template). Runs LAST so param-hygiene
     # lint and optional model annotation still see the plaintext. Backward
     # compatible: bundles compiled before this carry the plaintext fields and
-    # replay unchanged.
-    _phi_free_identity(workflow)
+    # replay unchanged. Multi-trace induction compiles with this off and
+    # hashes the bands itself once the loop's row columns are known
+    # (compiler.induction.phi_free_program_identity).
+    if phi_free_identity:
+        _phi_free_identity(workflow)
 
     # PHI governance manifest (audit REM-1): classify the bundle so an operator
     # inventory and the pre-commit/CI guard can act on it.

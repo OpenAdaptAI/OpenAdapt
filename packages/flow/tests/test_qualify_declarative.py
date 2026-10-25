@@ -266,3 +266,60 @@ def test_cli_reports_config_errors(tmp_path):
     )  # fmt: skip
     assert result.returncode == 2
     assert "verifier" in result.stderr
+
+
+def test_check_ready_refuses_a_record_selecting_click():
+    """Qualification's fault driver can't qualify a target_param click yet."""
+    workflow = _workflow()
+    workflow.steps.insert(
+        2,
+        Step(
+            id="s_pick",
+            intent="open the patient",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template="templates/pick.png",
+                region=(10, 40, 80, 20),
+                click_point=(20, 50),
+                context_text="Open chart for Doe 1970-01-01",
+            ),
+            target_param="lname",
+        ),
+    )
+    config = _config()
+    save, _ = apply_verify_config(workflow, config)
+    problems = " | ".join(check_ready(workflow, config, save, dict(workflow.params)))
+    assert "step s_pick selects a record by a run value" in problems
+    assert "fault driver" in problems
+
+
+def test_a_qualified_bundle_can_be_qualified_again():
+    # A sealed or repaired copy of a qualified bundle carries its project.
+    # Qualifying it again replaces the project with its next revision.
+    from openadapt_flow.qualify.campaign import configure_project
+
+    workflow = _workflow()
+    config = _config()
+    save, _notes = apply_verify_config(workflow, config)
+    kwargs = dict(
+        save=save,
+        params=dict(workflow.params),
+        environment={"app": "demo"},
+        campaign_id="first",
+        minimum_effect_tier=VerificationTier.INDEPENDENT_SYSTEM,
+    )
+    configure_project(workflow, config, **kwargs)
+    first = workflow.qualification
+    assert first is not None
+    first_digest = first.revision_digest()
+
+    configure_project(workflow, config, **{**kwargs, "campaign_id": "again"})
+
+    again = workflow.qualification
+    assert again is not None and again is not first
+    assert again.project_id == first.project_id
+    # The revision continues past the prior project's (every edit counts).
+    assert again.revision > first.revision
+    assert again.revision_digest() != first_digest
+    assert again.last_certification is None
+    assert sorted(c.id for c in again.cases) == sorted(c.id for c in first.cases)
