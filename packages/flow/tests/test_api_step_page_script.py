@@ -588,3 +588,42 @@ def test_a_field_that_isnt_on_screen_makes_the_run_unevaluable(app_page):
     result = _evaluate(app, page)
     assert result.status == "unevaluable" and "dob isn't on screen" in result.reason
     assert app.writes == []
+
+
+@pytest.mark.parametrize(
+    "tag",
+    [
+        "const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/act.php?delete=1';",
+        "const l = document.createElement('script'); l.src = '/act2.php?delete=1';",
+    ],
+)
+def test_code_a_handler_adds_after_load_never_reaches_the_app(app_page, tag):
+    # Round 3: a stylesheet or script URL the page didn't load is the page
+    # sending something, whatever its resource type.
+    app, page = app_page
+    app.pages["/act.php"] = app.pages["/act2.php"] = "ok"
+    app.form(
+        script="document.forms[0].dob.addEventListener('change', () => {"
+        f" {tag} document.head.appendChild(l); }});"
+    )
+    result = _evaluate(app, page)
+    assert result.status == "unevaluable" and "act" in result.reason
+    assert "/act.php" not in app.paths and "/act2.php" not in app.paths
+
+
+def test_a_form_submit_in_another_frame_is_seen(app_page):
+    # Round 3: an iframe's own form.submit() is recorded in that frame.
+    app, page = app_page
+    app.pages["/side.php"] = (
+        '<html><body><form action="/side-save.php" method="post">'
+        '<input name="x" value="1"></form></body></html>'
+    )
+    app.form(
+        script="document.forms[0].dob.addEventListener('change', () => {"
+        " const f = document.createElement('iframe'); f.src = '/side.php';"
+        " f.onload = () => f.contentDocument.forms[0].submit();"
+        " document.body.appendChild(f); });"
+    )
+    result = _evaluate(app, page, submitter_requests=("GET /side.php",))
+    assert result.status == "unevaluable" and "form submit in" in result.reason
+    assert app.writes == []
