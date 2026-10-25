@@ -1,4 +1,10 @@
 # SOC 2: automated dependency updates (OA-C-23).
+#
+# Each ecosystem and directory opens at most one version-update pull request a
+# week: every update is in one group (`patterns: ["*"]`). CI runner time is
+# the scarce resource (the org is on the free GitHub Actions plan), and one
+# grouped PR runs CI once instead of once per dependency. Security updates are
+# not grouped and still open as they are published.
 version: 2
 updates:
   - package-ecosystem: "pip"
@@ -8,6 +14,9 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    groups:
+      pip-root:
+        patterns: ["*"]
   # packages/capture keeps its own uv.lock. The uv ecosystem updates it with
   # pyproject.toml, so the capture lanes' `uv sync --locked` accepts the bump.
   - package-ecosystem: "uv"
@@ -17,6 +26,9 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    groups:
+      uv-capture:
+        patterns: ["*"]
     ignore:
       # Keep PyGObject >=3.46,<3.51 so the Linux extra installs on GLib 2.64
       # distros; 3.51+ needs newer GLib. See packages/capture/docs/DESIGN.md.
@@ -30,6 +42,9 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    groups:
+      uv-privacy:
+        patterns: ["*"]
   # packages/tray keeps its own uv.lock, like packages/capture.
   - package-ecosystem: "uv"
     directory: "/packages/tray"
@@ -38,9 +53,11 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    groups:
+      uv-tray:
+        patterns: ["*"]
   # packages/desktop: its uv.lock, the frontend's package-lock.json and the
-  # Tauri shell's Cargo.lock. Minor and patch bumps are grouped, as they were
-  # in openadapt-desktop.
+  # Tauri shell's Cargo.lock, each in one weekly group.
   - package-ecosystem: "uv"
     directory: "/packages/desktop"
     schedule:
@@ -49,8 +66,8 @@ updates:
     labels:
       - "dependencies"
     groups:
-      desktop-python-minor:
-        update-types: ["minor", "patch"]
+      uv-desktop:
+        patterns: ["*"]
     ignore:
       # Each version is a reviewed pin. A PyInstaller bump needs a new
       # bootloader license review (scripts/frozen_notices.py), and the
@@ -70,8 +87,8 @@ updates:
     labels:
       - "dependencies"
     groups:
-      desktop-npm-minor:
-        update-types: ["minor", "patch"]
+      npm-desktop:
+        patterns: ["*"]
     ignore:
       # Tauri's JavaScript packages pair with the Rust crates in src-tauri, and
       # tests/test_native_release.py requires the two sides to match. Dependabot
@@ -86,8 +103,8 @@ updates:
     labels:
       - "dependencies"
     groups:
-      desktop-cargo-minor:
-        update-types: ["minor", "patch"]
+      cargo-desktop:
+        patterns: ["*"]
     ignore:
       # The Rust side of the Tauri pairs above; bumped with them, by hand.
       # Build the Linux installer before taking a plugin bump: for example,
@@ -109,7 +126,7 @@ updates:
       - dependency-name: "peter-evans/repository-dispatch"
         versions: ["4.x"]
     groups:
-      # CodeQL persists version-specific state between init and analyze.
-      codeql-action:
-        patterns:
-          - "github/codeql-action/*"
+      # One PR for every action. That also keeps CodeQL's init and analyze,
+      # which share version-specific state, on the same version.
+      github-actions:
+        patterns: ["*"]
