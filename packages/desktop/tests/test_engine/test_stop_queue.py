@@ -605,3 +605,61 @@ def test_a_rearm_is_verified_against_the_registry_not_the_signers_key(
 
     assert answer["code"] == "human_approver_unregistered"
     assert fake.rearmed == [] and enclave.prompts == []
+
+
+def test_a_card_that_changes_during_the_prompt_changes_nothing(queue, enclave):
+    """The Touch ID prompt can stay up; the cards are checked again after it."""
+
+    disp, db, keychain = queue
+    _stop(db, "item-60", lname="Fairwick")
+    (card,) = _cards(disp)
+    real_sign = keychain.sign
+
+    def sign_while_another_window_answers(message, *, reason):
+        signed = real_sign(message, reason=reason)
+        db.update_work_item("item-60", status="skipped")  # answered elsewhere
+        return signed
+
+    keychain.sign = sign_while_another_window_answers  # type: ignore[method-assign]
+
+    answer = disp.dispatch(
+        "answer_stop_cards", {"card_ids": [card["card_id"]], "choice": "different_by_hand"}
+    )
+
+    assert answer["code"] == "card_changed"
+    assert db.get_work_item("item-60")["status"] == "skipped"
+    assert not (disp.config.data_dir / "stop_decisions.jsonl").exists()
+
+
+def test_a_touch_id_mac_without_a_key_never_signs_with_a_file_key(tmp_path, monkeypatch, enclave):
+    from openadapt_desktop import approver_key
+
+    monkeypatch.setattr(approver_key, "KEY_DIR", tmp_path / "approver")
+    approver_key.setup_approver_key()  # a terminal-made key exists
+    config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
+    config.data_dir.mkdir(parents=True)
+    db = IndexDB(tmp_path / "index.db")
+    db.initialize()
+    db.insert_bundle("wf-ref", str(tmp_path / "bundle"))
+    registry = FakeRegistry()
+    keychain = ApproverKeychain(  # supported, nothing set up
+        enclave,
+        register=registry.register,
+        unregister=registry.unregister,
+        lookup=registry.lookup,
+    )
+    disp = EngineDispatcher(
+        config,
+        services=EngineServices(
+            config, db=db, audit=_Audit(), flow_bridge=FlowBridge(approver_keychain=keychain)
+        ),
+    )
+    _stop(db, "item-61", lname="Fairwick")
+    (card,) = _cards(disp)
+
+    answer = disp.dispatch("answer_stop_cards", {"card_ids": [card["card_id"]], "choice": "same"})
+
+    assert answer["code"] == "approver_key_missing"
+    assert "in OpenAdapt" in answer["error"]
+    assert db.get_work_item("item-61")["status"] == "open"
+    db.close()

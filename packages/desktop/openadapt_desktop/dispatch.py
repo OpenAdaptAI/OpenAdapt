@@ -4505,15 +4505,24 @@ class EngineDispatcher:
     def _sign_stop_decision(self, message: bytes, *, count: int) -> dict:
         """Sign one queue answer with this computer's approver key.
 
-        Touch ID (or the login password) on a Mac with the key set up in the
-        app, else the terminal-made key. Raises ``ApproverKeychainError``.
+        Touch ID (or the login password) on a Mac that can keep the key in
+        the app; the terminal-made key only where it can't. Raises
+        ``ApproverKeychainError``.
         """
 
         from openadapt_desktop.approver_key import ApproverKeyError, sign_with_file_key
         from openadapt_desktop.approver_keychain import ApproverKeychainError
 
         keychain = self.services.flow_bridge.approver_keychain
-        if keychain.supported() and keychain.stored() is not None:
+        if keychain.supported() and keychain.stored() is None:
+            # As for Run it: a Mac that can keep the key behind Touch ID never
+            # falls back to a terminal-made key, which asks for no presence.
+            raise ApproverKeychainError(
+                "approver_key_missing",
+                "Set up your approver key in OpenAdapt to answer stops on this "
+                "Mac. Nothing changed.",
+            )
+        if keychain.supported():
             reason = (
                 "record your answer to this stop"
                 if count == 1
@@ -4761,19 +4770,21 @@ class EngineDispatcher:
             signature = sign(message, count=len(cards))
         except ApproverKeychainError as exc:
             return {"ok": False, "code": exc.code, "error": str(exc)}
+        # The Touch ID prompt can stay up for a while. Check again that every
+        # card is still exactly what the person saw before anything changes.
+        again, problem = self._current_cards(card_ids)
+        if again is None:
+            return {"ok": False, "code": "card_changed", "error": problem}
         results = []
         for card, choice in zip(cards, choices):
             assert choice is not None
-            if choice.action == "rearm":
-                outcome = self._rearm(card["workflow_id"], signature)
-            else:
-                outcome = self.resolve_attention_item(
-                    item_id=card["source"]["id"],
-                    action=choice.action,
-                    # The choice is the person's statement of what they
-                    # found in the record (stop_queue.RECORD_CHECK_ACTIONS).
-                    record_checked=choice.action in stop_queue.RECORD_CHECK_ACTIONS,
-                )
+            outcome = self.resolve_attention_item(
+                item_id=card["source"]["id"],
+                action=choice.action,
+                # The choice is the person's statement of what they found in
+                # the record (stop_queue.RECORD_CHECK_ACTIONS).
+                record_checked=choice.action in stop_queue.RECORD_CHECK_ACTIONS,
+            )
             results.append(
                 {
                     "card_id": card["card_id"],

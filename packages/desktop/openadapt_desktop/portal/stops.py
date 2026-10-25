@@ -33,18 +33,6 @@ class StopQueueBackend(Protocol):
 
     def list_cards(self) -> dict[str, Any]: ...
 
-    def _runs_again(self, card_ids: list[str], choice: str) -> bool:
-        from openadapt_desktop import stop_queue
-
-        cards = {c["card_id"]: c for c in self._dispatcher.list_stop_cards().get("cards", [])}
-        for card_id in card_ids:
-            card = cards.get(card_id)
-            found = stop_queue.choice_for(card, choice) if card else None
-            # Unknown card or choice: take the lock; the dispatcher refuses it.
-            if found is None or found.action in {"retry", "retry_after_check"}:
-                return True
-        return False
-
     def screenshot(self, card_id: str) -> bytes | None: ...
 
     def answer(

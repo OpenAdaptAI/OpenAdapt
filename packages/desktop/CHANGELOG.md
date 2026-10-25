@@ -6,12 +6,19 @@
 ### Features
 
 - **desktop**: set up the approver key in the app, behind Touch ID
+- **desktop**: review stops as one-tap cards with the evidence side by side,
+  on the computer (keys 1-9, batches of similar stops) or a paired phone; every
+  answer is signed with the approver key
+- **desktop**: re-arm "only ask about problems" from a stop card with one
+  Touch ID
 
 ### Bug Fixes
 
 - **desktop**: a locked Mac isn't a Mac without a Secure Enclave
 - **desktop**: re-register a stored approver key only after it opens behind Touch ID
 - **desktop**: a Mac that can keep the key behind Touch ID never falls back to a terminal-made key
+- **desktop**: a stop card that changes during the Touch ID prompt changes nothing
+- **desktop**: a stop where nothing was written also offers "I did it by hand"
 
 
 
