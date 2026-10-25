@@ -389,3 +389,49 @@ def tree_row_census(
             }
         )
     return result
+
+
+# Structural roles (backend-neutral, as the recorder stores them) of a form
+# field or a control. A target recorded with one of these is not a record row.
+CONTROL_ROLES = frozenset(
+    {
+        "textbox",
+        "searchbox",
+        "combobox",
+        "checkbox",
+        "radio",
+        "spinbutton",
+        "switch",
+        "slider",
+        "button",
+        "tab",
+        "menuitem",
+    }
+)
+
+
+def teach_time_role(step: Any) -> Literal["row", "control", "unknown"]:
+    """What teach time recorded the step's target as.
+
+    ``row`` when the recorder saw a record row (the census at record time),
+    ``control`` when it saw no row there, or when the target's structural
+    locator names a form-field or control role (:data:`CONTROL_ROLES`).
+    ``unknown`` otherwise, which the runtime counts like a row: a link, a
+    cell, a list item, or a target with no recorded role.
+    """
+    anchor = getattr(step, "anchor", None)
+    if anchor is None:
+        return "unknown"
+    template = getattr(anchor, "identity_template", None)
+    recorded_row = getattr(template, "structured_row", None)
+    if recorded_row is True:
+        return "row"
+    if recorded_row is False:
+        return "control"
+    if getattr(template, "structured", None):
+        # A structured identity was recorded but nothing counted its rows (a
+        # backend without a census, a legacy bundle): it may be a row's text.
+        return "unknown"
+    structural = getattr(anchor, "structural", None)
+    role = (getattr(structural, "role", None) or "").strip().casefold()
+    return "control" if role in CONTROL_ROLES else "unknown"

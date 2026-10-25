@@ -48,19 +48,25 @@ Desktop reads the requests and answers one of them:
 
 ```bash
 openadapt-flow item-approval show RUN_DIR            # JSON; waiting requests
-openadapt-flow item-approval approve RUN_DIR \
+OPENADAPT_JIT_KEY_PASSPHRASE=... openadapt-flow item-approval approve RUN_DIR \
   --request-id ID --request-sha256 SHA256 \
-  --decided-by human --route desktop_run_it \
-  --approver-id CLOUD_USER_ID --auth-method cloud_aal2   # or --unauthenticated
+  --decided-by human --route desktop_run_it --unauthenticated \
+  --approver-key APPROVER_KEY.pem
 openadapt-flow item-approval decline RUN_DIR ... --reason wrong_values
 ```
 
-- An answer names the request digest the person saw. A person answers with
-  `--decided-by human` from the `desktop_run_it` route, or from their phone
-  on the runner's decision portal (`decision_portal`; see
+- An answer names the request digest the person saw. A person answers from
+  the `desktop_run_it` route, or from their phone on the runner's decision
+  portal (`decision_portal`; see
   [`APPROVAL_AND_VERIFICATION.md`](APPROVAL_AND_VERIFICATION.md)), which
   echoes the signed task for that exact request. A decline carries
   one closed reason: `wrong_values`, `wrong_record` or `screen_problem`.
+- A person's answer counts only when a registered approver key signs it
+  (below). `--decided-by human`, the route, `--unauthenticated` and a
+  Cloud user id are claims any process could make, so on their own they are
+  refused (`human_answer_unsigned`). A claimed Cloud sign-in
+  (`--auth-method cloud_aal2` or `cloud_aal1`) is refused too
+  (`auth_method_unverified`): nothing on the runner can check it.
 - Answers are created once and never replaced. The run checks every answer
   itself, so an answer file written around the command is held to the same
   rules. An approval is used for exactly one save; a loop that reaches the
@@ -87,6 +93,105 @@ openadapt-flow item-approval decline RUN_DIR ... --reason wrong_values
   nothing, and the approval is spent. Start the item again instead. A resume
   in a signed-in browser the run attached to, where the form is still open,
   checks the form against the approved request before the save.
+
+### The approver key
+
+A person's answer carries an Ed25519 signature over the whole answer. The
+signer must be on the **signed approver roster** (`approvers.json` in the
+key directory, `$OPENADAPT_JIT_KEY_DIR`, default `~/.openadapt/jit`), and the
+run must **pin the roster's root**. The run checks both on every answer,
+including an answer file written around the command
+(`approval_mode/approver_roster.py`).
+
+- **The roster.** Its first entry is the root approver key, signed by
+  itself. Every later change, adding or removing an approver, is signed by
+  an approver already on the roster. Each entry also signs its position
+  (`seq`) and the hash of the entry before it (`prev`), so an entry can't be
+  replayed, reordered or dropped. Editing the file adds nobody: the first
+  entry that doesn't check out stops the replay, and nothing after it
+  counts. `principals.json` no longer lists approvers, and `jit register`
+  no longer registers one.
+- **The pin.** A run names the root approver key it trusts.
+  - A governed run, or one an agent started (`--started-by`), takes the root
+    only from its deployment config's `approvers.root_public_key`;
+    `--approver-root` and `OPENADAPT_APPROVER_ROOT` are ignored, since whoever
+    starts the run sets them. Without a config pin, every person's answer in
+    that run is refused.
+  - Other commands also accept `--approver-root` or `OPENADAPT_APPROVER_ROOT`;
+    two sources that disagree are refused.
+  - A deployment config that can't be read refuses the run rather than
+    dropping its pin.
+  - Nothing in the run directory or the environment is a trust anchor.
+    Verification takes the root only from the caller, never from
+    `OPENADAPT_APPROVER_ROOT`. A reader (`item-approval`, a resume) brings its
+    own pin, from its deployment config or `--approver-root`, and is refused
+    without one.
+  - The roster must extend every head recorded outside the run: the one in
+    the key directory's `approvers.head.json` (written by every roster
+    change) and the deployment config's `approvers.head` (Desktop writes its
+    Keychain's). A roster the run can't verify at start refuses the run.
+    The sidecar sits in the key directory, so a process that can write the
+    key directory can delete it and put an older roster back. Only a head
+    kept elsewhere (the deployment config's, or Desktop's Keychain) catches
+    that, which is one more reason to keep the key directory away from the
+    agents. `jit approver add` and `remove` update only the sidecar; they
+    never update a deployment config's or Desktop's head.
+  - The agent's task ledger and its guard server take their root only from
+    the deployment config (`--config`); the environment never counts there.
+  - With `--config-sha256`, Flow opens the deployment config once (not
+    through a symlink; it must be a regular file), refuses it if its digest
+    differs, and from then on parses only those bytes whenever the command
+    loads that path, including the approver pin. Replacing the file, or a
+    symlink put in its place, changes nothing (Desktop passes it for every
+    run).
+  - The deployment config's `approvers` section is read once per command,
+    so swapping the file mid-run changes nothing.
+  - The run records the root, the key directory and the roster's head when
+    it starts. A governed run's resume refuses when that record is missing. After that, an `item-approval` answer or a resume that names
+    another root (its own deployment config's included) or key directory is
+    refused, and so is a pin planted in the run directory before the run.
+    A roster that doesn't extend the recorded head (an older copy put back)
+    is refused (`approver_roster_rolled_back`).
+  - A deployment config can also pin `approvers.key_dir`; a run given
+    another `--key-dir` is then refused.
+- **The first approver.** On a Mac, Desktop sets it up behind Touch ID: the
+  root is Desktop's approver key, signed after a presence prompt. Elsewhere,
+  a person starts the roster with `openadapt-flow jit approver init`, and
+  the deployment config pins its root.
+
+Each route signs with its own key:
+
+- **Desktop's Run it** signs with the Desktop approver key.
+- **The decision portal** signs with the key at `OPENADAPT_PORTAL_APPROVER_KEY`
+  after the person answered on their phone. Without it, the portal records
+  no answer. Its key is added to the roster like any other approver.
+- **At a terminal**, a person passes their own key with `--approver-key`. The
+  key's passphrase comes from `OPENADAPT_JIT_KEY_PASSPHRASE`, never from the
+  command line.
+
+To start a roster and add an approver:
+
+```bash
+openadapt-flow jit keygen --out ROOT.pem
+openadapt-flow jit approver init --principal front-desk --key ROOT.pem
+openadapt-flow jit approver add --principal night-desk \
+  --public-key PUBLIC_KEY_HEX --signer-key ROOT.pem --approver-root ROOT_HEX
+```
+
+Neither command asks for a terminal or a typed confirmation: a change counts
+because an approver signed it.
+
+The run also refuses:
+- a key that holds another role, or an approver id that names an agent or
+  model;
+- an answer signed by the other route's key;
+- an answer changed after it was signed;
+- an answer signed by whoever started the run.
+
+Keep the key directory, the deployment config and the approver keys away
+from the agents the run governs. This pins the runs a deployment governs. A
+process that can rewrite the deployment config itself, or that starts its
+own run with its own pin, is outside it.
 
 The report's `approval` block lists every answer as codes and digests: no
 values, no screenshot and no form state. An item is `approved` only when a
@@ -217,17 +322,71 @@ The gate writes a `switched_off` event to the runner's hash-chained switch
 log, which applies before the next save, offline too. Cloud can't undo it,
 and a missing or broken log also reads as off.
 
+### Which problems turn it off
+
+Every item that needs a person is classed by its cause
+(`approval_mode/post.py`, `problem_class`):
+
+- **An item-input problem leaves the switch on.** The item goes to a person
+  and doesn't count toward `too_many_problems`. It is one of these, caught
+  before anything was written:
+  - a value refused before the first step: a missing required value, or a
+    typed value that isn't valid, such as a date that isn't an ISO date;
+  - an input item check (`inputs_supplied`, `inputs_strict`, `channel`);
+  - a real candidate in the app's possible-duplicate list
+    ([`DUPLICATE_CHECK.md`](DUPLICATE_CHECK.md)).
+- **A program or environment problem turns it off at once.** For example a
+  wrong write the record check caught, a failed identity check, a
+  postcondition that failed after delivery, a changed screen, or the wrong
+  user signed in. Any cause not named above counts here, and so does any
+  outcome that doesn't consistently read "nothing was written".
+
 | Reason | Trigger in Flow |
 | --- | --- |
 | `uncertain_result` | The item ended "Check the record", "Finished, not checked", rolled back, had an unknown or inconsistent outcome, or an earlier item was interrupted. Also when the gate let a save through and its input was delivered, but the outcome says nothing was written: the read-back showed only that the expected record is absent. |
-| `too_many_problems` | 3 counted problems in a row, or 5 in the last 20 counted items. Items sent to approval by the item checks or by a stale status don't count. |
-| `screen_changed` | P4 or R2 failed. |
+| `too_many_problems` | 3 counted problems in a row, or 5 in the last 20 counted items. Items sent to approval by the item checks or by a stale status, and item-input problems, don't count. Every program problem now turns the switch off by itself, so this is a backstop. |
+| `screen_changed` | P4 or R2 failed, a failed identity check, or a stop before any effect with no input cause. |
 | `record_check_lost` | P5 failed, or the engine's own record-check preflight refused the save. |
 | `version_changed` / `environment_changed` | The bundle, the environment, the runner or the dedicated user changed. |
 | Any reason in a Cloud "off" status | Cloud turned the switch off. |
 
 These thresholds are the public defaults. A deployment can only make them
 stricter.
+
+While the switch reads off, each item waits for a person to approve it before
+the save, as in `each_item`, when the run has an approval store. Without one,
+the item stops before the save and nothing is saved.
+
+### Re-arming takes one signed tap
+
+A switched-off switch never turns itself back on, under any profile. A person
+may re-arm it once these hold:
+
+- **10 consecutive verified items since the switch went off.** These are
+  items saved without a person, or approved by one, and confirmed. Any other
+  finished item resets the count.
+- **The person is shown what happened:** the switch-off, its reason, the
+  recorded cause, and those items. Their approver key signs it
+  (`approval_mode/switch.py`, `rearm_request`, `sign_rearm`, `rearm`).
+
+The log's `rearmed` event records:
+
+- who signed, and the key;
+- what they saw;
+- the off event it answers.
+
+A gate honours it only when the signing key is an approver key it trusts.
+By default, those are the approvers on the signed approver roster that the
+run's pinned root approver vouches for (#1486; the root is pinned by the
+deployment config, `--approver-root` or `OPENADAPT_APPROVER_ROOT`). Desktop's
+approver key is one of them. With no pinned root, or a roster that doesn't
+verify, no re-arm counts. `ApprovalGate(pinned_approver_keys=...)` names the
+keys explicitly instead.
+Desktop can sign with a key that never leaves its keychain: `rearm_to_sign`
+returns the bytes to sign, and `rearm_evidence` wraps the signature. Without the pinned key, a forged,
+tampered or early re-arm is ignored, and the switch stays off. Each reader
+checks the re-arm again against the log before it. A later problem turns the
+switch off again, and the count starts over.
 
 ## Requirements
 

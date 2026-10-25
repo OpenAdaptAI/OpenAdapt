@@ -16,6 +16,8 @@ those controls without opening the app window. The tray doesn't record or run
 anything itself. OpenAdapt Desktop records, and
 [openadapt-flow](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) compiles and
 replays workflows. The tray sends them commands and shows what they report.
+Without the desktop app, it shows recordings that `openadapt-flow record`
+starts, and on macOS it can start one.
 
 ## Quick start
 
@@ -28,11 +30,11 @@ The OpenAdapt icon appears in the menu bar or system tray. When you select
 **Start Recording**, the tray asks for a capture name, starts the installed
 OpenAdapt Desktop app if it isn't running, and asks it to record.
 
-Without the desktop app, the tray runs, but recording can't start. OpenAdapt
-Desktop has no trusted signed build to download yet
+OpenAdapt Desktop has no trusted signed build to download yet
 ([its README](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/desktop#quick-start) explains),
 and the `openadapt-desktop` command that pip installs doesn't open the socket
-the tray connects to.
+the tray connects to. Without the desktop app, the tray still shows local
+recordings. See [Recording without OpenAdapt Desktop](#recording-without-openadapt-desktop).
 
 On macOS, the global hotkeys need permission to read the keyboard. Allow the
 app that starts the tray, such as Terminal, in **System Settings** >
@@ -76,6 +78,43 @@ OpenAdapt Desktop instead and never opens the cloud dashboard. Either
 describes the local socket, the one cloud request, and how the tray handles the
 token.
 
+## Recording without OpenAdapt Desktop
+
+When OpenAdapt Desktop isn't connected, the tray watches the recorders that
+`openadapt-flow record` and `capture record` start, even when you start them in
+a terminal. The icon turns red and a **Recording Started** notification appears
+when the recorder reports that it is ready, not when the command starts. A
+full-screen recording can take several seconds to get ready. When the recorder
+ends, the tray shows **Recording Stopped** only if the capture was saved and
+its seal checks out. Otherwise it shows an error with the recorder's reason.
+
+On macOS, **Start Recording** without the desktop app runs
+
+```bash
+openadapt-flow record --backend macos --out <captures_directory>/<name> --task <name>
+```
+
+and **Stop Recording** sends it Ctrl-C. If the recorder hasn't stopped
+capturing 30 seconds later, the tray sends SIGTERM, then SIGKILL, and shows an
+error saying the capture may be incomplete. The command's output goes to
+`<captures_directory>/<name>.record.log`, which only you can read. Quitting
+the tray stops a recording it started the same way, with a 15-second deadline. For a recording you started in a
+terminal, **Stop Recording** asks the recorder to stop through its local
+control channel.
+
+This needs `openadapt-capture` 1.3.0 or later (the tray's `capture` extra) and,
+to start recordings from the menu, `openadapt-flow`, both in the same Python
+environment as the tray:
+
+```bash
+pip install "openadapt-tray[capture]" "openadapt-flow[capture,macos]"
+```
+
+The tray and the recorder must also run as the same user with the same
+`TMPDIR` (or the same `OPENADAPT_CAPTURE_RUNTIME_DIR`), because that is where
+the recorder publishes its control endpoint. Set `watch_local_recorders` to
+`false` in `tray.json` to turn this off.
+
 ## Configuration
 
 **Settings...** opens `tray.json` in a text editor and creates it with the
@@ -111,6 +150,8 @@ The settings you're most likely to change:
   defaults to `~/openadapt/captures`.
 - `poll_interval_s` sets how often, in seconds, the tray checks OpenAdapt
   Cloud. The minimum is 30.
+- `watch_local_recorders` shows recordings started without OpenAdapt
+  Desktop. It defaults to `true`.
 
 The token never goes in this file. The file that **Settings...** creates also
 has keys the tray doesn't use: `dashboard_port`, `auto_launch_dashboard`,

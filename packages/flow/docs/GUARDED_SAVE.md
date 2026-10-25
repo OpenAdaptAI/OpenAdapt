@@ -149,8 +149,13 @@ openadapt-flow item-approval show runs/guarded/<guard_id>
 ```
 
 ```bash
-openadapt-flow item-approval approve runs/guarded/<guard_id> --request-id <id> --request-sha256 <sha> --decided-by human --route desktop_run_it --unauthenticated
+openadapt-flow item-approval approve runs/guarded/<guard_id> --request-id <id> --request-sha256 <sha> --decided-by human --route desktop_run_it --unauthenticated --approver-key <approver-key.pem>
 ```
+
+The answer counts only because the person's registered approver key signs
+it (`OPENADAPT_JIT_KEY_PASSPHRASE` holds the key's passphrase; see
+[`APPROVAL_MODES.md`](APPROVAL_MODES.md#the-approver-key)). `GuardedSave`
+reads registered keys from `key_dir`, or from `$OPENADAPT_JIT_KEY_DIR`.
 
 If `--guard-state` is the runs folder the console watches, or a folder
 directly inside it, the paired phone also shows the request. The receipt binds the approval: its

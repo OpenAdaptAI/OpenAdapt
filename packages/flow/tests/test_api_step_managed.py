@@ -13,6 +13,8 @@ are made up.
 
 from __future__ import annotations
 
+import pytest
+
 from openadapt_flow import compatibility as matrix
 from openadapt_flow.runner.dispatch_envelope import (
     _BINDING_FACTORY,
@@ -21,6 +23,9 @@ from openadapt_flow.runner.dispatch_envelope import (
 from openadapt_flow.runner.protocol import dispatch_binding_sha256
 from tests.test_api_step_governed import PARAMS
 from tests.test_compatibility_matrix import Run
+
+# The person in the shared governed run signs with a registered approver key.
+pytestmark = pytest.mark.usefixtures("approver")
 
 RUN_ID = "00000000-0000-4000-8000-0000000000a1"
 

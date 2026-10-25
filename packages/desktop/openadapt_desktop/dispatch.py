@@ -63,6 +63,11 @@ _KNOWN_RUN_OUTCOMES = frozenset(
     }
 )
 _TEACHABLE_RUN_OUTCOMES = frozenset({"HALTED", "halt"})
+#: Flow refusals that mean this computer's approver key isn't set up or
+#: registered. Desktop shows Flow's message, which says what to do.
+_APPROVER_KEY_SETUP_CODES = frozenset(
+    {"human_answer_unsigned", "human_approver_unregistered", "approver_key_unusable"}
+)
 _TEACH_CORRECTION_SCHEMA = "openadapt.desktop-teach-correction/v1"
 _TEACH_CORRECTION_META_KEY = "teach_correction"
 
@@ -4342,11 +4347,12 @@ class EngineDispatcher:
                 "error": "Desktop couldn't send your answer. Nothing was approved.",
             }
         if not answer.get("ok"):
-            return {
-                "ok": False,
-                "error": "Flow refused the answer, so nothing was approved.",
-                "code": str(answer.get("code") or ""),
-            }
+            code = str(answer.get("code") or "")
+            error = "Flow refused the answer, so nothing was approved."
+            if code in _APPROVER_KEY_SETUP_CODES:
+                # The person needs to set up or register the approver key.
+                error = str(answer.get("message") or error)
+            return {"ok": False, "error": error, "code": code}
         if answer.get("resume_required"):
             # The run stopped waiting before the answer arrived. Desktop
             # doesn't resume it: run the item again.

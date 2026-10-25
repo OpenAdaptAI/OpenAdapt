@@ -549,3 +549,12 @@ def test_bundled_capture_floor_comes_from_the_frozen_flow_runtime() -> None:
         f"Desktop declares openadapt-capture {declared}, below the >= {floor} "
         "floor the bundled openadapt-flow declares for its 'capture' extra"
     )
+
+
+def test_macos_intel_cryptography_pin_matches_lock() -> None:
+    # The Intel build refuses any other cryptography version, and installers
+    # only build after merge, so a stale pin would surface on main instead of
+    # in the pull request that moved the lock.
+    lock = tomllib.loads((Path(build.ROOT) / "uv.lock").read_text(encoding="utf-8"))
+    locked = {p["name"]: p["version"] for p in lock["package"]}
+    assert build.MACOS_X86_CRYPTOGRAPHY_VERSION == locked["cryptography"]

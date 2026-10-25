@@ -1870,6 +1870,26 @@ class PlaywrightBackend:
         )
         return result if isinstance(result, bool) else None
 
+    def element_texts(
+        self, selector: str, frame_path: tuple[str, ...] = ()
+    ) -> Optional[list[str]]:
+        """The rendered text of every element matching ``selector``.
+
+        Read in the frame ``frame_path`` names (outermost first). ``None``
+        when the frame is missing or ambiguous, or the read fails; an empty
+        list means the frame is there and nothing matches. Read-only; never
+        raises.
+        """
+
+        try:
+            scope = self._resolve_scope(tuple(frame_path))
+            if scope is None:
+                return None
+            texts = scope.locator(selector).all_inner_texts()
+        except Exception:  # noqa: BLE001 - unreadable is None
+            return None
+        return [str(text) for text in texts]
+
     def focused_select_label(self) -> Optional[str]:
         """The focused ``<select>``'s selected option label, or None."""
 

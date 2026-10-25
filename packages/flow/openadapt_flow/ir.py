@@ -520,6 +520,14 @@ class PostconditionKind(str, Enum):
     # The focused dropdown shows the run's value of ``param`` (its selected
     # option's label, whitespace-squashed and case-insensitive).
     FIELD_VALUE = "field_value"
+    # An app's possible-duplicate list (rows matching ``candidate_rows`` in
+    # the frame ``candidate_frame_path``) has finished loading and names no
+    # real candidate: no listed row carries this run's value of any of
+    # ``candidate_params`` (for example the last name or the date of birth).
+    # An empty list passes only with its "no matches" marker (``text``)
+    # shown, so a list that has not loaded yet never passes. Unreadable rows
+    # fail the check.
+    NO_DUPLICATE_CANDIDATE = "no_duplicate_candidate"
 
 
 class Postcondition(BaseModel):
@@ -543,6 +551,15 @@ class Postcondition(BaseModel):
     param: Optional[str] = Field(
         default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}$"
     )
+    #: NO_DUPLICATE_CANDIDATE: the CSS selector of one listed candidate row.
+    candidate_rows: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    #: NO_DUPLICATE_CANDIDATE: the frame chain the list is in (outermost first).
+    candidate_frame_path: Optional[tuple[str, ...]] = Field(default=None, max_length=8)
+    #: NO_DUPLICATE_CANDIDATE: parameters whose value in any row makes it a
+    #: real candidate.
+    candidate_params: Optional[tuple[str, ...]] = Field(
+        default=None, min_length=1, max_length=8
+    )
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -554,6 +571,9 @@ class Postcondition(BaseModel):
             data.pop("field_selector", None)
         if self.param is None:
             data.pop("param", None)
+        for name in ("candidate_rows", "candidate_frame_path", "candidate_params"):
+            if getattr(self, name) is None:
+                data.pop(name, None)
         return data
 
 
@@ -1682,6 +1702,19 @@ class Step(BaseModel):
             "never replayed directly."
         ),
     )
+    target_param: Optional[str] = Field(
+        default=None,
+        description=(
+            "CLICK/DOUBLE_CLICK only: the run parameter whose value names the"
+            " record this click selects (a search result, a worklist row)."
+            " When the run's value differs from the demonstrated one, the"
+            " runtime looks for the run's value instead of the demonstrated"
+            " label and skips the demonstrated crop; the identity check then"
+            " verifies the row in parameter mode. A step without identity"
+            " evidence, or with an empty value, halts before acting. None"
+            " (the default) clicks the demonstrated target, as before."
+        ),
+    )
     key: Optional[str] = None  # for KEY/HOTKEY, e.g. "Enter" or "s"
     modifiers: list[str] = Field(
         default_factory=list,
@@ -1845,6 +1878,26 @@ class Step(BaseModel):
             raise ValueError(
                 "SWITCH_SURFACE delivers no input and carries no " + ", ".join(present)
             )
+        return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Keep steps without a selected-record parameter byte-identical."""
+        data: dict[str, Any] = handler(self)
+        if self.target_param is None:
+            data.pop("target_param", None)
+        return data
+
+    @model_validator(mode="after")
+    def _validate_target_param(self) -> "Step":
+        if self.target_param is None:
+            return self
+        if self.action not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
+            raise ValueError("target_param is valid only on CLICK/DOUBLE_CLICK")
+        if self.anchor is None:
+            raise ValueError("a target_param click needs an anchor")
+        if not self.target_param.strip():
+            raise ValueError("target_param must name a parameter")
         return self
 
     @model_validator(mode="after")
