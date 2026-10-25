@@ -507,6 +507,73 @@ def _verify_portal_deployment_target(
     return result
 
 
+def _verify_flow_command_contract(flow: list[str], root: Path, env: dict[str, str], bundle: Path) -> dict:
+    """Every command line Desktop builds gets past the bundled Flow's parser,
+    and the config pin Desktop sends is enforced, not just accepted.
+
+    Desktop 0.24.0 sent flags its bundled Flow didn't have; every unit test
+    faked the bridge, so only this run against the frozen binary sees it.
+    """
+
+    import hashlib
+
+    from flow_command_contract import argparse_refused, bridge_commands
+
+    refused = {}
+    commands = bridge_commands(root / "contract")
+    for name, argv in commands.items():
+        done = subprocess.run(
+            [*flow, *argv],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+            env=env,
+            stdin=subprocess.DEVNULL,
+        )
+        if argparse_refused(done.stderr):
+            refused[name] = done.stderr[-800:]
+    if refused:
+        raise RuntimeError(f"the bundled Flow refuses Desktop's command lines: {refused}")
+
+    config = root / "contract-deployment.yaml"
+    config.write_text("name: frozen-contract-smoke\n", encoding="utf-8")
+    digest = hashlib.sha256(config.read_bytes()).hexdigest()
+
+    def governed(sha: str, run_dir: str) -> str:
+        done = subprocess.run(
+            [
+                *flow,
+                "run",
+                str(bundle),
+                "--config",
+                str(config),
+                "--config-sha256",
+                sha,
+                "--run-dir",
+                str(root / run_dir),
+                "--approval-mode",
+                "each_item",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=False,
+            env=env,
+            stdin=subprocess.DEVNULL,
+        )
+        output = (done.stdout or "") + (done.stderr or "")
+        if argparse_refused(done.stderr or ""):
+            raise RuntimeError(f"the bundled Flow refused a governed run's flags: {output[-800:]}")
+        return output
+
+    if "deployment_config_changed" not in governed("0" * 64, "contract-run-wrong-digest"):
+        raise RuntimeError("the bundled Flow ran a config whose digest Desktop didn't send")
+    if "deployment_config_changed" in governed(digest, "contract-run"):
+        raise RuntimeError("the bundled Flow refused the config Desktop pinned")
+    return {"flow_command_lines_parsed": len(commands), "config_pin_enforced": True}
+
+
 def _run(command: list[str], *, env: dict[str, str], timeout: float = 900) -> tuple[str, float]:
     started = time.monotonic()
     result = subprocess.run(
@@ -587,6 +654,8 @@ def main() -> int:
             ],
             env=env,
         )
+
+        contract = _verify_flow_command_contract(flow, root, env, root / "bundle")
 
         report = json.loads((root / "run" / "report.json").read_text(encoding="utf-8"))
         results = report.get("results") or []
@@ -677,6 +746,7 @@ def main() -> int:
             json.dumps(
                 {
                     "artifact_bytes": executable.stat().st_size,
+                    **contract,
                     "first_provision_seconds": round(first_seconds, 3),
                     "replay_seconds": round(replay_seconds, 3),
                     "warm_record_seconds": round(warm_seconds, 3),

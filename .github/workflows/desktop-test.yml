@@ -98,6 +98,16 @@ jobs:
           tests/test_engine/test_dispatch.py::TestLibraryCommands::test_completed_first_workflow_allows_exact_environment_on_draft_descendant
           -v
 
+      # Unit tests fake the Flow bridge, so a flag Desktop sends that its
+      # bundled Flow doesn't know passes them all and fails every real run.
+      # Parse each command line Desktop builds with the bundled Flow's parser.
+      - name: Exercise the Desktop and Flow command-line contract
+        run: >-
+          uv run pytest
+          tests/test_flow_command_contract.py
+          tests/test_dependency_compat.py
+          -v
+
       # The capture floor is only checkable where the bundled Flow runtime is
       # installed: Flow's own metadata declares it, and converting a
       # demonstrated modifier chord needs both libraries. These assertions skip
