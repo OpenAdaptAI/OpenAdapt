@@ -280,8 +280,11 @@ class TaskLedger:
         *,
         question_ttl_s: float = 4 * 3600.0,
         key_dir: Optional[Path | str] = None,
+        approver_root: Optional[str] = None,
     ):
         self.root = Path(root)
+        #: The approver root this ledger pins; ``None``: the environment's.
+        self.approver_root = approver_root
         self.question_ttl_s = question_ttl_s
         #: Where a person's registered approver keys are read to check their
         #: signed answers. ``None``: ``$OPENADAPT_JIT_KEY_DIR`` or
@@ -716,7 +719,11 @@ class TaskLedger:
         from openadapt_flow.approval_mode.model import ApprovalMode
 
         question_id = "q-" + uuid.uuid4().hex[:16]
-        store = ItemApprovalStore(self._question_dir(question_id), key_dir=self.key_dir)
+        store = ItemApprovalStore(
+            self._question_dir(question_id),
+            key_dir=self.key_dir,
+            approver_root=self.approver_root,
+        )
         # Person-only, pinned before anything is asked. The ledger is the
         # initiator, so no delegate grant can let an agent answer it.
         store.write_policy(DEFAULT_APPROVER_POLICY)
@@ -771,7 +778,9 @@ class TaskLedger:
         if question["status"] != "waiting":
             return False
         store = ItemApprovalStore(
-            self._question_dir(question["question_id"]), key_dir=self.key_dir
+            self._question_dir(question["question_id"]),
+            key_dir=self.key_dir,
+            approver_root=self.approver_root,
         )
         try:
             request = store.read_request(question["request_id"])

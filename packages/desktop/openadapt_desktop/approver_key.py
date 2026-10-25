@@ -2,8 +2,10 @@
 
 Flow counts an answer from Desktop's Run it, or from the paired phone through
 the decision portal, as a person's only when it carries an Ed25519 signature
-by a key registered under ``approvers`` in Flow's key directory
-(``openadapt-flow jit register --role approver``). Desktop keeps one such key
+by a key on Flow's signed approver roster, and the run pins that roster's
+root (``OPENADAPT_APPROVER_ROOT`` or the deployment config's
+``approvers.root_public_key``; see Flow's ``approval_mode/approver_roster``).
+Desktop keeps one such key
 for each route (``desktop`` for Run it, ``portal`` for the phone's answers,
 which the Flow console it starts signs). For each:
 
@@ -13,7 +15,9 @@ which the Flow console it starts signs). For each:
   OS keychain), never in a file or on a command line.
 
 :func:`setup_approver_key` creates both and returns the public key. A person
-then registers it at a terminal; Desktop never registers its own key. Without
+then starts the roster with the Desktop key as its root (``jit approver
+init``), adds the portal key with the Desktop key's signature (``jit
+approver add``), and pins the root for Desktop's runs. Without
 a key and passphrase, :func:`approver_key_environment` returns ``None`` and
 Desktop records no answer at all rather than an unsigned one.
 """
@@ -71,11 +75,26 @@ class ApproverKeySetup:
     created: bool
     route: Route = "desktop"
 
-    def register_command(self, principal: str | None = None) -> str:
+    def register_command(
+        self, principal: str | None = None, *, root: "ApproverKeySetup | None" = None
+    ) -> str:
+        """The command that puts this key on the approver roster.
+
+        The Desktop key starts the roster as its root. Any other key (the
+        portal's) is added with the root key's signature, so ``root`` is the
+        Desktop key's setup.
+        """
+
         name = principal or _ROUTES[self.route][2]
+        if root is None:
+            return (
+                f"openadapt-flow jit approver init --principal {name} "
+                f"--key {self.key_path}"
+            )
         return (
-            "openadapt-flow jit register --role approver "
-            f"--principal {name} --public-key {self.public_key}"
+            f"openadapt-flow jit approver add --principal {name} "
+            f"--public-key {self.public_key} --signer-key {root.key_path} "
+            f"--approver-root {root.public_key}"
         )
 
 
@@ -174,11 +193,12 @@ def setup_instructions(route: Route = "desktop") -> str:
     return (
         "Set up the approver key once, at a terminal: with "
         f"{PASSPHRASE_ENV} set, run `openadapt-flow jit keygen --out {path}`, "
-        "then have a person register the public key it prints with "
-        f"`openadapt-flow jit register --role approver --principal {name} "
-        "--public-key <hex>`. Start Desktop with the same "
-        f"{PASSPHRASE_ENV}, or run `openadapt-desktop approver-key setup` "
-        "instead of keygen to keep the passphrase in this computer's keychain."
+        "then start the approver roster with it: "
+        f"`openadapt-flow jit approver init --principal {name} --key {path}`. "
+        "Start Desktop with OPENADAPT_APPROVER_ROOT set to the public key "
+        f"keygen printed, and the same {PASSPHRASE_ENV}; or run "
+        "`openadapt-desktop approver-key setup` instead of keygen to keep the "
+        "passphrase in this computer's keychain."
     )
 
 

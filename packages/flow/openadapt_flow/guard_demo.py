@@ -260,12 +260,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     try:
         base = url.rstrip("/")
         with tempfile.TemporaryDirectory() as tmp:
-            from openadapt_flow.approval_mode.demo_approver import demo_approver
+            from openadapt_flow.approval_mode.demo_approver import (
+                demo_approver,
+                demo_root,
+            )
 
-            # The demo plays the person on made-up data, so it registers a
-            # throwaway approver key in its own temporary key directory and
-            # points the guard there. Real use registers a person's key at a
-            # terminal (jit register --role approver).
+            # The demo plays the person on made-up data, so it starts a
+            # throwaway approver roster in its own temporary key directory and
+            # pins the guard to it. Real use pins the deployment's root
+            # (approval_mode/approver_roster.py).
             key_dir = Path(tmp) / "demo-keys"
             signer = demo_approver(key_dir)
             guard = GuardedSave(
@@ -273,6 +276,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 Path(tmp) / "state",
                 approval="each_item",
                 key_dir=key_dir,
+                approver_root=demo_root(signer),
             )
             agent = FakeAgent(base)
             for case in ("correct", "wrong_patient", "dropped"):

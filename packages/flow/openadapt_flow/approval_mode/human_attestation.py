@@ -93,39 +93,71 @@ class AttestationRefused(ValueError):
         self.code = code
 
 
+def approvers(
+    key_dir: Path | str,
+    root: Optional[str] = None,
+    *,
+    env: Optional[Mapping[str, str]] = None,
+) -> dict[str, str]:
+    """The verified approvers for this run's pinned root.
+
+    ``root`` is the run's pin; without one, :data:`.approver_roster.ROOT_ENV`.
+    Raises :class:`AttestationRefused` with the roster's code.
+    """
+
+    from openadapt_flow.approval_mode.approver_roster import (
+        RosterError,
+        pinned_root,
+        verified_approvers,
+    )
+
+    try:
+        return verified_approvers(key_dir, pinned_root(root, env=env))
+    except RosterError as exc:
+        raise AttestationRefused(exc.code, str(exc)) from exc
+
+
 def load_signer(
     key_path: Path | str,
     key_dir: Path,
     *,
     method: AttestationMethod,
     env: Optional[Mapping[str, str]] = None,
+    root: Optional[str] = None,
 ) -> ApproverSigner:
-    """Open an encrypted approver key and name it from the registry.
+    """Open an encrypted approver key and name it from the signed roster.
 
-    The principal is the name the key is registered under, never a name the
-    caller passes. Raises :class:`AttestationRefused`.
+    The principal is the name the key holds on the roster the run's pinned
+    root vouches for, never a name the caller passes. Raises
+    :class:`AttestationRefused`.
     """
 
     from openadapt_flow.jit.authority import (
         AuthorityError,
-        PrincipalRegistry,
         load_encrypted_key,
         public_hex,
     )
 
     try:
         key = load_encrypted_key(key_path, env=env)
-        registry = PrincipalRegistry.load(key_dir)
     except (AuthorityError, OSError, ValueError) as exc:
         raise AttestationRefused("approver_key_unusable", str(exc)) from exc
-    found = registry.lookup(public_hex(key))
-    if found is None or found[0] != "approver":
+    public = public_hex(key)
+    found = next(
+        (
+            pid
+            for pid, value in approvers(key_dir, root, env=env).items()
+            if value == public
+        ),
+        None,
+    )
+    if found is None:
         raise AttestationRefused(
             "human_approver_unregistered",
-            "this key isn't registered as an approver; a person registers it "
-            "with jit register --role approver",
+            "this key isn't on the approver roster; an approver adds it with "
+            "openadapt-flow jit approver add",
         )
-    return ApproverSigner(principal_id=found[1], method=method, signing=key)
+    return ApproverSigner(principal_id=found, method=method, signing=key)
 
 
 def refusal(
@@ -135,8 +167,13 @@ def refusal(
     payload: Any,
     key_dir: Optional[Path],
     method: Optional[AttestationMethod] = None,
+    root: Optional[str] = None,
 ) -> Optional[str]:
-    """A closed reason this attestation proves nothing, or ``None``."""
+    """A closed reason this attestation proves nothing, or ``None``.
+
+    The signer must be on the approver roster that the run's pinned root
+    (``root``, else the environment's pin) vouches for.
+    """
 
     if attestation is None:
         return "human_answer_unsigned"
@@ -144,13 +181,13 @@ def refusal(
         return "attestation_method_mismatch"
     if key_dir is None:
         return "human_answer_unverifiable"
-    from openadapt_flow.jit.authority import PrincipalRegistry, _verify
+    from openadapt_flow.jit.authority import _verify
 
     try:
-        registry = PrincipalRegistry.load(key_dir)
-    except (OSError, ValueError):
-        return "human_answer_unverifiable"
-    public = registry.approvers.get(attestation.signer)
+        known = approvers(key_dir, root)
+    except AttestationRefused as exc:
+        return exc.code
+    public = known.get(attestation.signer)
     if public is None:
         return "human_approver_unregistered"
     if not _verify(public, domain, payload, attestation.signature):
@@ -159,7 +196,10 @@ def refusal(
 
 
 def portal_signer(
-    key_dir: Path, *, env: Optional[Mapping[str, str]] = None
+    key_dir: Path,
+    *,
+    env: Optional[Mapping[str, str]] = None,
+    root: Optional[str] = None,
 ) -> ApproverSigner:
     """The decision portal's approver key, from :data:`PORTAL_KEY_ENV`.
 
@@ -175,6 +215,6 @@ def portal_signer(
         raise AttestationRefused(
             "human_answer_unverifiable",
             f"the decision portal has no approver key; set {PORTAL_KEY_ENV} to "
-            "a key registered with jit register --role approver",
+            "a key on the approver roster (openadapt-flow jit approver add)",
         )
-    return load_signer(path, key_dir, method="portal_key", env=env)
+    return load_signer(path, key_dir, method="portal_key", env=env, root=root)

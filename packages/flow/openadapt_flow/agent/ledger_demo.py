@@ -231,12 +231,14 @@ class SimulatedPerson:
         *,
         signer: Any,
         key_dir: Path,
+        approver_root: Optional[str] = None,
     ) -> None:
         self.runs_root = runs_root
         self.app = app
         #: The simulated person's approver key, registered in ``key_dir``.
         self.signer = signer
         self.key_dir = key_dir
+        self.approver_root = approver_root
         self.answered: list[dict[str, str]] = []
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._loop, daemon=True)
@@ -272,7 +274,9 @@ class SimulatedPerson:
 
         while not self._stop.is_set():
             for run_dir, request in _waiting(self.runs_root):
-                store = ItemApprovalStore(run_dir, key_dir=self.key_dir)
+                store = ItemApprovalStore(
+                    run_dir, key_dir=self.key_dir, approver_root=self.approver_root
+                )
                 decision = self._decide(request.step_id, request.step_intent)
                 store.write_answer(
                     make_answer(
@@ -617,21 +621,24 @@ def run_arm(arm: str, workdir: Path) -> dict[str, Any]:
     runs.mkdir(parents=True)
     app = SyntheticReferralApp()
     bridge = AgentBridge(None, RunnerConfig(runs_dir=runs), sandbox=app, mode="sandbox")
-    from openadapt_flow.approval_mode.demo_approver import demo_approver
+    from openadapt_flow.approval_mode.demo_approver import demo_approver, demo_root
 
-    # The demo plays the person on synthetic data, so it registers a throwaway
-    # approver key in its own key directory and points the ledger there. Real
-    # use registers a person's key at a terminal (jit register --role approver).
+    # The demo plays the person on synthetic data, so it starts a throwaway
+    # approver roster in its own key directory and pins the ledger to it. Real
+    # use pins the deployment's root (approval_mode/approver_roster.py).
     key_dir = workdir / f"{arm}-demo-keys"
     signer = demo_approver(key_dir)
+    root = demo_root(signer)
     ledger = (
         None
         if arm == "no_ledger"
-        else TaskLedger(runs / "task-ledger", key_dir=key_dir)
+        else TaskLedger(runs / "task-ledger", key_dir=key_dir, approver_root=root)
     )
     server = build_server(bridge, ledger=ledger)
     started = time.monotonic()
-    with SimulatedPerson(runs, app, signer=signer, key_dir=key_dir) as person:
+    with SimulatedPerson(
+        runs, app, signer=signer, key_dir=key_dir, approver_root=root
+    ) as person:
 
         async def go() -> Agent:
             async with _session(server) as session:

@@ -364,7 +364,7 @@ def decide_save_approval(
     )
 
     try:
-        signer = portal_signer(store.key_directory())
+        signer = portal_signer(store.key_directory(), root=store.approver_root)
     except AttestationRefused as exc:
         raise SaveApprovalRefused(exc.code, str(exc)) from exc
     try:

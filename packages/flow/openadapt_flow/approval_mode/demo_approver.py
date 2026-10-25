@@ -1,15 +1,15 @@
 """A throwaway approver key for demos that play a person on made-up data.
 
-A person's answer to a save counts only when a key registered under
-``approvers`` signs it (:mod:`.human_attestation`). A demo that simulates the
-person (``guard_demo``, the task-ledger demo) needs such a key, so it makes one
-here, in a key directory the demo created for itself, and points its own run
-at that directory. Nothing outside the demo trusts that directory, and the key
-lives only in memory.
+A person's answer to a save counts only when a key on the signed approver
+roster signs it, and the run pins that roster's root
+(:mod:`.approver_roster`). A demo that simulates the person (``guard_demo``,
+the task-ledger demo) needs such a key, so it starts a roster here, in a key
+directory the demo created for itself, with an in-memory key as its root, and
+pins its own run to that root (:func:`demo_root`). Nothing outside the demo
+trusts that directory or root.
 
-Never use this for real work: there a person registers their key at a
-terminal (``jit register --role approver``), in the key directory the
-deployment's runs read.
+Never use this for real work: there the first approver is set up in Desktop
+behind Touch ID, or pinned in the deployment config.
 """
 
 from __future__ import annotations
@@ -30,18 +30,27 @@ def demo_approver(
     *,
     method: AttestationMethod = "desktop_key",
 ) -> ApproverSigner:
-    """Register a new in-memory approver key in the demo's own ``key_dir``."""
+    """Start a roster in the demo's own ``key_dir`` with an in-memory root key."""
 
-    from openadapt_flow.jit.authority import public_hex, register_principal
+    from openadapt_flow.approval_mode.approver_roster import file_key_signer, init_root
+    from openadapt_flow.jit.authority import public_hex
 
     key = Ed25519PrivateKey.generate()
-    register_principal(
+    init_root(
         Path(key_dir),
-        role="approver",
-        principal_id=principal_id,
-        public_key_hex=public_hex(key),
+        principal=principal_id,
+        public_key=public_hex(key),
+        sign=file_key_signer(key),
     )
     return ApproverSigner(principal_id=principal_id, method=method, signing=key)
 
 
-__all__ = ["demo_approver"]
+def demo_root(signer: ApproverSigner) -> str:
+    """The root a demo pins: its own approver's public key."""
+
+    from openadapt_flow.jit.authority import public_hex
+
+    return public_hex(signer.signing)  # type: ignore[arg-type]
+
+
+__all__ = ["demo_approver", "demo_root"]

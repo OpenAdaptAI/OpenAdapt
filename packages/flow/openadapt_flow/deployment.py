@@ -1028,6 +1028,20 @@ class RepairSection(BaseModel):
     requalify_trials: int = Field(default=1, ge=1, le=10)
 
 
+class ApproversSection(BaseModel):
+    """Who may approve this deployment's saves (approval_mode/approver_roster).
+
+    ``root_public_key`` pins the root approver key (64 hex): a person's answer
+    counts only when its signer is on the signed roster this key vouches
+    for. ``key_dir``, when set, is the only key directory a run accepts.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    root_public_key: str = Field(pattern=r"^[0-9a-f]{64}$")
+    key_dir: Optional[str] = None
+
+
 class DeploymentConfig(BaseModel):
     """The whole-deployment configuration (one ``deployment.yaml``)."""
 
@@ -1058,6 +1072,9 @@ class DeploymentConfig(BaseModel):
     #: Declares the target a resettable test copy (``induce --probe-on``
     #: only). None (and omitted when serialized) otherwise.
     test_copy: Optional[ProbeCopySection] = None
+    #: The pinned approver root (approval_mode/approver_roster.py). None (and
+    #: omitted when serialized) means the run names it some other way.
+    approvers: Optional[ApproversSection] = None
     #: Automatic repair of stops that wrote nothing. Omitted when serialized
     #: at its defaults (no agent).
     repair: RepairSection = Field(default_factory=RepairSection)
@@ -1090,6 +1107,8 @@ class DeploymentConfig(BaseModel):
             data.pop("worklist", None)
         if self.test_copy is None:
             data.pop("test_copy", None)
+        if self.approvers is None:
+            data.pop("approvers", None)
         if self.repair == RepairSection():
             data.pop("repair", None)
         return data

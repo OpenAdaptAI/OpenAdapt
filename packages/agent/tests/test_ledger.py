@@ -17,7 +17,7 @@ from openadapt_flow.agent.ledger import (
 from openadapt_flow.agent.ledger_demo import WORKFLOW, SyntheticReferralApp, measure
 from openadapt_flow.agent.mcp import build_server
 from openadapt_flow.agent.runner import RunnerConfig
-from openadapt_flow.approval_mode.demo_approver import demo_approver
+from openadapt_flow.approval_mode.demo_approver import demo_approver, demo_root
 from openadapt_flow.approval_mode.item_approval import ItemApprovalStore, make_answer
 from openadapt_flow.approval_mode.model import ITEM_APPROVAL_ROUTE
 from openadapt_flow.console.save_approvals import (
@@ -59,13 +59,16 @@ def world(tmp_path):
     app = SyntheticReferralApp()
     bridge = AgentBridge(None, RunnerConfig(runs_dir=runs), sandbox=app, mode="sandbox")
     key_dir, _signer = _person(runs)
-    ledger = TaskLedger(runs / "task-ledger", key_dir=key_dir)
+    ledger = TaskLedger(
+        runs / "task-ledger", key_dir=key_dir, approver_root=demo_root(_signer)
+    )
     yield runs, app, build_server(bridge, ledger=ledger), ledger
     _PERSON.pop(runs, None)
 
 
 def _store(runs, run_dir):
-    return ItemApprovalStore(run_dir, key_dir=_person(runs)[0])
+    key_dir, signer = _person(runs)
+    return ItemApprovalStore(run_dir, key_dir=key_dir, approver_root=demo_root(signer))
 
 
 def _inputs(item="R01", clinic="north", **extra):
@@ -622,7 +625,13 @@ def test_polling_a_stopped_run_asks_only_once(world):
 
 
 def test_an_unanswered_question_keeps_the_item_waiting_for_a_person(tmp_path):
-    ledger = TaskLedger(tmp_path / "task-ledger", question_ttl_s=1, key_dir=_person(tmp_path)[0])
+    key_dir, signer = _person(tmp_path)
+    ledger = TaskLedger(
+        tmp_path / "task-ledger",
+        question_ttl_s=1,
+        key_dir=key_dir,
+        approver_root=demo_root(signer),
+    )
     job = ledger.open_job("Synthetic work.", [], [{"item_id": "R01"}])
     ledger.ask_user(job["job_id"], "R01: north or south?", "R01", 0)
     import time

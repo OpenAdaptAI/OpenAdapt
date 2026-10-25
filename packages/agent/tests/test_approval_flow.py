@@ -150,15 +150,20 @@ def test_nobody_answers_needs_review_and_the_server_never_kills_the_wait(mockmed
 
 
 def _approver_key(tmp_path, monkeypatch):
-    """A person's approver key, registered in a throwaway key directory.
+    """A person's approver key, the root of a throwaway roster the run pins.
 
     The run and the answer both read that directory, so only an answer this
     key signed counts as the person's.
     """
+    from openadapt_flow.approval_mode.approver_roster import (
+        ROOT_ENV,
+        file_key_signer,
+        init_root,
+    )
     from openadapt_flow.jit.authority import (
         KEY_PASSPHRASE_ENV,
         generate_encrypted_key,
-        register_principal,
+        load_encrypted_key,
     )
     from openadapt_flow.jit.lifecycle import KEY_DIR_ENV
 
@@ -167,7 +172,14 @@ def _approver_key(tmp_path, monkeypatch):
     monkeypatch.setenv(KEY_PASSPHRASE_ENV, "synthetic")
     key_path = key_dir / "front-desk.approver.pem"
     public = generate_encrypted_key(key_path)
-    register_principal(key_dir, role="approver", principal_id="front-desk", public_key_hex=public)
+    # The person's key is the roster's root, and the run pins it.
+    init_root(
+        key_dir,
+        principal="front-desk",
+        public_key=public,
+        sign=file_key_signer(load_encrypted_key(key_path)),
+    )
+    monkeypatch.setenv(ROOT_ENV, public)
     return key_path
 
 

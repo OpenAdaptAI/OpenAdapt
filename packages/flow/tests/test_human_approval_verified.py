@@ -264,7 +264,8 @@ def test_no_registry_means_no_person_answer(tmp_path, approver):
             policy=store.context(),
             signer=signer,
         )
-    assert raised.value.code == "human_approver_unregistered"
+    # A key directory without a roster vouches for nobody.
+    assert raised.value.code == "approver_roster_missing"
 
 
 # -- durable resume approval -------------------------------------------------
@@ -342,6 +343,10 @@ def test_resume_checks_the_approval_against_the_key_dir_it_was_given(
     monkeypatch.setenv(KEY_PASSPHRASE_ENV, PASSPHRASE)
     custom = tmp_path / "custom-keys"
     key_path, _signer = provision(custom)
+    from openadapt_flow.approval_mode.approver_roster import ROOT_ENV
+    from tests._approver_keys import root_of
+
+    monkeypatch.setenv(ROOT_ENV, root_of(custom))
 
     run = _paused_run(tmp_path)
     assert (

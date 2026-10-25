@@ -510,6 +510,7 @@ def cmd_approver_key(args: argparse.Namespace, engine: types.SimpleNamespace) ->
     from openadapt_desktop.approver_key import ApproverKeyError, setup_approver_key
 
     labels = {"desktop": "Run it", "portal": "the paired phone (decision portal)"}
+    root = None
     for route in ("desktop", "portal"):
         try:
             setup = setup_approver_key(route)
@@ -520,11 +521,15 @@ def cmd_approver_key(args: argparse.Namespace, engine: types.SimpleNamespace) ->
         print(f"{state} the approver key for {labels[route]}: {setup.key_path}")
         print(f"  Public key: {setup.public_key}")
         principal = args.principal if route == "desktop" else None
-        print(f"  Register it: {setup.register_command(principal)}")
+        print(f"  Put it on the roster: {setup.register_command(principal, root=root)}")
         engine.audit.log("approver_key_setup", route=route, created=setup.created)
+        if route == "desktop":
+            root = setup
     print(
-        "A person runs the register commands at a terminal. Until then, Flow "
-        "refuses answers from this computer."
+        "A person runs these commands (with OPENADAPT_JIT_KEY_PASSPHRASE set to "
+        "the key's passphrase), then starts Desktop with "
+        f"OPENADAPT_APPROVER_ROOT={root.public_key if root else '<root>'}. Until "
+        "then, Flow refuses answers from this computer."
     )
 
 

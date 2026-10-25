@@ -9,7 +9,8 @@ import anyio
 import pytest
 
 from openadapt_flow.agent.guard_tools import GuardBridge
-from openadapt_flow.approval_mode.demo_approver import demo_approver
+from openadapt_flow.approval_mode.approver_roster import ROOT_ENV
+from openadapt_flow.approval_mode.demo_approver import demo_approver, demo_root
 from openadapt_flow.agent.mcp import build_server
 from openadapt_flow.guard import GUARD_TASK_SCHEMA, GuardedSave
 from openadapt_flow.guard_demo import (
@@ -65,13 +66,14 @@ def test_guard_server_lists_only_the_guard_tools(mockmed, tmp_path, mcp_client):
     assert "Only VERIFIED" in (server.instructions or "")
 
 
-def test_guarded_save_over_mcp(mockmed, tmp_path, mcp_client):
+def test_guarded_save_over_mcp(mockmed, tmp_path, mcp_client, monkeypatch):
     base, db = mockmed
     server = _server(base, tmp_path)
     agent = FakeAgent(base)
-    # The test plays the person: a throwaway approver key registered in the
-    # guard's own key directory signs the answer.
+    # The test plays the person: a throwaway roster in the guard's own key
+    # directory, whose root the guard pins, signs the answer.
     signer = demo_approver(tmp_path / "keys")
+    monkeypatch.setenv(ROOT_ENV, demo_root(signer))
 
     async def call(client, name, args):
         result = await client.call_tool(name, args)
