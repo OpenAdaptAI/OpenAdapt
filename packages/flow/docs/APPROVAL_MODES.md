@@ -172,6 +172,11 @@ Each route signs with its own key:
     stdout; Desktop checks that they are the person's answer, asks for
     Touch ID, and writes the signature back on stdin. A cancelled prompt or
     any other failure is a refusal, and Flow records nothing.
+  - On a Mac, Desktop's pin is the root it set up behind Touch ID, kept in
+    the login Keychain; nothing else names it (not the environment, not a
+    file the user can write). A process running as the same user can delete
+    the Keychain items; Desktop then has no pin, and no person's answer
+    counts until someone sets the key up again behind Touch ID.
   - On Windows and Linux, `openadapt-desktop approver-key setup` creates it,
     keeps the encrypted key in an owner-only file and its passphrase in the
     OS keychain, and prints the `jit approver` commands that put it on the

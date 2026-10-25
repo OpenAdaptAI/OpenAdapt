@@ -17,7 +17,7 @@
 - **desktop**: a locked Mac isn't a Mac without a Secure Enclave
 - **desktop**: the Touch ID setup signs the approver roster's root behind its one prompt and pins that root for Desktop's runs; a key rotation is signed by the old key, and a roster this Mac didn't start needs an approver to add the key
 - **desktop**: re-register a stored approver key only after it opens behind Touch ID
-- **desktop**: Flow checks each run's config against the digest Desktop computed (--config-sha256); Run it answers carry the Keychain's head; staged-config folders that are symlinks are refused; OPENADAPT_APPROVER_ROOT no longer counts for Desktop (an administrator's pin goes in Desktop's deployment.json)
+- **desktop**: Flow checks each run's config against the digest Desktop computed (--config-sha256); Run it answers carry the Keychain's head; staged-config folders that are symlinks are refused; only the Keychain names Desktop's approver root (not OPENADAPT_APPROVER_ROOT, not a user-writable file); with no Keychain pin, no person's answer counts
 - **desktop**: each run's deployment config also carries the Keychain's roster head and is staged outside the run directory; Run it answers name this Mac's pin with --approver-root
 - **desktop**: the Keychain's approver pin wins over OPENADAPT_APPROVER_ROOT (a different value is refused); each run's deployment config carries the pin; the roster head is kept in the Keychain and an older roster put back is refused
 - **desktop**: a Mac that can keep the key behind Touch ID never falls back to a terminal-made key

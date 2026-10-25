@@ -748,46 +748,30 @@ def flow_roster(monkeypatch, tmp_path, fake_keyring):
     return approver_keychain.FlowRoster(), module
 
 
-def _admin_config(monkeypatch, tmp_path, root):
+def test_only_the_keychain_names_this_macs_root(flow_roster, monkeypatch, tmp_path):
+    """Not the environment, and not Desktop's own (user-writable) config."""
+
     import json as _json
 
+    from openadapt_desktop.approver_keychain import ROOT_ACCOUNT, pinned_root
+
+    roster, _module = flow_roster
     data = tmp_path / "data"
-    data.mkdir(exist_ok=True)
+    data.mkdir()
     monkeypatch.setenv("OPENADAPT_DATA_DIR", str(data))
     (data / "deployment.json").write_text(
-        _json.dumps({"approvers": {"root_public_key": root}})
+        _json.dumps({"approvers": {"root_public_key": "c" * 64}})
     )
-
-
-def test_the_environment_never_names_this_macs_root(flow_roster, monkeypatch, tmp_path):
-    from openadapt_desktop.approver_keychain import ROOT_ACCOUNT, pinned_root
-
-    roster, _module = flow_roster
-    monkeypatch.setenv("OPENADAPT_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("OPENADAPT_APPROVER_ROOT", "b" * 64)
-    assert pinned_root() is None  # no Keychain pin, no admin pin: nothing
+    assert pinned_root() is None
 
     fake = __import__("openadapt_desktop.auth.store", fromlist=["_keyring"])._keyring()
     fake.set_password(SERVICE_NAME, ROOT_ACCOUNT, "a" * 64)
-    assert roster.root() == "a" * 64  # the env value is simply ignored
+    assert roster.root() == "a" * 64
 
-
-def test_an_admin_root_counts_only_without_a_keychain_pin(flow_roster, monkeypatch, tmp_path):
-    from openadapt_desktop.approver_keychain import ROOT_ACCOUNT, pinned_root
-
-    roster, _module = flow_roster
-    _admin_config(monkeypatch, tmp_path, "c" * 64)
-    assert roster.root() == "c" * 64
-
-    fake = __import__("openadapt_desktop.auth.store", fromlist=["_keyring"])._keyring()
-    fake.set_password(SERVICE_NAME, ROOT_ACCOUNT, "a" * 64)
-    with pytest.raises(ApproverKeychainError) as raised:
-        pinned_root()
-    assert raised.value.code == "approver_root_conflict"
-
-    # A Keychain pin deleted by a same-user process leaves only the admin's.
+    # A same-user process deletes the Keychain pin: there is no pin at all.
     fake.delete_password(SERVICE_NAME, ROOT_ACCOUNT)
-    assert roster.root() == "c" * 64
+    assert roster.root() is None
 
 
 def test_ensure_private_dir_refuses_a_symlinked_folder(tmp_path):
