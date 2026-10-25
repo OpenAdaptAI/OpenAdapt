@@ -102,6 +102,10 @@ class FrameAttribution(BaseModel):
     #: OpenEMR's log names a patient (``pid``) while ``lists`` or ``pnotes``
     #: rows are told apart by their own ``id``.
     record_key: Optional[str] = None
+    #: ``audit_read`` only: per surface or table, the field that names the
+    #: record when it isn't ``record_key`` (OpenEMR's ``contact`` row points
+    #: at its chart through ``foreign_id``).
+    record_keys: dict[str, str] = Field(default_factory=dict)
     #: ``record_field`` only: a version, revision or ETag on each record.
     version_field: Optional[str] = None
     #: ``record_field`` only: the record fields this app sets on the server
@@ -132,6 +136,8 @@ class FrameAttribution(BaseModel):
                 raise ValueError("version_field applies to record_field attribution")
             if self.server_set:
                 raise ValueError("server_set applies to record_field attribution")
+        elif self.record_keys:
+            raise ValueError("record_keys applies to audit_read attribution")
         else:
             if self.read is not None or self.record_field is not None:
                 raise ValueError(
@@ -492,19 +498,24 @@ def judge_frame(
             window_entries = [e for e in audit_after if stable_id(e) not in seen]
 
     def ref_of(
+        name: str,
         key: Any,
         before: Optional[Mapping[str, Any]],
         after: Optional[Mapping[str, Any]],
     ) -> Any:
         """What an audit entry names for this record (``record_key``)."""
 
-        if attribution is None or not attribution.record_key:
+        if attribution is None:
+            return key
+        field = attribution.record_keys.get(name, attribution.record_key)
+        if not field:
             return key
         record = after if after is not None else before
-        value = None if record is None else record.get(attribution.record_key)
+        value = None if record is None else record.get(field)
         return None if value in (None, "") else str(value)
 
     def other_on_target(
+        name: str,
         key: Any,
         before: Optional[Mapping[str, Any]],
         after: Optional[Mapping[str, Any]],
@@ -513,7 +524,7 @@ def judge_frame(
 
         if attribution is None:
             return False
-        key = ref_of(key, before, after)
+        key = ref_of(name, key, before, after)
         if attribution.kind == "audit_read":
             return window_entries is not None and any(
                 str(get_path(e, attribution.record_field or "")) == str(key)
@@ -529,6 +540,7 @@ def judge_frame(
         return actor not in (None, "") and str(actor) not in self_ids
 
     def attribute(
+        name: str,
         key: Any,
         before: Optional[Mapping[str, Any]],
         after: Optional[Mapping[str, Any]],
@@ -536,7 +548,7 @@ def judge_frame(
         if attribution is None:
             return "unattributed"
         if attribution.kind == "audit_read":
-            key = ref_of(key, before, after)
+            key = ref_of(name, key, before, after)
             if window_entries is None or key is None:
                 return "unattributed"
             actors = {
@@ -658,8 +670,8 @@ def judge_frame(
                 after is not None and declared(after)
             )
             if is_declared:
-                declared_keys.add(str(ref_of(key, before, after)))
-                if other_on_target(key, before, after):
+                declared_keys.add(str(ref_of(name, key, before, after)))
+                if other_on_target(name, key, before, after):
                     # The saved value may not stand: never excused.
                     collateral.append(
                         FrameChange(
@@ -681,7 +693,7 @@ def judge_frame(
                             FrameChange(
                                 name,
                                 "added",
-                                attribute(key, None, after),
+                                attribute(name, key, None, after),
                                 extra,
                                 on_target=True,
                                 key=key,
@@ -699,7 +711,7 @@ def judge_frame(
                         FrameChange(
                             name,
                             "changed",
-                            attribute(key, before, after),
+                            attribute(name, key, before, after),
                             stray,
                             on_target=True,
                             key=key,
@@ -721,14 +733,14 @@ def judge_frame(
                     side = spec.side_records[side_index]
                     link = str(after.get(side.link_field))
                     side_found[side_index][link] += 1
-                    declared_keys.add(str(ref_of(key, None, after)))
+                    declared_keys.add(str(ref_of(name, key, None, after)))
                     extra = undeclared_columns(name, after, (side.link_field,))
                     if extra:
                         collateral.append(
                             FrameChange(
                                 name,
                                 "added",
-                                attribute(key, None, after),
+                                attribute(name, key, None, after),
                                 extra,
                                 on_target=True,
                                 key=key,
@@ -739,14 +751,16 @@ def judge_frame(
                     FrameChange(
                         name,
                         "added",
-                        attribute(key, None, after),
+                        attribute(name, key, None, after),
                         sorted(_without(after, ignore)),
                         key=key,
                     )
                 )
             elif after is None and before is not None:
                 note(
-                    FrameChange(name, "removed", attribute(key, before, None), key=key)
+                    FrameChange(
+                        name, "removed", attribute(name, key, before, None), key=key
+                    )
                 )
             elif before is not None and after is not None:
                 fields = _changed_fields(before, after, ignore)
@@ -755,7 +769,7 @@ def judge_frame(
                         FrameChange(
                             name,
                             "changed",
-                            attribute(key, before, after),
+                            attribute(name, key, before, after),
                             fields,
                             key=key,
                         )
