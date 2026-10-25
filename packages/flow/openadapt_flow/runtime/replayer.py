@@ -10730,6 +10730,9 @@ class Replayer:
                 why = (
                     f"{check.candidate_count} shown rows carry the same "
                     "identity and no recorded record id tells them apart"
+                    if check.candidate_count is not None
+                    else "teach time saw another row with the same identity and "
+                    "no record id between them (it may be out of view now)"
                 )
             elif check.ambiguity_halt == "identity_uncounted":
                 why = (
@@ -15776,6 +15779,8 @@ class Replayer:
         ):
             return check
         teach_role = census_mod.teach_time_role(step)
+        tmpl = step.anchor.identity_template if step.anchor is not None else None
+        teach_twin = bool(tmpl is not None and tmpl.teach_ambiguous)
         if check.mode == "structured":
             decision = self._structured_census(step, resolution.point)
         else:
@@ -15786,6 +15791,17 @@ class Replayer:
                 decision = self._pixel_census(
                     step, resolution, before_png, workflow, bundle_dir
                 )
+        if teach_twin and self._leads_into_consequential(step, workflow):
+            # Teach time already saw a look-alike row with no record id
+            # between them. Its twin may be out of view now (a virtualized
+            # list), so a unique live count proves nothing.
+            return check.model_copy(
+                update={
+                    "status": "abstain",
+                    "ambiguity_halt": "identical_candidates",
+                    "candidate_count": decision.candidate_count,
+                }
+            )
         if decision.verdict == "cannot_count" and teach_role == "control":
             # Teach time recorded a form field or a control, and no census can
             # count here. A census that can count always decides.

@@ -368,9 +368,11 @@ def test_a_menu_of_unique_items_before_a_save_still_runs(
 #
 # Look-alike rows that differ only in markup (an empty unread dot, an extra
 # class, a lone highlighted row, an MRN in a title or a hidden span, a
-# differently labelled or hover-revealed action) must still be counted. Cards
-# headed by a visit type keep the patient in their identity. Section cards,
-# nested cards and icon-only toolbars must not stop.
+# differently labelled or hover-revealed action, different badges) must still
+# be counted, including in another tbody or group. A twin seen at teach time
+# halts even after it scrolls out of a virtualized list. Cards headed by a
+# visit type keep the patient in their identity. Section cards, nested cards,
+# icon-only toolbars and rows whose name or MRN is a link or button still run.
 
 
 def _note(*_args: object) -> None:
@@ -452,12 +454,83 @@ def _probe_page(q):
             rows.append(
                 f'<article class="card"><h3>{visit}</h3><p>{name} with Dr Lee</p>{_p_btn(i, c)}</article>'
             )
+        elif s == "linkname":
+            name = {
+                "1001": "John Smith",
+                "1002": "Li Wei",
+                "1003": "Maria Garcia",
+                "1004": "Ana Ruiz",
+            }[c]
+            rows.append(
+                f'<div class="row-item"><a href="#" onclick="return false">{name}</a>'
+                f"<span>Follow-up</span><span>Dr Lee</span>"
+                f'<a href="#" id="open-{i}" data-chart="{c}" onclick="openChart(this);return false">Open</a></div>'
+            )
+        elif s == "mrnbutton":
+            rows.append(
+                f'<div class="row-item"><span>John Smith</span><button>MRN {c}</button>'
+                f"{_p_btn(i, c)}</div>"
+            )
+        elif s == "heteroshape":
+            extra = {
+                "1001": "<em>Allergy</em><b>STAT</b>",
+                "1002": "",
+                "1003": "<em>Allergy</em>",
+                "1004": "<b>STAT</b><b>Late</b><b>New</b>",
+            }[c]
+            rows.append(
+                f'<div class="row-item">{_P_TEXT[c]}{extra}{_p_btn(i, c)}</div>'
+            )
+        elif s == "lowcell":
+            name, age = {
+                "1001": ("John Smith", "2d"),
+                "1002": ("Li Wei", "5d"),
+                "1003": ("Maria Garcia", "1d"),
+                "1004": ("Ana Ruiz", "2d"),
+            }[c]
+            rows.append(
+                f'<div class="row-item"><span>{name}</span>'
+                f'<div class="act">{_p_btn(i, c)}<small>seen {age}</small></div>'
+                f'<div class="act"><button>Print</button><small>v3</small></div></div>'
+            )
         elif s == "hidden":
             rows.append(
                 f'<div class="row-item">{_P_TEXT[c]}<span style="display:none">{c}</span>'
                 f"{_p_btn(i, c)}</div>"
             )
     body = "".join(rows)
+    if s == "groups":
+        r = [
+            f'<div class="row-item">{_P_TEXT[c]}{_p_btn(i, c)}</div>'
+            for i, c in enumerate(charts)
+        ]
+        body = (
+            '<h3>Morning</h3><div class="group">' + r[0] + r[1] + "</div>"
+            '<h3>Afternoon</h3><div class="group">' + r[2] + r[3] + "</div>"
+        )
+    if s == "tbody":
+
+        def tr(i, c):
+            cells = _P_TEXT[c].replace("span>", "td>")
+            return f"<tr>{cells}<td>{_p_btn(i, c)}</td></tr>"
+
+        r = [tr(i, c) for i, c in enumerate(charts)]
+        body = (
+            "<table><tbody><tr><th colspan=4>Morning</th></tr>"
+            + r[0]
+            + r[1]
+            + "</tbody>"
+            "<tbody><tr><th colspan=4>Afternoon</th></tr>"
+            + r[2]
+            + r[3]
+            + "</tbody></table>"
+        )
+    if s == "twin":
+        # Virtualized window: only the first three charts in the order are rendered.
+        body = "".join(
+            f'<div class="row-item">{_P_TEXT[c]}{_p_btn(i, c)}</div>'
+            for i, c in enumerate(charts[:3])
+        )
     if s == "nested":
         # Patient cards; each holds repeated document lines with "Open".
         names = {
@@ -576,7 +649,7 @@ def _rec_open_sign(probe_app, browser, root, s, order, chart):
     page = _page(browser, url)
     try:
         rec = _recorder(page, root, url)
-        rec.click(*_center(page, f"button[data-chart='{chart}']"))
+        rec.click(*_center(page, f"[data-chart='{chart}']"))
         rec.click(*_center(page, "#sign"))
         assert page.locator("#signed").inner_text() == f"Signed chart {chart}"
         recording = rec.finish()
@@ -747,6 +820,45 @@ def test_section_cards_with_an_empty_heading_still_run(probe_app, browser, tmp_p
     )
     page.close()
     assert report.success and st == "Saved Medications Ibuprofen"
+
+
+@pytest.mark.parametrize(
+    "s,teach,replay,chart",
+    [
+        ("groups", "acbd", "bcad", "1001"),
+        ("tbody", "acbd", "bcad", "1001"),
+        ("heteroshape", "abcd", "bacd", "1001"),
+        ("lowcell", "abcd", "dbca", "1001"),
+        ("twin", "abcd", "bcda", "1001"),
+    ],
+)
+def test_grouped_varied_and_virtualized_rows_never_sign_the_other_chart(
+    probe_app, browser, tmp_path, s, teach, replay, chart
+):
+    bundle = _rec_open_sign(probe_app, browser, tmp_path / "rec", s, teach, chart)
+    report, page = _replay(
+        browser, f"{probe_app}?s={s}&order={replay}", bundle, tmp_path / "run"
+    )
+    signed = page.locator("#signed").inner_text()
+    _note(f"\n[{s}] success={report.success} signed={signed!r}\n{_summ(report)}")
+    page.close()
+    assert signed in {"Nothing signed", f"Signed chart {chart}"}, (
+        f"WRONG RECORD: {signed}"
+    )
+
+
+@pytest.mark.parametrize("s", ["linkname", "mrnbutton", "groups", "tbody", "lowcell"])
+def test_linked_names_and_grouped_rows_in_the_recorded_order_still_verify(
+    probe_app, browser, tmp_path, s
+):
+    bundle = _rec_open_sign(probe_app, browser, tmp_path / "rec", s, "cbad", "1003")
+    report, page = _replay(
+        browser, f"{probe_app}?s={s}&order=cbad", bundle, tmp_path / "run"
+    )
+    signed = page.locator("#signed").inner_text()
+    _note(f"\n[{s} same] success={report.success} signed={signed!r}\n{_summ(report)}")
+    page.close()
+    assert report.success and signed == "Signed chart 1003"
 
 
 def test_a_1500_row_census_finishes_in_under_a_second(probe_app, browser) -> None:

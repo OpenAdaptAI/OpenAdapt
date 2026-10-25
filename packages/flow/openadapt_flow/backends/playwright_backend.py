@@ -224,14 +224,30 @@ _REPEATED_ROW_HELPERS_JS = r"""
         el.getAttribute('aria-label') || el.getAttribute('title') ||
         el.textContent || el.getAttribute('value') || el.getAttribute('alt') || ''
     );
+    const siblingsLike = (el, controlTag) => {
+        const parent = el.parentElement;
+        const classes = classesOf(el);
+        if (!parent || parent === document.documentElement || !classes.length) return [];
+        return Array.from(parent.children).filter((child) =>
+            child.tagName === el.tagName &&
+            classesOf(child).some((name) => classes.includes(name)) &&
+            child.getElementsByTagName(controlTag).length > 0);
+    };
     const repeatedRows = (node) => {
         const found = [];
         if (node.matches(FIELD)) return found;
+        const clicked = node.closest(CONTROL);
         let cursor = node;
         for (let depth = 0; cursor && depth < 10; depth += 1) {
             if (cursor === document.body || cursor === document.documentElement) break;
             if (!(cursor === node && cursor.matches(CONTROL))) {
-                const peers = repeatedPeers(cursor);
+                let peers = repeatedPeers(cursor);
+                if (peers.length < 2 && clicked && cursor !== clicked && cursor.contains(clicked)) {
+                    // Rows whose badges differ have no same-shape peers.
+                    // Same-tag siblings that share a class and each hold a
+                    // control like the clicked one are rows too.
+                    peers = siblingsLike(cursor, clicked.tagName);
+                }
                 if (peers.length >= 2 && !peers.every((peer) => peer.querySelector(FIELD))) {
                     found.push(cursor);
                 }
@@ -371,11 +387,27 @@ _DESCRIBE_TARGET_JS = (
             rowIdentity = text;
             mode = textMode;
             repeated = true;
+            // The outer level's own text: everything outside the inner rows
+            // it holds (a card's patient heading). A plain group of rows has
+            // none, and combining with it would only add its other rows.
+            const ownTextOf = (outer, inner) => {
+                const clone = outer.cloneNode(true);
+                const innerClasses = classesOf(inner);
+                for (const part of Array.from(clone.getElementsByTagName(inner.tagName))) {
+                    const classes = classesOf(part);
+                    const same = innerClasses.length === 0
+                        ? classes.length === 0
+                        : classes.some((name) => innerClasses.includes(name));
+                    if (same) part.remove();
+                }
+                return cleanText(clone.textContent);
+            };
             let level = index;
             while (repeatsInDocument(levels[level]) && level + 1 < levels.length) {
+                const outerText = ownTextOf(levels[level + 1], levels[level]);
+                if (!outerText) break;
                 level += 1;
-                const [outer] = levelIdentity(levels[level]);
-                if (outer) rowIdentity = rowIdentity + ' | ' + outer;
+                rowIdentity = rowIdentity + ' | ' + outerText;
                 mode = 'row';
             }
             scope = levels[level];
@@ -1005,43 +1037,87 @@ _IDENTITY_CANDIDATES_AT_JS = (
     const ownCell = el.closest('td, th, [role="cell"], [role="gridcell"]');
     const cellIndex = ownCell && ownCell.parentElement === row && level === row
         ? Array.prototype.indexOf.call(row.children, ownCell) : -1;
-    const keyOf = (candidate) => {
-        if (target.mode === 'header') {
-            const header = headerOf(candidate);
-            return header ? textWithout(header[0], tag) : null;
+    // Text of a part with its index-th control of the clicked tag removed.
+    const textMinus = (part, index) => {
+        const clone = part.cloneNode(true);
+        const drop = clone.getElementsByTagName(tag)[index];
+        if (drop) drop.remove();
+        return cleanText(clone.textContent);
+    };
+    const partOf = (candidate) => {
+        if (target.mode !== 'header') return candidate;
+        const header = headerOf(candidate);
+        return header ? header[0] : null;
+    };
+    // The target's key leaves out only the clicked control, as its identity
+    // does. A candidate matches when leaving out ONE of its own controls of
+    // that tag gives the same key: a look-alike whose action reads "Resume"
+    // still matches, and a row whose name is a link keeps its name.
+    const targetPart = partOf(level);
+    let targetKey;
+    if (tag && targetPart) {
+        const index = Array.prototype.indexOf.call(
+            targetPart.getElementsByTagName(tag), control);
+        targetKey = index >= 0 ? textMinus(targetPart, index) : textOf(targetPart);
+    } else if (cellIndex >= 0) {
+        const clone = level.cloneNode(true);
+        const cell = clone.children[cellIndex];
+        if (cell) cell.remove();
+        targetKey = cleanText(clone.textContent);
+    } else {
+        targetKey = targetPart ? textOf(targetPart) : null;
+    }
+    const matchOf = (candidate) => {
+        const part = partOf(candidate);
+        if (!part || targetKey === null) return null;
+        if (tag) {
+            const controls = part.getElementsByTagName(tag);
+            if (!controls.length || textOf(part).length < targetKey.length) return null;
+            for (let index = 0; index < controls.length; index += 1) {
+                if (textMinus(part, index) === targetKey) return controls[index];
+            }
+            return null;
         }
-        if (tag) return textWithout(candidate, tag);
         if (cellIndex >= 0) {
-            // A table row clicked on a cell: leave out that column.
             const clone = candidate.cloneNode(true);
             const cell = clone.children[cellIndex];
             if (cell) cell.remove();
-            return cleanText(clone.textContent);
+            return cleanText(clone.textContent) === targetKey ? candidate : null;
         }
-        return textOf(candidate);
+        return textOf(part) === targetKey ? candidate : null;
     };
     const holdsControl = (candidate) =>
         candidate.matches(CONTROL) || candidate.querySelector(CONTROL) !== null;
     const container = level.parentElement;
     const siblings = container ? Array.from(container.children) : [level];
+    // Candidates: the container's children, and everything like the row
+    // across the page (another tbody, another group, a second list).
+    const pageWide = target.repeated || level !== row
+        ? Array.from(document.getElementsByTagName(level.tagName)).filter(
+            (candidate) => !tag || candidate.getElementsByTagName(tag).length > 0)
+        : Array.from(document.querySelectorAll('tr, [role="row"], li, [role="listitem"]'));
+    const pool = new Set(siblings.concat(pageWide));
     const result = {
         record_key: recordKey(row, el),
-        incomplete: siblings.length > cap,
+        incomplete: pool.size > cap,
         label_repeats: false,
         candidates: [],
     };
     if (result.incomplete) return result;
-    const targetKey = keyOf(level);
     const found = [[level, el]];
+    for (const candidate of pool) {
+        if (candidate === level || candidate.contains(level) || level.contains(candidate)) {
+            continue;
+        }
+        if (control && !holdsControl(candidate)) continue;
+        if (!shown(candidate)) continue;
+        const hit = matchOf(candidate);
+        if (hit) found.push([candidate, hit]);
+    }
     let withControls = 0;
     for (const candidate of siblings) {
-        if (control && !holdsControl(candidate)) continue;
-        if (candidate !== level && !shown(candidate)) continue;
-        withControls += 1;
-        if (candidate === level) continue;
-        if (keyOf(candidate) === targetKey) {
-            const hit = (tag && candidate.getElementsByTagName(tag)[0]) || candidate;
-            found.push([candidate, hit]);
+        if ((!control || holdsControl(candidate)) && (candidate === level || shown(candidate))) {
+            withControls += 1;
         }
     }
     result.label_repeats = withControls >= 2;

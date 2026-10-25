@@ -147,3 +147,30 @@ def test_ocr_rows_count_every_verifying_row_but_the_target() -> None:
         rows[2:], target_y=198, verifies=lambda text: text == ROW, same_row_px=16
     )
     assert unique == 1
+
+
+def test_a_teach_time_twin_is_one_no_record_id_separates() -> None:
+    from openadapt_flow.recorder import _census_has_twin
+
+    def census(own, other):
+        return {
+            "record_key": own,
+            "candidates": [
+                {"self": True, "record_key": own},
+                {"self": False, "record_key": other},
+            ],
+        }
+
+    assert _census_has_twin(census(None, None))
+    assert _census_has_twin(census("data-id=1001", "data-id=1001"))
+    assert not _census_has_twin(census("data-id=1001", "data-id=1002"))
+    assert not _census_has_twin({"candidates": [{"self": True}]})
+
+
+def test_teach_ambiguity_is_stored_and_left_out_when_unset() -> None:
+    twin = itmpl.build_identity_template(
+        None, structured_identity=ROW, structured_ambiguous=True
+    )
+    plain = itmpl.build_identity_template(None, structured_identity=ROW)
+    assert twin is not None and twin.teach_ambiguous is True
+    assert plain is not None and "teach_ambiguous" not in plain.model_dump()
