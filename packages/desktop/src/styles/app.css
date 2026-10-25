@@ -2824,14 +2824,33 @@ select.input:focus {
   background: color-mix(in srgb, var(--attention) 18%, transparent);
   border-radius: var(--radius-1);
 }
+.stop-same {
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  border-radius: var(--radius-1);
+}
 .stop-record-value {
   display: block;
   font-size: 0.9em;
   color: var(--text-muted);
 }
-.stop-candidates {
-  margin: 0 0 var(--space-2);
-  padding-left: var(--space-4);
+.stop-evidence .technical,
+.stop-evidence .stop-side:only-of-type {
+  grid-column: 1 / -1;
+}
+.stop-compare {
+  width: 100%;
+  border-collapse: collapse;
+}
+.stop-compare th,
+.stop-compare td {
+  text-align: left;
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.stop-compare thead th {
+  color: var(--text-muted);
+  font-weight: var(--fw-semibold);
 }
 .stop-shot {
   max-width: 100%;

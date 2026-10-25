@@ -20,7 +20,7 @@ import type {
 } from "../lib/types";
 import { ApproverKeySetup } from "../ui/ApproverKey";
 import { Callout } from "../ui/primitives";
-import { ChoiceButton, Icon, PageHead, ScreenCrop } from "../ui/simple";
+import { ChoiceButton, Icon, PageHead, ScreenCrop, TechnicalDetails } from "../ui/simple";
 import { fieldLabel } from "./NeedsYou";
 
 const POLL_MS = 3000;
@@ -75,71 +75,175 @@ function useScreenshot(card: StopCard | null): Shot | null {
   return shot;
 }
 
-function Evidence({ card }: { card: StopCard }) {
+function Screen({ card }: { card: StopCard }) {
   const shot = useScreenshot(card);
+  if (!shot) {
+    return card.evidence.screenshot ? <p className="simple-sub">Loading the screen…</p> : null;
+  }
+  return shot.width > 0 ? (
+    <ScreenCrop
+      dataUrl={shot.dataUrl}
+      width={shot.width}
+      height={shot.height}
+      caption={shot.caption}
+      region="top"
+    />
+  ) : (
+    <img className="stop-shot" src={shot.dataUrl} alt={shot.caption} />
+  );
+}
+
+/** The item next to each possible match, one row per field, differences marked. */
+function Comparison({ card }: { card: StopCard }) {
+  const matches = card.evidence.candidates.filter((c) => c.fields.length);
+  const compared = new Set(matches.flatMap((c) => c.fields.map((f) => f.field)));
+  const rows = card.evidence.source.filter((row) => compared.has(row.field));
+  const rest = card.evidence.source.filter((row) => !compared.has(row.field));
+  return (
+    <section className="stop-side" aria-label="The item next to the possible matches">
+      <table className="stop-compare">
+        <thead>
+          <tr>
+            <th scope="col">Field</th>
+            <th scope="col">The item</th>
+            {matches.map((_, i) => (
+              <th scope="col" key={i}>
+                {matches.length > 1 ? `Possible match ${i + 1}` : "Possible match in the app"}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.field}>
+              <th scope="row">{fieldLabel(row.field)}</th>
+              <td>{row.value === "" ? <em>Empty</em> : row.value}</td>
+              {matches.map((match, i) => {
+                const cell = match.fields.find((f) => f.field === row.field);
+                if (!cell) return <td key={i} />;
+                return (
+                  <td key={i} className={cell.same ? "stop-same" : "stop-differs"}>
+                    {cell.value === "" ? <em>Empty</em> : cell.value}
+                    <span className="stop-record-value">{cell.same ? "Same" : "Different"}</span>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rest.length > 0 && (
+        <details className="technical">
+          <summary>The item's other values ({rest.length})</summary>
+          <dl className="technical-body">
+            {rest.map((row) => (
+              <div key={row.field}>
+                <dt>{fieldLabel(row.field)}</dt>
+                <dd>{row.value === "" ? <em>Left empty</em> : row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      )}
+    </section>
+  );
+}
+
+function Evidence({ card }: { card: StopCard }) {
+  const structured = card.evidence.candidates.some((c) => c.fields.length);
   const differences = new Map(card.evidence.differences.map((d) => [d.field, d]));
   return (
     <div className="stop-evidence">
-      <section className="stop-side" aria-label="The item">
-        <h3>The item</h3>
-        {card.evidence.source.length ? (
-          <dl>
-            {card.evidence.source.map((row) => {
-              const diff = differences.get(row.field);
-              const differs = diff ? !diff.same : false;
-              return (
-                <div key={row.field} className={differs ? "stop-differs" : undefined}>
-                  <dt>{fieldLabel(row.field)}</dt>
-                  <dd>
-                    {row.value === "" ? <em>Left empty</em> : row.value}
-                    {diff && (
-                      <span className="stop-record-value">
-                        {differs ? "Record: " : "Record matches: "}
-                        <strong>{diff.record === "" ? "empty" : diff.record}</strong>
-                      </span>
-                    )}
-                  </dd>
-                </div>
-              );
-            })}
-          </dl>
-        ) : (
-          <p className="simple-sub">No values to compare.</p>
-        )}
-      </section>
-      <section className="stop-side" aria-label="What the app shows">
-        <h3>{card.kind === "approve_save" ? "The form" : "What the app shows"}</h3>
-        {card.evidence.candidates.length > 0 && (
-          <ul className="stop-candidates" aria-label="Possible matches the app listed">
-            {card.evidence.candidates.map((row) => (
-              <li key={row}>{row}</li>
-            ))}
-          </ul>
-        )}
-        {shot ? (
-          shot.width > 0 ? (
-            <ScreenCrop
-              dataUrl={shot.dataUrl}
-              width={shot.width}
-              height={shot.height}
-              caption={shot.caption}
-              region="top"
-            />
+      {structured ? (
+        <Comparison card={card} />
+      ) : (
+        <section className="stop-side" aria-label="The item">
+          <h3>The item</h3>
+          {card.evidence.source.length ? (
+            <dl>
+              {card.evidence.source.map((row) => {
+                const diff = differences.get(row.field);
+                const differs = diff ? !diff.same : false;
+                return (
+                  <div key={row.field} className={differs ? "stop-differs" : undefined}>
+                    <dt>{fieldLabel(row.field)}</dt>
+                    <dd>
+                      {row.value === "" ? <em>Left empty</em> : row.value}
+                      {diff && (
+                        <span className="stop-record-value">
+                          {differs ? "Record: " : "Record matches: "}
+                          <strong>{diff.record === "" ? "empty" : diff.record}</strong>
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
           ) : (
-            <img className="stop-shot" src={shot.dataUrl} alt={shot.caption} />
-          )
-        ) : card.evidence.screenshot ? (
-          <p className="simple-sub">Loading the screen…</p>
-        ) : null}
-        {card.evidence.reason && (
+            <p className="simple-sub">No values to compare.</p>
+          )}
+        </section>
+      )}
+      {(!structured || card.evidence.screenshot) && (
+        <section className="stop-side" aria-label="What the app shows">
+          <h3>{card.kind === "approve_save" ? "The form" : "What the app shows"}</h3>
+          {card.evidence.candidates
+            .filter((c) => !c.fields.length)
+            .map((c, i) => (
+              <p key={i} className="stop-candidate-text">
+                {c.text}
+              </p>
+            ))}
+          <Screen card={card} />
+        </section>
+      )}
+      {card.evidence.reason && (
+        <TechnicalDetails>
           <p className="fine-print stop-reason">{card.evidence.reason}</p>
-        )}
-      </section>
+        </TechnicalDetails>
+      )}
     </div>
   );
 }
 
-export function Stops({ onDone }: { onDone?: () => void }) {
+/** Where the queue reads cards and sends answers: the engine, or a practice set. */
+export interface StopBackend {
+  list(): Promise<StopCardsResponse>;
+  answer(request: {
+    cardIds: string[];
+    choice: string;
+    shownMs: Record<string, number>;
+    approval: boolean;
+  }): Promise<StopAnswer>;
+}
+
+export const ENGINE_BACKEND: StopBackend = {
+  list: () =>
+    engineTry<StopCardsResponse>(CMD.LIST_STOP_CARDS, {}, { ok: false, cards: [] }),
+  answer: ({ cardIds, choice, shownMs, approval }) =>
+    approval
+      ? engineInvoke<StopAnswer>(CMD.ANSWER_STOP_APPROVAL, {
+          card_id: cardIds[0],
+          choice,
+          shown_ms: shownMs,
+        })
+      : engineInvoke<StopAnswer>(CMD.ANSWER_STOP_CARDS, {
+          card_ids: cardIds,
+          choice,
+          shown_ms: shownMs,
+        }),
+};
+
+export function Stops({
+  onDone,
+  backend = ENGINE_BACKEND,
+  title = "Review stops",
+}: {
+  onDone?: () => void;
+  backend?: StopBackend;
+  title?: string;
+}) {
   const [cards, setCards] = useState<StopCard[] | null>(null);
   const [keyReady, setKeyReady] = useState<StopCardsResponse["approver_key"] | null>(null);
   const [index, setIndex] = useState(0);
@@ -152,17 +256,13 @@ export function Stops({ onDone }: { onDone?: () => void }) {
   const shownAt = useRef(new Map<string, number>());
 
   const refresh = useCallback(async () => {
-    const response = await engineTry<StopCardsResponse>(
-      CMD.LIST_STOP_CARDS,
-      {},
-      { ok: false, cards: [] },
-    );
+    const response = await backend.list();
     if (!response.ok) return;
     setCards(response.cards);
     setKeyReady(response.approver_key ?? null);
     const ids = new Set(response.cards.map((c) => c.card_id));
     setBatch((current) => current.filter((id) => ids.has(id)));
-  }, []);
+  }, [backend]);
 
   useEffect(() => {
     void refresh();
@@ -200,17 +300,12 @@ export function Stops({ onDone }: { onDone?: () => void }) {
       );
       try {
         const approval = targets.length === 1 && targets[0].kind === "approve_save";
-        const response = approval
-          ? await engineInvoke<StopAnswer>(CMD.ANSWER_STOP_APPROVAL, {
-              card_id: ids[0],
-              choice: choiceId,
-              shown_ms,
-            })
-          : await engineInvoke<StopAnswer>(CMD.ANSWER_STOP_CARDS, {
-              card_ids: ids,
-              choice: choiceId,
-              shown_ms,
-            });
+        const response = await backend.answer({
+          cardIds: ids,
+          choice: choiceId,
+          shownMs: shown_ms,
+          approval,
+        });
         if (!response.ok) {
           setError(response.error || "Nothing changed.");
         } else if (choiceId !== "leave") {
@@ -228,7 +323,7 @@ export function Stops({ onDone }: { onDone?: () => void }) {
         await refresh();
       }
     },
-    [busy, list, refresh],
+    [backend, busy, list, refresh],
   );
 
   useEffect(() => {
@@ -281,7 +376,7 @@ export function Stops({ onDone }: { onDone?: () => void }) {
   if (cards === null) {
     return (
       <div className="content simple">
-        <PageHead title="Review stops" sub="Reading the stops…" />
+        <PageHead title={title} sub="Reading the stops…" />
       </div>
     );
   }
@@ -289,7 +384,7 @@ export function Stops({ onDone }: { onDone?: () => void }) {
   return (
     <div className="content simple stops">
       <PageHead
-        title="Review stops"
+        title={title}
         sub={
           list.length
             ? `${list.length} waiting. Answer each with one key: 1 to ${Math.max(
@@ -355,7 +450,7 @@ export function Stops({ onDone }: { onDone?: () => void }) {
                 key={choice.id}
                 title={`${i + 1}. ${choice.label}`}
                 sub={choice.consequence}
-                tone={i === 0 ? "primary" : "default"}
+                // No choice is styled as the default: the evidence decides.
                 disabled={busy}
                 onClick={() => void answer(choice.id, [current.card_id])}
               />

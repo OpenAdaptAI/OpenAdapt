@@ -1250,7 +1250,11 @@ export interface StopCard {
     source: { field: string; label: string; value: string }[];
     record: { field: string; value: string }[];
     differences: { field: string; label: string; source: string; record: string; same: boolean }[];
-    candidates: string[];
+    /** Possible matches the app listed; fields say which values equal the item's. */
+    candidates: {
+      text: string;
+      fields: { field: string; label: string; value: string; same: boolean }[];
+    }[];
     reason: string;
     step: string;
     expected: string;

@@ -31,7 +31,7 @@ function card(id: string, lname: string, overrides: Partial<StopCard> = {}): Sto
       differences: [
         { field: "DOB", label: "DOB", source: "1941-02-27", record: "1941-07-22", same: false },
       ],
-      candidates: [`${lname}, Ana, 1941-07-22`],
+      candidates: [{ text: `${lname}, Ana, 1941-07-22`, fields: [] }],
       reason: "no_duplicate_candidate",
       step: "",
       expected: "",
@@ -72,6 +72,9 @@ it("shows the question, the item next to the record, and numbered choices", asyn
   expect(await screen.findByRole("heading", { name: "Same person?" })).toBeTruthy();
   expect(screen.getByText("1 of 2 · New patient referral · Fairwick referral")).toBeTruthy();
   expect(screen.getByText("Fairwick, Ana, 1941-07-22")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /Same record/ })?.className).not.toMatch(
+    /choice-primary/,
+  );
   // The differing value is marked, with the record's value beside it.
   expect(screen.getByText("1941-07-22", { selector: "strong" })).toBeTruthy();
   expect(screen.getByRole("button", { name: /1\. Same record: don't add it/ })).toBeTruthy();
@@ -161,4 +164,33 @@ it("offers the approver key setup when answers can't be signed yet", async () =>
   render(<Stops />);
 
   expect(await screen.findByRole("button", { name: "Set up with Touch ID" })).toBeTruthy();
+});
+
+it("puts the item next to each possible match, field by field", async () => {
+  vi.mocked(engineTry).mockImplementation(async (cmd) =>
+    cmd === CMD.LIST_STOP_CARDS
+      ? listing([
+          card("c", "Fairwick", {
+            evidence: {
+              ...card("c", "Fairwick").evidence,
+              candidates: [
+                {
+                  text: "Fairwick, Ana, 1941-07-22",
+                  fields: [
+                    { field: "lname", label: "Lname", value: "Fairwick", same: true },
+                    { field: "DOB", label: "DOB", value: "1941-07-22", same: false },
+                  ],
+                },
+              ],
+            },
+          }),
+        ])
+      : null,
+  );
+  render(<Stops />);
+
+  const table = await screen.findByRole("table");
+  expect(table.textContent).toContain("Last name");
+  expect(screen.getByText("Different").closest("td")?.className).toBe("stop-differs");
+  expect(screen.getByText("Same").closest("td")?.className).toBe("stop-same");
 });

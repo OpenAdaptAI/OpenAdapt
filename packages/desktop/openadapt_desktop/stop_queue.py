@@ -240,6 +240,29 @@ def _differences(source: list[dict], record: list[dict]) -> list[dict]:
     return out
 
 
+def _candidate(row: Any, source: list[dict]) -> dict[str, Any]:
+    """One possible match: its text, and per field whether it equals the item.
+
+    A row Flow read as plain text has no fields; the card shows its text.
+    """
+
+    if not isinstance(row, dict):
+        return {"text": str(row)[:300], "fields": []}
+    values = {str(k): str(v) for k, v in row.items() if v is not None}
+    fields = [
+        {
+            "field": entry["field"],
+            "label": entry["label"],
+            "value": values[entry["field"]],
+            "same": _norm(values[entry["field"]]) == _norm(entry["value"]),
+        }
+        for entry in source
+        if entry["field"] in values
+    ]
+    text = ", ".join(f["value"] for f in fields) or ", ".join(values.values())
+    return {"text": text[:300], "fields": fields}
+
+
 def _item_evidence(item: dict, kind: str) -> dict[str, Any]:
     inputs = item.get("inputs") if isinstance(item.get("inputs"), dict) else {}
     source = [
@@ -263,7 +286,7 @@ def _item_evidence(item: dict, kind: str) -> dict[str, Any]:
         "record": record,
         "differences": _differences(source, record),
         # Rows the app listed as possible matches, when Flow recorded them.
-        "candidates": [str(row)[:300] for row in candidates[:10]],
+        "candidates": [_candidate(row, source) for row in candidates[:10]],
         "reason": str(item.get("halt_reason") or "")[:500],
         "step": str(item.get("halt_step") or "")[:300],
         "expected": str(item.get("expected") or "")[:300],
@@ -314,6 +337,10 @@ def card_for_item(item: dict) -> dict[str, Any] | None:
         for row in evidence["source"]
     ):
         question = "Same person?"
+    public_choices = [c.public() for c in [*choices, _LEAVE]]
+    if question == "Same person?":
+        for choice in public_choices:
+            choice["label"] = choice["label"].replace(" record", " person")
     card = {
         "schema": CARD_SCHEMA,
         "kind": kind,
@@ -324,7 +351,7 @@ def card_for_item(item: dict) -> dict[str, Any] | None:
         "question": question,
         "summary": _SUMMARIES[kind],
         "evidence": evidence,
-        "choices": [c.public() for c in [*choices, _LEAVE]],
+        "choices": public_choices,
         "expires_at": None,
         "created_at": item.get("created_at"),
         "batch_key": f"{kind}:{item.get('workflow_id') or ''}:{_reason_class(item)}",

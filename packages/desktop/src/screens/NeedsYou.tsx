@@ -43,8 +43,22 @@ interface Notice {
 
 const FIELD_ACRONYMS = new Set(["dob", "dos", "mrn", "ssn", "npi", "id", "icd", "cpt", "zip"]);
 
+// Short field names apps often use, in the words a person reads.
+const FIELD_NAMES: Record<string, string> = {
+  fname: "First name",
+  lname: "Last name",
+  mname: "Middle name",
+  dob: "DOB",
+  phone_home: "Home phone",
+  postal_code: "ZIP",
+  state_label: "State",
+  country_code: "Country",
+};
+
 /** "dob" reads "DOB", "first_name" reads "First name". */
 export function fieldLabel(field: string): string {
+  const known = FIELD_NAMES[field.toLowerCase()];
+  if (known) return known;
   const words = field.replace(/[_-]+/g, " ").trim();
   if (!words) return field;
   return words
