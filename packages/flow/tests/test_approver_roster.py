@@ -851,3 +851,98 @@ def test_the_config_is_read_once_and_checked_against_its_digest(tmp_path):
             pin_deployment_bytes(config, digest)  # the swapped file doesn't match
     finally:
         _PINNED_CONFIG_BYTES.clear()
+
+
+def test_a_symlink_swapped_in_after_the_pin_changes_nothing(tmp_path):
+    import hashlib
+    import os
+
+    from openadapt_flow.deployment import (
+        _PINNED_CONFIG_BYTES,
+        load_deployment,
+        pin_deployment_bytes,
+    )
+
+    _a, first = _key()
+    _b, agent = _key()
+    config = tmp_path / "deployment.yaml"
+    config.write_text(f"approvers:\n  root_public_key: {first}\n")
+    agents = tmp_path / "agent.yaml"
+    agents.write_text(f"approvers:\n  root_public_key: {agent}\n")
+    digest = hashlib.sha256(config.read_bytes()).hexdigest()
+    try:
+        pin_deployment_bytes(config, digest)
+        config.unlink()
+        os.symlink(agents, config)  # the swap
+        assert (
+            load_deployment(config, allow_unresolved=True).approvers.root_public_key
+            == first
+        )
+    finally:
+        _PINNED_CONFIG_BYTES.clear()
+
+
+def test_a_config_that_is_a_symlink_is_refused_at_the_pin(tmp_path):
+    import hashlib
+    import os
+
+    from openadapt_flow.deployment import _PINNED_CONFIG_BYTES, pin_deployment_bytes
+
+    _a, first = _key()
+    real = tmp_path / "real.yaml"
+    real.write_text(f"approvers:\n  root_public_key: {first}\n")
+    link = tmp_path / "deployment.yaml"
+    os.symlink(real, link)
+    try:
+        with pytest.raises(ValueError, match="plain file"):
+            pin_deployment_bytes(link, hashlib.sha256(real.read_bytes()).hexdigest())
+        with pytest.raises(ValueError, match="regular file"):
+            pin_deployment_bytes(tmp_path, "0" * 64)
+    finally:
+        _PINNED_CONFIG_BYTES.clear()
+
+
+def test_the_cli_takes_the_approver_pin_from_the_pinned_bytes(tmp_path, monkeypatch):
+    import hashlib
+    import os
+
+    from openadapt_flow import __main__ as cli
+    from openadapt_flow.deployment import _PINNED_CONFIG_BYTES
+
+    _a, first = _key()
+    _b, agent = _key()
+    config = tmp_path / "deployment.yaml"
+    config.write_text(f"approvers:\n  root_public_key: {first}\n")
+    agents = tmp_path / "agent.yaml"
+    agents.write_text(f"approvers:\n  root_public_key: {agent}\n")
+    digest = hashlib.sha256(config.read_bytes()).hexdigest()
+    seen: dict = {}
+
+    def fake_func(args):
+        config.unlink()
+        os.symlink(agents, config)  # swapped after main() checked it
+        seen["pin"] = cli._approver_pin(args, config_only=True)["config_root"]
+        return 0
+
+    try:
+        original_parse = argparse.ArgumentParser.parse_args
+
+        def parse(self, argv=None, namespace=None):
+            ns = original_parse(self, argv, namespace)
+            ns.func = fake_func
+            return ns
+
+        monkeypatch.setattr(argparse.ArgumentParser, "parse_args", parse)
+        cli.main(
+            [
+                "run",
+                str(tmp_path / "bundle"),
+                "--config",
+                str(config),
+                "--config-sha256",
+                digest,
+            ]
+        )
+        assert seen["pin"] == first
+    finally:
+        _PINNED_CONFIG_BYTES.clear()

@@ -7946,9 +7946,11 @@ def _add_deployment_flags(
         default=None,
         metavar="HEX",
         help=(
-            "The SHA-256 of --config's bytes. Flow reads the file once, refuses "
-            "it if it differs, and parses only those bytes for the whole run, so "
-            "the file can't be swapped while the run goes on"
+            "The SHA-256 of --config's bytes. Flow opens the file once (not "
+            "through a symlink; it must be a regular file), refuses it if the "
+            "digest differs, and from then on parses only those bytes whenever "
+            "this command loads that path, so replacing the file, or a symlink "
+            "put in its place, changes nothing"
         ),
     )
     p.add_argument(
@@ -12319,6 +12321,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             # Read the config once, check it, and parse only those bytes.
             pin_deployment_bytes(args.config, args.config_sha256)
+            # The approver pin comes from those same bytes, now.
+            _deployment_approvers(args)
         except (OSError, ValueError) as exc:
             print(f"REFUSED (deployment_config_changed): {exc}", file=sys.stderr)
             return 2
