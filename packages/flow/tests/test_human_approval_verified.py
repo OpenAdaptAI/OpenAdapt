@@ -321,3 +321,51 @@ def test_resume_refuses_an_unsigned_stored_approval(tmp_path, approver, capsys):
 
     assert main(["resume", str(run), "--require-approval"]) == 3
     assert "human_answer_unsigned" in capsys.readouterr().out
+
+
+def test_resume_checks_the_approval_against_the_key_dir_it_was_given(
+    tmp_path, monkeypatch, capsys
+):
+    """``approve --key-dir`` and ``resume --key-dir`` name the same registry.
+
+    The approver is registered only in a custom directory; the default
+    directory (``$OPENADAPT_JIT_KEY_DIR``) has no approver at all.
+    """
+
+    from openadapt_flow.__main__ import main
+    from openadapt_flow.jit.lifecycle import KEY_DIR_ENV
+    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+    from tests._approver_keys import provision
+    from tests.test_cli_new_commands import _paused_run
+
+    monkeypatch.setenv(KEY_DIR_ENV, str(tmp_path / "default-keys"))
+    monkeypatch.setenv(KEY_PASSPHRASE_ENV, PASSPHRASE)
+    custom = tmp_path / "custom-keys"
+    key_path, _signer = provision(custom)
+
+    run = _paused_run(tmp_path)
+    assert (
+        main(
+            [
+                "approve",
+                str(run),
+                "--approver-key",
+                str(key_path),
+                "--key-dir",
+                str(custom),
+            ]
+        )
+        == 0
+    )
+    assert CheckpointStore(run).read_approval() is not None
+    capsys.readouterr()
+
+    refused = "isn't signed by a registered approver key"
+    assert main(["resume", str(run), "--require-approval"]) == 3
+    assert refused in capsys.readouterr().out
+
+    # Past the approval check the resume needs a live app; that is not the
+    # refusal under test.
+    with pytest.raises(SystemExit, match="target app URL"):
+        main(["resume", str(run), "--require-approval", "--key-dir", str(custom)])
+    assert refused not in capsys.readouterr().out
