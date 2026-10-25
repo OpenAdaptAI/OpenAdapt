@@ -59,6 +59,14 @@ from verification_coverage.independent.run import (  # noqa: E402
     score,
 )
 
+#: OpenEMR's New Patient form stores street and city in capitals, so the
+#: live referral prints them that way (WITNESS.md: a mixed-case referral's
+#: correct save is refuted by the exact-match contract).
+REFERRAL = {
+    **REFERRAL,
+    "street": REFERRAL["street"].upper(),
+    "city": REFERRAL["city"].upper(),
+}
 AUDIT_USER = "oa_audit_reader"
 AUDIT_ENV = "VC_AUDIT_PASSWORD"
 AUDIT_QUERY = (
@@ -68,13 +76,29 @@ AUDIT_QUERY = (
 #: The actor client's scope, widened for the bot's stray writes (synthetic
 #: fixture only; restored by every reset).
 WIDE_SCOPE = (
-    "openid api:oemr user/patient.crus user/allergy.crus user/message.crus "
-    "user/insurance.crus user/insurance_company.crus"
+    "openid api:oemr user/patient.crus user/allergy.crus user/message.cud "
+    "user/insurance.crus"
 )
 
 
 def fx() -> Any:
     return openemr.fixture()
+
+
+def reset() -> None:
+    """Restore the pinned baseline, then this install's OAuth key rows.
+
+    The baseline dump carries the OAuth ``keys`` rows of the install it was
+    taken from; a stack created later has other key files, so OpenEMR
+    answers every token request with HTTP 500 until its own rows are back
+    (``keys.sql``, saved before the first reset).
+    """
+
+    f = fx()
+    f.reset()
+    keys = f.state_dir.parent / "keys.sql"
+    if keys.exists():
+        f._db(input_bytes=b"USE openemr;\n" + keys.read_bytes())
 
 
 def sql(statement: str) -> str:
@@ -110,6 +134,10 @@ def add_user(username: str, fname: str, lname: str) -> int:
         "INSERT INTO openemr.gacl_groups_aro_map (group_id, aro_id) SELECT m.group_id, @aro "
         "FROM openemr.gacl_groups_aro_map m JOIN openemr.gacl_aro a ON a.id = m.aro_id "
         f"WHERE a.value = {q(BOT)};"
+        # OpenEMR's own group membership (``groups``), which the API login
+        # checks ("user not found in a group" otherwise).
+        "INSERT INTO openemr.`groups` (name, user) SELECT name, "
+        f"{q(username)} FROM openemr.`groups` WHERE user = {q(BOT)};"
     )
     return int(
         sql(f"SELECT id FROM openemr.users WHERE username = {q(username)}").split()[0]
@@ -207,6 +235,7 @@ class Browser:
             fx().ui_base_url, headless=True
         )
         _preauthenticate_browser(self.backend, fx())
+        self.used = False
 
     def close(self) -> None:
         self._close()
@@ -220,30 +249,57 @@ class Browser:
         )
 
         page = self.backend.page
-        page.evaluate(
-            "({path, name}) => { window.navigateTab(path, name); "
-            "window.activateTabByName(name, true); }",
-            {"path": FORM_PATH, "name": FORM_FRAME_NAME},
-        )
+        if self.used:
+            # A second save (the duplicate case): open a fresh form.
+            page.evaluate(
+                "({path, name}) => { window.navigateTab(path, name); "
+                "window.activateTabByName(name, true); }",
+                {"path": FORM_PATH, "name": FORM_FRAME_NAME},
+            )
+            page.wait_for_timeout(1500)
+        self.used = True
         form = _form_frame(page)
+        form.wait_for_load_state("load")
         form.locator("#form_fname").wait_for(state="visible", timeout=60_000)
-        form.locator("#form_title").select_option(label=v["title"])
-        form.locator("#form_fname").fill(v["fname"])
-        form.locator("#form_lname").fill(v["lname"])
-        form.locator("#form_DOB").fill(v["DOB"])
-        form.locator("#form_sex").select_option(label=v["sex"])
-        provider = form.locator("#form_providerID")
-        if provider.count():
-            last, first = v["provider"].removeprefix("Dr. ").split(" ")[::-1]
-            provider.select_option(label=f"{last}, {first}")
+        page.wait_for_timeout(1500)  # the form's own scripts finish
+        provider = v["provider"].removeprefix("Dr. ")
+        selects = {"title": v["title"], "sex": v["sex"], "providerID": provider}
+        texts = {"fname": v["fname"], "lname": v["lname"], "DOB": v["DOB"]}
+        for name in ("title", "sex"):
+            form.locator(f"#form_{name}").select_option(label=selects[name])
+        for name, value in texts.items():
+            form.locator(f"#form_{name}").fill(value)
+        # The primary provider is in the collapsed "Choices" section.
+        form.get_by_text("Choices", exact=True).click()
+        form.locator("#form_providerID").select_option(label=provider)
         form.get_by_text("Contact", exact=True).click()
-        form.locator("#form_street").fill(v["street"])
-        form.locator("#form_city").fill(v["city"])
+        contact = {
+            "street": v["street"],
+            "city": v["city"],
+            "postal_code": v["postal_code"],
+            "phone_home": v["phone_home"],
+            "email": v["email"],
+        }
+        for name, value in contact.items():
+            form.locator(f"#form_{name}").fill(value)
         form.locator("#form_state").select_option(label=v["state_label"])
-        form.locator("#form_postal_code").fill(v["postal_code"])
-        form.locator("#form_phone_home").fill(v["phone_home"])
-        form.locator("#form_email").fill(v["email"])
         form.locator("#form_country_code").select_option(label=v["country_code"])
+        # Read every field back: a fill lost to a reload must not save.
+        shown = form.evaluate(
+            "names => Object.fromEntries(names.map(n => {"
+            " const e = document.getElementById('form_' + n);"
+            " return [n, e ? (e.tagName === 'SELECT' ? e.options[e.selectedIndex].text"
+            " : e.value) : null]; }))",
+            [*selects, *texts, *contact],
+        )
+        expected = {**selects, **texts, **contact}
+        wrong = [
+            n
+            for n, val in expected.items()
+            if (shown.get(n) or "").casefold() != val.casefold()
+        ]
+        if wrong:
+            raise RuntimeError(f"the form did not take these fields: {wrong}")
         form.locator("#create").click()
         _confirm_create_locator(page).click()
         deadline = time.monotonic() + 60
@@ -395,7 +451,7 @@ def run_case(case: dict[str, Any], out: Path, container: str) -> dict[str, Any]:
     f = fx()
     cdir = out / case["id"]
     cdir.mkdir(parents=True, exist_ok=True)
-    f.reset()
+    reset()
     ids = seed()
     told = {**REFERRAL, **case.get("told", {})}
     doc = cdir / "referral.txt"

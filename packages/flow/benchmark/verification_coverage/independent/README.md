@@ -46,8 +46,8 @@ be set beside the independent result.
 - **Live** (`live.py`): the same cases on the pinned OpenEMR fixture. The bot's
   New Patient save goes through OpenEMR's form in a browser. The bot's other
   writes and clinician2's go through the REST API with each user's own token,
-  so OpenEMR writes its own audit rows. **Not run yet:** it waits for the
-  shared fixture slot.
+  so OpenEMR writes its own audit rows. Each case runs in its own process
+  under a 600 s watchdog. Run on 2026-10-24.
 
 ## Results: stand-in, clinical slice (2026-10-24)
 
@@ -77,13 +77,54 @@ What the fault gate said about the same checks:
 | `framed` | delta, frame | 18/18 killed, clean passes (admitted) |
 | `synthesized` | delta, frame | 7/7 killed, **clean fails** (not admitted) |
 
+## Results: live OpenEMR (2026-10-24)
+
+The 17 cases on the pinned OpenEMR 8.0.0.3 fixture, one run each, every case
+completed (`results/live-2026-10-24/RESULTS.md`; raw rows are private, in openadapt-corpus). The synthesized check needs
+`--db` and is measured on the stand-in only.
+
+| class | cases | shipped | framed |
+|---|---|---|---|
+| clean | 1 | ok | ok |
+| concurrent update by another user | 2 | **2 false alarms** | **2 false alarms** |
+| wrong record | 2 | 2/2 caught | 2/2 caught |
+| unrelated change by the bot | 7 | 3/7, **4 missed** | 3/7, **4 missed** |
+| misread source, saved faithfully | 3 | 0/3, **3 missed** | 2/3, **1 missed** |
+| missing side record | 1 | **missed** | **missed** |
+| duplicate save | 1 | caught | caught |
+
+The pre-save cross-check held all 3 misread cases, as on the stand-in.
+
+**Where live differs from the stand-in: audit attribution doesn't work on
+OpenEMR.** OpenEMR logged every REST API write, by the bot and by
+clinician2, with an empty user and `patient_id` 0 (`WITNESS.md` amendment 5).
+So `framed`:
+- can't excuse another user's legitimate edit: both concurrent updates are
+  false alarms, as with no attribution at all;
+- can't see the bot's writes to other tables: the history edit, the note and
+  the allergy were missed. The stand-in caught these only through emulated
+  audit rows that OpenEMR doesn't write.
+
+`framed` and `shipped` differ live only in the round trip, which caught the
+misread date of birth and the swapped names.
+
+**A correct save can be refuted.** OpenEMR's form stores street and city in
+capitals. With the referral in mixed case, the correct save was
+`reconciliation_required` under both checks (raw rows in openadapt-corpus), because
+the contract compares exactly. The suite used the referral in capitals.
+
 ## What it found
 
 Fail-open (a bad save reported `verified`), ranked by risk:
 
 1. **A frame with audit attribution excuses any write the bot makes for the
    saved patient, in any table.** An extra insurance row on the new chart
-   verified under `framed`. #1505
+   verified under `framed`, on the stand-in and live. #1505
+1a. **On OpenEMR, audit attribution has nothing to read.** API writes are
+   logged with no user and no patient, so the frame's attribution excuses no
+   concurrent edit and sees no write outside its read. Live, `framed` missed
+   4 of 7 unrelated changes, as `shipped` did. A better source exists:
+   OpenEMR's `api_log` records `user_id` and `patient_id` per API call.
 2. **The gate's "frame" coverage is the one table the check reads.** It
    admitted `shipped` at 18/18 while the independent cases show 9 of 15
    faults missed: edits to another chart's history, a note and an allergy on
@@ -107,24 +148,33 @@ Fail-closed (no wrong `verified`, but the check can't be used):
    the saved row, the gate then fails on the wrong table, and the default
    frame flags OpenEMR's own log rows on every correct save. On the full
    schema, synthesis and the gate ran for more than 30 minutes. #1509
-7. **The shipped contract flags every legitimate concurrent update** (no
-   attribution). `framed` handles both concurrent cases correctly.
+7. **Both contracts flag every legitimate concurrent update on OpenEMR.**
+   `framed` excused both on the stand-in, but OpenEMR's audit log names no
+   user for an API write, so live it can't.
+8. **A correct save of a mixed-case referral is refuted**, because OpenEMR
+   capitalizes street and city and the contract compares exactly.
 
-What held: wrong record and duplicate saves were caught by every check. Edits
-to another chart's own row were caught by every check. A stray edit by the bot
+What held, on the stand-in and live: wrong record and duplicate saves were
+caught by every check, and edits to another chart's own row were caught by
+every check. A stray edit by the bot
 was still caught when another user's legitimate edit happened in the same
 window. The round trip caught the misread DOB and the swapped names.
 
 ## Limits
 
-- The stand-in's audit rows are emulated. `framed` catches 3 of its 6
-  unrelated-change catches only through the bot's audit entries naming another
-  patient. Whether OpenEMR writes `patient_id` on those entries for API writes
-  is what the live run checks.
+- The stand-in's audit rows are emulated, and the live run showed they were
+  too generous (above). Its `framed` column overstates attribution.
+- Live deviations, recorded per row: `update_history` has no API, so the
+  bot's history edit ran as an unattributed SQL write; `add_insurance` ran as
+  SQL with an audit row by the bot. The live fixture needed three harness
+  fixes (`live.py`): the restored baseline's OAuth key rows don't match a
+  freshly created stack, a copied user needs OpenEMR's `groups` row, and the
+  provider select is in the collapsed "Choices" section.
 - One referral, one app, one run per case. The counts are cases, not rates.
-- The full-schema stand-in run is slower (about 10 minutes a case, mostly
-  `verify-run` polling the synthesized check's 580 effects). Its rows are added
-  to `results/standin-full/` when it finishes.
+- The full-schema stand-in (all 283 tables, `results/standin-full/`) gives
+  the same per-class results as the clinical slice. It is slow: about 10
+  minutes a case, mostly `verify-run` polling the synthesized check's 580
+  effects.
 
 ## Run it
 
