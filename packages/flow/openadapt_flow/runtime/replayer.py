@@ -15507,7 +15507,7 @@ class Replayer:
             [structured_tier, pixel_tier, vlm_tier, ocr_tier]
         )
         return self._apply_candidate_census(
-            step, resolution, check, before_png, params, workflow
+            step, resolution, check, before_png, params, workflow, bundle_dir
         )
 
     def _structured_census(self, step: Step, point: Point) -> census_mod.CensusDecision:
@@ -15626,6 +15626,7 @@ class Replayer:
         before_png: bytes,
         params: Mapping[str, RuntimeParamScalar],
         workflow: Workflow,
+        bundle_dir: Optional[Path] = None,
     ) -> IdentityCheck:
         """Keep ``verified`` only when the identity picks one shown record.
 
@@ -15647,6 +15648,12 @@ class Replayer:
             decision = self._structured_census(step, resolution.point)
         else:
             decision = self._ocr_census(step, resolution, before_png, params, workflow)
+            if decision.verdict == "cannot_count" and check.mode in ("pixel", "vlm"):
+                # No OCR band to read: count the places the identifier crop
+                # itself verifies instead.
+                decision = self._pixel_census(
+                    step, resolution, before_png, workflow, bundle_dir
+                )
         tmpl = step.anchor.identity_template if step.anchor is not None else None
         if (
             decision.verdict == "cannot_count"
@@ -15688,6 +15695,59 @@ class Replayer:
                 ),
             }
         )
+
+    def _pixel_census(
+        self,
+        step: Step,
+        resolution: Resolution,
+        before_png: bytes,
+        workflow: Workflow,
+        bundle_dir: Optional[Path],
+    ) -> census_mod.CensusDecision:
+        """Count the places on the frame where the identifier crop verifies.
+
+        For a pixel identity with no OCR band (a remote display): every
+        place the recorded identifier crop could match is cut from the frame
+        and checked with the same pixel verifier the ladder used. More than
+        one verifying place means another row shows the same identifier.
+        """
+        from openadapt_flow.vision.match import template_peaks
+
+        anchor = step.anchor
+        assert anchor is not None
+        recorded, live = self._identifier_crops(
+            anchor, resolution, before_png, bundle_dir, workflow=workflow
+        )
+        if recorded is None or live is None or anchor.identifier_region is None:
+            return census_mod.CensusDecision("cannot_count")
+        try:
+            peaks = template_peaks(before_png, recorded)
+        except Exception:
+            return census_mod.CensusDecision("cannot_count")
+        if peaks is None:
+            return census_mod.CensusDecision("uncounted")
+        rx, ry, rw, rh = anchor.identifier_region
+        dx, dy = self._identifier_displacement(
+            anchor, resolution, before_png, bundle_dir, workflow=workflow
+        )
+        target = (rx + dx, ry + dy)
+        count = 1
+        for x, y in peaks:
+            if abs(x - target[0]) < max(1, rw // 2) and abs(y - target[1]) < max(
+                1, rh // 2
+            ):
+                continue  # the target itself
+            crop = identity_mod.crop_region(before_png, (x, y, rw, rh))
+            if crop is None:
+                continue
+            verdict = identity_mod.verify_pixel_identity(
+                recorded, crop, enable_verify=self.pixel_verify_enabled
+            )
+            if verdict is not None and verdict.status == "verified":
+                count += 1
+        if count > 1:
+            return census_mod.CensusDecision("ambiguous", count)
+        return census_mod.CensusDecision("unique", count)
 
     def _leads_into_consequential(
         self, step: Step, workflow: Optional[Workflow]

@@ -33,7 +33,8 @@ another id is a different record that happens to read the same
 
 from __future__ import annotations
 
-from typing import Any, Callable, Literal, Mapping, NamedTuple, Optional
+import re
+from typing import Any, Callable, Literal, Mapping, NamedTuple, Optional, Protocol
 
 CensusVerdict = Literal[
     "unique",
@@ -138,3 +139,185 @@ def count_matching_rows(
         if abs(y - target_y) >= same_row_px and text.strip() and verifies(text)
     )
     return others + 1
+
+
+# ---------------------------------------------------------------------------
+# Row census over an accessibility tree (macOS AX, Linux AT-SPI)
+# ---------------------------------------------------------------------------
+#
+# The browser backend counts look-alike rows in page JavaScript. A native
+# accessibility tree is walked here instead, through a small adapter, so the
+# rules are the same on every backend: find the record row that holds the
+# target, read the same identity from every sibling row, and report each row
+# that reads the same with its stable record id. The Windows agent runs in the
+# guest without this package and carries a mirror of this function
+# (backends/win_agent/server.py, ``_identity_candidates_at``).
+
+#: Rows read before a census gives up and reports ``incomplete``.
+TREE_CENSUS_ROW_CAP = 2000
+
+_POSITIONAL_ID = re.compile(r"^\D*(\d+)\D*$")
+
+
+class TreeView(Protocol):
+    """Read-only access to one accessibility tree, for :func:`tree_row_census`.
+
+    Nodes are opaque. ``origin`` is the node's top-left in the backend's click
+    coordinates, or None when it cannot be mapped. ``id_attributes`` lists the
+    node's candidate record ids as ``(name, value)`` pairs (an AX identifier,
+    an AT-SPI ``id`` attribute, a URL). ``row_count`` is the number of rows the
+    container says it has, when it says (None otherwise).
+    """
+
+    def parent(self, node: Any) -> Any: ...
+
+    def children(self, node: Any) -> list[Any]: ...
+
+    def role(self, node: Any) -> Optional[str]: ...
+
+    def origin(self, node: Any) -> Optional[tuple[float, float]]: ...
+
+    def id_attributes(self, node: Any) -> list[tuple[str, str]]: ...
+
+    def row_count(self, container: Any) -> Optional[int]: ...
+
+
+def _record_key(view: TreeView, row: Any, path: list[int], index: int) -> Optional[str]:
+    """The stable record id of ``row``: ids on the row and on the path to the
+    target, minus values that are only the row's position."""
+
+    parts: set[str] = set()
+    node = row
+    nodes = [row]
+    for step in path:
+        children = view.children(node)
+        if step >= len(children):
+            break
+        node = children[step]
+        nodes.append(node)
+    for item in nodes:
+        for name, value in view.id_attributes(item):
+            value = (value or "").strip()
+            if not value or len(value) > 256:
+                continue
+            match = _POSITIONAL_ID.match(value)
+            if match and int(match.group(1)) in (index, index + 1):
+                continue
+            parts.add(f"{name}={value}")
+    return "\n".join(sorted(parts)) or None
+
+
+def tree_row_census(
+    target: Any,
+    view: TreeView,
+    *,
+    row_roles: frozenset[str],
+    identity: Callable[[Any, list[int]], Optional[str]],
+    container_roles: frozenset[str] = frozenset(),
+    max_depth: int = 8,
+    max_rows: int = TREE_CENSUS_ROW_CAP,
+) -> Optional[dict[str, Any]]:
+    """Count the sibling rows that read the same identity as ``target``'s row.
+
+    Args:
+        target: The node under the point.
+        view: The tree adapter.
+        row_roles: Roles that make a node a record row.
+        identity: ``identity(row, path)`` reads a row's identity the way the
+            backend's ``structured_text_at`` does, where ``path`` is the child
+            index path from the row to the target's place in it. None when the
+            row has nothing to read there.
+        container_roles: Roles of a list or table whose direct children are
+            its rows even when they carry no row role (an ``AXList`` item).
+        max_depth: How far above ``target`` to look for its row.
+        max_rows: More sibling rows than this reports ``incomplete``.
+
+    Returns:
+        The census shape of ``IdentityCandidatesBackend.identity_candidates_at``,
+        ``{"row": False}`` when the target is in no row, or None when the
+        target's own identity cannot be read.
+    """
+    row = None
+    previous = None
+    node = target
+    for _ in range(max_depth + 1):
+        if node is None:
+            break
+        role = view.role(node)
+        if role in row_roles:
+            row = node
+            break
+        if role in container_roles and previous is not None:
+            row = previous
+            break
+        previous, node = node, view.parent(node)
+    if row is None:
+        return {"row": False}
+    path: list[int] = []
+    node = target
+    while node is not row:
+        parent = view.parent(node)
+        if parent is None:
+            return None
+        siblings = view.children(parent)
+        try:
+            path.insert(0, next(i for i, c in enumerate(siblings) if c == node))
+        except StopIteration:
+            return None
+        node = parent
+    own_identity = identity(row, path)
+    if not own_identity:
+        return None
+    container = view.parent(row)
+    siblings = view.children(container) if container is not None else [row]
+    row_role = view.role(row)
+    rows = [c for c in siblings if c == row or view.role(c) == row_role]
+    declared = view.row_count(container) if container is not None else None
+    incomplete = len(rows) > max_rows or (declared is not None and declared > len(rows))
+    row_index = next((i for i, c in enumerate(rows) if c == row), 0)
+    result: dict[str, Any] = {
+        "record_key": _record_key(view, row, path, row_index),
+        "incomplete": incomplete,
+        "top_level": True,
+        "candidates": [],
+    }
+    if incomplete:
+        return result
+    origin = view.origin(row)
+    for index, candidate in enumerate(rows):
+        if candidate == row:
+            observed: Optional[str] = own_identity
+        else:
+            node = candidate
+            for step in path:
+                children = view.children(node)
+                if step >= len(children):
+                    # The row is not populated where the target sits (a lazily
+                    # built row): its identity cannot be read, so not every
+                    # row was counted.
+                    result["incomplete"] = True
+                    result["candidates"] = []
+                    return result
+                node = children[step]
+            observed = identity(candidate, path)
+        if observed != own_identity:
+            continue
+        here = view.origin(candidate)
+        offset = (
+            (here[0] - origin[0], here[1] - origin[1])
+            if here is not None and origin is not None
+            else (None, None)
+        )
+        result["candidates"].append(
+            {
+                "self": candidate == row,
+                "record_key": (
+                    result["record_key"]
+                    if candidate == row
+                    else _record_key(view, candidate, path, index)
+                ),
+                "dx": offset[0],
+                "dy": offset[1],
+            }
+        )
+    return result

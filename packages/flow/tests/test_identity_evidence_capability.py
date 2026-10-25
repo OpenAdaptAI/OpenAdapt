@@ -116,21 +116,33 @@ def test_no_surrounding_text_valid_crop_verifies_where_crops_are_verifiable(
     assert error is None
     assert check is not None
     assert check.status == "verified" and check.mode == "pixel"
-    # A crop alone gives no row text to count look-alikes with; nothing
-    # consequential follows this step, so it runs and records that.
-    assert check.census_status == "cannot_count"
+    # No row text to count look-alikes with: the crop itself is counted. It
+    # verifies in one place only.
+    assert check.candidate_count == 1
 
 
-def test_a_verified_crop_with_no_row_count_halts_before_a_write(
+def test_a_crop_found_once_on_the_frame_runs_before_a_write(
     tmp_path: Path,
 ) -> None:
-    """The crop matches, but nothing can say no other row shows the same."""
+    """No OCR band: the census counts where the crop verifies. Once: it runs."""
 
     step, res = _crop_only_step(tmp_path, _button())
     error, check = _gate(tmp_path, step, res, _button(), pixel_verify_enabled=True)
-    assert error is not None and "identity_uncounted" in error
+    assert error is None
+    assert check is not None and check.status == "verified"
+    assert check.candidate_count == 1
+
+
+def test_a_crop_found_twice_on_the_frame_halts(tmp_path: Path) -> None:
+    """Another row shows the same identifier pixels: the step stops."""
+
+    step, res = _crop_only_step(tmp_path, _button())
+    frame = np.vstack([_button(), np.full((8, _W), 255, np.uint8), _button()])
+    error, check = _gate(tmp_path, step, res, frame, pixel_verify_enabled=True)
+    assert error is not None and "2 shown rows" in error
     assert check is not None
-    assert check.status == "abstain" and check.ambiguity_halt == "identity_uncounted"
+    assert check.status == "abstain" and check.ambiguity_halt == "identical_candidates"
+    assert check.candidate_count == 2
 
 
 def test_crop_that_does_not_match_halts(tmp_path: Path) -> None:

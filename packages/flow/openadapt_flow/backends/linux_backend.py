@@ -585,6 +585,25 @@ class LinuxBackend:
             supported_operations=list(candidate.supported_operations),
         )
 
+    def identity_candidates_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """Census of the rows that read the same as the row at (x, y).
+
+        See :class:`openadapt_flow.backend.IdentityCandidatesBackend`. Uses the
+        client's optional ``row_census``; a client without it cannot count
+        rows (None). Offsets are global pixels, the same scale as clicks.
+        """
+        census_at = getattr(self._client, "row_census", None)
+        if not callable(census_at):
+            return None
+        try:
+            window, global_x, global_y = self._global_point(
+                int(x), int(y), require_active=False
+            )
+            census = census_at(window, global_x, global_y, limit=2000)
+        except Exception:
+            return None
+        return census if isinstance(census, dict) else None
+
     def displayed_text_at(self, x: int, y: int) -> Optional[str]:
         """The text of the one AT-SPI element under (x, y), for a read-back.
 
@@ -1358,12 +1377,7 @@ class AtspiLinuxClient:
         own = element.native
         node = own
         row = None
-        row_roles = {
-            "list item",
-            "table cell",
-            "table row",
-            "tree item",
-        }
+        row_roles = self._ROW_ROLES
         for _ in range(8):
             if self._raw_role(node) in row_roles:
                 row = node
@@ -1384,6 +1398,13 @@ class AtspiLinuxClient:
                 break
             branch = parent
 
+        return self._row_text(row, branch)
+
+    _ROW_ROLES = frozenset({"list item", "table cell", "table row", "tree item"})
+
+    def _row_text(self, row: Any, branch: Any) -> Optional[str]:
+        """A row's identity: its children's text except the target's branch."""
+
         parts: list[str] = []
         for child in self._children(row):
             if child is branch:
@@ -1402,6 +1423,45 @@ class AtspiLinuxClient:
             if text and text != name:
                 parts.append(text)
         return _clean_text(" ".join(parts))
+
+    def row_census(
+        self, window: LinuxWindow, x: int, y: int, *, limit: int
+    ) -> Optional[dict[str, Any]]:
+        """Census of the rows that read the same as the row at (x, y).
+
+        Mirrors :meth:`structured_text`: the record row is the nearest list
+        item, table row or cell, tree item; its identity is its children's
+        text except the target's branch; every sibling row is read the same
+        way. Record ids are AT-SPI accessible ids on the row and the target's
+        branch. A table whose Table interface reports more rows than it
+        exposes, or a row whose children are not built, is ``incomplete``.
+        Offsets are in global screen pixels. None on any failure.
+        """
+        try:
+            from openadapt_flow.runtime.identity_census import tree_row_census
+
+            element = self.element_at_point(window, x, y)
+            if element is None:
+                return None
+            client = self
+
+            def identity(row: Any, path: list[int]) -> Optional[str]:
+                if not path:
+                    return None
+                children = client._children(row)
+                if path[0] >= len(children):
+                    return None
+                return client._row_text(row, children[path[0]])
+
+            return tree_row_census(
+                element.native,
+                _AtspiTreeView(self),
+                row_roles=self._ROW_ROLES,
+                identity=identity,
+                max_rows=limit,
+            )
+        except Exception:
+            return None
 
     def perform_native(self, element: LinuxElement, operation: str) -> str:
         if operation == "focus":
@@ -1526,3 +1586,41 @@ class AtspiLinuxClient:
         # not provide a reliable pixel-delta contract. Refuse rather than
         # fabricate delivery evidence.
         return False
+
+
+class _AtspiTreeView:
+    """``identity_census.TreeView`` over live AT-SPI nodes (screen pixels)."""
+
+    def __init__(self, client: AtspiLinuxClient) -> None:
+        self._client = client
+
+    def parent(self, node: Any) -> Any:
+        return self._client._call(node, "get_parent", default=None)
+
+    def children(self, node: Any) -> list[Any]:
+        return self._client._children(node)
+
+    def role(self, node: Any) -> Optional[str]:
+        return self._client._raw_role(node) or None
+
+    def origin(self, node: Any) -> Optional[tuple[float, float]]:
+        bounds = self._client._bounds(node)
+        return (float(bounds[0]), float(bounds[1])) if bounds is not None else None
+
+    def id_attributes(self, node: Any) -> list[tuple[str, str]]:
+        value = self._client._accessible_id(node)
+        return [("atspi-id", value)] if value else []
+
+    def row_count(self, container: Any) -> Optional[int]:
+        table = self._client._call(
+            container, "get_table_iface", "queryTable", default=None
+        )
+        if table is None:
+            return None
+        count = self._client._call(table, "get_n_rows", default=None)
+        if count is None:
+            count = getattr(table, "nRows", None)
+        try:
+            return int(count) if count is not None else None
+        except (TypeError, ValueError):
+            return None

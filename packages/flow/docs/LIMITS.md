@@ -185,6 +185,31 @@ For an armed step:
   run's value into the recorded band and requires the whole band to match. A
   band that rests on a glyph-confusable identifier keeps the pixel comparison.
 
+A verified identity says the row reads like the recorded row, not that no
+other row reads the same. Before an armed step acts, the runtime counts the
+rows that show the same identity (`runtime/identity_census.py`). When more
+than one does, it acts only on the row with the record id recorded at teach
+time, or halts. How each surface counts:
+
+- browser: every shown row in the page, with app-owned `data-*` ids and row
+  links as record ids;
+- Windows (UI Automation agent): the sibling rows of the clicked row, with
+  non-positional AutomationIds as record ids. A grid that reports more rows
+  than it exposes, or a scrollable list that builds items on demand, cannot be
+  counted, and a row pick before a write halts;
+- macOS (AX): the rows of the `AXTable`, `AXOutline` or `AXList` around the
+  element, with the AX identifier and URL as record ids. A table that reports
+  more `AXRows` than it exposes cannot be counted;
+- Linux (AT-SPI): the sibling list items, table rows or tree items of the
+  clicked row, with AT-SPI accessible ids as record ids. GTK 3 list boxes and
+  tree views expose no row identity under the structured reading (one child
+  per row, or cells without a row), so the identity check there rests on OCR;
+- pixel-only displays: the OCR rows of the frame, or, with no OCR band, the
+  places the identifier crop verifies.
+
+A surface that cannot count the rows halts any row pick that leads into a
+write.
+
 On a pixel-only display, the OCR tier also stops the correct record whenever
 its own identifier contains a look-alike glyph (`O`/`0`, `l`/`1`, `B`/`8`).
 A deployment can remove most of that cost by giving the runtime a complete

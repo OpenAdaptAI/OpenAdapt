@@ -272,6 +272,14 @@ class MacAXClient(Protocol):
         """Exact AX text of ``element`` (value/title/description), or None."""
         ...
 
+    # Optional (IdentityCandidatesBackend): a client without it cannot count
+    # look-alike rows, and the runtime halts a row pick before a write.
+    #
+    # def row_census(self, pid: int, window_title: str, x: float, y: float, *,
+    #                limit: int) -> Optional[dict[str, Any]]:
+    #     """identity_candidates_at's census at screen point (x, y), with row
+    #     offsets in screen points."""
+
 
 def _clean_text(value: object) -> Optional[str]:
     """Collapse whitespace to a single-spaced string, or None if empty."""
@@ -527,6 +535,118 @@ class QuartzMacAXClient:
                 return _clean_text(self._text(element.native))
             return element.text
         except Exception:  # noqa: BLE001 - a momentary AX failure is not fatal
+            return None
+
+    def row_census(
+        self, pid: int, window_title: str, x: float, y: float, *, limit: int
+    ) -> Optional[dict[str, Any]]:
+        """Census of the rows that read the same as the element at (x, y).
+
+        The element's identity is its own AX text (as ``structured_text``).
+        Its record row is the enclosing ``AXRow``, or the item of an
+        ``AXList``; every sibling row is read at the same child path. Record
+        ids are the AX identifier and URL of the row and of the target's
+        node. A table that reports more ``AXRows`` than it exposes as
+        children, or a row whose cells are not built, is ``incomplete``.
+        Offsets are in screen points. None on any AX failure.
+        """
+        try:
+            from ApplicationServices import (
+                AXUIElementCopyAttributeValue,
+                AXUIElementCopyElementAtPosition,
+                AXUIElementCreateApplication,
+                kAXTitleAttribute,
+                kAXTopLevelUIElementAttribute,
+            )
+
+            from openadapt_flow.runtime.identity_census import tree_row_census
+
+            app = AXUIElementCreateApplication(int(pid))
+            hit_error, element = AXUIElementCopyElementAtPosition(
+                app, float(x), float(y), None
+            )
+            if hit_error != 0 or element is None:
+                return None
+            top_error, top_level = AXUIElementCopyAttributeValue(
+                element, kAXTopLevelUIElementAttribute, None
+            )
+            if top_error != 0 or top_level is None:
+                return None
+            title_error, title = AXUIElementCopyAttributeValue(
+                top_level, kAXTitleAttribute, None
+            )
+            if title_error != 0 or str(title or "") != window_title:
+                return None
+
+            def identity(row: Any, path: list[int]) -> Optional[str]:
+                node = row
+                for index in path:
+                    children = _AXTreeView(self).children(node)
+                    if index >= len(children):
+                        return None
+                    node = children[index]
+                return _clean_text(self._text(node))
+
+            return tree_row_census(
+                element,
+                _AXTreeView(self),
+                row_roles=frozenset({"AXRow"}),
+                container_roles=frozenset({"AXList"}),
+                identity=identity,
+                max_rows=limit,
+            )
+        except Exception:  # noqa: BLE001 - unobservable AX is an ordinary miss
+            return None
+
+
+class _AXTreeView:
+    """``identity_census.TreeView`` over live AX elements (screen points)."""
+
+    def __init__(self, client: QuartzMacAXClient) -> None:
+        self._client = client
+
+    def parent(self, node: Any) -> Any:
+        from ApplicationServices import kAXParentAttribute
+
+        return self._client._attr(node, kAXParentAttribute)
+
+    def children(self, node: Any) -> list[Any]:
+        from ApplicationServices import kAXChildrenAttribute
+
+        return list(self._client._attr(node, kAXChildrenAttribute) or [])
+
+    def role(self, node: Any) -> Optional[str]:
+        from ApplicationServices import kAXRoleAttribute
+
+        raw = self._client._attr(node, kAXRoleAttribute)
+        return str(raw) if raw is not None else None
+
+    def origin(self, node: Any) -> Optional[tuple[float, float]]:
+        bounds = self._client._bounds(node)
+        return (bounds[0], bounds[1]) if bounds is not None else None
+
+    def id_attributes(self, node: Any) -> list[tuple[str, str]]:
+        from ApplicationServices import kAXIdentifierAttribute, kAXURLAttribute
+
+        found = []
+        for name, attribute in (
+            ("ax-identifier", kAXIdentifierAttribute),
+            ("ax-url", kAXURLAttribute),
+        ):
+            value = self._client._attr(node, attribute)
+            if value is not None and str(value).strip():
+                found.append((name, str(value)))
+        return found
+
+    def row_count(self, container: Any) -> Optional[int]:
+        from ApplicationServices import kAXRowsAttribute
+
+        rows = self._client._attr(container, kAXRowsAttribute)
+        if rows is None:
+            return None
+        try:
+            return len(rows)
+        except TypeError:
             return None
 
 
@@ -1221,6 +1341,40 @@ class MacOSBackend(RemoteDisplayBackend):
             candidate_count=1,
             supported_operations=list(candidate.supported_operations),
         )
+
+    def identity_candidates_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """Census of the rows that read the same as the element at (x, y).
+
+        See :class:`openadapt_flow.backend.IdentityCandidatesBackend`. Uses the
+        AX client's optional ``row_census``; a client without it cannot count
+        rows (None). Row offsets are converted to captured pixels.
+        """
+        census_at = getattr(self._ax_client, "row_census", None)
+        if not callable(census_at):
+            return None
+        try:
+            window = self._ensure_captured()
+            screen_x, screen_y = self._pixel_to_screen(window, int(x), int(y))
+            census = census_at(
+                window.pid,
+                window.title,
+                screen_x,
+                screen_y,
+                limit=_AX_ENUMERATION_LIMIT,
+            )
+        except Exception:  # noqa: BLE001 - a momentary AX failure is not fatal
+            return None
+        if not isinstance(census, dict):
+            return None
+        scale_x = self._scale_x or 1.0
+        scale_y = self._scale_y or 1.0
+        for candidate in census.get("candidates") or []:
+            dx, dy = candidate.get("dx"), candidate.get("dy")
+            if isinstance(dx, (int, float)) and isinstance(dy, (int, float)):
+                candidate["dx"], candidate["dy"] = dx * scale_x, dy * scale_y
+            else:
+                candidate["dx"] = candidate["dy"] = None
+        return census
 
     def displayed_text_at(self, x: int, y: int) -> Optional[str]:
         """The text of the one AX element under (x, y), for a read-back.

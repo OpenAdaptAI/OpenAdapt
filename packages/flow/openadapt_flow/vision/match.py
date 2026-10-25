@@ -309,6 +309,29 @@ def find_template(
     )
 
 
+def template_peaks(
+    screen_png: bytes, template_png: bytes, *, threshold: float = 0.6
+) -> Optional[list[tuple[int, int]]]:
+    """Every spatially distinct place ``template`` matches, at its own scale.
+
+    Returns the top-left ``(x, y)`` of each non-max-suppressed peak at or above
+    ``threshold``, strongest first, for a caller that must know every place a
+    crop could be (the pixel identity census). None when the frame holds at
+    least :data:`MAX_PEAKS` peaks, so the list may be incomplete, or when the
+    template does not fit the frame.
+    """
+    screen = _decode_gray(screen_png)
+    template = _decode_gray(template_png)
+    th, tw = template.shape[:2]
+    if th > screen.shape[0] or tw > screen.shape[1]:
+        return None
+    result = imgops.match_template_ccoeff_normed(screen, template)
+    peaks = _peaks_above(result, threshold, tw, th)
+    if len(peaks) >= MAX_PEAKS:
+        return None
+    return [(x, y) for _score, x, y in peaks]
+
+
 def find_structural_template(
     screen_png: bytes,
     template_png: bytes,
