@@ -65,8 +65,15 @@ def main(argv: list[str]) -> None:
         return
     event, app, step, *note = argv
     assert event in ("start", "stop") and step in STEPS, argv
-    _append({"at": time.time(), "event": event, "app": app, "step": step,
-             "note": " ".join(note)})
+    _append(
+        {
+            "at": time.time(),
+            "event": event,
+            "app": app,
+            "step": step,
+            "note": " ".join(note),
+        }
+    )
 
 
 if __name__ == "__main__":

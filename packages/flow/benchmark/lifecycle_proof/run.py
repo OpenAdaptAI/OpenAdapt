@@ -56,8 +56,9 @@ import subprocess
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 HERE = Path(__file__).resolve().parent
 FLOW = HERE.parents[1]
@@ -168,11 +169,13 @@ def referral_params(key: str) -> dict[str, str]:
     return {k: str(v) for k, v in spec_for(ref).params().items()}
 
 
-def _config_and_hooks() -> tuple[Any, Any, dict[str, Any]]:
+def _config_and_hooks(
+    verify_yaml: Path = VERIFY_YAML,
+) -> tuple[Any, Any, dict[str, Any]]:
     from openadapt_flow.qualify.campaign import _default_hooks, lookup_plan
     from openadapt_flow.qualify.config import load_verify_config
 
-    config = load_verify_config(VERIFY_YAML)
+    config = load_verify_config(verify_yaml)
     surface, structure = lookup_plan(config)
     lookup = {"use_structural": structure, "deployment_surface": surface}
     return config, _default_hooks(config, None), lookup
@@ -277,6 +280,60 @@ class OpenEMRSignedInUser:
         return "match" if login == self._expected else "mismatch"
 
 
+@dataclass(frozen=True)
+class AppProfile:
+    """What the configuration needs to know about one application.
+
+    Everything else (admission, the switch, the gate, durable runs, the
+    pipelined record check, repair) is the same for every app.
+    """
+
+    name: str
+    verify_yaml: Path
+    source: Path
+    dedicated_user: str
+    workflow_id: str
+    #: The test copy: ``point_hooks_here()``, ``dump()``, ``restore(path)``
+    #: and ``reset_for_admission()`` (or ``fx.reset()``).
+    make_app: Callable[[], Any]
+    #: The gate's signed-in-user check (P2) for a live page.
+    signed_in_user: Callable[[Any, str], Any]
+    policy: str = POLICY
+
+
+def _openemr_app() -> Any:
+    from benchmark.lifecycle_proof.fixture import ProofApp
+
+    return ProofApp()
+
+
+OPENEMR = AppProfile(
+    name="openemr",
+    verify_yaml=VERIFY_YAML,
+    source=DEFAULT_SOURCE,
+    dedicated_user=DEDICATED_USER,
+    workflow_id="workflow-openemr-referral",
+    make_app=_openemr_app,
+    signed_in_user=lambda page, user: OpenEMRSignedInUser(page, user),
+)
+
+
+def profile(name: str) -> AppProfile:
+    """The profile for ``name`` (``openemr``, ``openimis`` or ``fhir``)."""
+
+    if name == "openemr":
+        return OPENEMR
+    if name == "openimis":
+        from benchmark.second_installation.openimis_profile import OPENIMIS
+
+        return OPENIMIS
+    if name == "fhir":
+        from benchmark.second_installation.fhir_profile import FHIR
+
+        return FHIR
+    raise ValueError(f"unknown app profile {name!r}")
+
+
 class LabelAgent:
     """A rule-based stand-in for the repair model; it calls no model.
 
@@ -366,7 +423,9 @@ class Item:
             fetch_status=LocalStatusAuthority(ctx["keys"]["status_private"]),
             environment_digest=lambda: ctx["environment_digest"],
             runner_id=RUNNER_ID,
-            signed_in_user=OpenEMRSignedInUser(page, DEDICATED_USER),
+            signed_in_user=ctx["profile"].signed_in_user(
+                page, ctx["profile"].dedicated_user
+            ),
             dedicated_user_key=bytes.fromhex(ctx["keys"]["user_hmac_key"]),
             item=ItemContext(
                 channel=DESKTOP_LIST_WITH_HEADER,
@@ -382,7 +441,7 @@ class Item:
             approval_store=store,
             approval_wait_s=600.0,
             sleep=ctx["person"].sleep,
-            policy_name=POLICY,
+            policy_name=ctx["profile"].policy,
         )
 
     def authorization(self, workflow: Any, bundle: Path, verifier: Any) -> Any:
@@ -400,7 +459,9 @@ class Item:
         gate = evaluate_run_gate(
             workflow,
             bundle_dir=bundle,
-            deployment=DeploymentConfig(policy=PolicySection(policy=POLICY)),
+            deployment=DeploymentConfig(
+                policy=PolicySection(policy=self.ctx["profile"].policy)
+            ),
             effect_verifier=verifier,
             profile_contract=execution_profile_contract(ExecutionProfile.REGULATED),
             effective_durable=True,
@@ -507,14 +568,16 @@ def _summary(report: Any) -> dict[str, Any]:
 # -- the phases ------------------------------------------------------------------------
 
 
-def _context(out: Path, keys_dir: Path, ledger: Ledger) -> dict[str, Any]:
-    from benchmark.lifecycle_proof.fixture import ProofApp
-
-    app = ProofApp()
+def _context(
+    out: Path, keys_dir: Path, ledger: Ledger, app_profile: Optional[AppProfile] = None
+) -> dict[str, Any]:
+    app_profile = app_profile or OPENEMR
+    app = app_profile.make_app()
     keys = _keys(keys_dir)
     _env(app, keys)
-    config, hooks, lookup = _config_and_hooks()
+    config, hooks, lookup = _config_and_hooks(app_profile.verify_yaml)
     ctx: dict[str, Any] = {
+        "profile": app_profile,
         "app": app,
         "keys": keys,
         "config": config,
@@ -580,13 +643,14 @@ def phase_admit(ctx: dict[str, Any], source: Path, trials: int) -> None:
             encrypted=encrypted.encrypted,
             certification_invalidated=invalidated,
         )
-    ctx["app"].fx.reset()
+    reset = getattr(ctx["app"], "reset_for_admission", None)
+    (reset or ctx["app"].fx.reset)()
     qual = qualify(
         sealed,
         ctx["config"],
         out=adm / "qualification",
         trials=trials,
-        certify=POLICY,
+        certify=ctx["profile"].policy,
         hooks=ctx["hooks"],
         log=lambda line: ledger.add("admit.qualify.log", line=line[:300]),
     )
@@ -618,7 +682,7 @@ def phase_admit(ctx: dict[str, Any], source: Path, trials: int) -> None:
             "pinned_digest": digest,
             "bundle": str(bundle),
             "qualification_dir": str(adm / "qualification"),
-            "policy": POLICY,
+            "policy": ctx["profile"].policy,
             "profile": "regulated",
             "environment_digest": environment,
             "qualification_trials": trials,
@@ -683,7 +747,7 @@ def phase_switch(ctx: dict[str, Any]) -> None:
     record = SwitchRecord(
         switch_id=f"switch-lifecycle-proof-{digest[:12]}-{opened}",
         org_id="org-lifecycle-proof",
-        workflow_id="workflow-openemr-referral",
+        workflow_id=ctx["profile"].workflow_id,
         runner_id=RUNNER_ID,
         bundle_content_digest=digest,
         environment_digest=doc["environment_digest"],
@@ -691,7 +755,7 @@ def phase_switch(ctx: dict[str, Any]) -> None:
             verifier_identity_of(ctx["config"].verifier.verifier, verifier),
         ),
         dedicated_user_ref=dedicated_user_reference(
-            DEDICATED_USER, bytes.fromhex(ctx["keys"]["user_hmac_key"])
+            ctx["profile"].dedicated_user, bytes.fromhex(ctx["keys"]["user_hmac_key"])
         ),
         rung_floor=floor,
         allowed_interstitials=dialogs,
@@ -910,7 +974,7 @@ class ProofTarget:
         self._base = ReplayTarget(
             self._open,
             effect_verifier=item.verifier(),
-            policy=POLICY,
+            policy=ctx["profile"].policy,
             profile="regulated",
             params=item.params,
             execution_origin=ctx["config"].app.origin,
@@ -941,9 +1005,7 @@ class ProofTarget:
             # The item's own first run: the problems-only gate and the pin.
             from openadapt_flow.runtime import Replayer
 
-            item = Item(
-                self.ctx, self.item.key, Path(run_dir), params=self.item.params
-            )
+            item = Item(self.ctx, self.item.key, Path(run_dir), params=self.item.params)
             verifier = item.verifier()
             replayer = Replayer(
                 session.backend,

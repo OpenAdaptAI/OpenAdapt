@@ -152,6 +152,8 @@ class ProductionArm:
         #: Convert each item's date parameters to ISO as intake does before
         #: the run (the referral writes dates however its sender writes them).
         self.intake_dates = bool(options.get("intake_dates", False))
+        #: Which application (benchmark/lifecycle_proof ``AppProfile``).
+        self.app_profile = str(options.get("app_profile", "openemr"))
         self.recovery = str(options.get("recovery", "none"))
         if self.recovery not in ("none", "relabel"):
             raise ValueError(f"unknown recovery {self.recovery!r}")
@@ -180,7 +182,8 @@ class ProductionArm:
             "repair": "self-repair on a halt before any effect (rule-based agent, "
             "no model)",
             "approval": "problems_only (local stand-in for Cloud's switch status)",
-            "policy": proof.POLICY,
+            "app_profile": self.app_profile,
+            "policy": proof.profile(self.app_profile).policy,
             "recovery": self.recovery,
             "typed_dob": self.typed_dob,
             "intake_dates": self.intake_dates,
@@ -199,12 +202,17 @@ class ProductionArm:
 
         out = env.workdir
         ledger = _Ledger(out / "arm-ledger.jsonl")
-        ctx = proof._context(out, self.keys_dir, ledger)  # type: ignore[arg-type]
+        ctx = proof._context(
+            out,
+            self.keys_dir,
+            ledger,  # type: ignore[arg-type]
+            proof.profile(self.app_profile),
+        )
         person = OperatorPerson(ledger)
         person.operator = operator
         ctx["person"] = person
         self.ctx = ctx
-        source = Path(self.source) if self.source else proof.DEFAULT_SOURCE
+        source = Path(self.source) if self.source else ctx["profile"].source
         app = ctx["app"]
         # Admission resets the app for its six cases; the harness already
         # seeded the run's existing charts, so put them back afterwards.

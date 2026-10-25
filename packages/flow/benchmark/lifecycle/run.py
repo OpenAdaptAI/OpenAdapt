@@ -23,11 +23,11 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from .apps import APPS
 from .arm import INTERFACE_VERSION, Env, ItemResult, OperatorRequest, load_arm
 from .cost_model import MODELS, V1
 from .metrics import classify
 from .operator import ScriptedOperator
-from .apps import APPS
 from .oracle import OPENEMR_SCHEMA, Oracle
 from .workload import WORKLOAD_VERSION, Truth, Workload, generate
 
