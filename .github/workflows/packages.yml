@@ -512,7 +512,6 @@ jobs:
         # results; OPENADAPT_GOLDEN_WRITE=1 regenerates them (upload below).
         env:
           OPENADAPT_GOLDEN_OUT: runs/golden
-          OPENADAPT_GOLDEN_WRITE: "1"  # TEMPORARY: first Linux baselines; removed before review
         run: |
           pytest -vv --durations=20 tests/golden_runs \
             --basetemp=runs/ci-goldens --junitxml=runs/goldens-junit.xml
