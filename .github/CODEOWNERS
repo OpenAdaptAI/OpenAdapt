@@ -13,6 +13,7 @@
 /packages/flow/openadapt_flow/qualification.py             @abrichr
 /packages/flow/openadapt_flow/runtime/replayer.py          @abrichr
 /packages/flow/openadapt_flow/runtime/core/              @abrichr
+/packages/flow/openadapt_flow/runtime/replay/            @abrichr
 /packages/flow/.importlinter                               @abrichr
 /packages/flow/openadapt_flow/runtime/resolver.py          @abrichr
 /packages/flow/openadapt_flow/submit_binding.py            @abrichr

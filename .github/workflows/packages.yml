@@ -309,8 +309,8 @@ jobs:
             openadapt_flow/runtime/identity_template.py \
             openadapt_flow/runtime/identity_vlm.py \
             openadapt_flow/runtime/replayer.py \
-            openadapt_flow/runtime/core/__init__.py \
-            openadapt_flow/runtime/core/actions.py \
+            openadapt_flow/runtime/core \
+            openadapt_flow/runtime/replay \
             openadapt_flow/runtime/resolver.py \
             openadapt_flow/submit_binding.py \
             openadapt_flow/runtime/effects/effect.py \
