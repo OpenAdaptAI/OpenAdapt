@@ -1047,10 +1047,19 @@ def _serve_guard(args: argparse.Namespace, serve) -> int:
         print("serve: --guard needs --guard-tasks and --guard-state", file=sys.stderr)
         return 2
     try:
+        approvers = _config_approvers(args)
         guarded = GuardedSave.from_file(
             args.guard,
             Path(args.guard_state).expanduser().resolve(),
             approval=args.guard_approval,
+            # Only the deployment config names who may approve; the agent's
+            # environment (OPENADAPT_APPROVER_ROOT) never counts here.
+            key_dir=Path(approvers.key_dir)
+            if approvers and approvers.key_dir
+            else None,
+            approver_root=approvers.root_public_key if approvers else None,
+            config_only=True,
+            config_head=tuple(approvers.head) if approvers and approvers.head else None,
         )
     except VerifyRunError as exc:
         print(f"serve: {exc}", file=sys.stderr)
@@ -1251,6 +1260,25 @@ def _serve_teach(args: argparse.Namespace, serve) -> int:
     return 0
 
 
+def _config_approvers(args: argparse.Namespace) -> Any:
+    """The deployment config's ``approvers`` section, or ``None``.
+
+    The only source of the approver root on the agent's servers: the agent
+    starts them, so the environment and flags it sets never count.
+    """
+
+    if not getattr(args, "config", None):
+        return None
+    from openadapt_flow.deployment import load_deployment
+
+    try:
+        return load_deployment(args.config, allow_unresolved=True).approvers
+    except (OSError, ValueError) as exc:
+        raise SystemExit(
+            f"REFUSED (deployment_config_unreadable): {args.config}: {exc}"
+        ) from None
+
+
 def _attach_ledger(args: argparse.Namespace, bridge: Any, runs_dir: Path) -> None:
     """Give the bridge a task ledger one level inside its runs folder.
 
@@ -1261,7 +1289,17 @@ def _attach_ledger(args: argparse.Namespace, bridge: Any, runs_dir: Path) -> Non
         return
     from openadapt_flow.agent.ledger import TaskLedger
 
-    bridge.ledger = TaskLedger(Path(runs_dir) / "task-ledger")
+    # The agent runs this server, so nothing it sets (the environment, a
+    # flag) may name the approver root: only the deployment config's pin
+    # counts. Without one, no person-level answer in the ledger counts.
+    approvers = _config_approvers(args)
+    bridge.ledger = TaskLedger(
+        Path(runs_dir) / "task-ledger",
+        key_dir=Path(approvers.key_dir) if approvers and approvers.key_dir else None,
+        approver_root=approvers.root_public_key if approvers else None,
+        config_only=True,
+        config_head=tuple(approvers.head) if approvers and approvers.head else None,
+    )
 
 
 def _serve(serve, bridge, authoring):

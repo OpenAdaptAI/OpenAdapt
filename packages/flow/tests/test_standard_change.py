@@ -972,3 +972,7 @@ def test_a_rollback_by_any_route_holds_the_step(mockmed, keys, tmp_path) -> None
 
     clear_hold(store_root, "triage", "step_001", by="ops-lead")
     assert hold_reason(store_root, "triage", "step_001") is None
+
+
+# Every person in these tests signs with a registered approver key.
+pytestmark = pytest.mark.usefixtures("approver")

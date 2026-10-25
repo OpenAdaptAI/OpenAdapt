@@ -14,6 +14,8 @@ are made up.
 
 from __future__ import annotations
 
+import pytest
+
 from openadapt_flow import compatibility as matrix
 from openadapt_flow.ir import QualifiedEffectRequirement
 from openadapt_flow.qualification import api_folded_step_ids
@@ -101,3 +103,7 @@ def test_folded_steps_are_covered_only_by_an_api_path_save(tmp_path):
 
 def test_the_matrix_says_the_api_step_works_under_a_qualification_admission():
     assert matrix.cell("api_step", "qualified").status == "works"
+
+
+# Every person in these tests signs with a registered approver key.
+pytestmark = pytest.mark.usefixtures("approver")

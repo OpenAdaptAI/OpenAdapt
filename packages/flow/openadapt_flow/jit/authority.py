@@ -90,7 +90,7 @@ ADMITTER_DOMAIN = b"openadapt-flow.jit.admitter/v1\x00"
 #: from the environment so it stays out of shell history.
 KEY_PASSPHRASE_ENV = "OPENADAPT_JIT_KEY_PASSPHRASE"
 
-Role = Literal["policy_signer", "admitter_key", "agent"]
+Role = Literal["policy_signer", "admitter_key", "agent", "approver"]
 _ID = r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$"
 _HEX_KEY = re.compile(r"^[0-9a-f]{64}$")
 
@@ -231,12 +231,16 @@ class PrincipalRegistry(BaseModel):
     admitter_keys: dict[str, str] = Field(default_factory=dict)
     #: agent principal id -> public key the agent signs with.
     agents: dict[str, str] = Field(default_factory=dict)
+    #: person or decision-portal id -> public key that signs a person's answer
+    #: to a save (:mod:`openadapt_flow.approval_mode.human_attestation`). Held
+    #: by Desktop or the decision portal, never by an agent.
+    approvers: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _check(self) -> "PrincipalRegistry":
         seen: dict[str, str] = {}
         keys: dict[str, str] = {}
-        for role in ("policy_signers", "admitter_keys", "agents"):
+        for role in ("policy_signers", "admitter_keys", "agents", "approvers"):
             for pid, pub in getattr(self, role).items():
                 if not re.match(_ID, pid):
                     raise ValueError(f"invalid principal id {pid!r}")
@@ -254,6 +258,12 @@ class PrincipalRegistry(BaseModel):
             if _is_unregistered_agent_name(pid):
                 raise ValueError(
                     f"{pid!r} names an agent or model; only a person signs policy"
+                )
+        for pid in self.approvers:
+            if _is_unregistered_agent_name(pid):
+                raise ValueError(
+                    f"{pid!r} names an agent or model; only a person's Desktop or "
+                    "decision portal signs an answer"
                 )
         return self
 
@@ -277,6 +287,7 @@ class PrincipalRegistry(BaseModel):
             ("policy_signer", self.policy_signers),
             ("admitter_key", self.admitter_keys),
             ("agent", self.agents),
+            ("approver", self.approvers),
         )
         for role, entries in roles:
             for pid, pub in entries.items():
@@ -290,11 +301,17 @@ def register_principal(
 ) -> PrincipalRegistry:
     """Add a key to the registry. A person does this (``jit register``)."""
 
+    if role == "approver":
+        raise AuthorityError(
+            "approvers are on the signed approver roster: an approver adds "
+            "one with openadapt-flow jit approver add"
+        )
     registry = PrincipalRegistry.load(key_dir)
     field_name = {
         "policy_signer": "policy_signers",
         "admitter_key": "admitter_keys",
         "agent": "agents",
+        "approver": "approvers",
     }.get(role)
     if field_name is None:
         raise AuthorityError(f"unknown role {role!r}")
@@ -638,6 +655,10 @@ def principal_from_key(
     if role == "policy_signer":
         raise AuthorityError(
             f"{pid!r} signs admission policy; a person admits at a terminal"
+        )
+    if role == "approver":
+        raise AuthorityError(
+            f"{pid!r} signs a person's answers to saves; it can't admit a program"
         )
     if role == "admitter_key":
         if policy is not None:
