@@ -96,8 +96,17 @@ class Imports:
 
 def names_in(nodes: list[ast.AST]) -> set[str]:
     found: set[str] = set()
+    # Docstrings mention names in prose; they are not references.
+    docstrings = {
+        id(sub.value)
+        for node in nodes
+        for sub in ast.walk(node)
+        if isinstance(sub, ast.Expr) and isinstance(sub.value, ast.Constant)
+    }
     for node in nodes:
         for sub in ast.walk(node):
+            if id(sub) in docstrings:
+                continue
             if isinstance(sub, ast.Name):
                 found.add(sub.id)
             elif isinstance(sub, ast.Attribute):
@@ -213,6 +222,13 @@ def stub(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     copy = ast.parse(ast.unparse(node)).body[0]
     assert isinstance(copy, (ast.FunctionDef, ast.AsyncFunctionDef))
     copy.body = [ast.Expr(ast.Constant(Ellipsis))]
+    # Only the decorators that change the signature belong on a stub; others
+    # (timing spans, caches) wrap behavior the stub does not have.
+    copy.decorator_list = [
+        d
+        for d in copy.decorator_list
+        if isinstance(d, ast.Name) and d.id in ("staticmethod", "classmethod", "property")
+    ]
     return ast.unparse(copy)
 
 
@@ -338,7 +354,10 @@ def extract_module_defs(args: argparse.Namespace) -> None:
     runtime, missing = import_lines(names - provided, imports, {})
     if missing:
         sys.exit(f"these definitions use other module-level names; move them too: {missing}")
-    body = "\n\n".join("".join(lines[a:b]).rstrip("\n") for a, b in (span(lines, n) for n in nodes))
+    # Adjacent definitions (only blank or comment lines between them) move as
+    # one block, so comments that cover several constants stay with them.
+    spans = merge_adjacent(lines, sorted(span(lines, n) for n in nodes))
+    body = "\n\n\n".join("".join(lines[a:b]).strip("\n") for a, b in spans)
     target = Path(args.target)
     target.parent.mkdir(parents=True, exist_ok=True)
     init = target.parent / "__init__.py"
@@ -354,7 +373,7 @@ def extract_module_defs(args: argparse.Namespace) -> None:
         + "\n",
         encoding="utf-8",
     )
-    for a, b in sorted((span(lines, n) for n in nodes), reverse=True):
+    for a, b in reversed(spans):
         del lines[a:b]
     out = "".join(lines)
     exported = sorted(provided)
@@ -366,6 +385,18 @@ def extract_module_defs(args: argparse.Namespace) -> None:
     )
     source_path.write_text(out, encoding="utf-8")
     print(f"moved {len(exported)} names into {target}")
+
+
+def merge_adjacent(lines: list[str], spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    merged: list[tuple[int, int]] = []
+    for a, b in spans:
+        if merged:
+            gap = lines[merged[-1][1] : a]
+            if all(not g.strip() or g.lstrip().startswith("#") for g in gap):
+                merged[-1] = (merged[-1][0], b)
+                continue
+        merged.append((a, b))
+    return merged
 
 
 def _defined_names(node: ast.stmt) -> list[str]:

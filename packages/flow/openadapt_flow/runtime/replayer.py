@@ -71,7 +71,6 @@ from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.backend import (
     ActionDeliveryUncertain,
     Backend,
-    BrowserPresentationGeometryBackend,
     FocusedElementActuationLeaseBackend,
     FreshActuationReacquisitionBackend,
     FreshActuationRequired,
@@ -157,7 +156,6 @@ from openadapt_flow.qualification_faults import (
 )
 from openadapt_flow.run_gate import is_consequential
 from openadapt_flow.runtime import heal as heal_mod
-from openadapt_flow.runtime import healing as healing_mod
 from openadapt_flow.runtime import identity as identity_mod
 from openadapt_flow.runtime import identity_looks as looks_mod
 from openadapt_flow.runtime.authorization import (
@@ -206,6 +204,8 @@ from openadapt_flow.runtime.program_predicates import (
     predicate_uses_frame,
     program_predicate_evaluator_contract_sha256,
 )
+from openadapt_flow.runtime.replay.evidence import AssetsHealingAndEvidence
+from openadapt_flow.runtime.replay.surfaces_overlay import SurfacesAndOverlay
 from openadapt_flow.runtime.resolver import (
     OCR_MIN_RATIO,
     is_below_ocr,
@@ -736,7 +736,7 @@ class _WebFormApprovalView:
     ref: Any
 
 
-class Replayer(RenderScaleAndLayoutDrift):
+class Replayer(RenderScaleAndLayoutDrift, SurfacesAndOverlay, AssetsHealingAndEvidence):
     """Replays a Workflow against a Backend using injected vision.
 
     Args:
@@ -3042,128 +3042,6 @@ class Replayer(RenderScaleAndLayoutDrift):
             transition_predicate_vision=self.vision,
         )
 
-    def _begin_control_overlay(self, profile: Optional[str]) -> None:
-        """Start an optional presentation rail without affecting execution."""
-
-        self.control_overlay_error = None
-        self._control_overlay_disabled = False
-        self._control_overlay_last_observation_png = None
-        if self.control_overlay is None:
-            return
-        try:
-            if profile is None:
-                raise ValueError("run report has no execution profile")
-            self.control_overlay.begin(profile=profile)
-            # Prime browser-only presentation metadata at the run boundary,
-            # never between final target revalidation and one-shot delivery.
-            # Subsequent reads are cache-only and fail closed if viewport
-            # dimensions changed.
-            if isinstance(self.backend, BrowserPresentationGeometryBackend):
-                self.backend.browser_presentation_viewport()
-        except Exception as exc:
-            self.control_overlay_error = type(exc).__name__
-            self._control_overlay_disabled = True
-
-    def _emit_control_overlay_phase(
-        self,
-        phase: str,
-        *,
-        current_step: Optional[int] = None,
-        total_steps: Optional[int] = None,
-        target_tracking: Optional[Any] = None,
-        observation_png: Optional[bytes] = None,
-    ) -> None:
-        if self.control_overlay is None or self._control_overlay_disabled:
-            return
-        try:
-            self.control_overlay.emit_phase(
-                phase,
-                current_step=current_step,
-                total_steps=total_steps,
-                target_tracking=target_tracking,
-                observation_png=observation_png,
-            )
-            if observation_png is not None:
-                self._control_overlay_last_observation_png = observation_png
-        except Exception as exc:
-            self.control_overlay_error = type(exc).__name__
-            self._control_overlay_disabled = True
-
-    def _control_overlay_browser_target(
-        self,
-        step: Step,
-        resolution: Optional[Resolution],
-        matched_region: Optional[Region],
-        observation_png: bytes,
-    ) -> Optional[Any]:
-        """Build presentation-only geometry from the final resolved target.
-
-        Only a backend that explicitly advertises top-level browser CSS
-        geometry can produce this V2 target.  Missing/invalid presentation
-        metadata omits the rectangle without disabling the status rail or
-        influencing execution.
-        """
-
-        if (
-            self.control_overlay is None
-            or self._control_overlay_disabled
-            or resolution is None
-            or not isinstance(self.backend, BrowserPresentationGeometryBackend)
-        ):
-            return None
-        viewport = self.backend.browser_presentation_viewport()
-        if viewport is None:
-            return None
-        # Visual ladder regions are screenshot-pixel coordinates.  The
-        # reference browser runner records CSS-scale screenshots (DPR 1); for
-        # any other DPR, omit visual tracking until an exact pixel-to-CSS
-        # projection is retained.  Structural handle regions are already CSS
-        # viewport coordinates and remain exact at any DPR.
-        if resolution.structural_handle is None and viewport[2] != 1.0:
-            return None
-        region = (
-            resolution.structural_handle.region
-            if resolution.structural_handle is not None
-            and resolution.structural_handle.region is not None
-            else matched_region
-        )
-        if region is None:
-            return None
-        action_kind = {
-            ActionKind.CLICK: "click",
-            ActionKind.DOUBLE_CLICK: "double_click",
-            ActionKind.RIGHT_CLICK: "right_click",
-            ActionKind.DRAG: "drag",
-            ActionKind.TYPE: "type",
-            ActionKind.SELECT_OPTION: "type",
-            ActionKind.SCROLL: "scroll",
-        }.get(step.action)
-        if action_kind is None:
-            return None
-        try:
-            return self.control_overlay.browser_target_tracking(
-                observation_png=observation_png,
-                region_css_px=region,
-                viewport=viewport,
-                action_kind=action_kind,
-            )
-        except Exception:
-            return None
-
-    def _emit_control_overlay_terminal(self, outcome: Optional[str]) -> None:
-        if self.control_overlay is None or self._control_overlay_disabled:
-            return
-        try:
-            if outcome is None:
-                raise ValueError("run report has no exact execution outcome")
-            self.control_overlay.emit_terminal(
-                outcome,
-                observation_png=self._control_overlay_last_observation_png,
-            )
-        except Exception as exc:
-            self.control_overlay_error = type(exc).__name__
-            self._control_overlay_disabled = True
-
     def _finalize_report(
         self,
         report: RunReport,
@@ -3681,16 +3559,6 @@ class Replayer(RenderScaleAndLayoutDrift):
                 report.transaction_outcome,
                 run_id=self._run_id,
             )
-
-    @staticmethod
-    def _control_overlay_progress(
-        workflow: Workflow,
-        step_index: int,
-        graph_ctx: Optional["_GraphStepContext"],
-    ) -> tuple[Optional[int], Optional[int]]:
-        if workflow.program is not None or graph_ctx is not None:
-            return None, None
-        return step_index + 1, len(workflow.steps)
 
     def _profile_runtime_refusal(self, workflow: Workflow) -> Optional[str]:
         """Recheck load-bearing profile invariants at the actuation boundary."""
@@ -7256,124 +7124,6 @@ class Replayer(RenderScaleAndLayoutDrift):
 
     # -- multi-surface routing (docs/MULTI_SURFACE.md) -----------------------
 
-    def _begin_surfaces(
-        self,
-        workflow: Workflow,
-        *,
-        resume: bool,
-        resume_from: Optional[int] = None,
-        resume_program: bool = False,
-        bundle_dir: Optional[Path] = None,
-    ) -> Optional[str]:
-        """Bind the workflow's surfaces for this run, or say why not.
-
-        A single-surface workflow binds nothing and runs exactly as before.
-        A surface is a name plus an identity check, never a live handle, so a
-        linear resume re-binds every surface by identity from the last
-        checkpoint's surface observations (docs/MULTI_SURFACE.md).
-        """
-
-        self._surface_router = None
-        if not workflow.surfaces:
-            if self.surface_backends:
-                return (
-                    "surface_backends were supplied, but this workflow declares "
-                    "no surfaces; refusing to run"
-                )
-            return None
-        # Governed, qualified, durable, resumed, and managed (Cloud) runs are
-        # admitted: the governed authorization binds the sealed bundle, whose
-        # workflow.json carries the declared surface map; every step result
-        # records the surface it ran on; the outcome classifier requires that
-        # record to match the contract; a qualification case observes each
-        # surface against its own qualified boundary; and checkpoints carry
-        # each surface's last-seen identity observation, never a handle.
-        if resume_program:
-            return (
-                "a multi-surface workflow program cannot be resumed yet: program "
-                "checkpoints do not carry surface observations; refusing to run"
-            )
-        if self._managed_dispatch_snapshot is not None:
-            # An unattended run must not start when a surface it will switch
-            # to has no target: it would stop half-way after earlier writes.
-            unbound = [
-                spec.id
-                for spec in workflow.surfaces[1:]
-                if not spec.is_page and spec.id not in (self.surface_backends or {})
-            ]
-            if unbound:
-                return (
-                    "a managed dispatch of a multi-surface workflow needs a "
-                    "backend for every backend surface in the deployment "
-                    "profile's surfaces: map; unbound: "
-                    + ", ".join(unbound)
-                    + "; refusing to run"
-                )
-        resume_active: Optional[str] = None
-        resume_observations: dict[str, Any] = {}
-        if resume and resume_from:
-            last = None
-            for checkpoint in self._durable_linear_snapshot:
-                if getattr(checkpoint, "step_index", None) == resume_from - 1:
-                    last = checkpoint
-            if last is None or getattr(last, "active_surface", None) is None:
-                return (
-                    "the checkpoint this multi-surface run resumes from carries "
-                    "no surface observation, so its surfaces cannot be re-bound "
-                    "by identity; refusing to run"
-                )
-            resume_active = last.active_surface
-            resume_observations = dict(last.surface_observations)
-        authorization = self.governed_authorization
-        if (
-            authorization is not None
-            and authorization.qualification_case_id is not None
-        ):
-            project = workflow.qualification
-            if project is None:
-                return (
-                    "a multi-surface qualification case needs the bundle's "
-                    "qualification project; refusing to run"
-                )
-            for spec in workflow.surfaces[1:]:
-                boundary = project.surface_environments.get(spec.id)
-                if boundary is None:
-                    return (
-                        f"the qualification project has no environment boundary "
-                        f"for surface '{spec.id}'; every surface of a "
-                        "multi-surface workflow must be qualified; refusing to run"
-                    )
-                if boundary.target_kind != spec.kind:
-                    return (
-                        f"the qualification boundary for surface '{spec.id}' is "
-                        f"{boundary.target_kind}, but the surface is declared "
-                        f"{spec.kind}; refusing to run"
-                    )
-            extra = sorted(
-                set(project.surface_environments)
-                - {spec.id for spec in workflow.surfaces[1:]}
-            )
-            if extra:
-                return (
-                    "the qualification project bounds surfaces the workflow "
-                    "does not declare: " + ", ".join(extra) + "; refusing to run"
-                )
-        self._surface_environment_observations = {}
-        try:
-            self._surface_identity_context = (workflow, bundle_dir)
-            self._surface_router = SurfaceRouter(
-                workflow,
-                self.backend,
-                self.surface_backends,
-                poll_interval_s=self.poll_interval_s,
-                identity_check=self._surface_identity_check,
-                resume_active=resume_active,
-                observations=resume_observations,
-            )
-        except ValueError as exc:
-            return f"{exc}; refusing to run"
-        return None
-
     @timed_span("identity")
     def _surface_identity_check(self, backend: Any, step: Step) -> Optional[bool]:
         """Vision-first identity check of one live target for ``step``.
@@ -7412,47 +7162,6 @@ class Replayer(RenderScaleAndLayoutDrift):
                 if self.vision.find_template(png, template) is None:
                     return False
         return True if evidence else None
-
-    def _end_surfaces(self) -> None:
-        """Restore the primary backend after a multi-surface run."""
-
-        router = self._surface_router
-        if router is None:
-            return
-        self._surface_router = None
-        if self.backend is not router.primary_backend:
-            self._activate_surface_backend(router.primary_backend)
-        # Drop the qualification input-edge guard from every other surface
-        # backend; the primary's guard follows the single-surface lifecycle.
-        for backend in router.backends.values():
-            if backend is router.primary_backend:
-                continue
-            clear_guard = getattr(backend, "set_qualification_input_guard", None)
-            if callable(clear_guard):
-                try:
-                    clear_guard(None)
-                except Exception:
-                    pass
-
-    def _activate_surface_backend(self, backend: Backend) -> None:
-        """Make ``backend`` current and drop every cache bound to the old one.
-
-        Nothing observed on one surface may be reused on another: the settle
-        seed, the on-screen read-back verifier, the last click point, and any
-        armed pointer/keyboard lease all belong to the surface they came from.
-        """
-
-        self._cancel_guarded_coordinate()
-        self._cancel_guarded_keyboard()
-        self.backend = backend
-        self._settle_seed = None
-        self._actuation_epoch += 1
-        # The on-screen read-back verifier is bound to one backend; drop it so
-        # the next step builds one for the new surface.
-        vars(self).pop("_readback_verifier", None)
-        self._last_click_point = None
-        self._last_click_region = None
-        self._control_overlay_last_observation_png = None
 
     def _bind_surface_qualification_environment(
         self, workflow: Workflow, surface_id: str
@@ -7506,28 +7215,6 @@ class Replayer(RenderScaleAndLayoutDrift):
                 )
             )
         return refusal
-
-    def _active_surface_binding(
-        self, workflow: Workflow
-    ) -> tuple[Optional[ExecutionTargetKind], Optional[str]]:
-        """(kind, execution mode) of the surface the run is on right now.
-
-        Single-surface runs use the bundle-level binding, unchanged. In a
-        multi-surface run the remote-surface safety rules follow the ACTIVE
-        surface, so an RDP segment of a web-first bundle keeps them.
-        """
-
-        router = self._surface_router
-        if router is None:
-            return workflow.surface, workflow.execution_mode
-        from openadapt_flow.surface_selection import execution_mode_for_surface
-
-        kind = cast(ExecutionTargetKind, router.active_kind())
-        return kind, execution_mode_for_surface(kind)
-
-    def _active_surface_is_external_remote(self, workflow: Workflow) -> bool:
-        kind, mode = self._active_surface_binding(workflow)
-        return kind in ("rdp", "citrix") and mode == "external"
 
     @staticmethod
     def _surface_refusal_result(step: Step, error: str) -> StepResult:
@@ -17889,91 +17576,12 @@ class Replayer(RenderScaleAndLayoutDrift):
             return None
         return self._asset_bytes(bundle_dir, rel)
 
-    def _asset_bytes(
-        self,
-        bundle_dir: Path,
-        rel: str,
-        *,
-        workflow: Optional[Workflow] = None,
-    ) -> Optional[bytes]:
-        """Return the verified run snapshot for governed asset consumers."""
-        if not rel:
-            # No crop: a record-selecting click rebound to another record
-            # (runtime.target_param) carries none.
-            return None
-        if self.governed_authorization is not None:
-            data = self._governed_asset_snapshot.get(rel)
-            expected = self._governed_asset_hashes.get(rel)
-            if self._governed_plaintext_assets and expected is not None:
-                path = Path(bundle_dir) / rel
-                try:
-                    current = path.read_bytes()
-                except OSError:
-                    current = b""
-                if hashlib.sha256(current).hexdigest() != expected:
-                    self._governed_asset_mutation = (
-                        f"governed sealed asset {rel!r} changed after admission; "
-                        "refusing to act; run aborted"
-                    )
-            return data
-        if workflow is not None and workflow.encrypted:
-            decrypted = workflow.decrypted_template(rel)
-            if decrypted is not None:
-                return decrypted
-        path = Path(bundle_dir) / rel
-        return path.read_bytes() if path.is_file() else None
-
     def _raise_on_governed_asset_mutation(self) -> None:
         """Make predicate-only mutation a non-catchable program safety halt."""
         if self._governed_asset_mutation is not None:
             raise _ProgramHalt("halt", self._governed_asset_mutation, safety=True)
 
     # -- healing ---------------------------------------------------------------
-
-    def _heal_step(
-        self,
-        step: Step,
-        resolution: Resolution,
-        matched_region: Region,
-        frame_png: bytes,
-        workflow: Workflow,
-        run_dir: Path,
-        new_crops: dict[str, bytes],
-    ):
-        """Build, govern, and persist a repair candidate.
-
-        A heal is a governed PATCH, not a silent bundle swap: the raw event is
-        wrapped in a reviewable :class:`~openadapt_flow.runtime.healing.HealPatch`
-        and run through the regression gate (identity + effect + risk) before
-        it may touch the workflow. A patch that would weaken the step's
-        identity band -- the reviewed context-drop bug -- is QUARANTINED
-        (persisted under ``run_dir/heals/<step_id>/patch.json`` for review)
-        and NOT applied; the caller halts the run. A gate-passing local repair
-        can update the in-memory workflow. A gate-passing repair discovered
-        under exact authorization remains a promotable candidate, because the
-        running program cannot change after admission.
-        """
-        event, crop_png = heal_mod.build_heal_event(
-            step, resolution, matched_region, frame_png, self.vision
-        )
-        outcome = healing_mod.govern_heal(step, event, run_dir=run_dir)
-        if outcome.promoted:
-            if self.governed_authorization is None:
-                heal_mod.apply_heal(workflow, event)
-                source = self._execution_workflow_source
-                if source is not None and source is not workflow:
-                    heal_mod.apply_heal(source, event)
-                self._accept_healed_anchor_in_workflow_snapshot(workflow, event)
-                new_crops[step.id] = crop_png
-            else:
-                # Exact authorization binds the admitted workflow semantics.
-                # Keep a gate-passing repair as a reviewable candidate for a
-                # later qualified bundle. Never change the program that is
-                # currently executing under that authorization.
-                outcome.patch.status = "promotable"
-                healing_mod.persist_patch(outcome.patch, run_dir)
-            heal_mod.persist_heal(event, crop_png, frame_png, run_dir)
-        return outcome
 
     def _accept_healed_anchor_in_workflow_snapshot(
         self,
@@ -18016,24 +17624,6 @@ class Replayer(RenderScaleAndLayoutDrift):
                     admitted_state.step.anchor = event.new_anchor.model_copy(deep=True)
 
     # -- io ----------------------------------------------------------------------
-
-    @staticmethod
-    def _new_step_evidence_key(run_dir: Path, step_id: str) -> str:
-        """Allocate one stable, collision-free file key for an action occurrence."""
-
-        safe = re.sub(r"[^A-Za-z0-9._-]+", "_", step_id).strip("._-") or "step"
-        if safe != step_id:
-            safe = f"{safe}_{hashlib.sha256(step_id.encode()).hexdigest()[:8]}"
-        steps_dir = Path(run_dir) / "steps"
-        candidate = safe
-        occurrence = 1
-        while any(
-            _sealed.exists(steps_dir / f"{candidate}_{suffix}.png")
-            for suffix in ("before", "after", "attended-before", "attended-after")
-        ):
-            occurrence += 1
-            candidate = f"{safe}__{occurrence:04d}"
-        return candidate
 
     @staticmethod
     @timed_span("artifact_write")
