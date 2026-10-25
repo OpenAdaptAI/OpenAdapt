@@ -74,13 +74,17 @@ document.getElementById('save').onclick = () => {{
 
 def _worklist(query: dict[str, list[str]]) -> str:
     order = query.get("order", ["ab"])[0]
+    # ``noid`` keeps each row's id in an attribute that is not a record id,
+    # so only the visible text can tell the rows apart.
+    attr = "data-chart" if "noid" in query else "data-id"
     rows = {
         "a": ("1001", "John Smith Follow-up Dr Lee"),
         "b": ("1002", "John Smith Follow-up Dr Lee"),
         "c": ("1003", "Maria Garcia Intake Dr Lee"),
+        "d": ("1004", "John Smith Follow-up Dr Lee"),
     }
     items = "".join(
-        f'<li data-id="{rows[k][0]}" onclick="openRow(this)">{rows[k][1]}</li>'
+        f'<li {attr}="{rows[k][0]}" onclick="openRow(this)">{rows[k][1]}</li>'
         for k in order + "c"
     )
     return f"""<!doctype html><html><head><title>Worklist</title>
@@ -94,7 +98,7 @@ def _worklist(query: dict[str, list[str]]) -> str:
 <script>
 let open = null;
 function openRow(li) {{
-  open = li.dataset.id;
+  open = li.dataset.id || li.dataset.chart;
   document.getElementById('status').textContent = 'Opened chart ' + open;
   document.getElementById('chart').style.display = 'block';
 }}
@@ -168,9 +172,16 @@ def _recorder(page, root: Path, url: str) -> Recorder:
     )
 
 
-def _replay(browser, url, bundle_dir: Path, run_dir: Path, params=None):
+class _CannotCountBackend(PlaywrightBackend):
+    """A browser backend without the row census, like the native and remote
+    backends: it reads structured text but cannot count look-alike rows."""
+
+    identity_candidates_at = None
+
+
+def _replay(browser, url, bundle_dir: Path, run_dir: Path, params=None, backend=None):
     page = _page(browser, url)
-    report = Replayer(PlaywrightBackend(page), poll_interval_s=0.05).run(
+    report = Replayer((backend or PlaywrightBackend)(page), poll_interval_s=0.05).run(
         Workflow.load(bundle_dir),
         params=params or {},
         bundle_dir=bundle_dir,
@@ -270,17 +281,18 @@ def test_an_unrecorded_confirm_dialog_never_ends_in_success(
         page.close()
 
 
-@pytest.fixture(scope="module")
-def worklist_bundle(app_url, browser, tmp_path_factory) -> Path:
-    root = tmp_path_factory.mktemp("worklist")
-    url = app_url + "/worklist.html"
+def _record_worklist(app_url, browser, root: Path, query: str, chart: str) -> Path:
+    url = app_url + "/worklist.html" + query
     page = _page(browser, url)
     try:
         recorder = _recorder(page, root, url)
-        recorder.click(*_center(page, "li[data-id='1001']"))
-        assert page.locator("#status").inner_text() == "Opened chart 1001"
+        ids = page.locator("li").evaluate_all(
+            "els => els.map(e => e.dataset.id || e.dataset.chart)"
+        )
+        recorder.click(*_center(page, f"li >> nth={ids.index(chart)}"))
+        assert page.locator("#status").inner_text() == f"Opened chart {chart}"
         recorder.click(*_center(page, "#sign"))
-        assert page.locator("#signed").inner_text() == "Signed chart 1001"
+        assert page.locator("#signed").inner_text() == f"Signed chart {chart}"
         recording = recorder.finish()
     finally:
         page.close()
@@ -288,13 +300,20 @@ def worklist_bundle(app_url, browser, tmp_path_factory) -> Path:
     return root / "bundle"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "REALISM_AUDIT identity-8: identity is verified per row, never for "
-        "uniqueness, so a swapped homonym row is opened and signed"
-    ),
-)
+@pytest.fixture(scope="module")
+def worklist_bundle(app_url, browser, tmp_path_factory) -> Path:
+    return _record_worklist(
+        app_url, browser, tmp_path_factory.mktemp("worklist"), "", "1001"
+    )
+
+
+@pytest.fixture(scope="module")
+def unkeyed_worklist_bundle(app_url, browser, tmp_path_factory) -> Path:
+    return _record_worklist(
+        app_url, browser, tmp_path_factory.mktemp("unkeyed"), "?noid=1", "1001"
+    )
+
+
 def test_identical_rows_that_swap_order_never_sign_the_other_chart(
     worklist_bundle, app_url, browser, tmp_path
 ) -> None:
@@ -314,5 +333,120 @@ def test_identical_rows_that_swap_order_never_sign_the_other_chart(
     try:
         status = page.locator("#signed").inner_text()
         assert not (report.success and status == "Signed chart 1002"), _summary(report)
+    finally:
+        page.close()
+
+
+def test_identical_rows_in_recorded_order_still_sign_the_recorded_chart(
+    worklist_bundle, app_url, browser, tmp_path
+) -> None:
+    """Control: homonym rows in the recorded order. No false stop."""
+
+    report, page = _replay(
+        browser, app_url + "/worklist.html", worklist_bundle, tmp_path / "run"
+    )
+    try:
+        assert report.success, _summary(report)
+        assert page.locator("#signed").inner_text() == "Signed chart 1001"
+    finally:
+        page.close()
+
+
+def test_swapped_identical_rows_with_record_ids_sign_the_recorded_chart(
+    worklist_bundle, app_url, browser, tmp_path
+) -> None:
+    """The rows carry ``data-id``. Replay picks the row by id, not position."""
+
+    report, page = _replay(
+        browser, app_url + "/worklist.html?order=ba", worklist_bundle, tmp_path / "run"
+    )
+    try:
+        assert report.success, _summary(report)
+        assert page.locator("#signed").inner_text() == "Signed chart 1001"
+        assert report.results[0].identity.candidate_count == 2
+    finally:
+        page.close()
+
+
+@pytest.mark.parametrize("order", ["ab", "ba", "bad"])
+def test_identical_rows_without_record_ids_halt_before_opening_a_chart(
+    unkeyed_worklist_bundle, app_url, browser, tmp_path, order
+) -> None:
+    """No record id tells the rows apart: the run stops before the first click."""
+
+    report, page = _replay(
+        browser,
+        app_url + f"/worklist.html?noid=1&order={order}",
+        unkeyed_worklist_bundle,
+        tmp_path / "run",
+    )
+    try:
+        assert not report.success, _summary(report)
+        first = report.results[0]
+        assert not first.ok and first.safety_halt, _summary(report)
+        assert first.identity.ambiguity_halt == "identical_candidates"
+        assert first.identity.candidate_count == len(order)
+        assert page.locator("#status").inner_text() == "No chart open"
+        assert page.locator("#signed").inner_text() == "Nothing signed"
+    finally:
+        page.close()
+
+
+def test_a_unique_row_among_homonyms_replays_after_a_swap(
+    app_url, browser, tmp_path
+) -> None:
+    """The recorded row's text is unique on the page: no false stop."""
+
+    bundle = _record_worklist(app_url, browser, tmp_path / "rec", "?noid=1", "1003")
+    report, page = _replay(
+        browser, app_url + "/worklist.html?noid=1&order=ba", bundle, tmp_path / "run"
+    )
+    try:
+        assert report.success, _summary(report)
+        assert page.locator("#signed").inner_text() == "Signed chart 1003"
+        assert report.results[0].identity.candidate_count == 1
+    finally:
+        page.close()
+
+
+def test_a_backend_that_cannot_count_rows_halts_before_the_sign(
+    worklist_bundle, app_url, browser, tmp_path
+) -> None:
+    """No census on this backend: opening a chart that a sign follows halts."""
+
+    report, page = _replay(
+        browser,
+        app_url + "/worklist.html?order=ba",
+        worklist_bundle,
+        tmp_path / "run",
+        backend=_CannotCountBackend,
+    )
+    try:
+        assert not report.success, _summary(report)
+        first = report.results[0]
+        assert not first.ok and first.safety_halt, _summary(report)
+        assert first.identity.ambiguity_halt == "identity_uncounted"
+        assert page.locator("#status").inner_text() == "No chart open"
+        assert page.locator("#signed").inner_text() == "Nothing signed"
+    finally:
+        page.close()
+
+
+def test_a_backend_that_cannot_count_rows_still_runs_a_plain_form(
+    note_bundle, app_url, browser, tmp_path
+) -> None:
+    """The note form has no rows: the same backend saves it as before."""
+
+    report, page = _replay(
+        browser,
+        app_url + "/form.html",
+        note_bundle,
+        tmp_path / "run",
+        params={"patient": "Ada"},
+        backend=_CannotCountBackend,
+    )
+    try:
+        assert report.success, _summary(report)
+        assert page.locator("#status").inner_text() == "Saved Ada"
     finally:
         page.close()

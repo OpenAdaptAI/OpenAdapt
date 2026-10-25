@@ -398,7 +398,8 @@ class Win32WindowClient:
         # and the pid set (UIPI elevation guard).
         self._activation_hints: dict[int, int] = {}
         self._last_match_pids: frozenset[int] = frozenset()
-        self._last_query: Optional[tuple[str, Optional[str]]] = None
+        # (owner, title, window_id): the lookup to repeat before every input.
+        self._last_query: Optional[tuple[str, Optional[str], Optional[int]]] = None
         self._resolved_target: Optional[tuple[int, int]] = None
 
     # -- DPI ------------------------------------------------------------------
@@ -425,6 +426,24 @@ class Win32WindowClient:
     def find_windows(self, owner: str, title: Optional[str]) -> list[WindowInfo]:
         """Every exact owner(+title)(+class) match among real top-level windows.
 
+        See :meth:`_find`.
+        """
+        return self._find(owner, title, None)
+
+    def find_pinned_window(self, owner: str, window_id: int) -> list[WindowInfo]:
+        """The one pinned HWND, whatever its title now is.
+
+        The backend pins the window its owner/title selectors matched first.
+        Looking it up by HWND keeps the input target unique when the owner
+        has other windows (RemoteApp seamless windows, browser windows).
+        """
+        return self._find(owner, None, window_id)
+
+    def _find(
+        self, owner: str, title: Optional[str], window_id: Optional[int]
+    ) -> list[WindowInfo]:
+        """Every exact owner(+title)(+class)(+HWND) match.
+
         ``owner`` matches the owning process executable basename (capture
         0.6.0 convention), exact case-insensitive, ``.exe`` optional. Cloaked
         (DWM ghost) windows are skipped so a suspended UWP duplicate can never
@@ -433,7 +452,7 @@ class Win32WindowClient:
         backend's on-screen/foreground proofs still gate every input.
         """
         self._require_dpi()
-        self._last_query = (owner, title)
+        self._last_query = (owner, title, window_id)
         self._resolved_target = None
         title_l = title.casefold() if title is not None else None
         class_l = (
@@ -444,12 +463,14 @@ class Win32WindowClient:
         matches: list[WindowInfo] = []
         hints: dict[int, int] = {}
         for hwnd in self._api.enum_top_level_windows():
+            if window_id is not None and int(hwnd) != window_id:
+                continue
             if not self._api.is_window_visible(hwnd):
                 continue
             if self._api.is_cloaked(hwnd):
                 continue
             win_title = self._api.window_title(hwnd)
-            if not win_title:
+            if not win_title and window_id is None:
                 # Unnamed tool/host windows (capture 0.6.0 skips these too).
                 continue
             if title_l is not None and win_title.casefold() != title_l:
@@ -531,8 +552,8 @@ class Win32WindowClient:
                 "no unique window target has been resolved; call find_windows "
                 "and require exactly one match before input"
             )
-        owner, title = query
-        matches = self.find_windows(owner, title)
+        owner, title, window_id = query
+        matches = self._find(owner, title, window_id)
         if len(matches) != 1:
             raise InputDeliveryError(
                 "window target is no longer unique "

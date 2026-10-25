@@ -1923,6 +1923,7 @@ def _compile_recording(
     pixel_verify_enabled: bool = False,
     bind_effect_params: bool = False,
     drop_redundant_keys: bool = False,
+    phi_free_identity: bool = True,
 ) -> Workflow:
     """Compile a recording directory into a workflow bundle.
 
@@ -2274,6 +2275,15 @@ def _compile_recording(
             # OCR context band; replay prefers it (no OCR glyph ambiguity) and
             # falls back to the band on pixel-only substrates.
             structured_identity = event.get("structured_identity") or None
+            # The row's stable record id (a DOM data-* id, the row link's
+            # path), captured with the structured identity. Hashed into the
+            # identity template so replay acts only on the row with this id.
+            record_key = (
+                event.get("record_key") or None if structured_identity else None
+            )
+            structured_row = event.get("structured_row")
+            if not structured_identity or not isinstance(structured_row, bool):
+                structured_row = None
             # Structural locator (DOM selector / role+name, or UIA identifiers)
             # of the clicked element, captured by the recorder when the
             # recording backend exposed it (StructuralActionBackend). Drives the
@@ -2381,6 +2391,8 @@ def _compile_recording(
                 ocr_text=anchor_ocr_text,
                 context_text=context_text,
                 structured_identity=structured_identity,
+                record_key=record_key,
+                structured_row=structured_row,
                 structural=structural,
                 landmarks=anchor_landmarks,
                 identifier_crop=identifier_crop_rel,
@@ -3471,8 +3483,11 @@ def _compile_recording(
     # (openadapt_flow.runtime.identity_template). Runs LAST so param-hygiene
     # lint and optional model annotation still see the plaintext. Backward
     # compatible: bundles compiled before this carry the plaintext fields and
-    # replay unchanged.
-    _phi_free_identity(workflow)
+    # replay unchanged. Multi-trace induction compiles with this off and
+    # hashes the bands itself once the loop's row columns are known
+    # (compiler.induction.phi_free_program_identity).
+    if phi_free_identity:
+        _phi_free_identity(workflow)
 
     # PHI governance manifest (audit REM-1): classify the bundle so an operator
     # inventory and the pre-commit/CI guard can act on it.
@@ -3590,9 +3605,13 @@ def _phi_free_identity(workflow: Workflow) -> None:
             structured_identity=anchor.structured_identity,
             param_examples=workflow.params,
             salt_hex=salt,
+            record_key=anchor.record_key,
+            structured_row=anchor.structured_row,
         )
         if template is None:
             continue
         anchor.identity_template = template
         anchor.context_text = None
         anchor.structured_identity = None
+        anchor.record_key = None
+        anchor.structured_row = None

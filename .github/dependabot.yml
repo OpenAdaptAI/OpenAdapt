@@ -58,6 +58,10 @@ updates:
       # docs/RELEASE_CANDIDATE_INSTALLERS.md describes. Bump them by hand.
       - dependency-name: "pyinstaller"
       - dependency-name: "playwright"
+      # The macOS Intel pin must stay on 1.20.1, the last release with an Intel
+      # wheel; dependabot's bump to 1.31.0 broke the Intel installer build.
+      # Bump onnxruntime by hand, and keep the Intel pin where it is.
+      - dependency-name: "onnxruntime"
   - package-ecosystem: "npm"
     directory: "/packages/desktop"
     schedule:

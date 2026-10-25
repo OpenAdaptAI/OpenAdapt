@@ -113,6 +113,7 @@ from openadapt_flow.ir import (
     LoopIterationBinding,
     LoopSpec,
     ObservedSurfaceEnvironment,
+    ParamKind,
     PixelIdentityEvidence,
     Point,
     Postcondition,
@@ -159,6 +160,7 @@ from openadapt_flow.run_gate import is_consequential
 from openadapt_flow.runtime import heal as heal_mod
 from openadapt_flow.runtime import healing as healing_mod
 from openadapt_flow.runtime import identity as identity_mod
+from openadapt_flow.runtime import identity_census as census_mod
 from openadapt_flow.runtime import identity_looks as looks_mod
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
@@ -1881,6 +1883,9 @@ class Replayer:
         # iteration scope from the exact loop cursor below. Hashing ``params``
         # inside a loop would count each row twice and reject valid runs.
         self._governed_base_params = dict(params)
+        # The run's own parameters, for postconditions that compare the screen
+        # with a value (a program run also tracks them per state).
+        self._run_params: dict[str, RuntimeParamScalar] = dict(params)
         # Preserve the exact caller-owned worklist object for last-common-point
         # authorization checks.  A callback that mutates it after admission
         # must invalidate the authorization before any reacquired input edge.
@@ -2315,6 +2320,28 @@ class Replayer:
                         "recorded example is available: "
                         + ", ".join(missing)
                         + " — refusing to run; run aborted"
+                    ),
+                )
+            )
+            report.success = False
+            report.total_ms = (time.monotonic() - t_run) * 1000.0
+            return self._finalize_report(report, workflow, run_dir)
+
+        # A typed date parameter must be a canonical ISO date before any step
+        # runs: a date written another way (03/14/1990) would otherwise be
+        # typed into the form and saved as whatever the app makes of it.
+        malformed = self._malformed_date_params(workflow, params)
+        if malformed:
+            report.results.append(
+                StepResult(
+                    step_id="<params>",
+                    intent="validate typed workflow parameters",
+                    ok=False,
+                    failure_category="governed_refusal",
+                    error=(
+                        "Typed workflow parameter(s) are not valid: "
+                        + "; ".join(malformed)
+                        + " — refusing to run; nothing was typed; run aborted"
                     ),
                 )
             )
@@ -7598,6 +7625,25 @@ class Replayer:
         if missed is not None and missed[0] == step.id:
             self._scroll_missed_target = None
             target_missed = missed[1]
+        if step.target_param is not None:
+            # A record-selecting click acts on the run's record: look for the
+            # run's value; the identity check verifies the row (param mode).
+            from openadapt_flow.runtime.target_param import bind_target_param
+
+            sealed_step = step
+            step, refusal = bind_target_param(step, params, workflow)
+            # The sealed-leaf check compares the program's step with the
+            # step the runtime acts on; it must see the sealed one.
+            self._target_param_binding = (step, sealed_step)
+            if refusal is not None:
+                return StepResult(
+                    step_id=step.id,
+                    intent=step.intent,
+                    ok=False,
+                    error=refusal,
+                    safety_halt=True,
+                    failure_category="safety_halt",
+                )
         router = self._surface_router
         if router is None:
             if step.action is ActionKind.SWITCH_SURFACE:
@@ -8963,6 +9009,10 @@ class Replayer:
                 and matched_region is not None
                 and resolution.rung not in ("template", "structural")
                 and step.anchor is not None
+                # A click rebound to the run's record (runtime.target_param)
+                # found another record's row; that row must never become the
+                # step's recorded anchor.
+                and not (step.target_param is not None and not step.anchor.template)
             ):
                 # Heal from the PRE-action frame: that is the frame the
                 # anchor was resolved against (the action may have navigated
@@ -10537,9 +10587,11 @@ class Replayer:
             if qualification is not None
             else None
         )
+        # A click that selects a record by a run value (Step.target_param)
+        # is judged by its identity band, never by hover evidence alone.
         hover_check = (
             self._hover_check(step, resolution, frame_png, workflow, bundle_dir)
-            if qualified_policy is None
+            if qualified_policy is None and step.target_param is None
             else None
         )
         if hover_check is None and (
@@ -10663,6 +10715,25 @@ class Replayer:
                 "target, the screen answered differently from the recording "
                 f"({reason}) — refusing to click; run aborted"
             )
+        elif check.ambiguity_halt is not None:
+            if check.ambiguity_halt == "identical_candidates":
+                why = (
+                    f"{check.candidate_count} shown rows carry the same "
+                    "identity and no recorded record id tells them apart"
+                )
+            elif check.ambiguity_halt == "identity_uncounted":
+                why = (
+                    "this surface cannot count the rows that might share it, "
+                    "and a consequential write follows (identity_uncounted)"
+                )
+            else:
+                why = "the rows that could share its identity could not all be counted"
+            error = (
+                f"Step '{step.id}' ({step.intent}) matched the recorded "
+                f"identity, but {why} (rung '{resolution.rung}') — acting "
+                "could open another record; refusing to act"
+            )
+            result.safety_halt = True
         elif check.mode == "hover":
             # Hover evidence only adds a stop. A step that had no identity
             # check before keeps going when the response is absent or cannot
@@ -10685,7 +10756,7 @@ class Replayer:
                 + " — refusing to act; run aborted"
             )
         elif check.status in ("unreadable", "abstain") and (
-            step.risk == "irreversible" or governed
+            step.risk == "irreversible" or governed or step.target_param is not None
         ):
             reason = (
                 "rests on a glyph-confusable identifier OCR may have "
@@ -10698,6 +10769,8 @@ class Replayer:
                 "requires verified identity under the governed run policy"
                 if governed
                 else "is irreversible"
+                if step.risk == "irreversible"
+                else "selects a record by a run value"
             )
             error = (
                 f"Step '{step.id}' ({step.intent}) {scope} and its target "
@@ -11602,6 +11675,17 @@ class Replayer:
         self._active_delivery_region = fresh_region
         return fresh_resolution, fresh_region, fresh_png, error
 
+    def _sealed_step(self, step: Step) -> Step:
+        """The program's own step for one the runtime rebound to a run value.
+
+        ``runtime.target_param`` rebinds a record-selecting click to the
+        run's record; integrity checks compare against the sealed step.
+        """
+        binding = getattr(self, "_target_param_binding", None)
+        if binding is not None and binding[0] is step:
+            return binding[1]
+        return step
+
     def _resolve_step_target(
         self,
         step: Step,
@@ -11712,6 +11796,9 @@ class Replayer:
                 ),
             )
         resolution, matched_region = resolved
+        resolution, matched_region = self._retarget_by_record_key(
+            step, resolution, matched_region
+        )
 
         if step.risk == "irreversible" and is_below_ocr(resolution.rung):
             return (
@@ -12038,7 +12125,7 @@ class Replayer:
             or leaf.get("state_id") != self._current_state_id
             or parent_state is None
             or parent_state.kind is not StateKind.ACTION
-            or parent_state.step != step
+            or parent_state.step != self._sealed_step(step)
         ):
             return (
                 "governed program leaf frame no longer matches the exact sealed "
@@ -15480,9 +15567,254 @@ class Replayer:
                 step, resolution, before_png, params, workflow
             )
 
-        return identity_mod.run_identity_ladder(
+        check = identity_mod.run_identity_ladder(
             [structured_tier, pixel_tier, vlm_tier, ocr_tier]
         )
+        return self._apply_candidate_census(
+            step, resolution, check, before_png, params, workflow
+        )
+
+    def _structured_census(self, step: Step, point: Point) -> census_mod.CensusDecision:
+        """The DOM/a11y candidate census at ``point`` (see identity_census)."""
+
+        anchor = step.anchor
+        assert anchor is not None
+        getter = getattr(self.backend, "identity_candidates_at", None)
+        if getter is None:
+            return census_mod.CensusDecision("cannot_count")
+        try:
+            census = getter(int(point[0]), int(point[1]))
+        except Exception:
+            census = None
+        tmpl = anchor.identity_template
+        recorded = tmpl if tmpl is not None and tmpl.record_key else None
+        from openadapt_flow.runtime import identity_template as itmpl
+
+        return census_mod.decide(
+            census,
+            has_recorded_key=recorded is not None,
+            key_matches=lambda key: (
+                recorded is not None and itmpl.record_key_matches(recorded, key)
+            ),
+        )
+
+    def _ocr_census(
+        self,
+        step: Step,
+        resolution: Resolution,
+        before_png: bytes,
+        params: Mapping[str, RuntimeParamScalar],
+        workflow: Workflow,
+    ) -> census_mod.CensusDecision:
+        """Count the frame's OCR rows that verify as the recorded identity.
+
+        The pixel-only counterpart of :meth:`_structured_census`: every text
+        row of the frame is read the way the OCR tier reads the target's row
+        (the same band height, the target's own crop excluded at the same
+        offset, volatile lines dropped) and checked against the recorded band.
+        """
+        anchor = step.anchor
+        assert anchor is not None
+        tmpl = anchor.identity_template
+        if not (anchor.context_text or (tmpl is not None and tmpl.tokens)):
+            return census_mod.CensusDecision("cannot_count")
+        today = date.today()
+        try:
+            lines = [
+                line
+                for line in self.vision.ocr(before_png, region=None)
+                if line.text.strip()
+                and not identity_mod.is_volatile_line(line.text, reference_date=today)
+            ]
+        except Exception:
+            return census_mod.CensusDecision("cannot_count")
+        viewport = self.backend.viewport
+        px, py = int(resolution.point[0]), int(resolution.point[1])
+        ex, ey = (
+            anchor.region[0] - anchor.click_point[0],
+            anchor.region[1] - (anchor.click_point[1]),
+        )
+        run_params = runtime_params_for_gui(params)
+
+        def row_text(y: int) -> str:
+            band = identity_mod.band_region((px, y), anchor.region[3], viewport)
+            exclude = (px + ex, y + ey, anchor.region[2], anchor.region[3])
+            kept = [
+                line
+                for line in lines
+                if identity_mod.regions_intersect(line.region, band)
+                and not identity_mod.regions_intersect(line.region, exclude)
+            ]
+            return " ".join(
+                line.text.strip() for line in identity_mod.lines_near_point(kept, y)
+            )
+
+        def verifies(text: str) -> bool:
+            if tmpl is not None and tmpl.tokens:
+                from openadapt_flow.runtime import identity_template as itmpl
+
+                verdict = itmpl.verify_template_identity(
+                    tmpl, text, params=run_params, param_examples=workflow.params
+                )
+            else:
+                assert anchor.context_text is not None
+                verdict = identity_mod.verify_target_identity(
+                    anchor.context_text,
+                    text,
+                    params=run_params,
+                    param_examples=workflow.params,
+                )
+            return verdict.status == "verified"
+
+        target_lines = identity_mod.lines_near_point(lines, py)
+        heights = sorted(line.region[3] for line in target_lines) or [16]
+        same_row_px = max(4, heights[len(heights) // 2])
+        centers: list[int] = []
+        for line in sorted(lines, key=lambda item: item.region[1]):
+            center = line.region[1] + line.region[3] // 2
+            if not centers or center - centers[-1] > 3:
+                centers.append(center)
+        rows = [(y, row_text(y)) for y in centers]
+        count = census_mod.count_matching_rows(
+            rows, target_y=py, verifies=verifies, same_row_px=same_row_px
+        )
+        if count > 1:
+            return census_mod.CensusDecision("ambiguous", count)
+        return census_mod.CensusDecision("unique", count)
+
+    def _apply_candidate_census(
+        self,
+        step: Step,
+        resolution: Resolution,
+        check: IdentityCheck,
+        before_png: bytes,
+        params: Mapping[str, RuntimeParamScalar],
+        workflow: Workflow,
+    ) -> IdentityCheck:
+        """Keep ``verified`` only when the identity picks one shown record.
+
+        A verified ladder verdict says the target reads like the recorded
+        row. When another shown row reads the same, the verdict cannot tell
+        them apart, whichever rung resolved the point. The census
+        (:mod:`openadapt_flow.runtime.identity_census`) then decides: the
+        recorded record id picks the row, or the step halts.
+        """
+        if check.status != "verified" or check.mode not in (
+            "structured",
+            "pixel",
+            "vlm",
+            "context",
+            "param",
+        ):
+            return check
+        if check.mode == "structured":
+            decision = self._structured_census(step, resolution.point)
+        else:
+            decision = self._ocr_census(step, resolution, before_png, params, workflow)
+        tmpl = step.anchor.identity_template if step.anchor is not None else None
+        if (
+            decision.verdict == "cannot_count"
+            and check.mode == "structured"
+            and tmpl is not None
+            and tmpl.structured_row is False
+        ):
+            # Teach time saw no record row here (a form field, a button).
+            decision = census_mod.CensusDecision("not_a_row")
+        if decision.verdict == "not_a_row":
+            return check.model_copy(update={"census_status": "not_a_row"})
+        if decision.verdict == "cannot_count":
+            if not self._leads_into_consequential(step, workflow):
+                return check.model_copy(update={"census_status": "cannot_count"})
+            return check.model_copy(
+                update={"status": "abstain", "ambiguity_halt": "identity_uncounted"}
+            )
+        if decision.verdict == "unique":
+            return check.model_copy(
+                update={"candidate_count": decision.candidate_count}
+            )
+        if decision.verdict in ("wrong_record", "retarget"):
+            return check.model_copy(
+                update={
+                    "status": "mismatch",
+                    "coverage": 0.0,
+                    "expected": "<recorded record id>",
+                    "candidate_count": decision.candidate_count,
+                }
+            )
+        return check.model_copy(
+            update={
+                "status": "abstain",
+                "candidate_count": decision.candidate_count,
+                "ambiguity_halt": (
+                    "candidates_uncounted"
+                    if decision.verdict == "uncounted"
+                    else "identical_candidates"
+                ),
+            }
+        )
+
+    def _leads_into_consequential(
+        self, step: Step, workflow: Optional[Workflow]
+    ) -> bool:
+        """Whether this step or any step after it is a consequential write.
+
+        A step that picks a record (opening a chart) is not itself a write, but
+        the write that follows lands on whatever it opened. Program graphs and
+        steps not found in the linear list count every step of the workflow.
+        """
+
+        if workflow is None:
+            return is_consequential(step, None)
+        steps = list(workflow.steps)
+        index = next((i for i, item in enumerate(steps) if item.id == step.id), None)
+        following = steps[index:] if index is not None else steps
+        return self._step_is_consequential(step, workflow) or any(
+            self._step_is_consequential(item, workflow) for item in following
+        )
+
+    def _retarget_by_record_key(
+        self,
+        step: Step,
+        resolution: Resolution,
+        matched_region: Region,
+    ) -> tuple[Resolution, Region]:
+        """Move a visual resolution onto the row with the recorded record id.
+
+        When rows read identically, a template or text rung lands on whichever
+        row now sits where the recorded one was. The recorded record id names
+        the right row; move the point (and matched region) by that row's
+        offset. A structural resolution names one exact element and is never
+        moved: if it is the wrong record, the identity check refuses it.
+        """
+        anchor = step.anchor
+        if (
+            anchor is None
+            or resolution.structural_handle is not None
+            or anchor.identity_template is None
+            or not anchor.identity_template.record_key
+        ):
+            return resolution, matched_region
+        decision = self._structured_census(step, resolution.point)
+        if decision.verdict != "retarget" or decision.offset is None:
+            return resolution, matched_region
+        dx, dy = (int(round(v)) for v in decision.offset)
+        x, y = resolution.point[0] + dx, resolution.point[1] + dy
+        width, height = self.backend.viewport
+        if not (0 <= x < width and 0 <= y < height):
+            return resolution, matched_region
+        moved = resolution.model_copy(
+            update={
+                "point": (x, y),
+                # The retained visual evidence reproduces the old point.
+                "visual_evidence": None,
+                "resolution_evidence_regions": tuple(
+                    (rx + dx, ry + dy, rw, rh)
+                    for rx, ry, rw, rh in resolution.resolution_evidence_regions
+                ),
+            }
+        )
+        rx, ry, rw, rh = matched_region
+        return moved, (rx + dx, ry + dy, rw, rh)
 
     def _identifier_displacement(
         self,
@@ -17627,6 +17959,84 @@ class Replayer:
                 return False
         return True
 
+    @staticmethod
+    def _malformed_date_params(workflow: Workflow, params: dict[str, Any]) -> list[str]:
+        """Why each supplied ``date`` parameter is not a canonical ISO date.
+
+        The same check hosted dispatch applies (``runner.inputs``). An empty
+        optional value is left to the required-parameter check.
+        """
+
+        from openadapt_flow.runner.inputs import AdmittedInputError, _validate_value
+
+        problems: list[str] = []
+        for name, spec in sorted(workflow.param_specs.items()):
+            if spec.type is not ParamKind.DATE or name not in params:
+                continue
+            value = params[name]
+            if value == "" and not spec.required:
+                continue
+            try:
+                _validate_value(spec, value)
+            except AdmittedInputError as exc:
+                problems.append(str(exc))
+        return problems
+
+    def _no_duplicate_candidate(self, pc: Any, frame_png: bytes) -> bool:
+        """The app's possible-duplicate list has loaded and names no candidate.
+
+        A row is a candidate when its words include every word of this run's
+        value of any ``pc.candidate_params`` parameter (case-insensitive). A
+        value that is an ISO date is also compared as a date: every date the
+        row shows, in any format intake reads (``Apr 20, 1944``,
+        ``20.04.1944``, ``04/20/1944``), is normalized and compared, and a
+        row date that reads either way counts when either reading matches.
+        Fails closed: an unreadable list, a missing or empty parameter, or an
+        empty list without its "no matches" marker all fail the check.
+        """
+
+        params = (
+            getattr(self, "_current_params", None)
+            or getattr(self, "_run_params", None)
+            or {}
+        )
+        names = tuple(pc.candidate_params or ())
+        if not pc.candidate_rows or not names or not pc.text:
+            return False
+        reader = getattr(self.backend, "element_texts", None)
+        if not callable(reader):
+            return False
+        rows = reader(pc.candidate_rows, tuple(pc.candidate_frame_path or ()))
+        if rows is None:
+            return False
+
+        def words(value: str) -> list[str]:
+            return re.findall(r"[0-9a-z]+", value.casefold())
+
+        wanted = []
+        wanted_dates: set[str] = set()
+        for name in names:
+            text = runtime_param_text(params[name]) if name in params else ""
+            value = words(text)
+            if not value:
+                return False
+            wanted.append(value)
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text.strip()):
+                wanted_dates.add(text.strip())
+        if not rows:
+            # Nothing listed: only the list's own "no matches" marker shows
+            # the search finished.
+            if self._dom_text_visible(pc.text):
+                return True
+            return self.vision.text_present(frame_png, pc.text)
+        for row in rows:
+            row_words = set(words(row))
+            if any(all(w in row_words for w in value) for value in wanted):
+                return False
+            if wanted_dates and wanted_dates & _row_dates(row):
+                return False
+        return True
+
     def _field_value_shown(self, pc: Any) -> bool:
         """The focused field shows this run's value of ``pc.param``.
 
@@ -17666,6 +18076,9 @@ class Replayer:
             return "local_edit (URL, title, page count and focus unchanged)"
         if kind == "field_value":
             return f"field_value (the focused field shows {{{pc.param}}})"
+        if kind == "no_duplicate_candidate":
+            names = ", ".join(pc.candidate_params or ())
+            return f"no_duplicate_candidate (no listed row has this run's {names})"
         if kind in ("text_present", "text_absent"):
             return f"{kind} {pc.text!r}"
         if kind in ("url_changed", "title_changed", "new_tab_opened"):
@@ -17716,6 +18129,8 @@ class Replayer:
             return self._local_edit_held(pc, start_state or {})
         if kind == "field_value":
             return self._field_value_shown(pc)
+        if kind == "no_duplicate_candidate":
+            return self._no_duplicate_candidate(pc, frame_png)
         if kind in ("url_changed", "title_changed", "new_tab_opened"):
             key = {
                 "url_changed": "url",
@@ -18108,6 +18523,10 @@ class Replayer:
         workflow: Optional[Workflow] = None,
     ) -> Optional[bytes]:
         """Return the verified run snapshot for governed asset consumers."""
+        if not rel:
+            # No crop: a record-selecting click rebound to another record
+            # (runtime.target_param) carries none.
+            return None
         if self.governed_authorization is not None:
             data = self._governed_asset_snapshot.get(rel)
             expected = self._governed_asset_hashes.get(rel)
@@ -18256,3 +18675,52 @@ class Replayer:
         rel = f"steps/{step_id}_{suffix}.png"
         _sealed.write_bytes(Path(run_dir) / rel, _scrub_png(png))
         return rel
+
+
+#: Date-looking text in a listed row: ISO or Y/M/D, numeric with / . or -,
+#: and a spelled-out month either side of the day.
+_ROW_DATE_PATTERNS = (
+    r"\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b",
+    r"\b\d{1,2}[./-]\d{1,2}[./-]\d{4}\b",
+    r"\b\d{1,2}\s+[A-Za-z]{3,9}\.?,?\s+\d{4}\b",
+    r"\b[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}\b",
+)
+
+
+def _row_dates(row: str) -> set[str]:
+    """Every ISO date a listed row could be showing.
+
+    Each date-looking substring is read the way intake reads a date
+    (``intake.extract.normalize_date``). One that reads either way (03/04/1970)
+    contributes both readings; one that isn't a date contributes nothing.
+    """
+
+    from datetime import date as _date
+
+    from openadapt_flow.intake.extract import normalize_date
+
+    found: set[str] = set()
+    for pattern in _ROW_DATE_PATTERNS:
+        for match in re.finditer(pattern, row):
+            text = match.group(0)
+            ymd = re.fullmatch(r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})", text)
+            if ymd:
+                try:
+                    found.add(
+                        _date(
+                            int(ymd.group(1)), int(ymd.group(2)), int(ymd.group(3))
+                        ).isoformat()
+                    )
+                except ValueError:
+                    pass
+                continue
+            text = re.sub(r"(\d)\.(?=\d)", r"\1/", text).replace(".", "")
+            iso, error, _ = normalize_date(text)
+            if iso is not None:
+                found.add(iso)
+            elif error and "ambiguous" in error:
+                for order in ("MM/DD/YYYY", "DD/MM/YYYY"):
+                    reading = normalize_date(text, order)[0]
+                    if reading is not None:
+                        found.add(reading)
+    return found
