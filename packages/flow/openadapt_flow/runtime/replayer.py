@@ -868,6 +868,7 @@ class Replayer:
         state_verifier: Optional[Any] = None,
         effect_verifier: Optional[EffectVerifier] = None,
         effect_compensator: Optional[Any] = None,
+        duplicate_record_source: Any = "auto",
         api_actuator: Optional[Any] = None,
         web_form_actuator: Optional[Any] = None,
         api_steps: bool = True,
@@ -1020,6 +1021,14 @@ class Replayer:
         # makes a model call — the $0 runtime guarantee is preserved.
         self.effect_verifier = effect_verifier
         self.effect_compensator = effect_compensator
+        # The duplicate check's record channel (``runtime/checks/
+        # duplicate_record.py``). Resolved from this run's own effect verifier
+        # when the check runs (``_duplicate_source``), so every construction
+        # path (qualification, run, resume, proof) that reads the same system
+        # of record uses the same check. Only tests and embedders pass one.
+        self._duplicate_requested = duplicate_record_source
+        self._last_duplicate_check: Optional[Any] = None
+        self._last_duplicate_outcome: Optional[str] = None
         # ``run``-only, bundle-bound admission capability.  The ordinary
         # ``replay`` path leaves this unset and preserves its permissive
         # behavior.  When present it carries exact identity/effect decisions
@@ -7770,13 +7779,15 @@ class Replayer:
             ok, frame = self._poll_postconditions(step, frame, bundle_dir, start_state)
             if not ok:
                 frame = self.vision.wait_settled(self.backend)
-                failed = [
-                    self._describe_postcondition(pc)
+                failed_pcs = [
+                    pc
                     for pc in step.expect
                     if not self._postcondition_passes(
                         pc, frame, bundle_dir, start_state
                     )
                 ]
+                self._stamp_duplicate_check(result, failed_pcs)
+                failed = [self._describe_postcondition(pc) for pc in failed_pcs]
             result.after_png = self._save_step_png(
                 run_dir, evidence_step_id, "after", frame
             )
@@ -17573,6 +17584,7 @@ class Replayer:
             and not self._postcondition_confirms_a_write(step, workflow)
         ):
             failed_pcs = self._drift_oracle_rescue(failed_pcs, frame_png, result)
+        self._stamp_duplicate_check(result, failed_pcs)
         failed = [self._describe_postcondition(pc) for pc in failed_pcs]
         return not failed_pcs, frame_png, failed
 
@@ -17715,16 +17727,32 @@ class Replayer:
         return problems
 
     def _no_duplicate_candidate(self, pc: Any, frame_png: bytes) -> bool:
-        """The app's possible-duplicate list has loaded and names no candidate.
+        """The duplicate check passes: no chart is, or may be, this patient.
 
-        A row is a candidate when its words include every word of this run's
+        Records why it failed in ``self._last_duplicate_outcome`` (``exact``,
+        ``close``, ``candidate`` or ``unreadable``; None when it passed), which
+        the halted step's ``StepResult.duplicate_check`` carries.
+        """
+
+        outcome = self._duplicate_outcome(pc, frame_png)
+        self._last_duplicate_outcome = outcome
+        return outcome is None
+
+    def _duplicate_outcome(self, pc: Any, frame_png: bytes) -> Optional[str]:
+        """None when the check passes, else why it failed.
+
+        With a record source (``runtime/checks/duplicate_record.py``): the
+        decision, ``exact``, ``close`` or ``unreadable``. On the screen: the
+        app's possible-duplicate list has loaded and names no candidate. A
+        row is a candidate when its words include every word of this run's
         value of any ``pc.candidate_params`` parameter (case-insensitive). A
         value that is an ISO date is also compared as a date: every date the
         row shows, in any format intake reads (``Apr 20, 1944``,
         ``20.04.1944``, ``04/20/1944``), is normalized and compared, and a
         row date that reads either way counts when either reading matches.
-        Fails closed: an unreadable list, a missing or empty parameter, or an
-        empty list without its "no matches" marker all fail the check.
+        A listed candidate is ``candidate``. Fails closed as ``unreadable``:
+        an unreadable list, a missing or empty parameter, or an empty list
+        without its "no matches" marker.
         """
 
         params = (
@@ -17732,15 +17760,40 @@ class Replayer:
             or getattr(self, "_run_params", None)
             or {}
         )
+        self._last_duplicate_check = None
+        pinned = getattr(pc, "candidate_source", None)
+        source = (
+            None if pinned == "screen" else self._duplicate_source(pinned == "record")
+        )
+        if pinned == "record" and source is None:
+            # The program was qualified with the record check; without a
+            # record channel it must not fall back to the screen.
+            from openadapt_flow.runtime.checks.duplicate_record import (
+                DuplicateCheckResult,
+            )
+
+            self._last_duplicate_check = DuplicateCheckResult(
+                "unreadable",
+                channel="none",
+                reason="the program requires the record check and this run has "
+                "no record channel",
+            )
+            return "unreadable"
+        if source is not None:
+            if self._no_duplicate_record(source, params, pc):
+                return None
+            checked = self._last_duplicate_check
+            decision = getattr(checked, "decision", "unreadable")
+            return decision if decision in ("exact", "close") else "unreadable"
         names = tuple(pc.candidate_params or ())
         if not pc.candidate_rows or not names or not pc.text:
-            return False
+            return "unreadable"
         reader = getattr(self.backend, "element_texts", None)
         if not callable(reader):
-            return False
+            return "unreadable"
         rows = reader(pc.candidate_rows, tuple(pc.candidate_frame_path or ()))
         if rows is None:
-            return False
+            return "unreadable"
 
         def words(value: str) -> list[str]:
             return re.findall(r"[0-9a-z]+", value.casefold())
@@ -17751,7 +17804,7 @@ class Replayer:
             text = runtime_param_text(params[name]) if name in params else ""
             value = words(text)
             if not value:
-                return False
+                return "unreadable"
             wanted.append(value)
             if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text.strip()):
                 wanted_dates.add(text.strip())
@@ -17759,15 +17812,81 @@ class Replayer:
             # Nothing listed: only the list's own "no matches" marker shows
             # the search finished.
             if self._dom_text_visible(pc.text):
-                return True
-            return self.vision.text_present(frame_png, pc.text)
+                return None
+            if self.vision.text_present(frame_png, pc.text):
+                return None
+            return "unreadable"  # the list never loaded
         for row in rows:
             row_words = set(words(row))
             if any(all(w in row_words for w in value) for value in wanted):
-                return False
+                return "candidate"
             if wanted_dates and wanted_dates & _row_dates(row):
-                return False
-        return True
+                return "candidate"
+        return None
+
+    def _stamp_duplicate_check(self, result: Any, failed_pcs: Any) -> None:
+        """Put the duplicate check's failure on the halted step's result."""
+
+        if result is None or not any(
+            getattr(pc.kind, "value", pc.kind) == "no_duplicate_candidate"
+            for pc in failed_pcs
+        ):
+            return
+        result.duplicate_check = (
+            getattr(self, "_last_duplicate_outcome", None) or "unreadable"
+        )
+
+    def _duplicate_source(self, pinned_record: bool = False) -> Any:
+        """This run's duplicate-check record source, or None (the screen)."""
+
+        from openadapt_flow.runtime.checks.duplicate_record import (
+            resolve_duplicate_source,
+        )
+
+        return resolve_duplicate_source(
+            self.effect_verifier,
+            getattr(self, "_duplicate_requested", "auto"),
+            pinned_record=pinned_record,
+        )
+
+    def _no_duplicate_record(
+        self, source: Any, params: dict[str, Any], pc: Any = None
+    ) -> bool:
+        """The duplicate check with the system of record as its source.
+
+        Proceeds only when the record channel answers completely and no chart
+        is this patient (``decision == "none"``). An exact or close match, or
+        an unreadable channel, fails the check, and the halt names the
+        records found and why (``_describe_postcondition``).
+        """
+
+        from openadapt_flow.runtime.checks.duplicate_record import (
+            RECORD_FIELDS,
+            check_duplicate,
+        )
+
+        # Which run parameter fills each field: OpenEMR's names by default,
+        # ``pc.candidate_record_fields`` for any other program.
+        mapped = getattr(pc, "candidate_record_fields", None) or {}
+        names = {**RECORD_FIELDS, **dict(mapped)}
+        want = {
+            field: runtime_param_text(params[name]) if name in params else ""
+            for field, name in names.items()
+        }
+        try:
+            result = check_duplicate(source, want)
+        except Exception as exc:  # noqa: BLE001 - any failure fails closed
+            from openadapt_flow.runtime.checks.duplicate_record import (
+                DuplicateCheckResult,
+            )
+
+            result = DuplicateCheckResult(
+                "unreadable",
+                channel=getattr(source, "channel", ""),
+                reason=f"the record check failed ({type(exc).__name__})",
+            )
+        self._last_duplicate_check = result
+        return result.proceed
 
     def _field_value_shown(self, pc: Any) -> bool:
         """The focused field shows this run's value of ``pc.param``.
@@ -17800,10 +17919,21 @@ class Replayer:
         value = read("focused_text_value")
         return value is not None and value == expected
 
-    @staticmethod
-    def _describe_postcondition(pc: Any) -> str:
+    def _describe_postcondition(self, pc: Any) -> str:
         """Human-readable one-liner for a postcondition (for error messages)."""
         kind = pc.kind.value if hasattr(pc.kind, "value") else pc.kind
+        checked = getattr(self, "_last_duplicate_check", None)
+        if kind == "no_duplicate_candidate" and checked is not None:
+            found = "; ".join(
+                f"{c.match} record {c.record.record_id} ({c.why})"
+                for c in checked.candidates
+            )
+            return (
+                f"no_duplicate_candidate (record check via {checked.channel}: "
+                f"{checked.decision}, {checked.reason}"
+                + (f": {found}" if found else "")
+                + ")"
+            )
         if kind == "local_edit":
             return "local_edit (URL, title, page count and focus unchanged)"
         if kind == "field_value":

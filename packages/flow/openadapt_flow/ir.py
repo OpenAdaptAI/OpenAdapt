@@ -514,6 +514,16 @@ class Postcondition(BaseModel):
     candidate_params: Optional[tuple[str, ...]] = Field(
         default=None, min_length=1, max_length=8
     )
+    #: NO_DUPLICATE_CANDIDATE: where the check's evidence must come from.
+    #: ``record``: the system of record, and a run with no record channel
+    #: fails the step (never the screen instead). ``screen``: the listed rows,
+    #: even when a record channel exists. Unset: the record when the run has
+    #: a record channel, else the screen.
+    candidate_source: Optional[Literal["record", "screen"]] = None
+    #: NO_DUPLICATE_CANDIDATE, record source: the run parameter that fills
+    #: each field the record check reads (``fname``, ``lname``, ``DOB``,
+    #: ``mrn``, ``phone_home``, ``email``, ``street``). Unset: those names.
+    candidate_record_fields: Optional[dict[str, str]] = None
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -525,7 +535,13 @@ class Postcondition(BaseModel):
             data.pop("field_selector", None)
         if self.param is None:
             data.pop("param", None)
-        for name in ("candidate_rows", "candidate_frame_path", "candidate_params"):
+        for name in (
+            "candidate_rows",
+            "candidate_frame_path",
+            "candidate_params",
+            "candidate_source",
+            "candidate_record_fields",
+        ):
             if getattr(self, name) is None:
                 data.pop(name, None)
         return data
@@ -4381,6 +4397,14 @@ class StepResult(BaseModel):
     #: on that path alone; None otherwise, and then omitted from the
     #: serialized result.
     scroll_target_ready_before: Optional[bool] = None
+    #: Set when ``no_duplicate_candidate`` failed this step: ``exact`` or
+    #: ``close`` (a record matched), ``candidate`` (a listed row matched on the
+    #: screen): about the item; ``unreadable`` (the record channel or the
+    #: screen list could not answer, or a record-pinned check had no
+    #: channel): about the program. None otherwise, and then omitted.
+    duplicate_check: Optional[Literal["exact", "close", "candidate", "unreadable"]] = (
+        None
+    )
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -4399,6 +4423,8 @@ class StepResult(BaseModel):
             data.pop("check_to_click", None)
         if isinstance(data, dict) and self.scroll_target_ready_before is None:
             data.pop("scroll_target_ready_before", None)
+        if isinstance(data, dict) and self.duplicate_check is None:
+            data.pop("duplicate_check", None)
         return data
 
 

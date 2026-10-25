@@ -756,7 +756,12 @@ def _run(
 
             kwargs["checkpoint_key"] = crypto.resolve_key(None)
         if hooks.replayer_kwargs is not None:
-            kwargs.update(hooks.replayer_kwargs(ctx))
+            extra = dict(hooks.replayer_kwargs(ctx))
+            if "duplicate_record_source" in extra:
+                # The duplicate check is resolved from the run's own verifier
+                # on every path; a hook can't qualify under another one.
+                raise ValueError("replayer_kwargs may not set duplicate_record_source")
+            kwargs.update(extra)
         # The signed lookup settings win over any hook, so a hook can't turn
         # structure back on during a pass that must not use it.
         kwargs.update(lookup or {})
