@@ -232,11 +232,53 @@ REVERT_OP = (
     "update other_patient's phone_home back to the value it had before the run "
     "(reverting clinician2's change)"
 )
+#: The second held-out suite's (``heldout2.yaml``).
+DELETE_INSURANCE_OP = (
+    "delete the existing primary insurance_data row belonging to other_patient "
+    "(if other_patient has none, first insert one before the run window opens so "
+    "the baseline holds it)"
+)
+EMPTY_HISTORY_OP = (
+    "insert a second history_data row for new_patient, empty except pid and date"
+)
+CAPITALS_REGISTER_OP = (
+    "register_referral, with street and city stored as '41 LARCH WAY' and "
+    "'CAMBRIDGE' and every other value exactly as in the referral"
+)
+REVERT2_OP = (
+    "update_chart on other_patient setting phone_home back to the value it held "
+    "before clinician2's change"
+)
 HELD_OUT_OPS = {
     APPOINTMENT_OP: "new_patient",
     DOUBLE_HISTORY_OP: "new_patient",
     REVERT_OP: "other_patient",
+    DELETE_INSURANCE_OP: "other_patient",
+    EMPTY_HISTORY_OP: "new_patient",
+    REVERT2_OP: "other_patient",
 }
+#: The primary insurance ``DELETE_INSURANCE_OP`` needs in the baseline.
+PRE_WINDOW_INSURANCE = "Example Health Plan"
+
+
+def capitals(values: dict[str, str]) -> dict[str, str]:
+    """The referral's values with street and city in capitals, as OpenEMR
+    stores them."""
+
+    return {
+        **values,
+        "street": values["street"].upper(),
+        "city": values["city"].upper(),
+    }
+
+
+def prepare_window(
+    store: standin.Store, case: dict[str, Any], ids: dict[str, int]
+) -> None:
+    """What a case says the baseline holds before the run window opens."""
+
+    if any(step["op"] == DELETE_INSURANCE_OP for step in case["steps"]):
+        store.add_insurance(None, ids["other_patient"], PRE_WINDOW_INSURANCE)
 
 
 def step_values(step: dict[str, Any], told: dict[str, str]) -> dict[str, str]:
@@ -255,7 +297,10 @@ def person_values(step: dict[str, Any], ids: dict[str, int]) -> dict[str, Any]:
     blank = dict.fromkeys(CONCURRENT_PERSON, "")
     out = {**blank, **person}
     out["state"] = "MA" if out["state"] == "Massachusetts" else out["state"]
-    return {**out, "providerID": None}
+    provider = {"Dr. Iris Holt": "iholt", "Dr. Owen Hale": "ohale"}.get(
+        str(out.pop("providerID", ""))
+    )
+    return {**out, "providerID": ids[provider] if provider else None}
 
 
 def told_values(case: dict[str, Any]) -> dict[str, str]:
@@ -427,6 +472,8 @@ def apply_steps(
             if step.get("phase") == "finish":
                 continue
             new_pid = store.register(who, stored(step_values(step, told), ids))
+        elif op == CAPITALS_REGISTER_OP:
+            new_pid = store.register(who, stored(capitals(told), ids))
         elif op == "register_patient":
             store.register(who, person_values(step, ids))
         elif op in HELD_OUT_OPS:
@@ -435,7 +482,11 @@ def apply_steps(
                 store.add_appointment(who, pid, ids["iholt"], "New Patient")
             elif op == DOUBLE_HISTORY_OP:
                 store.duplicate_history(who, pid)
-            else:  # REVERT_OP: the value the chart had before the run
+            elif op == EMPTY_HISTORY_OP:
+                store.add_history(who, pid)
+            elif op == DELETE_INSURANCE_OP:
+                store.delete_insurance(who, pid)
+            else:  # REVERT_OP, REVERT2_OP: the value before the run
                 field = "phone_home"
                 store.update_chart(who, pid, {field: SEEDS["other_patient"][field]})
         elif op == "overwrite_chart":

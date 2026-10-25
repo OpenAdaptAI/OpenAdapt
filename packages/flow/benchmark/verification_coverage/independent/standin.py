@@ -436,3 +436,27 @@ class Store:
         self.log(
             user, "patient-record-insert", pid, f"INSERT INTO history_data pid={pid}"
         )
+
+    def add_history(self, user: Optional[str], pid: int) -> None:
+        """A history_data row for ``pid``, empty except pid and date."""
+
+        cur = self.con.execute(
+            "INSERT INTO history_data (pid, date) VALUES (?, ?)", (pid, self._now())
+        )
+        self.con.execute(
+            "UPDATE history_data SET uuid = ? WHERE id = ?",
+            (self._uuid("history_data", cur.lastrowid), cur.lastrowid),
+        )
+        self.log(
+            user, "patient-record-insert", pid, f"INSERT INTO history_data pid={pid}"
+        )
+
+    def delete_insurance(self, user: Optional[str], pid: int) -> None:
+        """Delete ``pid``'s primary insurance_data row."""
+
+        self.con.execute(
+            "DELETE FROM insurance_data WHERE pid = ? AND type = 'primary'", (pid,)
+        )
+        self.log(
+            user, "patient-record-delete", pid, f"DELETE FROM insurance_data pid={pid}"
+        )

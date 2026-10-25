@@ -48,16 +48,22 @@ from scoreboard.tasks import openemr  # noqa: E402
 from verification_coverage.independent.run import (  # noqa: E402
     APPOINTMENT_OP,
     BOT,
+    CAPITALS_REGISTER_OP,
     CONCURRENT_PERSON,
+    DELETE_INSURANCE_OP,
     DOUBLE_HISTORY_OP,
+    EMPTY_HISTORY_OP,
     HELD_OUT_OPS,
     LABELS,
     OTHER,
+    PRE_WINDOW_INSURANCE,
     REFERRAL,
+    REVERT2_OP,
     REVERT_OP,
     SEEDS,
     SHIPPED_PARAMS,
     SHIPPED_RECORD,
+    capitals,
     provenance_for,
     referral_text,
     score,
@@ -353,6 +359,17 @@ def audit_row(user: str, pid: int) -> str:
     )
 
 
+def prepare_window(case: dict[str, Any], ids: dict[str, Any]) -> None:
+    """What a case says the baseline holds before the run window opens."""
+
+    if any(step["op"] == DELETE_INSURANCE_OP for step in case["steps"]):
+        sql(
+            "INSERT INTO openemr.insurance_data (type, provider, pid, date) VALUES "
+            f"('primary', {q(PRE_WINDOW_INSURANCE)}, {int(ids['other_patient'])}, "
+            "CURDATE())"
+        )
+
+
 def apply_steps(
     case: dict[str, Any],
     ids: dict[str, Any],
@@ -365,6 +382,10 @@ def apply_steps(
     try:
         for step in case["steps"]:
             who, op = step["actor"], step["op"]
+            if op == CAPITALS_REGISTER_OP:
+                # live.REFERRAL already holds street and city in capitals.
+                op = "register_referral"
+                step = {**step, "values": capitals(told)}
             if op == "register_referral":
                 if step.get("phase") == "finish":
                     continue
@@ -407,7 +428,7 @@ def apply_steps(
                     if HELD_OUT_OPS[op] == "new_patient"
                     else ids["other_patient"]
                 )
-                if op == REVERT_OP:
+                if op in (REVERT_OP, REVERT2_OP):
                     current = api(
                         sessions[who], "GET", f"/patient/{patient(pid)['uuid']}"
                     )["data"]
@@ -426,6 +447,22 @@ def apply_steps(
                         f"{q(str(ids['iholt']))}, {q(str(pid))}, 'New Patient', NOW(), "
                         "'2026-10-26', '0000-00-00', 1800, '09:00:00', '09:30:00', "
                         "'-', 3, 3);" + audit_row(BOT, pid)
+                    )
+                elif op == EMPTY_HISTORY_OP:
+                    deviations.append(
+                        "the second history row ran as SQL with an audit row by the bot"
+                    )
+                    sql(
+                        "INSERT INTO openemr.history_data (pid, date) VALUES "
+                        f"({int(pid)}, NOW());" + audit_row(BOT, pid)
+                    )
+                elif op == DELETE_INSURANCE_OP:
+                    deviations.append(
+                        "the insurance delete ran as SQL with an audit row by the bot"
+                    )
+                    sql(
+                        "DELETE FROM openemr.insurance_data WHERE pid = "
+                        f"{int(pid)} AND type = 'primary';" + audit_row(BOT, pid)
                     )
                 elif op == DOUBLE_HISTORY_OP:
                     deviations.append(

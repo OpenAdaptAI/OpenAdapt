@@ -214,6 +214,7 @@ def standin_case(case: dict[str, Any], work: Path, contract: str) -> dict[str, A
     db = standin.copy(work / "baseline.sqlite", cdir / "case.sqlite")
     store = standin.Store(db)
     ids = run.seed(store)
+    run.prepare_window(store, case, ids)
     told = {**run.REFERRAL, **run.told_values(case)}
 
     def sql(query: str) -> dict[str, Any]:
@@ -247,6 +248,7 @@ def live_case(case: dict[str, Any], work: Path, contract: str) -> dict[str, Any]
     cdir.mkdir(parents=True, exist_ok=True)
     live.reset()
     ids = live.seed()
+    live.prepare_window(case, ids)
     told = {**live.REFERRAL, **run.told_values(case)}
     oracle = f.token_session("oracle")
     os.environ[TOKEN_ENV] = oracle.headers["Authorization"].removeprefix("Bearer ")
