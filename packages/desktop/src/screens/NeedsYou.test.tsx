@@ -118,7 +118,16 @@ it("needs the person to look at the record before any choice on a possible save"
   ).toBe(true);
 
   fireEvent.click(screen.getByRole("checkbox", { name: "I looked at the record in the app." }));
-  fireEvent.click(done);
+  // Click only once the button is enabled, queried again after the re-render:
+  // on a loaded CI runner a click on the stale, still-disabled button was lost.
+  const enabled = await waitFor(() => {
+    const button = screen.getByRole("button", {
+      name: /It saved. Mark it done/,
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    return button;
+  });
+  fireEvent.click(enabled);
 
   await waitFor(() =>
     expect(engineInvoke).toHaveBeenCalledWith(CMD.RESOLVE_ATTENTION_ITEM, {
