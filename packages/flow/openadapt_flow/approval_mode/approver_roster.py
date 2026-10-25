@@ -42,6 +42,10 @@ from typing import Any, Callable, Literal, Mapping, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 ROSTER_FILE = "approvers.json"
+#: The head after the last change made through this module, kept next to the
+#: roster (outside any run directory). Every verification checks the roster
+#: still extends it, so an older roster put back between runs is refused.
+HEAD_FILE = "approvers.head.json"
 ROSTER_SCHEMA = "openadapt-flow.approver-roster/v1"
 #: What a roster signature covers: this domain, then the canonical entry.
 ROSTER_DOMAIN = b"openadapt-flow.approver-roster/v1\x00"
@@ -284,32 +288,77 @@ def head(key_dir: Path | str, root: Optional[str]) -> Head:
     return kept[-1].seq, entry_hash(kept[-1])
 
 
+def _heads(at_least: "Optional[Head] | list[Optional[Head]]") -> list[Head]:
+    if at_least is None:
+        return []
+    if isinstance(at_least, tuple):
+        return [at_least]
+    return [head for head in at_least if head is not None]
+
+
+def recorded_head(key_dir: Path | str, root: Optional[str]) -> Optional[Head]:
+    """The head the key directory's sidecar recorded for this root, if any."""
+
+    path = Path(key_dir) / HEAD_FILE
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as exc:
+        raise RosterError("approver_roster_head_unreadable", str(exc)) from exc
+    if not isinstance(data, dict) or data.get("root") != normalize_root(root):
+        return None
+    seq, digest = data.get("seq"), data.get("hash")
+    if not isinstance(seq, int) or not isinstance(digest, str):
+        raise RosterError(
+            "approver_roster_head_unreadable", "the head sidecar is malformed"
+        )
+    return seq, digest
+
+
+def _record_head(key_dir: Path | str, root: str) -> None:
+    seq, digest = head(key_dir, root)
+    path = Path(key_dir) / HEAD_FILE
+    tmp = path.with_suffix(".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(json.dumps({"root": root, "seq": seq, "hash": digest}) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp, path)
+
+
 def verified_approvers(
     key_dir: Path | str,
     root: Optional[str],
     *,
-    at_least: Optional[Head] = None,
+    at_least: "Optional[Head] | list[Optional[Head]]" = None,
 ) -> dict[str, str]:
     """``{principal: public_key_hex}`` of every approver the pinned root vouches for.
 
-    ``at_least`` is a head recorded earlier (by a run when it started, or by
-    Desktop after its own last change). A roster that doesn't extend it (an
-    older copy put back, or a different history) is refused, so an approver
-    removed since can't come back by restoring an old file. A key that holds
-    another role, or a name that names an agent or model, is never an
-    approver. Raises :class:`RosterError` when nothing can be trusted.
+    ``root`` must be given: nothing here reads the environment. ``at_least``
+    is one or more heads recorded earlier (the deployment config's, Desktop's
+    Keychain's, a run's own); the key directory's head sidecar is always
+    checked too. A roster that doesn't extend every one of them (an older
+    copy put back, or a different history) is refused, so an approver removed
+    since can't come back by restoring an old file. A key that holds another
+    role, or a name that names an agent or model, is never an approver.
+    Raises :class:`RosterError` when nothing can be trusted.
     """
 
     from openadapt_flow.jit.lifecycle import is_not_a_person_name
 
     active, kept = _replay(key_dir, root)
-    if at_least is not None:
-        seq, digest = at_least
+    heads = _heads(at_least)
+    sidecar = recorded_head(key_dir, root)
+    if sidecar is not None:
+        heads.append(sidecar)
+    for seq, digest in heads:
         if seq < 1 or len(kept) < seq or entry_hash(kept[seq - 1]) != digest:
             raise RosterError(
                 "approver_roster_rolled_back",
-                "the approver roster doesn't extend the one this run (or this "
-                "computer) recorded; an older or different roster was put back",
+                "the approver roster doesn't extend the one recorded earlier; an "
+                "older or different roster was put back",
             )
     others = _other_role_keys(key_dir)
     return {
@@ -450,6 +499,7 @@ def _change(
         # roster back as it was.
         _write(key_dir, roster, new=False)
         raise RosterError("approver_invalid", f"the roster refused this {action}")
+    _record_head(key_dir, str(normalize_root(root)))
     return entry
 
 
@@ -537,11 +587,13 @@ __all__ = [
     "Roster",
     "RosterEntry",
     "RosterError",
+    "HEAD_FILE",
     "Head",
     "add_approver",
     "approver_keys_b64",
     "entry_hash",
     "head",
+    "recorded_head",
     "file_key_signer",
     "init_root",
     "load",

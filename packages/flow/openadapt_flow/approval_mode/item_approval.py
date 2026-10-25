@@ -391,7 +391,7 @@ class ApproverContext:
     #: The approver root this run pinned (:mod:`.approver_roster`), and the
     #: roster head it recorded (a roster that doesn't extend it is refused).
     approver_root: Optional[str] = None
-    approver_head: Optional[tuple[int, str]] = None
+    approver_head: Any = None
     #: Why the run's pin can't be trusted (another root or key directory
     #: than the run recorded), or ``None``. A person's answer is then refused.
     pin_refusal: Optional[str] = None
@@ -636,6 +636,7 @@ class ItemApprovalStore:
         approver_root: Optional[str] = None,
         config_root: Optional[str] = None,
         config_only: bool = False,
+        config_head: Optional[tuple[int, str]] = None,
     ) -> None:
         self.run_dir = Path(run_dir)
         self.dir = self.run_dir / APPROVAL_DIRNAME
@@ -648,6 +649,9 @@ class ItemApprovalStore:
         self._approver_root = approver_root
         self._config_root = config_root
         self._config_only = config_only
+        #: A roster head the deployment config carries (Desktop writes its
+        #: Keychain's): the roster must extend it.
+        self._config_head = config_head
         # The pin this store wrote at run start; once set, the only one used.
         self._pinned_root: Optional[
             tuple[Optional[str], str, Optional[tuple[int, str]]]
@@ -791,11 +795,14 @@ class ItemApprovalStore:
         key_dir = str(self._key_directory().resolve())
         head: Optional[list[Any]] = None
         if root is not None:
+            # A pinned run starts only on a roster it can verify, that extends
+            # every head recorded outside the run directory.
             try:
+                roster.verified_approvers(key_dir, root, at_least=self._config_head)
                 seq, digest = roster.head(key_dir, root)
-                head = [seq, digest]
-            except roster.RosterError:
-                head = None  # nothing verifiable yet: answers refused anyway
+            except roster.RosterError as exc:
+                raise ItemApprovalRefused(exc.code, str(exc)) from exc
+            head = [seq, digest]
         record = {"approver_root": root, "key_dir": key_dir, "head": head}
         self._checked_dir(create=True)
         try:
@@ -836,46 +843,54 @@ class ItemApprovalStore:
             return None
         return root, key_dir, _head(head)
 
-    def _root_pin(
-        self,
-    ) -> tuple[Optional[str], Optional[tuple[int, str]], Optional[str]]:
-        """``(root, head, refusal)`` this store checks answers against.
+    def _root_pin(self) -> tuple[Optional[str], Any, Optional[str]]:
+        """``(root, heads, refusal)`` this store checks answers against.
 
         The run's own pin wins. A reader (the ``item-approval`` command, a
-        resume) uses what the run recorded, and is refused when the run
-        recorded no pin, or when the reader names another root (its own
-        deployment config pin included) or key directory than the run did.
+        resume) brings its own pin (its deployment config, an explicit
+        ``--approver-root``, or for a non-governed reader the environment).
+        The run directory is never a trust anchor: a reader without its own
+        pin is refused, the run's record must name the same root and key
+        directory, and a governed reader refuses when the record is missing.
+        ``heads`` are the roster heads the roster must extend.
         """
 
         from openadapt_flow.approval_mode.approver_roster import RosterError
 
         if self._pinned_root is not None:
             root, _key_dir, head = self._pinned_root
-            return root, head, None if root is not None else "approver_root_unpinned"
+            heads = [head, self._config_head]
+            return root, heads, None if root is not None else "approver_root_unpinned"
         try:
             named = self._named_root()
         except RosterError as exc:
             return None, None, exc.code
+        if named is None:
+            return None, None, "approver_root_unpinned"
         recorded = self._recorded_root()
         if recorded is None:
             if (self.dir / ROOT_FILENAME).exists():
                 return None, None, "approver_root_unreadable"
-            return named, None, None
+            if self._config_only:
+                return None, None, "approver_root_record_missing"
+            return named, [self._config_head], None
         root, key_dir, head = recorded
         if root is None:
             return None, None, "approver_root_unpinned"
-        if named is not None and named != root:
+        if named != root:
             return None, None, "approver_root_mismatch"
         if str(self._key_directory().resolve()) != key_dir:
             return None, None, "approver_key_dir_mismatch"
-        return root, head, None
+        return root, [head, self._config_head], None
 
     @property
     def approver_root(self) -> Optional[str]:
         return self._root_pin()[0]
 
     @property
-    def approver_head(self) -> Optional[tuple[int, str]]:
+    def approver_head(self) -> Any:
+        """The roster heads this store checks answers against."""
+
         return self._root_pin()[1]
 
     def key_directory(self) -> Path:

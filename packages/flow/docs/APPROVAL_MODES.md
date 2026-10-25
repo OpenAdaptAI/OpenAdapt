@@ -121,8 +121,20 @@ including an answer file written around the command
     two sources that disagree are refused.
   - A deployment config that can't be read refuses the run rather than
     dropping its pin.
+  - Nothing in the run directory or the environment is a trust anchor.
+    Verification takes the root only from the caller, never from
+    `OPENADAPT_APPROVER_ROOT`. A reader (`item-approval`, a resume) brings its
+    own pin, from its deployment config or `--approver-root`, and is refused
+    without one.
+  - The roster must extend every head recorded outside the run: the one in
+    the key directory's `approvers.head.json` (written by every roster
+    change) and the deployment config's `approvers.head` (Desktop writes its
+    Keychain's). A roster the run can't verify at start refuses the run.
+  - The agent's task ledger takes its root only from the deployment config.
+  - The deployment config's `approvers` section is read once per command,
+    so swapping the file mid-run changes nothing.
   - The run records the root, the key directory and the roster's head when
-    it starts. After that, an `item-approval` answer or a resume that names
+    it starts. A governed run's resume refuses when that record is missing. After that, an `item-approval` answer or a resume that names
     another root (its own deployment config's included) or key directory is
     refused, and so is a pin planted in the run directory before the run.
     A roster that doesn't extend the recorded head (an older copy put back)

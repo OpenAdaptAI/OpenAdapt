@@ -281,10 +281,15 @@ class TaskLedger:
         question_ttl_s: float = 4 * 3600.0,
         key_dir: Optional[Path | str] = None,
         approver_root: Optional[str] = None,
+        config_only: bool = False,
+        config_head: Optional[tuple[int, str]] = None,
     ):
         self.root = Path(root)
-        #: The approver root this ledger pins; ``None``: the environment's.
+        #: The approver root this ledger pins. ``config_only`` (the agent
+        #: server): only this root counts, never the environment's.
         self.approver_root = approver_root
+        self.config_only = config_only
+        self.config_head = config_head
         self.question_ttl_s = question_ttl_s
         #: Where a person's registered approver keys are read to check their
         #: signed answers. ``None``: ``$OPENADAPT_JIT_KEY_DIR`` or
@@ -695,6 +700,15 @@ class TaskLedger:
 
     # -- questions -----------------------------------------------------------
 
+    def _pin(self) -> dict[str, Any]:
+        if self.config_only:
+            return {
+                "config_root": self.approver_root,
+                "config_only": True,
+                "config_head": self.config_head,
+            }
+        return {"approver_root": self.approver_root}
+
     def _question_dir(self, question_id: str) -> Path:
         return self.root / question_id
 
@@ -713,6 +727,7 @@ class TaskLedger:
             StepClass,
         )
         from openadapt_flow.approval_mode.item_approval import (
+            ItemApprovalRefused,
             ItemApprovalStore,
             SaveField,
         )
@@ -722,12 +737,19 @@ class TaskLedger:
         store = ItemApprovalStore(
             self._question_dir(question_id),
             key_dir=self.key_dir,
-            approver_root=self.approver_root,
+            **self._pin(),
         )
         # Person-only, pinned before anything is asked. The ledger is the
         # initiator, so no delegate grant can let an agent answer it.
         store.write_policy(DEFAULT_APPROVER_POLICY)
         store.write_initiator("agent:task-ledger")
+        try:
+            # The pin every answer to this question is checked against.
+            store.write_approver_root()
+        except ItemApprovalRefused:
+            # No verifiable roster: the question is still asked, and no
+            # person's answer to it counts (fails closed).
+            pass
         request = store.open_request(
             run_id=question_id,
             workflow_name=ASK_WORKFLOW_NAME,
@@ -780,7 +802,7 @@ class TaskLedger:
         store = ItemApprovalStore(
             self._question_dir(question["question_id"]),
             key_dir=self.key_dir,
-            approver_root=self.approver_root,
+            **self._pin(),
         )
         try:
             request = store.read_request(question["request_id"])
