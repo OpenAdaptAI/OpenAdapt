@@ -116,6 +116,36 @@ def test_the_fixture_is_found_only_in_a_clone(tmp_path):
     assert checkout_problem(FLOW) is None
 
 
+def test_the_driver_loads_from_the_clones_file_without_shadowing():
+    import sys
+
+    from openadapt.quickstart.openemr import _driver
+
+    driver = _driver(FLOW)
+    assert (
+        Path(driver.__file__).resolve()
+        == (FLOW / "benchmark" / "openemr_local" / "quickstart.py").resolve()
+    )
+    assert sys.path.index(str(FLOW)) > 0, "the clone never goes first on sys.path"
+    assert _driver(FLOW) is driver
+
+
+def test_a_driver_from_another_copy_is_refused(tmp_path, monkeypatch):
+    import sys
+    import types
+
+    from openadapt.quickstart import openemr
+
+    other = tmp_path / "benchmark" / "openemr_local"
+    other.mkdir(parents=True)
+    fake = types.ModuleType("benchmark.openemr_local")
+    fake.__path__ = [str(other)]
+    monkeypatch.setitem(sys.modules, "benchmark.openemr_local", fake)
+    monkeypatch.delitem(sys.modules, openemr.DRIVER, raising=False)
+    with pytest.raises(RuntimeError, match="refusing to run another copy"):
+        openemr._driver(FLOW)
+
+
 def _no_mockmed(monkeypatch):
     """Fail the test if anything reaches MockMed (no silent fallback)."""
 

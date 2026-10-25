@@ -159,15 +159,45 @@ def checkout_problem(flow: Optional[Path]) -> Optional[str]:
     )
 
 
+DRIVER = "benchmark.openemr_local.quickstart"
+
+
 def _driver(flow: Path) -> Any:
-    """The fixture driver, imported from the clone."""
+    """The fixture driver, loaded from its file in the clone.
 
-    path = str(flow)
-    if path not in sys.path:
-        sys.path.insert(0, path)
-    from benchmark.openemr_local import quickstart
+    The clone goes at the end of ``sys.path``, so it never shadows an
+    installed package; it is there only because the fixture's own imports
+    and verify.yaml's hooks name ``benchmark.openemr_local``. A
+    ``benchmark.openemr_local`` that resolves anywhere but this clone is
+    refused rather than run.
+    """
 
-    return quickstart
+    import importlib
+    import importlib.util
+
+    loaded = sys.modules.get(DRIVER)
+    source = (flow / "benchmark" / "openemr_local" / "quickstart.py").resolve()
+    if loaded is not None and Path(str(loaded.__file__)).resolve() == source:
+        return loaded
+    if str(flow) not in sys.path:
+        sys.path.append(str(flow))
+    package = importlib.import_module("benchmark.openemr_local")
+    found = [Path(entry).resolve() for entry in package.__path__]
+    if found != [source.parent]:
+        raise RuntimeError(
+            f"benchmark.openemr_local resolves to {found[0] if found else '?'}, "
+            f"not to the clone at {flow}; refusing to run another copy."
+        )
+    spec = importlib.util.spec_from_file_location(DRIVER, source)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[DRIVER] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(DRIVER, None)
+        raise
+    return module
 
 
 # ---------------------------------------------------------------------------
