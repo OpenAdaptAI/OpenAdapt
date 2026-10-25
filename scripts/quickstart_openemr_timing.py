@@ -102,6 +102,11 @@ def main() -> int:
         "--warm", type=int, default=3, help="warm runs after the cold ones"
     )
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--keep-going",
+        action="store_true",
+        help="time every planned run even after one fails (default: stop)",
+    )
     args = parser.parse_args()
 
     launcher = _launcher()
@@ -160,6 +165,9 @@ def main() -> int:
             rows.append(row)
             print(json.dumps(row), flush=True)
             (args.out.parent / f"{args.out.stem}-{kind}-{index}.log").write_text(output)
+            if code != 0 and not args.keep_going:
+                # A failed run's time measures nothing; stop and keep its log.
+                break
     args.out.write_text(
         json.dumps(
             {
