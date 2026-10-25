@@ -710,6 +710,11 @@ class WebFormSpec(BaseModel):
     #: requests.
     submitter: Optional[str] = None
     submitter_requests: list[str] = Field(default_factory=list)
+    #: The control the person clicked to confirm the save when it isn't the
+    #: submitter (for example OpenEMR's ``#confirmCreate`` in the duplicate
+    #: check dialog). Running the page's script clicks it too, in whichever
+    #: frame has it, and the page must then submit the form.
+    confirm: Optional[str] = None
     prechecks: list[WebFormPrecheck] = Field(default_factory=list)
     #: Regular expression the save response must match to count as accepted.
     success_pattern: Optional[str] = None
