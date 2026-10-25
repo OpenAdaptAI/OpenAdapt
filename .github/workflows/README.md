@@ -8,7 +8,9 @@ To keep pull requests fast, CI runs in three tiers:
   version (3.12) and only the packages a change touches, including Flow's
   unit suite. The checkout is the pull request merged with main, so this tier
   already tests the change on top of main.
-- **Queue tier** (`merge_group`): a lean re-check of the group on top of the
+- **Queue tier** (`merge_group`), when the merge queue is on (ruleset
+  25486718; it is off as of 2026-10-25, so a pull request merges once its
+  PR-tier checks pass and the PR tier is the only gate before main): a lean re-check of the group on top of the
   newest main. It runs the five required checks and a cheap but meaningful
   set: Flow lint and the critical golden path (VERIFIED, zero model calls),
   each touched package's Linux suite, and Desktop's frontend and Linux

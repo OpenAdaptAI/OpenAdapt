@@ -2,9 +2,10 @@
 #
 # Tiers (see .github/workflows/README.md for the job-by-tier table): a pull
 # request runs one fast Linux lane, including Flow's unit suite. The merge
-# queue (merge_group) runs a lean re-check of that lane on top of the newest
-# main: lint, the critical golden path and each touched package's Linux suite,
-# but not Flow's unit shards, which the pull request already passed. A push to
+# queue (merge_group), when it is on, runs a lean re-check of that lane on top
+# of the newest main: lint, the critical golden path and each touched
+# package's Linux suite, but not Flow's unit shards, which the pull request
+# already passed. A push to
 # main and a dispatch run the post-merge tier: everything, plus macOS,
 # Windows, older Pythons and the native installers. packages-gate is required
 # on pull requests and in the queue, and fails a job the change selects that
