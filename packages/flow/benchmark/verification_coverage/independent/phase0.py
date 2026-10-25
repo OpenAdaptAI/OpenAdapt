@@ -12,10 +12,10 @@ the state mapped from its label), judged by ``verify-run`` with a baseline and
 its default frame. No attribution and no provenance: the production
 configuration declares neither.
 
-``--contract plus`` is that contract with the fixes this measurement
-proposes (``plus_doc``): reads of the side tables, a required history row,
-the provider checked, audit attribution keyed by ``pid``, and the provenance
-round trip against the referral.
+``--contract plus`` is the candidate contract,
+``benchmark/lifecycle_proof/verify.frame.yaml`` (reads of the side tables, a
+required history row, the provider checked, audit attribution keyed by
+``pid``), with the provenance round trip against the referral.
 
 ``standin`` reads an SQLite copy of the pinned fixture's baseline (writes
 emulated by ``standin.py``). ``live`` runs on the pinned OpenEMR fixture
@@ -37,7 +37,6 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any, Callable, Optional
 
 import yaml
@@ -49,6 +48,7 @@ sys.path.insert(0, str(BENCH))
 from verification_coverage.independent import run, standin  # noqa: E402
 
 VERIFY_YAML = BENCH / "lifecycle_proof" / "verify.yaml"
+FRAME_YAML = BENCH / "lifecycle_proof" / "verify.frame.yaml"
 PARAMS = (
     "title",
     "fname",
@@ -72,8 +72,6 @@ SIDE_TABLES = {
     "allergies": "lists",
     "insurance": "insurance_data",
 }
-#: Provider name -> users.id as seeded (clinician2 5, Iris Holt 6, Owen Hale 7).
-PROVIDERS = {"Dr. Iris Holt": "6", "Dr. Owen Hale": "7"}
 #: OpenEMR's audit trail: UI writes in ``log`` (by user name), API writes in
 #: ``api_log`` (by user id). The stand-in emulates ``log`` only.
 AUDIT_LOG_SQL = (
@@ -110,50 +108,21 @@ def production_doc(patient: dict[str, Any]) -> dict[str, Any]:
 def plus_doc(
     patient: dict[str, Any], side: dict[str, dict[str, Any]], audit: dict[str, Any]
 ) -> dict[str, Any]:
-    """The production contract with the fixes this measurement proposes.
+    """The candidate contract (``lifecycle_proof/verify.frame.yaml``).
 
-    The required history row (P4) uses ``frame.side_records``, new in this
-    measurement's branch.
+    Its record and frame are used as written; only the reads (the patient,
+    the side tables, the audit trail) are replaced with this environment's.
     """
 
-    from openadapt_flow.qualify.campaign import record_effects
-    from openadapt_flow.qualify.config import RecordConfig
-    from openadapt_flow.runtime.effects.surfaces import surface_probe
-
-    record = production_record()
-    record["fields"]["providerID"] = {"param": "provider", "map": dict(PROVIDERS)}
-    parsed = RecordConfig.model_validate(record)
-    effects = []
-    for effect in record_effects(SimpleNamespace(record=parsed)):  # type: ignore[arg-type]
-        routed = effect.model_copy(
-            update={"probe": surface_probe("patient", effect.probe or "")}
-        )
-        effects.append(routed.model_dump(mode="json", exclude_unset=True))
+    doc = yaml.safe_load(FRAME_YAML.read_text())
+    frame = copy.deepcopy(doc["frame"])
+    frame["attribution"]["read"] = audit
     return {
         "schema_version": "openadapt.verify/v1",
-        "minimum_effect_strength": "independent_system_of_record",
+        "minimum_effect_strength": doc["minimum_effect_strength"],
         "verifier": {"kind": "surfaces", "surfaces": {"patient": patient, **side}},
-        "effects": effects,
-        "frame": {
-            "identity_field": "id",
-            # P4: one history row per new chart, linked by pid.
-            "side_records": [
-                {
-                    "surface": "history",
-                    "link_field": "pid",
-                    "of_surface": "patient",
-                    "of_field": "pid",
-                }
-            ],
-            "attribution": {
-                "kind": "audit_read",
-                "actor_field": "user",
-                "record_field": "patient_id",
-                "record_key": "pid",
-                "self": [run.BOT],
-                "read": audit,
-            },
-        },
+        "record": copy.deepcopy(doc["record"]),
+        "frame": frame,
     }
 
 
