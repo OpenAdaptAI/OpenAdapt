@@ -1168,6 +1168,58 @@ def pull(command_ctx: click.Context) -> None:
     _run_flow(["pull", *command_ctx.args])
 
 
+FIRST_TOOL_GUIDE = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/FIRST_TOOL.md"
+
+
+@main.command("setup")
+@click.option(
+    "--dry-run", is_flag=True, help="List what setup would change, and change nothing."
+)
+@click.option("--undo", is_flag=True, help="Reverse what earlier setup runs changed.")
+@click.option(
+    "--client",
+    "only",
+    multiple=True,
+    type=click.Choice(["claude", "cursor", "codex", "gemini"]),
+    help="Set up only this client (repeat for more). Default: every one found.",
+)
+def setup(dry_run: bool, undo: bool, only: tuple[str, ...]) -> None:
+    """Add OpenAdapt to Claude Code, Cursor, Codex and Gemini CLI.
+
+    For each one installed, register the OpenAdapt MCP server and install a
+    skill that tells the agent how to turn a browser task into a tool it can
+    call again. Prints every change. Running it again changes nothing that is
+    already set up.
+    """
+    from openadapt.setup_clients import CLIENTS, Setup, server_command
+
+    _require_supported_python()
+    clients = [c for c in CLIENTS if not only or c.key in only]
+    run = Setup(
+        home=Path.home(), command=server_command(), say=click.echo, dry_run=dry_run
+    )
+    if undo:
+        run.undo()
+        sys.exit(1 if run.failures else 0)
+    found = run.install(clients)
+    if not found:
+        click.echo(
+            "No supported agent found. Install Claude Code, Cursor, Codex or "
+            "Gemini CLI, then run openadapt setup again."
+        )
+        sys.exit(1)
+    if dry_run:
+        sys.exit(1 if run.failures else 0)
+    click.echo(
+        "\nNext: restart your agent so it loads OpenAdapt. To try it on a "
+        "local example app, run:\n"
+        "  openadapt agent example-app\n"
+        f"and follow {FIRST_TOOL_GUIDE}\n"
+        "Undo with: openadapt setup --undo"
+    )
+    sys.exit(1 if run.failures else 0)
+
+
 @main.command(
     "agent",
     context_settings={
