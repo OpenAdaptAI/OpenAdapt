@@ -40,7 +40,7 @@ import re
 import struct
 import warnings
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -686,6 +686,22 @@ class WindowsBackend:
         if not value:
             return None
         return str(value)
+
+    def identity_candidates_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """Census of the rows that read the same as the row under (x, y).
+
+        See :class:`openadapt_flow.backend.IdentityCandidatesBackend`. Served by
+        the agent's typed ``/uia/identity-candidates-at``; an agent without it,
+        or the legacy exec path, cannot count rows (None), and the runtime
+        halts a row pick before a write.
+        """
+        typed = self._post_typed_read(
+            "/uia/identity-candidates-at", {"x": int(x), "y": int(y)}
+        )
+        if not typed.available or typed.payload is None:
+            return None
+        census = typed.payload.get("census")
+        return census if isinstance(census, dict) else None
 
     def _execute_read(self, command: str) -> Optional[str]:
         """POST bare Python to WAA and return the response body if any.

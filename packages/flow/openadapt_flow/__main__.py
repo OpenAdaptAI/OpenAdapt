@@ -3154,6 +3154,110 @@ def _approval_wait_seconds(args: argparse.Namespace) -> float:
     return max(0.0, min(float(raw), MAX_APPROVAL_WAIT_S))
 
 
+def _deployment_approvers(args: argparse.Namespace) -> Any:
+    """The deployment config's ``approvers`` section, or ``None``.
+
+    Parsed once per command: every later reader in this process sees the
+    same pin, even if the file is swapped while the run goes on.
+    """
+
+    if hasattr(args, "_approvers_section"):
+        return args._approvers_section
+    args._approvers_section = _load_deployment_approvers(args)
+    return args._approvers_section
+
+
+def _load_deployment_approvers(args: argparse.Namespace) -> Any:
+    config = getattr(args, "config", None)
+    if not config:
+        return None
+    from openadapt_flow.deployment import load_deployment
+
+    try:
+        return load_deployment(config, allow_unresolved=True).approvers
+    except (OSError, ValueError) as exc:
+        # A config that can't be read must not quietly drop its pin and let
+        # a caller-set root count instead.
+        raise SystemExit(
+            f"REFUSED (deployment_config_unreadable): {config} can't be read, so "
+            f"its approver pin can't be checked ({exc}). Nothing was executed."
+        ) from None
+
+
+def _args_key_dir(args: argparse.Namespace) -> Optional[Path]:
+    """The ``--key-dir`` the operator chose, or ``None`` for the default.
+
+    Never read from a run directory: the approval files there are writable by
+    any process, so a path stored in them would let a forger pick the registry.
+    A deployment config that pins ``approvers.key_dir`` names the only key
+    directory a run accepts: ``--key-dir`` elsewhere is refused.
+    """
+
+    key_dir = getattr(args, "key_dir", None)
+    pinned = _deployment_approvers(args)
+    if pinned is not None and pinned.key_dir:
+        want = Path(pinned.key_dir).expanduser().resolve()
+        if key_dir and Path(key_dir).expanduser().resolve() != want:
+            raise SystemExit(
+                f"REFUSED (approver_key_dir_mismatch): the deployment config pins "
+                f"the approver key directory {want}; --key-dir names another. "
+                "Nothing was executed."
+            )
+        return want
+    return Path(key_dir) if key_dir else None
+
+
+def _approver_pin(args: argparse.Namespace, *, config_only: bool) -> dict[str, Any]:
+    """The pin a run's item-approval store checks answers against.
+
+    ``config_only`` (a governed run, or one an agent started): only the
+    deployment config's ``approvers.root_public_key`` counts; ``--approver-root``
+    and ``OPENADAPT_APPROVER_ROOT`` are ignored, since whoever starts the run
+    sets them. Without a config pin such a run refuses every person's answer.
+    """
+
+    pinned = _deployment_approvers(args)
+    return {
+        "approver_root": getattr(args, "approver_root", None),
+        "config_root": pinned.root_public_key if pinned is not None else None,
+        "config_only": config_only,
+        "config_head": tuple(pinned.head)
+        if pinned is not None and pinned.head
+        else None,
+    }
+
+
+def _run_is_config_pinned(args: argparse.Namespace) -> bool:
+    """A governed run (or its resume), or one an agent started."""
+
+    return (
+        bool(getattr(args, "started_by", None))
+        or getattr(args, "_governed_run_authorization", None) is not None
+        or bool(getattr(args, "_resume_governed", False))
+    )
+
+
+def _args_approver_root(args: argparse.Namespace) -> Optional[str]:
+    """The approver root this command pins (approval_mode/approver_roster).
+
+    The deployment config's ``approvers.root_public_key``, ``--approver-root``
+    and ``OPENADAPT_APPROVER_ROOT``; two that disagree are refused.
+    """
+
+    from openadapt_flow.approval_mode.approver_roster import RosterError, pinned_root
+
+    pinned = _deployment_approvers(args)
+    try:
+        return pinned_root(
+            getattr(args, "approver_root", None),
+            config_root=pinned.root_public_key if pinned is not None else None,
+        )
+    except RosterError as exc:
+        raise SystemExit(
+            f"REFUSED ({exc.code}): {exc}. Nothing was executed."
+        ) from None
+
+
 def _approver_settings(args: argparse.Namespace):
     """The run's approver grant and delegated approver, from its flags.
 
@@ -3179,7 +3283,7 @@ def _approver_settings(args: argparse.Namespace):
     loaded = None
     path = getattr(args, "approver_policy", None)
     if path:
-        loaded = load_approver_policy(path, default_key_dir())
+        loaded = load_approver_policy(path, _args_key_dir(args) or default_key_dir())
         if loaded.refusal is not None:
             from openadapt_flow.cli_hints import command
 
@@ -3215,9 +3319,15 @@ def _prepare_approval_store(
         ItemApprovalStore,
     )
 
-    store = ItemApprovalStore(run_dir)
+    store = ItemApprovalStore(
+        run_dir,
+        key_dir=_args_key_dir(args),
+        **_approver_pin(args, config_only=_run_is_config_pinned(args)),
+    )
     loaded, approver = _approver_settings(args)
     try:
+        if record_initiator:
+            store.write_approver_root()
         if loaded is not None and loaded.signed is not None:
             store.write_grant(loaded.signed)
         elif loaded is not None and loaded.refusal is None:
@@ -3231,6 +3341,25 @@ def _prepare_approval_store(
     return store, approver
 
 
+def _record_approver_pin(args: argparse.Namespace, run_dir: Path) -> None:
+    from openadapt_flow.approval_mode.item_approval import (
+        ItemApprovalRefused,
+        ItemApprovalStore,
+    )
+
+    store = ItemApprovalStore(
+        run_dir,
+        key_dir=_args_key_dir(args),
+        **_approver_pin(args, config_only=True),
+    )
+    try:
+        store.write_approver_root()
+    except ItemApprovalRefused as exc:
+        raise SystemExit(
+            f"run REFUSED: {exc} ({exc.code}). Nothing was executed."
+        ) from None
+
+
 def _approval_gate_for_run(
     args: argparse.Namespace,
     run_dir: Path,
@@ -3241,6 +3370,10 @@ def _approval_gate_for_run(
 
     mode = getattr(args, "_approval_mode", None)
     if mode is None:
+        if _run_is_config_pinned(args):
+            # No gate, but a durable stop may still need a person's signed
+            # approval later: record the pin a resume will check now.
+            _record_approver_pin(args, run_dir)
         return None
     from openadapt_flow.approval_mode.gate import ApprovalGate
 
@@ -3952,7 +4085,13 @@ def _resume_approval_mode(args: argparse.Namespace, authorization):
     return None
 
 
-def _carry_item_approval_to_pause(run_dir: Path, store, pending):
+def _carry_item_approval_to_pause(
+    run_dir: Path,
+    store,
+    pending,
+    key_dir: Optional[Path] = None,
+    pin: Optional[dict[str, Any]] = None,
+):
     """Answer a waiting ``item_approval`` pause from an unused approval, if any.
 
     Returns the pause as it now stands (unchanged when there's no approval).
@@ -3965,7 +4104,9 @@ def _carry_item_approval_to_pause(run_dir: Path, store, pending):
     try:
         manifest = store.read_manifest()
         found = (
-            ItemApprovalStore(run_dir).find_unused_approval(
+            ItemApprovalStore(
+                run_dir, key_dir=key_dir, **(pin or {})
+            ).find_unused_approval(
                 run_id=manifest.run_id,
                 step_id=pending.step_id,
                 step_index=pending.step_index,
@@ -4031,12 +4172,23 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             "Nothing was executed."
         )
         return 3
+    # A governed run's resume takes its approver pin only from the deployment
+    # config, everywhere it checks an answer (the run directory and the
+    # environment are never the anchor).
+    _early_manifest = store.read_manifest()
+    args._resume_governed = bool(
+        _early_manifest is not None
+        and _early_manifest.governed_authorization is not None
+    )
+    resume_pin = _approver_pin(args, config_only=_run_is_config_pinned(args))
     if pending.category == "item_approval" and pending.status == "pending":
         # The person may have approved while the run was giving up waiting,
         # before this pause existed for `item-approval approve` to answer.
         # Carry that approval to the pause now; the resumed run still checks
         # the answer itself and uses it once.
-        pending = _carry_item_approval_to_pause(run_dir, store, pending)
+        pending = _carry_item_approval_to_pause(
+            run_dir, store, pending, _args_key_dir(args), resume_pin
+        )
     if args.require_approval and pending.status != "approved":
         from openadapt_flow.cli_hints import command
 
@@ -4063,7 +4215,9 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
 
         if (
-            ItemApprovalStore(run_dir).find_unused_approval(
+            ItemApprovalStore(
+                run_dir, key_dir=_args_key_dir(args), **resume_pin
+            ).find_unused_approval(
                 run_id=manifest.run_id,
                 step_id=pending.step_id,
                 step_index=pending.step_index,
@@ -4078,6 +4232,44 @@ def _cmd_resume(args: argparse.Namespace) -> int:
                 "Nothing was executed."
             )
             return 3
+    elif pending.category != "business_decision":
+        # An item's authority is its signed answer, checked above and again by
+        # the run; a business decision carries its own signed receipt. Any
+        # other stored approval must be signed by a registered approver key:
+        # approval.json is a file any process could write.
+        from openadapt_flow.jit.lifecycle import default_key_dir
+        from openadapt_flow.runtime.durable.approval import stored_approval_refusal
+
+        stored = store.read_approval()
+        if stored is not None:
+            from openadapt_flow.approval_mode.item_approval import (
+                ItemApprovalStore as _PinStore,
+            )
+
+            # The run's own recorded pin and roster head when it has one; a
+            # governed run's resume otherwise takes only the config's root.
+            pin = _PinStore(
+                run_dir,
+                key_dir=_args_key_dir(args) or default_key_dir(),
+                **_approver_pin(
+                    args,
+                    config_only=manifest.governed_authorization is not None,
+                ),
+            )
+            root, head, pin_refusal = pin._root_pin()
+            code = pin_refusal or stored_approval_refusal(
+                stored,
+                _args_key_dir(args) or default_key_dir(),
+                root=root,
+                at_least=head,
+            )
+            if code is not None:
+                print(
+                    f"Resume REFUSED ({code}): the approval isn't signed by a "
+                    "registered approver key. Approve with openadapt flow approve "
+                    "--approver-key. Nothing was executed."
+                )
+                return 3
     resume_mode = _resume_approval_mode(args, manifest.governed_authorization)
     if isinstance(resume_mode, int):
         return resume_mode
@@ -4361,6 +4553,35 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     return 0 if report.success else 1
 
 
+def _approver_signer(args: argparse.Namespace, *, method: str) -> Any:
+    """The registered approver key from ``--approver-key``, or ``None`` after
+    printing why. A person's approval is signed with it; nothing else counts."""
+
+    from openadapt_flow.approval_mode.human_attestation import (
+        AttestationRefused,
+        load_signer,
+    )
+    from openadapt_flow.jit.lifecycle import default_key_dir
+
+    key_path = getattr(args, "approver_key", None)
+    if not key_path:
+        print(
+            "A person's approval is signed with their registered approver key: "
+            "pass --approver-key (with OPENADAPT_JIT_KEY_PASSPHRASE set). "
+            "Create one with jit keygen; an approver on the roster adds it with "
+            "jit approver add (or jit approver init starts the roster)."
+        )
+        return None
+    key_dir = _args_key_dir(args) or default_key_dir()
+    try:
+        return load_signer(  # type: ignore[arg-type]
+            key_path, key_dir, method=method, root=_args_approver_root(args)
+        )
+    except AttestationRefused as exc:
+        print(f"Approval refused ({exc.code}): {exc}")
+        return None
+
+
 def _cmd_approve(args: argparse.Namespace) -> int:
     """Record an AUTHENTICATED approval for a durably-paused run (P0-5).
 
@@ -4370,8 +4591,6 @@ def _cmd_approve(args: argparse.Namespace) -> int:
     approval is refused). Also flips the pending escalation's ``status`` to
     ``approved`` for the audit trail / back-compat.
     """
-    import getpass
-
     from openadapt_flow import crypto
     from openadapt_flow.runtime.durable.approval import (
         ResumeRefused,
@@ -4421,9 +4640,18 @@ def _cmd_approve(args: argparse.Namespace) -> int:
         )
         return 1
 
-    # The approver identity defaults to the invoking OS user (a resume with a
-    # blank approver is refused by the durable library); --approver overrides.
-    approver = args.approver or getpass.getuser()
+    # The approver is whoever the registered approver key belongs to. A name
+    # on the command line, or the OS user, is a claim any process can make.
+    signer = _approver_signer(args, method="person_key")
+    if signer is None:
+        return 1
+    if args.approver and args.approver != signer.principal_id:
+        print(
+            f"--approver {args.approver!r} doesn't match the approver key, which "
+            f"is registered as {signer.principal_id!r}."
+        )
+        return 1
+    approver = signer.principal_id
     try:
         bundle_ver = bundle_version(manifest.bundle_dir)
     except OSError:
@@ -4461,6 +4689,11 @@ def _cmd_approve(args: argparse.Namespace) -> int:
         run_dir=run_dir,
         authorize_uncertain_retry=authorize_uncertain_retry,
     )
+    from openadapt_flow.approval_mode.human_attestation import RESUME_DOMAIN
+
+    approval = approval.model_copy(
+        update={"attestation": signer.attest(RESUME_DOMAIN, approval.signed_payload())}
+    )
     # Bind the exact authority and pause-state transition in one filesystem
     # transaction. A concurrent resume cannot replace the retained approver or
     # leave approval.json describing authority that the live attempt did not use.
@@ -4479,6 +4712,18 @@ def _cmd_approve(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_head(value: Optional[str]) -> Optional[tuple[int, str]]:
+    """``SEQ:sha256:HEX`` (or ``SEQ:HEX``) as a roster head, or ``None``."""
+
+    if not value:
+        return None
+    seq, _, digest = str(value).partition(":")
+    if not seq.isdigit() or not digest:
+        raise SystemExit(f"REFUSED: --approver-head {value!r} isn't SEQ:SHA256")
+    digest = digest if digest.startswith("sha256:") else "sha256:" + digest
+    return int(seq), digest
+
+
 def _cmd_item_approval(args: argparse.Namespace) -> int:
     """List, approve or decline per-item approval requests (Desktop's Run it).
 
@@ -4493,6 +4738,7 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
     """
     import json
 
+    from openadapt_flow.approval_mode.human_attestation import AttestationRefused
     from openadapt_flow.approval_mode.item_approval import (
         ItemApprovalRefused,
         ItemApprovalStore,
@@ -4502,7 +4748,13 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
 
     verb = args.item_approval_cmd
     run_dir = Path(args.run_dir)
-    store = ItemApprovalStore(run_dir)
+    key_dir = getattr(args, "key_dir", None)
+    store = ItemApprovalStore(
+        run_dir,
+        key_dir=Path(key_dir) if key_dir else None,
+        approver_root=getattr(args, "approver_root", None),
+        config_head=_parse_head(getattr(args, "approver_head", None)),
+    )
     if verb == "show":
         rows = [request_summary(store, request) for request in store.requests()]
         if not args.all:
@@ -4567,6 +4819,52 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
             "approver_invalid",
             "a Cloud approver needs --auth-method cloud_aal2 or cloud_aal1",
         )
+    signer = None
+    if delegate is None:
+        from openadapt_flow.approval_mode.human_attestation import (
+            ROUTE_METHOD,
+            load_signer,
+            stdio_signer,
+        )
+
+        method = ROUTE_METHOD.get(args.route)
+        if method is None:
+            return refuse("route_not_allowed", "a person answers from desktop_run_it")
+        public_key = getattr(args, "approver_public_key", None)
+        external = getattr(args, "approver_signer", None)
+        if bool(public_key) != bool(external):
+            return refuse(
+                "approver_invalid",
+                "--approver-signer stdio and --approver-public-key go together",
+            )
+        if public_key and getattr(args, "approver_key", None):
+            return refuse(
+                "approver_invalid",
+                "pass --approver-key or --approver-signer stdio, not both",
+            )
+        if not public_key and not getattr(args, "approver_key", None):
+            return refuse(
+                "human_answer_unsigned",
+                "a person's answer is signed with the Desktop approver key: pass "
+                "--approver-key. --decided-by human on its own proves nothing",
+            )
+        try:
+            if public_key:
+                signer = stdio_signer(
+                    public_key,
+                    store.key_directory(),
+                    method=method,
+                    root=store.approver_root,
+                )
+            else:
+                signer = load_signer(
+                    args.approver_key,
+                    store.key_directory(),
+                    method=method,
+                    root=store.approver_root,
+                )
+        except AttestationRefused as exc:
+            return refuse(exc.code, str(exc))
     try:
         request = store.read_request(args.request_id)
         if args.request_sha256 != request.digest():
@@ -4593,9 +4891,10 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
             decline_reason=getattr(args, "reason", None),
             approver=delegate,
             policy=store.context(),
+            signer=signer,
         )
         store.write_answer(answer)
-    except ItemApprovalRefused as exc:
+    except (ItemApprovalRefused, AttestationRefused) as exc:
         return refuse(exc.code, str(exc))
     resume_required = _answer_durable_item_pause(run_dir, request, answer)
     print(
@@ -7508,9 +7807,61 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_approver_key_flags(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--approver-key",
+        default=None,
+        help=(
+            "The person's encrypted approver key (jit keygen; on the approver "
+            "roster via jit approver init or add). Its passphrase comes from "
+            "OPENADAPT_JIT_KEY_PASSPHRASE. A person's approval is signed with "
+            "it; without it the approval is refused"
+        ),
+    )
+    p.add_argument(
+        "--key-dir",
+        default=None,
+        help="Key directory with the approver roster (default "
+        "$OPENADAPT_JIT_KEY_DIR or ~/.openadapt/jit)",
+    )
+    p.add_argument(
+        "--approver-root",
+        default=None,
+        metavar="HEX",
+        help=(
+            "The root approver key (64 hex) this run trusts: a person's answer "
+            "counts only when its signer is on the signed approver roster this "
+            "key vouches for. Also set by the deployment config's "
+            "approvers.root_public_key or OPENADAPT_APPROVER_ROOT; without one, "
+            "a person's answer is refused"
+        ),
+    )
+
+
 def _add_approval_flags(p: argparse.ArgumentParser) -> None:
     """Add the per-item approval flags to ``run``, ``resume`` and ``run-case``."""
 
+    p.add_argument(
+        "--approver-root",
+        default=None,
+        metavar="HEX",
+        help=(
+            "The root approver key (64 hex) this run trusts: a person's answer "
+            "counts only when its signer is on the signed approver roster this "
+            "key vouches for. Also set by the deployment config's "
+            "approvers.root_public_key or OPENADAPT_APPROVER_ROOT; without one, "
+            "a person's answer is refused"
+        ),
+    )
+    p.add_argument(
+        "--key-dir",
+        default=None,
+        help=(
+            "Key directory with the signed approver roster (approvers.json) that "
+            "approvals are checked against; use the one you approved with "
+            "(default $OPENADAPT_JIT_KEY_DIR or ~/.openadapt/jit)"
+        ),
+    )
     p.add_argument(
         "--approver-policy",
         default=None,
@@ -7590,6 +7941,18 @@ def _add_deployment_flags(
 ) -> None:
     """Add the shared deployment-wiring flags (config + effects + actuation +
     durable, optionally a worklist) to a replay-family subparser."""
+    p.add_argument(
+        "--config-sha256",
+        default=None,
+        metavar="HEX",
+        help=(
+            "The SHA-256 of --config's bytes. Flow opens the file once (not "
+            "through a symlink; it must be a regular file), refuses it if the "
+            "digest differs, and from then on parses only those bytes whenever "
+            "this command loads that path, so replacing the file, or a symlink "
+            "put in its place, changes nothing"
+        ),
+    )
     p.add_argument(
         "--config",
         default=None,
@@ -8262,9 +8625,15 @@ def build_parser() -> argparse.ArgumentParser:
         "induce",
         help=(
             "Induce a parameterized PROGRAM bundle from MULTIPLE recordings "
-            "(multi-trace induction: infer params / loops / branches). REFUSES "
-            "(nonzero exit, no bundle) when intent is underdetermined, printing "
-            "a record-next worklist of missing demonstrations"
+            "(multi-trace induction: infer params / loops / branches). Loops: "
+            "back-to-back repeats and search, open, act, return worklists, "
+            "including rows that differ; not pagination (a next-page step "
+            "between rows) or a list nested inside each row. Certified and "
+            "governed runs refuse a loop that opens each row's record by its "
+            "values (a record-selecting click) until qualification covers it. "
+            "REFUSES (nonzero exit, no bundle) when intent is "
+            "underdetermined, printing a record-next worklist of missing "
+            "demonstrations"
         ),
     )
     p.add_argument(
@@ -8289,8 +8658,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--held-out",
         action="store_true",
         help=(
-            "Also run leave-one-out held-out validation and print the per-fold "
-            "reproduction scores (needs >= 2 traces)"
+            "Also print the leave-one-out STRUCTURAL held-out coverage (needs "
+            ">= 2 traces). It compares program shape with each held-out trace, "
+            "executes nothing and checks neither identity nor effects; for a "
+            "generalization claim run held-out items with openadapt_flow."
+            "validation.behavioral_generalization"
         ),
     )
     p.add_argument(
@@ -9197,8 +9569,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--approver",
         default=None,
         help=(
-            "Approver identity recorded on the approval (defaults to the "
-            "invoking OS user; a blank identity is refused at resume)"
+            "Optional check: the approver id the --approver-key must be "
+            "registered as. The approval names the key's registered approver"
         ),
     )
     p.add_argument(
@@ -9217,6 +9589,7 @@ def build_parser() -> argparse.ArgumentParser:
             "retry of the possibly dispatched step (ordinary approval refuses)"
         ),
     )
+    _add_approver_key_flags(p)
     p.set_defaults(func=_cmd_approve)
 
     p = sub.add_parser(
@@ -9294,6 +9667,31 @@ def build_parser() -> argparse.ArgumentParser:
             "--unauthenticated",
             action="store_true",
             help="Desktop was signed out: record the answer without a name",
+        )
+        _add_approver_key_flags(q)
+        q.add_argument(
+            "--approver-signer",
+            choices=["stdio"],
+            default=None,
+            help=(
+                "The process that started this one holds the approver key and "
+                "signs over stdin/stdout (Desktop's Keychain key). Flow writes "
+                "one sign request line and reads one response line"
+            ),
+        )
+        q.add_argument(
+            "--approver-public-key",
+            default=None,
+            help="With --approver-signer: the registered approver key's public key (hex)",
+        )
+        q.add_argument(
+            "--approver-head",
+            default=None,
+            metavar="SEQ:SHA256",
+            help=(
+                "A roster head the answering side recorded (Desktop's Keychain): "
+                "the approver roster must extend it"
+            ),
         )
         if verb == "decline":
             q.add_argument(
@@ -11923,6 +12321,25 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     no_outbound.enforce_from_env()
     args = build_parser().parse_args(argv)
+    if getattr(args, "config_sha256", None):
+        if not getattr(args, "config", None):
+            print("REFUSED: --config-sha256 needs --config", file=sys.stderr)
+            return 2
+        # Pin by the absolute path: a relative path plus a later chdir would
+        # otherwise name a different, unpinned file.
+        import os
+
+        from openadapt_flow.deployment import pin_deployment_bytes
+
+        args.config = os.path.abspath(args.config)
+        try:
+            # Read the config once, check it, and parse only those bytes.
+            pin_deployment_bytes(args.config, args.config_sha256)
+            # The approver pin comes from those same bytes, now.
+            _deployment_approvers(args)
+        except (OSError, ValueError) as exc:
+            print(f"REFUSED (deployment_config_changed): {exc}", file=sys.stderr)
+            return 2
     from openadapt_flow import sealed_set
 
     try:

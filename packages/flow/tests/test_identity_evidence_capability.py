@@ -40,6 +40,16 @@ def _button(val: int = 255) -> np.ndarray:
     return img
 
 
+def _id_crop() -> np.ndarray:
+    """An identifier crop with real structure (text), unlike ``_button``'s
+    full-height bar, which matches itself shifted and so is featureless."""
+    img = np.full((_H, _W), 255, np.uint8)
+    cv2.putText(
+        img, "MG4408 Okafor", (6, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.7, 0, 2, cv2.LINE_AA
+    )
+    return img
+
+
 def _with_extra_bar(img: np.ndarray) -> np.ndarray:
     other = img.copy()
     other[:, 140:145] = 0
@@ -109,10 +119,40 @@ def test_no_surrounding_text_valid_crop_verifies_where_crops_are_verifiable(
     tmp_path: Path,
 ) -> None:
     step, res = _crop_only_step(tmp_path, _button())
+    # A read-only step: nothing consequential follows it.
+    step.risk = "reversible"
+    step.intent = "click 'View referral'"
     error, check = _gate(tmp_path, step, res, _button(), pixel_verify_enabled=True)
     assert error is None
     assert check is not None
     assert check.status == "verified" and check.mode == "pixel"
+    # A full-height bar matches itself shifted, so it cannot count rows; with
+    # nothing consequential after the step it runs and records that.
+    assert check.census_status == "cannot_count"
+
+
+def test_a_crop_found_once_on_the_frame_runs_before_a_write(
+    tmp_path: Path,
+) -> None:
+    """No OCR band: the census counts where the crop verifies. Once: it runs."""
+
+    step, res = _crop_only_step(tmp_path, _id_crop())
+    error, check = _gate(tmp_path, step, res, _id_crop(), pixel_verify_enabled=True)
+    assert error is None
+    assert check is not None and check.status == "verified"
+    assert check.candidate_count == 1
+
+
+def test_a_crop_found_twice_on_the_frame_halts(tmp_path: Path) -> None:
+    """Another row shows the same identifier pixels: the step stops."""
+
+    step, res = _crop_only_step(tmp_path, _id_crop())
+    frame = np.vstack([_id_crop(), np.full((8, _W), 255, np.uint8), _id_crop()])
+    error, check = _gate(tmp_path, step, res, frame, pixel_verify_enabled=True)
+    assert error is not None and "2 shown rows" in error
+    assert check is not None
+    assert check.status == "abstain" and check.ambiguity_halt == "identical_candidates"
+    assert check.candidate_count == 2
 
 
 def test_crop_that_does_not_match_halts(tmp_path: Path) -> None:
