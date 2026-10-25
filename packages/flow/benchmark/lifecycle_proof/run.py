@@ -59,6 +59,8 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
+from benchmark.lifecycle.paths import relative_paths
+
 HERE = Path(__file__).resolve().parent
 FLOW = HERE.parents[1]
 VERIFY_YAML = HERE / "verify.yaml"
@@ -80,8 +82,9 @@ CONTINUE = ("r7-arlo-whitcombe", "r8-priya-raman")
 # -- small helpers -----------------------------------------------------------------
 
 
-def _write(path: Path, value: Any) -> None:
+def _write(path: Path, value: Any, root: Optional[Path] = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    value = relative_paths(value, root or path.parent)
     path.write_text(json.dumps(value, indent=2, sort_keys=True, default=str) + "\n")
 
 
@@ -94,11 +97,12 @@ class Ledger:
 
     def __init__(self, out: Path) -> None:
         self.path = out / "ledger.jsonl"
+        self.root = out
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 
     def add(self, kind: str, **fields: Any) -> None:
-        row = {"at": time.time(), "kind": kind, **fields}
+        row = relative_paths({"at": time.time(), "kind": kind, **fields}, self.root)
         with self._lock, self.path.open("a") as handle:
             handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
         print(json.dumps(row, default=str), flush=True)
@@ -334,13 +338,17 @@ class Item:
         *,
         pipeline: Any = None,
         verifier_wrapper: Any = None,
+        params: Optional[dict[str, str]] = None,
+        is_retry: bool = False,
     ) -> None:
         self.ctx = ctx
         self.key = key
         self.run_dir = run_dir
-        self.params = referral_params(key)
+        # A soak item brings its own values; the proof's referrals are named.
+        self.params = dict(params) if params is not None else referral_params(key)
         self.pipeline = pipeline
         self.verifier_wrapper = verifier_wrapper
+        self.is_retry = is_retry
 
     def approval_gate(self, bundle: Path, page: Any) -> Any:
         from openadapt_flow.approval_mode.gate import ApprovalGate
@@ -359,6 +367,8 @@ class Item:
             record=ctx["switch_record"],
             log=ctx["switch_log"],
             pinned_status_keys=ctx["keys"]["status_keys"],
+            # A person's signed re-arm counts only with their key pinned.
+            pinned_approver_keys=ctx.get("approver_keys") or None,
             fetch_status=LocalStatusAuthority(ctx["keys"]["status_private"]),
             environment_digest=lambda: ctx["environment_digest"],
             runner_id=RUNNER_ID,
@@ -369,7 +379,7 @@ class Item:
                 header_maps_every_input=True,
                 rows_well_formed=True,
                 values_pass_types=True,
-                is_retry=False,
+                is_retry=self.is_retry,
                 allow_repeat=False,
                 record_key_seen_recently=False,
                 caller_supplied_configuration=False,
@@ -697,6 +707,7 @@ def phase_switch(ctx: dict[str, Any]) -> None:
     _write(
         out / "switch" / "switch.json",
         {"record": record.model_dump(mode="json"), "log": str(log_path)},
+        root=out,
     )
     ctx.update(switch_record=record, switch_log=log)
     ctx["ledger"].add(
@@ -832,7 +843,12 @@ def phase_crash(ctx: dict[str, Any], keys_dir: Path) -> dict[str, Any]:
     return summary
 
 
-def _resume(ctx: dict[str, Any], key: str, run_dir: Path) -> Any:
+def _resume(
+    ctx: dict[str, Any],
+    key: str,
+    run_dir: Path,
+    params: Optional[dict[str, str]] = None,
+) -> Any:
     from openadapt_flow.runtime import Replayer
     from openadapt_flow.runtime.durable import CheckpointStore, resume
     from openadapt_flow.runtime.durable.approval import issue_resume_approval
@@ -853,7 +869,7 @@ def _resume(ctx: dict[str, Any], key: str, run_dir: Path) -> Any:
     )
     ctx["person"].touches += 1
     ctx["ledger"].add("person", action="resume", item=key)
-    item = Item(ctx, key, run_dir)
+    item = Item(ctx, key, run_dir, params=params)
     backend, close = ctx["hooks"].open_session()
     try:
         replayer = Replayer(
@@ -932,7 +948,7 @@ class ProofTarget:
             # The item's own first run: the problems-only gate and the pin.
             from openadapt_flow.runtime import Replayer
 
-            item = Item(self.ctx, self.item.key, Path(run_dir))
+            item = Item(self.ctx, self.item.key, Path(run_dir), params=self.item.params)
             verifier = item.verifier()
             replayer = Replayer(
                 session.backend,
