@@ -761,13 +761,13 @@ class RuntimeSection(BaseModel):
     #: :func:`openadapt_flow.runtime.identity.verify_pixel_identity` and
     #: docs/LIMITS.md.
     pixel_verify_enabled: bool = False
-    #: Where ``no_duplicate_candidate`` gets its evidence. ``record`` (the
+    #: Where ``no_duplicate_candidate`` gets its evidence. ``auto`` (the
     #: default): when ``effects`` reads a FHIR server or OpenEMR's patient API,
     #: the check searches the system of record for this patient
     #: (``runtime/checks/duplicate_record.py``) and the app's on-screen match
     #: list is not read. With no such channel, or ``screen``, the on-screen
     #: list decides, as before.
-    duplicate_check: Literal["record", "screen"] = "record"
+    duplicate_check: Literal["auto", "screen"] = "auto"
     #: Path to an export of the system of record that lists every identifier
     #: in the namespace (CSV, JSON or one per line). When set, an OCR identity
     #: check that abstained only on a look-alike identifier (O/0, l/1, B/8) is
@@ -1447,16 +1447,6 @@ def build_model_grounder(cfg: GroundingModelConfig) -> Optional[Any]:
     return None
 
 
-def _duplicate_record_source(effect_verifier: Any) -> Any:
-    """The duplicate check's record channel, from the deployment's verifier."""
-
-    if effect_verifier is None:
-        return None
-    from openadapt_flow.runtime.checks.duplicate_record import source_for_verifier
-
-    return source_for_verifier(effect_verifier)
-
-
 def build_replayer(
     backend: Any,
     *,
@@ -1668,9 +1658,7 @@ def build_replayer(
         allow_model_grounding=allow_egress,
         effect_verifier=effect_verifier,
         duplicate_record_source=(
-            None
-            if runtime_config is not None and runtime_config.duplicate_check == "screen"
-            else _duplicate_record_source(effect_verifier)
+            runtime_config.duplicate_check if runtime_config is not None else "auto"
         ),
         api_actuator=api_actuator,
         durable=durable,

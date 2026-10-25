@@ -514,6 +514,12 @@ class Postcondition(BaseModel):
     candidate_params: Optional[tuple[str, ...]] = Field(
         default=None, min_length=1, max_length=8
     )
+    #: NO_DUPLICATE_CANDIDATE: where the check's evidence must come from.
+    #: ``record``: the system of record, and a run with no record channel
+    #: fails the step (never the screen instead). ``screen``: the listed rows,
+    #: even when a record channel exists. Unset: the record when the run has
+    #: a record channel, else the screen.
+    candidate_source: Optional[Literal["record", "screen"]] = None
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -525,7 +531,12 @@ class Postcondition(BaseModel):
             data.pop("field_selector", None)
         if self.param is None:
             data.pop("param", None)
-        for name in ("candidate_rows", "candidate_frame_path", "candidate_params"):
+        for name in (
+            "candidate_rows",
+            "candidate_frame_path",
+            "candidate_params",
+            "candidate_source",
+        ):
             if getattr(self, name) is None:
                 data.pop(name, None)
         return data

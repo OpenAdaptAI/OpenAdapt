@@ -868,7 +868,7 @@ class Replayer:
         state_verifier: Optional[Any] = None,
         effect_verifier: Optional[EffectVerifier] = None,
         effect_compensator: Optional[Any] = None,
-        duplicate_record_source: Optional[Any] = None,
+        duplicate_record_source: Any = "auto",
         api_actuator: Optional[Any] = None,
         web_form_actuator: Optional[Any] = None,
         api_steps: bool = True,
@@ -1022,9 +1022,18 @@ class Replayer:
         self.effect_verifier = effect_verifier
         self.effect_compensator = effect_compensator
         # The duplicate check's record channel (``runtime/checks/
-        # duplicate_record.py``). When set, ``no_duplicate_candidate`` asks the
-        # system of record instead of reading the app's match list.
-        self.duplicate_record_source = duplicate_record_source
+        # duplicate_record.py``), resolved here from this run's own effect
+        # verifier, so every construction path (qualification, run, resume,
+        # proof) that reads the same system of record uses the same check.
+        # When set, ``no_duplicate_candidate`` asks the system of record
+        # instead of reading the app's match list.
+        from openadapt_flow.runtime.checks.duplicate_record import (
+            resolve_duplicate_source,
+        )
+
+        self.duplicate_record_source = resolve_duplicate_source(
+            effect_verifier, duplicate_record_source
+        )
         self._last_duplicate_check: Optional[Any] = None
         # ``run``-only, bundle-bound admission capability.  The ordinary
         # ``replay`` path leaves this unset and preserves its permissive
@@ -17739,7 +17748,21 @@ class Replayer:
             or {}
         )
         source = getattr(self, "duplicate_record_source", None)
-        if source is not None:
+        pinned = getattr(pc, "candidate_source", None)
+        if pinned == "record" and source is None:
+            # The program was qualified with the record check; without a
+            # record channel it must not fall back to the screen.
+            from openadapt_flow.runtime.checks.duplicate_record import (
+                DuplicateCheckResult,
+            )
+
+            self._last_duplicate_check = DuplicateCheckResult(
+                "unreadable",
+                reason="the program requires the record check and this run has "
+                "no record channel",
+            )
+            return False
+        if source is not None and pinned != "screen":
             return self._no_duplicate_record(source, params)
         names = tuple(pc.candidate_params or ())
         if not pc.candidate_rows or not names or not pc.text:

@@ -772,6 +772,9 @@ def with_duplicate_list_check(source: Path, out: Path) -> Path:
             candidate_rows="tr.oneresult",
             candidate_frame_path=("#modalframe",),
             candidate_params=("lname", "DOB"),
+            # Qualified with the record check (OpenEMR's patient API): a run
+            # without that channel fails the step instead of reading the list.
+            candidate_source="record",
         )
         for pc in step.expect
     ]

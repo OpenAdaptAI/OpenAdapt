@@ -484,7 +484,11 @@ def _get_json(
 
 
 class FhirPatientSource:
-    """FHIR R4 ``Patient`` search, every page (``Bundle.link[next]``).
+    """Generic FHIR R4: ``Patient`` search, every page (``Bundle.link[next]``).
+
+    Uses only standard R4 search parameters (``birthdate``, ``family``,
+    ``given``, ``identifier``, ``phone``, ``email``), so it serves any R4
+    server, OpenEMR's included.
 
     A page chain longer than :data:`MAX_PAGES`, a ``Bundle.total`` that does
     not equal the entries read, or an entry that is not a ``Patient`` makes
@@ -648,7 +652,10 @@ class FhirPatientSource:
 
 
 class SqlPatientSource:
-    """Fallback: a read-only query on OpenEMR's ``patient_data``.
+    """OpenEMR adapter, fallback: a read-only query on ``patient_data``.
+
+    The columns (``pid``, ``pubpid``, ``DOB``, ``birth_lname``, ...) are
+    OpenEMR's.
 
     For a deployment with no FHIR or REST read. ``connect`` returns a DB-API
     connection with a SELECT-only account. Uses ``qmark`` parameters.
@@ -774,7 +781,10 @@ class TableSource:
 
 
 class RestPatientSource:
-    """OpenEMR's standard REST API: ``GET .../api/patient?DOB=...``.
+    """OpenEMR adapter: its standard REST API, ``GET .../api/patient?DOB=...``.
+
+    The query parameters and fields (``fname``, ``lname``, ``DOB``,
+    ``pubpid``, ``phone_home``) are OpenEMR's.
 
     OpenEMR answers with ``{"data": [...]}``. A next-page link
     (``links.next``) is followed. A full page with no next link may be
@@ -930,3 +940,27 @@ def source_for_verifier(verifier: Any) -> Optional[PatientSource]:
             timeout_s=max(verifier.timeout_s, 10.0),
         )
     return None
+
+
+#: ``Replayer(duplicate_record_source=...)``: derive the source from the run's
+#: own effect verifier (the default), or keep the on-screen list.
+AUTO = "auto"
+SCREEN = "screen"
+
+
+def resolve_duplicate_source(effect_verifier: Any, requested: Any = AUTO) -> Any:
+    """The one place a run's duplicate-check source is decided.
+
+    Every ``Replayer`` resolves its source here from the effect verifier it is
+    given, so qualification, a run, a resume and a proof that read the same
+    system of record use the same check. ``requested`` is ``AUTO`` (derive),
+    ``SCREEN`` (no record source) or a source object (tests, embedding).
+    """
+
+    if requested == SCREEN or requested is None:
+        return None
+    if requested != AUTO:
+        return requested
+    if effect_verifier is None:
+        return None
+    return source_for_verifier(effect_verifier)

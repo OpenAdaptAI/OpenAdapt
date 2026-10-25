@@ -64,13 +64,34 @@ on the OpenEMR referral program, and the soak admits that version afresh
 
 ## Asking the system of record instead
 
-When the deployment's `effects` reads a FHIR server or OpenEMR's patient API,
+When the run's effect verifier reads a FHIR server or OpenEMR's patient API,
 `no_duplicate_candidate` searches the system of record for the patient instead
 of reading the on-screen list (`runtime/checks/duplicate_record.py`, a check
-whose source is the record). `runtime.duplicate_check: screen` keeps the
-on-screen list. With no such channel, the on-screen list decides, as above. A
-read-only SQL query on `patient_data` (`SqlPatientSource`) is the documented
-fallback for a deployment with neither; it is wired by hand, not by default.
+whose source is the record). With no such channel, the on-screen list decides,
+as above.
+
+The channels:
+
+| Source | Scope |
+|---|---|
+| `FhirPatientSource` | generic FHIR R4 (`Patient` search with standard parameters); any R4 server |
+| `RestPatientSource` | OpenEMR adapter: OpenEMR's standard REST `/api/patient` |
+| `SqlPatientSource` | OpenEMR adapter, fallback: a read-only query on `patient_data`, wired by hand, never by default |
+
+**One source for every path.** `Replayer` resolves the source itself, from the
+effect verifier it is given (`resolve_duplicate_source`). So qualification
+(`qualify`), a run (`build_replayer`), a resume and the lifecycle proof that
+read the same system of record use the same check, and none of them can pick
+another. `tests/test_duplicate_source_paths.py` scans every `Replayer(...)`
+construction to keep it so.
+
+**The program can pin it.** The postcondition's `candidate_source: record`
+makes the record check part of the qualified program: a run with no record
+channel fails the step, and never reads the screen instead.
+`candidate_source: screen` keeps the list even when a channel exists. Unset,
+the run's channel decides. The deployment's `runtime.duplicate_check: screen`
+turns the record check off for unpinned programs; a program pinned to
+`record` then fails closed.
 
 The check searches by the date of birth, by the date of birth with day and
 month swapped, by each part of the last and first name, by first name, and by
