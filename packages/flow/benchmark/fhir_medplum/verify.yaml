@@ -1,0 +1,73 @@
+# Qualify the Medplum new-patient workflow on the local fixture.
+#
+#   PYTHONPATH=. openadapt-flow qualify path/to/bundle \
+#     --verify benchmark/fhir_medplum/verify.yaml --out runs/medplum-qual \
+#     --certify clinical-write
+#
+# Synthetic patients only. The record check reads the Patient back through
+# the FHIR R4 API with its own client (client credentials), never the screen.
+schema_version: openadapt.verify/v1
+environment_id: medplum-local-fixture-5.2.8
+minimum_effect_strength: independent_system_of_record
+
+app:
+  target: web
+  name: Medplum (local fixture, synthetic patients)
+  url: ${MEDPLUM_UI_URL:-http://localhost:9411/}
+  version: medplum@5.2.8 (benchmark/fhir_medplum lock)
+  # Signs the dedicated user in and opens the new-patient form; the reset
+  # removes the patients the cases created.
+  session: benchmark.fhir_medplum.qualify_hooks:open_session
+  reset:
+    python: benchmark.fhir_medplum.qualify_hooks:reset
+
+verifier:
+  kind: fhir
+  base_url: ${MEDPLUM_FHIR_URL:-http://localhost:9410/fhir/R4}
+  resource_type: Patient
+  search_param_exprs:
+    email: {param: email}
+  field_paths:
+    id: id
+    fname: name.given
+    lname: name.family
+    DOB: birthDate
+    sex: gender
+    street: address.line
+    city: address.city
+    state: address.state
+    postal_code: address.postalCode
+    phone_home: telecom[system=phone].value
+    email: telecom[system=email].value
+  # A client-credentials token for the record-check client, set by the hooks
+  # module (benchmark/fhir_medplum/qualify_hooks.py) before the run.
+  access_token_env: MEDPLUM_RECORD_TOKEN
+
+record:
+  name: patient
+  match: [email, lname]
+  duplicate_key: email
+  exact_new_set: true
+  identity_field: id
+  fields:
+    email: email
+    lname: lname
+    fname: fname
+    DOB: DOB
+    # The form shows "Female" / "Male"; FHIR stores the code.
+    sex: {param: sex, map: {Female: female, Male: male}}
+    street: street
+    city: city
+    state: {param: state_label, map: {Massachusetts: MA}}
+    postal_code: postal_code
+    phone_home: phone_home
+
+save_step: auto
+
+inputs:
+  source: recorded
+
+campaign:
+  id: medplum-local-new-patient-v1
+  trials: 1
+  policy: clinical-write

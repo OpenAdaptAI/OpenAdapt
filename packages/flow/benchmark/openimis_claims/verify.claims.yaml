@@ -1,0 +1,73 @@
+# Qualify the openIMIS claims-intake workflow on the local fixture.
+#
+#   PYTHONPATH=. openadapt-flow qualify path/to/bundle \
+#     --verify benchmark/openimis_claims/verify.claims.yaml --out runs/openimis-qual \
+#     --certify clinical-write
+#
+# Synthetic claims only. The record check reads tblClaim through a dedicated
+# read-only database role (oa_claims_oracle, SELECT on three tables), never
+# the screen. clinical-write is the strictest policy the product ships; there
+# is no claims-specific policy.
+schema_version: openadapt.verify/v1
+environment_id: openimis-local-fixture-25.10
+minimum_effect_strength: independent_system_of_record
+
+app:
+  target: web
+  name: openIMIS (local fixture, synthetic claims)
+  url: ${OPENIMIS_FRONT_URL:-http://localhost:9401/front/}
+  version: openimis@25.10 (benchmark/openimis_claims lock)
+  # Signs in and opens a blank claim form for the fixed health facility and
+  # claim administrator; the reset voids the claims the cases entered.
+  session: benchmark.openimis_claims.qualify_hooks:open_session
+  reset:
+    python: benchmark.openimis_claims.qualify_hooks:reset
+
+verifier:
+  kind: sql
+  sql_driver: psycopg
+  sql_connect_args:
+    host: 127.0.0.1
+    port: ${OPENIMIS_DB_PORT:-9402}
+    user: oa_claims_oracle
+    dbname: IMIS
+  sql_password_env: OPENIMIS_CLAIMS_ORACLE_PASSWORD
+  sql_query: |
+    SELECT CAST(c."ClaimID" AS text) AS id,
+           c."ClaimCode" AS claim_no,
+           i."CHFID" AS insurance_no,
+           c."Explanation" AS explanation,
+           hf."HFCode" AS hf_code,
+           CAST(c."ClaimStatus" AS text) AS claim_status
+    FROM "tblClaim" c
+    JOIN "tblInsuree" i ON i."InsureeID" = c."InsureeID"
+    JOIN "tblHF" hf ON hf."HfID" = c."HFID"
+    WHERE c."ValidityTo" IS NULL
+      AND c."ClaimCode" = %(claim_no)s
+  sql_query_params:
+    claim_no: {param: claim_no}
+
+record:
+  name: claim
+  match: [claim_no]
+  # One live claim per claim number.
+  duplicate_key: claim_no
+  exact_new_set: true
+  identity_field: id
+  fields:
+    claim_no: claim_no
+    insurance_no: insurance_no
+    explanation: explanation
+    hf_code: {literal: VIHOS001}
+    # tblClaim.ClaimStatus 2 is "Entered".
+    claim_status: {literal: "2"}
+
+save_step: auto
+
+inputs:
+  source: recorded
+
+campaign:
+  id: openimis-local-claims-intake-v1
+  trials: 1
+  policy: clinical-write

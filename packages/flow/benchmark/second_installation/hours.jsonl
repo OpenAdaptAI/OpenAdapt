@@ -1,3 +1,10 @@
 {"app": "both", "at": 1792886992.818742, "event": "start", "note": "offline inventory of harness, fixtures, FHIR duplicate check", "step": "prep"}
 {"app": "both", "at": 1792887357.8493319, "event": "stop", "note": "", "step": "prep"}
 {"app": "both", "at": 1792887357.87052, "event": "start", "note": "app registry, oracle schema, claims workload, openIMIS soak adapter", "step": "harness"}
+{"app": "both", "at": 1792887615.28961, "event": "stop", "note": "", "step": "harness"}
+{"app": "fhir", "at": 1792887615.310915, "event": "start", "note": "Medplum fixture: pinned compose, secrets, readiness, admin token, client app, SQL oracle", "step": "setup"}
+{"app": "fhir", "at": 1792887787.2145972, "event": "stop", "note": "", "step": "setup"}
+{"app": "fhir", "at": 1792887787.234221, "event": "start", "note": "verify.yaml (fhir kind), session/reset hooks, signed-in probe (offline draft)", "step": "contract"}
+{"app": "fhir", "at": 1792887849.225984, "event": "stop", "note": "", "step": "contract"}
+{"app": "openimis", "at": 1792887849.245452, "event": "start", "note": "verify.yaml (sql on tblClaim), claims oracle role, hooks, signed-in probe (offline draft)", "step": "contract"}
+{"app": "openimis", "at": 1792887932.2611232, "event": "stop", "note": "", "step": "contract"}
