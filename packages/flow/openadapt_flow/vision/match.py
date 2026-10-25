@@ -309,6 +309,40 @@ def find_template(
     )
 
 
+# A crop that matches itself shifted by a quarter of its width or height at or
+# above this correlation (a blank band, a rule, a repeating pattern) matches
+# along that axis anywhere: it cannot tell one place from another. Identifier
+# crops of real records measured at most ~0.65.
+SELF_SIMILAR_SHIFT_SCORE = 0.9
+# Below this grey-level spread a crop is flat.
+FLAT_CROP_STD = 2.0
+
+
+def crop_is_featureless(template_png: bytes) -> bool:
+    """Whether a crop has too little structure to tell one place from another.
+
+    True for a flat crop, and for one that matches itself shifted by a quarter
+    of its width or height (a background band, a ruled line, a repeat), so a
+    template match finds it at every offset along that axis.
+    """
+    crop = _decode_gray(template_png).astype(np.float64)
+    if crop.size == 0 or float(crop.std()) < FLAT_CROP_STD:
+        return True
+    height, width = crop.shape[:2]
+
+    def shifted_score(a: np.ndarray, b: np.ndarray) -> float:
+        a = a - a.mean()
+        b = b - b.mean()
+        denom = math.sqrt(float((a * a).sum()) * float((b * b).sum()))
+        return 1.0 if denom == 0 else float((a * b).sum()) / denom
+
+    dx = max(1, width // 4)
+    dy = max(1, height // 4)
+    horizontal = shifted_score(crop[:, dx:], crop[:, :-dx]) if width > dx else 1.0
+    vertical = shifted_score(crop[dy:, :], crop[:-dy, :]) if height > dy else 1.0
+    return max(horizontal, vertical) >= SELF_SIMILAR_SHIFT_SCORE
+
+
 def template_peaks(
     screen_png: bytes, template_png: bytes, *, threshold: float = 0.6
 ) -> Optional[list[tuple[int, int]]]:

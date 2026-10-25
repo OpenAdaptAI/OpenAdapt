@@ -15775,10 +15775,12 @@ class Replayer:
         with the same or unreadable text counts it as a look-alike. The census is
         ``uncounted`` when the frame has too many places, when a place cannot
         be cut, or when the target's own place is not among them (the frame
-        renders at another scale than the recorded crop).
+        renders at another scale than the recorded crop). A featureless crop
+        (a blank band, a ruled line) cannot count at all: ``cannot_count``.
         """
         from openadapt_flow.vision.match import (
             AMBIGUITY_SUSPICION_SCORE,
+            crop_is_featureless,
             template_peaks,
         )
 
@@ -15790,6 +15792,10 @@ class Replayer:
         if recorded is None or live is None or anchor.identifier_region is None:
             return census_mod.CensusDecision("cannot_count")
         try:
+            if crop_is_featureless(recorded):
+                # A blank band or a ruled line matches everywhere along it: it
+                # cannot count rows (cannot_count, not "ambiguous").
+                return census_mod.CensusDecision("cannot_count")
             peaks = template_peaks(
                 before_png, recorded, threshold=AMBIGUITY_SUSPICION_SCORE
             )

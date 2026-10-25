@@ -906,3 +906,19 @@ def test_sibling_tabs_with_unreadable_labels_still_halt(tmp_path) -> None:
 def test_two_tabs_with_the_same_label_halt(tmp_path) -> None:
     decision = _tab_census(tmp_path, ["Who", "Contact", "Misc", "Contact"], 1)
     assert decision == CensusDecision("ambiguous", 2)
+
+
+def test_featureless_crops_are_recognized() -> None:
+    import cv2
+    import numpy as np
+
+    from openadapt_flow.vision.match import crop_is_featureless
+
+    band = np.full((64, 160), 40, np.uint8)
+    band[32:34, :] = 220  # OpenEMR step_016: a band with one rule
+    assert crop_is_featureless(_png(band))
+    assert crop_is_featureless(_png(np.full((48, 240), 128, np.uint8)))
+    text = np.full((48, 240), 255, np.uint8)
+    cv2.putText(text, "MG4408 Okafor", (6, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.7, 0, 2)
+    assert not crop_is_featureless(_png(text))
+    assert not crop_is_featureless(_png(_tab("Contact")))
