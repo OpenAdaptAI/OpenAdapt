@@ -278,13 +278,15 @@ Each of `before/`, `after/` and `recovery-smoke/` holds:
 
 ## Reproduce
 
-Take the fixture lease first (`~/oa/scratch/fixture-lease/README.md`). Then,
+Run one Docker fixture at a time. Set `STATE_DIR` to a directory for the
+fixture's state and `KEYS_DIR` to one for its test keys, both outside the
+repository. Then,
 from `packages/flow`:
 
 ```bash
 export LIFECYCLE_OPENEMR_PROJECT=openadapt-openemr-compose LIFECYCLE_UI_PORT=9401 LIFECYCLE_API_PORT=9400
-export LIFECYCLE_OPENEMR_STATE=~/oa/scratch/compose-proof/openemr-state PYTHONPATH=.:../types
-python -m benchmark.lifecycle_proof.run up --out /tmp/up --keys ~/oa/scratch/compose-proof/keys
+export LIFECYCLE_OPENEMR_STATE=$STATE_DIR PYTHONPATH=.:../types
+python -m benchmark.lifecycle_proof.run up --out runs/up --keys $KEYS_DIR
 python -m benchmark.lifecycle.run --app openemr --seed 7 --items 55 --days 10 --drift relabel_save@26 \
   --arm benchmark.lifecycle.production_arm:make --arm-options '{"recovery":"none"}' --out <dir>
 python -m benchmark.lifecycle.run --app openemr --seed 7 --items 55 --days 10 --drift relabel_save@26 \

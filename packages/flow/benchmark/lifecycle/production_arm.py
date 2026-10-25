@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from .arm import Env, ItemResult, OperatorRequest, WorkItem
+from .paths import relative_paths
 
 DEFAULT_KEYS = Path.home() / "oa" / "scratch" / "compose-proof" / "keys"
 APPROVER_ID = "lifecycle-soak-operator"
@@ -54,13 +55,16 @@ APPROVER_ID = "lifecycle-soak-operator"
 class _Ledger:
     """The arm's own detail log (the harness ledger holds the results)."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, root: Optional[Path] = None) -> None:
         self.path = path
+        #: Paths in rows are written relative to the run's root.
+        self.root = root or path.parent
         path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 
     def add(self, kind: str, **fields: Any) -> None:
         row = {"at": round(time.time(), 3), "kind": kind, **fields}
+        row = relative_paths(row, self.root)
         with self._lock, self.path.open("a") as handle:
             handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
 
@@ -202,7 +206,7 @@ class ProductionArm:
         from benchmark.lifecycle_proof import run as proof
 
         out = env.workdir
-        ledger = _Ledger(out / "arm-ledger.jsonl")
+        ledger = _Ledger(out / "arm-ledger.jsonl", root=out.parent.parent)
         ctx = proof._context(out, self.keys_dir, ledger)  # type: ignore[arg-type]
         person = OperatorPerson(ledger)
         person.operator = operator

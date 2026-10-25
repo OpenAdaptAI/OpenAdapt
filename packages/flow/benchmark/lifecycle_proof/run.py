@@ -59,6 +59,8 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
+from benchmark.lifecycle.paths import relative_paths
+
 HERE = Path(__file__).resolve().parent
 FLOW = HERE.parents[1]
 VERIFY_YAML = HERE / "verify.yaml"
@@ -80,8 +82,9 @@ CONTINUE = ("r7-arlo-whitcombe", "r8-priya-raman")
 # -- small helpers -----------------------------------------------------------------
 
 
-def _write(path: Path, value: Any) -> None:
+def _write(path: Path, value: Any, root: Optional[Path] = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    value = relative_paths(value, root or path.parent)
     path.write_text(json.dumps(value, indent=2, sort_keys=True, default=str) + "\n")
 
 
@@ -94,11 +97,12 @@ class Ledger:
 
     def __init__(self, out: Path) -> None:
         self.path = out / "ledger.jsonl"
+        self.root = out
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 
     def add(self, kind: str, **fields: Any) -> None:
-        row = {"at": time.time(), "kind": kind, **fields}
+        row = relative_paths({"at": time.time(), "kind": kind, **fields}, self.root)
         with self._lock, self.path.open("a") as handle:
             handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
         print(json.dumps(row, default=str), flush=True)
@@ -703,6 +707,7 @@ def phase_switch(ctx: dict[str, Any]) -> None:
     _write(
         out / "switch" / "switch.json",
         {"record": record.model_dump(mode="json"), "log": str(log_path)},
+        root=out,
     )
     ctx.update(switch_record=record, switch_log=log)
     ctx["ledger"].add(

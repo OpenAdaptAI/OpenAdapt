@@ -15,7 +15,7 @@
 {"action": "approve", "at": 1792877073.152, "item": "ref-00023", "kind": "person", "request_id": "46b574fc76814ef6a1948a242e44d572"}
 {"action": "approve", "at": 1792877427.578, "item": "ref-00025", "kind": "person", "request_id": "dfba91fbcde54b8db802b0ef7e02adcc"}
 {"action": "approve", "at": 1792877546.587, "item": "ref-00026", "kind": "person", "request_id": "44aba42af969451f91503f2008789b83"}
-{"at": 1792877568.579, "candidate": "/Users/abrichr/oa/scratch/production-lifecycle/runs/soak-after-2/arms/openadapt-production-relabel/items/ref-00026-relabel/candidate", "kind": "drift.requalify.start"}
+{"at": 1792877568.579, "candidate": "runs/soak-after-2/arms/openadapt-production-relabel/items/ref-00026-relabel/candidate", "kind": "drift.requalify.start"}
 {"at": 1792878326.425, "kind": "drift.requalify.end"}
 {"at": 1792878330.91, "bundle": "c0a61b16b9d895eb7f7abf2791634485db5afd59993b7e31f788739d9611697d", "dialogs": {}, "kind": "switch.open", "rung_floor": {"step_000": "structural", "step_003": "structural", "step_006": "structural", "step_009": "structural", "step_012": "structural", "step_016": "structural", "step_018": "structural", "step_021": "structural", "step_024": "structural", "step_027": "structural", "step_030": "structural", "step_033": "structural", "step_036": "structural", "step_039": "structural", "step_040": "structural"}, "switch_id": "switch-lifecycle-proof-c0a61b16b9d8-1792878330"}
 {"action": "approve", "at": 1792878434.742, "item": "ref-00026", "kind": "person", "request_id": "dd14459300104427a2ecf48db3c110e1"}

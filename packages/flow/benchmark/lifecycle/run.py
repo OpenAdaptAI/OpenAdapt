@@ -28,6 +28,7 @@ from .cost_model import MODELS, V1
 from .metrics import classify
 from .operator import ScriptedOperator
 from .oracle import Oracle
+from .paths import relative_paths
 from .workload import WORKLOAD_VERSION, Truth, Workload, generate
 
 HERE = Path(__file__).resolve().parent
@@ -52,6 +53,7 @@ class Ledger:
 
     def write(self, row: dict[str, Any]) -> None:
         row = {"t": round(time.time(), 3), "arm": self.arm, **row}
+        row = relative_paths(row, self.path.parent)
         with self._lock:
             self._fh.write(json.dumps(row, sort_keys=True, default=str) + "\n")
             self._fh.flush()

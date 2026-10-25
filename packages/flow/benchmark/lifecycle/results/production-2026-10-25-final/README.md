@@ -87,13 +87,21 @@ Where the 48.3 operator minutes went:
 afresh with its own switch, which stayed on through item 55. No re-arm was
 needed or offered.
 
-### Phase 0 gate: met
+### Phase 0: throughput and silent-wrong criteria met
 
-The gate is at least 2 times hand entry at 3 minutes per item, with 0 silent
-wrongs. This run reached 3.17 times, with 0 silent wrongs in 41 items claimed
-done (judged by direct SQL, never by the product's verdict). The per-touch
-charges are the cost model's assumptions, not timings from real operators
-(see `REPORT.md`).
+Phase 0 has three criteria: at least 2 times hand entry at 3 minutes per
+item, 0 silent wrongs, and at least 15 of 17 independent faults caught. This
+run measures the first two:
+
+- **Throughput: met.** The run reached 3.17 times hand entry.
+- **Silent wrongs: met.** There were 0 in the 41 items claimed done, judged by
+  direct SQL and never by the product's verdict.
+- **Fault coverage: measured separately** (#1539, the independent fault
+  suite). This run says nothing about it, so it doesn't show that Phase 0 is
+  met overall.
+
+The per-touch charges are the cost model's assumptions, not timings from real
+operators (see `REPORT.md`).
 
 ### Items timed with host load above 40
 
@@ -162,6 +170,11 @@ an existing chart were all registered correctly, with no person.
   admission (5.0).
 
 ## Files
+
+Paths in the committed files are relative to the run's root (`runs/<name>/`).
+They were rewritten from the paths of the machine that ran the soak, and the
+harness now writes them relative itself (`benchmark/lifecycle/paths.py`). The
+report recomputes to the same `results.json`.
 
 Everything is computed from `ledger.jsonl`
 (`python -m benchmark.lifecycle.report <dir>`):

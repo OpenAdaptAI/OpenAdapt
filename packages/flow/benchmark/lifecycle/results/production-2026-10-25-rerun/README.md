@@ -59,19 +59,21 @@ From item 13 on, every saved item waited for a person's approval:
 #1517's head classes these correctly, with tests. This run therefore
 **under-states** the policy's effect. The numbers below are as measured.
 
-## Phase 0 gate: not met
+## Phase 0 gate: throughput criterion not met
 
-The gate is at least 2 times the by-hand rate at 3 minutes per item, with 0
-silent wrongs. This run measured **1.97 times**, just under 2, with **0 silent
-wrongs**. So the gate is **not met** on this run:
+Phase 0 has three criteria: at least 2 times the by-hand rate at 3 minutes
+per item, 0 silent wrongs, and at least 15 of 17 independent faults caught.
+This run measures the first two:
 
-- the rate condition fails, by 0.03;
-- the silent-wrong condition holds;
-- the run used an older switch-policy commit (see the deviation below), so
-  the result understates the policy as merged.
+- **Throughput: not met.** The run measured 1.97 times, 0.03 under 2. It used
+  an older switch-policy commit (see the deviation below), so the result
+  understates the policy as merged.
+- **Silent wrongs: met.** There were 0.
+- **Fault coverage: not measured here.** It is measured separately (#1539,
+  the independent fault suite).
 
-A further 55-item run on main (with #1517 merged) plus #1516 is queued to
-measure the policy as merged.
+The final run on main ([`production-2026-10-25-final`](../production-2026-10-25-final/README.md))
+measures the policy as merged.
 
 ## Results
 

@@ -11,7 +11,7 @@ LEASE TAKEN Sun Oct 25 06:22:14 EDT 2026
 Starting machine "openadapt-benchmark"
 Error: unable to start "openadapt-benchmark": already running
 COMMIT 8bfd7f6af84135425ae55dddc09abdcb3dface23
-saved ~/oa/scratch/compose-proof/openemr-state/fresh-oauth-keys.sql
+saved $LIFECYCLE_OPENEMR_STATE/fresh-oauth-keys.sql
 [openadapt-production-relabel] resetting the app to its baseline
 [openadapt-production-relabel] setup
 [openadapt-production-relabel]    1 ref-00001 clean                  claimed=done    oracle=correct   -> correct       final=correct   120.5s load=4.3

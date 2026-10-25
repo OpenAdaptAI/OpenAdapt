@@ -1,5 +1,5 @@
 {
-  "log": "/Users/abrichr/oa/scratch/production-lifecycle/runs/smoke-5/arms/openadapt-production-relabel/switch/log-1792866771.jsonl",
+  "log": "runs/smoke-5/arms/openadapt-production-relabel/switch/log-1792866771.jsonl",
   "record": {
     "allowed_interstitials": {},
     "bundle_content_digest": "bbb693b01824f47b414b5dd54425f16502a7533c74e797116ff8f4f8a1925577",

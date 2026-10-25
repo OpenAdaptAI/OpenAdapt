@@ -1,5 +1,5 @@
 COMMIT 38fc21afbfff08275d77fd8f61972ad49c28cbf4
-saved /Users/abrichr/oa/scratch/compose-proof/openemr-state/fresh-oauth-keys.sql
+saved $LIFECYCLE_OPENEMR_STATE/fresh-oauth-keys.sql
 [openadapt-production-relabel] resetting the app to its baseline
 [openadapt-production-relabel] setup
 [openadapt-production-relabel]    1 ref-00001 clean                  claimed=done    oracle=correct   -> correct       final=correct   164.9s load=94.9

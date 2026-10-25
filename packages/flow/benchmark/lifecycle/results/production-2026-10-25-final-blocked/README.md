@@ -7,7 +7,7 @@ on origin/main 6dc0be40e plus #1516 (4b635f2d6) plus the harness. Branch
 at the start, below the 40 limit.
 
 No item ran. The program could not be admitted, so there are no
-throughput numbers and no Phase 0 verdict from this run.
+throughput numbers and no Phase 0 result from this run.
 
 ## What failed
 

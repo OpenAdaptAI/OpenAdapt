@@ -1,5 +1,5 @@
 {
-  "log": "/Users/abrichr/oa/scratch/production-lifecycle/runs/soak-final-2/arms/openadapt-production-relabel/switch/log-1792928598.jsonl",
+  "log": "runs/soak-final-2/arms/openadapt-production-relabel/switch/log-1792928598.jsonl",
   "record": {
     "allowed_interstitials": {},
     "bundle_content_digest": "6935ae303537bf6d6806ed16f50a0aced834814b79fd5ed4a078e8abed54f669",
