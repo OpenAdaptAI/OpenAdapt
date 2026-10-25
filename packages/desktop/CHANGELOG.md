@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.25.0 (2026-10-25)
+
+### Features
+
+- **desktop**: an administrator can pin the approver root for this computer with `openadapt-desktop approver-pin ROOT` (with sudo, or from an elevated prompt on Windows). The pin lives in a file only an administrator can write: `/Library/Application Support/OpenAdapt` (macOS), `/etc/openadapt` (Linux) or `ProgramData\OpenAdapt` (Windows). Desktop checks its owner, permissions and links before trusting it, and on Windows and Linux it is the only pin.
+
+### Bug Fixes
+
+- **desktop**: a Mac reads its Keychain approver root with Keychain prompts turned off, so an item another program planted or rewrote counts as no root instead of a prompt someone might allow. A Keychain root that disagrees with the administrator's pin is refused.
+- **desktop**: the stop-review screen says when no approver root is pinned, since answers can't count until one is.
+
+
+
 ## v0.24.0 (2026-10-24)
 
 ### Features

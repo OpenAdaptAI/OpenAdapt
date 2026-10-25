@@ -77,6 +77,7 @@ Code = Literal[
     "approver_payload_refused",
     "approver_root_conflict",
     "approver_anchor_untrusted",
+    "approver_needs_adding",
 ]
 
 

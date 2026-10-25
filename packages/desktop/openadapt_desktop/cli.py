@@ -537,7 +537,12 @@ def cmd_approver_key(args: argparse.Namespace, engine: types.SimpleNamespace) ->
 
 def cmd_approver_pin(args: argparse.Namespace) -> int:
     """Pin (or show) the approver root in the administrator-owned anchor."""
-    from openadapt_desktop.approver_anchor import AnchorError, anchor_path, read_anchor, write_anchor
+    from openadapt_desktop.approver_anchor import (
+        AnchorError,
+        anchor_path,
+        read_anchor,
+        write_anchor,
+    )
 
     try:
         if args.show or not args.root:

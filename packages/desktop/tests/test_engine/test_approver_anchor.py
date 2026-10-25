@@ -291,9 +291,7 @@ def test_a_run_config_carries_the_anchors_root(roster, tmp_path) -> None:
 # -- the command -----------------------------------------------------------------
 
 
-def test_the_pin_command_shows_and_refuses_without_elevation(
-    monkeypatch, tmp_path, capsys
-) -> None:
+def test_the_pin_command_shows_and_refuses_without_elevation(monkeypatch, tmp_path, capsys) -> None:
     from openadapt_desktop import cli
 
     target = tmp_path.resolve() / "OpenAdapt" / approver_anchor.ANCHOR_NAME

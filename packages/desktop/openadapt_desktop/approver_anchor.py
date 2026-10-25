@@ -168,9 +168,7 @@ def _check_posix_dirs(directory: Path, trusted_uids: frozenset[int]) -> None:
                 f"{current} isn't owned by the administrator; the pin isn't trusted.",
             )
         writable_by_others = info.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
-        if writable_by_others and not (
-            info.st_mode & stat.S_ISVTX and current != directory
-        ):
+        if writable_by_others and not (info.st_mode & stat.S_ISVTX and current != directory):
             raise AnchorError(
                 "approver_anchor_untrusted",
                 f"Others can write {current}; the pin isn't trusted.",
@@ -260,8 +258,16 @@ _INHERIT_ONLY_ACE = 0x08
 #: data (add file/subfolder), write EA/attributes, delete child, DELETE,
 #: WRITE_DAC, WRITE_OWNER, GENERIC_ALL, GENERIC_WRITE.
 _WRITE_RIGHTS = (
-    0x0002 | 0x0004 | 0x0010 | 0x0040 | 0x0100 | 0x00010000 | 0x00040000 | 0x00080000
-    | 0x10000000 | 0x40000000
+    0x0002
+    | 0x0004
+    | 0x0010
+    | 0x0040
+    | 0x0100
+    | 0x00010000
+    | 0x00040000
+    | 0x00080000
+    | 0x10000000
+    | 0x40000000
 )
 _FILE_ATTRIBUTE_REPARSE_POINT = 0x400
 
@@ -307,9 +313,7 @@ def _check_windows(path: Path) -> None:
         owner, aces = _windows_security(target)
         reason = dacl_admin_only(owner, aces)
         if reason:
-            raise AnchorError(
-                "approver_anchor_untrusted", f"{target} isn't trusted: {reason}."
-            )
+            raise AnchorError("approver_anchor_untrusted", f"{target} isn't trusted: {reason}.")
 
 
 def _read_windows(path: Path) -> bytes:  # pragma: no cover - Windows only
@@ -327,8 +331,8 @@ def _windows_security(target: Path) -> tuple[str | None, list[Ace] | None]:  # p
     import ctypes
     from ctypes import wintypes
 
-    advapi = ctypes.WinDLL("advapi32", use_last_error=True)
-    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    advapi = _windll("advapi32", use_last_error=True)
+    kernel = _windll("kernel32", use_last_error=True)
     owner = ctypes.c_void_p()
     dacl = ctypes.c_void_p()
     descriptor = ctypes.c_void_p()
@@ -366,16 +370,23 @@ def _windows_security(target: Path) -> tuple[str | None, list[Ace] | None]:  # p
         for index in range(size.AceCount):
             ace = ctypes.c_void_p()
             if not advapi.GetAce(dacl, index, ctypes.byref(ace)):
-                raise AnchorError(
-                    "approver_anchor_unreadable", f"Can't read the ACL of {target}."
-                )
-            header = (ctypes.c_ubyte * 4).from_address(ace.value)
-            mask = wintypes.DWORD.from_address(ace.value + 4).value
-            sid = ctypes.c_void_p(ace.value + 8)
+                raise AnchorError("approver_anchor_unreadable", f"Can't read the ACL of {target}.")
+            address = int(ace.value or 0)
+            if not address:
+                raise AnchorError("approver_anchor_unreadable", f"Can't read the ACL of {target}.")
+            header = (ctypes.c_ubyte * 4).from_address(address)
+            mask = wintypes.DWORD.from_address(address + 4).value
+            sid = ctypes.c_void_p(address + 8)
             aces.append(Ace(header[0], header[1], mask, _sid_string(advapi, kernel, sid)))
         return owner_sid, aces
     finally:
         kernel.LocalFree(descriptor)
+
+
+def _windll(name: str, **kwargs: object):  # pragma: no cover - Windows only
+    import ctypes
+
+    return getattr(ctypes, "WinDLL")(name, **kwargs)
 
 
 def _sid_string(advapi, kernel, sid) -> str:  # pragma: no cover - Windows only
@@ -407,10 +418,13 @@ def _program_data() -> Path:  # pragma: no cover - Windows only
         ]
 
     folder = Guid(
-        0x62AB5D82, 0xFDC1, 0x4DC3, (ctypes.c_ubyte * 8)(0xA9, 0xDD, 0x07, 0x0D, 0x1D, 0x49, 0x5D, 0x97)
+        0x62AB5D82,
+        0xFDC1,
+        0x4DC3,
+        (ctypes.c_ubyte * 8)(0xA9, 0xDD, 0x07, 0x0D, 0x1D, 0x49, 0x5D, 0x97),
     )
-    shell = ctypes.WinDLL("shell32")
-    ole = ctypes.WinDLL("ole32")
+    shell = _windll("shell32")
+    ole = _windll("ole32")
     result = ctypes.c_wchar_p()
     if shell.SHGetKnownFolderPath(ctypes.byref(folder), 0, None, ctypes.byref(result)) != 0:
         raise AnchorError("approver_anchor_unreadable", "Can't find the ProgramData folder.")
@@ -421,9 +435,8 @@ def _program_data() -> Path:  # pragma: no cover - Windows only
 
 
 def _require_windows_admin() -> None:  # pragma: no cover - Windows only
-    import ctypes
 
-    if not ctypes.WinDLL("shell32").IsUserAnAdmin():
+    if not _windll("shell32").IsUserAnAdmin():
         raise AnchorError(
             "not_elevated",
             "Pinning the approver root needs an administrator: run it from an "
@@ -470,7 +483,7 @@ def _known_windows_dir() -> Path | None:  # pragma: no cover - Windows only
     import ctypes
 
     buffer = ctypes.create_unicode_buffer(260)
-    if ctypes.WinDLL("kernel32").GetSystemWindowsDirectoryW(buffer, 260):
+    if _windll("kernel32").GetSystemWindowsDirectoryW(buffer, 260):
         return Path(buffer.value)
     return None
 
