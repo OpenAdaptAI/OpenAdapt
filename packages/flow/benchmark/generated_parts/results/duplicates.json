@@ -1,0 +1,749 @@
+{
+  "seed7-500@0.005": {
+    "budget": 0.005,
+    "generated": {
+      "false_stops": 0,
+      "false_stops_by_exception": {},
+      "false_stops_per_100_items": 0.0,
+      "items": 676,
+      "missed_by_exception": {
+        "limit_married_moved_dob_typo": 12,
+        "limit_new_name_moved_same_dob": 12,
+        "pl_both_typos_same_contact": 12,
+        "pl_married_moved": 12,
+        "r2_prior_name_moved_dob_typo": 6
+      },
+      "missed_duplicates": 54,
+      "new_chart_items": 440,
+      "true_duplicates": 223
+    },
+    "generation_s": 0.456,
+    "hand_built_record_check": {
+      "false_stops": 2,
+      "false_stops_by_exception": {
+        "shared_dob": 2
+      },
+      "false_stops_per_100_items": 0.3,
+      "items": 676,
+      "missed_by_exception": {
+        "limit_married_moved_dob_typo": 12,
+        "limit_new_name_moved_same_dob": 12
+      },
+      "missed_duplicates": 24,
+      "new_chart_items": 440,
+      "true_duplicates": 223
+    },
+    "profile_records": 30,
+    "rule": {
+      "calibration": {
+        "calibration_duplicates": 526,
+        "distinct_queries": 870,
+        "false_match_rate": 0.0,
+        "miss_by_error": {
+          "contact_changed+contact_changed": 0.0,
+          "day_month_swapped+contact_changed": 0.0,
+          "day_month_swapped+contact_kept": 0.0,
+          "dob_digit+contact_changed": 0.0,
+          "dob_digit+contact_kept": 0.0,
+          "first_initial+contact_changed": 0.0,
+          "first_initial+contact_kept": 0.0,
+          "first_typo+contact_changed": 0.9,
+          "first_typo+contact_kept": 0.0,
+          "last_changed+contact_changed": 1.0,
+          "last_changed+contact_kept": 0.0,
+          "last_hyphenated+contact_changed": 0.0,
+          "last_hyphenated+contact_kept": 0.0,
+          "last_second_surname+contact_changed": 0.0,
+          "last_second_surname+contact_kept": 0.0,
+          "last_typo+contact_changed": 0.8,
+          "last_typo+contact_kept": 0.0,
+          "names_swapped+contact_changed": 1.0,
+          "names_swapped+contact_kept": 0.0
+        },
+        "miss_rate": 0.211
+      },
+      "close": [
+        [
+          [
+            "email",
+            "eq"
+          ],
+          [
+            "phone",
+            "eq"
+          ],
+          [
+            "street",
+            "eq"
+          ]
+        ],
+        [
+          [
+            "first",
+            "initial"
+          ],
+          [
+            "last",
+            "eq"
+          ],
+          [
+            "dob",
+            "eq"
+          ]
+        ],
+        [
+          [
+            "first",
+            "eq"
+          ],
+          [
+            "last",
+            "share"
+          ],
+          [
+            "dob",
+            "swap"
+          ]
+        ],
+        [
+          [
+            "first",
+            "eq"
+          ],
+          [
+            "last",
+            "share"
+          ],
+          [
+            "dob",
+            "near"
+          ]
+        ],
+        [
+          [
+            "first",
+            "edit1"
+          ],
+          [
+            "last",
+            "eq"
+          ],
+          [
+            "dob",
+            "swap"
+          ]
+        ]
+      ],
+      "estimated_false_stops_per_record": 0.00497,
+      "exact": [
+        [
+          "first",
+          "eq"
+        ],
+        [
+          "last",
+          "eq"
+        ],
+        [
+          "dob",
+          "eq"
+        ]
+      ],
+      "notes": [],
+      "roles": {
+        "dob": "DOB",
+        "email": "email",
+        "first": "fname",
+        "last": "lname",
+        "phone": "phone_home",
+        "prior_last": "prior_lname",
+        "street": "street"
+      },
+      "schema_version": "openadapt.duplicate-rule/v1"
+    },
+    "rule_text": [
+      "Stop: the record exists when first the same and last the same and dob the same.",
+      "Stop for a person when email the same and phone the same and street the same.",
+      "Stop for a person when first matching by initial and last the same and dob the same.",
+      "Stop for a person when first the same and last sharing a name part and dob with day and month swapped.",
+      "Stop for a person when first the same and last sharing a name part and dob one part off.",
+      "Stop for a person when first one letter apart and last the same and dob with day and month swapped.",
+      "Stop for a person when the new record lacks a name or a date of birth."
+    ]
+  },
+  "seed7-500@0.05": {
+    "budget": 0.05,
+    "generated": {
+      "false_stops": 0,
+      "false_stops_by_exception": {},
+      "false_stops_per_100_items": 0.0,
+      "items": 676,
+      "missed_by_exception": {
+        "limit_married_moved_dob_typo": 12,
+        "limit_new_name_moved_same_dob": 12,
+        "pl_both_typos_same_contact": 12,
+        "pl_married_moved": 12,
+        "r2_prior_name_moved_dob_typo": 6
+      },
+      "missed_duplicates": 54,
+      "new_chart_items": 440,
+      "true_duplicates": 223
+    },
+    "generation_s": 0.423,
+    "hand_built_record_check": {
+      "false_stops": 2,
+      "false_stops_by_exception": {
+        "shared_dob": 2
+      },
+      "false_stops_per_100_items": 0.3,
+      "items": 676,
+      "missed_by_exception": {
+        "limit_married_moved_dob_typo": 12,
+        "limit_new_name_moved_same_dob": 12
+      },
+      "missed_duplicates": 24,
+      "new_chart_items": 440,
+      "true_duplicates": 223
+    },
+    "profile_records": 30,
+    "rule": {
+      "calibration": {
+        "calibration_duplicates": 526,
+        "distinct_queries": 870,
+        "false_match_rate": 0.0,
+        "miss_by_error": {
+          "contact_changed+contact_changed": 0.0,
+          "day_month_swapped+contact_changed": 0.0,
+          "day_month_swapped+contact_kept": 0.0,
+          "dob_digit+contact_changed": 0.0,
+          "dob_digit+contact_kept": 0.0,
+          "first_initial+contact_changed": 0.0,
+          "first_initial+contact_kept": 0.0,
+          "first_typo+contact_changed": 0.0,
+          "first_typo+contact_kept": 0.0,
+          "last_changed+contact_changed": 1.0,
+          "last_changed+contact_kept": 0.0,
+          "last_hyphenated+contact_changed": 0.0,
+          "last_hyphenated+contact_kept": 0.0,
+          "last_second_surname+contact_changed": 0.0,
+          "last_second_surname+contact_kept": 0.0,
+          "last_typo+contact_changed": 0.8,
+          "last_typo+contact_kept": 0.0,
+          "names_swapped+contact_changed": 0.0,
+          "names_swapped+contact_kept": 0.0
+        },
+        "miss_rate": 0.1027
+      },
+      "close": [
+        [
+          [
+            "email",
+            "eq"
+          ],
+          [
+            "phone",
+            "eq"
+          ],
+          [
+            "street",
+            "eq"
+          ]
+        ],
+        [
+          [
+            "first",
+            "initial"
+          ],
+          [
+            "last",
+            "eq"
+          ],
+          [
+            "dob",
+            "eq"
+          ]
+        ],
+        [
+          [
+            "first",
+            "eq"
+          ],
+          [
+            "last",
+            "share"
+          ],
+          [
+            "dob",
+            "swap"
+          ]
+        ],
+        [
+          [
+            "first",
+            "eq"
+          ],
+          [
+            "last",
+            "share"
+          ],
+          [
+            "dob",
+            "near"
+          ]
+        ],
+        [
+          [
+            "first",
+            "edit1"
+          ],
+          [
+            "last",
+            "eq"
+          ],
+          [
+            "dob",
+            "eq"
+          ]
+        ],
+        [
+          [
+            "dob",
+            "eq"
+          ],
+          [
+            "names_swapped",
+            "eq"
+          ]
+        ]
+      ],
+      "estimated_false_stops_per_record": 0.04539,
+      "exact": [
+        [
+          "first",
+          "eq"
+        ],
+        [
+          "last",
+          "eq"
+        ],
+        [
+          "dob",
+          "eq"
+        ]
+      ],
+      "notes": [],
+      "roles": {
+        "dob": "DOB",
+        "email": "email",
+        "first": "fname",
+        "last": "lname",
+        "phone": "phone_home",
+        "prior_last": "prior_lname",
+        "street": "street"
+      },
+      "schema_version": "openadapt.duplicate-rule/v1"
+    },
+    "rule_text": [
+      "Stop: the record exists when first the same and last the same and dob the same.",
+      "Stop for a person when email the same and phone the same and street the same.",
+      "Stop for a person when first matching by initial and last the same and dob the same.",
+      "Stop for a person when first the same and last sharing a name part and dob with day and month swapped.",
+      "Stop for a person when first the same and last sharing a name part and dob one part off.",
+      "Stop for a person when first one letter apart and last the same and dob the same.",
+      "Stop for a person when dob the same and first and last names swapped.",
+      "Stop for a person when the new record lacks a name or a date of birth."
+    ]
+  },
+  "soak-seed7-55@0.005": {
+    "budget": 0.005,
+    "generated": {
+      "false_stops": 0,
+      "false_stops_by_exception": {},
+      "false_stops_per_100_items": 0.0,
+      "items": 231,
+      "missed_by_exception": {
+        "limit_married_moved_dob_typo": 12,
+        "limit_new_name_moved_same_dob": 12,
+        "pl_both_typos_same_contact": 12,
+        "pl_married_moved": 12,
+        "r2_prior_name_moved_dob_typo": 6
+      },
+      "missed_duplicates": 54,
+      "new_chart_items": 45,
+      "true_duplicates": 184
+    },
+    "generation_s": 0.447,
+    "hand_built_record_check": {
+      "false_stops": 0,
+      "false_stops_by_exception": {},
+      "false_stops_per_100_items": 0.0,
+      "items": 231,
+      "missed_by_exception": {
+        "limit_married_moved_dob_typo": 12,
+        "limit_new_name_moved_same_dob": 12
+      },
+      "missed_duplicates": 24,
+      "new_chart_items": 45,
+      "true_duplicates": 184
+    },
+    "profile_records": 30,
+    "rule": {
+      "calibration": {
+        "calibration_duplicates": 526,
+        "distinct_queries": 870,
+        "false_match_rate": 0.0,
+        "miss_by_error": {
+          "contact_changed+contact_changed": 0.0,
+          "day_month_swapped+contact_changed": 0.0,
+          "day_month_swapped+contact_kept": 0.0,
+          "dob_digit+contact_changed": 0.0,
+          "dob_digit+contact_kept": 0.0,
+          "first_initial+contact_changed": 0.0,
+          "first_initial+contact_kept": 0.0,
+          "first_typo+contact_changed": 0.0,
+          "first_typo+contact_kept": 0.0,
+          "last_changed+contact_changed": 1.0,
+          "last_changed+contact_kept": 0.0,
+          "last_hyphenated+contact_changed": 0.0,
+          "last_hyphenated+contact_kept": 0.0,
+          "last_second_surname+contact_changed": 0.0,
+          "last_second_surname+contact_kept": 0.0,
+          "last_typo+contact_changed": 0.733,
+          "last_typo+contact_kept": 0.0,
+          "names_swapped+contact_changed": 0.9,
+          "names_swapped+contact_kept": 0.0
+        },
+        "miss_rate": 0.1502
+      },
+      "close": [
+        [
+          [
+            "email",
+            "eq"
+          ],
+          [
+            "phone",
+            "eq"
+          ],
+          [
+            "street",
+            "eq"
+          ]
+        ],
+        [
+          [
+            "first",
+            "initial"
+          ],
+          [
+            "last",
+            "eq"
+          ],
+          [
+            "dob",
+            "eq"
+          ]
+        ],
+        [
+          [
+            "first",
+            "eq"
+          ],
+          [
+            "last",
+            "share"
+          ],
+          [
+            "dob",
+            "swap"
+          ]
+        ],
+        [
+          [
+            "first",
+            "eq"
+          ],
+          [
+            "last",
+            "share"
+          ],
+          [
+            "dob",
+            "near"
+          ]
+        ],
+        [
+          [
+            "first",
+            "edit1"
+          ],
+          [
+            "last",
+            "eq"
+          ],
+          [
+            "dob",
+            "eq"
+          ]
+        ],
+        [
+          [
+            "dob",
+            "swap"
+          ],
+          [
+            "names_swapped",
+            "eq"
+          ]
+        ],
+        [
+          [
+            "first",
+            "eq"
+          ],
+          [
+            "last",
+            "edit1"
+          ],
+          [
+            "dob",
+            "swap"
+          ]
+        ]
+      ],
+      "estimated_false_stops_per_record": 0.00358,
+      "exact": [
+        [
+          "first",
+          "eq"
+        ],
+        [
+          "last",
+          "eq"
+        ],
+        [
+          "dob",
+          "eq"
+        ]
+      ],
+      "notes": [],
+      "roles": {
+        "dob": "DOB",
+        "email": "email",
+        "first": "fname",
+        "last": "lname",
+        "phone": "phone_home",
+        "prior_last": "prior_lname",
+        "street": "street"
+      },
+      "schema_version": "openadapt.duplicate-rule/v1"
+    },
+    "rule_text": [
+      "Stop: the record exists when first the same and last the same and dob the same.",
+      "Stop for a person when email the same and phone the same and street the same.",
+      "Stop for a person when first matching by initial and last the same and dob the same.",
+      "Stop for a person when first the same and last sharing a name part and dob with day and month swapped.",
+      "Stop for a person when first the same and last sharing a name part and dob one part off.",
+      "Stop for a person when first one letter apart and last the same and dob the same.",
+      "Stop for a person when dob with day and month swapped and first and last names swapped.",
+      "Stop for a person when first the same and last one letter apart and dob with day and month swapped.",
+      "Stop for a person when the new record lacks a name or a date of birth."
+    ]
+  },
+  "soak-seed7-55@0.05": {
+    "budget": 0.05,
+    "generated": {
+      "false_stops": 0,
+      "false_stops_by_exception": {},
+      "false_stops_per_100_items": 0.0,
+      "items": 231,
+      "missed_by_exception": {
+        "limit_married_moved_dob_typo": 12,
+        "limit_new_name_moved_same_dob": 12,
+        "pl_both_typos_same_contact": 12,
+        "pl_married_moved": 12,
+        "r2_prior_name_moved_dob_typo": 6
+      },
+      "missed_duplicates": 54,
+      "new_chart_items": 45,
+      "true_duplicates": 184
+    },
+    "generation_s": 0.441,
+    "hand_built_record_check": {
+      "false_stops": 0,
+      "false_stops_by_exception": {},
+      "false_stops_per_100_items": 0.0,
+      "items": 231,
+      "missed_by_exception": {
+        "limit_married_moved_dob_typo": 12,
+        "limit_new_name_moved_same_dob": 12
+      },
+      "missed_duplicates": 24,
+      "new_chart_items": 45,
+      "true_duplicates": 184
+    },
+    "profile_records": 30,
+    "rule": {
+      "calibration": {
+        "calibration_duplicates": 526,
+        "distinct_queries": 870,
+        "false_match_rate": 0.0,
+        "miss_by_error": {
+          "contact_changed+contact_changed": 0.0,
+          "day_month_swapped+contact_changed": 0.0,
+          "day_month_swapped+contact_kept": 0.0,
+          "dob_digit+contact_changed": 0.0,
+          "dob_digit+contact_kept": 0.0,
+          "first_initial+contact_changed": 0.0,
+          "first_initial+contact_kept": 0.0,
+          "first_typo+contact_changed": 0.0,
+          "first_typo+contact_kept": 0.0,
+          "last_changed+contact_changed": 0.967,
+          "last_changed+contact_kept": 0.0,
+          "last_hyphenated+contact_changed": 0.0,
+          "last_hyphenated+contact_kept": 0.0,
+          "last_second_surname+contact_changed": 0.0,
+          "last_second_surname+contact_kept": 0.0,
+          "last_typo+contact_changed": 0.0,
+          "last_typo+contact_kept": 0.0,
+          "names_swapped+contact_changed": 0.0,
+          "names_swapped+contact_kept": 0.0
+        },
+        "miss_rate": 0.0551
+      },
+      "close": [
+        [
+          [
+            "email",
+            "eq"
+          ],
+          [
+            "phone",
+            "eq"
+          ],
+          [
+            "street",
+            "eq"
+          ]
+        ],
+        [
+          [
+            "first",
+            "initial"
+          ],
+          [
+            "last",
+            "eq"
+          ],
+          [
+            "dob",
+            "eq"
+          ]
+        ],
+        [
+          [
+            "first",
+            "eq"
+          ],
+          [
+            "last",
+            "share"
+          ],
+          [
+            "dob",
+            "swap"
+          ]
+        ],
+        [
+          [
+            "first",
+            "eq"
+          ],
+          [
+            "last",
+            "share"
+          ],
+          [
+            "dob",
+            "near"
+          ]
+        ],
+        [
+          [
+            "first",
+            "edit1"
+          ],
+          [
+            "last",
+            "eq"
+          ],
+          [
+            "dob",
+            "eq"
+          ]
+        ],
+        [
+          [
+            "dob",
+            "eq"
+          ],
+          [
+            "names_swapped",
+            "eq"
+          ]
+        ],
+        [
+          [
+            "first",
+            "eq"
+          ],
+          [
+            "last",
+            "edit1"
+          ],
+          [
+            "dob",
+            "eq"
+          ]
+        ]
+      ],
+      "estimated_false_stops_per_record": 0.01387,
+      "exact": [
+        [
+          "first",
+          "eq"
+        ],
+        [
+          "last",
+          "eq"
+        ],
+        [
+          "dob",
+          "eq"
+        ]
+      ],
+      "notes": [],
+      "roles": {
+        "dob": "DOB",
+        "email": "email",
+        "first": "fname",
+        "last": "lname",
+        "phone": "phone_home",
+        "prior_last": "prior_lname",
+        "street": "street"
+      },
+      "schema_version": "openadapt.duplicate-rule/v1"
+    },
+    "rule_text": [
+      "Stop: the record exists when first the same and last the same and dob the same.",
+      "Stop for a person when email the same and phone the same and street the same.",
+      "Stop for a person when first matching by initial and last the same and dob the same.",
+      "Stop for a person when first the same and last sharing a name part and dob with day and month swapped.",
+      "Stop for a person when first the same and last sharing a name part and dob one part off.",
+      "Stop for a person when first one letter apart and last the same and dob the same.",
+      "Stop for a person when dob the same and first and last names swapped.",
+      "Stop for a person when first the same and last one letter apart and dob the same.",
+      "Stop for a person when the new record lacks a name or a date of birth."
+    ]
+  }
+}

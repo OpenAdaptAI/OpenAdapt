@@ -534,6 +534,7 @@ improvising or retrying when something is off.
 | Judge any executor's write, including an agent's or a script's, from the system of record | Released | Synthetic | `openadapt-flow verify-run`, [VERIFY_RUN.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFY_RUN.md) |
 | Prove that nothing outside the declared change moved (frame conditions), and attribute concurrent edits by other users through the app's audit log or a modified-by field; the receipt signs which parts were checked | On main | Synthetic (MockMed, SQLite audit log) | `verify-run`, [VERIFICATION_COVERAGE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFICATION_COVERAGE.md) |
 | Admit a record check only after a fault suite written to a store copy shows it catches every fault it claims, and sign its coverage into the receipt | On main | Synthetic (in-memory REST store, SQLite copy) | `openadapt_flow/fault_gate.py`, `scaffold-verifier --fault-gate`, `verify-run` `admission:` |
+| Generate the app-specific parts of a workflow (read channel, record contract, duplicate rule, input types) from two or three demonstrations, each admitted only by a check that doesn't depend on the generator, and approved by a person in plain words | On main | Synthetic (a fake REST and FHIR app); duplicates on #1516's stream: 54 of 223 missed against the hand-built 24, 0 false stops against 2 | `openadapt-flow generate-parts`, [GENERATED_PARTS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/GENERATED_PARTS.md) |
 | Check that the saved record matches its source document, not only the parameters: intake keeps each value's line, a second reading must agree before a guarded save, and a round trip compares the read-back with the document | On main | Synthetic (MockMed, text referral) | `openadapt_flow/provenance.py`, `intake`, `verify-run --provenance`, guarded save |
 | Guarded save: a safety layer any agent wraps around one write (check the record, hold for approval, read back) | On main ([#1258](https://github.com/OpenAdaptAI/OpenAdapt/pull/1258)) | Synthetic | `GUARDED_SAVE.md` |
 | Draft a record check from the demonstration's write steps (`scaffold-verifier`) | Released | Synthetic | `openadapt-flow scaffold-verifier` (a person fills in the draft) |
@@ -563,6 +564,7 @@ improvising or retrying when something is off.
 | Learn one program with branches from two or more recordings, or say which recordings are missing | Released | Synthetic | `openadapt-flow induce`, `disambiguate`; [CAPABILITIES.md (flow)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/CAPABILITIES.md) |
 | Learn a guarded branch from several halts fixed the same way | Released | Synthetic | `openadapt-flow teach-branch`, `learning/branch_teach.py` |
 | Run a program over a worklist | Released | Real app | `openadapt-flow for-each` |
+| Learn a worklist loop from recordings that search a record, open it, work it and go back to the list, even when the last row skips the return or rows differ (a field some rows lack, a write some rows get behind a screen check a person accepts). Each pass selects the row's own record by its values, verifies it, and checks that row's write. Certified and governed runs refuse it until qualification covers it | On main ([#1435](https://github.com/OpenAdaptAI/OpenAdapt/pull/1435)) | Synthetic (held-out rows run through the interpreter against an in-memory app) | `openadapt-flow induce`; `Step.target_param` |
 | Typed business decisions inside a run | Released | Synthetic | `business_decision` states, `openadapt-flow business-decisions` |
 | Watch many real runs in the background and mine candidate branches (shadow mode) | On main ([#1212](https://github.com/OpenAdaptAI/OpenAdapt/pull/1212)) | Synthetic | [SHADOW_MINING.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/docs/SHADOW_MINING.md), [LEARN_FROM_MANY_RUNS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/LEARN_FROM_MANY_RUNS.md) |
 | Fill a workflow's inputs from a referral PDF, fax image or email | Released | Synthetic | `openadapt-flow intake`, [INTAKE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/INTAKE.md) |
@@ -698,6 +700,7 @@ A test fails when a command has no file or this list is out of date.
 - `bind-record-checks`
 - `certify`
 - `check`
+- `generate-parts`
 - `jit`
 - `known-ids`
 - `lint`
