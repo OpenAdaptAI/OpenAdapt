@@ -15710,15 +15710,12 @@ class Replayer:
         teach_role = census_mod.teach_time_role(step)
         if check.mode == "structured":
             decision = self._structured_census(step, resolution.point)
-            if decision.verdict == "cannot_count" and teach_role == "control":
-                decision = census_mod.CensusDecision("not_a_row")
-        elif teach_role == "control":
-            # Teach time recorded a form field or a control here, not a record
-            # row: there are no look-alike rows to count, whichever rung
-            # (template, OCR, pixel) resolved it.
-            decision = census_mod.CensusDecision("not_a_row")
         else:
             decision = self._ocr_census(step, resolution, before_png, params, workflow)
+        if decision.verdict == "cannot_count" and teach_role == "control":
+            # Teach time recorded a form field or a control, and no census can
+            # count here. A census that can count always decides.
+            decision = census_mod.CensusDecision("not_a_row")
         if decision.verdict == "not_a_row":
             return check.model_copy(update={"census_status": "not_a_row"})
         if decision.verdict == "cannot_count":
