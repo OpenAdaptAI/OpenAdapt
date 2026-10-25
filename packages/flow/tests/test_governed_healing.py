@@ -143,6 +143,14 @@ class FakeBackend:
     def structured_text_at(self, x, y):
         return self._structured
 
+    def identity_candidates_at(self, x, y):
+        # One record row on this screen (IdentityCandidatesBackend).
+        return {
+            "record_key": None,
+            "incomplete": False,
+            "candidates": [{"self": True, "record_key": None, "dx": 0, "dy": 0}],
+        }
+
     def screenshot(self):
         return self._frame
 

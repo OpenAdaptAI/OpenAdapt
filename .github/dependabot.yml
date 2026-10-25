@@ -75,9 +75,9 @@ updates:
       # docs/RELEASE_CANDIDATE_INSTALLERS.md describes. Bump them by hand.
       - dependency-name: "pyinstaller"
       - dependency-name: "playwright"
-      # ONNX Runtime 1.31.0 is the newest release with macOS Intel wheels,
-      # which the macOS Intel lock and installer need (see the onnxruntime pins
-      # in packages/desktop/pyproject.toml). A bump breaks that lane.
+      # The macOS Intel pin must stay on 1.20.1, the last release with an Intel
+      # wheel; dependabot's bump to 1.31.0 broke the Intel installer build.
+      # Bump onnxruntime by hand, and keep the Intel pin where it is.
       - dependency-name: "onnxruntime"
   - package-ecosystem: "npm"
     directory: "/packages/desktop"
