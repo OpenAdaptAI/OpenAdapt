@@ -682,19 +682,35 @@ def turn_off(
 # -- re-arming a switched-off switch -------------------------------------------
 
 
-def _last_off(events: list[SwitchLogEvent]) -> Optional[SwitchLogEvent]:
-    """The ``switched_off`` event that holds the switch off now, if any."""
+def _last_off(
+    events: list[SwitchLogEvent],
+    approver_keys: Optional[Mapping[str, str]] = None,
+) -> Optional[SwitchLogEvent]:
+    """The ``switched_off`` event that holds the switch off now, if any.
+
+    Only a re-arm that verifies against the log before it (with
+    ``approver_keys``) ends an off period; a forged or early one doesn't.
+    """
 
     off: Optional[SwitchLogEvent] = None
-    for event in events:
+    for index, event in enumerate(events):
         if event.kind == "switched_off" and off is None:
             off = event
-        elif event.kind == "rearmed":
+        elif (
+            event.kind == "rearmed"
+            and off is not None
+            and event.rearm is not None
+            and approver_keys
+            and rearm_refusal(events[:index], event.rearm, approver_keys) is None
+        ):
             off = None
     return off
 
 
-def clean_streak(events: list[SwitchLogEvent]) -> tuple[str, ...]:
+def clean_streak(
+    events: list[SwitchLogEvent],
+    approver_keys: Optional[Mapping[str, str]] = None,
+) -> tuple[str, ...]:
     """Run refs of the consecutive verified items since the switch went off.
 
     The trailing run of ``item_finished`` events after the off event whose
@@ -702,7 +718,7 @@ def clean_streak(events: list[SwitchLogEvent]) -> tuple[str, ...]:
     finished item resets it; an item still open after the last one does too.
     """
 
-    off = _last_off(events)
+    off = _last_off(events, approver_keys)
     if off is None:
         return ()
     streak: list[str] = []
@@ -765,20 +781,28 @@ def rearm_signing_payload(
     )
 
 
-def rearm_request(log: SwitchLog, *, cause: str) -> dict[str, Any]:
+def rearm_request(
+    log: SwitchLog,
+    *,
+    cause: str,
+    approver_keys: Optional[Mapping[str, str]] = None,
+) -> dict[str, Any]:
     """What a person is shown before re-arming, or raise when it isn't offered.
 
     Offered only while the switch is off and after
     :data:`REARM_CLEAN_ITEMS` consecutive verified items since it went off.
-    Returns the unsigned fields the person's key signs (without
-    ``approver_id``, ``key_id``, ``signed_at``).
+    ``approver_keys`` are the keys the gate trusts (by default the registered
+    approvers, :func:`registry_approver_keys`): a re-arm already in the log
+    counts only if it verifies with them. Returns the unsigned fields the
+    person's key signs (without ``approver_id``, ``key_id``, ``signed_at``).
     """
 
+    keys = registry_approver_keys() if approver_keys is None else approver_keys
     events = log.read()
-    off = _last_off(events)
+    off = _last_off(events, keys)
     if off is None:
         raise SwitchLogError("the switch is on; there is nothing to re-arm")
-    streak = clean_streak(events)
+    streak = clean_streak(events, keys)
     if len(streak) < REARM_CLEAN_ITEMS:
         raise SwitchLogError(
             f"{len(streak)} consecutive verified items since the switch went "
@@ -857,14 +881,18 @@ def rearm_refusal(
 
     if not events or events[0].switch_record_sha256 is None:
         return "the switch log is not readable"
-    off = _last_off(events)
+    if rearm.approver_id != rearm.key_id:
+        # The key is registered under the approver's own name; a re-arm that
+        # names one person and is signed with another's key proves nothing.
+        return "the re-arm's approver is not the key's registered approver"
+    off = _last_off(events, approver_keys)
     if off is None:
         return "the switch is on; there is nothing to re-arm"
     if rearm.off_seq != off.seq or rearm.off_sha256 != off.sha256:
         return "the re-arm names another switch-off"
     if rearm.off_reason != off.reason:
         return "the re-arm names another off reason"
-    streak = clean_streak(events)
+    streak = clean_streak(events, approver_keys)
     if len(streak) < REARM_CLEAN_ITEMS:
         return (
             f"{len(streak)} consecutive verified items since the switch went off; "

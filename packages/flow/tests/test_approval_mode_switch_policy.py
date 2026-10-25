@@ -47,6 +47,33 @@ from openadapt_flow.ir import RunReport, StepResult
 from tests._approval_mode_support import BUNDLE_DIGEST, make_record, open_log
 
 FAIL = CheckOutcome(code="verified", passed=False, detail="not_verified")
+
+
+@pytest.fixture(autouse=True)
+def _no_registered_approvers(monkeypatch):
+    """Hermetic: never read the developer's own key directory."""
+
+    from openadapt_flow.jit import authority
+
+    monkeypatch.setattr(
+        authority.PrincipalRegistry,
+        "load",
+        classmethod(lambda cls, key_dir: authority.PrincipalRegistry()),
+    )
+
+
+def _with_duplicate_check(result: StepResult, value: str) -> StepResult:
+    """The duplicate check's structured outcome on a halted step.
+
+    ``StepResult.duplicate_check`` is added and set by the record-channel
+    duplicate check (#1516); until then it is set here directly.
+    """
+
+    result = result.model_copy()
+    object.__setattr__(result, "duplicate_check", value)
+    return result
+
+
 PASS_R2 = CheckOutcome(code="whole_run_clean", passed=True)
 
 
@@ -109,7 +136,7 @@ CAUGHT_WRONG_WRITE = StepResult(
     [
         ("REJECTED_POLICY", INVALID_DATE),
         ("HALTED_BEFORE_EFFECT", INVALID_DATE),
-        ("HALTED_BEFORE_EFFECT", DUPLICATE),
+        ("HALTED_BEFORE_EFFECT", _with_duplicate_check(DUPLICATE, "candidate")),
     ],
 )
 def test_an_input_problem_leaves_the_switch_on(transaction, halted) -> None:
@@ -138,7 +165,9 @@ def test_an_unnamed_stop_before_any_effect_is_a_program_problem() -> None:
 def test_a_duplicate_stop_after_a_delivered_save_is_a_program_problem() -> None:
     # The duplicate-list failure counts as an input problem only when nothing
     # that saves was delivered.
-    report = _report("HALTED_BEFORE_EFFECT", DUPLICATE)
+    report = _report(
+        "HALTED_BEFORE_EFFECT", _with_duplicate_check(DUPLICATE, "candidate")
+    )
     report.results.insert(0, CAUGHT_WRONG_WRITE.model_copy(update={"ok": True}))
     assert problem_class(report) == PROGRAM_PROBLEM
 
@@ -181,11 +210,13 @@ def _switched_off_log(tmp_path, clean: int):
 
 
 def _signed(log, private) -> object:
-    request = rearm_request(log, cause="a malformed date of birth was saved wrong")
+    request = rearm_request(
+        log, cause="a malformed date of birth was saved wrong", approver_keys={}
+    )
     return sign_rearm(
         log,
         request,
-        approver_id="person-0001",
+        approver_id="approver-1",
         key_id="approver-1",
         private_key=private,
     )
@@ -196,7 +227,7 @@ def test_a_signed_rearm_after_ten_verified_items_turns_the_switch_on(tmp_path) -
     log = _switched_off_log(tmp_path, REARM_CLEAN_ITEMS)
     event = rearm(log, _signed(log, private), approver_keys=keys)
     assert event.kind == "rearmed" and event.rearm is not None
-    assert event.rearm.approver_id == "person-0001"
+    assert event.rearm.approver_id == "approver-1"
     assert event.rearm.cause.startswith("a malformed date")
     assert len(event.rearm.clean_run_refs) == REARM_CLEAN_ITEMS
     assert not log.state(approver_keys=keys).is_off
@@ -249,7 +280,7 @@ def test_a_rearm_is_never_automatic_and_a_later_problem_turns_it_off_again(
     state = log.state(approver_keys=keys)
     assert state.off_reason is OffReason.SCREEN_CHANGED
     with pytest.raises(SwitchLogError, match="0 consecutive"):
-        rearm_request(log, cause="x")
+        rearm_request(log, cause="x", approver_keys=keys)
 
 
 def test_an_appended_rearm_event_with_a_bad_signature_is_ignored(tmp_path) -> None:
@@ -267,7 +298,7 @@ def test_a_key_held_in_a_keychain_signs_the_bytes_without_leaving_it(tmp_path) -
     log = _switched_off_log(tmp_path, REARM_CLEAN_ITEMS)
     request = rearm_request(log, cause="a malformed date of birth was saved wrong")
     fields, payload = rearm_to_sign(
-        log, request, approver_id="person-0001", key_id="approver-1"
+        log, request, approver_id="approver-1", key_id="approver-1"
     )
     signature = base64.b64encode(private.sign(payload)).decode("ascii")
     rearm(log, rearm_evidence(fields, signature), approver_keys=keys)
@@ -307,3 +338,110 @@ def test_an_unreadable_registry_gives_no_approver_keys(tmp_path, monkeypatch) ->
 
     monkeypatch.setattr(authority.PrincipalRegistry, "load", classmethod(broken))
     assert switch.registry_approver_keys(tmp_path) == {}
+
+
+def test_a_duplicate_stop_is_classed_only_by_its_structured_outcome() -> None:
+    # The error text alone says nothing: a duplicate stop that doesn't say
+    # why is a program problem.
+    plain = _report("HALTED_BEFORE_EFFECT", DUPLICATE)
+    assert problem_class(plain) == PROGRAM_PROBLEM
+    # A list or record channel that couldn't be read turns the switch off.
+    unreadable = _report(
+        "HALTED_BEFORE_EFFECT", _with_duplicate_check(DUPLICATE, "unreadable")
+    )
+    assert problem_class(unreadable) == PROGRAM_PROBLEM
+    assert _decide(unreadable).switch_off is OffReason.RECORD_CHECK_LOST
+
+
+def test_an_explicit_switch_off_is_never_classed_down() -> None:
+    from openadapt_flow.approval_mode.post import ItemDecision
+
+    gate = ItemDecision(
+        kind=ItemDecisionKind.STOP_BEFORE_SAVING,
+        reason="record_check_ready",
+        needs_person=True,
+        counts_toward_problems=True,
+        switch_off=OffReason.RECORD_CHECK_LOST,
+    )
+    decision = decide_problems_only(
+        _report("REJECTED_POLICY", INVALID_DATE),
+        r1=FAIL,
+        r2=PASS_R2,
+        gate_decision=gate,
+    )
+    assert decision.switch_off is OffReason.RECORD_CHECK_LOST
+    assert decision.counts_toward_problems
+
+
+def test_a_replayed_old_rearm_after_a_second_switch_off_is_refused(tmp_path) -> None:
+    private, keys = _keypair()
+    log = _switched_off_log(tmp_path, REARM_CLEAN_ITEMS)
+    first = _signed(log, private)
+    rearm(log, first, approver_keys=keys)
+    turn_off(log, OffReason.SCREEN_CHANGED)
+    for index in range(100, 100 + REARM_CLEAN_ITEMS):
+        _finish(log, index, ItemDecisionKind.NO_PERSON)
+    with pytest.raises(SwitchLogError, match="another switch-off"):
+        rearm(log, first, approver_keys=keys)
+    assert log.state(approver_keys=keys).is_off
+
+
+def test_a_rearm_for_another_switch_log_is_refused(tmp_path) -> None:
+    private, keys = _keypair()
+    log = _switched_off_log(tmp_path / "a", REARM_CLEAN_ITEMS)
+    other = open_log(tmp_path / "b", make_record(switch_id="switch-other-0001"))
+    turn_off(other, OffReason.UNCERTAIN_RESULT)
+    for index in range(REARM_CLEAN_ITEMS):
+        _finish(other, index, ItemDecisionKind.NO_PERSON)
+    evidence = _signed(log, private)
+    with pytest.raises(SwitchLogError):
+        rearm(other, evidence, approver_keys=keys)
+    assert other.state(approver_keys=keys).is_off
+
+
+def test_a_forged_rearm_then_a_real_one(tmp_path) -> None:
+    private, keys = _keypair()
+    log = _switched_off_log(tmp_path, REARM_CLEAN_ITEMS)
+    forger, _ = _keypair()
+    log.append("rearmed", rearm=_signed(log, forger))
+    # The forged event ends no off period: the same switch-off and streak
+    # are still offered, and a real re-arm of them counts.
+    request = rearm_request(log, cause="x", approver_keys=keys)
+    assert len(request["clean_run_refs"]) == REARM_CLEAN_ITEMS
+    rearm(log, _signed(log, private), approver_keys=keys)
+    assert not log.state(approver_keys=keys).is_off
+
+
+def test_a_rearm_naming_another_approver_than_its_key_is_refused(tmp_path) -> None:
+    private, keys = _keypair()
+    log = _switched_off_log(tmp_path, REARM_CLEAN_ITEMS)
+    request = rearm_request(log, cause="x", approver_keys=keys)
+    mismatched = sign_rearm(
+        log,
+        request,
+        approver_id="someone-else",
+        key_id="approver-1",
+        private_key=private,
+    )
+    with pytest.raises(SwitchLogError, match="registered approver"):
+        rearm(log, mismatched, approver_keys=keys)
+
+
+def test_the_gate_reads_on_after_a_valid_rearm(tmp_path) -> None:
+    from openadapt_flow.approval_mode.gate import ApprovalGate
+
+    private, keys = _keypair()
+    record = make_record()
+    log = open_log(tmp_path, record)
+    turn_off(log, OffReason.UNCERTAIN_RESULT)
+    for index in range(REARM_CLEAN_ITEMS):
+        _finish(log, index, ItemDecisionKind.APPROVED)
+    trusting = ApprovalGate(
+        "problems_only", record=record, log=log, pinned_approver_keys=keys
+    )
+    untrusting = ApprovalGate("problems_only", record=record, log=log)
+    assert trusting._switch_reads_off() and untrusting._switch_reads_off()
+    rearm(log, _signed(log, private), approver_keys=keys)
+    assert not trusting._switch_reads_off()
+    # A gate that doesn't trust the key still reads off.
+    assert untrusting._switch_reads_off()

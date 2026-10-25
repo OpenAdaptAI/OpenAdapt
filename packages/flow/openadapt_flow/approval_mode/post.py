@@ -265,8 +265,10 @@ INPUT_PROBLEM = "input"
 PROGRAM_PROBLEM = "program"
 #: Item checks that judge the item's inputs, not the program.
 _INPUT_CHECK_CODES = frozenset({"inputs_supplied", "inputs_strict", "channel"})
-#: The postcondition that reads an app's possible-duplicate list.
-_DUPLICATE_CANDIDATE = "failed: no_duplicate_candidate"
+#: ``StepResult.duplicate_check`` values (set by the duplicate check): a real
+#: candidate was found, or the list or record channel couldn't be read.
+_DUPLICATE_FOUND = "candidate"
+_DUPLICATE_UNREADABLE = "unreadable"
 
 
 def problem_class(report: "RunReport", reason: Optional[str] = None) -> str:
@@ -300,9 +302,12 @@ def problem_class(report: "RunReport", reason: Optional[str] = None) -> str:
         return PROGRAM_PROBLEM
     if halted.step_id == "<params>":
         return INPUT_PROBLEM
+    # The duplicate check says why it failed in a structured field; the error
+    # text is never read. A check that couldn't read its list, and any
+    # duplicate stop that doesn't say, is a program problem.
     if (
         report.transaction_outcome == "HALTED_BEFORE_EFFECT"
-        and _DUPLICATE_CANDIDATE in (halted.error or "")
+        and getattr(halted, "duplicate_check", None) == _DUPLICATE_FOUND
         and not any(
             r.delivery_uncertainty is not None
             or (r.delivery_attempted is True and _consequential(r))
@@ -327,6 +332,11 @@ def _program_off_reason(report: "RunReport", reason: Optional[str] = None) -> Of
 
     if reason in _GATE_OFF_REASONS:
         return _GATE_OFF_REASONS[reason]
+    if any(
+        getattr(result, "duplicate_check", None) == _DUPLICATE_UNREADABLE
+        for result in report.results
+    ):
+        return OffReason.RECORD_CHECK_LOST
 
     for result in report.results:
         evidence = result.safety_refusal_evidence
@@ -354,6 +364,10 @@ def classify_decision(report: "RunReport", decision: ItemDecision) -> ItemDecisi
     if not decision.needs_person or not (
         decision.counts_toward_problems or decision.switch_off is not None
     ):
+        return decision
+    if decision.switch_off is not None:
+        # The gate, R2 or the engine already turned the switch off for a
+        # named reason. Nothing classes that down to an input problem.
         return decision
     if problem_class(report, decision.reason) == INPUT_PROBLEM:
         return dataclasses.replace(

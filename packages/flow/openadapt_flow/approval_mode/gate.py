@@ -327,8 +327,11 @@ class ApprovalGate:
         self._pinned_keys = dict(pinned_status_keys or {})
         # Approver keys a person's signed re-arm may be signed with: the ones
         # given here (key id to a raw Ed25519 public key, hex or base64), or
-        # by default every approver registered in the JIT key directory. With
-        # none, a switch that turned off stays off.
+        # by default every approver registered in the JIT key directory. That
+        # default is deliberate: an approver is registered by a person at a
+        # terminal (``jit register --role approver``, #1486), never by an
+        # agent, and the registry refuses agent and model names. With none, a
+        # switch that turned off stays off.
         if pinned_approver_keys is not None:
             self._approver_keys = dict(pinned_approver_keys)
         else:
