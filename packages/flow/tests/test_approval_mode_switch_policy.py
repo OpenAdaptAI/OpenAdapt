@@ -51,15 +51,9 @@ FAIL = CheckOutcome(code="verified", passed=False, detail="not_verified")
 
 @pytest.fixture(autouse=True)
 def _no_registered_approvers(monkeypatch):
-    """Hermetic: never read the developer's own key directory."""
+    """Hermetic: never read the developer's own approver roster."""
 
-    from openadapt_flow.jit import authority
-
-    monkeypatch.setattr(
-        authority.PrincipalRegistry,
-        "load",
-        classmethod(lambda cls, key_dir: authority.PrincipalRegistry()),
-    )
+    monkeypatch.delenv("OPENADAPT_APPROVER_ROOT", raising=False)
 
 
 def _with_duplicate_check(result: StepResult, value: str) -> StepResult:
@@ -307,38 +301,59 @@ def test_a_key_held_in_a_keychain_signs_the_bytes_without_leaving_it(tmp_path) -
     assert not log.state(approver_keys=keys).is_off
 
 
-def test_registered_approver_keys_in_hex_verify_a_rearm(tmp_path, monkeypatch) -> None:
-    """The principal registry's approvers (hex) are the gate's default keys."""
+def _fake_roster(monkeypatch, keys_or_error):
+    """Stand in for #1486's approver roster module (not on main yet)."""
 
-    from types import SimpleNamespace
+    import sys
+    from types import ModuleType
+
+    roster = ModuleType("openadapt_flow.approval_mode.approver_roster")
+    calls: list = []
+
+    def pinned_root(explicit):
+        return "root-key"
+
+    def approver_keys_b64(key_dir, root):
+        calls.append((key_dir, root))
+        if isinstance(keys_or_error, Exception):
+            raise keys_or_error
+        return keys_or_error
+
+    roster.pinned_root = pinned_root
+    roster.approver_keys_b64 = approver_keys_b64
+    monkeypatch.setitem(sys.modules, roster.__name__, roster)
+    import openadapt_flow.approval_mode as package
+
+    monkeypatch.setattr(package, "approver_roster", roster, raising=False)
+    return calls
+
+
+def test_roster_approver_keys_verify_a_rearm(tmp_path, monkeypatch) -> None:
+    """The pinned roster's approvers are the gate's default keys."""
 
     from openadapt_flow.approval_mode import switch
-    from openadapt_flow.jit import authority
 
     private, keys = _keypair()
-    hex_key = base64.b64decode(keys["approver-1"]).hex()
-    monkeypatch.setattr(
-        authority.PrincipalRegistry,
-        "load",
-        classmethod(
-            lambda cls, key_dir: SimpleNamespace(approvers={"approver-1": hex_key})
-        ),
-    )
-    registered = switch.registry_approver_keys(tmp_path)
-    assert registered == {"approver-1": hex_key}
+    calls = _fake_roster(monkeypatch, keys)
+    trusted = switch.registry_approver_keys(tmp_path)
+    assert trusted == keys and calls == [(tmp_path, "root-key")]
     log = _switched_off_log(tmp_path, REARM_CLEAN_ITEMS)
-    rearm(log, _signed(log, private), approver_keys=registered)
-    assert not log.state(approver_keys=registered).is_off
+    rearm(log, _signed(log, private), approver_keys=trusted)
+    assert not log.state(approver_keys=trusted).is_off
 
 
-def test_an_unreadable_registry_gives_no_approver_keys(tmp_path, monkeypatch) -> None:
+def test_hex_keys_still_verify_a_rearm(tmp_path) -> None:
+    private, keys = _keypair()
+    hex_keys = {k: base64.b64decode(v).hex() for k, v in keys.items()}
+    log = _switched_off_log(tmp_path, REARM_CLEAN_ITEMS)
+    rearm(log, _signed(log, private), approver_keys=hex_keys)
+    assert not log.state(approver_keys=hex_keys).is_off
+
+
+def test_an_unverifiable_roster_gives_no_approver_keys(tmp_path, monkeypatch) -> None:
     from openadapt_flow.approval_mode import switch
-    from openadapt_flow.jit import authority
 
-    def broken(cls, key_dir):
-        raise ValueError("unreadable")
-
-    monkeypatch.setattr(authority.PrincipalRegistry, "load", classmethod(broken))
+    _fake_roster(monkeypatch, ValueError("the roster does not verify"))
     assert switch.registry_approver_keys(tmp_path) == {}
 
 

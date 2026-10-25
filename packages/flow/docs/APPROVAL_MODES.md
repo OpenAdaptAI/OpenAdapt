@@ -271,9 +271,12 @@ The log's `rearmed` event records:
 - the off event it answers.
 
 A gate honours it only when the signing key is an approver key it trusts.
-By default, those are the approvers registered in the key directory's
-principal registry (`jit register --role approver`; Desktop's approver key is
-one). `ApprovalGate(pinned_approver_keys=...)` names them explicitly instead.
+By default, those are the approvers on the signed approver roster that the
+run's pinned root approver vouches for (#1486; the root is pinned by the
+deployment config, `--approver-root` or `OPENADAPT_APPROVER_ROOT`). Desktop's
+approver key is one of them. With no pinned root, or a roster that doesn't
+verify, no re-arm counts. `ApprovalGate(pinned_approver_keys=...)` names the
+keys explicitly instead.
 Desktop can sign with a key that never leaves its keychain: `rearm_to_sign`
 returns the bytes to sign, and `rearm_evidence` wraps the signature. Without the pinned key, a forged,
 tampered or early re-arm is ignored, and the switch stays off. Each reader
