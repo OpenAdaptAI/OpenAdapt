@@ -221,12 +221,17 @@ class FlowRoster:
         write.
         """
 
-        from openadapt_desktop import approver_anchor
-
         try:
+            from openadapt_desktop import approver_anchor
+
             anchor = approver_anchor.read_anchor()
-        except approver_anchor.AnchorError as exc:
-            raise ApproverKeychainError("approver_anchor_untrusted", str(exc)) from exc
+        except Exception as exc:
+            # An anchor that can't be loaded or read is never "no anchor":
+            # no person's answer counts until it reads.
+            raise ApproverKeychainError(
+                "approver_anchor_untrusted",
+                f"The administrator's approver pin can't be checked: {exc}",
+            ) from exc
         stored = self._read_pin(ROOT_ACCOUNT)
         keychain = stored.strip().lower() if stored else None
         if anchor and keychain and anchor != keychain:

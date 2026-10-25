@@ -4527,10 +4527,10 @@ class EngineDispatcher:
         except Exception:
             in_app, stored = False, False
         file_key = approver_key_environment() is not None
-        from openadapt_desktop import approver_anchor
-        from openadapt_desktop.approver_keychain import pinned_root
-
         try:
+            from openadapt_desktop import approver_anchor
+            from openadapt_desktop.approver_keychain import pinned_root
+
             pinned = pinned_root() is not None
             anchored = approver_anchor.read_anchor() is not None
         except Exception:

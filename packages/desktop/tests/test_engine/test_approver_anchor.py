@@ -402,3 +402,56 @@ def test_the_pin_command_shows_and_refuses_without_elevation(monkeypatch, tmp_pa
         assert refused.value.code == 1
         assert "not_elevated" in capsys.readouterr().out
         assert not target.exists()
+
+
+def test_an_anchor_that_cant_be_checked_counts_no_answer(roster) -> None:
+    """A load or read failure other than a refusal (a broken import, an OS
+    error) is never taken as "no anchor"."""
+    from openadapt_desktop.approver_keychain import ApproverKeychainError
+
+    flow_roster, state, keyring = roster
+    _keychain_root(keyring, ROOT)
+    state["anchor"] = OSError("the folder vanished mid-read")
+    with pytest.raises(ApproverKeychainError) as raised:
+        flow_roster.root()
+    assert raised.value.code == "approver_anchor_untrusted"
+
+
+def _windows_admin() -> bool:
+    if sys.platform != "win32":
+        return False
+    return bool(approver_anchor._windll("shell32").IsUserAnAdmin())
+
+
+@pytest.mark.skipif(not _windows_admin(), reason="needs an elevated Windows session")
+def test_windows_pin_replaces_a_folder_a_user_made_first() -> None:  # pragma: no cover
+    """Attack: a user creates the anchor folder before the administrator pins
+    and plants a root in it. The plant is refused; pinning moves that folder
+    aside and creates a fresh one only administrators can change."""
+    import secrets
+    import shutil
+
+    base = approver_anchor._program_data()
+    folder = base / f"OpenAdapt-test-{secrets.token_hex(6)}"
+    target = folder / approver_anchor.ANCHOR_NAME
+    folder.mkdir()  # inherits ProgramData's ACL: Users may write here
+    target.write_text(json.dumps({"root_public_key": OTHER}))
+    try:
+        with pytest.raises(AnchorError) as planted:
+            _read_anchor(target)
+        assert planted.value.code == "approver_anchor_untrusted"
+
+        assert approver_anchor.write_anchor(ROOT, target) == target
+        assert _read_anchor(target) == ROOT
+        owner, aces = approver_anchor._windows_security(folder)
+        assert owner == ADMINS
+        assert dacl_admin_only(owner, aces) is None
+        asides = list(base.glob(f"{folder.name}.replaced-*"))
+        assert len(asides) == 1
+        assert (
+            json.loads((asides[0] / approver_anchor.ANCHOR_NAME).read_text())["root_public_key"]
+            == OTHER
+        )
+    finally:
+        for leftover in [folder, *base.glob(f"{folder.name}.replaced-*")]:
+            shutil.rmtree(leftover, ignore_errors=True)

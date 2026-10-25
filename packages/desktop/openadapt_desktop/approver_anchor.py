@@ -608,14 +608,15 @@ def _write_windows(path: Path, payload: bytes) -> None:  # pragma: no cover - Wi
     """
 
     import ctypes
-    import time
+    import secrets
     from ctypes import wintypes
 
     directory = path.parent
     for ancestor in reversed(directory.parents):
         _check_windows_ancestor(ancestor)
     if os.path.lexists(directory):
-        aside = directory.with_name(f"{directory.name}.replaced-{time.strftime('%Y%m%d%H%M%S')}")
+        # Random, so no one can make the name first and block the move.
+        aside = directory.with_name(f"{directory.name}.replaced-{secrets.token_hex(8)}")
         try:
             os.rename(directory, aside)
         except OSError as exc:
@@ -643,10 +644,11 @@ def _write_windows(path: Path, payload: bytes) -> None:  # pragma: no cover - Wi
     try:
         attributes = SecurityAttributes(ctypes.sizeof(SecurityAttributes), descriptor, False)
         if not kernel.CreateDirectoryW(wintypes.LPCWSTR(str(directory)), ctypes.byref(attributes)):
+            error = ctypes.get_last_error()  # type: ignore[attr-defined]
             raise AnchorError(
                 "approver_anchor_untrusted",
-                f"Can't create {directory} (error {getattr(ctypes, 'get_last_error')()}); if something "
-                "made it again meanwhile, pin again.",
+                f"Can't create {directory} (error {error}); if something made it again "
+                "meanwhile, pin again.",
             )
     finally:
         kernel.LocalFree(descriptor)
