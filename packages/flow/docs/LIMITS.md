@@ -375,6 +375,48 @@ The binding ties the click to the entry the run made. It doesn't check that
 the entry is right: the values typed come from the run's parameters, and only
 a record check can confirm what the application saved.
 
+A labelled save on a create-new form (Trac's **Create ticket**, NetBox's
+**Create**) has the same problem: no existing record is on screen next to it,
+so it compiled with no identity check, and a policy that refuses unarmed saves
+refused it. Its record is the one the run is typing into the form. When the
+recording shows the save is the submit button of the one form that owns every
+field typed since the last save, the compiler gives it a **form identity**
+(`Anchor.form_identity`). Before the click, a run requires (identity mode
+`form`):
+
+- the button is still that form's submit button, and the form owns exactly the
+  fields this run typed into, each holding exactly what the run typed;
+- the form submits to the same origin and path with the same method, and would
+  send the same set of field names and types, hidden ones included, so an edit
+  form that looks like the create form, or an address, method or record id a
+  script changed or added, halts;
+- every field the run did not type into (a hidden parent or record id, a
+  select left on its default, a checked box) holds its demonstrated value,
+  stored as a salted digest. Hidden tokens are not compared: ones named like a
+  token (`csrf`, `token`, `nonce` and the like), whose value changes with every
+  page load, and ones that changed while the demonstration was typed. A
+  program that should create under a different parent on each run therefore
+  halts until that parent is checked another way.
+
+During the click, a submit from any other form, or from the right form without
+its save button (`requestSubmit()` from a click handler), is cancelled and
+halts the run. A script that submits with `form.submit()` or `fetch` sends no
+submit event, so the guard doesn't see it.
+
+A backend that can't read the page leaves the identity unreadable, which halts
+too. Each field must hold exactly what the run typed, so a controlled input
+that reformats the value halts: one that reformats on every keystroke stops at
+the typed-value read-back, and one that reformats when it loses focus (a
+phone-number mask, for example) stops at the form check. A field that a React
+keyed remount replaces with a new element, even with the same value, also
+halts: the new element isn't one the run typed into. A submit button outside
+the `<form>` element counts when its `form=` attribute names that form. One
+with no form owner at all (a React portal that submits from script) gets no
+form identity, so its save stays unarmed.
+
+The form identity ties the click to the entry the run made in the demonstrated
+form. It doesn't prove the app saved it correctly: only a record check does.
+
 For consequential or entity-sensitive workflows, require a policy that refuses
 unarmed actions, review the inferred risk and tags, and test identity against
 real near-match and same-name records. Pure-pixel substrates should expect more
