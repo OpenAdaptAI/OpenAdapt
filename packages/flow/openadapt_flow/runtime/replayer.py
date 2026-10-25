@@ -15718,18 +15718,14 @@ class Replayer:
             "param",
         ):
             return check
+        teach_role = census_mod.teach_time_role(step)
         if check.mode == "structured":
             decision = self._structured_census(step, resolution.point)
         else:
             decision = self._ocr_census(step, resolution, before_png, params, workflow)
-        tmpl = step.anchor.identity_template if step.anchor is not None else None
-        if (
-            decision.verdict == "cannot_count"
-            and check.mode == "structured"
-            and tmpl is not None
-            and tmpl.structured_row is False
-        ):
-            # Teach time saw no record row here (a form field, a button).
+        if decision.verdict == "cannot_count" and teach_role == "control":
+            # Teach time recorded a form field or a control, and no census can
+            # count here. A census that can count always decides.
             decision = census_mod.CensusDecision("not_a_row")
         if decision.verdict == "not_a_row":
             return check.model_copy(update={"census_status": "not_a_row"})
@@ -17459,6 +17455,12 @@ class Replayer:
         check = self._verify_identity(
             step, resolution, frame_png, params, workflow, bundle_dir
         )
+        if check.status != "verified" and check.ambiguity_halt is not None:
+            # The target is in view and its identity matched, but the census
+            # refused it. Scrolling cannot change that; the scroll loop stops
+            # and reports this instead of spending its budget.
+            self._scroll_census_refusal = (step.id, check)
+            return miss("census")
         return check.status == "verified" or miss("identity")
 
     def _act_scroll(
@@ -17564,9 +17566,41 @@ class Replayer:
                 workflow=workflow,
             )
 
+        def census_refusal() -> Optional[str]:
+            """The halt for a target in view whose census refused it."""
+
+            refusal = self.__dict__.pop("_scroll_census_refusal", None)
+            if not misses or misses[-1] != "census" or refusal is None:
+                return None
+            target_id, check = refusal
+            why = {
+                "identical_candidates": (
+                    f"{check.candidate_count} shown rows carry the same identity "
+                    "and no recorded record id tells them apart"
+                ),
+                "identity_uncounted": (
+                    "this surface cannot count the rows that might share it, "
+                    "and a consequential write follows"
+                ),
+            }.get(
+                check.ambiguity_halt or "",
+                "the rows that could share its identity could not all be counted",
+            )
+            result.safety_halt = True
+            return (
+                f"Step '{step.id}' ({step.intent}): the target of step "
+                f"'{target_id}' is in view and its identity matched, but {why} "
+                f"({check.ambiguity_halt}); scrolling cannot change that, so "
+                "the scroll stops here and no input was sent for it"
+            )
+
+        self.__dict__.pop("_scroll_census_refusal", None)
         holds = readiness_holds(before_png)
         if self._governed_asset_mutation is not None:
             return self._governed_asset_mutation
+        stop = census_refusal()
+        if stop is not None:
+            return stop
         if holds:
             # Target already in view; nothing to scroll and no input sent.
             # Record why, only for the next-target readiness check, so the
@@ -17605,6 +17639,9 @@ class Replayer:
                     return scroll_error
                 if readiness_holds(fresh_scroll_frame):
                     return None
+                stop = census_refusal()
+                if stop is not None:
+                    return stop
             remote_preflight_error = self._prepare_remote_scroll_input(step, result)
             if remote_preflight_error is not None:
                 return remote_preflight_error
@@ -17627,6 +17664,9 @@ class Replayer:
             holds = readiness_holds(frame)
             if self._governed_asset_mutation is not None:
                 return self._governed_asset_mutation
+            stop = census_refusal()
+            if stop is not None:
+                return stop
             if holds:
                 return None
 

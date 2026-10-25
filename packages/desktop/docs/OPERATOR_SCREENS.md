@@ -122,10 +122,29 @@ How it works:
   holds the command queue (`openadapt_desktop/ipc.py` `CONCURRENT_COMMANDS`). They read
   and answer only a run this engine started and hasn't finished, and only a
   request that is waiting now, for the exact digest the person saw.
-- Desktop has no person-level sign-in (its Cloud credential belongs to the
-  organization), so each answer is recorded with `--unauthenticated` and
-  `--route desktop_run_it`. Flow re-checks the answer, re-reads the form and
-  runs the right-record check again before it saves.
+- Desktop signs each answer with this computer's approver key, and Flow
+  counts it as a person's only because of that signature. Desktop has no
+  person-level sign-in (its Cloud credential belongs to the organization),
+  so the answer names no Cloud user (`--unauthenticated`, `--route
+  desktop_run_it`); it passes `--approver-key`, and the key's passphrase
+  reaches Flow only through the child process's environment. Flow re-checks
+  the answer, re-reads the form and runs the right-record check again before
+  it saves.
+- Set the key up once per computer, at a terminal. With
+  `OPENADAPT_JIT_KEY_PASSPHRASE` set, run `openadapt-flow jit keygen --out
+  ~/.openadapt/approver/desktop-approver.pem`, then start the signed
+  approver roster with it as the root: `openadapt-flow jit approver init
+  --principal NAME --key ~/.openadapt/approver/desktop-approver.pem`. Start
+  Desktop with `OPENADAPT_APPROVER_ROOT` set to that key's public key, which
+  pins the roster's root for Desktop's runs. Each later approver key (the
+  portal's, another person's) is added with an approver's signature:
+  `openadapt-flow jit approver add --principal NAME --public-key HEX
+  --signer-key ROOT_KEY --approver-root ROOT_HEX`. Nothing else adds an
+  approver: editing a file in the key directory, or pointing a run at
+  another key directory, counts for nothing. `openadapt-desktop
+  approver-key setup` makes both keys, keeps their passphrases in the OS
+  keychain and prints these commands. Until a key is set up and on the
+  roster, Desktop sends no answer, and Run it shows these steps.
 - A late answer (the run already stopped waiting) is never turned into a
   save: Desktop doesn't resume the run, and says to run the item again.
 - Before the practice item runs, Desktop calls `openadapt-flow qualify drills

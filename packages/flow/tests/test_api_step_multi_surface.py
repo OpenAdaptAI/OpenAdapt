@@ -214,3 +214,7 @@ def test_a_span_on_a_windows_surface_runs_on_the_gui():
     assert _span_reason(_router_replayer(wf, active="windows_1"), wf) == (
         "the API step's surface is not a browser, so the GUI steps run"
     )
+
+
+# Every person in these tests signs with a registered approver key.
+pytestmark = pytest.mark.usefixtures("approver")

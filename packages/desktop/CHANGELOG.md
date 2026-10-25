@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.23.0 (2026-10-24)
+
+### Bug Fixes
+
+- a person's approval needs the signature of a key on the signed approver roster, whose root the run pins (`OPENADAPT_APPROVER_ROOT` or the deployment config). Set the key up from a terminal (`jit keygen`, then `jit approver init`); every later approver is added with an approver's signature (`jit approver add`). An approval from a key not on the pinned roster is refused.
+- security updates to locked dependencies (pillow 13.0.0, certifi, setuptools, rustls-webpki, webpki-root-certs)
+
+
+
 ## v0.22.0 (2026-10-19)
 
 0.21.1 was never published: its release stopped before PyPI, because the release check accepted only Python packages and refused the Desktop installers. This release ships the 0.21.1 and 0.21.0 changes below together with these.

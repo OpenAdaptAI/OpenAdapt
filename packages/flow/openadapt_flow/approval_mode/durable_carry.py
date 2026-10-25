@@ -59,11 +59,11 @@ def carry_answer_to_durable_pause(
         )
         return False
     if approver is None:
-        approver = (
-            f"desktop:{answer.approver_id}"
-            if answer.approver_id is not None
-            else "desktop:unauthenticated"
+        # The registered approver whose key signed the answer, when it was.
+        name = answer.approver_id or (
+            answer.attestation.signer if answer.attestation is not None else None
         )
+        approver = f"desktop:{name}" if name is not None else "desktop:unauthenticated"
     try:
         approval = issue_resume_approval(
             pending,

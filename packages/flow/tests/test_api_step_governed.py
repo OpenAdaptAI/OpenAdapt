@@ -308,3 +308,7 @@ def test_the_record_check_must_select_by_the_identity_parameter():
     unrelated = save.effects[0].model_copy(update={"new_records": []})
     with pytest.raises(ApiProposalError, match="selects no field"):
         web_form_identity(save.api_binding, [unrelated], "subject_name", "lname")
+
+
+# Every person in these tests signs with a registered approver key.
+pytestmark = pytest.mark.usefixtures("approver")
