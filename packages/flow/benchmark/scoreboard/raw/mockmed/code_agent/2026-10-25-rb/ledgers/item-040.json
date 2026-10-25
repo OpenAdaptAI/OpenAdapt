@@ -97,7 +97,7 @@
   ],
   "result": {
     "record_status": "capture_failed",
-    "detail": "ReadBackRefused: after 'Save Encounter', the read-back shows 1 record(s) the task does not name changed; run 1 stopped (capture kept at /Users/abrichr/.cache/openadapt-scoreboard/mockmed/code_agent/2026-10-25-rb/jit-cache/item-040/mockmed.add_note-48f60d6be84e/refused-20261025T034130714941000)",
+    "detail": "ReadBackRefused: after 'Save Encounter', the read-back shows 1 record(s) the task does not name changed; run 1 stopped (capture kept at <scoreboard cache>/mockmed/code_agent/2026-10-25-rb/jit-cache/item-040/mockmed.add_note-48f60d6be84e/refused-20261025T034130714941000)",
     "gates": [
       {
         "control": "Save Encounter",

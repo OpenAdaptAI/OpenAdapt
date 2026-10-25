@@ -5,12 +5,16 @@
   "cpu_count": 12,
   "python": "3.12.7",
   "engine": {
-    "path": "/Users/abrichr/oa/worktrees/code-agent-default/packages/flow/openadapt_flow",
+    "path": "packages/flow/openadapt_flow",
     "git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31"
   },
   "benchmark_git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31",
   "task": "mockmed",
   "arm": "program",
   "program_from": "code-2026-10-25-rb",
-  "n": 40
+  "n": 40,
+  "code_at_run": {
+    "commit": "bedf5439f462acd296a8056acdad8a58f4db2b31",
+    "note": "run on bedf5439 with no uncommitted engine or runner change"
+  }
 }

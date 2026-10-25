@@ -5,7 +5,7 @@
   "cpu_count": 12,
   "python": "3.12.7",
   "engine": {
-    "path": "/Users/abrichr/oa/worktrees/code-agent-default/packages/flow/openadapt_flow",
+    "path": "packages/flow/openadapt_flow",
     "git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31"
   },
   "benchmark_git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31",
@@ -18,5 +18,9 @@
   "max_cost_per_item": 0.3,
   "on_screen": [
     "Create New Patient"
-  ]
+  ],
+  "code_at_run": {
+    "commit": "7525b6854",
+    "note": "run on bedf5439 plus the Amendment 11 success rule in run.py, uncommitted at the time and committed in 7525b685"
+  }
 }

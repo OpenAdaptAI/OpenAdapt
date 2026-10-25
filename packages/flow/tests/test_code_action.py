@@ -27,6 +27,7 @@ from openadapt_flow.compile_agent.code_action import Element, LeftTheApp, PixelS
 from openadapt_flow.compile_agent.harness import CommitHint, Harness, SaveGate
 from openadapt_flow.compile_agent.sandbox import Sandbox, ShellRefused
 from openadapt_flow.ir import StructuralLocator
+from openadapt_flow.jit.adapters import UnsupportedAction
 from openadapt_flow.jit.compile_agent import TaskRequest
 
 # -- the shell ----------------------------------------------------------------------
@@ -705,59 +706,6 @@ def test_code_as_action_is_the_default_first_run_agent() -> None:
     assert cli_agent.vision == "code" and cli_agent.model == CODE_DEFAULT_MODEL
 
 
-def test_record_readback_names_the_record_and_flags_any_other() -> None:
-    from openadapt_flow.compile_agent.harness import record_readback
-
-    before = [{"id": 1, "patient_id": "p2", "note": "old"}]
-    state = {"now": list(before)}
-    check = record_readback(lambda: state["now"], {"patient_id": "p1"}, lambda: before)
-    assert check().outcome == "no_change"
-    state["now"] = before + [{"id": 2, "patient_id": "p1", "note": "x"}]
-    landed = check()
-    assert landed.outcome == "landed" and landed.fields == ("id", "note", "patient_id")
-    state["now"] = [{"id": 1, "patient_id": "p2", "note": "edited"}]
-    assert check().outcome == "wrong_record"
-    state["now"] = []
-    assert check().outcome == "wrong_record"
-    unreadable = record_readback(lambda: None, {"patient_id": "p1"}, lambda: before)
-    assert unreadable().outcome == "unreadable"
-
-
-def test_each_save_is_judged_against_the_read_just_before_it() -> None:
-    from openadapt_flow.compile_agent.harness import record_readback
-
-    state = {"now": []}
-    check = record_readback(lambda: state["now"], {"patient_id": "p1"}, lambda: [])
-    check.mark()
-    state["now"] = [{"id": 1, "patient_id": "p1", "note": "a"}]
-    assert check().outcome == "landed"
-    # A second save that writes nothing is told so.
-    check.mark()
-    assert check().outcome == "no_change"
-
-
-def test_an_edit_on_a_store_without_ids_is_the_named_record() -> None:
-    from openadapt_flow.compile_agent.harness import record_readback
-
-    before = [{"patient_id": "p1", "note": "a"}, {"patient_id": "p2", "note": "b"}]
-    state = {"now": list(before)}
-    check = record_readback(lambda: state["now"], {"patient_id": "p1"}, lambda: before)
-    check.mark()
-    state["now"] = [{"patient_id": "p1", "note": "edited"}, before[1]]
-    assert check().outcome == "landed"
-
-
-def test_overwriting_another_record_to_match_the_task_is_the_wrong_record() -> None:
-    from openadapt_flow.compile_agent.harness import record_readback
-
-    before = [{"id": 2, "patient_id": "p2", "note": "b"}]
-    state = {"now": list(before)}
-    check = record_readback(lambda: state["now"], {"patient_id": "p1"}, lambda: before)
-    check.mark()
-    state["now"] = [{"id": 2, "patient_id": "p1", "note": "b"}]
-    assert check().outcome == "wrong_record"
-
-
 def test_typing_on_a_native_drop_down_is_not_a_save() -> None:
     class Page:
         url = "http://app.test/"
@@ -796,3 +744,147 @@ def test_a_failed_action_takes_back_the_recorders_wait(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError):
         tool.run('click name="Save note"')
     assert waits[-2:] == [harness.readback_wait_s, 0.0]
+
+
+# -- the read-back after every save (review of #1542) ---------------------------
+
+
+def _rb(state: dict, values: Optional[dict] = None, start: Any = "same") -> Any:
+    from openadapt_flow.compile_agent.harness import record_readback
+
+    first = list(state["now"]) if start == "same" else start
+    return record_readback(
+        lambda: state["now"],
+        {"patient_id": "p1"},
+        lambda: first,
+        values=values or {},
+    )
+
+
+def test_a_save_lands_only_as_a_new_record_with_every_input() -> None:
+    state = {"now": [{"id": 1, "patient_id": "p2", "note": "old"}]}
+    check = _rb(state, {"note": "x"})
+    check.mark()
+    state["now"] = state["now"] + [{"id": 2, "patient_id": "p1", "note": "x"}]
+    landed = check()
+    assert landed.outcome == "landed" and "with every input" in landed.detail
+    check.mark()
+    assert check().outcome == "unconfirmed"  # a second save that wrote nothing
+
+
+def test_a_save_without_an_input_value_is_incomplete() -> None:
+    state = {"now": []}
+    check = _rb(state, {"note": "x"})
+    check.mark()
+    state["now"] = [{"id": 1, "patient_id": "p1", "note": ""}]
+    got = check()
+    assert got.outcome == "incomplete" and "note" in got.detail
+
+
+@pytest.mark.parametrize(
+    "after",
+    [
+        # Overwriting a starting record until it matches the task.
+        [{"id": 1, "patient_id": "p1", "note": "old"}],
+        # Deleting a starting record and creating the named one.
+        [{"id": 2, "patient_id": "p1", "note": "x"}],
+        # Editing a starting record in a store without ids.
+        [{"patient_id": "p2", "note": "edited"}, {"patient_id": "p1", "note": "x"}],
+    ],
+)
+def test_any_change_to_a_starting_record_is_the_wrong_record(after: list) -> None:
+    state = {"now": [{"id": 1, "patient_id": "p2", "note": "old"}]}
+    check = _rb(state)
+    check.mark()
+    state["now"] = after
+    assert check().outcome == "wrong_record"
+
+
+@pytest.mark.parametrize("with_ids", [True, False])
+def test_a_duplicate_save_stops_the_run(with_ids: bool) -> None:
+    state = {"now": []}
+    check = _rb(state)
+    one = {"patient_id": "p1", "note": "x"}
+    check.mark()
+    state["now"] = [{"id": 1, **one} if with_ids else dict(one)]
+    assert check().outcome == "landed"
+    check.mark()
+    state["now"] = state["now"] + [{"id": 2, **one} if with_ids else dict(one)]
+    assert check().outcome == "duplicate"
+
+
+def test_an_unreadable_read_or_a_missing_start_read_stops_the_run() -> None:
+    from openadapt_flow.compile_agent.harness import ReadBackError, record_readback
+
+    state: dict = {"now": []}
+    check = _rb(state)
+    check.mark()
+    state["now"] = None
+    assert check().outcome == "unreadable"
+    with pytest.raises(ReadBackError):
+        check.mark()  # no fallback to an older read
+    no_start = record_readback(lambda: [], {"patient_id": "p1"}, lambda: None)
+    with pytest.raises(ReadBackError):
+        no_start.start()
+
+
+def test_a_save_that_lands_late_stops_the_next_save(tmp_path: Path) -> None:
+    from openadapt_flow.compile_agent.harness import ReadBackRefused
+
+    tool, computer, harness = _tool(tmp_path)
+    state: dict = {"now": []}
+    harness.readback = _rb(state, start=[])
+    harness.readback_wait_s = 0.0
+    tool.run('click role=button name=Open near="Jane Sample"')
+    out = tool.run('click name="Save note"').text
+    assert "unconfirmed" in out and "Do not save again" in out
+    # The write shows up after the read-back gave up.
+    state["now"] = [{"id": 1, "patient_id": "p1", "note": ""}]
+    computer.surface.screen = "form"
+    saves = len([n for n in computer.executed if n["kind"] == "click"])
+    with pytest.raises(ReadBackRefused, match="landed late"):
+        tool.run('click name="Save note"')
+    assert len([n for n in computer.executed if n["kind"] == "click"]) == saves
+    assert harness.readback_log[-1]["outcome"] == "landed_late"
+
+
+def test_a_save_that_raises_is_still_read_back(tmp_path: Path) -> None:
+    from openadapt_flow.compile_agent.harness import ReadBackRefused
+
+    tool, computer, harness = _tool(tmp_path)
+    state: dict = {"now": [{"id": 9, "patient_id": "p2"}]}
+    harness.readback = _rb(state)
+    harness.readback_wait_s = 0.0
+    tool.run('click role=button name=Open near="Jane Sample"')
+
+    def save_then_fail(native: Any) -> Any:
+        state["now"] = []  # the save went out and touched another record
+        raise UnsupportedAction("generic", "click", "the page went away")
+
+    computer.execute = save_then_fail
+    with pytest.raises(ReadBackRefused):
+        tool.run('click name="Save note"')
+    assert harness.readback_log[-1]["outcome"] == "wrong_record"
+    # Without a wrong write, the error text carries the read-back.
+    tool2, computer2, harness2 = _tool(tmp_path / "b")
+    harness2.readback = _rb({"now": []})
+    harness2.readback_wait_s = 0.0
+    tool2.run('click role=button name=Open near="Jane Sample"')
+    computer2.execute = lambda native: (_ for _ in ()).throw(
+        UnsupportedAction("generic", "click", "the page went away")
+    )
+    out = tool2.run('click name="Save note"').text
+    assert "read back after the error: unconfirmed" in out
+
+
+def test_run_1_does_not_start_without_a_starting_read(tmp_path: Path) -> None:
+    from openadapt_flow.compile_agent.harness import (
+        ReadBackRefused,
+        _start_readback,
+        record_readback,
+    )
+
+    _tool_, _computer, harness = _tool(tmp_path)
+    harness.readback = record_readback(lambda: [], {"patient_id": "p1"}, lambda: None)
+    with pytest.raises(ReadBackRefused, match="when run 1 started"):
+        _start_readback(harness)

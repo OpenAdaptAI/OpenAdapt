@@ -411,3 +411,17 @@ Amendment 11's success rule applies.
   duplicate-check dialog and writes nothing, so it has no read-back. Not
   fixed here: binding a "nothing was written here" read-back to such a step
   changes what admission accepts.
+
+## Amendment 13 (2026-10-25, after review): the read-back's rules changed after Amendments 10 to 12's runs
+
+After review, run 1's read-back counts only a record created during run 1 as
+the named one (any change to or removal of a starting record stops the run),
+stops on a second named record (a duplicate, counted even without record
+ids), treats a save with no new record as unconfirmed and stops the next save
+if it lands late, stops when a read fails, and calls a save `landed` only
+when the new record holds every input value (`compile_agent.harness.
+RecordReadBack`). Amendments 10 to 12's runs used the earlier rules. Not
+re-run; by the rules, their verdicts are the same: every item made one save,
+on MockMed's empty store or next to OpenEMR records it left untouched; item
+40's save created a record on another patient (wrong record either way) and
+item 30's showed no new record (unconfirmed, the earlier "no change").

@@ -40,6 +40,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from openadapt_flow.compile_agent import observe as _observe
@@ -69,21 +70,28 @@ class GateRefused(RuntimeError):
 
 
 class ReadBackRefused(GateRefused):
-    """A save went through, and the system of record shows a change on a record
-    the task does not name. Run 1 stops; no draft is made."""
+    """The read-back stopped run 1: a record the task does not name changed, a
+    starting record changed or disappeared, the named record was saved twice,
+    an earlier save landed late, or the system of record could not be read.
+    No draft is made."""
+
+
+#: Read-back outcomes that stop run 1.
+STOP_OUTCOMES = frozenset({"wrong_record", "duplicate", "landed_late", "unreadable"})
 
 
 @dataclass(frozen=True)
 class ReadBack:
     """What the system of record showed after one save.
 
-    ``outcome`` is ``landed`` (only the named record changed), ``no_change``,
-    ``wrong_record`` (another record changed) or ``unreadable``.
+    ``outcome`` is ``landed`` (one new record the task names, with every
+    input value), ``incomplete`` (that record, missing an input value),
+    ``unconfirmed`` (no new record yet), or one of :data:`STOP_OUTCOMES`.
     """
 
     outcome: str
     detail: str
-    #: Field names of the named record's change (values stay out of the log).
+    #: Field names of the new record (values stay out of the log).
     fields: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
@@ -94,14 +102,52 @@ class ReadBack:
         }
 
 
+class ReadBackError(RuntimeError):
+    """A read the read-back needs failed, or showed a late write."""
+
+    def __init__(self, outcome: str, detail: str) -> None:
+        super().__init__(detail)
+        self.outcome = outcome
+
+
+def _canonical(record: Mapping[str, Any]) -> str:
+    import json
+
+    return json.dumps(record, sort_keys=True, default=str)
+
+
+def _added_removed(
+    old: Sequence[Mapping[str, Any]], new: Sequence[Mapping[str, Any]]
+) -> tuple[list[Mapping[str, Any]], int]:
+    """Records in ``new`` not in ``old`` (counted, so two equal records are
+    two), and how many of ``old`` are no longer there as they were."""
+
+    from collections import Counter
+
+    before = Counter(_canonical(r) for r in old)
+    after = Counter(_canonical(r) for r in new)
+    added: list[Mapping[str, Any]] = []
+    seen: Counter[str] = Counter()
+    for record in new:
+        key = _canonical(record)
+        seen[key] += 1
+        if seen[key] > before.get(key, 0):
+            added.append(record)
+    removed = sum((before - after).values())
+    return added, removed
+
+
 class RecordReadBack:
     """A read-back for the harness (see :func:`record_readback`).
 
-    :meth:`mark` takes a read just before a save; calling the object then
-    reads again. A record that changed or disappeared since run 1 started and
-    is not the named record is the wrong record. Whether this save landed is
-    judged against the read :meth:`mark` took, so a second save that writes
-    nothing is told so.
+    Only a record created during run 1 can be the one the task names; any
+    change to or removal of a record that was there when run 1 started stops
+    the run, and so does a second new record the task names (a duplicate save,
+    counted even in a store without record ids). :meth:`mark` takes a read
+    just before each save, and whether this save landed is judged against it,
+    never against an older read. A save that shows no new record is
+    unconfirmed: before the next save a fresh read must show nothing changed
+    since, or the run stops (the first save landed late).
     """
 
     def __init__(
@@ -109,63 +155,113 @@ class RecordReadBack:
         read: Callable[[], Optional[list[dict[str, Any]]]],
         expect: Mapping[str, Any],
         baseline: Callable[[], Optional[list[dict[str, Any]]]],
+        values: Mapping[str, Any] = MappingProxyType({}),
     ) -> None:
         self.read = read
         self.baseline = baseline
         self.wanted = {str(k): str(v) for k, v in expect.items()}
+        self.values = {str(k): str(v) for k, v in values.items() if str(v)}
         self._before: Optional[list[dict[str, Any]]] = None
+        self._unconfirmed: Optional[list[dict[str, Any]]] = None
 
     def named(self, record: Mapping[str, Any]) -> bool:
         return all(str(record.get(k)) == v for k, v in self.wanted.items())
 
-    def mark(self) -> None:
+    def _read(self, what: str) -> list[dict[str, Any]]:
         try:
-            self._before = self.read()
-        except Exception:  # noqa: BLE001 - judged against the run's start then
-            self._before = None
+            records = self.read()
+        except Exception as exc:  # noqa: BLE001 - reported, and the run stops
+            raise ReadBackError(
+                "unreadable",
+                f"the system of record could not be read {what}: {type(exc).__name__}",
+            ) from None
+        if records is None:
+            raise ReadBackError(
+                "unreadable", f"the system of record could not be read {what}"
+            )
+        return records
 
-    def _others(self, diff: Any) -> list[str]:
-        """Changes on records the task does not name."""
+    def start(self) -> None:
+        """Before run 1's first action: the starting read must exist."""
 
-        bad: list[str] = []
-        named_created = [r for r in diff.created if self.named(r)]
-        for record in diff.created:
-            if not self.named(record):
-                bad.append("a record the task does not name was created")
-        for change in diff.changed:
-            # The named record before and after: overwriting another record
-            # until it matches the task is not the named record.
-            if not (self.named(change.before) and self.named(change.after)):
-                bad.append("a record the task does not name changed")
-        for record in diff.removed:
-            # A store without record ids shows an edit as removed + created.
-            if not (self.named(record) and named_created):
-                bad.append("a record disappeared")
-        return bad
+        if self.baseline() is None:
+            raise ReadBackError(
+                "unreadable",
+                "the system of record could not be read when run 1 started",
+            )
+
+    def mark(self) -> None:
+        """Just before a save. Raises ReadBackError when the read fails, or
+        when an earlier unconfirmed save has landed since."""
+
+        now = self._read("before this save")
+        if self._unconfirmed is not None:
+            late, gone = _added_removed(self._unconfirmed, now)
+            if late or gone:
+                raise ReadBackError(
+                    "landed_late",
+                    "an earlier unconfirmed save landed late (the records "
+                    "changed after it showed nothing); this save was not made, "
+                    "so nothing is saved twice",
+                )
+            self._unconfirmed = None
+        self._before = now
 
     def __call__(self) -> ReadBack:
-        from openadapt_flow.record_sor import diff_snapshots
-
-        start, after = self.baseline(), self.read()
-        if start is None or after is None:
-            return ReadBack("unreadable", "the system of record could not be read")
-        bad = self._others(diff_snapshots(start, after))
-        if bad:
+        start = self.baseline()
+        if start is None:
+            return ReadBack("unreadable", "the starting read is missing")
+        try:
+            after = self._read("after this save")
+        except ReadBackError as exc:
+            return ReadBack(exc.outcome, str(exc))
+        added, removed = _added_removed(start, after)
+        if removed:
             return ReadBack(
-                "wrong_record", f"{len(bad)} change(s) the task does not name: {bad[0]}"
+                "wrong_record",
+                f"{removed} record(s) that existed when run 1 started changed or "
+                "disappeared",
             )
-        before = self._before if self._before is not None else start
+        foreign = [r for r in added if not self.named(r)]
+        if foreign:
+            return ReadBack(
+                "wrong_record",
+                f"{len(foreign)} new record(s) the task does not name were saved",
+            )
+        if len(added) > 1:
+            return ReadBack(
+                "duplicate",
+                f"{len(added)} new records the task names were saved; it saves one",
+            )
+        before = self._before
         self._before = None
-        step = diff_snapshots(before, after)
-        touched = [*step.created, *(c.after for c in step.changed)]
-        if not touched:
-            return ReadBack("no_change", "nothing was saved in the system of record")
-        fields = tuple(sorted({k for r in touched for k in r}))
+        if before is None:
+            return ReadBack("unreadable", "no read was taken just before this save")
+        new, _gone = _added_removed(before, after)
+        if not new:
+            self._unconfirmed = after
+            return ReadBack(
+                "unconfirmed",
+                "unconfirmed: the system of record shows no new record after this "
+                "save. Do not save again; report the save as not confirmed",
+            )
+        record = new[0]
+        fields = tuple(sorted(record))
+        held = {str(v) for v in record.values() if v is not None}
+        missing = sorted(k for k, v in self.values.items() if v not in held)
+        if missing:
+            return ReadBack(
+                "incomplete",
+                "1 record saved for "
+                + ", ".join(f"{k}={v}" for k, v in self.wanted.items())
+                + f", without the input(s) {', '.join(missing)}",
+                fields,
+            )
         return ReadBack(
             "landed",
-            f"{len(touched)} record(s) with "
+            "1 record saved for "
             + ", ".join(f"{k}={v}" for k, v in self.wanted.items())
-            + " saved",
+            + ", with every input",
             fields,
         )
 
@@ -174,13 +270,15 @@ def record_readback(
     read: Callable[[], Optional[list[dict[str, Any]]]],
     expect: Mapping[str, Any],
     baseline: Callable[[], Optional[list[dict[str, Any]]]],
+    values: Mapping[str, Any] = MappingProxyType({}),
 ) -> RecordReadBack:
     """A read-back for the harness: ``read`` the system of record after each
     save and compare it with ``baseline()`` (the read when run 1 started) and
-    with the read just before the save. A record is the named one when it has
-    every ``expect`` field with that value."""
+    with the read just before the save. A new record is the named one when it
+    has every ``expect`` field with that value; it landed when it also holds
+    every ``values`` input."""
 
-    return RecordReadBack(read, expect, baseline)
+    return RecordReadBack(read, expect, baseline, values)
 
 
 def _expect_write(harness: Any, wait_s: Optional[float] = None) -> None:
@@ -195,38 +293,82 @@ def _expect_write(harness: Any, wait_s: Optional[float] = None) -> None:
         expect(harness.readback_wait_s if wait_s is None else wait_s)
 
 
-def _before_write(harness: Any) -> None:
-    """Just before a save the gate let through: the read-back's before-read,
-    and the recorder's wait for the write."""
+def _stop_run(harness: Any, control: str, outcome: str, detail: str) -> None:
+    harness.stats.gate_refusals += 1
+    harness.readback_log.append(
+        {
+            "control": control,
+            "outcome": outcome,
+            "detail": detail,
+            "fields": [],
+            "at": time.time(),
+        }
+    )
+    harness.refusal = f"at {control!r}, the read-back shows: {detail}; run 1 stopped"
+    raise ReadBackRefused(harness.refusal)
+
+
+def _start_readback(harness: Any) -> None:
+    """Before run 1's first action: refuse to start without a starting read."""
+
+    start = getattr(harness.readback, "start", None)
+    if callable(start):
+        try:
+            start()
+        except ReadBackError as exc:
+            _stop_run(harness, "(run 1 start)", exc.outcome, str(exc))
+
+
+def _before_write(harness: Any, control: str) -> None:
+    """Just before a save the gate let through: the read-back's before-read
+    (nothing is performed if it fails or shows a late write), and the
+    recorder's wait for the write."""
 
     mark = getattr(harness.readback, "mark", None)
     if callable(mark):
-        mark()
+        try:
+            mark()
+        except ReadBackError as exc:
+            _stop_run(harness, control, exc.outcome, str(exc))
     _expect_write(harness)
+
+
+def _read_back_after_error(harness: Any, control: str, exc: BaseException) -> None:
+    """After a save raised: read back (a stop outcome raises ReadBackRefused
+    from ``exc``), and keep the result in the log for the error text."""
+
+    try:
+        _read_back(harness, control)
+    except ReadBackRefused as refused:
+        raise refused from exc
 
 
 def _read_back(harness: Any, control: str) -> Optional[ReadBack]:
     """Read the system of record after a save went through the gate; poll a
-    little for a write that lands late. Raises ReadBackRefused on another
-    record's change."""
+    little for a write that lands late. Raises ReadBackRefused on any outcome
+    in :data:`STOP_OUTCOMES`."""
 
     check = getattr(harness, "readback", None)
     if check is None:
         return None
     deadline = time.monotonic() + max(float(harness.readback_wait_s), 0.0)
+    before = getattr(check, "_before", None)
     while True:
         try:
             got = check()
-        except Exception as exc:  # noqa: BLE001 - an unreadable read is reported
+        except Exception as exc:  # noqa: BLE001 - an unreadable read stops the run
             got = ReadBack("unreadable", f"{type(exc).__name__}: {exc}"[:200])
-        if got.outcome != "no_change" or time.monotonic() >= deadline:
+        if got.outcome != "unconfirmed" or time.monotonic() >= deadline:
             break
+        # Not landed yet: poll again against the same read from before the save.
+        if isinstance(check, RecordReadBack):
+            check._before, check._unconfirmed = before, None
         time.sleep(0.25)
     harness.stats.readbacks += 1
     harness.readback_log.append(
         {"control": control, **got.to_dict(), "at": time.time()}
     )
-    if got.outcome == "wrong_record":
+    if got.outcome in STOP_OUTCOMES:
         harness.stats.gate_refusals += 1
         harness.refusal = (
             f"after {control!r}, the read-back shows {got.detail}; run 1 stopped"
@@ -466,12 +608,15 @@ class Harness:
             commit = self._hinted_commit(native, hint)
         if commit is not None:
             self._check_gate(*commit)
-            _before_write(self)
+            _before_write(self, commit[0])
         try:
             obs = self.computer.execute(native)
-        except BaseException:
+        except BaseException as exc:
             if commit is not None:
                 _expect_write(self, 0.0)
+                # The save may have gone out before the error: read it back,
+                # so a wrong or duplicate write still stops run 1.
+                _read_back_after_error(self, commit[0], exc)
             raise
         self.stats.actions += 1
         if commit is not None and self.has_page:
@@ -887,12 +1032,15 @@ class SurfaceHarness:
         commit = self.commit_target(native, ref)
         if commit is not None:
             self._check_gate(commit)
-            _before_write(self)
+            _before_write(self, commit)
         try:
             obs = self.computer.execute(native)
-        except BaseException:
+        except BaseException as exc:
             if commit is not None:
                 _expect_write(self, 0.0)
+                # The save may have gone out before the error: read it back,
+                # so a wrong or duplicate write still stops run 1.
+                _read_back_after_error(self, commit, exc)
             raise
         self.stats.actions += 1
         if commit is not None:

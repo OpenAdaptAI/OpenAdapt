@@ -332,6 +332,10 @@ class _HarnessedAgent:
             readback=self.readback,
         )
         try:
+            if self.readback is not None:
+                from openadapt_flow.compile_agent.harness import _start_readback
+
+                _start_readback(self.harness)
             self.ledger = self.inner.drive(request, self.harness)
         except BaseException as exc:
             self.error = f"{type(exc).__name__}: {exc}"
@@ -634,6 +638,7 @@ class FirstRunCompiler:
                 lambda: self.observer.system_of_record,
                 self.expect,
                 lambda: self._baseline,
+                values=values,
             ),
         )
         jit.agent = harnessed
@@ -688,8 +693,11 @@ class FirstRunCompiler:
                 if decision == "refused_by_hold"
                 else "refused_wrong_record"
             )
-            if any(r["outcome"] == "wrong_record" for r in harness.readback_log):
+            stops = [r["outcome"] for r in harness.readback_log]
+            if any(o in ("wrong_record", "duplicate") for o in stops):
                 status = "readback_wrong_record"
+            elif any(o in ("landed_late", "unreadable") for o in stops):
+                status = "readback_refused"
             if jit.candidate() is not None:
                 # An agent that caught the refusal and went on still made a
                 # draft; it must never be admitted.

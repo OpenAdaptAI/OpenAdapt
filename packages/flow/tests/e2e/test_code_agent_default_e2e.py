@@ -88,12 +88,12 @@ def test_every_save_in_run_1_is_read_back(mockmed: str, tmp_path: Path) -> None:
         {
             "control": "Save Encounter",
             "outcome": "landed",
-            "detail": "1 record(s) with patient_id=p1, type=Triage saved",
+            "detail": "1 record saved for patient_id=p1, type=Triage, with every input",
             "fields": ["id", "key", "note", "patient_id", "source", "type"],
         }
     ]
     assert result.run1["harness"]["readbacks"] == 1
-    assert "read back: 1 record(s) with patient_id=p1" in agent.outputs[1]
+    assert "read back: 1 record saved for patient_id=p1" in agent.outputs[1]
     assert result.run1["code_action"]["readbacks"] == {"landed": 1}
 
 
@@ -118,9 +118,9 @@ def test_a_dropped_save_is_reported_as_not_saved(mockmed: str, tmp_path: Path) -
     result = _compiler(tmp_path, mockmed, fault="optimistic").record(
         agent, {"note": NOTE}
     )
-    assert result.run1["readbacks"][0]["outcome"] == "no_change"
-    assert "nothing was saved" in agent.outputs[1]
-    assert "do not report it as saved" in agent.outputs[1]
+    assert result.run1["readbacks"][0]["outcome"] == "unconfirmed"
+    assert "unconfirmed" in agent.outputs[1]
+    assert "Do not save again" in agent.outputs[1]
     # Flow's own check after run 1 refuses it too: nothing landed.
     assert result.status == "readback_refused", result.detail
     assert _records(mockmed) == []
@@ -171,7 +171,7 @@ def test_teach_run_is_offered_and_drafts_a_program(
                 "teach_run", {"script": script.replace("{note}", NOTE)}
             )
             assert out["status"] == "ok", out
-        assert "read back: 1 record(s)" in out["output"]
+        assert "read back: 1 record saved" in out["output"]
         report = teach.dispatch("teach_finish", {})  # type: ignore[attr-defined]
         assert report["status"] == "draft", report
     finally:
@@ -206,7 +206,7 @@ def test_teach_run_stops_before_a_save_a_person_must_approve(
             "teach_run", {"script": out["script"]}, held_by_person=hold["binding"]
         )
         assert done["status"] == "ok", done
-        assert "read back: 1 record(s)" in done["output"]
+        assert "read back: 1 record saved" in done["output"]
         assert [(r["patient_id"], r["note"]) for r in _records(mockmed)] == [
             ("p1", NOTE)
         ]

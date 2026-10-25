@@ -760,6 +760,7 @@ def arm_code_agent(args: argparse.Namespace) -> int:
                     sess.server.records,
                     {"patient_id": "p1", "type": "Triage"},
                     lambda: [],
+                    values=values,
                 )
                 fault = it.fault
             else:
@@ -773,6 +774,8 @@ def arm_code_agent(args: argparse.Namespace) -> int:
                     task.patients,
                     {"email": values["email"], "lname": values["lname"]},
                     lambda: before,
+                    # The state is typed as its label and stored as its code.
+                    values={k: v for k, v in values.items() if k != "state_label"},
                 )
                 fault = "none"
             inner = ClaudeAgent(

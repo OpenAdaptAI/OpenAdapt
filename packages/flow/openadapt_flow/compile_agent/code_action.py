@@ -114,6 +114,8 @@ _ROLE_ALIASES = {
 }
 
 _MAX_WAIT_MS = 2000
+#: How long a target named by role and name may take to appear on the web.
+_TARGET_WAIT_S = 3.0
 #: Roles a click only focuses or opens: it commits nothing by itself.
 _FIELD_ROLES = ("textbox", "searchbox", "spinbutton", "combobox", "listbox")
 _MAX_LINES = 40
@@ -765,7 +767,15 @@ class ActionTrace:
             "commits": len(commits),
             "readbacks": {
                 outcome: sum(1 for st in self.steps if st.get("readback") == outcome)
-                for outcome in ("landed", "no_change", "unreadable")
+                for outcome in (
+                    "landed",
+                    "incomplete",
+                    "unconfirmed",
+                    "wrong_record",
+                    "duplicate",
+                    "landed_late",
+                    "unreadable",
+                )
                 if any(st.get("readback") == outcome for st in self.steps)
             },
             "identity_read_before_commit": (
@@ -890,6 +900,7 @@ class CodeActionTool:
             self.trace.lines += 1
             gates = self.harness.stats.gate_checks
             actions = self.harness.stats.actions
+            readbacks = len(getattr(self.harness, "readback_log", []))
             try:
                 text, image = self._line(line)
             except ScopeViolation:
@@ -927,6 +938,9 @@ class CodeActionTool:
             except (ScriptError, ShellRefused, UnsupportedAction, LookupError) as exc:
                 self.trace.errors += 1
                 chunks.append(f"$ {line}\nerror: {self._out(str(exc))}")
+                log = getattr(self.harness, "readback_log", [])
+                if len(log) > readbacks:
+                    chunks.append("read back after the error: " + log[-1]["detail"])
                 if self.harness.stats.gate_checks > gates:
                     committed = True
                     chunks.append(
@@ -1132,6 +1146,14 @@ class CodeActionTool:
             raise ScriptError("a target needs @N, or name= (with role= or near=)")
         self._read()
         hits = self._match(described, exact=True)
+        if not hits and self.surface.kind == "dom":
+            # A page that is still loading: look again for a moment before
+            # calling the target missing.
+            deadline = time.monotonic() + _TARGET_WAIT_S
+            while not hits and time.monotonic() < deadline:
+                time.sleep(0.25)
+                self._read()
+                hits = self._match(described, exact=True)
         if not hits and self.surface.kind == "tree" and described.get("role"):
             located = self.surface.locate(described["role"], described["name"])
             if located is not None:
@@ -1499,8 +1521,8 @@ class CodeActionTool:
             back = log[-1]
             step["readback"] = back["outcome"]
             text += "\nread back: " + back["detail"]
-            if back["outcome"] == "no_change":
-                text += " (whatever the screen says; do not report it as saved)"
+            if back["outcome"] == "unconfirmed":
+                text += " (whatever the screen says)"
         header = ""
         if self.surface.kind == "dom":
             page = self.harness.page

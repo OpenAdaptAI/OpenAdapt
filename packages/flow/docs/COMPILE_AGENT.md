@@ -116,8 +116,8 @@ The default is `--vision code` on `claude-sonnet-5-5`: the agent gets one
 terminal-style tool and writes short scripts that read the structure, act by
 role and name, read back, and keep notes in a sandboxed working directory,
 with a screenshot only when it asks. Every action becomes a structured step
-that is checked against the compiled program, and every save is read back
-from the system of record before the agent goes on. See
+that is checked against the compiled program, and every save the gate
+detects is read back from the system of record before the agent goes on. See
 [CODE_AS_ACTION.md](CODE_AS_ACTION.md).
 
 `--vision selective` gives the structural listing after every action (the

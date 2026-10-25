@@ -373,9 +373,10 @@ class TeachBridge:
                             '(click role=button name="Save" near="Jane Sample"); '
                             "sh for a read-only shell over files you saved. "
                             "Lines run in order and stop at the first error or "
-                            "after a save. After every save OpenAdapt reads the "
-                            "app's records back and tells you what landed; a "
-                            "save on a record the task does not name ends run 1. "
+                            "after a save. After every save the gate detects, "
+                            "OpenAdapt reads the app's records back and tells you "
+                            "what landed; a write on a record the task does not "
+                            "name ends run 1. "
                             + (
                                 "A person approves each save first: the script "
                                 "stops before it with status needs_person, and "
