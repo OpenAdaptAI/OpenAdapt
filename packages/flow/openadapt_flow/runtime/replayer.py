@@ -736,6 +736,16 @@ class _WebFormApprovalView:
     ref: Any
 
 
+# The pixel census's OCR tie-break: a place the pixels do not rule out is
+# distinguishable only when OCR reads both crops with every line at or above
+# this confidence, neither text contains the other, and the two texts are less
+# similar than this ratio. One label read two ways measured 0.82-0.95
+# ("Smith, John" / "Smith, S John" / "Smith, 10 lohn"); sibling tab labels
+# ("Contact" / "Stats") measure 0.5 or less.
+PIXEL_CENSUS_OCR_MIN_CONFIDENCE = 0.8
+PIXEL_CENSUS_OCR_MAX_SIMILARITY = 0.6
+
+
 class Replayer:
     """Replays a Workflow against a Backend using injected vision.
 
@@ -15571,7 +15581,7 @@ class Replayer:
             [structured_tier, pixel_tier, vlm_tier, ocr_tier]
         )
         return self._apply_candidate_census(
-            step, resolution, check, before_png, params, workflow
+            step, resolution, check, before_png, params, workflow, bundle_dir
         )
 
     def _structured_census(self, step: Step, point: Point) -> census_mod.CensusDecision:
@@ -15690,6 +15700,7 @@ class Replayer:
         before_png: bytes,
         params: Mapping[str, RuntimeParamScalar],
         workflow: Workflow,
+        bundle_dir: Optional[Path] = None,
     ) -> IdentityCheck:
         """Keep ``verified`` only when the identity picks one shown record.
 
@@ -15712,6 +15723,12 @@ class Replayer:
             decision = self._structured_census(step, resolution.point)
         else:
             decision = self._ocr_census(step, resolution, before_png, params, workflow)
+            if decision.verdict == "cannot_count" and check.mode in ("pixel", "vlm"):
+                # No OCR band to read: count the places the identifier crop
+                # itself verifies instead.
+                decision = self._pixel_census(
+                    step, resolution, before_png, workflow, bundle_dir
+                )
         if decision.verdict == "cannot_count" and teach_role == "control":
             # Teach time recorded a form field or a control, and no census can
             # count here. A census that can count always decides.
@@ -15748,6 +15765,121 @@ class Replayer:
                 ),
             }
         )
+
+    def _pixel_census(
+        self,
+        step: Step,
+        resolution: Resolution,
+        before_png: bytes,
+        workflow: Workflow,
+        bundle_dir: Optional[Path],
+    ) -> census_mod.CensusDecision:
+        """Count the places on the frame that could show the identifier crop.
+
+        For a pixel identity with no OCR band (a remote display): every place
+        the recorded identifier crop matches is cut from the frame and checked
+        with the ladder's pixel verifier. A clear ``mismatch`` rules a place
+        out, and so does its own text when OCR reads both crops and the text
+        differs (sibling tabs share their chrome, not their label). A verify,
+        an abstain (drift, the uncertain band, verify turned off) or no verdict
+        with the same or unreadable text counts it as a look-alike. The census is
+        ``uncounted`` when the frame has too many places, when a place cannot
+        be cut, or when the target's own place is not among them (the frame
+        renders at another scale than the recorded crop). A featureless crop
+        (a blank band, a ruled line) cannot count at all: ``cannot_count``.
+        """
+        from openadapt_flow.vision.match import (
+            AMBIGUITY_SUSPICION_SCORE,
+            crop_is_featureless,
+            template_peaks,
+        )
+
+        anchor = step.anchor
+        assert anchor is not None
+        recorded, live = self._identifier_crops(
+            anchor, resolution, before_png, bundle_dir, workflow=workflow
+        )
+        if recorded is None or live is None or anchor.identifier_region is None:
+            return census_mod.CensusDecision("cannot_count")
+        try:
+            if crop_is_featureless(recorded):
+                # A blank band or a ruled line matches everywhere along it: it
+                # cannot count rows (cannot_count, not "ambiguous").
+                return census_mod.CensusDecision("cannot_count")
+            peaks = template_peaks(
+                before_png, recorded, threshold=AMBIGUITY_SUSPICION_SCORE
+            )
+        except Exception:
+            return census_mod.CensusDecision("cannot_count")
+        if peaks is None:
+            return census_mod.CensusDecision("uncounted")
+        rx, ry, rw, rh = anchor.identifier_region
+        dx, dy = self._identifier_displacement(
+            anchor, resolution, before_png, bundle_dir, workflow=workflow
+        )
+        target = (rx + dx, ry + dy)
+
+        def is_target(x: int, y: int) -> bool:
+            return abs(x - target[0]) < max(1, rw // 2) and abs(y - target[1]) < max(
+                1, rh // 2
+            )
+
+        if not any(is_target(x, y) for x, y in peaks):
+            return census_mod.CensusDecision("uncounted")
+
+        def crop_text(png: bytes) -> str:
+            """The crop's own text, squashed; empty when OCR reads nothing."""
+            try:
+                lines = self.vision.ocr(png, region=None)
+            except Exception:
+                return ""
+            # A low-confidence fragment ("S", "10", "lohn") is a misread, not
+            # evidence: the whole crop then counts as unreadable.
+            if any(
+                float(getattr(line, "confidence", 0.0) or 0.0)
+                < PIXEL_CENSUS_OCR_MIN_CONFIDENCE
+                for line in lines
+            ):
+                return ""
+            return identity_mod.squash(
+                " ".join(str(getattr(line, "text", "") or "") for line in lines)
+            )
+
+        def texts_differ(a: str, b: str) -> bool:
+            """Clearly different labels, not one label read two ways."""
+            import difflib
+
+            if a in b or b in a:
+                return False  # a dropped or clipped word, not another label
+            ratio = difflib.SequenceMatcher(None, a, b, autojunk=False).ratio()
+            return ratio < PIXEL_CENSUS_OCR_MAX_SIMILARITY
+
+        target_text: Optional[str] = None
+        count = 1
+        for x, y in peaks:
+            if is_target(x, y):
+                continue
+            crop = identity_mod.crop_region(before_png, (x, y, rw, rh))
+            if crop is None:
+                return census_mod.CensusDecision("uncounted")
+            verdict = identity_mod.verify_pixel_identity(
+                recorded, crop, enable_verify=self.pixel_verify_enabled
+            )
+            if verdict is not None and verdict.status == "mismatch":
+                continue
+            # The pixels do not rule this place out. Sibling controls that
+            # share their chrome (section tabs, toggle buttons) look alike;
+            # their own text still tells them apart. Only when OCR reads both
+            # crops and the text differs is the place distinguishable.
+            if target_text is None:
+                target_text = crop_text(live)
+            other_text = crop_text(crop)
+            if target_text and other_text and texts_differ(target_text, other_text):
+                continue
+            count += 1
+        if count > 1:
+            return census_mod.CensusDecision("ambiguous", count)
+        return census_mod.CensusDecision("unique", count)
 
     def _leads_into_consequential(
         self, step: Step, workflow: Optional[Workflow]

@@ -455,6 +455,45 @@ def test_a_backend_that_cannot_count_rows_still_runs_a_plain_form(
         page.close()
 
 
+def test_browser_record_ids_follow_the_same_positional_rule(browser) -> None:
+    """The page-side record-id filter drops exactly what positional_id drops."""
+
+    import uuid
+
+    from openadapt_flow.backends.playwright_backend import _RECORD_KEY_JS
+    from openadapt_flow.runtime.identity_census import positional_id
+
+    values = [
+        str(uuid.uuid4()),
+        uuid.uuid4().hex,
+        f"encounter-{uuid.uuid4()}",
+        "MRN-A1234",
+        "00012345",
+        "chart-1001",
+        "ENC2024-000123",
+        "01HEHRGVBY0HPFKMYZV5Q9KR35",
+        "row-3",
+        "r3c2",
+        "item_12",
+        "row-3-col-1",
+        "3-1",
+        "ListViewItem-0",
+        "2",
+    ]
+    page = browser.new_page()
+    try:
+        items = "".join(f'<li data-id="{v}">x</li>' for v in values)
+        page.set_content(f"<ul>{items}</ul>")
+        keys = page.evaluate(
+            f"() => Array.from(document.querySelectorAll('li'))"
+            f".map((li) => ({_RECORD_KEY_JS})(li, li))"
+        )
+    finally:
+        page.close()
+    for index, (value, key) in enumerate(zip(values, keys)):
+        assert (key is None) == positional_id(value, index), (value, key)
+
+
 def _row_buttons(query: dict[str, list[str]]) -> str:
     """Identical table rows, each with an Edit button whose id is positional."""
     order = query.get("order", ["ab"])[0]

@@ -22,10 +22,12 @@ from openadapt_flow.runtime.identity_census import teach_time_role
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.vision import Match
 from tests.test_identity_evidence_capability import (
+    _H,
     _W,
     _button,
     _crop_only_step,
     _gate,
+    _id_crop,
 )
 from tests.test_replayer import (
     FakeBackend,
@@ -59,6 +61,21 @@ def _with_role(step, role: str | None):
     return step
 
 
+@pytest.fixture()
+def no_pixel_census(monkeypatch):
+    """A surface where no census can count: the pixel census is unavailable too
+    (for example, the frame cannot be searched for the identifier crop)."""
+
+    from openadapt_flow.runtime import identity_census as census_mod
+
+    monkeypatch.setattr(
+        Replayer,
+        "_pixel_census",
+        lambda self, *a, **k: census_mod.CensusDecision("cannot_count"),
+    )
+
+
+@pytest.mark.usefixtures("no_pixel_census")
 @pytest.mark.parametrize("role", ["button", "textbox", "combobox", "checkbox"])
 def test_a_pixel_resolved_form_field_before_a_save_verifies(
     tmp_path: Path, role: str
@@ -74,6 +91,7 @@ def test_a_pixel_resolved_form_field_before_a_save_verifies(
     assert check.census_status == "not_a_row"
 
 
+@pytest.mark.usefixtures("no_pixel_census")
 @pytest.mark.parametrize("role", [None, "row", "listitem", "link", "gridcell"])
 def test_a_pixel_resolved_row_that_cannot_be_counted_still_halts(
     tmp_path: Path, role: str | None
@@ -86,6 +104,7 @@ def test_a_pixel_resolved_row_that_cannot_be_counted_still_halts(
     assert check is not None and check.ambiguity_halt == "identity_uncounted"
 
 
+@pytest.mark.usefixtures("no_pixel_census")
 def test_a_row_recorded_at_teach_time_is_counted_even_with_a_control_role(
     tmp_path: Path,
 ) -> None:
@@ -200,3 +219,51 @@ def test_a_recorded_structured_identity_with_no_teach_census_is_not_a_control() 
         None, structured_identity="John Smith Follow-up Dr Lee"
     )
     assert teach_time_role(step) == "unknown"
+
+
+@pytest.mark.parametrize("role", ["button", None])
+def test_the_pixel_census_decides_for_a_control_when_it_can_count(
+    tmp_path: Path, role: str | None
+) -> None:
+    """A census that can count always decides, a control role included: the
+    crop found once verifies, the crop found twice halts."""
+
+    step, res = _crop_only_step(tmp_path, _id_crop())
+    _with_role(step, role)
+    error, check = _gate(tmp_path, step, res, _id_crop(), pixel_verify_enabled=True)
+    assert error is None
+    assert check is not None and check.candidate_count == 1
+
+    twice = np.vstack([_id_crop(), np.full((8, _W), 255, np.uint8), _id_crop()])
+    error, check = _gate(tmp_path, step, res, twice, pixel_verify_enabled=True)
+    assert error is not None
+    assert check is not None and check.ambiguity_halt == "identical_candidates"
+
+
+def _blank_band() -> np.ndarray:
+    """OpenEMR step_016's recorded crop: a dark background band with one
+    light rule across it, and no label."""
+    img = np.full((_H, _W), 40, np.uint8)
+    img[_H // 2 : _H // 2 + 2, :] = 220
+    return img
+
+
+def test_a_blank_band_crop_on_a_control_before_a_save_verifies(tmp_path: Path) -> None:
+    """The OpenEMR case on #1518: the crop matches all along its band, so the
+    pixel census cannot count; the recorded button role then applies."""
+
+    step, res = _crop_only_step(tmp_path, _blank_band())
+    _with_role(step, "button")
+    frame = np.hstack([_blank_band()] * 3)
+    error, check = _gate(tmp_path, step, res, frame, pixel_verify_enabled=True)
+    assert error is None
+    assert check is not None and check.census_status == "not_a_row"
+
+
+def test_a_blank_band_crop_with_no_role_still_halts(tmp_path: Path) -> None:
+    step, res = _crop_only_step(tmp_path, _blank_band())
+    _with_role(step, None)
+    frame = np.hstack([_blank_band()] * 3)
+    error, check = _gate(tmp_path, step, res, frame, pixel_verify_enabled=True)
+    assert error is not None
+    assert check is not None and check.ambiguity_halt == "identity_uncounted"

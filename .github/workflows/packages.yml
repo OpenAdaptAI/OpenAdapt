@@ -549,6 +549,75 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
 
+  # Real native list apps read through the row census (identical rows halt,
+  # record ids pick the row, a unique row runs): a WPF ListBox over UI
+  # Automation on Windows and a Swift NSTableView over AX on macOS. Both legs
+  # must run every real-app test; the step summary lists each outcome.
+  flow-native-census:
+    name: flow native row census (${{ matrix.os }})
+    needs: scope
+    if: needs.scope.outputs.flow == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: packages/flow
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          pip install -e ../types -e . pytest pytest-timeout
+          if [ "$RUNNER_OS" = "Windows" ]; then pip install uiautomation; fi
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            pip install pyobjc-framework-ApplicationServices pyobjc-framework-Cocoa pyobjc-framework-Quartz
+          fi
+      - name: Census unit tests and real-app tests
+        env:
+          OPENADAPT_TEST_WINDOWS_UIA: "1"
+          OPENADAPT_TEST_MACOS_AX: "1"
+        run: |
+          mkdir -p runs
+          pytest -v -rs tests/test_native_identity_census.py \
+            tests/test_native_census_real_apps.py --junitxml=runs/native-junit.xml
+      - name: The real-app tests ran (no skips)
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          import xml.etree.ElementTree as ET
+          prefix = {"Windows": "test_windows_wpf_", "macOS": "test_macos_table_"}[
+              os.environ["RUNNER_OS"]
+          ]
+          cases = [
+              c for c in ET.parse("runs/native-junit.xml").getroot().iter("testcase")
+              if c.get("name", "").startswith(prefix)
+          ]
+          lines = [f"### Native row census, real app ({os.environ['RUNNER_OS']})", ""]
+          for case in cases:
+              skip = case.find("skipped")
+              failed = case.find("failure") is not None or case.find("error") is not None
+              state = "skipped: " + (skip.get("message") or "") if skip is not None else (
+                  "failed" if failed else "passed"
+              )
+              lines.append(f"- `{case.get('name')}`: {state}")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
+              out.write("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          skipped = [c.get("name") for c in cases if c.find("skipped") is not None]
+          sys.exit(1 if not cases or skipped else 0)
+          PY
+
   capture-linux:
     name: capture (linux, py${{ matrix.python-version }})
     needs: scope
@@ -1033,6 +1102,7 @@ jobs:
       - flow-lint
       - flow-unit
       - flow-critical
+      - flow-native-census
       - capture-linux
       - capture-macos
       - capture-windows
