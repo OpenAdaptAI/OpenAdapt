@@ -1,0 +1,14 @@
+qualify REFUSED: REFUSE: workflow 'medplum-new-patient' under 'standard' profile vs policy 'clinical-write'
+  [PASS] Execution profile: standard (production); durability required and enabled; settled-state detection required and enabled
+  [REFUSE] Certification: bundle is NOT certified under 'clinical-write': 3 policy violation(s) (e.g. prohibit_vacuous_postconditions: key step asserts no postcondition — passes vacuously at replay)
+         steps: step_035, step_042
+  [PASS] Identity coverage: 10/10 entity-sensitive/consequential action(s) identity-armed
+  [PASS] Effect coverage: 1/1 consequential write(s) declare the required postcondition and confirmed system-of-record effect contracts
+  [PASS] Approval fallback: a verifier satisfying the required evidence tier is configured; 1 declared write(s) are covered
+  [PASS] Interstitial admission: no automatic interstitial actions declared
+  [WARN] Encrypted bundle: workflow.json plaintext (not required); WARNING: 56 template/screenshot asset(s) are unsealed (plaintext at rest) -- protect via disk encryption or run with --strict-templates to refuse
+         steps: templates/identifiers/step_012.png, templates/identifiers/step_014.png, templates/identifiers/step_046.png, templates/identifiers/step_048.png, templates/identifiers/step_050.png, templates/identifiers/step_052.png, templates/layout_fingerprint.json, templates/step_000_expect.png, ... (+48 more)
+  [PASS] Sealed manifest + version pin: integrity-sealed manifest re-verified (digest e6988b422384a224..., compiler 2.3.0)
+  -> RUN REFUSED (fail-closed): Certification. Nothing was executed.
+Evidence so far: /Users/abrichr/oa/scratch/second-installation/medplum/qual3
+EXIT 1

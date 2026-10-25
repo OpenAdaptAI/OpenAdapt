@@ -14,8 +14,10 @@ Three choices the form forces:
 - Gender is an autocomplete over a ValueSet: the clerk types the code
   (``female``), then ArrowDown and Enter take the exact match. Enter alone
   submits the whole form.
-- Telecom's system is a native select: the clerk clicks it and types the
-  option (``phone``, ``email``).
+- Telecom's system is a native select: the clerk types the option
+  (``phone``, ``email``) into it.
+- Controls with nothing readable beside them are reached by keyboard (see
+  ``demonstrate``).
 - Birth Date is a native date input; the backend sets an ISO date into it.
 
 Synthetic values only.
@@ -77,36 +79,87 @@ def _click(recorder: Any, page: Any, locator: Any) -> None:
     page.wait_for_timeout(250)
 
 
-def demonstrate(recorder: Any, page: Any, values: dict[str, str]) -> None:
-    """Fill the new-patient form once and click Create."""
+_FOCUSED = (
+    "() => { const e = document.activeElement; return [e.tagName,"
+    " e.getAttribute('name') || '', e.getAttribute('data-testid') || '',"
+    " e.getAttribute('placeholder') || '', (e.innerText || '').trim().slice(0, 30)]; }"
+)
 
-    _click(recorder, page, page.get_by_role("button", name="Add Name"))
+
+def _keys(recorder: Any, page: Any, key: str, times: int, expect: dict[str, str]) -> None:
+    """Move the focus by keyboard, then check where it landed (not recorded)."""
+
+    for _ in range(times):
+        recorder.press(key)
+        page.wait_for_timeout(120)
+    tag, name, testid, placeholder, text = page.evaluate(_FOCUSED)
+    got = {"tag": tag, "name": name, "testid": testid, "placeholder": placeholder, "text": text}
+    wrong = {k: (v, got[k]) for k, v in expect.items() if got[k] != v}
+    if wrong:
+        raise RuntimeError(f"focus landed elsewhere after {times} x {key}: {wrong}")
+
+
+def _keys_until(
+    recorder: Any, page: Any, key: str, expect: dict[str, str], most: int = 4
+) -> int:
+    """Press ``key`` until the focus matches ``expect``; the presses are recorded."""
+
+    for n in range(1, most + 1):
+        recorder.press(key)
+        page.wait_for_timeout(120)
+        tag, name, testid, placeholder, text = page.evaluate(_FOCUSED)
+        got = {
+            "tag": tag,
+            "name": name,
+            "testid": testid,
+            "placeholder": placeholder,
+            "text": text,
+        }
+        if all(got.get(k) == v for k, v in expect.items()):
+            return n
+    raise RuntimeError(f"focus never reached {expect} in {most} x {key}")
+
+
+def demonstrate(recorder: Any, page: Any, values: dict[str, str]) -> None:
+    """Fill the new-patient form once and click Create.
+
+    Medplum's generic resource form gives several controls nothing to read
+    beside them: the "Add Name" button, the Telecom selects and value fields,
+    Gender and Birth Date. A click on them can't carry an identity check, and
+    clinical-write refuses an unarmed click. So the demonstration reaches
+    them by keyboard from a click that does carry one, as a keyboard user
+    would; every keystroke is recorded, and record time checks the focus.
+    """
+
+    # The first control has nothing beside it, so the demonstration tabs
+    # from the top of the page to "Add Name" (Space presses a button).
+    _keys_until(recorder, page, "Tab", {"tag": "BUTTON", "text": "Add Name"}, most=15)
+    recorder.press("Space")
+    page.wait_for_timeout(300)
     _click(recorder, page, page.get_by_placeholder("Given"))
     recorder.type_text(values["fname"], param="fname")
     _click(recorder, page, page.get_by_placeholder("Family"))
     recorder.type_text(values["lname"], param="lname")
 
-    _click(recorder, page, page.get_by_role("button", name="Add Telecom"))
-    _click(recorder, page, page.locator("select[data-testid=system]").nth(0))
-    recorder.type_text("phone")
-    recorder.press("Escape")
-    _click(recorder, page, page.get_by_placeholder("Value").nth(0))
-    recorder.type_text(values["phone_home"], param="phone_home")
-    _click(recorder, page, page.get_by_role("button", name="Add Telecom"))
-    _click(recorder, page, page.locator("select[data-testid=system]").nth(1))
-    recorder.type_text("email")
-    recorder.press("Escape")
-    _click(recorder, page, page.get_by_placeholder("Value").nth(1))
-    recorder.type_text(values["email"], param="email")
+    # Each Telecom row: system, use, value, remove, then the Add button.
+    for system, param in (("phone", "phone_home"), ("email", "email")):
+        _click(recorder, page, page.get_by_role("button", name="Add Telecom"))
+        _keys(recorder, page, "Shift+Tab", 4, {"tag": "SELECT", "testid": "system"})
+        recorder.type_text(system)
+        _keys(recorder, page, "Tab", 2, {"tag": "INPUT", "placeholder": "Value"})
+        recorder.type_text(values[param], param=param)
 
-    _click(recorder, page, page.locator("input[name=gender]"))
+    # Birth Date: the row's remove button, Add Telecom, Gender, Birth Date.
+    # Choosing a gender re-renders the field and drops the focus, so the date
+    # goes first and Gender last.
+    _keys(recorder, page, "Tab", 4, {"tag": "INPUT", "name": "birthDate"})
+    recorder.type_text(values["DOB"], param="DOB")
+    _keys_until(recorder, page, "Shift+Tab", {"tag": "INPUT", "name": "gender"})
     recorder.type_text(values["sex"], param="sex")
     page.wait_for_timeout(1200)
     recorder.press("ArrowDown")
     recorder.press("Enter")
-
-    _click(recorder, page, page.locator("input[name=birthDate]"))
-    recorder.type_text(values["DOB"], param="DOB")
+    page.wait_for_timeout(300)
 
     _click(recorder, page, page.get_by_role("button", name="Add Address"))
     _click(recorder, page, page.get_by_placeholder("Line 1"))
