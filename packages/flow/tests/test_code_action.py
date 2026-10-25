@@ -721,3 +721,78 @@ def test_record_readback_names_the_record_and_flags_any_other() -> None:
     assert check().outcome == "wrong_record"
     unreadable = record_readback(lambda: None, {"patient_id": "p1"}, lambda: before)
     assert unreadable().outcome == "unreadable"
+
+
+def test_each_save_is_judged_against_the_read_just_before_it() -> None:
+    from openadapt_flow.compile_agent.harness import record_readback
+
+    state = {"now": []}
+    check = record_readback(lambda: state["now"], {"patient_id": "p1"}, lambda: [])
+    check.mark()
+    state["now"] = [{"id": 1, "patient_id": "p1", "note": "a"}]
+    assert check().outcome == "landed"
+    # A second save that writes nothing is told so.
+    check.mark()
+    assert check().outcome == "no_change"
+
+
+def test_an_edit_on_a_store_without_ids_is_the_named_record() -> None:
+    from openadapt_flow.compile_agent.harness import record_readback
+
+    before = [{"patient_id": "p1", "note": "a"}, {"patient_id": "p2", "note": "b"}]
+    state = {"now": list(before)}
+    check = record_readback(lambda: state["now"], {"patient_id": "p1"}, lambda: before)
+    check.mark()
+    state["now"] = [{"patient_id": "p1", "note": "edited"}, before[1]]
+    assert check().outcome == "landed"
+
+
+def test_overwriting_another_record_to_match_the_task_is_the_wrong_record() -> None:
+    from openadapt_flow.compile_agent.harness import record_readback
+
+    before = [{"id": 2, "patient_id": "p2", "note": "b"}]
+    state = {"now": list(before)}
+    check = record_readback(lambda: state["now"], {"patient_id": "p1"}, lambda: before)
+    check.mark()
+    state["now"] = [{"id": 2, "patient_id": "p1", "note": "b"}]
+    assert check().outcome == "wrong_record"
+
+
+def test_typing_on_a_native_drop_down_is_not_a_save() -> None:
+    class Page:
+        url = "http://app.test/"
+
+        def evaluate(self, script: str, arg: Any = None) -> Any:
+            return {
+                "tag": "select",
+                "name": "Visit type",
+                "scope": "",
+                "editable": False,
+            }
+
+    computer = SimpleNamespace(
+        dialect="generic",
+        page=Page(),
+        pointer=None,
+        executed=[],
+        screenshot=lambda: b"png",
+    )
+    computer.execute = lambda native: computer.executed.append(native)
+    harness = Harness(computer, SaveGate(["MRN P1"]))  # type: ignore[arg-type]
+    harness.act({"kind": "type", "text": "Office visit"})
+    assert harness.stats.gate_checks == 0 and computer.executed
+
+
+def test_a_failed_action_takes_back_the_recorders_wait(tmp_path: Path) -> None:
+    waits: list[float] = []
+    tool, computer, harness = _tool(tmp_path)
+    computer.session._recorder = SimpleNamespace(expect_write=waits.append)
+    tool.run('click role=button name=Open near="Jane Sample"')
+
+    def boom(native: Any) -> Any:
+        raise RuntimeError("no")
+
+    computer.execute = boom
+    with pytest.raises(RuntimeError):
+        tool.run('click name="Save note"')
+    assert waits[-2:] == [harness.readback_wait_s, 0.0]

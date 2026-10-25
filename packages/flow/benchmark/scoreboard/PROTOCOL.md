@@ -372,6 +372,9 @@ program compiled from it:
   agent's evidence, not the scoreboard's: the scoreboard still reads the store
   on its own after each item.
 - Rows are timed only under the protocol's load rule.
+- Arm 7 now follows the runner's `--no-faults` switch like arms 1 and 3
+  (faults on by default). Its earlier runs were items 1 to 5, before any
+  fault item, so they are unaffected.
 
 ## Amendment 11 (2026-10-25, after Amendment 10's run): arm 7 reports what its read-back saw
 

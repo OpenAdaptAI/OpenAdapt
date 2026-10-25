@@ -145,39 +145,60 @@ class DrivenAgent:
             self.last_trace = self._tool.trace
         return self._tool
 
-    def script_binding(self, script: str) -> str:
-        """What a person's approval of a script covers: this run, the actions
-        performed so far, and the script's first line (the save)."""
+    @staticmethod
+    def _first_line(script: str) -> str:
+        return next(
+            (
+                ln.strip()
+                for ln in str(script).splitlines()
+                if ln.strip() and not ln.strip().startswith("#")
+            ),
+            "",
+        )
 
-        first = next((ln.strip() for ln in str(script).splitlines() if ln.strip()), "")
+    def script_binding(self, script: str, commit: Optional[str]) -> str:
+        """What a person's approval of a script covers: this run, the actions
+        performed so far, the script's first line, and the save it previews."""
+
         actions = self.harness.stats.actions if self.harness is not None else 0
-        return json.dumps([self.run_id, actions, first])
+        return json.dumps([self.run_id, actions, self._first_line(script), commit])
 
     def _run_script(self, command: _Command) -> dict[str, Any]:
         tool = self._code_tool()
         script = str(command.payload.get("script") or "")
         if command.kind == "run_preview":
             commit = tool.first_commit(script)
-            first = next((ln.strip() for ln in script.splitlines() if ln.strip()), "")
             return {
                 "commit": commit,
-                "binding": self.script_binding(script) if commit else None,
-                "action": first[:200],
+                "binding": self.script_binding(script, commit) if commit else None,
+                "action": tool._out(self._first_line(script)[:200]),
             }
         held = command.payload.get("_held_by_person")
-        if held and held != self.script_binding(script):
-            raise ValueError(
-                "the app or the run changed after the person approved this save, "
-                "so nothing was done; call teach_run again"
-            )
+        approved_commit: Optional[str] = None
+        if held:
+            # The approval covers the save the person was shown, on the app as
+            # it is now: read it again and require the same.
+            approved_commit = tool.first_commit(script)
+            if approved_commit is None or held != self.script_binding(
+                script, approved_commit
+            ):
+                raise ValueError(
+                    "the app or the run changed after the person approved this "
+                    "save, so nothing was done; call teach_run again"
+                )
         person_approves = self.harness.gate.hold is not None
         approval = {"left": bool(held)}
 
         def approve(control: str) -> bool:
             if not person_approves:
                 return True  # the gate's own right-record check decides
-            # A person's approval covers one save, on the script's first line.
-            if approval["left"] and tool.line_number == 1:
+            # A person's approval covers one save: the one previewed, on the
+            # script's first line.
+            if (
+                approval["left"]
+                and tool.line_number == 1
+                and control == approved_commit
+            ):
                 approval["left"] = False
                 self._approved = control
                 return True
@@ -195,11 +216,9 @@ class DrivenAgent:
         if out.images:
             answer["output"] += "\n(screenshots are not shared here; use teach_screen)"
         if out.pending is not None:
-            rest = "\n".join(out.pending["rest"])
             answer["pending"] = {
                 "save": out.pending["control"],
-                "script": rest,
-                "binding": self.script_binding(rest),
+                "script": "\n".join(out.pending["rest"]),
             }
         return answer
 

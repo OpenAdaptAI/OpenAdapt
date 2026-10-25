@@ -56,6 +56,7 @@ __all__ = [
     "SaveGate",
     "StaleRef",
     "SurfaceControl",
+    "RecordReadBack",
     "record_readback",
     "SurfaceHarness",
     "SurfaceObservation",
@@ -93,61 +94,115 @@ class ReadBack:
         }
 
 
-def record_readback(
-    read: Callable[[], Optional[list[dict[str, Any]]]],
-    expect: Mapping[str, Any],
-    baseline: Callable[[], Optional[list[dict[str, Any]]]],
-) -> Callable[[], ReadBack]:
-    """A read-back for the harness: ``read`` the system of record and compare
-    it with ``baseline()`` (the read when run 1 started). A created or changed
-    record is the named one when it has every ``expect`` field with that value.
+class RecordReadBack:
+    """A read-back for the harness (see :func:`record_readback`).
+
+    :meth:`mark` takes a read just before a save; calling the object then
+    reads again. A record that changed or disappeared since run 1 started and
+    is not the named record is the wrong record. Whether this save landed is
+    judged against the read :meth:`mark` took, so a second save that writes
+    nothing is told so.
     """
 
-    wanted = {str(k): str(v) for k, v in expect.items()}
+    def __init__(
+        self,
+        read: Callable[[], Optional[list[dict[str, Any]]]],
+        expect: Mapping[str, Any],
+        baseline: Callable[[], Optional[list[dict[str, Any]]]],
+    ) -> None:
+        self.read = read
+        self.baseline = baseline
+        self.wanted = {str(k): str(v) for k, v in expect.items()}
+        self._before: Optional[list[dict[str, Any]]] = None
 
-    def named(record: Mapping[str, Any]) -> bool:
-        return all(str(record.get(k)) == v for k, v in wanted.items())
+    def named(self, record: Mapping[str, Any]) -> bool:
+        return all(str(record.get(k)) == v for k, v in self.wanted.items())
 
-    def check() -> ReadBack:
+    def mark(self) -> None:
+        try:
+            self._before = self.read()
+        except Exception:  # noqa: BLE001 - judged against the run's start then
+            self._before = None
+
+    def _others(self, diff: Any) -> list[str]:
+        """Changes on records the task does not name."""
+
+        bad: list[str] = []
+        named_created = [r for r in diff.created if self.named(r)]
+        for record in diff.created:
+            if not self.named(record):
+                bad.append("a record the task does not name was created")
+        for change in diff.changed:
+            # The named record before and after: overwriting another record
+            # until it matches the task is not the named record.
+            if not (self.named(change.before) and self.named(change.after)):
+                bad.append("a record the task does not name changed")
+        for record in diff.removed:
+            # A store without record ids shows an edit as removed + created.
+            if not (self.named(record) and named_created):
+                bad.append("a record disappeared")
+        return bad
+
+    def __call__(self) -> ReadBack:
         from openadapt_flow.record_sor import diff_snapshots
 
-        before, after = baseline(), read()
-        if before is None or after is None:
+        start, after = self.baseline(), self.read()
+        if start is None or after is None:
             return ReadBack("unreadable", "the system of record could not be read")
-        diff = diff_snapshots(before, after)
-        touched = [*diff.created, *(c.after for c in diff.changed)]
-        if diff.removed:
-            return ReadBack("wrong_record", f"{len(diff.removed)} records disappeared")
-        others = [r for r in touched if not named(r)]
-        if others:
+        bad = self._others(diff_snapshots(start, after))
+        if bad:
             return ReadBack(
-                "wrong_record",
-                f"{len(others)} record(s) the task does not name changed",
+                "wrong_record", f"{len(bad)} change(s) the task does not name: {bad[0]}"
             )
+        before = self._before if self._before is not None else start
+        self._before = None
+        step = diff_snapshots(before, after)
+        touched = [*step.created, *(c.after for c in step.changed)]
         if not touched:
             return ReadBack("no_change", "nothing was saved in the system of record")
         fields = tuple(sorted({k for r in touched for k in r}))
         return ReadBack(
             "landed",
             f"{len(touched)} record(s) with "
-            + ", ".join(f"{k}={v}" for k, v in wanted.items())
+            + ", ".join(f"{k}={v}" for k, v in self.wanted.items())
             + " saved",
             fields,
         )
 
-    return check
+
+def record_readback(
+    read: Callable[[], Optional[list[dict[str, Any]]]],
+    expect: Mapping[str, Any],
+    baseline: Callable[[], Optional[list[dict[str, Any]]]],
+) -> RecordReadBack:
+    """A read-back for the harness: ``read`` the system of record after each
+    save and compare it with ``baseline()`` (the read when run 1 started) and
+    with the read just before the save. A record is the named one when it has
+    every ``expect`` field with that value."""
+
+    return RecordReadBack(read, expect, baseline)
 
 
-def _expect_write(harness: Any) -> None:
+def _expect_write(harness: Any, wait_s: Optional[float] = None) -> None:
     """Tell the recorder the next action may write, so the event's after-read
     of the system of record waits for the change (and the compiler binds the
-    write to this step)."""
+    write to this step). ``wait_s=0`` takes it back."""
 
     session = getattr(harness.computer, "session", None)
     recorder = getattr(session, "_recorder", None)
     expect = getattr(recorder, "expect_write", None)
     if callable(expect):
-        expect(harness.readback_wait_s)
+        expect(harness.readback_wait_s if wait_s is None else wait_s)
+
+
+def _before_write(harness: Any) -> None:
+    """Just before a save the gate let through: the read-back's before-read,
+    and the recorder's wait for the write."""
+
+    mark = getattr(harness.readback, "mark", None)
+    if callable(mark):
+        mark()
+    _expect_write(harness)
 
 
 def _read_back(harness: Any, control: str) -> Optional[ReadBack]:
@@ -411,8 +466,13 @@ class Harness:
             commit = self._hinted_commit(native, hint)
         if commit is not None:
             self._check_gate(*commit)
-            _expect_write(self)
-        obs = self.computer.execute(native)
+            _before_write(self)
+        try:
+            obs = self.computer.execute(native)
+        except BaseException:
+            if commit is not None:
+                _expect_write(self, 0.0)
+            raise
         self.stats.actions += 1
         if commit is not None and self.has_page:
             # Let the app react before the agent looks at the result.
@@ -500,7 +560,12 @@ class Harness:
             elif op.kind == "type" and " " in (op.text or ""):
                 # A typed space on a focused button presses it.
                 focused = _observe.focused_element(self.page) or {}
-                if not focused.get("editable"):
+                # Typing on a native drop-down picks an option, unless its
+                # change submits the form.
+                on_select = focused.get("tag") == "select" and not focused.get(
+                    "submits"
+                )
+                if not focused.get("editable") and not on_select:
                     label = str(focused.get("name") or "the focused element")
                     return (f"typing a space on {label}", focused.get("scope"))
             elif op.kind == "hotkey":
@@ -822,8 +887,13 @@ class SurfaceHarness:
         commit = self.commit_target(native, ref)
         if commit is not None:
             self._check_gate(commit)
-            _expect_write(self)
-        obs = self.computer.execute(native)
+            _before_write(self)
+        try:
+            obs = self.computer.execute(native)
+        except BaseException:
+            if commit is not None:
+                _expect_write(self, 0.0)
+            raise
         self.stats.actions += 1
         if commit is not None:
             _read_back(self, commit)

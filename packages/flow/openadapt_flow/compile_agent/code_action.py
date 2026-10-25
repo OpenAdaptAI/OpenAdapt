@@ -897,6 +897,17 @@ class CodeActionTool:
                 raise
             except NeedsPerson as exc:
                 acted = self.harness.stats.actions > actions
+                if self.harness.stats.gate_checks > gates:
+                    # A save on this line already went through; sending the
+                    # line again would save twice. Stop without a pending line.
+                    committed = True
+                    chunks.append(
+                        f"$ {line}\nstopped: a save on this line went through, and "
+                        f"the next action ({self._out(exc.control)}) needs a "
+                        "person's approval. Do not send this line again; read "
+                        "the screen and go on from what it shows."
+                    )
+                    break
                 chunks.append(
                     f"$ {line}\nwaiting: this line may save ({self._out(exc.control)}), "
                     "and a person must approve it first. "
@@ -1556,9 +1567,14 @@ class CodeActionTool:
             editable=editable if command != "click" else element.role in _FIELD_ROLES,
             commits=command == "select" and element.submits,
         )
-        return self.harness.commit_target(
+        commit = self.harness.commit_target(
             {"kind": "click", "x": element.x, "y": element.y}, hint=hint
         )
+        value = named.get("value", "")
+        if commit is None and command == "fill" and any(c in value for c in "\r\n"):
+            # The field is focused by then; only a line break can submit.
+            return "a typed line break"
+        return commit
 
 
 def _number(named: Mapping[str, str], key: str, default: int) -> int:
