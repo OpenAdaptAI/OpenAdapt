@@ -145,6 +145,17 @@ Sharing only a last name, or only a date of birth, doesn't stop the item.
 problem with the program or its channel. `exact` and `close` are about the
 item.
 
+**On OpenEMR 8.0.0.3** (measured live, `benchmark/dup_check/README.md`):
+- REST pages with `links.next`, but the link carries OpenEMR's configured site
+  address. The check refuses a link to another origin, so on a deployment
+  whose site address differs from the address the check reads, a
+  multi-page REST answer is `unreadable`.
+- FHIR returns no next link, and its `Bundle.total` equals the rows returned.
+  The check sends no `_count`, and OpenEMR returned every row (up to 120
+  tested).
+- Both match last names by prefix. A birth name is not searchable through
+  FHIR.
+
 Not catchable from the referral alone: a person whose name changed, who moved,
 and whose date of birth is mistyped or merely shared. Nothing the referral
 carries ties them to the chart; that needs an MRN, an insurance id, or a

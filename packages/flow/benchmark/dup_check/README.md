@@ -90,6 +90,45 @@ bring back the screen's `shared_dob` false stops (33 here).
   shared contact details for a near date, or one for the same date. That
   narrowing is tuned to this stream.
 
+## Live OpenEMR (2026-10-24)
+
+`live.py` on the pinned OpenEMR 8.0.0.3 fixture. It seeded 23 synthetic
+charts, 13 of them born on one day, and probed both channels. Raw output
+(`probe.json`, `decisions.json`) is private, in openadapt-corpus
+`reliability_recipes/verification_coverage/live-2026-10-24/dup_check/`.
+
+What OpenEMR does:
+
+| | REST `/api/patient` | FHIR `Patient` |
+|---|---|---|
+| page size | `_limit` honored | `_count` honored |
+| next page | `links.next`, but built on OpenEMR's configured site address, not the address the request went to; no total | no next link at all, and `Bundle.total` equals the rows returned, so `_count=5` silently returns 5 of 13 |
+| with no page size | all 120 of 120 rows sharing a birth date | all 120 of 120 |
+| `lname` / `family` | prefix match (`Hartwell` finds `Hartwell1`...) | prefix match |
+| birth name | not exposed | a birth name isn't returned as an old name; searching it finds nothing |
+
+The check's decisions on six referrals with known answers:
+- exact;
+- a married name;
+- a nickname;
+- a swapped day and month;
+- a new patient sharing only the birth date;
+- a namesake.
+
+| channel | right | notes |
+|---|---:|---|
+| FHIR, as the check sends it (no `_count`) | 6 / 6 | |
+| REST, 500 rows a page | 6 / 6 | |
+| REST, 5 rows a page | 4 / 6 | the two that needed a second page were `unreadable`: the next link points to the site address, another origin, so the check refused it (fail closed) |
+
+So:
+- REST stays opt-in. Its paging only works where OpenEMR's site address is
+  the address the check reads.
+- `FhirPatientSource` never sends `_count`. OpenEMR returned all rows without
+  it (up to 120 tested), and the total can't reveal a cap, so a larger result
+  set than that is untested.
+- Prior names are only searchable through the SQL adapter.
+
 ## How the set was built
 
 For every existing chart, `plant` inserts duplicates at seeded positions:
