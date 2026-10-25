@@ -1,0 +1,133 @@
+.emblem {
+    --tone: #4cf0b8;
+    --tone-soft: #b9fbe5;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px 12px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    background:
+        radial-gradient(120px 120px at 52px 50%, color-mix(in srgb, var(--tone) 16%, transparent), transparent 70%),
+        rgba(4, 7, 10, 0.92);
+    box-shadow:
+        0 24px 60px -28px rgba(0, 0, 0, 0.9),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    color: #eaf0f6 !important;
+    text-decoration: none !important;
+    transition:
+        border-color 240ms ease,
+        transform 240ms ease,
+        box-shadow 240ms ease;
+}
+.emblem[data-tone='halt'] {
+    --tone: #ffbf55;
+    --tone-soft: #ffe2ad;
+}
+.emblem:hover {
+    border-color: color-mix(in srgb, var(--tone) 50%, transparent);
+    transform: translateY(-2px);
+    box-shadow:
+        0 30px 70px -28px rgba(0, 0, 0, 0.95),
+        0 0 0 6px color-mix(in srgb, var(--tone) 8%, transparent);
+}
+.emblem:focus-visible {
+    outline: 2px solid var(--tone-soft);
+    outline-offset: 3px;
+}
+.art {
+    position: relative;
+    flex: none;
+    width: 96px;
+    height: 96px;
+}
+.emblem[data-size='lg'] {
+    gap: clamp(18px, 3vw, 32px);
+    border-radius: 28px;
+    padding: clamp(18px, 3vw, 28px) clamp(20px, 3.4vw, 36px) clamp(18px, 3vw, 28px) clamp(18px, 3vw, 28px);
+    background:
+        radial-gradient(260px 260px at 110px 50%, color-mix(in srgb, var(--tone) 16%, transparent), transparent 70%),
+        radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1.2px) 0 0 / 22px 22px,
+        #04070a;
+}
+.emblem[data-size='lg'] .art {
+    width: clamp(132px, 20vw, 196px);
+    height: clamp(132px, 20vw, 196px);
+}
+.emblem[data-size='lg'] .words {
+    gap: 8px;
+}
+.emblem[data-size='lg'] .words b {
+    font-size: clamp(26px, 3vw, 38px);
+    font-weight: 280;
+    line-height: 1.02;
+    letter-spacing: -0.035em;
+    color: transparent;
+    background: linear-gradient(175deg, #fff 30%, var(--tone-soft) 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+}
+@media (max-width: 520px) {
+    .emblem[data-size='lg'] {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+/* A ring that pulses once the Seal is in place, to draw the eye. */
+.art::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 1px solid var(--tone);
+    opacity: 0;
+    pointer-events: none;
+}
+.emblem[data-play] .art::after {
+    animation: pulse 2.6s ease-out 2.4s 3;
+}
+@keyframes pulse {
+    0% {
+        opacity: 0.6;
+        transform: scale(0.94);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(1.35);
+    }
+}
+.words {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    font-size: 15px;
+    line-height: 1.35;
+}
+.kicker {
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #8d9aa8;
+}
+.words b {
+    font-weight: 600;
+    color: var(--tone-soft);
+}
+.words em {
+    font-style: normal;
+    color: #8d9aa8;
+}
+.words small {
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    color: #c8d2dd;
+}
+@media (prefers-reduced-motion: reduce) {
+    .emblem,
+    .emblem * {
+        animation: none !important;
+        transition: none !important;
+    }
+}
