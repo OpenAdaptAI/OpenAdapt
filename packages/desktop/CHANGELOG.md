@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v0.24.0 (2026-10-24)
+
+### Features
+
+- **desktop**: set up the approver key in the app, behind Touch ID
+
+### Bug Fixes
+
+- **desktop**: a locked Mac isn't a Mac without a Secure Enclave
+- **desktop**: re-register a stored approver key only after it opens behind Touch ID
+- **desktop**: a Mac that can keep the key behind Touch ID never falls back to a terminal-made key
+
+
+
 ## v0.23.0 (2026-10-24)
 
 ### Bug Fixes
