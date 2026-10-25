@@ -346,12 +346,15 @@ def check_ready(
         problems.append(
             f"save step {save.id} has an unconfirmed placeholder record check"
         )
+    structural = save.anchor.structural if save.anchor is not None else None
     if save.anchor is not None and (
-        save.anchor.structural is None or not save.anchor.structural.selector
+        structural is None
+        or not (structural.selector or (structural.role and structural.name))
     ):
         problems.append(
-            f"save step {save.id} has no structural selector: the web fault "
-            "driver needs it for the ambiguity and identity faults"
+            f"save step {save.id} has no structural locator (a selector, or a "
+            "role and a name): the web fault driver needs it for the ambiguity "
+            "and identity faults"
         )
     return problems
 
