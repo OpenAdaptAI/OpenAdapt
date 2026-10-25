@@ -185,7 +185,7 @@ class TestTerminalOutcome:
     def test_other_session_is_a_mismatch(self, tmp_path):
         _write_state(tmp_path, phase="complete", complete=True, integrity_verified=True)
         outcome, error = read_terminal_outcome(
-            str(tmp_path), "another-session", _seal_ok
+            str(tmp_path), "another-session", _seal_ok, _owner_ok
         )
         assert outcome == OUTCOME_UNKNOWN
         assert error == "state_file_mismatch"
