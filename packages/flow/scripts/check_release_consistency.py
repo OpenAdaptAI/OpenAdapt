@@ -367,6 +367,31 @@ PENDING_PUBLIC_ARTIFACT_INVENTORY_PATHS = frozenset(
         "tests/fixtures/v4-qualification/signer-registry.json",
     }
 )
+# Folders approved once for published evidence, demo and test material. A file
+# of an artifact type inside one passes without its own row in the reviewed
+# list, so pull requests that add evidence don't edit (or collide on) that
+# list. Every other folder still needs a row per file. Approval doesn't skip
+# the content checks: forbidden categories, private-corpus signatures and the
+# secret scan apply to these files as to any other. The release stamp still
+# lists and hashes every artifact here, so a shipped archive pins their bytes.
+#
+# Only result folders are approved under benchmark/: elsewhere there the row
+# per file is what catches a renamed raw-results or recipe file.
+PUBLIC_ARTIFACT_APPROVED_DIRECTORIES = (
+    "benchmark/auto_repair/",
+    "benchmark/openemr_api_tier/",
+    "benchmark/run_player/",
+    "benchmark/scoreboard/",
+    "benchmark/silent_saves/",
+    "docs/showcase-encounter-loop/",
+    "docs/showcase-loop/",
+    "docs/showcase-openemr/",
+    "docs/showcase-openimis/",
+    "docs/showcase/",
+    "public-demo/evidence-packs/",
+    "registry/bundles/",
+    "tests/fixtures/",
+)
 # The crown-jewel artifact categories, recorded in the reviewed public artifact
 # inventory so a reader can see which classes of content the inventory exists to
 # keep out. Derived from the manifest, not restated here.
@@ -572,6 +597,10 @@ def _artifact_inventory_candidate(path: str) -> bool:
     return PurePosixPath(path).suffix.lower() in PUBLIC_ARTIFACT_SUFFIXES
 
 
+def _in_approved_artifact_directory(path: str) -> bool:
+    return path.startswith(PUBLIC_ARTIFACT_APPROVED_DIRECTORIES)
+
+
 def _sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
@@ -684,7 +713,10 @@ def build_public_artifact_inventory(root: Path = ROOT) -> dict[str, object]:
         "schema_version": PUBLIC_ARTIFACT_REVIEWED_SCHEMA,
         "policy": _public_artifact_policy(),
         "artifacts": [
-            path for path in sorted(files) if _artifact_inventory_candidate(path)
+            path
+            for path in sorted(files)
+            if _artifact_inventory_candidate(path)
+            and not _in_approved_artifact_directory(path)
         ],
     }
 
@@ -707,12 +739,17 @@ def build_release_artifact_inventory(root: Path = ROOT) -> dict[str, object]:
     """
     files = _walk_public_source_files(root)
     inventory = _validate_public_artifact_inventory(files, root=root)
+    approved = {
+        path
+        for path in files
+        if _artifact_inventory_candidate(path) and _in_approved_artifact_directory(path)
+    }
     return {
         "schema_version": PUBLIC_ARTIFACT_RELEASE_SCHEMA,
         "policy": _public_artifact_policy(),
         "artifacts": [
             {"path": path, "sha256": _sha256_file(files[path])}
-            for path in sorted(inventory)
+            for path in sorted(set(inventory) | approved)
         ],
     }
 
@@ -730,6 +767,7 @@ def stamp_release_artifact_inventory(root: Path = ROOT) -> Path:
 
 def _public_artifact_policy() -> dict[str, object]:
     return {
+        "approved_directories": list(PUBLIC_ARTIFACT_APPROVED_DIRECTORIES),
         "artifact_suffixes": sorted(PUBLIC_ARTIFACT_SUFFIXES),
         "forbidden_categories": sorted(PUBLIC_SOURCE_FORBIDDEN_CATEGORIES),
         "note": (
@@ -826,7 +864,11 @@ def _validate_public_artifact_inventory(
     inventory = _load_public_artifact_inventory(root)
     observed = {path for path in files if _artifact_inventory_candidate(path)}
     expected = set(inventory)
-    unregistered = observed - expected - PENDING_PUBLIC_ARTIFACT_INVENTORY_PATHS
+    unregistered = {
+        path
+        for path in observed - expected - PENDING_PUBLIC_ARTIFACT_INVENTORY_PATHS
+        if not _in_approved_artifact_directory(path)
+    }
     missing = expected - observed
     if unregistered or missing:
         raise ValueError(

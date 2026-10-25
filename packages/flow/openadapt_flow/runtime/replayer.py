@@ -45,12 +45,14 @@ import math
 import os
 import re
 import struct
+import threading
 import time
 import uuid
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -230,6 +232,10 @@ _PIXEL_RECHECK_LEVEL = 24
 _PIXEL_RECHECK_MIN_PIXELS = 4
 # How long a step that raises a browser dialog waits for it to open.
 _DIALOG_WAIT_S = 5.0
+
+# How long past its step's timeout a held record check may run under an
+# approval mode before the held report decides the item (a person).
+READBACK_DEADLINE_MARGIN_S = 120.0
 # Private module capability.  The public ``run`` API cannot mint a durable
 # continuation.  ``runtime.durable.resume`` imports this object only after it
 # has validated the pause, approval, bundle, checkpoint, and live state.
@@ -1652,7 +1658,23 @@ class Replayer:
                         return "a business-decision state"
         return None
 
-    def _run_unsealed(
+    def _run_unsealed(self, workflow: Workflow, **kwargs: Any) -> RunReport:
+        """Run the workflow; see :meth:`_run_unsealed_steps`.
+
+        However the run ends, a deferred record check it still holds is
+        released: a durable run's check waits for its pause, and a run that
+        left before writing it must not block the read-back thread forever.
+        """
+
+        try:
+            return self._run_unsealed_steps(workflow, **kwargs)
+        finally:
+            entry = getattr(self, "_pipelined_readback", None)
+            start = getattr(entry, "start", None)
+            if start is not None:
+                start.set()
+
+    def _run_unsealed_steps(
         self,
         workflow: Workflow,
         *,
@@ -2376,6 +2398,11 @@ class Replayer:
         else:
             span_skip_to = -1
             stop_run = False
+            # A durable run defers only the last step's record check: nothing
+            # in the item then waits on it, and its pause is the item's end.
+            self._linear_final_step_id = (
+                workflow.steps[-1].id if workflow.steps else None
+            )
             for step_index, step in enumerate(workflow.steps):
                 # Resume: never re-execute an already-verified step (no
                 # re-performed confirmed writes); its result was pre-loaded.
@@ -2617,6 +2644,41 @@ class Replayer:
                 router = self._surface_router
                 if router is not None and result.ok:
                     router.observe_active(step.id)
+                deferred = getattr(self, "_pipelined_readback", None)
+                if (
+                    deferred is not None
+                    and getattr(deferred, "result", None) is result
+                    and result.ok
+                ):
+                    # The save was sent and its record check runs alongside
+                    # the next item: the durable pause holds the check, so a
+                    # crash resumes the check and never resends the save.
+                    durable_run.record_deferred_readback(
+                        step_index,
+                        step,
+                        result,
+                        dict(params),
+                        actuation=deferred.actuation,
+                        before=deferred.before.model_dump(mode="json"),
+                        active_surface=(
+                            router.active_id if router is not None else None
+                        ),
+                        surface_observations=(
+                            router.observations if router is not None else None
+                        ),
+                    )
+                    deferred.durable_run = durable_run
+                    deferred.step_index = step_index
+                    deferred.params = dict(params)
+                    deferred.workflow = workflow
+                    deferred.active_surface = (
+                        router.active_id if router is not None else None
+                    )
+                    deferred.surface_observations = (
+                        router.observations if router is not None else None
+                    )
+                    deferred.start.set()
+                    return False
                 durable_run.record(
                     step_index,
                     step,
@@ -2667,8 +2729,10 @@ class Replayer:
             ids = [s.id for s in workflow.steps[step_index : end_index + 1]]
             if not self.api_steps:
                 reason = self.api_steps_off_reason or "API steps are off for this run"
-            elif getattr(self, "_surface_router", None) is not None:
-                reason = "a run across several windows or tabs uses the GUI steps"
+            elif surface_reason := self._web_form_surface_refusal(
+                workflow, step_index, end_index, binding
+            ):
+                reason = surface_reason
             elif self._approval_gated() and not callable(
                 getattr(self._actuator_for(binding), "prepare", None)
             ):
@@ -2724,31 +2788,90 @@ class Replayer:
             return end_index, save, reason
         return None
 
+    def _web_form_surface_refusal(
+        self, workflow: Workflow, start_index: int, end_index: int, binding: Any
+    ) -> Optional[str]:
+        """Why a multi-surface run can't use this API step, or None when it can.
+
+        The API step is bound to its span's surface the way it is bound to the
+        page in a single-surface run: every step it replaces runs on that one
+        browser surface, none of them switches, opens or closes a surface, the
+        surface is the active one, and the request goes to that surface's
+        session on its declared origin.
+        """
+
+        router = getattr(self, "_surface_router", None)
+        if router is None:
+            return None
+        span = workflow.steps[start_index : end_index + 1]
+        surfaces = {s.surface or router.primary_id for s in span}
+        if len(surfaces) != 1:
+            return (
+                "the steps the API step replaces run on more than one surface, "
+                "so the GUI steps run"
+            )
+        if any(
+            s.action is ActionKind.SWITCH_SURFACE or s.opens or s.closes_surface
+            for s in span
+        ):
+            return (
+                "the steps the API step replaces switch, open or close a "
+                "surface, so the GUI steps run"
+            )
+        (surface_id,) = surfaces
+        if surface_id != router.active_id:
+            return "the API step's surface is not the active one, so the GUI steps run"
+        spec = router.specs[surface_id]
+        if spec.kind != "web":
+            return "the API step's surface is not a browser, so the GUI steps run"
+        actuator = self._actuator_for(binding)
+        if actuator is None:
+            return "there is no live browser session for the API step"
+        from openadapt_flow.runtime.surfaces import url_origin
+
+        if spec.is_page:
+            expected = spec.origin
+        else:
+            seen = router.observations.get(surface_id)
+            expected = seen.origin if seen is not None else None
+        actual = url_origin(
+            getattr(getattr(actuator, "transport", None), "base_url", None)
+        )
+        if expected is not None and actual != url_origin(expected):
+            return (
+                "the API step's session is on another origin than its surface, "
+                "so the GUI steps run"
+            )
+        return None
+
     def _governed_web_form_refusal(
         self, workflow: Workflow, save: Step
     ) -> Optional[str]:
         """Why a governed run can't use this API step, or None when it can.
 
-        The run's authorization must have admitted this exact API step. A
-        qualification case runs the path it names, and a managed (Cloud)
-        dispatch or a production qualification admission doesn't bind API
-        steps yet, so those run the GUI steps.
+        The run's authorization must have admitted this exact API step. For a
+        managed (Cloud) dispatch that is Cloud's authorization, whose
+        ``api_steps`` are inside the dispatch binding digest Cloud signs.
+
+        A qualification case runs the path its contract names for the save:
+        the API step when that path is ``api``, the GUI steps otherwise. A run
+        under a production qualification admission uses the API step only
+        when the qualified effect contract, which the signed admission binds,
+        names the save's API path; that contract exists only when the
+        qualification campaign ran the API path's cases.
         """
 
         authorization = self.governed_authorization
         assert authorization is not None
         if authorization.qualification_case_id is not None:
-            return (
-                "a qualification case runs the GUI path it names; qualifying "
-                "an API step's path is not supported yet"
-            )
-        if self.managed_dispatch_binding is not None:
-            return "a managed dispatch doesn't bind API steps yet"
-        if authorization.production_qualification_admission_id is not None:
-            return (
-                "a production qualification admission doesn't cover API steps "
-                "yet, so the qualified GUI path runs"
-            )
+            if authorization.qualification_case_action_paths.get(save.id) != "api":
+                return "a qualification case runs the GUI path it names"
+        elif authorization.production_qualification_admission_id is not None:
+            if not authorization.effect_requirements(save.id, "api"):
+                return (
+                    "the production qualification admission didn't qualify this "
+                    "API step's path, so the qualified GUI path runs"
+                )
         return authorization.admitted_api_step(save, workflow)
 
     def _resume_inside_web_form_span(
@@ -2837,6 +2960,8 @@ class Replayer:
         if result.api_fallback is not None:
             self._web_form_fallback_reason = result.api_fallback
             return None
+        router = getattr(self, "_surface_router", None)
+        surface = router.active_id if router is not None else None
         folded = [
             StepResult(
                 step_id=s.id,
@@ -2844,6 +2969,7 @@ class Replayer:
                 ok=True,
                 skipped=True,
                 actuation="api_folded",
+                surface=surface,
                 risk=s.risk,
                 risk_explanation=s.risk_explanation,
                 risk_review_required=s.risk_review_required,
@@ -3059,9 +3185,9 @@ class Replayer:
             else:
                 # The run ended some other way: settle the read-back inline
                 # before the report is written.
-                self._apply_pipelined_verdict(
-                    report, self._join_pipelined_readback(keep=True)
-                )
+                error = self._join_pipelined_readback(keep=True)
+                error = self._settle_durable_readback(pending, error)
+                self._apply_pipelined_verdict(report, error)
                 self._pipelined_readback = None
         self._end_surfaces()
         if self._surface_environment_observations:
@@ -3075,7 +3201,25 @@ class Replayer:
         if (variant_route := current_variant_route()) is not None:
             report.variant_route = variant_route
         self._stamp_execution_outcome(report, workflow, run_dir)
-        self._stamp_approval(report)
+        hold = getattr(self.approval_gate, "hold_for_readback", None)
+        held = False
+        deadline_s = 0.0
+        if handed_off and callable(hold):
+            held = True
+            # The item's approval decision waits for its record check: the
+            # settled verdict decides it (_settle_pipelined_readback). Deciding
+            # now, on the held report, would read a save still being checked
+            # as an uncertain result and switch problems_only off. The wait
+            # is bounded: past the deadline the held report decides it.
+            assert pending is not None
+            step = next((s for s in workflow.steps if s.id == pending.step_id), None)
+            deadline_s = (
+                float(getattr(step, "timeout_s", 0.0) or 0.0)
+                + READBACK_DEADLINE_MARGIN_S
+            )
+            hold(deadline_s)
+        else:
+            self._stamp_approval(report)
         if persist:
             persisted_path = report.save(run_dir)
             # The evidence file must exist before the terminal projection.  A
@@ -3107,26 +3251,83 @@ class Replayer:
             assert pending is not None and self.readback_pipeline is not None
             self._pipelined_readback = None
             entry = pending
+            decided = threading.Lock()
+            first: list[str] = []
+
+            def _claim(by: str) -> bool:
+                """Whether ``by`` is first to decide the item's approval."""
+
+                with decided:
+                    if not first:
+                        first.append(by)
+                    return first[0] == by
+
+            timer: Optional[threading.Timer] = None
+            if held:
+
+                def _expire() -> None:
+                    if not _claim("deadline"):
+                        return
+                    # The record check outlived its deadline. The held report
+                    # still says unsuccessful, so deciding it now sends the
+                    # item to a person, turns problems_only off and releases
+                    # the hold.
+                    self._stamp_approval(report)
+                    report.save(run_dir)
+
+                timer = threading.Timer(deadline_s, _expire)
+                timer.daemon = True
+                timer.start()
 
             def _settle(error: Optional[str]) -> RunReport:
+                if timer is not None:
+                    timer.cancel()
                 return self._settle_pipelined_readback(
-                    report, workflow, run_dir, entry, error
+                    report,
+                    workflow,
+                    run_dir,
+                    entry,
+                    error,
+                    decide_approval=_claim("settle"),
                 )
 
             self.readback_pipeline.hand_off(entry, _settle)
+            entry.start.set()
         return report
 
     # -- pipelined read-back (runtime/readback_pipeline.py) ------------------
 
-    def _may_pipeline_readback(self, verifier: Any) -> bool:
-        """Whether this effect's read-back may run on the side thread."""
+    def _may_pipeline_readback(
+        self, verifier: Any, step: Optional[Step] = None
+    ) -> bool:
+        """Whether this effect's read-back may run on the side thread.
+
+        A durable run defers the record check only when the durable pause
+        can hold it (docs/THROUGHPUT.md): a linear run, an encrypted
+        checkpoint store, and the item's last step, so nothing else in the
+        item waits on the check.
+        """
 
         pipeline = getattr(self, "readback_pipeline", None)
         if pipeline is None:
             return False
         reason = None
-        if self.durable or getattr(self, "_program_durable", None) is not None:
-            reason = "durable runs verify inline"
+        if getattr(self, "_program_durable", None) is not None:
+            reason = "durable program runs verify inline"
+        elif self.durable and self._durable_continuation_guard is not None:
+            reason = "a resumed durable run verifies inline"
+        elif self.durable and not self.checkpoint_key:
+            reason = (
+                "a durable run without an encrypted checkpoint store verifies "
+                "inline (the deferred check keeps record rows)"
+            )
+        elif self.durable and (
+            step is None or step.id != getattr(self, "_linear_final_step_id", None)
+        ):
+            reason = (
+                "a durable run defers only its last step's record check; this "
+                "one verifies inline"
+            )
         elif getattr(self, "idempotency_ledger", None) is not None:
             reason = "idempotency-ledger runs verify inline"
         elif getattr(self, "_pipelined_readback", None) is not None:
@@ -3149,19 +3350,33 @@ class Replayer:
         *,
         effects: Optional[list["Effect"]],
         verifier: Any,
+        actuation: Literal["gui", "api"] = "gui",
     ) -> None:
         assert self.readback_pipeline is not None
         scratch = StepResult(step_id=step.id, intent=step.intent, ok=True)
+        # A durable run's check starts only once the durable pause holds it,
+        # so a crash in between can't leave a sent save without its pause.
+        # Whatever waits on the check also starts it.
+        start = threading.Event()
+        if not self.durable:
+            start.set()
 
         def verify() -> Optional[str]:
+            start.wait()
             return self._verify_effects(
                 step, before, scratch, effects=effects, verifier=verifier
             )
 
         entry = self.readback_pipeline.submit(step.id, verify)
+        entry.start = start  # type: ignore[attr-defined]
         entry.scratch = scratch  # type: ignore[attr-defined]
         entry.result = result  # type: ignore[attr-defined]
         entry.intent = step.intent  # type: ignore[attr-defined]
+        # What a durable pause needs to re-run this check after a crash.
+        entry.step = step  # type: ignore[attr-defined]
+        entry.before = before  # type: ignore[attr-defined]
+        entry.actuation = actuation  # type: ignore[attr-defined]
+        entry.durable_run = None  # type: ignore[attr-defined]
         result.effect_verified = None
         result.effect_results.append("[pipelined] system-of-record read-back pending")
         self._pipelined_readback = entry
@@ -3172,6 +3387,9 @@ class Replayer:
         entry = getattr(self, "_pipelined_readback", None)
         if entry is None:
             return None
+        start = getattr(entry, "start", None)
+        if start is not None:
+            start.set()
         try:
             error = entry.verdict.result()
         except Exception as exc:  # noqa: BLE001 - a raising verifier fails closed
@@ -3248,21 +3466,118 @@ class Replayer:
         run_dir: Path,
         entry: "PipelinedReadback",
         error: Optional[str],
+        *,
+        decide_approval: bool = True,
     ) -> RunReport:
-        """Apply a finished deferred read-back to the saved item report."""
+        """Apply a finished deferred read-back to the saved item report.
 
-        self._copy_pipelined_evidence(entry, error)
-        if error is not None:
-            self._apply_pipelined_verdict(report, error, entry=entry)
-        else:
-            # The execution completed; it was held unsuccessful only until the
-            # read-back confirmed. Re-derive the outcome from that evidence.
-            report.execution_completed = True
-            report.success = True
-        self._stamp_execution_outcome(report, workflow, run_dir)
-        self._stamp_approval(report)
+        ``decide_approval`` is False when the read-back's deadline already
+        decided the item's approval; a late verdict doesn't change it.
+        """
+
+        try:
+            self._copy_pipelined_evidence(entry, error)
+            error = self._settle_durable_readback(entry, error)
+            if error is not None:
+                self._apply_pipelined_verdict(report, error, entry=entry)
+            else:
+                # The execution completed; it was held unsuccessful only until
+                # the read-back confirmed. Re-derive the outcome from that
+                # evidence.
+                report.execution_completed = True
+                report.success = True
+            self._stamp_execution_outcome(report, workflow, run_dir)
+        finally:
+            # The held approval decision is always made, even when settling
+            # fails: the report then still says unsuccessful, so the item goes
+            # to a person, and it never stays held open for the next item.
+            if decide_approval:
+                self._stamp_approval(report)
         report.save(run_dir)
         return report
+
+    def recheck_deferred_readback(
+        self,
+        workflow: Workflow,
+        deferred: Any,
+        *,
+        params: Mapping[str, RuntimeParamScalar],
+        run_id: str,
+    ) -> StepResult:
+        """Re-run a durable pause's deferred record check; send nothing.
+
+        The check runs against the snapshot of the system of record taken
+        before the save, with this replayer's system-of-record verifier.
+        Returns the save's result with the verdict applied: ``ok`` when the
+        record check confirmed the save.
+        """
+
+        from openadapt_flow.policy import effects_for_actuation
+        from openadapt_flow.runtime.durable.approval import StateDiverged
+
+        step = workflow.steps[deferred.step_index]
+        if step.id != deferred.step_id:
+            raise StateDiverged(
+                "the deferred record check names a different step than the bundle"
+            )
+        verifier = self.effect_verifier
+        if verifier is None or not _pipeline_safe_verifier(verifier):
+            raise StateDiverged(
+                "re-running a deferred record check needs the run's REST, FHIR, "
+                "GraphQL or SQL record checker"
+            )
+        self._run_id = run_id
+        effects = self._resolve_effects(
+            list(effects_for_actuation(step, deferred.actuation)), params
+        )
+        before = EffectState.model_validate(deferred.before)
+        result = deferred.result.model_copy(deep=True)
+        scratch = StepResult(step_id=step.id, intent=step.intent, ok=True)
+        try:
+            error = self._verify_effects(
+                step, before, scratch, effects=effects, verifier=verifier
+            )
+        except Exception as exc:  # noqa: BLE001 - a raising verifier fails closed
+            error = f"read-back raised {type(exc).__name__}; reconciliation is required"
+        self._copy_pipelined_evidence(
+            SimpleNamespace(result=result, scratch=scratch), error
+        )
+        return result
+
+    def _settle_durable_readback(
+        self, entry: Any, error: Optional[str]
+    ) -> Optional[str]:
+        """Replace a durable run's deferred-check pause with its verdict.
+
+        Returns the error to report: the check's own, or why the durable
+        record of the verdict failed. The pause then stays, so a resume
+        re-runs the check; the save is never sent again either way.
+        """
+
+        durable_run = getattr(entry, "durable_run", None)
+        if durable_run is None:
+            return error
+        result: StepResult = entry.result
+        try:
+            durable_run.settle_deferred_readback(
+                entry.step_index,
+                entry.step,
+                result,
+                entry.params,
+                workflow=entry.workflow,
+                active_surface=entry.active_surface,
+                surface_observations=entry.surface_observations,
+            )
+        except Exception as exc:  # noqa: BLE001 - durable evidence boundary
+            reason = (
+                "the record check finished, but its durable record failed "
+                f"({type(exc).__name__}); resume re-runs the check"
+            )
+            result.ok = False
+            result.error = reason if error is None else f"{error}; {reason}"
+            result.safety_halt = True
+            return result.error
+        return error
 
     def _project_idempotency_outcome_after_persist(
         self,
@@ -7283,6 +7598,25 @@ class Replayer:
         if missed is not None and missed[0] == step.id:
             self._scroll_missed_target = None
             target_missed = missed[1]
+        if step.target_param is not None:
+            # A record-selecting click acts on the run's record: look for the
+            # run's value; the identity check verifies the row (param mode).
+            from openadapt_flow.runtime.target_param import bind_target_param
+
+            sealed_step = step
+            step, refusal = bind_target_param(step, params, workflow)
+            # The sealed-leaf check compares the program's step with the
+            # step the runtime acts on; it must see the sealed one.
+            self._target_param_binding = (step, sealed_step)
+            if refusal is not None:
+                return StepResult(
+                    step_id=step.id,
+                    intent=step.intent,
+                    ok=False,
+                    error=refusal,
+                    safety_halt=True,
+                    failure_category="safety_halt",
+                )
         router = self._surface_router
         if router is None:
             if step.action is ActionKind.SWITCH_SURFACE:
@@ -8584,7 +8918,7 @@ class Replayer:
                 error is None
                 and not delivery_uncertain
                 and effect_pre_state is not None
-                and self._may_pipeline_readback(active_verifier)
+                and self._may_pipeline_readback(active_verifier, step)
             ):
                 # Pipelined read-back (runtime/readback_pipeline.py): the same
                 # check, run on the side thread. Any later step in this run
@@ -8648,6 +8982,10 @@ class Replayer:
                 and matched_region is not None
                 and resolution.rung not in ("template", "structural")
                 and step.anchor is not None
+                # A click rebound to the run's record (runtime.target_param)
+                # found another record's row; that row must never become the
+                # step's recorded anchor.
+                and not (step.target_param is not None and not step.anchor.template)
             ):
                 # Heal from the PRE-action frame: that is the frame the
                 # anchor was resolved against (the action may have navigated
@@ -8971,7 +9309,11 @@ class Replayer:
             return self.api_actuator
         if self.web_form_actuator is not None:
             return self.web_form_actuator
-        page = getattr(self.backend, "page", None)
+        # In a multi-surface run the request goes through the active
+        # surface's session, which on a resume may not be self.backend yet.
+        router = getattr(self, "_surface_router", None)
+        backend = router.active_backend if router is not None else self.backend
+        page = getattr(backend, "page", None)
         if page is None:
             return None
         from openadapt_flow.runtime.actuators.web_form import (
@@ -9394,12 +9736,17 @@ class Replayer:
             current_step=overlay_current,
             total_steps=overlay_total,
         )
-        if self._may_pipeline_readback(effect_verifier):
+        if self._may_pipeline_readback(effect_verifier, step):
             # Pipelined read-back (runtime/readback_pipeline.py), as for a GUI
             # save: the same record check on the side thread. The item's
             # report stays unsuccessful until it settles with the verdict.
             self._defer_readback(
-                step, before, result, effects=effects, verifier=effect_verifier
+                step,
+                before,
+                result,
+                effects=effects,
+                verifier=effect_verifier,
+                actuation="api",
             )
             result.ok = True
             result.error = None
@@ -10213,9 +10560,11 @@ class Replayer:
             if qualification is not None
             else None
         )
+        # A click that selects a record by a run value (Step.target_param)
+        # is judged by its identity band, never by hover evidence alone.
         hover_check = (
             self._hover_check(step, resolution, frame_png, workflow, bundle_dir)
-            if qualified_policy is None
+            if qualified_policy is None and step.target_param is None
             else None
         )
         if hover_check is None and (
@@ -10361,7 +10710,7 @@ class Replayer:
                 + " — refusing to act; run aborted"
             )
         elif check.status in ("unreadable", "abstain") and (
-            step.risk == "irreversible" or governed
+            step.risk == "irreversible" or governed or step.target_param is not None
         ):
             reason = (
                 "rests on a glyph-confusable identifier OCR may have "
@@ -10374,6 +10723,8 @@ class Replayer:
                 "requires verified identity under the governed run policy"
                 if governed
                 else "is irreversible"
+                if step.risk == "irreversible"
+                else "selects a record by a run value"
             )
             error = (
                 f"Step '{step.id}' ({step.intent}) {scope} and its target "
@@ -11278,6 +11629,17 @@ class Replayer:
         self._active_delivery_region = fresh_region
         return fresh_resolution, fresh_region, fresh_png, error
 
+    def _sealed_step(self, step: Step) -> Step:
+        """The program's own step for one the runtime rebound to a run value.
+
+        ``runtime.target_param`` rebinds a record-selecting click to the
+        run's record; integrity checks compare against the sealed step.
+        """
+        binding = getattr(self, "_target_param_binding", None)
+        if binding is not None and binding[0] is step:
+            return binding[1]
+        return step
+
     def _resolve_step_target(
         self,
         step: Step,
@@ -11714,7 +12076,7 @@ class Replayer:
             or leaf.get("state_id") != self._current_state_id
             or parent_state is None
             or parent_state.kind is not StateKind.ACTION
-            or parent_state.step != step
+            or parent_state.step != self._sealed_step(step)
         ):
             return (
                 "governed program leaf frame no longer matches the exact sealed "
@@ -17784,6 +18146,10 @@ class Replayer:
         workflow: Optional[Workflow] = None,
     ) -> Optional[bytes]:
         """Return the verified run snapshot for governed asset consumers."""
+        if not rel:
+            # No crop: a record-selecting click rebound to another record
+            # (runtime.target_param) carries none.
+            return None
         if self.governed_authorization is not None:
             data = self._governed_asset_snapshot.get(rel)
             expected = self._governed_asset_hashes.get(rel)

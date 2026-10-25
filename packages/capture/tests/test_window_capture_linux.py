@@ -12,6 +12,7 @@ from PIL import Image
 from openadapt_capture.desktop_capture import DesktopCaptureScope
 from openadapt_capture.window_capture import (
     TargetWindow,
+    WindowCaptureAmbiguousError,
     WindowCaptureError,
     WindowCaptureScope,
     WindowTarget,
@@ -85,9 +86,15 @@ def _record(
 
 
 def test_resolver_binds_process_and_root_pixel_coordinates(x11_environment) -> None:
-    client = FakeX11Client([_record(41), _record(42, bounds=(50, 40, 1200, 700))])
+    client = FakeX11Client(
+        [
+            _record(41, pid=2000),
+            _record(42, bounds=(50, 40, 1200, 700)),
+        ]
+    )
     identities = {
         1000: ("citrix-workspace", 1700000000.25),
+        2000: ("terminal", 1700000001.0),
     }
 
     window = resolve_window_linux(
@@ -105,6 +112,57 @@ def test_resolver_binds_process_and_root_pixel_coordinates(x11_environment) -> N
         on_screen=True,
         process_start_time=1700000000.25,
         coordinate_source="x11-root-physical-pixels",
+    )
+
+
+def test_resolver_refuses_several_matching_windows(x11_environment) -> None:
+    """The first match is pinned for the session, so it must be unique."""
+    client = FakeX11Client([_record(41), _record(42, bounds=(50, 40, 1200, 700))])
+
+    with pytest.raises(WindowCaptureAmbiguousError, match="matched 2"):
+        resolve_window_linux(
+            WindowTarget(owner="citrix", title="remote"),
+            client_factory=lambda: client,
+            process_identity=lambda _pid: ("citrix-workspace", 100.0),
+        )
+
+
+def test_resolver_prefers_the_exact_owner_and_title_match(x11_environment) -> None:
+    client = FakeX11Client(
+        [_record(41, title="Remote session 2"), _record(42, title="Remote session")]
+    )
+
+    window = resolve_window_linux(
+        WindowTarget(owner="citrix-workspace", title="Remote session"),
+        client_factory=lambda: client,
+        process_identity=lambda _pid: ("citrix-workspace", 100.0),
+    )
+
+    assert window is not None
+    assert window.window_id == 42
+
+
+def test_resolver_finds_a_pinned_window_by_id_after_retitle(x11_environment) -> None:
+    client = FakeX11Client(
+        [_record(41, title="Remote session"), _record(42, title="Signed in")]
+    )
+
+    window = resolve_window_linux(
+        WindowTarget(owner="citrix", window_id=42),
+        client_factory=lambda: client,
+        process_identity=lambda _pid: ("citrix-workspace", 100.0),
+    )
+
+    assert window is not None
+    assert window.window_id == 42
+    assert window.title == "Signed in"
+    assert (
+        resolve_window_linux(
+            WindowTarget(owner="citrix", window_id=43),
+            client_factory=lambda: client,
+            process_identity=lambda _pid: ("citrix-workspace", 100.0),
+        )
+        is None
     )
 
 
