@@ -99,6 +99,12 @@ class ParamProvenance(BaseModel):
     extractor: str = Field(min_length=1)
     #: ``text`` | ``code`` | ``date`` | ``currency``. Unset: inferred.
     value_kind: Optional[Literal["text", "code", "date", "currency"]] = None
+    #: The text as the source wrote it, when intake converted it (``value`` is
+    #: the converted form, for example a date as ISO).
+    raw_value: Optional[str] = None
+    #: How ``raw_value`` became ``value``, for example
+    #: ``MM/DD/YYYY to ISO (25 can only be the day)``.
+    conversion: Optional[str] = None
 
 
 class ProvenanceFile(BaseModel):
@@ -160,6 +166,8 @@ def from_intake(
                 label=fld.label,
             ),
             extractor="person" if fld.confirmed and fld.confidence >= 1.0 else name_of,
+            raw_value=getattr(fld, "raw", None),
+            conversion=getattr(fld, "conversion", None),
         )
     return ProvenanceFile(params=params)
 
@@ -189,6 +197,8 @@ class LabelExtractor:
     specs: Mapping[str, Any]
     aliases: Mapping[str, list[str]] = field(default_factory=dict)
     name: str = "intake:local"
+    #: Declared order of numeric dates, per parameter (as in intake).
+    date_formats: Mapping[str, str] = field(default_factory=dict)
 
     def read(self, document: Any, name: str, ref: SourceRef) -> Optional[str]:
         from openadapt_flow.intake.extract import extract_fields
@@ -199,7 +209,12 @@ class LabelExtractor:
         aliases = dict(self.aliases)
         if ref.label:
             aliases[name] = [*aliases.get(name, []), ref.label]
-        found = extract_fields(document, {name: spec}, aliases=aliases).fields[name]
+        found = extract_fields(
+            document,
+            {name: spec},
+            aliases=aliases,
+            date_formats={k: v for k, v in self.date_formats.items() if k == name},
+        ).fields[name]
         if found.error or found.value is None:
             return None
         return str(found.value)

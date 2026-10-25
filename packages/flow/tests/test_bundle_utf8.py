@@ -13,6 +13,8 @@ import sys
 import textwrap
 from pathlib import Path
 
+import pytest
+
 from openadapt_flow.ir import ActionKind, Step, Workflow
 
 NAME = "Überweisung – 患者 ✓"
@@ -32,6 +34,7 @@ def test_non_ascii_bundle_round_trips(tmp_path: Path) -> None:
     assert NAME in (bundle / "workflow.json").read_text(encoding="utf-8")
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="needs a POSIX C locale")
 def test_bundle_round_trips_under_a_non_utf8_locale(tmp_path: Path) -> None:
     """Save and load in a child whose default text encoding is ASCII."""
 

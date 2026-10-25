@@ -864,7 +864,8 @@ def test_revert_from_the_phone_portal(mockmed, keys, tmp_path) -> None:
     [
         ("", "", "the control has no readable label"),
         ("Void encounter", "Void encounter", "the control reads as 'void'"),
-        ("Sign note", "Sign note", "the control reads as 'sign'"),
+        # "Sign" is a write verb (openadapt_flow.risk), so the relabel adds one.
+        ("Sign note", "Sign note", "the repair adds a save"),
     ],
     ids=["unlabeled", "void", "sign"],
 )
@@ -971,3 +972,7 @@ def test_a_rollback_by_any_route_holds_the_step(mockmed, keys, tmp_path) -> None
 
     clear_hold(store_root, "triage", "step_001", by="ops-lead")
     assert hold_reason(store_root, "triage", "step_001") is None
+
+
+# Every person in these tests signs with a registered approver key.
+pytestmark = pytest.mark.usefixtures("approver")

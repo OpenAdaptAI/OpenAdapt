@@ -1,0 +1,3225 @@
+{
+  "schema": "openadapt.stop-queue-drill/v1",
+  "selection": "the first 20 stops the soak's operator handled, in order",
+  "source": "/private/tmp/claude-501/-Users-abrichr-oa-src-OpenAdapt--claude-worktrees-exciting-keller-2a43e5/9f57cffd-1c29-4ef9-8d69-39b3e53e9c48/scratchpad/soak/after",
+  "stops": [
+    {
+      "card": {
+        "batch_key": "same_record:openemr-referral:duplicate",
+        "card_id": "sha256:cc33bf4e44d4081110ebcffeb42a8b4b30814ff1044b8f1d1e53e182987a26f8",
+        "choices": [
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "same",
+            "label": "Same person: don't add it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person. OpenAdapt saves nothing.",
+            "id": "different_by_hand",
+            "label": "Different person: I entered it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": false,
+                  "value": "1941-02-27"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": false,
+                  "value": "Ana"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": true,
+                  "value": "Fairwick"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": false,
+                  "value": "Male"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": false,
+                  "value": "276 QUARRY HILL DRIVE"
+                }
+              ],
+              "text": "1941-02-27, Ana, Fairwick, Male, 276 QUARRY HILL DRIVE"
+            }
+          ],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "HALTED_BEFORE_EFFECT: Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: no_duplicate_candidate (no listed row has this run's lname, DOB) \u2014 run aborted",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "1957-03-08"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "bram.fairwick.2@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Bram"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Fairwick"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0162"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Female"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "339 STREET CEDAR ROW"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Ms."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "same_record",
+        "label": "Referral ref-00002",
+        "question": "Same person?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00002",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving: the app may already have this record. Compare the item with what the app shows.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "clean",
+      "expected": [
+        "different_by_hand"
+      ],
+      "hard": true,
+      "item_id": "ref-00002",
+      "rationale": "a new referral; register it",
+      "soak_operator": {
+        "action": "do_by_hand",
+        "charged_s": 300.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "enter_by_hand"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "same_record:openemr-referral:duplicate",
+        "card_id": "sha256:66d2ee010980f83d0103ab6d43b6563b446a8840f43da3e47ca89926672894f9",
+        "choices": [
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "same",
+            "label": "Same person: don't add it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person. OpenAdapt saves nothing.",
+            "id": "different_by_hand",
+            "label": "Different person: I entered it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": true,
+                  "value": "1943-01-24"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": false,
+                  "value": "Arlo"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": false,
+                  "value": "Jesston"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": false,
+                  "value": "Male"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": false,
+                  "value": "361 BEACON TERRACE STATION"
+                }
+              ],
+              "text": "1943-01-24, Arlo, Jesston, Male, 361 BEACON TERRACE STATION"
+            }
+          ],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "HALTED_BEFORE_EFFECT: Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: no_duplicate_candidate (no listed row has this run's lname, DOB) \u2014 run aborted",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "1943-01-24"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "rafael.caldley.5@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Rafael"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Caldley"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0100"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Female"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "176 WILLOW BEND ROAD"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Ms."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "same_record",
+        "label": "Referral ref-00005",
+        "question": "Same person?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00005",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving: the app may already have this record. Compare the item with what the app shows.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "shared_dob",
+      "expected": [
+        "different_by_hand"
+      ],
+      "hard": true,
+      "item_id": "ref-00005",
+      "rationale": "born on the same day as an existing chart; a different person",
+      "soak_operator": {
+        "action": "do_by_hand",
+        "charged_s": 300.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "enter_by_hand"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "confirm_save:openemr-referral:save_not_confirmed",
+        "card_id": "sha256:3be6c34c3a8c4af90e44a06a4a0ea4f31fdf9398e8af45b878e3775f5f13dee5",
+        "choices": [
+          {
+            "consequence": "The item closes as saved.",
+            "id": "saved",
+            "label": "I checked: it saved correctly"
+          },
+          {
+            "consequence": "OpenAdapt runs the item again, with every check.",
+            "id": "not_saved_retry",
+            "label": "I checked: nothing saved, run it again"
+          },
+          {
+            "consequence": "The item closes as done by a person.",
+            "id": "fixed_by_hand",
+            "label": "I fixed it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "RECONCILIATION_REQUIRED: System-of-record effect verification HALTED step 'step_040' (click 'Confirm Create New Patient'): exact_new_set refuted against the rest system of record (the screen indicated completion but the declared outcome is contradicted or unverifiable) \u2014 declared new record {DOB=04/",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "04/20/1944"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "priya.marwell.6@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Priya"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Marwell"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0144"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Female"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "194 LANTERN COURT FERRY"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Mrs."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "confirm_save",
+        "label": "Referral ref-00006",
+        "question": "Did it save?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00006",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "The save may have gone through, but OpenAdapt couldn't confirm it. Look at the record, then say what you found.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "malformed_dob",
+      "expected": [
+        "fixed_by_hand"
+      ],
+      "hard": true,
+      "item_id": "ref-00006",
+      "rationale": "date of birth written MM/DD/YYYY; the true date is ISO",
+      "soak_operator": {
+        "action": "do_by_hand",
+        "charged_s": 330.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "fix_wrong_chart_by_hand"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "halted:openemr-referral:screen_changed",
+        "card_id": "sha256:e2bc55b85e96202eca674b94179f903c388eb0a4400f17b3daaa4f47cce49fa2",
+        "choices": [
+          {
+            "consequence": "OpenAdapt runs the item again, with every check. Nothing was saved.",
+            "id": "retry",
+            "label": "Run it again"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "skip",
+            "label": "Skip it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person.",
+            "id": "by_hand",
+            "label": "I did it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "REJECTED_POLICY: ",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "bo.jessby.8@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Bo"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Jessby"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0188"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Male"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "107 AVENUE MILL ROAD"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Mr."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "halted",
+        "label": "Referral ref-00008",
+        "question": "What should happen to this item?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00008",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving. Nothing was written.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "missing_required",
+      "expected": [
+        "decline",
+        "skip"
+      ],
+      "hard": false,
+      "item_id": "ref-00008",
+      "rationale": "no date of birth; return the referral to the sender",
+      "soak_operator": {
+        "action": "skip",
+        "charged_s": 120.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "skip_no_chart_wanted"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "same_record:openemr-referral:duplicate",
+        "card_id": "sha256:bed39c02e37d72fc597ee09cfcf63fc12bf3d10048c3f47bf936deee947eb77c",
+        "choices": [
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "same",
+            "label": "Same person: don't add it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person. OpenAdapt saves nothing.",
+            "id": "different_by_hand",
+            "label": "Different person: I entered it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": true,
+                  "value": "1979-06-03"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": true,
+                  "value": "Anouk"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": true,
+                  "value": "Langstead"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": true,
+                  "value": "Male"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": true,
+                  "value": "114 QUARRY HILL DRIVE"
+                }
+              ],
+              "text": "1979-06-03, Anouk, Langstead, Male, 114 QUARRY HILL DRIVE"
+            }
+          ],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "HALTED_BEFORE_EFFECT: Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: no_duplicate_candidate (no listed row has this run's lname, DOB) \u2014 run aborted",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "1979-06-03"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "anouk.langstead.12@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Anouk"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Langstead"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0160"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Male"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "114 QUARRY HILL DRIVE"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Mr."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "same_record",
+        "label": "Referral ref-00012",
+        "question": "Same person?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00012",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving: the app may already have this record. Compare the item with what the app shows.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "concurrent_same",
+      "expected": [
+        "decline",
+        "same"
+      ],
+      "hard": false,
+      "item_id": "ref-00012",
+      "rationale": "another clerk registered this patient moments earlier",
+      "soak_operator": {
+        "action": "skip",
+        "charged_s": 120.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "skip_no_chart_wanted"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "confirm_save:openemr-referral:save_not_confirmed",
+        "card_id": "sha256:08d47c4b1be98d4c1ae4c120ad5cd3349f1444b6698680ad3050084d33ded9f1",
+        "choices": [
+          {
+            "consequence": "The item closes as saved.",
+            "id": "saved",
+            "label": "I checked: it saved correctly"
+          },
+          {
+            "consequence": "OpenAdapt runs the item again, with every check.",
+            "id": "not_saved_retry",
+            "label": "I checked: nothing saved, run it again"
+          },
+          {
+            "consequence": "The item closes as done by a person.",
+            "id": "fixed_by_hand",
+            "label": "I fixed it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "RECONCILIATION_REQUIRED: System-of-record effect verification HALTED step 'step_040' (click 'Confirm Create New Patient'): exact_new_set refuted against the rest system of record (the screen indicated completion but the declared outcome is contradicted or unverifiable) \u2014 declared new record {DOB=10/",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "10/01/1958"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "fergus.ashbrook.19@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Fergus"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Ashbrook"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0118"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Male"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "399 LANTERN COURT FERRY"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Mr."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "confirm_save",
+        "label": "Referral ref-00019",
+        "question": "Did it save?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00019",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "The save may have gone through, but OpenAdapt couldn't confirm it. Look at the record, then say what you found.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "malformed_dob",
+      "expected": [
+        "fixed_by_hand"
+      ],
+      "hard": true,
+      "item_id": "ref-00019",
+      "rationale": "date of birth written MM/DD/YYYY; the true date is ISO",
+      "soak_operator": {
+        "action": "do_by_hand",
+        "charged_s": 330.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "fix_wrong_chart_by_hand"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "same_record:openemr-referral:duplicate",
+        "card_id": "sha256:83c816b5eade946084dc13f8dd058800130e5316063739ae9e0a0dc5538c8f34",
+        "choices": [
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "same",
+            "label": "Same person: don't add it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person. OpenAdapt saves nothing.",
+            "id": "different_by_hand",
+            "label": "Different person: I entered it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": true,
+                  "value": "1996-11-12"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": true,
+                  "value": "Odile"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": true,
+                  "value": "Quenwood"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": true,
+                  "value": "Female"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": true,
+                  "value": "411 QUARRY HILL DRIVE"
+                }
+              ],
+              "text": "1996-11-12, Odile, Quenwood, Female, 411 QUARRY HILL DRIVE"
+            }
+          ],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "HALTED_BEFORE_EFFECT: Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: no_duplicate_candidate (no listed row has this run's lname, DOB) \u2014 run aborted",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "1996-11-12"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "odile.quenwood.13@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Odile"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Quenwood"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0149"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Female"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "411 QUARRY HILL DRIVE"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Ms."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "same_record",
+        "label": "Referral ref-00021",
+        "question": "Same person?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00021",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving: the app may already have this record. Compare the item with what the app shows.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "dup_resend",
+      "expected": [
+        "decline",
+        "same"
+      ],
+      "hard": false,
+      "item_id": "ref-00021",
+      "rationale": "a resend of ref-00013",
+      "soak_operator": {
+        "action": "skip",
+        "charged_s": 120.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "skip_no_chart_wanted"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "same_record:openemr-referral:duplicate",
+        "card_id": "sha256:3e9b7dfe8fcfa8102d7ebe24ea3f7598adcf7d45f46fa4a05c422a0e2e901855",
+        "choices": [
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "same",
+            "label": "Same person: don't add it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person. OpenAdapt saves nothing.",
+            "id": "different_by_hand",
+            "label": "Different person: I entered it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": false,
+                  "value": "1937-08-12"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": true,
+                  "value": "Ida"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": true,
+                  "value": "Norwick"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": true,
+                  "value": "Male"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": true,
+                  "value": "88 QUARRY HILL DRIVE"
+                }
+              ],
+              "text": "1937-08-12, Ida, Norwick, Male, 88 QUARRY HILL DRIVE"
+            }
+          ],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "HALTED_BEFORE_EFFECT: Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: no_duplicate_candidate (no listed row has this run's lname, DOB) \u2014 run aborted",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "1937-08-13"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "ida.norwick.9010@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Ida"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Norwick"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0107"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Male"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "88 QUARRY HILL DRIVE"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Mr."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "same_record",
+        "label": "Referral ref-00024",
+        "question": "Same person?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00024",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving: the app may already have this record. Compare the item with what the app shows.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "ambiguous_same_person",
+      "expected": [
+        "decline",
+        "same"
+      ],
+      "hard": false,
+      "item_id": "ref-00024",
+      "rationale": "same person as an existing chart; the date of birth has a typo",
+      "soak_operator": {
+        "action": "skip",
+        "charged_s": 120.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "skip_no_chart_wanted"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "confirm_save:openemr-referral:save_not_confirmed",
+        "card_id": "sha256:588ff23b826be96c4ae4ba889511ff2f7cb24801a6a913acd922f455a2aef228",
+        "choices": [
+          {
+            "consequence": "The item closes as saved.",
+            "id": "saved",
+            "label": "I checked: it saved correctly"
+          },
+          {
+            "consequence": "OpenAdapt runs the item again, with every check.",
+            "id": "not_saved_retry",
+            "label": "I checked: nothing saved, run it again"
+          },
+          {
+            "consequence": "The item closes as done by a person.",
+            "id": "fixed_by_hand",
+            "label": "I fixed it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "RECONCILIATION_REQUIRED: System-of-record effect verification HALTED step 'step_040' (click 'Save new patient'): record_written refuted against the rest system of record (the screen indicated completion but the declared outcome is contradicted or unverifiable) \u2014 0 records match the target selector, ",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "1990-09-13"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "farida.hartbrook.26@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": " FARIDA "
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "HARTBROOK "
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0145"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Female"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "175 ORCHARD LANE HARBOR"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Ms."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "confirm_save",
+        "label": "Referral ref-00026",
+        "question": "Did it save?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00026",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "The save may have gone through, but OpenAdapt couldn't confirm it. Look at the record, then say what you found.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "malformed_case",
+      "expected": [
+        "saved"
+      ],
+      "hard": false,
+      "item_id": "ref-00026",
+      "rationale": "names in capitals with stray spaces",
+      "soak_operator": {
+        "action": "confirm_saved",
+        "charged_s": 120.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "chart_already_correct"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "same_record:openemr-referral:duplicate",
+        "card_id": "sha256:d447a65bcf072b62f7618d6fb0b83f2dd2b8eda2850a49ca6c05ee49b200f085",
+        "choices": [
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "same",
+            "label": "Same person: don't add it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person. OpenAdapt saves nothing.",
+            "id": "different_by_hand",
+            "label": "Different person: I entered it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": false,
+                  "value": "1975-06-23"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": false,
+                  "value": "Henrik"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": true,
+                  "value": "Birchmore"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": true,
+                  "value": "Female"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": false,
+                  "value": "181 WAY"
+                }
+              ],
+              "text": "1975-06-23, Henrik, Birchmore, Female, 181 WAY"
+            }
+          ],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "HALTED_BEFORE_EFFECT: Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: no_duplicate_candidate (no listed row has this run's lname, DOB) \u2014 run aborted",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "1978-09-15"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "jasper.birchmore.27@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Jasper"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Birchmore"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0142"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Female"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "227 WILLOW BEND ROAD"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Mrs."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "same_record",
+        "label": "Referral ref-00027",
+        "question": "Same person?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00027",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving: the app may already have this record. Compare the item with what the app shows.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "common_surname",
+      "expected": [
+        "different_by_hand"
+      ],
+      "hard": true,
+      "item_id": "ref-00027",
+      "rationale": "shares a last name with an existing chart; a different person",
+      "soak_operator": {
+        "action": "do_by_hand",
+        "charged_s": 300.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "enter_by_hand"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "same_record:openemr-referral:duplicate",
+        "card_id": "sha256:4a65c4105db3317d4e87b97b29de96b00bf2f9c5c8e09f8d77f996cfc3997802",
+        "choices": [
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "same",
+            "label": "Same person: don't add it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person. OpenAdapt saves nothing.",
+            "id": "different_by_hand",
+            "label": "Different person: I entered it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": true,
+                  "value": "1986-03-18"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": true,
+                  "value": "Wen"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": true,
+                  "value": "Oakwell"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": true,
+                  "value": "Male"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": true,
+                  "value": "472 WAY"
+                }
+              ],
+              "text": "1986-03-18, Wen, Oakwell, Male, 472 WAY"
+            }
+          ],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "HALTED_BEFORE_EFFECT: Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: no_duplicate_candidate (no listed row has this run's lname, DOB) \u2014 run aborted",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "1986-03-18"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "wen.oakwell.29@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Wen"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Oakwell"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0111"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Male"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "472 WAY"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Mr."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "same_record",
+        "label": "Referral ref-00029",
+        "question": "Same person?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00029",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving: the app may already have this record. Compare the item with what the app shows.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "concurrent_same",
+      "expected": [
+        "decline",
+        "same"
+      ],
+      "hard": false,
+      "item_id": "ref-00029",
+      "rationale": "another clerk registered this patient moments earlier",
+      "soak_operator": {
+        "action": "skip",
+        "charged_s": 120.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "skip_no_chart_wanted"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "same_record:openemr-referral:duplicate",
+        "card_id": "sha256:f5afc01f6c4aea47875533fffd430555590c12be26cd50edd0027287c005f571",
+        "choices": [
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "same",
+            "label": "Same person: don't add it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person. OpenAdapt saves nothing.",
+            "id": "different_by_hand",
+            "label": "Different person: I entered it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": false,
+                  "value": "1943-01-24"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": false,
+                  "value": "Arlo"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": true,
+                  "value": "Jesston"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": true,
+                  "value": "Male"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": false,
+                  "value": "361 BEACON TERRACE STATION"
+                }
+              ],
+              "text": "1943-01-24, Arlo, Jesston, Male, 361 BEACON TERRACE STATION"
+            }
+          ],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "HALTED_BEFORE_EFFECT: Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: no_duplicate_candidate (no listed row has this run's lname, DOB) \u2014 run aborted",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "1944-05-01"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "hollis.jesston.30@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Hollis"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Jesston"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0110"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Male"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "326 QUARRY HILL DRIVE"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Mr."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "same_record",
+        "label": "Referral ref-00030",
+        "question": "Same person?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00030",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving: the app may already have this record. Compare the item with what the app shows.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "common_surname",
+      "expected": [
+        "different_by_hand"
+      ],
+      "hard": true,
+      "item_id": "ref-00030",
+      "rationale": "shares a last name with an existing chart; a different person",
+      "soak_operator": {
+        "action": "do_by_hand",
+        "charged_s": 300.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "enter_by_hand"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "halted:openemr-referral:screen_changed",
+        "card_id": "sha256:dde30b98d79e7a226be74039395fb601d98432dc7a9f0c449a36761e061a3535",
+        "choices": [
+          {
+            "consequence": "OpenAdapt runs the item again, with every check. Nothing was saved.",
+            "id": "retry",
+            "label": "Run it again"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "skip",
+            "label": "Skip it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person.",
+            "id": "by_hand",
+            "label": "I did it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "REJECTED_POLICY: ",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "1955-05-02"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "ilse.iverswick.32@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Ilse"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Iverswick"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": ""
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Female"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "94 STREET CEDAR ROW"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Mrs."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "halted",
+        "label": "Referral ref-00032",
+        "question": "What should happen to this item?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00032",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving. Nothing was written.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "missing_optional",
+      "expected": [
+        "by_hand"
+      ],
+      "hard": false,
+      "item_id": "ref-00032",
+      "rationale": "no home phone; register without one",
+      "soak_operator": {
+        "action": "do_by_hand",
+        "charged_s": 300.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "enter_by_hand"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "same_record:openemr-referral:duplicate",
+        "card_id": "sha256:bdab6627899547c780f0db6d81112ef283e3460d989977d4017dfa6592ce1238",
+        "choices": [
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "same",
+            "label": "Same person: don't add it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person. OpenAdapt saves nothing.",
+            "id": "different_by_hand",
+            "label": "Different person: I entered it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": false,
+                  "value": "1941-02-27"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": false,
+                  "value": "Ana"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": true,
+                  "value": "Fairwick"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": true,
+                  "value": "Male"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": false,
+                  "value": "276 QUARRY HILL DRIVE"
+                }
+              ],
+              "text": "1941-02-27, Ana, Fairwick, Male, 276 QUARRY HILL DRIVE"
+            },
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": false,
+                  "value": "1957-03-08"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": false,
+                  "value": "Bram"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": true,
+                  "value": "Fairwick"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": false,
+                  "value": "Female"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": false,
+                  "value": "339 STREET CEDAR ROW"
+                }
+              ],
+              "text": "1957-03-08, Bram, Fairwick, Female, 339 STREET CEDAR ROW"
+            }
+          ],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "HALTED_BEFORE_EFFECT: Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: no_duplicate_candidate (no listed row has this run's lname, DOB) \u2014 run aborted",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "1999-11-06"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "odile.fairwick.33@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Odile"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Fairwick"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0132"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Male"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "140 AVENUE MILL ROAD"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Mr."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "same_record",
+        "label": "Referral ref-00033",
+        "question": "Same person?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00033",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving: the app may already have this record. Compare the item with what the app shows.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "common_surname",
+      "expected": [
+        "different_by_hand"
+      ],
+      "hard": true,
+      "item_id": "ref-00033",
+      "rationale": "shares a last name with an existing chart; a different person",
+      "soak_operator": {
+        "action": "do_by_hand",
+        "charged_s": 300.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "enter_by_hand"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "same_record:openemr-referral:duplicate",
+        "card_id": "sha256:bcb25bbb2f544e033e11ad8f3f535138d85659ec38001e168f88dec9a1532e31",
+        "choices": [
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "same",
+            "label": "Same person: don't add it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person. OpenAdapt saves nothing.",
+            "id": "different_by_hand",
+            "label": "Different person: I entered it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": true,
+                  "value": "1937-08-12"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": true,
+                  "value": "Ida"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": true,
+                  "value": "Norwick"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": true,
+                  "value": "Male"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": true,
+                  "value": "88 QUARRY HILL DRIVE"
+                }
+              ],
+              "text": "1937-08-12, Ida, Norwick, Male, 88 QUARRY HILL DRIVE"
+            }
+          ],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "HALTED_BEFORE_EFFECT: Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: no_duplicate_candidate (no listed row has this run's lname, DOB) \u2014 run aborted",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "1937-08-12"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "ida.norwick.9010@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Ida"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Norwick"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0107"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Male"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "88 QUARRY HILL DRIVE"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Mr."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "same_record",
+        "label": "Referral ref-00034",
+        "question": "Same person?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00034",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving: the app may already have this record. Compare the item with what the app shows.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "dup_existing",
+      "expected": [
+        "decline",
+        "same"
+      ],
+      "hard": false,
+      "item_id": "ref-00034",
+      "rationale": "this patient already has a chart",
+      "soak_operator": {
+        "action": "skip",
+        "charged_s": 120.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "skip_no_chart_wanted"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "same_record:openemr-referral:duplicate",
+        "card_id": "sha256:ef330b5c8011fc21e0afa85da1f8c30ec89896e58f965b0d3b376978fb1a0eb8",
+        "choices": [
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "same",
+            "label": "Same person: don't add it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person. OpenAdapt saves nothing.",
+            "id": "different_by_hand",
+            "label": "Different person: I entered it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": false,
+                  "value": "1972-07-05"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": false,
+                  "value": "Bram"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": true,
+                  "value": "Birchfield"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": false,
+                  "value": "Female"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": false,
+                  "value": "278 QUARRY HILL DRIVE"
+                }
+              ],
+              "text": "1972-07-05, Bram, Birchfield, Female, 278 QUARRY HILL DRIVE"
+            }
+          ],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "HALTED_BEFORE_EFFECT: Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: no_duplicate_candidate (no listed row has this run's lname, DOB) \u2014 run aborted",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "1958-03-09"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "dmitri.birchfield.38@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Dmitri"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Birchfield"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0146"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Male"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "230 WILLOW BEND ROAD"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Mr."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "same_record",
+        "label": "Referral ref-00038",
+        "question": "Same person?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00038",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving: the app may already have this record. Compare the item with what the app shows.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "slow_save",
+      "expected": [
+        "different_by_hand"
+      ],
+      "hard": true,
+      "item_id": "ref-00038",
+      "rationale": "the save is slow",
+      "soak_operator": {
+        "action": "do_by_hand",
+        "charged_s": 300.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "enter_by_hand"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "same_record:openemr-referral:duplicate",
+        "card_id": "sha256:27e73f168b1b3a3edebd851bbd0ca9944ccb6104b5a998e33d20062810c4bda3",
+        "choices": [
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "same",
+            "label": "Same person: don't add it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person. OpenAdapt saves nothing.",
+            "id": "different_by_hand",
+            "label": "Different person: I entered it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": true,
+                  "value": "1950-04-21"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": false,
+                  "value": "Rosalind"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": false,
+                  "value": "Oakwood"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": true,
+                  "value": "Female"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": false,
+                  "value": "323 WILLOW BEND ROAD"
+                }
+              ],
+              "text": "1950-04-21, Rosalind, Oakwood, Female, 323 WILLOW BEND ROAD"
+            },
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": false,
+                  "value": "1990-09-09"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": false,
+                  "value": "Rosalind"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": true,
+                  "value": "Jesswood"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": true,
+                  "value": "Female"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": false,
+                  "value": "363 ORCHARD LANE HARBOR"
+                }
+              ],
+              "text": "1990-09-09, Rosalind, Jesswood, Female, 363 ORCHARD LANE HARBOR"
+            }
+          ],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "HALTED_BEFORE_EFFECT: Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: no_duplicate_candidate (no listed row has this run's lname, DOB) \u2014 run aborted",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "1950-04-21"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "mateo.jesswood.40@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Mateo"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Jesswood"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0111"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Female"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "4 QUARRY HILL DRIVE"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Mrs."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "same_record",
+        "label": "Referral ref-00040",
+        "question": "Same person?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00040",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving: the app may already have this record. Compare the item with what the app shows.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "shared_dob",
+      "expected": [
+        "different_by_hand"
+      ],
+      "hard": true,
+      "item_id": "ref-00040",
+      "rationale": "born on the same day as an existing chart; a different person",
+      "soak_operator": {
+        "action": "do_by_hand",
+        "charged_s": 300.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "enter_by_hand"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "same_record:openemr-referral:duplicate",
+        "card_id": "sha256:79812f6020f1722dc41eb3407614e681b595dff6921fe9cedf52791510b8e21f",
+        "choices": [
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "same",
+            "label": "Same person: don't add it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person. OpenAdapt saves nothing.",
+            "id": "different_by_hand",
+            "label": "Different person: I entered it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": true,
+                  "value": "1966-07-13"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": false,
+                  "value": "Odile"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": false,
+                  "value": "Jessmere"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": true,
+                  "value": "Female"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": false,
+                  "value": "471 WAY"
+                }
+              ],
+              "text": "1966-07-13, Odile, Jessmere, Female, 471 WAY"
+            }
+          ],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "HALTED_BEFORE_EFFECT: Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: no_duplicate_candidate (no listed row has this run's lname, DOB) \u2014 run aborted",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "1966-07-13"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "ines.norwell.41@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Ines"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Norwell"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0184"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Female"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "121 QUARRY HILL DRIVE"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Ms."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "same_record",
+        "label": "Referral ref-00041",
+        "question": "Same person?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00041",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving: the app may already have this record. Compare the item with what the app shows.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "shared_dob",
+      "expected": [
+        "different_by_hand"
+      ],
+      "hard": true,
+      "item_id": "ref-00041",
+      "rationale": "born on the same day as an existing chart; a different person",
+      "soak_operator": {
+        "action": "do_by_hand",
+        "charged_s": 300.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "enter_by_hand"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "same_record:openemr-referral:duplicate",
+        "card_id": "sha256:04cdb4c2055b08ff164a63ba73008aaec24dde4aff7c825d6150272d021b77b6",
+        "choices": [
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "same",
+            "label": "Same person: don't add it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person. OpenAdapt saves nothing.",
+            "id": "different_by_hand",
+            "label": "Different person: I entered it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": false,
+                  "value": "1958-10-01"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": true,
+                  "value": "Fergus"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": true,
+                  "value": "Ashbrook"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": true,
+                  "value": "Male"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": true,
+                  "value": "399 LANTERN COURT FERRY"
+                }
+              ],
+              "text": "1958-10-01, Fergus, Ashbrook, Male, 399 LANTERN COURT FERRY"
+            }
+          ],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "HALTED_BEFORE_EFFECT: Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: no_duplicate_candidate (no listed row has this run's lname, DOB) \u2014 run aborted",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "10/01/1958"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "fergus.ashbrook.19@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Fergus"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Ashbrook"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0118"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Male"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "399 LANTERN COURT FERRY"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Mr."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "same_record",
+        "label": "Referral ref-00044",
+        "question": "Same person?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00044",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving: the app may already have this record. Compare the item with what the app shows.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "dup_resend",
+      "expected": [
+        "decline",
+        "same"
+      ],
+      "hard": false,
+      "item_id": "ref-00044",
+      "rationale": "a resend of ref-00019",
+      "soak_operator": {
+        "action": "skip",
+        "charged_s": 120.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "skip_no_chart_wanted"
+      }
+    },
+    {
+      "card": {
+        "batch_key": "same_record:openemr-referral:duplicate",
+        "card_id": "sha256:84909b0fc3f1cb667a37051b52c2af0017eca4952335ccc9b3b47a6cb58629ed",
+        "choices": [
+          {
+            "consequence": "Nothing is saved. The item closes as skipped.",
+            "id": "same",
+            "label": "Same person: don't add it"
+          },
+          {
+            "consequence": "Nothing is saved. The item closes as declined.",
+            "id": "decline",
+            "label": "This item shouldn't be done"
+          },
+          {
+            "consequence": "The item closes as done by a person. OpenAdapt saves nothing.",
+            "id": "different_by_hand",
+            "label": "Different person: I entered it by hand"
+          },
+          {
+            "consequence": "Nothing changes. The stop stays in the queue.",
+            "id": "leave",
+            "label": "Not sure, leave it"
+          }
+        ],
+        "created_at": null,
+        "evidence": {
+          "candidates": [
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": true,
+                  "value": "1959-06-04"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": true,
+                  "value": "Gideon"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": true,
+                  "value": "Galwick"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": true,
+                  "value": "Female"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": true,
+                  "value": "282 QUARRY HILL DRIVE"
+                }
+              ],
+              "text": "1959-06-04, Gideon, Galwick, Female, 282 QUARRY HILL DRIVE"
+            },
+            {
+              "fields": [
+                {
+                  "field": "DOB",
+                  "label": "DOB",
+                  "same": false,
+                  "value": "1945-10-10"
+                },
+                {
+                  "field": "fname",
+                  "label": "Fname",
+                  "same": false,
+                  "value": "Yuki"
+                },
+                {
+                  "field": "lname",
+                  "label": "Lname",
+                  "same": true,
+                  "value": "Galwick"
+                },
+                {
+                  "field": "sex",
+                  "label": "Sex",
+                  "same": true,
+                  "value": "Female"
+                },
+                {
+                  "field": "street",
+                  "label": "Street",
+                  "same": false,
+                  "value": "270 WAY"
+                }
+              ],
+              "text": "1945-10-10, Yuki, Galwick, Female, 270 WAY"
+            }
+          ],
+          "differences": [],
+          "expected": "",
+          "observed": "",
+          "reason": "HALTED_BEFORE_EFFECT: Postconditions failed for step 'step_039' (click 'Create New Patient'): expected screen state not reached (semantic drift) \u2014 failed: no_duplicate_candidate (no listed row has this run's lname, DOB) \u2014 run aborted",
+          "record": [],
+          "screenshot": null,
+          "source": [
+            {
+              "field": "DOB",
+              "label": "DOB",
+              "value": "1959-06-04"
+            },
+            {
+              "field": "city",
+              "label": "City",
+              "value": "EXAMPLETON"
+            },
+            {
+              "field": "country_code",
+              "label": "Country code",
+              "value": "USA"
+            },
+            {
+              "field": "email",
+              "label": "Email",
+              "value": "gideon.galwick.9004@example.invalid"
+            },
+            {
+              "field": "fname",
+              "label": "Fname",
+              "value": "Gideon"
+            },
+            {
+              "field": "lname",
+              "label": "Lname",
+              "value": "Galwick"
+            },
+            {
+              "field": "phone_home",
+              "label": "Phone home",
+              "value": "555-0179"
+            },
+            {
+              "field": "postal_code",
+              "label": "Postal code",
+              "value": "02139"
+            },
+            {
+              "field": "sex",
+              "label": "Sex",
+              "value": "Female"
+            },
+            {
+              "field": "state_label",
+              "label": "State label",
+              "value": "Massachusetts"
+            },
+            {
+              "field": "street",
+              "label": "Street",
+              "value": "282 QUARRY HILL DRIVE"
+            },
+            {
+              "field": "title",
+              "label": "Title",
+              "value": "Ms."
+            }
+          ],
+          "step": ""
+        },
+        "expires_at": null,
+        "kind": "same_record",
+        "label": "Referral ref-00045",
+        "question": "Same person?",
+        "schema": "openadapt.desktop-stop-card/v1",
+        "source": {
+          "id": "ref-00045",
+          "run_id": null,
+          "type": "item"
+        },
+        "status": "open",
+        "summary": "OpenAdapt stopped before saving: the app may already have this record. Compare the item with what the app shows.",
+        "task_name": "New patient referral",
+        "workflow_id": "openemr-referral"
+      },
+      "exception": "dup_existing",
+      "expected": [
+        "decline",
+        "same"
+      ],
+      "hard": false,
+      "item_id": "ref-00045",
+      "rationale": "this patient already has a chart",
+      "soak_operator": {
+        "action": "skip",
+        "charged_s": 120.0,
+        "cost_model": "lifecycle-cost/2026-10-20.1",
+        "rule": "skip_no_chart_wanted"
+      }
+    }
+  ]
+}

@@ -33,6 +33,7 @@ from openadapt_desktop.portal.flow_client import (
 )
 from openadapt_desktop.portal.ingress import PortalIngress
 from openadapt_desktop.portal.pairing import DevicePairingStore, DeviceSession, PairingRefused
+from openadapt_desktop.portal.stops import StopQueueBackend
 
 SHELL_DIR = Path(__file__).parent / "shell"
 
@@ -50,6 +51,8 @@ SHELL_ASSETS: dict[str, tuple[str, str]] = {
         "application/manifest+json; charset=utf-8",
     ),
     "/sw.js": ("shell/sw.js", "application/javascript; charset=utf-8"),
+    "/stops.js": ("shell/stops.js", "application/javascript; charset=utf-8"),
+    "/stops.css": ("shell/stops.css", "text/css; charset=utf-8"),
 }
 
 _MAX_BODY_BYTES = 16 * 1024
@@ -84,6 +87,30 @@ _ROUTE_SAVE_ACTION = re.compile(
     rf"^/api/portal/save-approvals/(?P<request_id>{_REQUEST_ID})"
     rf"/actions/(?P<action_id>{_ACTION_ID})$"
 )
+
+# The stop-review queue (openadapt_desktop/portal/stops.py). A card id is
+# ``sha256:<hex>``; the path carries the hex only.
+_CARD_HEX = r"[0-9a-f]{64}"
+_CARD_ID = re.compile(r"^sha256:[0-9a-f]{64}$")
+_ROUTE_STOPS = re.compile(r"^/api/portal/stops$")
+_ROUTE_STOPS_BATCH = re.compile(r"^/api/portal/stops/answer$")
+_ROUTE_STOP_SCREENSHOT = re.compile(
+    rf"^/api/portal/stops/(?P<card>{_CARD_HEX})/screenshot$"
+)
+_ROUTE_STOP_ANSWER = re.compile(rf"^/api/portal/stops/(?P<card>{_CARD_HEX})/answer$")
+_CHOICE_ID = re.compile(r"^[a-z][a-z_]{0,39}$")
+_MAX_STOP_BATCH = 25
+
+#: The dispatcher's refusal codes, as HTTP statuses. The body carries the code.
+_STOP_REFUSAL_STATUS = {
+    "card_changed": 409,
+    "use_approval": 409,
+    "answer_on_computer": 409,
+    "choice_not_offered": 422,
+    "approver_key_missing": 503,
+    "approver_key_unusable": 503,
+    "busy": 503,
+}
 
 _SECURITY_HEADERS = {
     "Content-Security-Policy": (
@@ -121,10 +148,13 @@ class PortalApp:
         ingress: PortalIngress,
         pairings: DevicePairingStore,
         flow: FlowConsoleClient | None,
+        *,
+        stops: StopQueueBackend | None = None,
     ) -> None:
         self.ingress = ingress
         self.pairings = pairings
         self.flow = flow
+        self.stops = stops
 
     # -------------------------------------------------------------- responses
 
@@ -154,11 +184,11 @@ class PortalApp:
             headers["Service-Worker-Allowed"] = "/"
         return 200, headers, body
 
-    def _shell(self) -> tuple[int, dict[str, str], bytes]:
+    def _shell(self, page: str = "index.html") -> tuple[int, dict[str, str], bytes]:
         headers = {"Content-Type": "text/html; charset=utf-8"}
         headers.update(_SECURITY_HEADERS)
         headers["Cache-Control"] = "no-cache"
-        return 200, headers, (SHELL_DIR / "index.html").read_bytes()
+        return 200, headers, (SHELL_DIR / page).read_bytes()
 
     # ----------------------------------------------------------------- policy
 
@@ -219,6 +249,10 @@ class PortalApp:
 
         if method == "GET" and path in ("/", "/pair"):
             return self._shell()
+        if method == "GET" and path == "/stops":
+            # The page only. Every card it shows comes from an authenticated
+            # route below.
+            return self._shell("stops.html")
         if method == "GET" and path in SHELL_ASSETS:
             return self._asset(path)
 
@@ -244,6 +278,9 @@ class PortalApp:
                     "public_origin": self.ingress.public_origin,
                 },
             )
+
+        if path == "/api/portal/stops" or path.startswith("/api/portal/stops/"):
+            return self._stops_route(method, path, headers, body, session)
 
         if method == "GET" and _ROUTE_TASKS.fullmatch(path):
             return self._relay("tasks")
@@ -304,6 +341,115 @@ class PortalApp:
             return self._relay("task_detail", run_id=run_id)
 
         return self._refusal(404, "not_found", "No such page.")
+
+    # ------------------------------------------------------------ stop queue
+
+    def _check_fetch_site(self, headers: Any) -> None:
+        """Refuse a read another site started.
+
+        A browser leaves ``Origin`` off a same-origin GET, so a read can't
+        require it. When either header is present, though, it must say this
+        portal.
+        """
+        origin = headers.get("origin")
+        if origin is not None and str(origin).rstrip("/") != self.ingress.public_origin:
+            raise PairingRefused("cross_origin", "That request came from another site.")
+        site = headers.get("sec-fetch-site")
+        if site is not None and str(site).lower() not in {"same-origin", "none"}:
+            raise PairingRefused("cross_origin", "That request came from another site.")
+
+    def _mutation_payload(
+        self, headers: Any, body: bytes, session: DeviceSession
+    ) -> tuple[dict | None, tuple[int, dict[str, str], bytes] | None]:
+        """The JSON body of a same-origin, CSRF-checked mutation, or a refusal."""
+        if len(body) > _MAX_BODY_BYTES:
+            return None, self._refusal(413, "bad_request", "Request body is too large.")
+        try:
+            self._check_origin(headers)
+        except PairingRefused as exc:
+            return None, self._refusal(403, exc.reason, str(exc))
+        content_type = str(headers.get("content-type", "") or "").lower()
+        if not content_type.startswith("application/json"):
+            return None, self._refusal(415, "bad_request", "Answers must be JSON.")
+        if not self.pairings.verify_csrf(
+            session, headers.get("x-openadapt-portal-csrf", "")
+        ):
+            return None, self._refusal(403, "csrf", "This session needs to pair again.")
+        try:
+            payload = json.loads(body or b"{}")
+        except ValueError:
+            return None, self._refusal(400, "bad_request", "Invalid request.")
+        if not isinstance(payload, dict):
+            return None, self._refusal(400, "bad_request", "Invalid request.")
+        return payload, None
+
+    def _stops_route(
+        self, method: str, path: str, headers: Any, body: bytes, session: DeviceSession
+    ):
+        """The stop-review queue. Every route here has a paired session."""
+        if self.stops is None:
+            return self._refusal(
+                503,
+                "stops_unavailable",
+                "The stop queue isn't available. Open OpenAdapt Desktop on the computer.",
+            )
+        if method == "GET":
+            try:
+                self._check_fetch_site(headers)
+            except PairingRefused as exc:
+                return self._refusal(403, exc.reason, str(exc))
+            if _ROUTE_STOPS.fullmatch(path):
+                return self._json(200, self.stops.list_cards())
+            shot = _ROUTE_STOP_SCREENSHOT.fullmatch(path)
+            if shot:
+                data = self.stops.screenshot("sha256:" + shot.group("card"))
+                if data is None:
+                    return self._refusal(404, "not_found", "This stop has no picture.")
+                image_headers = {"Content-Type": "image/png"}
+                image_headers.update(_SECURITY_HEADERS)
+                image_headers.update(_NO_STORE_HEADERS)
+                return 200, image_headers, data
+            return self._refusal(404, "not_found", "No such page.")
+        if method != "POST":
+            return self._refusal(404, "not_found", "No such page.")
+        single = _ROUTE_STOP_ANSWER.fullmatch(path)
+        if not single and not _ROUTE_STOPS_BATCH.fullmatch(path):
+            return self._refusal(404, "not_found", "No such page.")
+        payload, refused = self._mutation_payload(headers, body, session)
+        if refused is not None:
+            return refused
+        assert payload is not None
+        choice = payload.get("choice")
+        if not isinstance(choice, str) or not _CHOICE_ID.fullmatch(choice):
+            return self._refusal(400, "bad_request", "Choose one of the stop's answers.")
+        if single:
+            card_ids = ["sha256:" + single.group("card")]
+            raw_ms = payload.get("shown_ms")
+            shown_ms = (
+                {card_ids[0]: raw_ms} if isinstance(raw_ms, (int, float)) else None
+            )
+        else:
+            raw_ids = payload.get("card_ids")
+            if (
+                not isinstance(raw_ids, list)
+                or not 1 <= len(raw_ids) <= _MAX_STOP_BATCH
+                or not all(isinstance(c, str) and _CARD_ID.fullmatch(c) for c in raw_ids)
+            ):
+                return self._refusal(400, "bad_request", "Invalid list of stops.")
+            card_ids = list(raw_ids)
+            shown_ms = payload.get("shown_ms")
+        result = self.stops.answer(
+            card_ids,
+            choice,
+            shown_ms=shown_ms if isinstance(shown_ms, dict) else None,
+            # Which paired device answered. The session id is the handle the
+            # computer lists and revokes devices by; never the bearer token.
+            device={"id": session.session_id, "label": session.device_label},
+        )
+        status = 200
+        if not result.get("ok") and result.get("code"):
+            status = _STOP_REFUSAL_STATUS.get(str(result["code"]), 409)
+        return self._json(status, result)
 
     @staticmethod
     def _safe_run_id(value: str | None) -> str | None:
