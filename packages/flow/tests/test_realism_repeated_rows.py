@@ -367,8 +367,10 @@ def test_a_menu_of_unique_items_before_a_save_still_runs(
 # -- review regressions for #1569 ------------------------------------------------
 #
 # Look-alike rows that differ only in markup (an empty unread dot, an extra
-# class, a lone highlighted row, an MRN in a title or a hidden span) must still
-# be counted; section cards, nested cards and icon-only toolbars must not stop.
+# class, a lone highlighted row, an MRN in a title or a hidden span, a
+# differently labelled or hover-revealed action) must still be counted. Cards
+# headed by a visit type keep the patient in their identity. Section cards,
+# nested cards and icon-only toolbars must not stop.
 
 
 def _note(*_args: object) -> None:
@@ -394,6 +396,12 @@ function openChart(b) { open = b.dataset.chart;
 document.getElementById('sign').onclick = () => {
   document.getElementById('signed').textContent = 'Signed chart ' + open; };
 </script>"""
+
+
+_P_HOV = {
+    "hoveropacity": ".hov button{opacity:0} .hov:hover button{opacity:1}",
+    "hovervis": ".hov button{visibility:hidden} .hov:hover button{visibility:visible}",
+}
 
 
 def _p_btn(i, chart, label="Open"):
@@ -427,6 +435,23 @@ def _probe_page(q):
                 f'<div class="row-item"><span title="MRN {c}">&#9679;</span>'
                 f"{_P_TEXT[c]}{_p_btn(i, c)}</div>"
             )
+        elif s in ("labeldiff", "labelcase"):
+            lab = "Open"
+            if c == "1002":
+                lab = "Resume" if s == "labeldiff" else "OPEN"
+            rows.append(f'<div class="row-item">{_P_TEXT[c]}{_p_btn(i, c, lab)}</div>')
+        elif s in ("hoveropacity", "hovervis"):
+            rows.append(f'<div class="row-item hov">{_P_TEXT[c]}{_p_btn(i, c)}</div>')
+        elif s == "headingvisit":
+            visit, name = {
+                "1001": ("Follow-up", "John Smith"),
+                "1002": ("Physical", "John Smith"),
+                "1003": ("Intake", "Maria Garcia"),
+                "1004": ("Follow-up", "Ana Ruiz"),
+            }[c]
+            rows.append(
+                f'<article class="card"><h3>{visit}</h3><p>{name} with Dr Lee</p>{_p_btn(i, c)}</article>'
+            )
         elif s == "hidden":
             rows.append(
                 f'<div class="row-item">{_P_TEXT[c]}<span style="display:none">{c}</span>'
@@ -450,6 +475,13 @@ def _probe_page(q):
                 f'<button onclick="0">Open</button></div></section>'
             )
         body = "".join(cards)
+    if s == "perf":
+        n = int(q["n"][0])
+        body = "".join(
+            f'<div class="row-item"><span>Patient {k}</span><span>MRN {100000 + k}</span>'
+            f"<span>Dr Lee</span>{_p_btn(k, str(k))}</div>"
+            for k in range(n)
+        )
     if s == "icontoolbar":
         body = (
             '<div class="toolbar">'
@@ -482,6 +514,12 @@ def _probe_page(q):
                 zip(("Allergies", "Medications", "Problems"), data)
             )
         )
+        if q.get("empty"):
+            secs += (
+                '<div class="section"><div class="hdr"><span></span>'
+                '<a href="#" id="edit-9" onclick="return false">Edit</a></div>'
+                f'<div class="body">{pid} notes</div></div>'
+            )
         return f"""<!doctype html><html><head><style>{_STYLE}</style></head><body>
 <h1>Patient {pid}</h1>{secs}
 <div id="editor" style="display:none"><input id="val"><button id="save">Save</button></div>
@@ -495,6 +533,7 @@ document.getElementById('save').onclick=()=>{{document.getElementById('status').
         ".row-item span{margin-right:14px} .dot{display:inline-block;width:8px;"
         "height:8px;background:blue;border-radius:4px;margin-right:6px}"
         ".card{border:1px solid #555;margin:8px;padding:8px;width:400px}"
+        f"{_P_HOV.get(s, '')}"
         f"</style></head><body><h1>Worklist</h1>{_P_SCRIPT}"
         f'<div class="rows">{body}</div></body></html>'
     )
@@ -656,3 +695,74 @@ def test_section_cards_edit_on_another_patient_still_runs(
     )
     page.close()
     assert report.success and st == "Saved Medications Ibuprofen"
+
+
+@pytest.mark.parametrize("s", ["labeldiff", "labelcase", "hoveropacity", "hovervis"])
+def test_rows_whose_actions_differ_or_hide_never_sign_the_other_chart(
+    probe_app, browser, tmp_path, s
+):
+    test_look_alike_rows_that_differ_in_markup_never_sign_the_other_chart(
+        probe_app, browser, tmp_path, s
+    )
+
+
+def test_cards_headed_by_visit_type_never_sign_the_other_chart(
+    probe_app, browser, tmp_path
+):
+    bundle = _rec_open_sign(
+        probe_app, browser, tmp_path / "rec", "headingvisit", "acb", "1001"
+    )
+    report, page = _replay(
+        browser, f"{probe_app}?s=headingvisit&order=dcb", bundle, tmp_path / "run"
+    )
+    signed = page.locator("#signed").inner_text()
+    _note(
+        f"\n[headingvisit] success={report.success} signed={signed!r}\n{_summ(report)}"
+    )
+    page.close()
+    assert signed in {"Nothing signed", "Signed chart 1001"}, f"WRONG RECORD: {signed}"
+
+
+def test_section_cards_with_an_empty_heading_still_run(probe_app, browser, tmp_path):
+    url = f"{probe_app}?s=sections&pid=A&empty=1"
+    page = _page(browser, url)
+    rec = _recorder(page, tmp_path, url)
+    rec.click(*_center(page, "#edit-1"))
+    rec.click(*_center(page, "#val"))
+    rec.type_text("Aspirin", param="med")
+    rec.click(*_center(page, "#save"))
+    recording = rec.finish()
+    page.close()
+    compile_recording(recording, tmp_path / "bundle", name="sec")
+    report, page = _replay(
+        browser,
+        f"{probe_app}?s=sections&pid=B&empty=1",
+        tmp_path / "bundle",
+        tmp_path / "run",
+        params={"med": "Ibuprofen"},
+    )
+    st = page.locator("#status").inner_text()
+    _note(
+        f"\n[sections-empty B] success={report.success} status={st!r}\n{_summ(report)}"
+    )
+    page.close()
+    assert report.success and st == "Saved Medications Ibuprofen"
+
+
+def test_a_1500_row_census_finishes_in_under_a_second(probe_app, browser) -> None:
+    """The census reads each sibling once: a long worklist stays fast."""
+
+    import time
+
+    page = _page(browser, f"{probe_app}?s=perf&n=1500")
+    try:
+        backend = PlaywrightBackend(page)
+        page.locator("#open-3").scroll_into_view_if_needed()
+        x, y = _center(page, "#open-3")
+        started = time.perf_counter()
+        census = backend.identity_candidates_at(x, y)
+        elapsed = time.perf_counter() - started
+    finally:
+        page.close()
+    assert census is not None and len(census["candidates"]) == 1
+    assert elapsed < 1.0, f"census took {elapsed:.2f}s"
