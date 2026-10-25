@@ -1,10 +1,17 @@
 # Per-package CI for the packages/ tree.
 #
 # Tiers (see .github/workflows/README.md for the job-by-tier table): a pull
-# request runs one fast Linux lane; the merge queue (merge_group) and main add
-# macOS, Windows, older Pythons and the native installers. packages-gate is
-# required on both: it fails a job the change selects that was skipped, except
-# a queue-only job on a pull request and a PR-only job in the queue.
+# request runs one fast Linux lane, including Flow's unit suite. The merge
+# queue (merge_group) runs a lean re-check of that lane on top of the newest
+# main: lint, the critical golden path and each touched package's Linux suite,
+# but not Flow's unit shards, which the pull request already passed. A push to
+# main and a dispatch run the post-merge tier: everything, plus macOS,
+# Windows, older Pythons and the native installers. packages-gate is required
+# on pull requests and in the queue, and fails a job the change selects that
+# was skipped, unless that job's tier does not run on this event.
+#
+# A draft pull request runs nothing, and packages-gate fails on it with a
+# message, so a draft never shows a stale green. Marking it ready runs CI.
 #
 # The root workflow (main.yml) only runs the launcher's own tests. This
 # workflow runs each package's own suite from the monorepo checkout, so a
@@ -20,8 +27,9 @@
 # in-tree Flow also installs the in-tree types, so a types change re-runs Flow
 # and the agent shim, and the types job installs nothing else.
 #
-# Flow is split: lint, four unit shards, and a critical job that runs the
-# golden free-path task (VERIFIED read-back against an independent oracle),
+# Flow is split: lint, two unit shards that each run pytest-xdist across the
+# runner's cores (one file per worker at a time), and a critical job that runs
+# the golden free-path task (VERIFIED read-back against an independent oracle),
 # the record/compile/replay E2E, and the read-back and zero-model-call unit
 # files by name, failing if any of them is skipped.
 #
@@ -44,15 +52,17 @@
 # a vendored copy's checksum verification.
 #
 # OpenAdapt Desktop (packages/desktop) runs two reusable workflows:
-# desktop-test.yml (the Python engine on Linux for a PR, plus macOS and Windows
-# in the merge queue and on main, and the bundled-Flow qualification contract)
-# and desktop-build.yml (frontend, Python distribution, frozen sidecar, and the
-# Tauri installers, which build in the merge queue and on main only). Their
-# jobs are in packages-gate like every other package's.
+# desktop-test.yml (the Python engine on Linux for a PR and in the queue, plus
+# macOS and Windows on main, and the bundled-Flow qualification contract) and
+# desktop-build.yml (frontend, Python distribution, frozen sidecar, and the
+# Tauri installers, which build on main and on dispatch only). Their jobs are
+# in packages-gate like every other package's. desktop-release.yml releases
+# from the push-to-main run, so no Desktop release ships without the
+# installers having built and passed their smoke tests.
 #
 # openadapt-tray (packages/tray) keeps its own uv.lock and runs `uv sync
-# --locked` against it: its suite on Linux with Python 3.12 for a PR, plus
-# 3.10, 3.11, macOS and Windows in the merge queue and on main; ruff, the version and changelog
+# --locked` against it: its suite on Linux with Python 3.12 for a PR and in
+# the queue, plus 3.10, 3.11, macOS and Windows on main; ruff, the version and changelog
 # contract, `uv build` and the archive boundary; and Desktop's socket test
 # against this tray client, so a tray change cannot break the protocol
 # without the desktop suite running. A desktop change runs that same test in
@@ -140,9 +150,8 @@ jobs:
           case "$EVENT_NAME" in
             workflow_dispatch) all ;;
             pull_request) base="HEAD^1" ;;  # the PR merge commit's first parent is the base tip
-            # A queue group runs the full matrix (the PR tier ran one lane)
-            # for every package the group's PRs touch, measured from the main
-            # commit the group was built on.
+            # A queue group re-checks every package the group's PRs touch,
+            # measured from the main commit the group was built on.
             merge_group)
               base="$GROUP_BASE_SHA"
               git cat-file -e "$base^{commit}" 2>/dev/null || all
@@ -199,8 +208,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # PR tier: one Python; the merge queue and main add the oldest.
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || (github.event_name == 'push' && github.actor == 'github-merge-queue[bot]')) && '["3.12"]' || '["3.10", "3.12"]') }}
+        # PR and queue tiers: one Python; main adds the oldest.
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/types
@@ -243,8 +252,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # PR tier: one Python; the merge queue and main add the oldest.
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || (github.event_name == 'push' && github.actor == 'github-merge-queue[bot]')) && '["3.12"]' || '["3.10", "3.12"]') }}
+        # PR and queue tiers: one Python; main adds the oldest.
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/agent
@@ -255,9 +264,19 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
+      # uv installs the same requirements as pip, into the setup-python
+      # interpreter, in seconds instead of minutes, from a cache keyed on the
+      # pyproject files it resolves.
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            packages/flow/pyproject.toml
+            packages/types/pyproject.toml
+            packages/agent/pyproject.toml
+          cache-suffix: agent-py${{ matrix.python-version }}
       - name: Install the shim against the in-tree core
-        run: pip install -e ../types -e '../flow[agent]' -e ".[dev]"
+        run: uv pip install --system -e ../types -e '../flow[agent]' -e ".[dev]"
       - name: Confirm the in-tree Flow is the one installed
         run: |
           python - <<'PY'
@@ -287,9 +306,18 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip
+      # uv installs the same requirements as pip, into the setup-python
+      # interpreter, in seconds instead of minutes, from a cache keyed on the
+      # pyproject files it resolves.
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            packages/flow/pyproject.toml
+            packages/types/pyproject.toml
+          cache-suffix: flow-lint
       - name: Install
-        run: pip install -e ../types -e '.[dev]'
+        run: uv pip install --system -e ../types -e '.[dev]'
       - name: Release consistency and public artifact inventory
         # Flow's own gate: version sync across project, module and lock, and
         # every public data/config asset listed in public-artifacts.json.
@@ -342,15 +370,22 @@ jobs:
   flow-unit:
     name: flow core unit (shard ${{ matrix.shard }}/${{ matrix.of }})
     needs: scope
-    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true')
+    # PR and post-merge tiers. The merge queue skips it: a pull request can
+    # enter the queue only after packages-gate passed with these shards green
+    # on its merge with main, and flow-critical re-checks the golden path on
+    # the group.
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group')
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        # PR tier: two larger shards, because each job pays about five minutes
-        # of setup and runners are capped. The merge queue runs four.
-        include: ${{ fromJSON((github.event_name == 'pull_request' || (github.event_name == 'push' && github.actor == 'github-merge-queue[bot]')) && '[{"shard":1,"of":2},{"shard":2,"of":2}]' || '[{"shard":1,"of":4},{"shard":2,"of":4},{"shard":3,"of":4},{"shard":4,"of":4}]') }}
+        # Two shards, each running pytest-xdist on all four runner cores. Each
+        # job pays a few minutes of setup and runners are capped, so more
+        # shards cost more runner time than they save.
+        include:
+          - { shard: 1, of: 2 }
+          - { shard: 2, of: 2 }
     defaults:
       run:
         working-directory: packages/flow
@@ -361,14 +396,24 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip
+      # uv installs the same requirements as pip, into the setup-python
+      # interpreter, in seconds instead of minutes, from a cache keyed on the
+      # pyproject files it resolves.
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            packages/flow/pyproject.toml
+            packages/types/pyproject.toml
+            packages/capture/pyproject.toml
+          cache-suffix: flow-unit
       - name: Install
-        run: pip install -e ../types -e ../capture -e '.[dev,capture,agent]'
+        run: uv pip install --system -e ../types -e ../capture -e '.[dev,capture,agent]'
       - name: Install Harness² for the integration tests
         # Not on PyPI. Pinned to the commit openadapt_flow.integrations.harness2
         # is written against; it has no runtime dependencies.
         run: >-
-          pip install --no-deps
+          uv pip install --system --no-deps
           'harness2 @ git+https://github.com/google-research/harness2@1cfe254e8d25b15f37048c3730134686abe60335'
       - name: Verify the in-tree openadapt-capture imports headless
         run: |
@@ -408,11 +453,15 @@ jobs:
             | LC_ALL=C sort | awk -v s="$SHARD" -v n="$SHARDS" 'NR % n == s % n' > "$RUNNER_TEMP/shard.txt"
           wc -l < "$RUNNER_TEMP/shard.txt"
       - name: Test
+        # -n auto: one xdist worker per core. --dist loadfile keeps each file
+        # on one worker, so module fixtures and file-local state stay in one
+        # process. xdist gives each worker its own directory under --basetemp
+        # (runs/ci/popen-gwN), so tmp_path never collides.
         run: |
           set -euo pipefail
           mkdir -p runs
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
-          pytest -vv --durations=20 --basetemp=runs/ci "${files[@]}"
+          pytest -n auto --dist loadfile -v --durations=20 --basetemp=runs/ci "${files[@]}"
 
   flow-critical:
     name: flow core critical (golden VERIFIED, zero model calls)
@@ -430,9 +479,18 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip
+      # uv installs the same requirements as pip, into the setup-python
+      # interpreter, in seconds instead of minutes, from a cache keyed on the
+      # pyproject files it resolves.
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            packages/flow/pyproject.toml
+            packages/types/pyproject.toml
+          cache-suffix: flow-critical
       - name: Install
-        run: pip install -e ../types -e '.[dev,agent]'
+        run: uv pip install --system -e ../types -e '.[dev,agent]'
       - name: Resolve Playwright version
         id: pw
         run: |
@@ -499,8 +557,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # PR tier: one Python; the merge queue and main run all three.
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || (github.event_name == 'push' && github.actor == 'github-merge-queue[bot]')) && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
+        # PR and queue tiers: one Python; main runs all three.
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/capture
@@ -563,8 +621,9 @@ jobs:
   capture-macos:
     name: capture (macos, py3.12)
     needs: scope
-    # Merge queue and main only; the PR tier runs capture on Linux.
-    if: github.event.pull_request.draft != true && (needs.scope.outputs.capture == 'true' && github.event_name != 'pull_request' && !(github.event_name == 'push' && github.actor == 'github-merge-queue[bot]'))
+    # Post-merge tier (main and dispatch); a PR and the queue run capture on
+    # Linux.
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.capture == 'true' && github.event_name != 'pull_request' && github.event_name != 'merge_group')
     runs-on: macos-latest
     timeout-minutes: 30
     defaults:
@@ -596,8 +655,9 @@ jobs:
   capture-windows:
     name: capture (windows, py3.12)
     needs: scope
-    # Merge queue and main only; the PR tier runs capture on Linux.
-    if: github.event.pull_request.draft != true && (needs.scope.outputs.capture == 'true' && github.event_name != 'pull_request' && !(github.event_name == 'push' && github.actor == 'github-merge-queue[bot]'))
+    # Post-merge tier (main and dispatch); a PR and the queue run capture on
+    # Linux.
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.capture == 'true' && github.event_name != 'pull_request' && github.event_name != 'merge_group')
     runs-on: windows-latest
     timeout-minutes: 45
     defaults:
@@ -671,8 +731,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # PR tier: one Python; the merge queue and main run all three.
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || (github.event_name == 'push' && github.actor == 'github-merge-queue[bot]')) && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
+        # PR and queue tiers: one Python; main runs all three.
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.12"]' || '["3.10", "3.11", "3.12"]') }}
     defaults:
       run:
         working-directory: packages/privacy
@@ -767,9 +827,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # PR tier: Linux on Python 3.12. The merge queue and main add 3.10,
-        # 3.11, macOS and Windows, where the tray's platform handlers differ.
-        include: ${{ fromJSON((github.event_name == 'pull_request' || (github.event_name == 'push' && github.actor == 'github-merge-queue[bot]')) && '[{"os":"ubuntu-latest","python-version":"3.12"}]' || '[{"os":"ubuntu-latest","python-version":"3.10"},{"os":"ubuntu-latest","python-version":"3.11"},{"os":"ubuntu-latest","python-version":"3.12"},{"os":"macos-latest","python-version":"3.12"},{"os":"windows-latest","python-version":"3.12"}]') }}
+        # PR and queue tiers: Linux on Python 3.12. Main adds 3.10, 3.11,
+        # macOS and Windows, where the tray's platform handlers differ.
+        include: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '[{"os":"ubuntu-latest","python-version":"3.12"}]' || '[{"os":"ubuntu-latest","python-version":"3.10"},{"os":"ubuntu-latest","python-version":"3.11"},{"os":"ubuntu-latest","python-version":"3.12"},{"os":"macos-latest","python-version":"3.12"},{"os":"windows-latest","python-version":"3.12"}]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     defaults:
@@ -987,15 +1047,23 @@ jobs:
       - install-weight
       - capture-core-record
       - desktop-release-intent
-    if: github.event.pull_request.draft != true && (always())
+    # Always runs, so the required check reports on every event, drafts too.
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # A skipped required check counts as passing, so a draft that skipped
+      # everything would show green. Fail instead: a draft can't merge anyway,
+      # and marking it ready (ready_for_review) starts a full run.
+      - name: Fail on a draft pull request
+        if: github.event.pull_request.draft == true
+        run: |
+          echo "::error::draft PR: CI runs when marked ready for review."
+          exit 1
       - name: Require every selected package job to pass
         env:
           RESULTS: ${{ toJSON(needs) }}
           EVENT_NAME: ${{ github.event_name }}
-          ACTOR: ${{ github.actor }}
         run: |
           python3 - <<'PY'
           import json, os, sys
@@ -1003,9 +1071,7 @@ jobs:
           needs = json.loads(os.environ["RESULTS"])
           event = os.environ["EVENT_NAME"]
           pr_tier = event == "pull_request"
-          # The merge queue pushes the exact commit its group just tested, so
-          # that push runs the PR-tier lane instead of the queue tier again.
-          queue_push = event == "push" and os.environ["ACTOR"] == "github-merge-queue[bot]"
+          queue_tier = event == "merge_group"
           # The scope output that selects each job. A selected job must run and
           # pass, except where its tier says it does not run on this event.
           selects = {
@@ -1031,10 +1097,12 @@ jobs:
               "program-graph": "program_graph",
               "install-weight": "weight",
           }
-          # Queue tier only: skipped on a pull request and on the merge queue's
-          # own push to main; required in the merge queue, on any other push to
-          # main and on dispatch.
-          queue_only = {"capture-macos", "capture-windows"}
+          # Post-merge tier only: skipped on a pull request and in the merge
+          # queue; required on a push to main and on dispatch.
+          post_merge_only = {"capture-macos", "capture-windows"}
+          # Skipped in the merge queue only: the pull request already passed
+          # it on its merge with main (packages-gate is required there).
+          not_in_queue = {"flow-unit"}
           # PR tier only: checks a pull request's own diff.
           pr_only = {"desktop-release-intent"}
           scope = needs["scope"]
@@ -1052,8 +1120,10 @@ jobs:
                   continue
               # A job missing from `selects` keeps the old rule: skipped is fine.
               selected = name in selects and outputs.get(selects[name]) == "true"
-              off_tier = ((pr_tier or queue_push) and name in queue_only) or (
-                  not pr_tier and name in pr_only
+              off_tier = (
+                  ((pr_tier or queue_tier) and name in post_merge_only)
+                  or (queue_tier and name in not_in_queue)
+                  or (not pr_tier and name in pr_only)
               )
               if result == "skipped" and selected and not off_tier:
                   bad[name] = "skipped although selected"
