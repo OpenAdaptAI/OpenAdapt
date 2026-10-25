@@ -201,6 +201,8 @@ class Recorder:
         # backend must never advertise an authoritative business-effect oracle
         # merely because the recorder can query a separate read-only source.
         self._system_of_record_reader = system_of_record_reader
+        #: Set by :meth:`expect_write` for the next event only.
+        self._write_wait_s = 0.0
         self._settle_interval_s = settle_interval_s
         self._settle_stable_frames = settle_stable_frames
         self._settle_timeout_s = settle_timeout_s
@@ -655,6 +657,13 @@ class Recorder:
 
         return self._i
 
+    def expect_write(self, wait_s: float = 3.0) -> None:
+        """The next action may write to the system of record: its after-read
+        waits up to ``wait_s`` for the records to change (see :meth:`_commit`).
+        Changes nothing else about the event."""
+
+        self._write_wait_s = max(float(wait_s), 0.0)
+
     # -- internals -----------------------------------------------------------
 
     def _record(self, event: dict[str, Any], act: Callable[[], None]) -> None:
@@ -906,6 +915,19 @@ class Recorder:
             line[f"{key}_before"] = value
         if structural_after is None:
             structural_after = self._structural_state()
+            wait_s, self._write_wait_s = self._write_wait_s, 0.0
+            if wait_s > 0 and "sor" in structural_before:
+                # The caller said this action may write (a save the gate let
+                # through). A system of record can show the write a moment
+                # after the screen settles; read again until it changes, so
+                # the write is bound to this event.
+                deadline = time.monotonic() + wait_s
+                while (
+                    structural_after.get("sor") == structural_before.get("sor")
+                    and time.monotonic() < deadline
+                ):
+                    time.sleep(0.25)
+                    structural_after = self._structural_state()
         for key, value in structural_after.items():
             line[f"{key}_after"] = value
         line["t"] = round(time.monotonic() - self._t0, 3)

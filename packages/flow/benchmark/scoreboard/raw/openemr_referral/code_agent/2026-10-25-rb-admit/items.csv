@@ -1,0 +1,2 @@
+task,arm,run_id,item,attempt,fault,reported_success,readback,outcome,model_calls,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,cost_usd,item_s,wall_s,approvals_asked,host_load_1m,timed,detail
+openemr_referral,code_agent,2026-10-25-rb-admit,6,1,none,True,correct,correct,11,24,975,49713,8010,0.039766,54.008,160.192,0,143.52,False,"{""record_status"": ""needs_human_admit"", ""program_check"": true, ""canary_status"": ""refused"", ""admitted"": false, ""readbacks"": [""landed""], ""error"": null}"

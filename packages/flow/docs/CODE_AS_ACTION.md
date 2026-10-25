@@ -1,8 +1,10 @@
 # Code as action: the run-1 agent works through a terminal
 
 Before OpenAdapt compiles a task, an agent does it once
-([COMPILE_AGENT.md](COMPILE_AGENT.md)). With `vision="code"` that agent does
-not look at a screenshot after every click. It gets one terminal-style tool,
+([COMPILE_AGENT.md](COMPILE_AGENT.md)). Code as action is the default for that
+first run: `ClaudeAgent()` and `openadapt-flow compile-agent` use
+`vision="code"` on `claude-sonnet-5-5`, and the MCP teach tools offer
+`teach_run`. The agent does not look at a screenshot after every click. It gets one terminal-style tool,
 `run`, and writes short scripts: read the app's structure, act on elements by
 role and name, read the result back, keep notes in a working directory, and
 take a screenshot only when it asks for one. One model call can carry several
@@ -18,18 +20,44 @@ from openadapt_flow.compile_agent import ClaudeAgent, compile_first_run
 result = compile_first_run(
     "Open the referral for Jane Sample, start a Triage encounter, and save this note: {note}",
     params={"note": "Follow up in two weeks"},
-    agent=ClaudeAgent(vision="code", model="claude-sonnet-5-5"),
+    agent=ClaudeAgent(),  # vision="code", claude-sonnet-5-5
     url="http://localhost:8080/#tasks", verify="verify.yaml",
     expect={"patient_id": "p1"}, on_screen=["Jane Sample", "MRN P1"],
 )
 ```
 
 ```bash
-openadapt-flow compile-agent "..." --vision code --url ... --verify verify.yaml ...
+openadapt-flow compile-agent "..." --url ... --verify verify.yaml ...   # --vision code is the default
 ```
 
 `--agent scripts.json` with `{"scripts": ["tree", "click name=Open near=\"Jane Sample\""]}`
 runs the same tool from fixed scripts with no model calls (tests, CI, demos).
+
+## Every save is read back
+
+After every action the save gate lets through, the harness reads the system of
+record (the `verifier:` in `verify.yaml`) and compares it with the read taken
+when run 1 started:
+
+- a change on any record the task does not name stops run 1 at once
+  (`readback_wrong_record`); nothing can be admitted;
+- no change is told to the agent as "nothing was saved in the system of
+  record (whatever the screen says; do not report it as saved)", so a screen
+  that says "saved" can't stand in for a save;
+- a change on the named record is told to the agent: "1 record(s) with
+  patient_id=p1, type=Triage saved".
+
+Each read-back is kept with run 1 (`run1["readbacks"]`). It runs for every
+agent in the harness, not only the code agent, and on every surface.
+
+## In the MCP teach tools
+
+`openadapt-agent serve --teach VERIFY_YAML` adds `teach_run` on web apps: the
+client's model sends a script, and the server runs it through the same tool.
+When a person approves saves (`--teach-hold`), the script stops
+before each save with `status: needs_person` and the rest of the script; the
+client's form asks the person, and the approval covers that one line on the
+app as it was when they answered. `teach_act` (one action per call) stays.
 
 ## Why
 
@@ -198,12 +226,32 @@ Each one wrongly refused, or failed to gate, a step on OpenEMR:
 
 ## Measured
 
-**Scoreboard, arm 7** is the quotable source
-(`benchmark/scoreboard`, protocol 2026-10-18.1,
-[#1307](https://github.com/OpenAdaptAI/OpenAdapt/pull/1307)). Its rows are run
-by the scoreboard's single runner under the load gate; until they are in
-`scoreboard.json`, there is no arm 7 figure to quote. Trial runs made while
-building the arm are set aside in `benchmark/scoreboard/superseded/`.
+**Scoreboard, arm 7** is the quotable source (`benchmark/scoreboard`,
+`python -m scoreboard.build` over committed rows; PROTOCOL.md Amendments 10
+and 11).
+
+Agent first runs against the program compiled from one of them, MockMed items
+21 to 40 (20 items; item 30 is a save the server drops while the screen says
+saved, item 40 a save that lands on another patient). claude-sonnet-5-5,
+effort medium. All rows untimed: the host's load was above 12 at every item.
+
+| 20 items, final attempt | Agent first runs (code, read-back on every save) | Compiled program |
+| --- | ---: | ---: |
+| Correct, on the 18 normal items | 18 | 18 |
+| Item 30, dropped save | `silent_wrong` by the word rule; a safe stop on hand review | `safe_stop` |
+| Item 40, wrong patient | `flagged_wrong`: the read-back stopped run 1 | `flagged_wrong` |
+| Silent wrong saves (hand review) | 0 | 0 |
+| Model calls per item (median) | 4 | 0 |
+| Cost per item | $0.0093 | $0 |
+| Task seconds per correct item (median, untimed) | 6.6 | 5.3 |
+
+On item 30 the agent wrote that the save "did not take effect" because the
+read-back showed nothing was saved, though the screen showed a "saved"
+banner. The scoreboard's word rule did not catch that wording, so the row
+keeps the rule's verdict and `HAND_REVIEW.md` next to it records the review.
+From Amendment 11 on, arm 7 reports success only when its last read-back
+shows the save landed. The program for arm 3 was compiled and admitted from
+arm 7's item 21.
 
 **Exploratory measurement** (before the scoreboard; its own runner):
 

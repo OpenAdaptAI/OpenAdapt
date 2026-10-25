@@ -841,6 +841,10 @@ def arm_code_agent(args: argparse.Namespace) -> int:
                 and ledger is not None
                 and ledger.finished
                 and not any(w in text.lower() for w in FAILURE_WORDS)
+                # Amendment 11: the arm reports success only when its own
+                # read-back after the last save shows the save landed.
+                and bool(summary["readbacks"])
+                and summary["readbacks"][-1]["outcome"] == "landed"
             )
             ledger_doc = {
                 "ledger": ledger.to_dict() if ledger is not None else None,

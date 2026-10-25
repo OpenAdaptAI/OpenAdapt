@@ -1,0 +1,117 @@
+{
+  "ledger": {
+    "agent": "claude",
+    "model": "claude-sonnet-5-5",
+    "vision": "code",
+    "model_calls": 3,
+    "input_tokens": 8,
+    "output_tokens": 184,
+    "cache_creation_input_tokens": 1900,
+    "cache_read_input_tokens": 3112,
+    "prompt_tokens": 5020,
+    "images_in_requests": 0,
+    "cost_usd": 0.007228,
+    "wall_seconds": 5.463,
+    "model_seconds": 3.06,
+    "finished": false,
+    "summary": null,
+    "tool_errors": 0,
+    "calls": [
+      {
+        "turn": 1,
+        "input_tokens": 4,
+        "output_tokens": 50,
+        "cache_creation_input_tokens": 1453,
+        "cache_read_input_tokens": 0,
+        "seconds": 1.064,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      },
+      {
+        "turn": 2,
+        "input_tokens": 2,
+        "output_tokens": 50,
+        "cache_creation_input_tokens": 206,
+        "cache_read_input_tokens": 1453,
+        "seconds": 0.987,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      },
+      {
+        "turn": 3,
+        "input_tokens": 2,
+        "output_tokens": 84,
+        "cache_creation_input_tokens": 241,
+        "cache_read_input_tokens": 1659,
+        "seconds": 1.009,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      }
+    ]
+  },
+  "harness": {
+    "observations": 0,
+    "screenshots_requested": 0,
+    "screenshots_at_gate": 0,
+    "screenshots_every_turn": 0,
+    "actions": 6,
+    "gate_checks": 1,
+    "gate_evidence_screenshots": 1,
+    "gate_refusals": 1,
+    "readbacks": 1
+  },
+  "trace": {
+    "surface": "dom",
+    "scripts": 4,
+    "lines": 8,
+    "actions": 4,
+    "errors": 0,
+    "screenshots": 0,
+    "shell_commands": 0,
+    "shell_isolation": "sandbox-exec",
+    "by_structure": 4,
+    "with_recorded_locator": 4,
+    "locator_agrees": 4,
+    "locator_unique": 4,
+    "commits": 0,
+    "readbacks": {},
+    "identity_read_before_commit": [],
+    "read_back_after_commit": []
+  },
+  "scripts": [
+    {
+      "script": "tree",
+      "output": "$ tree\npage: MockMed (http://127.0.0.1:18765/?...#tasks)\nMockMed\nClinical demo \u2014 all data is fake\n# Referral Tasks\nrow: Patient | Reason | Priority | Action\nrow: Jane Sample | Knee pain referral | High | @1 button \"Open\"\nrow: Alex Testcase | Cardiology follow-up | Medium | @2 button \"Open\"\nrow: Sam Specimen | Dermatology consult | Low | @3 button \"Open\"",
+      "images": 0
+    },
+    {
+      "script": "click @1\ntree",
+      "output": "$ click @1\nok: click button \"Open\"\npage: MockMed (http://127.0.0.1:18765/?...#patient/p1)\n$ tree\npage: MockMed (http://127.0.0.1:18765/?...#patient/p1)\nMockMed\nClinical demo \u2014 all data is fake\nJane Sample \u2014 MRN P1 \u2014 DOB 1980-01-01\n@1 button \"New Encounter\"\n# Encounters\nNo encounters yet.",
+      "images": 0
+    },
+    {
+      "script": "click @1\ntree",
+      "output": "$ click @1\nok: click button \"New Encounter\"\npage: MockMed (http://127.0.0.1:18765/?...#encounter)\n$ tree\npage: MockMed (http://127.0.0.1:18765/?...#encounter)\nMockMed\nClinical demo \u2014 all data is fake\nJane Sample \u2014 MRN P1 \u2014 DOB 1980-01-01\n# New Encounter\nEncounter Type\n@1 button \"Triage\"\n@2 button \"Consult\"\nNote\n@3 textbox \"Note\" value=\"\"\n@4 button \"Save Encounter\"",
+      "images": 0
+    }
+  ],
+  "result": {
+    "record_status": "capture_failed",
+    "detail": "ReadBackRefused: after 'Save Encounter', the read-back shows 1 record(s) the task does not name changed; run 1 stopped (capture kept at /Users/abrichr/.cache/openadapt-scoreboard/mockmed/code_agent/2026-10-25-rb/jit-cache/item-040/mockmed.add_note-48f60d6be84e/refused-20261025T034130714941000)",
+    "gates": [
+      {
+        "control": "Save Encounter",
+        "missing": [],
+        "decision": "passed_no_hold"
+      }
+    ],
+    "readbacks": [
+      {
+        "control": "Save Encounter",
+        "outcome": "wrong_record",
+        "detail": "1 record(s) the task does not name changed",
+        "fields": []
+      }
+    ]
+  }
+}

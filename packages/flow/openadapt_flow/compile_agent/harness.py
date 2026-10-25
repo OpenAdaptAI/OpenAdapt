@@ -138,6 +138,18 @@ def record_readback(
     return check
 
 
+def _expect_write(harness: Any) -> None:
+    """Tell the recorder the next action may write, so the event's after-read
+    of the system of record waits for the change (and the compiler binds the
+    write to this step)."""
+
+    session = getattr(harness.computer, "session", None)
+    recorder = getattr(session, "_recorder", None)
+    expect = getattr(recorder, "expect_write", None)
+    if callable(expect):
+        expect(harness.readback_wait_s)
+
+
 def _read_back(harness: Any, control: str) -> Optional[ReadBack]:
     """Read the system of record after a save went through the gate; poll a
     little for a write that lands late. Raises ReadBackRefused on another
@@ -399,6 +411,7 @@ class Harness:
             commit = self._hinted_commit(native, hint)
         if commit is not None:
             self._check_gate(*commit)
+            _expect_write(self)
         obs = self.computer.execute(native)
         self.stats.actions += 1
         if commit is not None and self.has_page:
@@ -809,6 +822,7 @@ class SurfaceHarness:
         commit = self.commit_target(native, ref)
         if commit is not None:
             self._check_gate(commit)
+            _expect_write(self)
         obs = self.computer.execute(native)
         self.stats.actions += 1
         if commit is not None:

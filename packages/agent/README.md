@@ -411,7 +411,7 @@ claude mcp add --scope user openadapt-teach -- uvx --python 3.12 --from 'openada
 Your agent then:
 
 1. Calls `teach_start` with the task (`{note}` for each input), this run's `inputs`, the `record_fields` the saved record must have (such as its patient id), and `on_screen`, the record's identity as the screen shows it (a name and an MRN).
-2. Calls `teach_observe` and `teach_act` until the task is done. On the web, `teach_observe` lists the page as short lines with a ref for each control, and before every save OpenAdapt checks that the record's identity is shown next to the control. A save on the wrong record is refused and ends the run.
+2. Calls `teach_run` with short scripts (read the page, act on elements by role and name, read the result back; web apps), or `teach_observe` and `teach_act` one action at a time, until the task is done. After every save OpenAdapt reads the app's records back and tells the agent what landed; a save on a record the task does not name ends the run. On the web, `teach_observe` lists the page as short lines with a ref for each control, and before every save OpenAdapt checks that the record's identity is shown next to the control. A save on the wrong record is refused and ends the run.
 3. Calls `teach_finish`. OpenAdapt compiles the run and reads the app's records: exactly one record must have appeared, with every `record_fields` value and every input. The result is the draft: its steps, its inputs, the proposed record check, and what still needs a person.
 4. Calls `teach_confirm_checks`. Your MCP client shows a person the proposed check, and only their answer there, with their name, confirms it. Your agent has no argument that confirms it.
 5. Calls `teach_admit` with `canary_inputs`, the values each canary saves. A canary is a real save on the same record, so use values that are safe there.
@@ -428,7 +428,7 @@ It works on a web app (`--url`) and on the app a deployment file's `backend:` se
 
 | Flag | What it does |
 | --- | --- |
-| `--teach VERIFY_YAML` | Adds `teach_start`, `teach_observe`, `teach_act`, `teach_finish`, `teach_abort`, `teach_status`, `teach_confirm_checks` and `teach_admit`, and turns on runs of taught workflows. |
+| `--teach VERIFY_YAML` | Adds `teach_start`, `teach_run` (web apps), `teach_observe`, `teach_act`, `teach_finish`, `teach_abort`, `teach_status`, `teach_confirm_checks` and `teach_admit`, and turns on runs of taught workflows. |
 | `--teach-dir DIR` | Where drafts and taught programs live (default `RUNS_DIR/teach`). |
 | `--teach-key PEM`, `--teach-policy JSON` | The registered agent's encrypted key (passphrase in `OPENADAPT_JIT_KEY_PASSPHRASE`) and the signed admission policy. Only an agent key under a policy; an admitter key admits from CI with `openadapt-flow jit admit`. |
 | `--key-dir DIR` | The JIT key directory (default `OPENADAPT_JIT_KEY_DIR` or `~/.openadapt/jit`). |

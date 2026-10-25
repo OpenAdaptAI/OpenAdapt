@@ -1,0 +1,22 @@
+{
+  "protocol_version": "2026-10-18.1",
+  "written_at": "2026-10-25T00:06:24-0400",
+  "machine": "arm64 Darwin 24.6.0",
+  "cpu_count": 12,
+  "python": "3.12.7",
+  "engine": {
+    "path": "/Users/abrichr/oa/worktrees/code-agent-default/packages/flow/openadapt_flow",
+    "git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31"
+  },
+  "benchmark_git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31",
+  "task": "openemr_referral",
+  "arm": "code_agent",
+  "model": "claude-sonnet-5-5",
+  "n": 6,
+  "vision": "code",
+  "effort": "medium",
+  "max_cost_per_item": 0.3,
+  "on_screen": [
+    "Create New Patient"
+  ]
+}
