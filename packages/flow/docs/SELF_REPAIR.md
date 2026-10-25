@@ -192,8 +192,12 @@ show it:
 - **Terminal.** `run --self-repair` prints the exact command when it asks:
 
   ```bash
-  openadapt-flow item-approval approve runs/item-17 --request-id <id> --request-sha256 <sha> --decided-by human --route desktop_run_it --unauthenticated
+  openadapt-flow item-approval approve runs/item-17 --request-id <id> --request-sha256 <sha> --decided-by human --route desktop_run_it --unauthenticated --approver-key <approver-key.pem>
   ```
+
+  The person's registered approver key signs the answer, with its
+  passphrase in `OPENADAPT_JIT_KEY_PASSPHRASE` (see
+  [`APPROVAL_MODES.md`](APPROVAL_MODES.md#the-approver-key)).
 
 - **Reject in the store.** Rejecting the candidate with `RepairStore.reject`
   while the run waits ends the wait as a decline.
@@ -403,6 +407,56 @@ CLI, the Standard profile requires a signed qualification admission. So a CLI
 self-repair runs without a named profile or under Demo, and the record check
 still runs. The Python API can run the Standard profile contract directly, as
 the tutorial does.
+
+### A relabeled control: proof that only the label changed
+
+Self-repair never repairs a stop on a failed identity check, because a
+renamed control usually can't be told from a different control. One case can
+be told apart. When an app release renames a button, the ladder finds the same
+control on the structural rung, and the run stops because the control's
+structured identity (its id, kind, form and label) no longer matches.
+
+The recorded identity is a salted hash, but the bundle also keeps the recorded
+label in plaintext (the step's intent and OCR text).
+`openadapt_flow/repair/relabel.py` rebuilds the recorded identity from the
+observed one with only the label swapped back. If that matches the recorded
+hash, the id, kind and form are proven unchanged and only the label differs.
+It refuses everything else:
+
+- a step that received input, or any earlier save that did (a step that may
+  have written is never retried);
+- an identity check that failed outside the structured tier, or one that names
+  a record value rather than a control;
+- a target found below the structural rung;
+- an identity that doesn't match under any recorded label.
+
+The repair then follows the pinned-bundle path above:
+
+1. The candidate bundle changes only that step's identity hash, intent and
+   OCR text.
+2. It is re-qualified with the parent's own campaign on the test copy, which
+   now runs the new release. Each re-qualification names its case runs
+   afresh, because a process refuses a run's authorization id once it has
+   been used, and the parent may have been qualified in the same process.
+3. A person approves once, with the old and new label and the
+   re-qualification in front of them.
+4. The certified copy runs next:
+   - For a control that is not part of the record check, it is re-admitted
+     with signed lineage, and the pin accepts it through the chain.
+   - A save button's identity is part of the record check, so no lineage hop
+     may carry it (`fixed_contract_refusal`). The person's approval is then a
+     fresh admission of the certified copy, and the deployment pins its new
+     digest. `readmit` returns `fresh_admission` and never re-pins by itself.
+
+The stopped item never wrote, so it runs again on the re-admitted version as a
+retry; `problems_only` sends a retry to a person. Under a production
+qualification admission or a managed dispatch the repair stays refused, as for
+every other repair.
+
+On the local OpenEMR referral (proof-15's configuration), a relabeled save
+button stopped every item until a person re-taught the step. The lifecycle
+soak measures this path: see
+the lifecycle soak (`benchmark/lifecycle`).
 
 ## What is recorded
 

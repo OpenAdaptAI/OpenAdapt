@@ -30,6 +30,7 @@ import { Onboarding } from "./screens/Onboarding";
 import { Welcome } from "./screens/Welcome";
 import { Tasks } from "./screens/Tasks";
 import { NeedsYou } from "./screens/NeedsYou";
+import { Stops } from "./screens/Stops";
 import { Results } from "./screens/Results";
 import { CheckIt } from "./screens/CheckIt";
 import { RunIt } from "./screens/RunIt";
@@ -55,6 +56,7 @@ import {
 type Route =
   | { name: "tasks" }
   | { name: "needs" }
+  | { name: "stops" }
   | { name: "results" }
   | { name: "sample" }
   | { name: "check"; id: string; firstWorkflow?: boolean }
@@ -111,6 +113,7 @@ function tabFor(route: Route): "tasks" | "needs" | "results" | null {
     case "teach":
       return "tasks";
     case "needs":
+    case "stops":
       return "needs";
     case "results":
       return "results";
@@ -928,6 +931,15 @@ export default function App() {
           <NeedsYou
             onTeach={(id) => setRoute({ name: "teach", id })}
             onChanged={() => void refreshAttention()}
+            onReviewStops={() => setRoute({ name: "stops" })}
+          />
+        )}
+        {route.name === "stops" && (
+          <Stops
+            onDone={() => {
+              void refreshAttention();
+              setRoute({ name: "needs" });
+            }}
           />
         )}
         {route.name === "results" && (
