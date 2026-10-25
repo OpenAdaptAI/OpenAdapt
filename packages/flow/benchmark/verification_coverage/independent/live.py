@@ -46,17 +46,22 @@ from scoreboard.claims_openemr import TOKEN_ENV  # noqa: E402
 from scoreboard.tasks import openemr  # noqa: E402
 
 from verification_coverage.independent.run import (  # noqa: E402
+    APPOINTMENT_OP,
     BOT,
     CONCURRENT_PERSON,
+    DOUBLE_HISTORY_OP,
+    HELD_OUT_OPS,
     LABELS,
     OTHER,
     REFERRAL,
+    REVERT_OP,
     SEEDS,
     SHIPPED_PARAMS,
     SHIPPED_RECORD,
     provenance_for,
     referral_text,
     score,
+    step_values,
     told_values,
 )
 
@@ -338,6 +343,16 @@ def api_body(values: dict[str, Any]) -> dict[str, Any]:
     return body
 
 
+def audit_row(user: str, pid: int) -> str:
+    """The ``log`` row OpenEMR's UI path writes for a patient-record insert."""
+
+    return (
+        "INSERT INTO openemr.log (date, event, category, user, groupname, comments, "
+        f"patient_id, success, log_from) VALUES (NOW(), 'patient-record-insert', "
+        f"'Patient Demographics', {q(user)}, 'Default', '', {int(pid)}, 1, 'open-emr');"
+    )
+
+
 def apply_steps(
     case: dict[str, Any],
     ids: dict[str, Any],
@@ -353,16 +368,83 @@ def apply_steps(
             if op == "register_referral":
                 if step.get("phase") == "finish":
                     continue
-                browser.register(told)
+                values = step_values(step, told)
+                browser.register(values)
                 new_pid = int(
                     sql(
                         "SELECT MAX(pid) FROM openemr.patient_data "
-                        f"WHERE email = {q(told['email'])}"
+                        f"WHERE email = {q(values['email'])}"
                     ).split()[0]
                 )
                 continue
             if op == "register_patient":
-                api(sessions[who], "POST", "/patient", CONCURRENT_PERSON)
+                person = step.get("person")
+                if not isinstance(person, dict):
+                    api(sessions[who], "POST", "/patient", CONCURRENT_PERSON)
+                    continue
+                api(sessions[who], "POST", "/patient", api_body(person))
+                other = int(
+                    sql(
+                        "SELECT MAX(pid) FROM openemr.patient_data "
+                        f"WHERE fname = {q(person['fname'])} "
+                        f"AND lname = {q(person['lname'])}"
+                    ).split()[0]
+                )
+                # The API path writes no history_data; the held-out case says
+                # the registration also creates one, as the UI does.
+                deviations.append(
+                    "register_patient's history row ran as SQL with an audit row "
+                    f"by {who}"
+                )
+                sql(
+                    f"INSERT INTO openemr.history_data (pid, date) VALUES ({other}, NOW());"
+                    + audit_row(OTHER if who == "clinician2" else BOT, other)
+                )
+                continue
+            if op in HELD_OUT_OPS:
+                pid = (
+                    new_pid
+                    if HELD_OUT_OPS[op] == "new_patient"
+                    else ids["other_patient"]
+                )
+                if op == REVERT_OP:
+                    current = api(
+                        sessions[who], "GET", f"/patient/{patient(pid)['uuid']}"
+                    )["data"]
+                    body = {k: current.get(k) for k in api_body(current)}
+                    body["phone_home"] = SEEDS["other_patient"]["phone_home"]
+                    api(sessions[who], "PUT", f"/patient/{patient(pid)['uuid']}", body)
+                elif op == APPOINTMENT_OP:
+                    deviations.append(
+                        "the appointment ran as SQL with an audit row by the bot"
+                    )
+                    sql(
+                        "INSERT INTO openemr.openemr_postcalendar_events (pc_catid, "
+                        "pc_aid, pc_pid, pc_title, pc_time, pc_eventDate, pc_endDate, "
+                        "pc_duration, pc_startTime, pc_endTime, pc_apptstatus, "
+                        "pc_facility, pc_billing_location) VALUES (10, "
+                        f"{q(str(ids['iholt']))}, {q(str(pid))}, 'New Patient', NOW(), "
+                        "'2026-10-26', '0000-00-00', 1800, '09:00:00', '09:30:00', "
+                        "'-', 3, 3);" + audit_row(BOT, pid)
+                    )
+                elif op == DOUBLE_HISTORY_OP:
+                    deviations.append(
+                        "the second history row ran as SQL with an audit row by the bot"
+                    )
+                    cols = ", ".join(
+                        c
+                        for c in sql(
+                            "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE "
+                            "TABLE_SCHEMA = 'openemr' AND TABLE_NAME = 'history_data' "
+                            "ORDER BY ORDINAL_POSITION"
+                        ).split()
+                        if c not in ("id", "uuid")
+                    )
+                    sql(
+                        f"INSERT INTO openemr.history_data ({cols}) SELECT {cols} "
+                        f"FROM openemr.history_data WHERE pid = {int(pid)} "
+                        "ORDER BY id LIMIT 1;" + audit_row(BOT, pid)
+                    )
                 continue
             pid = (
                 new_pid if step.get("target") == "new_patient" else ids[step["target"]]
