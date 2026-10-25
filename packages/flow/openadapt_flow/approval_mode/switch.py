@@ -762,6 +762,40 @@ def rearm_request(log: SwitchLog, *, cause: str) -> dict[str, Any]:
     }
 
 
+def rearm_to_sign(
+    log: SwitchLog,
+    request: Mapping[str, Any],
+    *,
+    approver_id: str,
+    key_id: str,
+    signed_at: Optional[str] = None,
+) -> tuple[dict[str, Any], bytes]:
+    """The fields to sign and their exact bytes, for a key held elsewhere.
+
+    For a key that never leaves a keychain: sign the returned bytes there,
+    then pass the fields and the base64 signature to :func:`rearm_evidence`.
+    """
+
+    first = log.read()[0]
+    assert first.switch_record_sha256 is not None
+    fields = {
+        **dict(request),
+        "approver_id": approver_id,
+        "key_id": key_id,
+        "signed_at": signed_at or _utc_now(),
+    }
+    return fields, rearm_signing_payload(
+        first.switch_id, first.switch_record_sha256, fields
+    )
+
+
+def rearm_evidence(fields: Mapping[str, Any], signature_b64: str) -> RearmEvidence:
+    """The re-arm from :func:`rearm_to_sign`'s fields and a signature made
+    elsewhere. :func:`rearm` verifies it; nothing is trusted here."""
+
+    return RearmEvidence.model_validate({**dict(fields), "signature": signature_b64})
+
+
 def sign_rearm(
     log: SwitchLog,
     request: Mapping[str, Any],
@@ -773,20 +807,11 @@ def sign_rearm(
 ) -> RearmEvidence:
     """A person's approver key signs the re-arm they were shown."""
 
-    first = log.read()[0]
-    assert first.switch_record_sha256 is not None
-    fields = {
-        **dict(request),
-        "approver_id": approver_id,
-        "key_id": key_id,
-        "signed_at": signed_at or _utc_now(),
-    }
-    signature = private_key.sign(
-        rearm_signing_payload(first.switch_id, first.switch_record_sha256, fields)
+    fields, payload = rearm_to_sign(
+        log, request, approver_id=approver_id, key_id=key_id, signed_at=signed_at
     )
-    return RearmEvidence.model_validate(
-        {**fields, "signature": base64.b64encode(signature).decode("ascii")}
-    )
+    signature = private_key.sign(payload)
+    return rearm_evidence(fields, base64.b64encode(signature).decode("ascii"))
 
 
 def rearm_refusal(

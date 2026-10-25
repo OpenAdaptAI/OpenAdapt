@@ -37,7 +37,9 @@ from openadapt_flow.approval_mode.switch import (
     REARM_CLEAN_ITEMS,
     SwitchLogError,
     rearm,
+    rearm_evidence,
     rearm_request,
+    rearm_to_sign,
     sign_rearm,
     turn_off,
 )
@@ -257,3 +259,16 @@ def test_an_appended_rearm_event_with_a_bad_signature_is_ignored(tmp_path) -> No
     other, _ = _keypair()
     log.append("rearmed", rearm=_signed(log, other))
     assert log.state(approver_keys=keys).is_off
+
+
+def test_a_key_held_in_a_keychain_signs_the_bytes_without_leaving_it(tmp_path) -> None:
+    # Desktop signs inside its keychain: it gets the bytes, returns a signature.
+    private, keys = _keypair()
+    log = _switched_off_log(tmp_path, REARM_CLEAN_ITEMS)
+    request = rearm_request(log, cause="a malformed date of birth was saved wrong")
+    fields, payload = rearm_to_sign(
+        log, request, approver_id="person-0001", key_id="approver-1"
+    )
+    signature = base64.b64encode(private.sign(payload)).decode("ascii")
+    rearm(log, rearm_evidence(fields, signature), approver_keys=keys)
+    assert not log.state(approver_keys=keys).is_off
