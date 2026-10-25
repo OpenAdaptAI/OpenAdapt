@@ -527,12 +527,33 @@ def cmd_approver_key(args: argparse.Namespace, engine: types.SimpleNamespace) ->
             root = setup
     print(
         "A person runs these commands (with OPENADAPT_JIT_KEY_PASSPHRASE set to "
-        "the key's passphrase), then pins the root "
-        f"{root.public_key if root else '<root>'} as approvers.root_public_key "
-        "in the deployment config passed to `openadapt-flow run --config`. "
-        "Desktop counts a person's answer only with a root pinned in this "
-        "Mac's Keychain; until then, Flow refuses answers from Desktop."
+        "the key's passphrase). Then an administrator pins the root for "
+        "Desktop on this computer: `sudo openadapt-desktop approver-pin "
+        f"{root.public_key if root else '<root>'}` (on Windows, from an "
+        "elevated prompt, without sudo). Until then, Flow refuses answers "
+        "from Desktop."
     )
+
+
+def cmd_approver_pin(args: argparse.Namespace) -> int:
+    """Pin (or show) the approver root in the administrator-owned anchor."""
+    from openadapt_desktop.approver_anchor import AnchorError, anchor_path, read_anchor, write_anchor
+
+    try:
+        if args.show or not args.root:
+            pinned = read_anchor()
+            print(f"{anchor_path()}: {pinned or 'no approver root pinned'}")
+            return 0 if (pinned or args.show) else 2
+        path = write_anchor(args.root)
+    except AnchorError as exc:
+        print(f"Approver pin refused ({exc.code}): {exc}")
+        return 1
+    print(f"Pinned approver root {args.root.strip().lower()} in {path}.")
+    print(
+        "Desktop on this computer now counts a person's answer only when it is "
+        "signed by a key on the roster this root started."
+    )
+    return 0
 
 
 def cmd_config(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
@@ -1051,7 +1072,19 @@ def main(argv: list[str] | None = None) -> None:
         help="The approver name to show in the register command",
     )
 
+    # approver-pin
+    p = subparsers.add_parser(
+        "approver-pin",
+        help="Pin this computer's approver root (administrator only)",
+    )
+    p.add_argument("root", nargs="?", help="The roster's root public key (64 hex digits)")
+    p.add_argument("--show", action="store_true", help="Show the pinned root and exit")
+
     args = parser.parse_args(argv)
+
+    if args.command == "approver-pin":
+        # Runs elevated: touch nothing in any user's data folder.
+        sys.exit(cmd_approver_pin(args))
 
     config = EngineConfig()
 

@@ -157,7 +157,8 @@ including an answer file written around the command
 - **The first approver.** On a Mac, Desktop sets it up behind Touch ID: the
   root is Desktop's approver key, signed after a presence prompt. Elsewhere,
   a person starts the roster with `openadapt-flow jit approver init`, and
-  the deployment config pins its root.
+  the deployment config pins its root (for Desktop, an administrator pins
+  it with `openadapt-desktop approver-pin`).
 
 Each route signs with its own key:
 
@@ -172,15 +173,38 @@ Each route signs with its own key:
     stdout; Desktop checks that they are the person's answer, asks for
     Touch ID, and writes the signature back on stdin. A cancelled prompt or
     any other failure is a refusal, and Flow records nothing.
-  - On a Mac, Desktop's pin is the root it set up behind Touch ID, kept in
-    the login Keychain; nothing else names it (not the environment, not a
-    file the user can write). A process running as the same user can delete
-    the Keychain items; Desktop then has no pin, and no person's answer
-    counts until someone sets the key up again behind Touch ID.
-  - On Windows and Linux, `openadapt-desktop approver-key setup` creates it,
-    keeps the encrypted key in an owner-only file and its passphrase in the
-    OS keychain, and prints the `jit approver` commands that put it on the
-    roster.
+  - Desktop's pin comes from one of two places, and nothing else names it
+    (not the environment, not a file this user can write, not Windows
+    Credential Manager or the Linux Secret Service):
+    - **The administrator's anchor**, a file only an administrator can
+      write: `/Library/Application Support/OpenAdapt/approver-root.json`
+      (macOS), `/etc/openadapt/approver-root.json` (Linux), or
+      `OpenAdapt\approver-root.json` in the ProgramData known folder
+      (Windows). An administrator writes it with `sudo openadapt-desktop
+      approver-pin ROOT` (on Windows, from an elevated prompt). Desktop
+      trusts it only when the file and every folder above it are owned by
+      root (or Administrators, SYSTEM or TrustedInstaller on Windows), none
+      is a symlink or reparse point, and no one else can write any of them;
+      otherwise it counts no person's answer.
+    - **On a Mac without an anchor, the Keychain**: the root Desktop set up
+      itself behind Touch ID. Desktop reads it with Keychain prompts turned
+      off, so an item another program planted or rewrote reads as no pin
+      instead of asking the person, who might allow it.
+    - An anchor and a Keychain root that disagree are refused, and a Mac
+      with an anchor doesn't start a second root.
+  - Without a pin, Desktop sends Flow no approvers section: runs go on, and
+    every person's answer is refused (`approver_root_unpinned`).
+  - What the anchor protects against: a process running as the same user
+    (an agent) can delete or rewrite this user's Keychain items, and on
+    today's ad-hoc signed macOS builds, which have no hardened runtime, it
+    can run code inside Desktop's own engine and write a Keychain root
+    Desktop reads without a prompt. Only the administrator's anchor holds
+    against that. An administrator, or a process with the administrator's
+    password or a cached `sudo`, can still change the anchor.
+  - On Windows and Linux, `openadapt-desktop approver-key setup` creates the
+    key, keeps the encrypted key in an owner-only file and its passphrase in
+    the OS keychain, and prints the `jit approver` commands that put it on
+    the roster; an administrator then pins the root with `approver-pin`.
 - **The decision portal** signs with the key at `OPENADAPT_PORTAL_APPROVER_KEY`
   after the person answered on their phone. Without it, the portal records
   no answer. Its key is added to the roster like any other approver.

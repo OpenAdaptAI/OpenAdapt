@@ -181,6 +181,9 @@ def test_run_it_waits_for_a_person_and_saves_after_approval(task) -> None:
 
     result = _run(disp)
 
+    # Flow gets the staged config's digest, so the bytes it reads are pinned.
+    digest = flow.run_kwargs.pop("config_sha256")
+    assert len(digest) == 64 and int(digest, 16) >= 0
     assert flow.run_kwargs == {"approval_mode": "each_item", "approval_wait_s": APPROVAL_WAIT_S}
     (shown,) = flow.seen
     assert shown["waiting"] is True
@@ -595,7 +598,7 @@ def test_bridge_sends_no_answer_without_an_approver_key(monkeypatch, tmp_path: P
     assert f"openadapt-flow jit keygen --out {key_path}" in message
     assert "OPENADAPT_JIT_KEY_PASSPHRASE" in message
     assert "openadapt-flow jit approver init --principal" in message
-    assert "approvers.root_public_key" in message
+    assert "sudo openadapt-desktop approver-pin" in message
     assert "OPENADAPT_APPROVER_ROOT" not in message
     assert calls == []  # never an unsigned answer
 

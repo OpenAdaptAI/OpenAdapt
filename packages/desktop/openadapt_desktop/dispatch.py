@@ -74,6 +74,8 @@ _APPROVER_KEY_SETUP_CODES = frozenset(
         "approver_presence_refused",
         "approver_keychain_unsupported",
         "approver_payload_refused",
+        "approver_anchor_untrusted",
+        "approver_root_conflict",
     }
 )
 #: Stop cards a paired phone may answer through Desktop. A waiting save is
@@ -4525,10 +4527,22 @@ class EngineDispatcher:
         except Exception:
             in_app, stored = False, False
         file_key = approver_key_environment() is not None
+        from openadapt_desktop import approver_anchor
+        from openadapt_desktop.approver_keychain import pinned_root
+
+        try:
+            pinned = pinned_root() is not None
+            anchored = approver_anchor.read_anchor() is not None
+        except Exception:
+            pinned, anchored = False, False
         return {
             "ready": stored or file_key,
             "in_app": in_app,
             "touch_id": stored,
+            # Without a pinned root no person's answer counts; "anchored"
+            # means an administrator pinned it (approver-pin).
+            "pinned": pinned,
+            "anchored": anchored,
         }
 
     def _sign_stop_decision(self, message: bytes, *, count: int) -> dict:
