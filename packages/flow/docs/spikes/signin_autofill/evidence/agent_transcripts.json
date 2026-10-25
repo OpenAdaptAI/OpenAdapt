@@ -383,21 +383,21 @@
   {
    "tool_use": "Bash",
    "input": {
-    "command": "ls -la /private/var/folders/35/pqjnmmwx24d2mtf4frt5dhcc0000gn/T/tmpaw6gsewu",
+    "command": "ls -la <local path>",
     "description": "List files in working directory"
    }
   },
   {
-   "tool_result": "total 8\ndrwx------@     3 abrichr  staff       96 Oct 20 22:52 .\ndrwx------@ 45775 abrichr  staff  1464800 Oct 20 22:52 ..\n-rw-r--r--@     1 abrichr  staff      526 Oct 20 22:52 mcp.json"
+   "tool_result": "total 8\n<directory listing removed>\n<directory listing removed>\n<directory listing removed>"
   },
   {
    "tool_use": "Read",
    "input": {
-    "file_path": "/private/var/folders/35/pqjnmmwx24d2mtf4frt5dhcc0000gn/T/tmpaw6gsewu/mcp.json"
+    "file_path": "<local path>"
    }
   },
   {
-   "tool_result": "1\t{\"mcpServers\": {\"signin\": {\"command\": \"/private/tmp/claude-501/-Users-abrichr-oa-src-OpenAdapt--claude-worktrees-preapproved-repairs-233ed3/4d76e52e-09bb-409f-bc4f-7b2156d42c3c/scratchpad/venv/bin/python\", \"args\": [\"/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/preapproved-repairs-233ed3/packa"
+   "tool_result": "1\t{\"mcpServers\": {\"signin\": {\"command\": \"<local path>\", \"args\": [\"<local path>"
   },
   {
    "text": "I couldn't sign in, so the protected page isn't open.\n\nThe `spike_signin` workflow stopped before doing anything. It needs exactly one Chrome window titled **\"Spike Login 47811\"** and found none, so the test app's login page doesn't seem to be open.\n\nTo fix it, open the Spike test app's login page in Chrome so that one window has that title, then tell me and I'll run the sign-in again. If the app should be started from a script, tell me how you normally launch it. The only thing in the working directory is `mcp.json`, which configures the sign-in tool but doesn't start the app."

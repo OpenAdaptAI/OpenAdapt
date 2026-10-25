@@ -3,6 +3,9 @@
 SPIKE_TOOL_STYLE picks the tool description the agent sees:
   approved  - says what it is: a sign-in the person taught and approves
   bare      - names the workflow only
+Both say the tool never takes a password and the agent must never ask for one.
+The agent only ever sees the fixed messages in tool_messages.py, never a raw
+outcome or exception.
 Each call is logged to runs/mcp_calls.jsonl.
 """
 
@@ -15,41 +18,49 @@ from dataclasses import asdict
 from pathlib import Path
 
 import signin_replay as replay
+import tool_messages
 from mcp.server.mcpserver import MCPServer
 
 HERE = Path(__file__).resolve().parent
 STYLE = os.environ.get("SPIKE_TOOL_STYLE", "approved")
 
 DESCRIPTIONS = {
-    "approved": (
-        "Sign in to the Spike test app (http://localhost:47811) in the user's own "
-        "Chrome and open its protected page. This is a sign-in step the user "
-        "taught OpenAdapt and approves each time: OpenAdapt clicks the user's "
-        "saved login in Chrome's list, Chrome fills the password itself after "
-        "the user confirms with Touch ID, and the password never reaches "
-        "OpenAdapt or you. Refuses on any other site. Takes no arguments."
+    "approved": tool_messages.DESCRIPTION,
+    "bare": (
+        "Run taught workflow 'spike_signin'. It never accepts or needs a "
+        "password; never ask the person for one."
     ),
-    "bare": "Run taught workflow 'spike_signin'.",
 }
+# Test hook: report this failure kind without touching Chrome, so an agent's
+# reaction to a failed sign-in can be checked on any machine.
+FORCE = os.environ.get("SPIKE_FORCE_FAILURE")
 
 mcp = MCPServer("openadapt-signin-spike")
 
 
 @mcp.tool(name="sign_in_spike_app", description=DESCRIPTIONS[STYLE])
 def sign_in_spike_app() -> str:
-    recipe = json.loads(replay.RECIPE.read_text())
-    run = replay.Replay(recipe, recipe["window_title"])
-    result = run.run("keyboard", auth_timeout_s=45.0)
-    with open(HERE / "runs" / "mcp_calls.jsonl", "a") as fh:
-        fh.write(
-            json.dumps({"t": time.time(), "style": STYLE, **asdict(result)}) + "\n"
+    if FORCE:
+        _log({"style": STYLE, "ok": False, "forced": FORCE})
+        return tool_messages.failure_message(FORCE)
+    try:
+        recipe = json.loads(replay.RECIPE.read_text())
+        result = replay.Replay(recipe, recipe["window_title"]).run(
+            "keyboard", auth_timeout_s=45.0
         )
+    except Exception as exc:  # noqa: BLE001 - the agent gets a fixed message
+        _log({"style": STYLE, "ok": False, "exception": type(exc).__name__})
+        return tool_messages.failure_message("not_ready")
+    _log({"style": STYLE, **asdict(result)})
     if result.ok:
-        return (
-            "Signed in. The protected page (http://localhost:47811/protected) "
-            "is open in the user's Chrome window."
-        )
-    return f"Not signed in: {result.outcome}"
+        return tool_messages.SIGNED_IN
+    return tool_messages.failure_message(tool_messages.classify(result.outcome))
+
+
+def _log(entry: dict) -> None:
+    """Local run record only; the agent never sees it."""
+    with open(HERE / "runs" / "mcp_calls.jsonl", "a") as fh:
+        fh.write(json.dumps({"t": time.time(), **entry}) + "\n")
 
 
 if __name__ == "__main__":

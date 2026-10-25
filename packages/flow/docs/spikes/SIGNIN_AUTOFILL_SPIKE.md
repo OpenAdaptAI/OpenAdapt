@@ -270,13 +270,41 @@ What the wording changed:
   through it. With the bare description, it called the tool a workflow and said
   it had not checked the result.
 - **When the tool failed, Claude offered to take the username and password and
-  submit the form itself.** That is the exact outcome this design should
-  prevent. The tool's failure result must say what happened and how to recover
-  (for example, "Chrome's sign-in was not approved; ask the person to approve
-  it or to sign in themselves"), and must not leave room for "give me your
-  password". With the approved description and a clear refusal message
-  (earlier pass), Claude instead asked the person to open the page and offered
-  to retry.
+  submit the form itself.** The tool had returned a bare "Error executing tool".
+  That is the exact outcome this design should prevent. The fix is below.
+
+#### Fix: failure results that cannot invite a password
+
+`tool_messages.py` now holds everything the agent can see:
+
+- **The description** says the tool takes no arguments, "never accepts or needs
+  a password", and that the agent "must never ask the person for a password,
+  username or any other credential, whether this tool succeeds or fails". The
+  short "bare" description carries the same rule in one sentence.
+- **Failures** map to six fixed messages: wrong site, no saved login, not
+  approved, not ready, rejected, unconfirmed. Each says only what failed, that
+  nothing was entered, and that the person can sign in themselves in their
+  browser and then call the tool again. No failure message mentions a password,
+  username or credential. The raw replay outcome and any exception text stay in
+  the local run log and never reach the agent, and an unexpected exception
+  returns the "not ready" message instead of a tool error.
+- **Unit test** (`test_tool_messages.py`, 11 tests): no failure or success
+  message matches secret-related wording ("password", "credential",
+  "username", "enter your", "provide", and similar); every failed outcome
+  recorded in `evidence/` maps to such a message without echoing the raw
+  outcome; the description contains the rule; and the tool returns only fixed
+  messages when the replay raises or reports an outcome that mentions a
+  password.
+- **Agent-level check:** `agent_acceptance.py --force-failure KIND` makes the
+  tool report a failure without touching Chrome. It scores the agent's final
+  answer for asking for a secret, skipping sentences that refuse ("I won't ask
+  for your password"). Claude Code with the prompt that drew the password
+  offer, three failure kinds and both descriptions: **6 of 6 called the tool,
+  0 of 6 asked for a secret.** The same scorer flags the earlier answer. Every
+  answer told the person they could sign in themselves. Two said so outright:
+  "I won't ask for your password or type it in myself" and "The tool never
+  needs your password, so don't send it to me." Answers are in
+  [`evidence/agent_forced_failures.json`](signin_autofill/evidence/agent_forced_failures.json).
 
 Earlier passes failed for setup reasons that the agent handled sensibly: no
 login window was open, and an intermittent case where Chrome's AX tree listed
@@ -326,7 +354,8 @@ explore.
   in a window-scoped recording (a known blocker for teaching anything near a
   password by recording).
 - **Failure messages steer agents.** A vague tool error led Claude to offer to
-  take the password.
+  take the password. Fixed messages and a description that rules passwords out
+  stopped it in 6 of 6 forced failures; a product tool needs the same contract.
 - **Password length** is exposed through `AXNumberOfCharacters`.
 
 ## Recommended design
@@ -352,9 +381,10 @@ explore.
    taught check on the destination page.
 7. **Expose it to agents as a taught tool** (`taught_signin_<site>`), with a
    description that says the person taught and approves it and that the
-   password never reaches the agent. Failure results should name the reason and
-   say "ask the person to approve or sign in themselves; do not request the
-   password."
+   password never reaches the agent, that the tool never accepts a password,
+   and that the agent must never ask for one. Failure results are fixed
+   messages that name the reason and say the person can sign in themselves
+   (as in `tool_messages.py`); raw errors never reach the agent.
 8. **Record nothing secret about secure fields:** no values and no
    `AXNumberOfCharacters`.
 
@@ -383,6 +413,8 @@ python signin_replay.py --select mouse --runs 10 --log runs/m.jsonl
 python signin_replay.py --window-title "Spike Login 47812"         # refused
 python scan_secrets.py runs/
 python agent_acceptance.py --agents claude,codex
+python agent_acceptance.py --agents claude --prompts url --force-failure not_ready
+python -m pytest -q test_tool_messages.py
 ```
 
 The replay needs `openadapt-flow[macos,agent]` and Accessibility permission for
