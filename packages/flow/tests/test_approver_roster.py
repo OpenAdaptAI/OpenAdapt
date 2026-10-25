@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -581,8 +580,8 @@ def test_a_run_refuses_a_roster_rolled_back_after_it_started(started, tmp_path):
     (key_dir / roster.ROSTER_FILE).write_text(older)
 
     from openadapt_flow.approval_mode.human_attestation import (
-        approvers,
         AttestationRefused,
+        approvers,
     )
 
     context = run.context()
@@ -737,3 +736,118 @@ def test_the_deployment_pin_is_read_once_per_command(tmp_path):
     assert _approver_pin(args, config_only=True)["config_root"] == first
     config.write_text(f"approvers:\n  root_public_key: {second}\n")  # swapped mid-run
     assert _approver_pin(args, config_only=True)["config_root"] == first
+
+
+# -- third review --------------------------------------------------------------------
+
+
+def test_the_guard_server_takes_its_root_only_from_the_config(tmp_path, monkeypatch):
+    """The agent sets OPENADAPT_APPROVER_ROOT to its own roster; the guard ignores it."""
+
+    from openadapt_flow.agent import cli as agent_cli
+    from openadapt_flow.guard import GuardedSave
+
+    agent_key, agent_public = _key()
+    monkeypatch.setenv(roster.ROOT_ENV, agent_public)
+    _real, real_public = _key()
+    config = tmp_path / "deployment.yaml"
+    config.write_text(f"approvers:\n  root_public_key: {real_public}\n")
+    seen: dict = {}
+
+    def capture(cls, verify, state, **kwargs):
+        seen.update(kwargs)
+        raise SystemExit(0)
+
+    monkeypatch.setattr(GuardedSave, "from_file", classmethod(capture))
+    args = argparse.Namespace(
+        authoring=None,
+        bundles=None,
+        tutorial=False,
+        guard="verify.yaml",
+        guard_tasks="tasks",
+        guard_state=str(tmp_path / "state"),
+        guard_approval="each_item",
+        config=str(config),
+    )
+    with pytest.raises(SystemExit):
+        agent_cli._serve_guard(args, serve=None)
+    assert seen["config_only"] is True
+    assert seen["approver_root"] == real_public
+
+    # And a guard store built the way the guard builds it never reads the env.
+    store = ItemApprovalStore(tmp_path / "guard", config_root=None, config_only=True)
+    store.write_approver_root()
+    assert store.context().pin_refusal == "approver_root_unpinned"
+
+
+def test_a_governed_resume_with_a_deleted_record_refuses(tmp_path, monkeypatch, capsys):
+    """Deleting approver-root.json and resuming with another root and key dir."""
+
+    from openadapt_flow.__main__ import main
+    from openadapt_flow.jit.authority import KEY_PASSPHRASE_ENV
+    from openadapt_flow.jit.lifecycle import KEY_DIR_ENV
+    from tests._approver_keys import PASSPHRASE, provision, root_of
+    from tests.test_cli_new_commands import _paused_run
+
+    keys = tmp_path / "keys"
+    monkeypatch.setenv(KEY_DIR_ENV, str(keys))
+    monkeypatch.setenv(KEY_PASSPHRASE_ENV, PASSPHRASE)
+    provision(keys)
+    monkeypatch.setenv(roster.ROOT_ENV, root_of(keys))
+    run = _paused_run(tmp_path, managed=True)
+    record = run / "item-approval" / "approver-root.json"
+    assert record.exists()
+    record.unlink()
+
+    agent_key, agent_public = _key()
+    agent_keys = tmp_path / "agent-keys"
+    roster.init_root(
+        agent_keys,
+        principal="front-desk",
+        public_key=agent_public,
+        sign=roster.file_key_signer(agent_key),
+    )
+    config = tmp_path / "deployment.yaml"
+    config.write_text(f"approvers:\n  root_public_key: {root_of(keys)}\n")
+    capsys.readouterr()
+    code = main(
+        [
+            "resume",
+            str(run),
+            "--require-approval",
+            "--config",
+            str(config),
+            "--approver-root",
+            agent_public,
+            "--key-dir",
+            str(agent_keys),
+        ]
+    )
+    assert code == 3
+
+
+def test_the_config_is_read_once_and_checked_against_its_digest(tmp_path):
+    import hashlib
+
+    from openadapt_flow.deployment import (
+        _PINNED_CONFIG_BYTES,
+        load_deployment,
+        pin_deployment_bytes,
+    )
+
+    _a, first = _key()
+    _b, second = _key()
+    config = tmp_path / "deployment.yaml"
+    config.write_text(f"approvers:\n  root_public_key: {first}\n")
+    digest = hashlib.sha256(config.read_bytes()).hexdigest()
+    try:
+        pin_deployment_bytes(config, digest)
+        config.write_text(f"approvers:\n  root_public_key: {second}\n")  # swapped
+        assert (
+            load_deployment(config, allow_unresolved=True).approvers.root_public_key
+            == first
+        )
+        with pytest.raises(ValueError, match="config-sha256"):
+            pin_deployment_bytes(config, digest)  # the swapped file doesn't match
+    finally:
+        _PINNED_CONFIG_BYTES.clear()

@@ -989,8 +989,13 @@ class FlowBridge:
         env_overrides: dict[str, str] | None = None,
         approval_mode: str | None = None,
         approval_wait_s: int | None = None,
+        config_sha256: str | None = None,
     ) -> FlowResult:
         """Run a bundle under a deployment config.
+
+        ``config_sha256`` is the digest of the config bytes Desktop wrote:
+        Flow reads the file once, refuses it if it differs, and parses only
+        those bytes (``--config-sha256``), so it can't be swapped mid-run.
 
         ``authorization_file`` forwards a cloud-minted GovernedRunAuthorization
         JSON to ``openadapt-flow run --authorization-file`` -- pass it only when
@@ -1004,6 +1009,8 @@ class FlowBridge:
         unless the caller passes the mode, so Desktop always passes it.
         """
         args = ["run", str(bundle_dir), "--config", str(config)]
+        if config_sha256:
+            args += ["--config-sha256", config_sha256]
         if out_dir:
             args += ["--run-dir", str(out_dir)]
         if authorization_file:
@@ -1034,6 +1041,7 @@ class FlowBridge:
         url: str | None = None,
         env_overrides: dict[str, str] | None = None,
         approval_wait_s: int | None = None,
+        config_sha256: str | None = None,
     ) -> FlowResult:
         """Run one qualification case through Flow-owned authorization.
 
@@ -1060,6 +1068,7 @@ class FlowBridge:
             str(out_dir),
             "--config",
             str(config),
+            *(["--config-sha256", config_sha256] if config_sha256 else []),
         ]
         if url:
             args += ["--url", url]
@@ -1192,6 +1201,7 @@ class FlowBridge:
             raise ValueError("An approval has no reason")
         from openadapt_desktop.approver_keychain import (
             ApproverKeychainError,
+            pinned_head,
             pinned_root,
         )
 
@@ -1201,8 +1211,12 @@ class FlowBridge:
             return {"ok": False, "code": exc.code, "message": str(exc)}
         if root:
             # The reader brings its own pin; the run directory's record must
-            # match it, and is never trusted on its own.
+            # match it, and is never trusted on its own. The head this Mac
+            # recorded goes with it, so Flow refuses a roster Desktop would.
             args += ["--approver-root", root]
+            head = pinned_head()
+            if head is not None:
+                args += ["--approver-head", f"{head[0]}:{head[1]}"]
         from openadapt_desktop.approver_key import (
             approver_key_environment,
             setup_instructions,

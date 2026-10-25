@@ -748,27 +748,68 @@ def flow_roster(monkeypatch, tmp_path, fake_keyring):
     return approver_keychain.FlowRoster(), module
 
 
-def test_the_keychain_pin_wins_and_a_different_env_root_is_refused(flow_roster, monkeypatch):
+def _admin_config(monkeypatch, tmp_path, root):
+    import json as _json
+
+    data = tmp_path / "data"
+    data.mkdir(exist_ok=True)
+    monkeypatch.setenv("OPENADAPT_DATA_DIR", str(data))
+    (data / "deployment.json").write_text(
+        _json.dumps({"approvers": {"root_public_key": root}})
+    )
+
+
+def test_the_environment_never_names_this_macs_root(flow_roster, monkeypatch, tmp_path):
     from openadapt_desktop.approver_keychain import ROOT_ACCOUNT, pinned_root
 
     roster, _module = flow_roster
+    monkeypatch.setenv("OPENADAPT_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("OPENADAPT_APPROVER_ROOT", "b" * 64)
+    assert pinned_root() is None  # no Keychain pin, no admin pin: nothing
+
     fake = __import__("openadapt_desktop.auth.store", fromlist=["_keyring"])._keyring()
     fake.set_password(SERVICE_NAME, ROOT_ACCOUNT, "a" * 64)
-    assert roster.root() == "a" * 64
+    assert roster.root() == "a" * 64  # the env value is simply ignored
 
-    monkeypatch.setenv("OPENADAPT_APPROVER_ROOT", "b" * 64)
+
+def test_an_admin_root_counts_only_without_a_keychain_pin(flow_roster, monkeypatch, tmp_path):
+    from openadapt_desktop.approver_keychain import ROOT_ACCOUNT, pinned_root
+
+    roster, _module = flow_roster
+    _admin_config(monkeypatch, tmp_path, "c" * 64)
+    assert roster.root() == "c" * 64
+
+    fake = __import__("openadapt_desktop.auth.store", fromlist=["_keyring"])._keyring()
+    fake.set_password(SERVICE_NAME, ROOT_ACCOUNT, "a" * 64)
     with pytest.raises(ApproverKeychainError) as raised:
         pinned_root()
     assert raised.value.code == "approver_root_conflict"
 
-    monkeypatch.setenv("OPENADAPT_APPROVER_ROOT", "a" * 64)  # the same: fine
-    assert pinned_root() == "a" * 64
-
-
-def test_an_admin_env_root_counts_only_without_a_keychain_pin(flow_roster, monkeypatch):
-    roster, _module = flow_roster
-    monkeypatch.setenv("OPENADAPT_APPROVER_ROOT", "c" * 64)
+    # A Keychain pin deleted by a same-user process leaves only the admin's.
+    fake.delete_password(SERVICE_NAME, ROOT_ACCOUNT)
     assert roster.root() == "c" * 64
+
+
+def test_ensure_private_dir_refuses_a_symlinked_folder(tmp_path):
+    from openadapt_desktop.private_fs import ensure_private_dir
+
+    real = tmp_path / "elsewhere"
+    real.mkdir()
+    (tmp_path / "staged").symlink_to(real)
+    with pytest.raises(OSError, match="not a plain folder"):
+        ensure_private_dir(tmp_path / "staged")
+
+
+def test_the_staged_config_is_byte_exact_for_its_digest(tmp_path):
+    import hashlib
+
+    from openadapt_desktop.private_flow_config import stage_private_text
+
+    payload = "name: clinic\r\napprovers:\n  root_public_key: " + "a" * 64 + "\n"
+    with stage_private_text(tmp_path, payload=payload, prefix=".d-", suffix=".yaml") as path:
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == hashlib.sha256(
+            payload.encode("utf-8")
+        ).hexdigest()
 
 
 def test_the_roster_head_is_kept_in_the_keychain_and_a_rollback_is_refused(flow_roster):

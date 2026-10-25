@@ -3228,8 +3228,12 @@ def _approver_pin(args: argparse.Namespace, *, config_only: bool) -> dict[str, A
 
 
 def _run_is_config_pinned(args: argparse.Namespace) -> bool:
-    return bool(getattr(args, "started_by", None)) or (
-        getattr(args, "_governed_run_authorization", None) is not None
+    """A governed run (or its resume), or one an agent started."""
+
+    return (
+        bool(getattr(args, "started_by", None))
+        or getattr(args, "_governed_run_authorization", None) is not None
+        or bool(getattr(args, "_resume_governed", False))
     )
 
 
@@ -4082,7 +4086,11 @@ def _resume_approval_mode(args: argparse.Namespace, authorization):
 
 
 def _carry_item_approval_to_pause(
-    run_dir: Path, store, pending, key_dir: Optional[Path] = None
+    run_dir: Path,
+    store,
+    pending,
+    key_dir: Optional[Path] = None,
+    pin: Optional[dict[str, Any]] = None,
 ):
     """Answer a waiting ``item_approval`` pause from an unused approval, if any.
 
@@ -4096,7 +4104,9 @@ def _carry_item_approval_to_pause(
     try:
         manifest = store.read_manifest()
         found = (
-            ItemApprovalStore(run_dir, key_dir=key_dir).find_unused_approval(
+            ItemApprovalStore(
+                run_dir, key_dir=key_dir, **(pin or {})
+            ).find_unused_approval(
                 run_id=manifest.run_id,
                 step_id=pending.step_id,
                 step_index=pending.step_index,
@@ -4162,13 +4172,22 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             "Nothing was executed."
         )
         return 3
+    # A governed run's resume takes its approver pin only from the deployment
+    # config, everywhere it checks an answer (the run directory and the
+    # environment are never the anchor).
+    _early_manifest = store.read_manifest()
+    args._resume_governed = bool(
+        _early_manifest is not None
+        and _early_manifest.governed_authorization is not None
+    )
+    resume_pin = _approver_pin(args, config_only=_run_is_config_pinned(args))
     if pending.category == "item_approval" and pending.status == "pending":
         # The person may have approved while the run was giving up waiting,
         # before this pause existed for `item-approval approve` to answer.
         # Carry that approval to the pause now; the resumed run still checks
         # the answer itself and uses it once.
         pending = _carry_item_approval_to_pause(
-            run_dir, store, pending, _args_key_dir(args)
+            run_dir, store, pending, _args_key_dir(args), resume_pin
         )
     if args.require_approval and pending.status != "approved":
         from openadapt_flow.cli_hints import command
@@ -4197,7 +4216,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
 
         if (
             ItemApprovalStore(
-                run_dir, key_dir=_args_key_dir(args)
+                run_dir, key_dir=_args_key_dir(args), **resume_pin
             ).find_unused_approval(
                 run_id=manifest.run_id,
                 step_id=pending.step_id,
@@ -4693,6 +4712,18 @@ def _cmd_approve(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_head(value: Optional[str]) -> Optional[tuple[int, str]]:
+    """``SEQ:sha256:HEX`` (or ``SEQ:HEX``) as a roster head, or ``None``."""
+
+    if not value:
+        return None
+    seq, _, digest = str(value).partition(":")
+    if not seq.isdigit() or not digest:
+        raise SystemExit(f"REFUSED: --approver-head {value!r} isn't SEQ:SHA256")
+    digest = digest if digest.startswith("sha256:") else "sha256:" + digest
+    return int(seq), digest
+
+
 def _cmd_item_approval(args: argparse.Namespace) -> int:
     """List, approve or decline per-item approval requests (Desktop's Run it).
 
@@ -4722,6 +4753,7 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
         run_dir,
         key_dir=Path(key_dir) if key_dir else None,
         approver_root=getattr(args, "approver_root", None),
+        config_head=_parse_head(getattr(args, "approver_head", None)),
     )
     if verb == "show":
         rows = [request_summary(store, request) for request in store.requests()]
@@ -7910,6 +7942,16 @@ def _add_deployment_flags(
     """Add the shared deployment-wiring flags (config + effects + actuation +
     durable, optionally a worklist) to a replay-family subparser."""
     p.add_argument(
+        "--config-sha256",
+        default=None,
+        metavar="HEX",
+        help=(
+            "The SHA-256 of --config's bytes. Flow reads the file once, refuses "
+            "it if it differs, and parses only those bytes for the whole run, so "
+            "the file can't be swapped while the run goes on"
+        ),
+    )
+    p.add_argument(
         "--config",
         default=None,
         metavar="YAML",
@@ -9630,6 +9672,15 @@ def build_parser() -> argparse.ArgumentParser:
             "--approver-public-key",
             default=None,
             help="With --approver-signer: the registered approver key's public key (hex)",
+        )
+        q.add_argument(
+            "--approver-head",
+            default=None,
+            metavar="SEQ:SHA256",
+            help=(
+                "A roster head the answering side recorded (Desktop's Keychain): "
+                "the approver roster must extend it"
+            ),
         )
         if verb == "decline":
             q.add_argument(
@@ -12259,6 +12310,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     no_outbound.enforce_from_env()
     args = build_parser().parse_args(argv)
+    if getattr(args, "config_sha256", None):
+        if not getattr(args, "config", None):
+            print("REFUSED: --config-sha256 needs --config", file=sys.stderr)
+            return 2
+        from openadapt_flow.deployment import pin_deployment_bytes
+
+        try:
+            # Read the config once, check it, and parse only those bytes.
+            pin_deployment_bytes(args.config, args.config_sha256)
+        except (OSError, ValueError) as exc:
+            print(f"REFUSED (deployment_config_changed): {exc}", file=sys.stderr)
+            return 2
     from openadapt_flow import sealed_set
 
     try:

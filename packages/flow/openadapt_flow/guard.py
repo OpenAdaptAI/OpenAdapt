@@ -311,8 +311,12 @@ class GuardedSave:
     #: ``~/.openadapt/jit``. Keep it away from the agent this guard governs.
     key_dir: Optional[Path] = None
     #: The approver root this guard pins (approval_mode/approver_roster).
-    #: ``None``: ``$OPENADAPT_APPROVER_ROOT``.
+    #: ``config_only`` (the agent's guard server): it came from the deployment
+    #: config and nothing the agent sets (the environment) can replace it.
     approver_root: Optional[str] = None
+    config_only: bool = False
+    #: A roster head from the deployment config the roster must extend.
+    config_head: Optional[tuple[int, str]] = None
 
     def __post_init__(self) -> None:
         if self.approval not in APPROVAL_MODES:
@@ -523,9 +527,16 @@ class Guard:
         from openadapt_flow.approval_mode.model import ApprovalMode
         from openadapt_flow.approval_mode.switch import canonical_json
 
-        store = ItemApprovalStore(
-            self.dir, key_dir=self.owner.key_dir, approver_root=self.owner.approver_root
+        pin: dict[str, Any] = (
+            {
+                "config_root": self.owner.approver_root,
+                "config_only": True,
+                "config_head": self.owner.config_head,
+            }
+            if self.owner.config_only
+            else {"approver_root": self.owner.approver_root}
         )
+        store = ItemApprovalStore(self.dir, key_dir=self.owner.key_dir, **pin)
         if self._request is None:
             if not screenshot_png:
                 raise GuardRefused(
@@ -538,6 +549,8 @@ class Guard:
                 # started this guard is recorded so it can never answer it.
                 store.write_policy(DEFAULT_APPROVER_POLICY)
                 store.write_initiator(f"agent:{self.agent_id}")
+                # The pin every answer to this save is checked against.
+                store.write_approver_root()
                 self._request = store.open_request(
                     run_id=self.guard_id,
                     workflow_name="guarded-save",

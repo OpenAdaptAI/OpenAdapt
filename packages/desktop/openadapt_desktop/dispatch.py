@@ -1630,6 +1630,14 @@ class EngineDispatcher:
                         # A missing historical default stays fail-loud in Flow.
                         config_path = staged_config or default_config
                         run_kwargs: dict[str, Any] = {"out_dir": run_dir}
+                        config_digest = (
+                            hashlib.sha256(prepared.payload.encode("utf-8")).hexdigest()
+                            if staged_config is not None and prepared is not None
+                            else None
+                        )
+                        if config_digest:
+                            # Flow parses only the bytes Desktop wrote.
+                            run_kwargs["config_sha256"] = config_digest
                         if params_file is not None:
                             run_kwargs["params_file"] = params_file
                         if bundle_env:
@@ -1647,6 +1655,7 @@ class EngineDispatcher:
                                 run_id=run_id,
                                 out_dir=run_dir,
                                 env_overrides=bundle_env,
+                                config_sha256=config_digest,
                                 **case_kwargs,
                             )
                         else:

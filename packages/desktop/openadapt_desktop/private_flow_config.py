@@ -394,7 +394,9 @@ def stage_private_text(
             os.fchmod(fd, 0o600)
         except (AttributeError, OSError):  # pragma: no cover - Windows fallback
             os.chmod(path, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        # No newline translation: the bytes on disk are exactly
+        # payload.encode("utf-8"), so the digest Desktop passes matches.
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
             fd = -1
             handle.write(payload)
             handle.flush()

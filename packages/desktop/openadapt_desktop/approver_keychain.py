@@ -45,12 +45,12 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 import secrets
 import sys
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, Literal, Protocol
 
 from cryptography.hazmat.primitives import serialization
@@ -192,9 +192,11 @@ class FlowRoster:
     """The roster in Flow's key directory, pinned by this Mac.
 
     The pin is the root Desktop set up itself, behind Touch ID, kept in the
-    login Keychain. ``OPENADAPT_APPROVER_ROOT`` is an administrator's setting
-    for a Mac that didn't start the roster: it counts only when the Keychain
-    holds no pin, and a value that differs from the Keychain's is refused.
+    login Keychain. An administrator's root in Desktop's own deployment config
+    (``approvers.root_public_key`` in ``deployment.json``) counts for a Mac
+    that didn't start the roster, or whose Keychain pin is gone; one that
+    differs from the Keychain's is refused. ``OPENADAPT_APPROVER_ROOT`` never
+    counts.
     Desktop never adopts the root of a roster it finds: that would trust
     whoever wrote the file first. The roster must also extend the head this
     Mac recorded after its own last change.
@@ -203,14 +205,16 @@ class FlowRoster:
     def root(self) -> str | None:
         stored = _store._kr_get(_store._keyring(), ROOT_ACCOUNT)
         kept = stored.strip().lower() if stored else None
-        env = os.environ.get(ROOT_ENV, "").strip().lower() or None
-        if kept and env and env != kept:
+        admin = _admin_root()
+        if kept and admin and admin != kept:
             raise ApproverKeychainError(
                 "approver_root_conflict",
-                f"{ROOT_ENV} names another approver root than the one this Mac "
-                "set up. Nothing was approved.",
+                "Desktop's deployment config names another approver root than "
+                "the one this Mac set up. Nothing was approved.",
             )
-        return kept or env
+        # The environment never counts: whoever starts a process sets it. A
+        # pin deleted from the Keychain leaves only an administrator's.
+        return kept or admin
 
     def _head(self) -> tuple[int, str] | None:
         raw = _store._kr_get(_store._keyring(), HEAD_ACCOUNT)
@@ -292,6 +296,30 @@ class FlowRoster:
             at_least=self._head(),
         )
         self._record_head()
+
+
+def _admin_root() -> str | None:
+    """An administrator's approver root from Desktop's own deployment config.
+
+    ``approvers.root_public_key`` in ``<data_dir>/deployment.json``: for a Mac
+    whose key an approver added to a roster it didn't start. Unreadable
+    means refused, not ignored.
+    """
+
+    from openadapt_desktop.config import EngineConfig
+
+    path = Path(EngineConfig().data_dir) / "deployment.json"
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ApproverKeychainError(
+            "approver_key_unusable", f"Desktop's deployment config is unreadable: {exc}"
+        ) from exc
+    section = data.get("approvers") if isinstance(data, dict) else None
+    value = section.get("root_public_key") if isinstance(section, dict) else None
+    return str(value).strip().lower() if value else None
 
 
 def pinned_root() -> str | None:

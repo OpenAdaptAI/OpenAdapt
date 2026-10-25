@@ -1261,6 +1261,33 @@ def incomplete_deployment_reasons(cfg: DeploymentConfig) -> list[str]:
     return reasons
 
 
+#: Config bytes read once and checked against the digest the caller passed
+#: (``--config-sha256``), by resolved path. Every later load of that path in
+#: this process parses these bytes, never the file, so a file swapped after
+#: the check changes nothing.
+_PINNED_CONFIG_BYTES: dict[str, bytes] = {}
+
+
+def pin_deployment_bytes(source: str | Path, sha256: str) -> None:
+    """Read ``source`` once, check it against ``sha256``, and keep those bytes.
+
+    Raises ValueError when the digest doesn't match.
+    """
+
+    import hashlib
+
+    path = Path(source)
+    data = path.read_bytes()
+    want = sha256.strip().lower().removeprefix("sha256:")
+    got = hashlib.sha256(data).hexdigest()
+    if got != want:
+        raise ValueError(
+            f"deployment config {path} doesn't match --config-sha256 (it changed "
+            "after it was written)"
+        )
+    _PINNED_CONFIG_BYTES[str(path.resolve())] = data
+
+
 def load_deployment(
     source: str | Path, *, allow_unresolved: bool = False
 ) -> DeploymentConfig:
@@ -1274,10 +1301,12 @@ def load_deployment(
     import yaml
 
     path = Path(source)
-    if not path.is_file():
+    pinned = _PINNED_CONFIG_BYTES.get(str(path.resolve()))
+    if pinned is None and not path.is_file():
         raise FileNotFoundError(f"deployment config {source!r} is not an existing file")
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        text = pinned.decode("utf-8") if pinned is not None else path.read_text()
+        data = yaml.safe_load(text) or {}
     except yaml.YAMLError as e:  # pragma: no cover - passthrough
         raise ValueError(f"could not parse deployment YAML {path}: {e}") from e
     if not isinstance(data, dict):
