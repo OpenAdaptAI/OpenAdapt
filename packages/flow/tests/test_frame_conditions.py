@@ -721,12 +721,12 @@ def test_an_audited_edit_of_the_saved_record_by_another_user_blocks() -> None:
 #: OpenEMR's ``log`` keeps each statement base64-encoded in ``comments``
 #: (as the pinned fixture's own rows do), with ``user`` and ``patient_id``.
 OPENEMR_SCOPE = (
-    r"(?i)^\s*(?:insert\s+(?:ignore\s+)?into|replace\s+into|update|delete\s+from)"
-    r"\s+`?(?P<scope>[A-Za-z0-9_]+)"
+    r"(?i)^\s*(?P<op>insert|replace|update|delete)\s+(?:ignore\s+)?(?:into\s+|from\s+)?"
+    r"`?(?P<scope>[A-Za-z0-9_]+)"
 )
 
 
-def _openemr_frame(db: Path) -> dict:
+def _openemr_frame(db: Path, writes: list | None = None) -> dict:
     return {
         "identity_field": "pid",
         "attribution": {
@@ -736,7 +736,7 @@ def _openemr_frame(db: Path) -> dict:
             "scope_field": "comments",
             "scope_encoding": "base64",
             "scope_pattern": OPENEMR_SCOPE,
-            "writes": ["patient_data", "history_data"],
+            "writes": writes or ["patient_data", "history_data"],
             "self": ["openadapt_actor"],
             "read": {
                 "kind": "sql",
@@ -810,7 +810,9 @@ def _new_patient(con, user: str = "openadapt_actor") -> int:
     return 2
 
 
-def _openemr_verify(tmp_path: Path, db: Path, name: str, write) -> dict:
+def _openemr_verify(
+    tmp_path: Path, db: Path, name: str, write, writes: list | None = None
+) -> dict:
     doc = {
         "schema_version": "openadapt.verify/v1",
         "verifier": {
@@ -830,7 +832,7 @@ def _openemr_verify(tmp_path: Path, db: Path, name: str, write) -> dict:
                 "timeout_s": 0.2,
             }
         ],
-        "frame": _openemr_frame(db),
+        "frame": _openemr_frame(db, writes),
     }
     params = {"fname": "Ada", "lname": "Quill", "DOB": "1984-03-07"}
     cfg = parse_verify_config(doc)
@@ -896,7 +898,7 @@ def test_openemr_insurance_row_for_the_new_patient_is_collateral(
     [
         ("lists", "INSERT INTO lists SET `type` = ?, `title` = ?, `pid` = ?"),
         ("pnotes", "INSERT INTO `pnotes` (`body`, `pid`) VALUES (?, ?)"),
-        ("history_delete", "DELETE FROM `insurance_data` WHERE pid = ?"),
+        ("insurance_delete", "DELETE FROM `insurance_data` WHERE pid = ?"),
     ],
 )
 def test_any_other_table_for_the_saved_patient_is_collateral(
@@ -967,3 +969,76 @@ def test_scope_reading() -> None:
     assert spec.scope_of(entry("SELECT * FROM patient_data")) is None
     assert spec.scope_of({"comments": "not base64!"}) is None
     assert spec.scope_of({}) is None
+
+
+def test_a_verb_the_save_does_not_use_on_a_declared_table_is_collateral(
+    tmp_path: Path,
+) -> None:
+    """With ``ops``, a DELETE or UPDATE on a table the save only inserts into
+    is not excused."""
+
+    writes = [
+        {"table": "patient_data", "ops": ["insert"]},
+        {"table": "history_data", "ops": ["insert"]},
+    ]
+    db = _openemr_store(tmp_path)
+    clean = _openemr_verify(tmp_path, db, "ops-clean", _new_patient, writes)
+    assert clean["receipt"]["outcome"] == "verified", clean["evidence"]["frame"]
+
+    (tmp_path / "second").mkdir()
+    db = _openemr_store(tmp_path / "second")
+
+    def write(con) -> None:
+        pid = _new_patient(con)
+        con.execute("DELETE FROM history_data WHERE pid = ?", (pid,))
+        _log(
+            con,
+            "openadapt_actor",
+            "patient-record-delete",
+            pid,
+            "DELETE FROM `history_data` WHERE pid = ? ('2')",
+        )
+
+    result = _openemr_verify(tmp_path, db, "ops-delete", write, writes)
+    assert result["receipt"]["outcome"] == "reconciliation_required"
+    assert result["evidence"]["frame"]["collateral_scopes"] == ["history_data:delete"]
+
+
+def test_writes_are_validated() -> None:
+    base = _openemr_frame(Path("x"))["attribution"]
+    with pytest.raises(ValueError, match="reserved"):
+        FrameAttribution.model_validate({**base, "writes": ["unknown"]})
+    no_op_group = {
+        **base,
+        "scope_pattern": r"(?i)into\s+(?P<scope>\w+)",
+        "writes": [{"table": "patient_data", "ops": ["insert"]}],
+    }
+    with pytest.raises(ValueError, match="op"):
+        FrameAttribution.model_validate(no_op_group)
+    spec = FrameAttribution.model_validate(
+        {**base, "writes": ["patient_data", {"table": "lists", "ops": ["INSERT"]}]}
+    )
+    assert [w.table for w in spec.writes] == ["patient_data", "lists"]
+    assert spec.writes[1].ops == ["insert"]
+
+
+def test_the_verb_is_read_with_the_table() -> None:
+    import base64
+
+    spec = FrameAttribution.model_validate(_openemr_frame(Path("x"))["attribution"])
+
+    def entry(statement: str) -> dict:
+        return {"comments": base64.b64encode(statement.encode()).decode()}
+
+    assert spec.read_scope(entry("DELETE FROM `history_data` WHERE pid = ?")) == (
+        "history_data",
+        "delete",
+    )
+    assert spec.read_scope(entry("INSERT IGNORE INTO lists SET a = ?")) == (
+        "lists",
+        "insert",
+    )
+    assert spec.read_scope(entry("REPLACE INTO `lists` (a) VALUES (?)")) == (
+        "lists",
+        "replace",
+    )

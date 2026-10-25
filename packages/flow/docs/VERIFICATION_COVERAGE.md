@@ -81,7 +81,7 @@ frame:
     scope_field: comments           # what the entry wrote (a table)
     scope_encoding: base64
     scope_pattern: ...              # a regex with a (?P<scope>...) group
-    writes: [patient_data, history_data]  # the tables the save writes
+    writes: [patient_data, history_data]  # the tables the save writes (author-set)
 ```
 
 The slice is the verifier's read set: the records it returns before and after

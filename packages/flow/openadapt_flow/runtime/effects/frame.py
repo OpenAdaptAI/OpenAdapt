@@ -77,6 +77,40 @@ ChangeKind = Literal["added", "removed", "changed"]
 _SAMPLE_LIMIT = 5
 
 
+#: The scope recorded for a bot log entry that names no table. A table can't
+#: be declared under this name.
+UNKNOWN_SCOPE = "unknown"
+
+
+class FrameWrite(BaseModel):
+    """One table (scope) the save writes for a declared record.
+
+    ``ops`` (optional) narrows it to statement verbs (``insert``,
+    ``update``, ``delete``, ``replace``), read from ``scope_pattern``'s
+    ``op`` group; an entry with any other verb, or none, is collateral.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    table: str = Field(min_length=1)
+    ops: Optional[list[str]] = Field(default=None, min_length=1)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce(cls, data: Any) -> Any:
+        return {"table": data} if isinstance(data, str) else data
+
+    @model_validator(mode="after")
+    def _shape(self) -> "FrameWrite":
+        if self.table == UNKNOWN_SCOPE:
+            raise ValueError(
+                f"{UNKNOWN_SCOPE!r} is reserved for a log entry that names no table"
+            )
+        if self.ops is not None:
+            self.ops = sorted({op.lower() for op in self.ops})
+        return self
+
+
 class FrameAttribution(BaseModel):
     """Where the judge learns who changed a record.
 
@@ -114,12 +148,14 @@ class FrameAttribution(BaseModel):
     #: logged statement base64-encoded.
     scope_encoding: Literal["plain", "base64"] = "plain"
     #: ``audit_read`` only: a regular expression with a ``scope`` group that
-    #: finds the scope in the (decoded) value. Unset: the whole value.
+    #: finds the scope in the (decoded) value, and an ``op`` group for the
+    #: statement verb when ``writes`` lists ``ops``. Unset: the whole value.
     scope_pattern: Optional[str] = None
     #: ``audit_read`` only: the scopes (tables, resource types) the save
-    #: writes for a declared record. A bot entry on a declared record for any
-    #: other scope is collateral.
-    writes: list[str] = Field(default_factory=list)
+    #: writes for a declared record, as the frame's author declares them. A
+    #: bot entry on a declared record for any other scope is collateral.
+    #: Entries are a table name or ``{table, ops}``.
+    writes: list[FrameWrite] = Field(default_factory=list)
     #: ``record_field`` only: a version, revision or ETag on each record.
     version_field: Optional[str] = None
     #: ``record_field`` only: the record fields this app sets on the server
@@ -165,6 +201,13 @@ class FrameAttribution(BaseModel):
                     raise ValueError(f"scope_pattern does not compile: {exc}") from exc
                 if "scope" not in groups:
                     raise ValueError("scope_pattern needs a (?P<scope>...) group")
+            if any(w.ops for w in self.writes) and (
+                self.scope_pattern is None
+                or "op" not in re.compile(self.scope_pattern).groupindex
+            ):
+                raise ValueError(
+                    "writes with ops needs a scope_pattern with a (?P<op>...) group"
+                )
         else:
             if (
                 self.read is not None
@@ -192,21 +235,45 @@ class FrameAttribution(BaseModel):
     def scope_of(self, entry: Mapping[str, Any]) -> Optional[str]:
         """What ``entry`` wrote, or None when the entry doesn't say."""
 
+        return self.read_scope(entry)[0]
+
+    def read_scope(
+        self, entry: Mapping[str, Any]
+    ) -> tuple[Optional[str], Optional[str]]:
+        """(scope, verb) of ``entry``; either is None when it doesn't say."""
+
         value = get_path(entry, self.scope_field or "")
         if value in (None, ""):
-            return None
+            return None, None
         text = str(value)
         if self.scope_encoding == "base64":
             try:
                 text = base64.b64decode(text, validate=True).decode("utf-8")
             except (binascii.Error, UnicodeDecodeError):
-                return None
+                return None, None
         if self.scope_pattern is None:
-            return text.strip() or None
+            return (text.strip() or None), None
         match = re.search(self.scope_pattern, text)
         if match is None or not match.group("scope"):
-            return None
-        return match.group("scope")
+            return None, None
+        op = match.groupdict().get("op")
+        return match.group("scope"), (op.lower() if op else None)
+
+    def excuses(self, entry: Mapping[str, Any]) -> tuple[bool, str]:
+        """Whether the save's ``writes`` cover ``entry``, and its label."""
+
+        scope, op = self.read_scope(entry)
+        if scope is None:
+            return False, UNKNOWN_SCOPE
+        for write in self.writes:
+            if write.table != scope:
+                continue
+            if write.ops is None:
+                return True, scope
+            if op is not None and op in write.ops:
+                return True, scope
+            return False, f"{scope}:{op or UNKNOWN_SCOPE}"
+        return False, scope
 
 
 class FrameSpec(BaseModel):
@@ -647,7 +714,6 @@ def judge_frame(
         else:
             assert attribution is not None
             moved = {str(c.key) for c in collateral + concurrent}
-            allowed = set(attribution.writes)
             stray: set[tuple[str, str]] = set()
             for entry in window_entries:
                 actor = get_path(entry, attribution.actor_field)
@@ -658,8 +724,8 @@ def judge_frame(
                     # The saved record: excused only for a table the save
                     # writes. An insurance row, an allergy or a note for the
                     # new patient is collateral (#1505).
-                    scope = attribution.scope_of(entry) or "unknown"
-                    if scope in allowed or (str(ref), scope) in stray:
+                    excused, scope = attribution.excuses(entry)
+                    if excused or (str(ref), scope) in stray:
                         continue
                     stray.add((str(ref), scope))
                     collateral.append(
