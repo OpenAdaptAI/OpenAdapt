@@ -5,7 +5,7 @@
 
 ### Bug Fixes
 
-- **desktop**: bundle openadapt-flow 2.4.0. 0.24.0 bundled a Flow that didn't accept the options Desktop sends for a run's pinned config and for a person's signed answer, so governed runs and answers stopped before they started. Every command line Desktop builds is now checked against the Flow it bundles, in CI and against the installer's own binary.
+- **desktop**: governed runs and approvals work again. Desktop bundles openadapt-flow 2.4.0, which accepts every option Desktop sends: the pinned run configuration, the approver root and roster head, and the approver signature from the app or from a key file. 0.23.0 and 0.24.0 bundled a Flow without them, so governed runs couldn't start and a person's answers couldn't be recorded. Every command line Desktop builds is now checked against the bundled Flow, both in CI and against the installer's own binary.
 
 
 
