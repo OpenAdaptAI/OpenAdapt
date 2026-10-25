@@ -66,8 +66,33 @@ def read_rows(paths: Iterable[Path]) -> list[dict[str, Any]]:
     for p in paths:
         for line in p.read_text().splitlines():
             if line.strip():
-                rows.append(json.loads(line))
+                row = json.loads(line)
+                row["_ledger"] = str(p)
+                rows.append(row)
     return rows
+
+
+def planned_items(rows: list[dict[str, Any]], arm: str) -> Optional[int]:
+    """How many items the arm's run was started for.
+
+    From the ``run_start`` row of the arm's own ledger, lowered by a
+    ``stop_after`` option in the comparison's ``plan.json``. None when the
+    ledger does not say.
+    """
+
+    start = next((r for r in rows if r.get("type") == "arm_start" and r.get("arm") == arm), None)
+    if start is None or "_ledger" not in start:
+        return None
+    ledger = start["_ledger"]
+    planned = next((r.get("items") for r in rows if r.get("type") == "run_start" and r.get("_ledger") == ledger), None)
+    if planned is None:
+        return None
+    plan = Path(ledger).parent.parent / "plan.json"
+    if plan.is_file():
+        for entry in json.loads(plan.read_text()).get("arms", []):
+            if entry[0] == arm and isinstance(entry[2], dict) and entry[2].get("stop_after"):
+                planned = min(int(planned), int(entry[2]["stop_after"]))
+    return int(planned)
 
 
 def _cost_model(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -95,6 +120,14 @@ def arm_economics(rows: list[dict[str, Any]], arm: str, cm: dict[str, Any], labo
     describe = next((r.get("describe") for r in mine if r["type"] == "arm_start"), {}) or {}
 
     n = len(items)
+    planned = planned_items(rows, arm)
+    short = planned is not None and n < planned
+    stopped = next((r for r in reversed(mine) if r.get("type") == "stopped"), None)
+    if short:
+        short_why = (f"{stopped.get('why')}: {stopped.get('detail', '')}" if stopped
+                     else "the ledger ends before the planned items (the run exited or was killed)")
+    else:
+        short_why = None
     by_hand = {r["item_id"] for r in ops if r.get("action") == "do_by_hand" and r.get("item_id")}
     verified = [r for r in items if r.get("final_oracle") == "correct"]
     automated = [r for r in verified if r["item_id"] not in by_hand]
@@ -150,6 +183,9 @@ def arm_economics(rows: list[dict[str, Any]], arm: str, cm: dict[str, Any], labo
         "arm": arm,
         "describe": describe,
         "items": n,
+        "planned_items": planned,
+        "short_run": short,
+        "short_why": short_why,
         "verified": v,
         "automated": len(automated),
         "by_hand": len(by_hand),
@@ -255,7 +291,7 @@ def render(result: dict[str, Any]) -> str:
     for a in arms:
         m, p = a["measured"], a["per_1000_verified"]
         lines.append(
-            f"| {a['arm']} | {a['items']} | {a['verified']} | {a['automated']} | "
+            f"| {a['arm']}{' (SHORT RUN: ' + str(a['items']) + ' of ' + str(a['planned_items']) + ' planned)' if a.get('short_run') else ''} | {a['items']} | {a['verified']} | {a['automated']} | "
             f"{a['silent_wrong']} ({_fmt(a['silent_wrong_rate'], 3)}) | "
             f"{a['false_stop']} of {a['false_stop_denominator']} | {_fmt(p['setup_usd'])} | "
             f"{_fmt(m['per_item_model_usd'], 3)} | {_fmt(p['operator_min'], 0)} | "

@@ -71,3 +71,33 @@ def test_hung_item_is_an_error_and_the_browser_is_restarted(
     assert "timed out" in result.product_status
     assert _Session.closed == 1
     assert "item timeout" in (tmp_path / "stacks.txt").read_text()
+
+
+def test_a_run_that_ends_short_of_its_plan_is_labelled(tmp_path: Path) -> None:
+    import json
+
+    from lifecycle.arms import economics
+    from lifecycle.cost_model import V1
+
+    ledger = tmp_path / "arm" / "ledger.jsonl"
+    ledger.parent.mkdir()
+    rows = [
+        {"type": "run_start", "items": 3, "cost_model": V1.to_dict()},
+        {"type": "arm_start", "arm": "a", "describe": {}},
+    ] + [
+        {
+            "type": "item_result",
+            "arm": "a",
+            "item_id": f"ref-{i}",
+            "outcome": "correct",
+            "final_oracle": "correct",
+            "chart_wanted": True,
+            "exception": "clean",
+            "wall_s": 1.0,
+        }
+        for i in (1, 2)
+    ]
+    ledger.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    (arm,) = economics.compute(economics.read_rows([ledger]))["arms"]
+    assert arm["items"] == 2 and arm["planned_items"] == 3 and arm["short_run"]
+    assert "ledger ends before" in arm["short_why"]

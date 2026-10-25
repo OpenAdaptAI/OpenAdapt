@@ -3,9 +3,9 @@
 | Arm | Items | Verified in the end | Automated (no hand entry) | Silent wrong | False stops | Median s/item | Model $/item | Operator min/item | Maintenance for the change (people min / model $) | Setup people min | Setup agent min / $ |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 3. OpenAdapt, Regulated + problems_only, durable, pipelined read-back, relabel repair (engine of measure/production-lifecycle; the API step is refused on this form, so the GUI save runs) | 55 | 53 | 41 | 0 | 9 of 35 | 118.5 | 0.000 | 2.15 | 7.5 / 0.00 | 52 | 13.3 / 0.00 |
-| 3 on main. Same configuration, current main's engine (the run was stopped at 27 items) | 27 | 27 | 4 | 0 | 19 of 20 | 226.9 | 0.000 | 4.56 | 0.0 / 0.00 | 52 | 13.4 / 0.00 |
+| 3 on main. Same configuration, current main's engine [short run: 27 of 55 planned items; the ledger ends before the planned items (the run exited or was killed)] | 27 | 27 | 4 | 0 | 19 of 20 | 226.9 | 0.000 | 4.56 | 0.0 / 0.00 | 52 | 13.4 / 0.00 |
 | 1. Agent with structured tools and REST read-back (Claude Sonnet 5.5) | 55 | 55 | 49 | 0 | 5 of 35 | 24.3 | 0.050 | 0.91 | 0.0 / 0.00 | 60 | 0.0 / 0.00 |
-| 2. (hung after 16 items) Agent-written Playwright + REST script with read-back and duplicate check, agent-maintained (Claude Sonnet 5.5) | 16 | 16 | 7 | 0 | 7 of 12 | 5.3 | 0.000 | 2.44 | not reached | 70 | 2.6 / 0.86 |
+| 2. Agent-written Playwright + REST script with read-back and duplicate check, agent-maintained (Claude Sonnet 5.5) [short run: 16 of 55 planned items; hung: no progress for about 2 h after item 16 (process at 0% CPU, one Playwright driver idle); stopped by hand to release the shared fixture lease] | 16 | 16 | 7 | 0 | 7 of 12 | 5.3 | 0.000 | 2.44 | not reached | 70 | 2.6 / 0.86 |
 | Reference: a person enters every item (cost model V1) | None | None | 0 | 0 | None of None | 210.0 | 0.000 | 3.50 | 0.0 / 0.00 | 0 | 0.0 / 0.00 |
 
 ### Totals (people time priced at the assumed rates; x0.5 and x2 in brackets)

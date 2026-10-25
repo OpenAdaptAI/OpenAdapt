@@ -72,7 +72,9 @@ exception: duplicates, resends, shared surnames and dates of birth, a missing
 date of birth, malformed fields, other clerks, a forced logout, slow and
 failed saves. One app change: the save button "Confirm Create New Patient"
 becomes "Save new patient" from item 26 on. Local OpenEMR 8.0.0.3. Host
-1-minute load was about 5 to 20 during these runs.
+1-minute load: median 5.8 (max 79.4) for the agent with tools, 22.1 (max
+44.2) for the agent script, and 8.0 (max 102.5) for OpenAdapt's run, read
+from each item row of the ledgers.
 
 | Arm | Items | Right in the end | Automated (no hand entry) | Silent wrong | False stops (of clean items) | Median s an item | Model $ an item | Operator min an item | After the app change | Model $ in total |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -328,7 +330,7 @@ python -m economic_comparison.totals    # recompute every table from the raw row
 python -m silent_saves --fault-set 1.1.0 --agent python:silent_saves.agent_arms:AgentTools --out <dir>
 python -m silent_saves --fault-set 1.1.0 --agent python:silent_saves.agent_arms:AgentScript --out <dir>
 
-# OpenEMR (needs the fixture lease; see ~/oa/scratch/fixture-lease/README.md)
+# OpenEMR (one Docker fixture per machine at a time)
 python -m lifecycle.apps up
 python -m lifecycle.arms.compare --out <dir> --seed 7 --items 55 --days 10 \
     --drift relabel_save@26 --arms-json economic_comparison/openemr_arms.json

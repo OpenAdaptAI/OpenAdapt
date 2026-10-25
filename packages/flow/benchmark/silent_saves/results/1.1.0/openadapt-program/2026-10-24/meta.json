@@ -4,7 +4,7 @@
   "protocol": "silent-saves/2026-10-19.2",
   "app": "mockmed",
   "executor": "openadapt-program",
-  "agent_spec": "openadapt-program:/Users/abrichr/.cache/silent-saves/program-2026-10-18-a",
+  "agent_spec": "openadapt-program:~/.cache/silent-saves/program-2026-10-18-a",
   "readback": false,
   "arm": "program",
   "arm_cap_usd": null,

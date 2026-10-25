@@ -428,8 +428,7 @@ OPENEMR_ARMS: list[dict[str, Any]] = [
         "dir": "production-2026-10-24/before",
         "setup": "openadapt_regulated_openemr",
         "kind": "program",
-        "allow_partial": True,
-        "label": "3 on main. Same configuration, current main's engine (the run was stopped at 27 items)",
+        "label": "3 on main. Same configuration, current main's engine",
     },
     {
         "arm": "agent_tools",
@@ -443,8 +442,7 @@ OPENEMR_ARMS: list[dict[str, Any]] = [
         "dir": "economics-2026-10-24/agent_script",
         "setup": "agent_script",
         "kind": "script",
-        "allow_partial": True,
-        "label": "2. (hung after 16 items) Agent-written Playwright + REST script with read-back and duplicate check, agent-maintained (Claude Sonnet 5.5)",
+        "label": "2. Agent-written Playwright + REST script with read-back and duplicate check, agent-maintained (Claude Sonnet 5.5)",
     },
     {
         "arm": "human_script",
@@ -471,13 +469,16 @@ def openemr_arm(spec: dict[str, Any]) -> Optional[dict[str, Any]]:
     if not ledger.is_file():
         return None
     rows = econ.read_rows([ledger])
-    partial = not any(r.get("type") == "arm_end" for r in rows)
-    if partial and not spec.get("allow_partial"):
-        return None
     res = econ.compute(rows)
     a = next((x for x in res["arms"] if x["arm"] == spec["arm"]), None)
     if a is None:
         return None
+    # A run that ended short of its planned items is labelled, never silently
+    # shrunk: its rates come from fewer items than the stream it was started on.
+    partial = bool(a.get("short_run"))
+    label = spec["label"]
+    if partial:
+        label += f" [short run: {a['items']} of {a['planned_items']} planned items; {a['short_why']}]"
     m = a["measured"]
     n = a["items"]
     op = ASSUME["operator_s"]
@@ -530,7 +531,7 @@ def openemr_arm(spec: dict[str, Any]) -> Optional[dict[str, Any]]:
     )
     out = {
         "arm": spec["arm"],
-        "label": spec["label"],
+        "label": label,
         "kind": spec["kind"],
         "source": f"lifecycle/results/{spec['dir']}",
         "partial": partial,
