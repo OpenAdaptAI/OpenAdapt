@@ -576,6 +576,18 @@ def _verify_flow_command_contract(
     return {"flow_command_lines_parsed": len(commands), "config_pin_enforced": True}
 
 
+#: What Flow prints when it downloads Playwright's browser: the full build
+#: (headed) or only the headless shell.
+BROWSER_DOWNLOAD_NOTICES = (
+    "Downloading the Chromium browser",
+    "downloading Playwright's headless Chromium",
+)
+
+
+def _downloaded_browser(output: str) -> bool:
+    return any(notice in output for notice in BROWSER_DOWNLOAD_NOTICES)
+
+
 def _run(command: list[str], *, env: dict[str, str], timeout: float = 900) -> tuple[str, float]:
     started = time.monotonic()
     result = subprocess.run(
@@ -619,6 +631,9 @@ def main() -> int:
         env["PLAYWRIGHT_BROWSERS_PATH"] = str(root / "browser-runtime")
         env["OPENADAPT_VISION_RUNTIME_ROOT"] = str(root / "vision-runtime")
         env.pop("OPENADAPT_FLOW_NO_AUTO_INSTALL", None)
+        # Flow prefers an installed Chrome or Edge, which build runners have;
+        # force Playwright's own browser so its first-use download is proven.
+        env["OPENADAPT_FLOW_BROWSER"] = "bundled"
 
         flow = [str(executable), "__openadapt_flow__"]
         first_output, first_seconds = _run(
@@ -629,7 +644,7 @@ def main() -> int:
             raise RuntimeError("clean-user run did not exercise first-use vision provision")
         if not any((root / "vision-runtime").glob("*/*/.complete.json")):
             raise RuntimeError("vision runtime was not persisted outside the one-file extraction")
-        if "Downloading the Chromium browser" not in first_output:
+        if not _downloaded_browser(first_output):
             raise RuntimeError("clean-user run did not exercise first-use browser provision")
         if not any((root / "browser-runtime").glob("chromium*")):
             raise RuntimeError("browser runtime was not persisted outside the one-file extraction")
@@ -728,7 +743,7 @@ def main() -> int:
             [*flow, "demo-record", "--out", str(root / "recording-warm")],
             env=env,
         )
-        if "Downloading the Chromium browser" in second_output:
+        if _downloaded_browser(second_output):
             raise RuntimeError("warm run attempted to download the browser again")
         if any(
             marker in second_output

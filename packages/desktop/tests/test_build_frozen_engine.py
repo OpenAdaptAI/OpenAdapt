@@ -558,3 +558,28 @@ def test_macos_intel_cryptography_pin_matches_lock() -> None:
     lock = tomllib.loads((Path(build.ROOT) / "uv.lock").read_text(encoding="utf-8"))
     locked = {p["name"]: p["version"] for p in lock["package"]}
     assert build.MACOS_X86_CRYPTOGRAPHY_VERSION == locked["cryptography"]
+
+
+def test_only_the_benchmark_module_the_product_imports_is_frozen(tmp_path: Path) -> None:
+    """Flow's jit adapters import a constant from benchmark.agent_baseline, so
+    excluding the whole benchmark package broke every frozen command."""
+    benchmark = tmp_path / "benchmark"
+    benchmark.mkdir()
+    for name in ("__init__", "agent_baseline", "run_benchmark", "silent_wrong_action"):
+        (benchmark / f"{name}.py").write_text("")
+    (benchmark / "effectbench").mkdir()
+    (benchmark / "effectbench" / "__init__.py").write_text("")
+
+    excluded = build.excluded_benchmark_modules(benchmark)
+    assert "openadapt_flow.benchmark.agent_baseline" not in excluded
+    assert set(excluded) == {
+        "openadapt_flow.benchmark.effectbench",
+        "openadapt_flow.benchmark.run_benchmark",
+        "openadapt_flow.benchmark.silent_wrong_action",
+    }
+    assert build.excluded_benchmark_modules(tmp_path / "missing") == ("openadapt_flow.benchmark",)
+    command = _build_command("-", tmp_path)
+    assert "openadapt_flow.benchmark.agent_baseline" not in command
+    assert "openadapt_flow.benchmark" not in command or build.excluded_benchmark_modules() == (
+        "openadapt_flow.benchmark",
+    )
