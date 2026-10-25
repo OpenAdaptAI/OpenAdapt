@@ -267,7 +267,8 @@ PROGRAM_PROBLEM = "program"
 _INPUT_CHECK_CODES = frozenset({"inputs_supplied", "inputs_strict", "channel"})
 #: ``StepResult.duplicate_check`` values (set by the duplicate check): a real
 #: candidate was found, or the list or record channel couldn't be read.
-_DUPLICATE_FOUND = "candidate"
+#: The record channel's own decisions name an exact or close match.
+_DUPLICATE_FOUND = frozenset({"candidate", "exact", "close"})
 _DUPLICATE_UNREADABLE = "unreadable"
 
 
@@ -307,7 +308,7 @@ def problem_class(report: "RunReport", reason: Optional[str] = None) -> str:
     # duplicate stop that doesn't say, is a program problem.
     if (
         report.transaction_outcome == "HALTED_BEFORE_EFFECT"
-        and getattr(halted, "duplicate_check", None) == _DUPLICATE_FOUND
+        and getattr(halted, "duplicate_check", None) in _DUPLICATE_FOUND
         and not any(
             r.delivery_uncertainty is not None
             or (r.delivery_attempted is True and _consequential(r))

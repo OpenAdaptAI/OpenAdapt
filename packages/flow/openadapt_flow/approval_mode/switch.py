@@ -747,23 +747,34 @@ def _public_key_bytes(encoded: str) -> bytes:
 
 
 def registry_approver_keys(key_dir: Optional[Path] = None) -> dict[str, str]:
-    """Approver keys registered in the JIT key directory's principal registry.
+    """The approver keys a run trusts: the signed approver roster's entries
+    that the run's pinned root vouches for.
 
-    ``approvers`` maps a person's approver name (for example Desktop's
-    ``desktop-approver``) to its hex public key (``jit register --role
-    approver``). An unreadable registry, or one with no approvers, gives no
-    keys, and then no re-arm counts.
+    The roster (``approval_mode.approver_roster``, #1486) lists each person's
+    approver key, signed down from a root approver; the run pins that root
+    (the deployment config, ``--approver-root`` or ``OPENADAPT_APPROVER_ROOT``).
+    Returns ``{name: base64 public key}``, and nothing when no root is pinned,
+    the roster doesn't verify, or this Flow has no roster yet. Then no re-arm
+    counts.
     """
 
-    try:
-        from openadapt_flow.jit.authority import PrincipalRegistry
-        from openadapt_flow.jit.lifecycle import default_key_dir
+    import importlib
 
-        registry = PrincipalRegistry.load(key_dir or default_key_dir())
-    except Exception:  # noqa: BLE001 - no registry proves nothing
+    try:
+        # Imported by name: the roster arrives with #1486.
+        approver_roster: Any = importlib.import_module(
+            "openadapt_flow.approval_mode.approver_roster"
+        )
+        from openadapt_flow.jit.lifecycle import default_key_dir
+    except ImportError:
         return {}
-    approvers = getattr(registry, "approvers", None) or {}
-    return {str(name): str(key) for name, key in dict(approvers).items()}
+    try:
+        keys = approver_roster.approver_keys_b64(
+            key_dir or default_key_dir(), approver_roster.pinned_root(None)
+        )
+    except Exception:  # noqa: BLE001 - an unverifiable roster trusts no one
+        return {}
+    return {str(name): str(key) for name, key in dict(keys).items()}
 
 
 def rearm_signing_payload(
