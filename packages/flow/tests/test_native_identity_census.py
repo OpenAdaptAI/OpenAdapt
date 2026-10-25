@@ -805,3 +805,104 @@ def test_pixel_census_is_uncounted_when_a_place_cannot_be_cut(
     )
     decision = _pixel_census(tmp_path, _two_copies(), verify=True)
     assert decision.verdict == "uncounted"
+
+
+# -- pixel census tie-break: sibling tabs share chrome, not their label ---------
+
+_TAB_W, _TAB_H = 300, 40
+_TABS = ["Who", "Contact", "Choices", "Employer", "Stats", "Misc"]
+
+
+def _tab(label: str) -> Any:
+    """An OpenEMR-like section toggle: chrome dominates, the label is small."""
+
+    import cv2
+    import numpy as np
+
+    img = np.full((_TAB_H, _TAB_W), 245, np.uint8)
+    cv2.rectangle(img, (0, 0), (_TAB_W - 1, _TAB_H - 1), 120, 2)
+    cv2.rectangle(img, (0, 0), (_TAB_W - 1, 10), 200, -1)
+    cv2.circle(img, (16, 25), 6, 60, -1)
+    cv2.putText(
+        img, label, (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.45, 40, 1, cv2.LINE_AA
+    )
+    return img
+
+
+def _tabs(labels: list[str]) -> Any:
+    import numpy as np
+
+    gap = np.full((12, _TAB_W), 255, np.uint8)
+    return np.vstack([part for label in labels for part in (_tab(label), gap)])
+
+
+class _TabOcr:
+    """OCR that reads a tab crop as its nearest rendered label (or nothing)."""
+
+    def __init__(self, readable: bool = True):
+        self.readable = readable
+
+    def ocr(self, png: bytes, *, region=None):
+        import cv2
+        import numpy as np
+
+        if not self.readable:
+            return []
+        crop = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_GRAYSCALE)
+        if crop is None or crop.shape != (_TAB_H, _TAB_W):
+            return []
+        label = min(
+            _TABS + ["Contact"],
+            key=lambda name: float(np.abs(crop.astype(int) - _tab(name)).mean()),
+        )
+        return [types.SimpleNamespace(text=label)]
+
+
+def _tab_census(tmp_path, labels: list[str], target: int, *, readable: bool = True):
+    (tmp_path / "templates").mkdir(parents=True, exist_ok=True)
+    recorded = _png(_tab(labels[target]))
+    (tmp_path / "templates" / "id.png").write_bytes(recorded)
+    (tmp_path / "templates" / "t.png").write_bytes(recorded)
+    top = target * (_TAB_H + 12)
+    step = Step(
+        id="open_contact",
+        intent="click 'Contact'",
+        action=ActionKind.CLICK,
+        identity_armed=True,
+        anchor=Anchor(
+            template="templates/t.png",
+            region=(0, top, _TAB_W, _TAB_H),
+            click_point=(0, top),
+            identifier_crop="templates/id.png",
+            identifier_region=(0, top, _TAB_W, _TAB_H),
+        ),
+    )
+    replayer = Replayer(
+        _PixelBackend(),
+        vision=_TabOcr(readable),
+        poll_interval_s=0.01,
+        pixel_verify_enabled=True,
+    )
+    resolution = Resolution(
+        rung="template", point=(0, top), confidence=1.0, elapsed_ms=1
+    )
+    return replayer._pixel_census(
+        step, resolution, _png(_tabs(labels)), Workflow(name="wf"), tmp_path
+    )
+
+
+def test_a_section_tab_among_sibling_tabs_is_unique_by_its_label(tmp_path) -> None:
+    """The OpenEMR "Contact" toggle: its siblings share the chrome, and some
+    are not a clear pixel mismatch, but their labels read differently."""
+
+    assert _tab_census(tmp_path, _TABS, 1) == CensusDecision("unique", 1)
+
+
+def test_sibling_tabs_with_unreadable_labels_still_halt(tmp_path) -> None:
+    decision = _tab_census(tmp_path, _TABS, 1, readable=False)
+    assert decision.verdict == "ambiguous"
+
+
+def test_two_tabs_with_the_same_label_halt(tmp_path) -> None:
+    decision = _tab_census(tmp_path, ["Who", "Contact", "Misc", "Contact"], 1)
+    assert decision == CensusDecision("ambiguous", 2)

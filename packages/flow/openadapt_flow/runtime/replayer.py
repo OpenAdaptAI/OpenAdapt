@@ -15768,9 +15768,11 @@ class Replayer:
 
         For a pixel identity with no OCR band (a remote display): every place
         the recorded identifier crop matches is cut from the frame and checked
-        with the ladder's pixel verifier. Only a clear ``mismatch`` rules a
-        place out; a verify, an abstain (drift, the uncertain band, verify
-        turned off) or no verdict counts it as a look-alike. The census is
+        with the ladder's pixel verifier. A clear ``mismatch`` rules a place
+        out, and so does its own text when OCR reads both crops and the text
+        differs (sibling tabs share their chrome, not their label). A verify,
+        an abstain (drift, the uncertain band, verify turned off) or no verdict
+        with the same or unreadable text counts it as a look-alike. The census is
         ``uncounted`` when the frame has too many places, when a place cannot
         be cut, or when the target's own place is not among them (the frame
         renders at another scale than the recorded crop).
@@ -15808,6 +15810,18 @@ class Replayer:
 
         if not any(is_target(x, y) for x, y in peaks):
             return census_mod.CensusDecision("uncounted")
+
+        def crop_text(png: bytes) -> str:
+            """The crop's own text, squashed; empty when OCR reads nothing."""
+            try:
+                lines = self.vision.ocr(png, region=None)
+            except Exception:
+                return ""
+            return identity_mod.squash(
+                " ".join(str(getattr(line, "text", "") or "") for line in lines)
+            )
+
+        target_text: Optional[str] = None
         count = 1
         for x, y in peaks:
             if is_target(x, y):
@@ -15818,8 +15832,18 @@ class Replayer:
             verdict = identity_mod.verify_pixel_identity(
                 recorded, crop, enable_verify=self.pixel_verify_enabled
             )
-            if verdict is None or verdict.status != "mismatch":
-                count += 1
+            if verdict is not None and verdict.status == "mismatch":
+                continue
+            # The pixels do not rule this place out. Sibling controls that
+            # share their chrome (section tabs, toggle buttons) look alike;
+            # their own text still tells them apart. Only when OCR reads both
+            # crops and the text differs is the place distinguishable.
+            if target_text is None:
+                target_text = crop_text(live)
+            other_text = crop_text(crop)
+            if target_text and other_text and other_text != target_text:
+                continue
+            count += 1
         if count > 1:
             return census_mod.CensusDecision("ambiguous", count)
         return census_mod.CensusDecision("unique", count)
