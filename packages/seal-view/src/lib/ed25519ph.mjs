@@ -4,7 +4,7 @@
 // pure Ed25519 only. A line-for-line port of the engine's verifier
 // (packages/flow/openadapt_flow/ed25519ph.py), written from the RFC's
 // equations. Verification only, over public data, so it need not be constant
-// time. tests/sealChecks.test.js checks it against the RFC 8032 section 7.3
+// time. test/rfc8032.test.mjs checks it against the RFC 8032 section 7.3
 // vector.
 
 const P = 2n ** 255n - 19n

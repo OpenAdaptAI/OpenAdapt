@@ -121,6 +121,16 @@ def test_the_page_embeds_the_exact_files(runs):
     assert data["program"]["spec"] == PROGRAM
 
 
+def test_a_page_checked_against_this_computers_key_says_so(runs, monkeypatch):
+    # A seal.html forwarded to someone else must not read as third-party proof.
+    monkeypatch.setattr(seal_view, "local_keys", lambda home=None: KEYS)
+    data = _data(
+        write_seal_page(runs / "run-1", program=PROGRAM, about={"app": "MockMed"})
+    )
+    assert data["keys"] == KEYS
+    assert data["host"]["trustWords"] == "checked against your computer's Seal key"
+
+
 def test_witness_files_are_embedded_only_when_the_run_has_them(runs):
     (runs / "run-1" / "seal.anchor.json").write_text("{}", encoding="utf-8")
     data = _data(_page(runs / "run-1"))

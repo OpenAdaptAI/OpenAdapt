@@ -47,7 +47,7 @@ const { page } = await sealPageProps({ files, keys, program: { spec } })
 `spec` is the program graph of the run's bundle (`openadapt-flow visualize
 --format json`). `host` holds the parts that differ between hosts: `Link`,
 `links`, `map` (`kicker`, `title`, `resolveMedia` for the workbench),
-`copyHref`, `kicker`, `footer`, `keyWords`, `live` (Rekor's live entry
+`copyHref`, `kicker`, `footer`, `trustWords`, `live` (Rekor's live entry
 and GitHub's key list, default on) and `loadFiles` (default: fetch the paths in
 `seal.files`). `sealPageMeta(page)` gives the title and description for the
 host's `<head>`.
@@ -62,7 +62,7 @@ slot that `openadapt seal view RUN_DIR` fills with the run's files. Its
 Content-Security-Policy allows no requests, so it works from `file://` with
 the network off and uploads nothing.
 
-Size, measured on 2026-10-20: 212,468 bytes (68,661 gzipped). The budget is
+Size, measured on 2026-10-24: 212,474 bytes (68,660 gzipped). The budget is
 262,144 bytes (`VIEWER_BUDGET` in `scripts/build.mjs`, and
 `tests/snapshots/seal_viewer_size.json` at the repository root);
 `node scripts/build.mjs --check` fails over it or when the launcher's copy is

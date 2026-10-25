@@ -78,6 +78,8 @@ class Engine(Protocol):
 
     def seal(self, runs: list[RunFacts]) -> Optional[SealFacts]: ...
 
+    def seal_broken(self, broken: BreakFacts) -> bool: ...
+
     def seal_pages(
         self,
         runs: list[RunFacts],
@@ -298,17 +300,25 @@ def run_story(
 
 
 def _write_seal_pages(engine: Engine, outcome: Outcome, steps: NextSteps) -> None:
-    """Write the Seal pages; a page that can't be written leaves no Seal line."""
+    """Sign the stopped run, then write the Seal pages.
 
+    The receipt counts the stopped run's Seal when it was written, whether or
+    not its page is; a page that can't be written leaves no Seal line.
+    """
+
+    if outcome.seal is not None and outcome.broken is not None:
+        try:
+            sealed = engine.seal_broken(outcome.broken)
+        except Exception:  # noqa: BLE001 - the checked runs' Seals stand alone
+            sealed = False
+        if sealed:
+            outcome.seal = SealFacts(outcome.seal.key_id, outcome.seal.sealed + 1)
     try:
         outcome.seal_pages = engine.seal_pages(
             list(outcome.runs), outcome.broken, steps.verify_run
         )
     except Exception:  # noqa: BLE001 - the runs and their Seals stand without a page
         outcome.seal_pages = SealPages()
-        return
-    if outcome.seal is not None and outcome.seal_pages.broken is not None:
-        outcome.seal = SealFacts(outcome.seal.key_id, outcome.seal.sealed + 1)
 
 
 def _in_background(work: Callable[[], Any]) -> Any:

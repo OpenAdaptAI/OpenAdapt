@@ -26,7 +26,9 @@
 //   copyHref     the page's own address, for "Copy link" (none: no button)
 //   live         ask the network once the offline proof passes: Rekor's live
 //                entry and GitHub's key list (default true; the viewer: false)
-//   kicker, footer, keyWords ("the pinned key"), unchanged ("The published
+//   kicker, footer, trustWords (how the verdict names the key: "signed by
+//   the pinned key"; the offline viewer: "checked against your computer's
+//   Seal key"), unchanged ("The published
 //   files are unchanged."), canonicalOrigin (rewritten to this page's origin
 //   in the commands)
 // No <head>: the host sets the title (sealPageMeta).
@@ -170,7 +172,7 @@ export default function SealPage({ seal: page, host = {} }) {
         live: liveChecks = true,
         kicker: hostKicker = null,
         footer = null,
-        keyWords = 'the pinned key',
+        trustWords = 'signed by the pinned key',
         unchanged = 'The published files are unchanged.',
         canonicalOrigin = null,
         chrome = true,
@@ -638,7 +640,7 @@ export default function SealPage({ seal: page, host = {} }) {
                                     <span className={s.pending}>{phase === 'build' ? 'Assembling the Seal from the report' : 'Checking the Ed25519 signature in your browser'}</span>
                                 ) : verdict === 'valid' ? (
                                     <>
-                                        <b>Valid.</b> This is the report exactly as the run wrote it, signed by {keyWords}.
+                                        <b>Valid.</b> This is the report exactly as the run wrote it, {trustWords}.
                                     </>
                                 ) : verdict === 'unsupported' ? (
                                     <>

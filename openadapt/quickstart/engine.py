@@ -620,6 +620,20 @@ class FlowEngine:
             key_id = str(seal.key_id)
         return SealFacts(key_id=key_id, sealed=len(checked))
 
+    def seal_broken(self, broken: BreakFacts) -> bool:
+        """Sign the stopped run's report too; True once its Seal is written.
+
+        Its Seal says the report is the one the run wrote, stop and all.
+        Engines without offline Seals sign nothing.
+        """
+
+        try:
+            from openadapt_flow.offline_seal import seal_home, seal_run
+        except ImportError:
+            return False
+        seal_run(broken.run_dir, home=seal_home(), enqueue=False)
+        return (broken.run_dir / "seal.json").is_file()
+
     def seal_pages(
         self,
         runs: list[RunFacts],
@@ -628,15 +642,12 @@ class FlowEngine:
     ) -> SealPages:
         """Write the Seal pages: the first checked run's and the stopped run's.
 
-        The stopped run is sealed here too: its Seal says the report is the
-        one the run wrote, stop and all. Each page is the offline viewer with
+        Only a sealed run gets a page. Each page is the offline viewer with
         that run's files in it (:mod:`openadapt.seal_view`); nothing leaves
         this computer. Engines without offline Seals get no pages.
         """
 
         try:
-            from openadapt_flow.offline_seal import seal_home, seal_run
-
             from openadapt.seal_view import bundle_graph, write_seal_page
         except ImportError:
             return SealPages()
@@ -650,10 +661,10 @@ class FlowEngine:
                 about={**about, "kicker": kicker},
                 host={
                     "footer": (
-                        "A run of the program you compiled, on this computer, in "
-                        "MockMed with synthetic data. Signed with this computer's "
-                        "Seal key. This page makes no network requests; nothing "
-                        "was uploaded."
+                        "A run of the program you compiled, on your computer, in "
+                        "MockMed with synthetic data, signed with your computer's "
+                        "Seal key and checked here against that key. This page "
+                        "makes no network requests; nothing was uploaded."
                     ),
                 },
                 commands=command(run_dir) if command else None,
@@ -666,8 +677,7 @@ class FlowEngine:
         )
         if first is not None and (first.run_dir / "seal.json").is_file():
             pages.verified = page(first.run_dir, f"Run {first.index} of {len(runs)}")
-        if broken is not None:
-            seal_run(broken.run_dir, home=seal_home(), enqueue=False)
+        if broken is not None and (broken.run_dir / "seal.json").is_file():
             pages.broken = page(broken.run_dir, "The run with the failed save")
         return pages
 

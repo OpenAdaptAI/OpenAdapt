@@ -267,7 +267,11 @@ def write_seal_page(
         raise SealViewError(f"{report_path} can't be read") from exc
     if keys is None:
         keys = local_keys()
-        host = {"keyWords": "this computer's Seal key", **dict(host or {})}
+        # A page forwarded to someone else stays a local check, not third-party proof.
+        host = {
+            "trustWords": "checked against your computer's Seal key",
+            **dict(host or {}),
+        }
     if program is None or _digest_of(program) != report.get("bundle_content_digest"):
         program = find_program(run_dir, report, bundle_dir)
     data = page_data(

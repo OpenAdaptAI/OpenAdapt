@@ -9,7 +9,7 @@
 //
 // seal-data: { report_b64, seal_text, anchor_text?, tsa_text?, tsr_b64?, auth?, keys,
 //              program: { spec, folds?, titles? },
-//              about: { app, job, kicker? }, host: { keyWords?, unchanged?, footer? },
+//              about: { app, job, kicker? }, host: { trustWords?, unchanged?, footer? },
 //              commands? }
 import { createRoot } from 'react-dom/client'
 import '@openadapt/program-graph/styles.css'
@@ -75,7 +75,7 @@ async function main() {
                 loadFiles: async () => ({ ...files, report: files.report.slice() }),
                 live: false,
                 kicker: data.about?.kicker ?? null,
-                keyWords: extra.keyWords,
+                trustWords: extra.trustWords,
                 unchanged: extra.unchanged,
                 footer: extra.footer,
                 links: {
