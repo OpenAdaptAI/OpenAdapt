@@ -467,7 +467,26 @@ def _judge_field_equals(
         )
     record = matched[0]
     observed = "" if record.get(effect.field) is None else str(record.get(effect.field))
-    if observed == want:
+    compare_kind = effect.compare or (
+        getattr(effect.value, "compare", None) if effect.value else None
+    )
+    if compare_kind in ("text_ci", "text"):
+        from openadapt_flow.runtime.effects.readback_values import compare_value
+
+        is_match = (
+            compare_value(observed, want, kind="text", source="structure") == "match"
+        )
+    elif compare_kind in ("code", "date", "currency"):
+        from openadapt_flow.runtime.effects.readback_values import compare_value
+
+        is_match = (
+            compare_value(observed, want, kind=compare_kind, source="structure")
+            == "match"
+        )
+    else:
+        is_match = observed == want
+
+    if is_match:
         return EffectVerdict(
             verdict=Verdict.CONFIRMED,
             kind=effect.kind,

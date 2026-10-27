@@ -112,8 +112,8 @@ record:
     fname: fname
     DOB: DOB
     sex: sex
-    street: street
-    city: city
+    street: {{param: street, compare: text_ci}}
+    city: {{param: city, compare: text_ci}}
     state: {{literal: MA}}
     postal_code: postal_code
     phone_home: phone_home

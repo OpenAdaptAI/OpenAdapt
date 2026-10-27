@@ -154,13 +154,25 @@ def resolve_save_step(workflow: Workflow, config: VerifyConfig) -> Any:
     )
 
 
+_FREE_TEXT_ADDRESS_FIELDS = frozenset(
+    {"street", "city", "street_address", "address", "address1", "address2"}
+)
+
+
 def record_effects(config: VerifyConfig) -> list[Any]:
     """The save's system-of-record checks, from ``record`` in verify.yaml."""
 
-    from openadapt_flow.runtime.effects import Effect, EffectKind
+    from openadapt_flow.runtime.effects import Effect, EffectKind, ValueExpr
 
     record = config.record
-    selector = {name: record.expr(name) for name in record.match}
+
+    def _field_expr(name: str) -> ValueExpr:
+        expr = record.expr(name)
+        if expr.compare is None and name.lower() in _FREE_TEXT_ADDRESS_FIELDS:
+            return expr.model_copy(update={"compare": "text_ci"})
+        return expr
+
+    selector = {name: _field_expr(name) for name in record.match}
     written = Effect(
         kind=EffectKind.RECORD_WRITTEN,
         match=selector,
@@ -171,14 +183,14 @@ def record_effects(config: VerifyConfig) -> list[Any]:
         timeout_s=record.timeout_s,
     )
     if record.duplicate_key is not None:
-        written.idempotency_key = record.expr(record.duplicate_key)
+        written.idempotency_key = _field_expr(record.duplicate_key)
         written.key_field = record.duplicate_key
     effects = [written]
     if record.exact_new_set:
         # Exactly these records were added since the snapshot before the
         # save, and nothing else, read by every declared field.
         selector_all = {
-            name: record.expr(name) for name in [*record.match, *record.fields]
+            name: _field_expr(name) for name in [*record.match, *record.fields]
         }
         effects.append(
             Effect(
@@ -197,12 +209,14 @@ def record_effects(config: VerifyConfig) -> list[Any]:
     for name in record.fields:
         if name in record.match:
             continue
+        expr = _field_expr(name)
         effects.append(
             Effect(
                 kind=EffectKind.FIELD_EQUALS,
                 match=selector,
                 field=name,
-                value=record.expr(name),
+                value=expr,
+                compare=expr.compare,
                 risk="reversible",
                 probe=f"{record.name} field {name!r} read-back",
                 timeout_s=record.timeout_s,

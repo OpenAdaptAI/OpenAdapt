@@ -91,6 +91,9 @@ class ValueExpr(BaseModel):
     #: reads the entered value back as its code. A value the map doesn't name
     #: resolves to nothing, so the check matches nothing and fails closed.
     map: Optional[dict[str, str]] = None
+    #: How the value is compared (e.g. "text_ci" or "text" for case-insensitive,
+    #: or "exact", "code", "date", "currency"). None means exact string equality.
+    compare: Optional[str] = None
 
     @model_validator(mode="after")
     def _exactly_one_source(self) -> "ValueExpr":
@@ -106,11 +109,14 @@ class ValueExpr(BaseModel):
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> Any:
-        # A value without a map serializes exactly as before, so existing
+        # A value without a map or compare serializes exactly as before, so existing
         # effect contract hashes and bundle digests are unchanged.
         data = handler(self)
-        if isinstance(data, dict) and data.get("map") is None:
-            data.pop("map", None)
+        if isinstance(data, dict):
+            if data.get("map") is None:
+                data.pop("map", None)
+            if data.get("compare") is None:
+                data.pop("compare", None)
         return data
 
     def resolve(self, params: Mapping[str, object]) -> Optional[str]:
@@ -136,7 +142,7 @@ class ValueExpr(BaseModel):
 
     def resolved(self, params: Mapping[str, object]) -> "ValueExpr":
         """Return a pure-literal copy of this expression bound to ``params``."""
-        return ValueExpr(literal=self.resolve(params))
+        return ValueExpr(literal=self.resolve(params), compare=self.compare)
 
     # -- transparent str-compatibility (back-compat with the v1 plain-string
     #    form): a literal ValueExpr compares, hashes, stringifies, and reprs
@@ -164,10 +170,11 @@ class ValueExpr(BaseModel):
                 self.literal == other.literal
                 and self.param == other.param
                 and self.map == other.map
+                and self.compare == other.compare
             )
         if isinstance(other, str):
             # A literal expression equals the bare string it stands for.
-            return self.param is None and self.literal == other
+            return self.param is None and self.compare is None and self.literal == other
         return NotImplemented
 
     def __hash__(self) -> int:
@@ -177,8 +184,17 @@ class ValueExpr(BaseModel):
         # code that keys a set/dict on ``match`` values mixing plain strings
         # and literal expressions then behaves unchanged.
         if self.param is None:
+            if self.compare is not None:
+                return hash((self.literal, self.compare))
             return hash(self.literal)
-        return hash(("__param__", self.param, tuple(sorted((self.map or {}).items()))))
+        return hash(
+            (
+                "__param__",
+                self.param,
+                tuple(sorted((self.map or {}).items())),
+                self.compare,
+            )
+        )
 
 
 class EffectKind(str, Enum):
@@ -616,6 +632,10 @@ class Effect(BaseModel):
     #: run-``param`` reference; see :attr:`match`). Exactly one matching record
     #: is required, so missing or ambiguous read outcomes refuse.
     value: Optional[ValueExpr] = None
+    #: How ``field_equals`` (or selector) compares the observed and expected values:
+    #: e.g. ``text_ci`` / ``text`` for case-insensitive comparison, ``exact``,
+    #: ``code``, ``date``, ``currency``. None falls back to exact equality.
+    compare: Optional[str] = None
     #: ``record_written`` only: how many matching records must exist. 1 is the
     #: at-most-once contract for a consequential write; 0 asserts absence.
     #: ``exact_new_set``: the declared CARDINALITY of the added set, which must
@@ -787,6 +807,16 @@ class Effect(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def _inherit_compare(self) -> "Effect":
+        if (
+            self.compare is None
+            and self.value is not None
+            and getattr(self.value, "compare", None)
+        ):
+            self.compare = self.value.compare
+        return self
+
     @model_serializer(mode="wrap")
     def _drop_unset_collateral_change(self, handler: Any) -> dict[str, Any]:
         """Keep the bytes of effects that predate ``forbid_collateral_change``.
@@ -801,6 +831,8 @@ class Effect(BaseModel):
         data: dict[str, Any] = handler(self)
         if not self.forbid_collateral_change:
             data.pop("forbid_collateral_change", None)
+        if not self.compare:
+            data.pop("compare", None)
         return data
 
     @model_validator(mode="after")
@@ -945,6 +977,8 @@ class Effect(BaseModel):
             payload["count_new_only"] = True
         if self.forbid_collateral_change:
             payload["forbid_collateral_change"] = True
+        if self.compare:
+            payload["compare"] = self.compare
         # Bound ONLY on the new kind, so every pre-existing effect's digest
         # (and every ledger entry that pins it) stays byte-identical.
         if self.kind is EffectKind.EXACT_NEW_SET:
@@ -1017,6 +1051,8 @@ class Effect(BaseModel):
             payload["count_new_only"] = True
         if self.forbid_collateral_change:
             payload["forbid_collateral_change"] = True
+        if self.compare:
+            payload["compare"] = self.compare
         if self.kind is EffectKind.EXACT_NEW_SET:
             payload["new_records"] = [
                 {k: str(v) for k, v in sorted(selector.items())}
@@ -1202,7 +1238,7 @@ class EffectVerifier(Protocol):
 # -- shared matching helpers (used by every substrate) -----------------------
 
 
-def record_matches(record: dict[str, Any], selector: dict[str, str]) -> bool:
+def record_matches(record: dict[str, Any], selector: dict[str, Any]) -> bool:
     """Whether ``record`` satisfies every ``field == value`` in ``selector``.
 
     Comparison is on ``str()`` of both sides so a numeric id in JSON (``1``)
@@ -1210,7 +1246,19 @@ def record_matches(record: dict[str, Any], selector: dict[str, str]) -> bool:
     An empty selector matches every record (used by absence checks).
     """
     for key, want in selector.items():
-        if str(record.get(key, None)) != str(want):
+        obs = record.get(key, None)
+        compare = getattr(want, "compare", None)
+        if compare in ("text_ci", "text"):
+            from openadapt_flow.runtime.effects.readback_values import compare_value
+
+            if obs is None:
+                return False
+            if (
+                compare_value(str(obs), str(want), kind="text", source="structure")
+                != "match"
+            ):
+                return False
+        elif str(obs) != str(want):
             return False
     return True
 
