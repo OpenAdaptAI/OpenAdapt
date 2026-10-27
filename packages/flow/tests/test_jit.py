@@ -369,7 +369,10 @@ def test_lift_never_leaves_an_input_inside_a_lifted_workflow_literal(
 
 
 def _detour_bundle(
-    tmp_path: Path, labels: list[str], record: dict[str, str] | None
+    tmp_path: Path,
+    labels: list[str],
+    record: dict[str, str] | None,
+    text: str = "Female",
 ) -> Path:
     """Two typed steps of one value, then a save whose mined check holds
     ``record`` (OpenAdaptAI/OpenAdapt#1328, synthetic values)."""
@@ -381,7 +384,7 @@ def _detour_bundle(
             id=f"step_{i:03d}",
             intent="type",
             action=ActionKind.TYPE,
-            text="Female",
+            text=text,
             field_label=label,
         )
         for i, label in enumerate(labels)
@@ -472,6 +475,40 @@ def test_lift_ignores_a_placeholder_record_check(tmp_path: Path) -> None:
     workflow.save(bundle)
     report = lift_params(bundle, {"sex": "Female"})
     assert "no mined record check" in report.unlifted["sex"]
+
+
+def test_lift_applies_record_field_check_to_single_matches(tmp_path: Path) -> None:
+    # 1. Single match where step field matches record field -> lifted
+    bundle1 = _detour_bundle(
+        tmp_path / "b1", ["form_sex"], {"fname": "Testa", "sex": "Female"}
+    )
+    report1 = lift_params(bundle1, {"sex": "Female"})
+    assert report1.unlifted == {}
+    assert len(report1.lifted) == 1
+    assert report1.lifted[0].step_id == "step_000"
+
+    # 2. Single match where saved record holds value in no field -> refused
+    bundle2 = _detour_bundle(
+        tmp_path / "b2", ["form_sex"], {"fname": "Testa", "sex": "Male"}
+    )
+    report2 = lift_params(bundle2, {"sex": "Female"})
+    assert report2.lifted == []
+    assert report2.unlifted == {
+        "sex": "typed in step_000; the saved record holds it in no field"
+    }
+
+    # 3. Single match where step field is not a record field holding the value -> refused
+    bundle3 = _detour_bundle(
+        tmp_path / "b3",
+        ["refills"],
+        {"fname": "Testa", "quantity": "1"},
+        text="1",
+    )
+    report3 = lift_params(bundle3, {"quantity": "1"})
+    assert report3.lifted == []
+    assert report3.unlifted == {
+        "quantity": "typed in step_000; its field is not a record field that holds it (quantity)"
+    }
 
 
 # -- the gates (no browser) --------------------------------------------------
