@@ -40,13 +40,20 @@ def test_no_entry_claims_certified_without_a_record() -> None:
 
 def test_pull_verifies_and_loads(tmp_path: Path) -> None:
     index = _local_registry(tmp_path)
-    dest = registry.pull("openemr/new-referral", tmp_path / "out", index_url=str(index))
+    dest = registry.pull(
+        "openemr/new-referral",
+        tmp_path / "out",
+        index_url=str(index),
+        allow_unsigned=True,
+    )
     from openadapt_flow.ir import Workflow
 
     wf = Workflow.load(dest)
     assert "fname" in wf.param_specs
     with pytest.raises(registry.RegistryError, match="exists"):
-        registry.pull("openemr/new-referral", dest, index_url=str(index))
+        registry.pull(
+            "openemr/new-referral", dest, index_url=str(index), allow_unsigned=True
+        )
 
 
 def test_pull_refuses_tampered_file(tmp_path: Path) -> None:
@@ -54,16 +61,26 @@ def test_pull_refuses_tampered_file(tmp_path: Path) -> None:
     wf_json = index.parent / "bundles/openemr/new-referral/workflow.json"
     wf_json.write_text(wf_json.read_text().replace("Elena", "Elenx", 1))
     with pytest.raises(registry.RegistryError, match="sha256"):
-        registry.pull("openemr/new-referral", tmp_path / "out", index_url=str(index))
+        registry.pull(
+            "openemr/new-referral",
+            tmp_path / "out",
+            index_url=str(index),
+            allow_unsigned=True,
+        )
     assert not (tmp_path / "out").exists()
 
 
 def test_pull_refuses_planned_and_unknown(tmp_path: Path) -> None:
     index = str(_local_registry(tmp_path))
     with pytest.raises(registry.RegistryError, match="planned"):
-        registry.pull("openimis/claim-intake", tmp_path / "o", index_url=index)
+        registry.pull(
+            "openimis/claim-intake",
+            tmp_path / "o",
+            index_url=index,
+            allow_unsigned=True,
+        )
     with pytest.raises(registry.RegistryError, match="no workflow"):
-        registry.pull("nope/x", tmp_path / "o", index_url=index)
+        registry.pull("nope/x", tmp_path / "o", index_url=index, allow_unsigned=True)
 
 
 def test_unsafe_paths_rejected() -> None:
@@ -85,6 +102,7 @@ def test_cli_list_and_pull(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
             [
                 "pull",
                 "openemr/new-referral",
+                "--allow-unsigned",
                 "--index",
                 index,
                 "--out",

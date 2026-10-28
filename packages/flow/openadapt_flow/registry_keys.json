@@ -1,0 +1,5 @@
+{
+  "schema": "openadapt.registry-keys/v1",
+  "note": "Public keys that sign skills-registry entries. Empty until the registry signing key is published; until then pull needs --allow-unsigned.",
+  "keys": {}
+}

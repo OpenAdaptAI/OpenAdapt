@@ -5,12 +5,39 @@ Packaged, parameterized bundles for open-source apps. Fetch one with:
 ```bash
 openadapt-flow pull --list
 openadapt-flow pull openemr/new-referral
-openadapt-flow replay new-referral --url <your test OpenEMR URL> --params-file params.json
+openadapt-flow skill qualify new-referral --verify my-verify.yaml --certify clinical-write
+openadapt-flow run new-referral --params-file params.json
 ```
 
 `pull` downloads the files listed in [`index.json`](index.json), checks each
 file's sha256 against the index, and loads the bundle so its manifest digest is
 checked as well. It doesn't run anything.
+
+Each entry is signed (Ed25519ph, the form Rekor accepts) by a key whose
+public half ships with the package (`openadapt_flow/registry_keys.json`).
+`pull` checks the signature before it downloads anything. Until the registry
+key is published the index is unsigned, and `pull` takes an entry only with
+`--allow-unsigned`.
+
+A pulled skill doesn't run until it is qualified on your own instance. `pull`
+writes `skill.lock.json` beside the bundle and expires any certification it
+carries. `run`, `replay`, `emit-skill` and `emit-mcp` refuse it until you
+have done this:
+
+```bash
+openadapt-flow skill bind new-referral --set APP_URL=https://your-test-copy.example \
+    --set RECORD_TOKEN_VAR=MY_EMR_READ_TOKEN
+openadapt-flow skill qualify new-referral --certify clinical-write
+openadapt-flow skill status new-referral
+```
+
+`bind` takes addresses, the names of the environment variables that hold your
+credentials (never the secrets themselves), local paths and local commands.
+`qualify` runs the qualification cases with the skill's bundled record check
+(`verify.yaml`) against your instance. A skill that ships no record check
+takes your own with `--verify`. A shipped record check may not name Python
+hooks, because a pulled skill never runs code it downloaded. See
+[`docs/design/SKILLS_REGISTRY.md`](../docs/design/SKILLS_REGISTRY.md).
 
 | Workflow | App | Status |
 |---|---|---|

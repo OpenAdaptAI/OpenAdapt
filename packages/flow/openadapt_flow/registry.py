@@ -13,10 +13,19 @@ so its own manifest digest is checked too. Nothing is installed or run.
   ``certification``. The index validator refuses this status without one.
 * ``planned``: listed so users can see it is coming; there are no files and
   ``pull`` refuses.
+
+Schema 2 (docs/design/SKILLS_REGISTRY.md) adds, per entry, a ``version``
+(``pull app/task@1.2.0`` pins it), the app's license, the bundled record-check
+template (``contract``) with the variables it needs (``contract_vars``), its
+fault ``coverage``, a blind ``verifier_score`` and the ``credentials`` it
+needs. A pulled skill is marked (``skill.lock.json``) and any certification it
+carries is expired: it runs only after ``openadapt-flow skill qualify`` on the
+user's own instance (:mod:`openadapt_flow.skills`).
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import shutil
@@ -38,6 +47,68 @@ class RegistryError(RuntimeError):
     """The index or a bundle failed a check. Nothing was written to ``out``."""
 
 
+# -- signatures ---------------------------------------------------------------------
+
+#: Domain separation for a signed entry (Ed25519ph over SHA-512, the form Rekor
+#: checks for an Ed25519 key in a ``hashedrekord`` entry, so an entry can be
+#: anchored as Seals are).
+_ENTRY_DOMAIN = b"openadapt.registry-entry/v1\n"
+KEYS_FILE = Path(__file__).with_name("registry_keys.json")
+
+
+def entry_statement(raw: dict[str, Any]) -> bytes:
+    """The bytes a signature covers: every field of the entry but the signature."""
+
+    body = {k: v for k, v in raw.items() if k != "signature"}
+    return _ENTRY_DOMAIN + json.dumps(
+        body, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+
+
+def entry_sha256(raw: dict[str, Any]) -> str:
+    return hashlib.sha256(entry_statement(raw)).hexdigest()
+
+
+def sign_entry(raw: dict[str, Any], seed: bytes, key_id: str) -> dict[str, str]:
+    """A signature block for ``raw``, made with the 32-byte Ed25519 ``seed``."""
+
+    from openadapt_flow.ed25519ph import sign_prehashed
+
+    digest = hashlib.sha512(entry_statement(raw)).digest()
+    signature = sign_prehashed(seed, digest)
+    return {"key_id": key_id, "ed25519ph": base64.b64encode(signature).decode("ascii")}
+
+
+def trusted_keys() -> dict[str, bytes]:
+    """The registry's public keys, shipped with the package (never fetched)."""
+
+    data = json.loads(KEYS_FILE.read_text())
+    return {kid: base64.b64decode(pub) for kid, pub in (data.get("keys") or {}).items()}
+
+
+def entry_signature_problem(
+    raw: dict[str, Any], keys: dict[str, bytes]
+) -> Optional[str]:
+    """Why an entry's signature doesn't hold, or None when it does."""
+
+    from openadapt_flow.ed25519ph import verify_prehashed
+
+    signature = raw.get("signature")
+    if not isinstance(signature, dict):
+        return "the entry is not signed"
+    key = keys.get(str(signature.get("key_id")))
+    if key is None:
+        return f"the entry is signed by an unknown key {signature.get('key_id')!r}"
+    try:
+        sig = base64.b64decode(str(signature.get("ed25519ph", "")), validate=True)
+    except ValueError:
+        return "the entry's signature is not base64"
+    digest = hashlib.sha512(entry_statement(raw)).digest()
+    if not verify_prehashed(key, digest, sig):
+        return "the entry's signature does not match its content"
+    return None
+
+
 @dataclass(frozen=True)
 class Entry:
     id: str
@@ -48,6 +119,29 @@ class Entry:
     @property
     def files(self) -> dict[str, str]:
         return dict(self.raw.get("files") or {})
+
+    @property
+    def version(self) -> Optional[str]:
+        version = self.raw.get("version")
+        return str(version) if version else None
+
+    @property
+    def ref(self) -> str:
+        """``id@version`` (or the bare id for a schema 1 entry)."""
+        return f"{self.id}@{self.version}" if self.version else self.id
+
+
+#: Contract variable kinds ``skill bind`` accepts; a credential is only ever the
+#: name of the environment variable that holds it.
+CONTRACT_VAR_KINDS = ("url", "env_var_name", "path", "command")
+
+
+def _version_key(version: Optional[str]) -> tuple[int, ...]:
+    parts = []
+    for piece in (version or "0").split("."):
+        digits = "".join(ch for ch in piece if ch.isdigit())
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts)
 
 
 def _read(location: str) -> bytes:
@@ -75,9 +169,10 @@ def validate_index(index: dict[str, Any]) -> list[Entry]:
     seen = set()
     for item in index.get("workflows", []):
         wid = item.get("id", "")
-        if "/" not in wid or wid in seen:
+        key = (wid, item.get("version"))
+        if "/" not in wid or "@" in wid or key in seen:
             raise RegistryError(f"bad or duplicate workflow id {wid!r}")
-        seen.add(wid)
+        seen.add(key)
         status = item.get("status")
         if status not in STATUSES:
             raise RegistryError(f"{wid}: status must be one of {STATUSES}")
@@ -88,6 +183,25 @@ def validate_index(index: dict[str, Any]) -> list[Entry]:
         for rel in item.get("files") or {}:
             if rel.startswith("/") or ".." in Path(rel).parts:
                 raise RegistryError(f"{wid}: unsafe path {rel!r}")
+        contract = item.get("contract")
+        if contract is not None and contract not in (item.get("files") or {}):
+            raise RegistryError(f"{wid}: contract {contract!r} is not one of its files")
+        for var in item.get("contract_vars") or []:
+            if not isinstance(var, dict) or var.get("kind") not in CONTRACT_VAR_KINDS:
+                raise RegistryError(
+                    f"{wid}: each contract variable needs a kind in {CONTRACT_VAR_KINDS}"
+                )
+        score = item.get("verifier_score")
+        if score is not None:
+            for field in (
+                "suite_sha256",
+                "caught",
+                "missed",
+                "clean_right",
+                "false_alarm",
+            ):
+                if field not in score:
+                    raise RegistryError(f"{wid}: verifier_score needs {field!r}")
         entries.append(Entry(wid, item.get("title", wid), status, item))
     return entries
 
@@ -101,10 +215,15 @@ def load_index(index_url: str = DEFAULT_INDEX_URL) -> list[Entry]:
 
 
 def find(entries: list[Entry], workflow_id: str) -> Entry:
-    for entry in entries:
-        if entry.id == workflow_id:
-            return entry
-    known = ", ".join(e.id for e in entries)
+    """The entry for ``app/task`` (its newest version) or ``app/task@version``."""
+
+    wid, _, version = workflow_id.partition("@")
+    matches = [
+        e for e in entries if e.id == wid and (not version or e.version == version)
+    ]
+    if matches:
+        return max(matches, key=lambda e: _version_key(e.version))
+    known = ", ".join(sorted({e.ref for e in entries}))
     raise RegistryError(f"no workflow {workflow_id!r} in the registry (known: {known})")
 
 
@@ -114,12 +233,32 @@ def pull(
     *,
     index_url: str = DEFAULT_INDEX_URL,
     overwrite: bool = False,
+    keys: Optional[dict[str, bytes]] = None,
+    allow_unsigned: bool = False,
 ) -> Path:
-    """Download and verify a bundle into ``out`` (default ``./<name>``)."""
+    """Download and verify a bundle into ``out`` (default ``./<name>``).
+
+    The entry's signature is checked against the keys shipped with the
+    package before anything is downloaded. ``allow_unsigned`` takes an
+    unsigned entry (a local index while authoring); a signature that is
+    present must always hold.
+    """
     entry = find(load_index(index_url), workflow_id)
     if entry.status == "planned":
         raise RegistryError(f"{workflow_id} is planned and has no bundle yet")
-    dest = Path(out) if out else Path(workflow_id.split("/", 1)[1])
+    problem = entry_signature_problem(
+        entry.raw, trusted_keys() if keys is None else keys
+    )
+    if problem is not None and not (
+        allow_unsigned and entry.raw.get("signature") is None
+    ):
+        hint = (
+            "; pass --allow-unsigned for a local index you trust"
+            if entry.raw.get("signature") is None
+            else ""
+        )
+        raise RegistryError(f"{entry.ref}: {problem}{hint}")
+    dest = Path(out) if out else Path(entry.id.split("/", 1)[1])
     if dest.exists() and not overwrite:
         raise RegistryError(f"{dest} exists; pass --force to replace it")
     base = _join(index_url, entry.raw["path"].rstrip("/") + "/")
@@ -141,6 +280,11 @@ def pull(
             Workflow.load(stage)
         except Exception as exc:  # noqa: BLE001 - report any load failure as one error
             raise RegistryError(f"bundle failed to load: {exc}") from exc
+        from openadapt_flow.skills import mark_pulled
+
+        # Mark it as pulled and expire any certification it carries: a
+        # registry certification is about our test copy, never the user's.
+        mark_pulled(stage, entry, index_url=index_url)
         if dest.exists():
             shutil.rmtree(dest)
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -163,7 +307,16 @@ def _describe(entry: Entry) -> str:
         "certified": "certified",
         "planned": "planned, not available yet",
     }
-    return f"{entry.id:28} {labels[entry.status]:24} {entry.title}"
+    score = entry.raw.get("verifier_score")
+    if score:
+        cases = score["caught"] + score["missed"]
+        clean = score["clean_right"] + score["false_alarm"]
+        checked = f"blind: {score['caught']}/{cases} faults, {score['clean_right']}/{clean} clean"
+    elif entry.status == "planned":
+        checked = ""
+    else:
+        checked = "no blind score"
+    return f"{entry.ref:34} {labels[entry.status]:24} {checked:32} {entry.title}"
 
 
 def cmd_pull(args: Any) -> int:
@@ -175,15 +328,26 @@ def cmd_pull(args: Any) -> int:
                 print(_describe(entry))
             return 0
         entry = find(load_index(args.index), args.workflow)
-        dest = pull(args.workflow, args.out, index_url=args.index, overwrite=args.force)
+        dest = pull(
+            args.workflow,
+            args.out,
+            index_url=args.index,
+            overwrite=args.force,
+            allow_unsigned=getattr(args, "allow_unsigned", False),
+        )
     except RegistryError as exc:
         print(f"pull: {exc}", file=sys.stderr)
         return 1
-    print(f"Pulled {entry.id} into {dest} ({len(entry.files)} files, sha256 checked)")
+    print(f"Pulled {entry.ref} into {dest} ({len(entry.files)} files, sha256 checked)")
     if entry.status != "certified":
         print(
             "Status: example, not certified. Rehearse it on a test copy of the app first."
         )
+    print(
+        "It won't run until it is qualified on your instance:\n"
+        f"  openadapt-flow skill bind {dest} ...\n"
+        f"  openadapt-flow skill qualify {dest} --certify clinical-write"
+    )
     params = entry.raw.get("params") or []
     if params:
         print("Parameters: " + ", ".join(params))
@@ -208,4 +372,9 @@ def add_parser(sub: Any) -> None:
         "--force", action="store_true", help="Replace an existing destination"
     )
     p.add_argument("--list", action="store_true", help="List available workflows")
+    p.add_argument(
+        "--allow-unsigned",
+        action="store_true",
+        help="Take an unsigned entry (a local index you trust while authoring)",
+    )
     p.set_defaults(func=cmd_pull)

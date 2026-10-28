@@ -2567,6 +2567,9 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     from openadapt_flow.ir import Workflow
 
     bundle = Path(args.bundle)
+    from openadapt_flow.skills import refuse_unqualified_skill
+
+    refuse_unqualified_skill(bundle, target_url=getattr(args, "url", None))
     refuse_replay_composition(bundle)
     refuse_replay_process(bundle)
     from openadapt_flow.cli_variants import refuse_replay_variants
@@ -3619,6 +3622,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from openadapt_flow.runtime.authorization import runtime_inputs_digest
 
     bundle = Path(args.bundle)
+    from openadapt_flow.skills import refuse_unqualified_skill
+
+    refuse_unqualified_skill(bundle)
     if is_composition_artifact(bundle):
         from openadapt_flow.cli_compose import cmd_run_composition
 
@@ -6516,7 +6522,9 @@ def _cmd_disambiguate(args: argparse.Namespace) -> int:
 
 def _cmd_emit_skill(args: argparse.Namespace) -> int:
     from openadapt_flow.emit.skill import emit_skill
+    from openadapt_flow.skills import refuse_unqualified_skill
 
+    refuse_unqualified_skill(args.bundle)
     skill_dir = emit_skill(Path(args.bundle), Path(args.out))
     print(f"Skill written to {skill_dir}")
     return 0
@@ -6524,7 +6532,9 @@ def _cmd_emit_skill(args: argparse.Namespace) -> int:
 
 def _cmd_emit_mcp(args: argparse.Namespace) -> int:
     from openadapt_flow.emit.mcp_tool import emit_mcp_server
+    from openadapt_flow.skills import refuse_unqualified_skill
 
+    refuse_unqualified_skill(args.bundle)
     server_path = emit_mcp_server(Path(args.bundle), Path(args.out))
     print(f"MCP server written to {server_path}")
     return 0
@@ -9784,8 +9794,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_silent_saves)
 
     from openadapt_flow.registry import add_parser as _add_pull_parser
+    from openadapt_flow.skills import add_parser as _add_skill_parser
 
     _add_pull_parser(sub)
+    _add_skill_parser(sub)
 
     from openadapt_flow.intake.cli import add_parser as _add_intake_parser
 
