@@ -103,11 +103,11 @@ format. This is a stand-in result; the live OpenEMR run is next.
 
 ## Held-out 5
 
-The check is fixed at measurement commit `0c9287b85` before the suite is
-written: #1582, #1586, #1597 and #1604 after three review rounds, with the
-whole-database contract pinning the OpenEMR profile
-(`openemr-frame-profile/2026-10-29.1`,
-`sha256:b626d14a92a9170a35bff156671a4ee5d850772f9769c73a05b9c3e6be090bb5`).
+The check is fixed at measurement commit `784fc15e4`, recorded and pushed
+before the suite was opened: #1582, #1586, #1597 and #1604 after three
+review rounds, with the whole-database contract pinning the OpenEMR profile
+`openemr-frame-profile/2026-10-29.2`
+(`sha256:a3daefcf7b7f96e0c68a7d5c1829c3e358dc1ce9366e3098d18bc80441685bed`).
 It runs on the stand-in and on live OpenEMR; both results count.
 
 ## Live OpenEMR
