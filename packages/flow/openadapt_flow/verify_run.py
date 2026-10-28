@@ -445,19 +445,38 @@ def _same_connection(
 
 
 def _audit_sql(cfg: VerifyConfig) -> dict[str, str]:
-    """The audit query, when it can run inside the database snapshot."""
+    """Reads that run inside the database snapshot: the audit query (when it
+    shares the connection), and the acting user's ids (for a profile's
+    own-row rules)."""
 
     frame = cfg.frame
-    if frame is None or frame.database is None or frame.attribution is None:
+    if frame is None or frame.database is None:
         return {}
+    out: dict[str, str] = {}
+    profile = frame.database.loaded_profile()
+    if profile is not None:
+        query = profile.actor_ids_query(_self_names(cfg), frame.database.dialect)
+        if query:
+            out["actor_ids"] = query
+    if frame.attribution is None:
+        return out
     audit = frame.attribution.read
     if (
         _same_connection(audit, frame.database.read)
         and audit
         and audit.get("sql_query")
     ):
-        return {"audit": str(audit["sql_query"])}
-    return {}
+        out["audit"] = str(audit["sql_query"])
+    return out
+
+
+def _self_names(cfg: VerifyConfig) -> list[str]:
+    """The bot's own sign-in names the frame lists (literal ``self``)."""
+
+    a = cfg.frame.attribution if cfg.frame is not None else None
+    if a is None:
+        return []
+    return sorted({v.literal for v in a.self_actors if v.literal})
 
 
 def _ref_columns(cfg: VerifyConfig) -> list[str]:
@@ -474,6 +493,9 @@ def _ref_columns(cfg: VerifyConfig) -> list[str]:
         cols |= set(a.record_keys.values())
     for side in frame.side_records:
         cols |= {side.link_field, side.of_field}
+    profile = frame.database.loaded_profile() if frame.database else None
+    if profile is not None:
+        cols |= set(profile.ref_columns())
     return sorted(c for c in cols if c)
 
 
@@ -548,39 +570,44 @@ class _DatabaseFrame:
     #: The read account can't see triggers: what the save caused can't be
     #: ruled out, so the frame is not checked.
     blind: bool = False
+    #: The app profile's judgment of one row change (``AppProfile.excuse``).
+    excuse: Any = None
 
 
 def _rules_used(profile: Any, old: Any, new: Any) -> list[str]:
-    """The profile's rules that excused something in this run: an
-    append-only table that gained rows, a session table present, or a row
-    whose only changes were in a rule's columns."""
+    """The profile's unconditional rules that applied in this run: an
+    append-only table that gained rows, or a row of a compared table whose
+    only changes were in a column rule's columns. (Conditional rules are
+    reported by the judge when they excuse a row.)"""
 
+    from openadapt_flow.app_profiles import table_name
     from openadapt_flow.runtime.effects.db_snapshot import unpack
 
     used = []
     for rule in profile.rules:
-        if rule.mode == "append_only":
-            a, b = old.tables.get(rule.table), new.tables.get(rule.table)
-            if a is not None and b is not None and len(b.rows) > len(a.rows):
+        if rule.conditional:
+            continue
+        tables = [n for n in new.tables if table_name(n) == table_name(rule.table)]
+        for name in tables:
+            a, b = old.tables.get(name), new.tables.get(name)
+            if a is None or b is None:
+                continue
+            if rule.mode == "append_only" and len(b.rows.keys() - a.rows.keys()):
                 used.append(rule.id)
-        elif rule.mode == "session":
-            if rule.table in new.tables:
-                used.append(rule.id)
-        else:
-            tables = new.tables if rule.table == "*" else {rule.table: None}
-            for name in tables:
-                a, b = old.tables.get(name), new.tables.get(name)
-                if a is None or b is None or a.cell_columns != b.cell_columns:
-                    continue
-                cols = [c for c in rule.columns if c in a.cell_columns]
-                if any(
+                break
+            cols = [c for c in rule.columns if c in a.cell_columns]
+            if (
+                cols
+                and a.cell_columns == b.cell_columns
+                and any(
                     unpack(a.cell_columns, a.rows[k][1])[c]
                     != unpack(b.cell_columns, b.rows[k][1])[c]
                     for k in a.rows.keys() & b.rows.keys()
                     for c in cols
-                ):
-                    used.append(rule.id)
-                    break
+                )
+            ):
+                used.append(rule.id)
+                break
     return used
 
 
@@ -693,6 +720,16 @@ def _database_frame(
             "sha256": profile.sha256(),
             "rules_used": _rules_used(profile, old, new),
         }
+        names = set(_self_names(cfg))
+        ids = {str(r.get("id")) for r in new.extra.get("actor_ids", [])}
+        hashers = out.hashers
+
+        def excuse(name: str, before: Any, after: Any, fields: list[str]) -> Any:
+            return profile.excuse(
+                name, before, after, fields, hashers[name], names, ids
+            )
+
+        out.excuse = excuse
     return out
 
 
@@ -820,7 +857,7 @@ def judge_run_frame(
             else:
                 audit_before = list(stored.get("records", []))
                 audit_after = entries_now
-    return judge_frame(
+    verdict = judge_frame(
         spec,
         bound_effects,
         slices,
@@ -835,7 +872,14 @@ def judge_run_frame(
         hashers=None if db is None else db.hashers,
         clock=("", "") if db is None else db.clock,
         database_evidence=None if db is None else db.evidence,
+        excuse=None if db is None else db.excuse,
     )
+    profile = db.evidence.get("profile") if db is not None else None
+    if profile is not None:
+        # The rules that actually excused something: unconditional ones seen
+        # in the snapshots, conditional ones as the judge applied them.
+        profile["rules_used"] = sorted(set(profile["rules_used"]) | verdict.excused_by)
+    return verdict
 
 
 def _target_record(
