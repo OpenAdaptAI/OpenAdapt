@@ -163,7 +163,7 @@ def whole_doc(
         # for tables it doesn't have are left out (the live run keeps all).
         frame["database"]["allow_tables"] = [
             t
-            for t in frame["database"]["allow_tables"]
+            for t in frame["database"].get("allow_tables", [])
             if (t if isinstance(t, str) else t["table"]) in tables
         ]
     return {
