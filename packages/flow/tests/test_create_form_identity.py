@@ -73,6 +73,49 @@ _PORTAL = (
 # Variants from the #1543 review: each looks like the same create form, and
 # each would submit the wrong thing if only the typed fields were checked.
 _SCRIPTS = {
+    # Re-review round 2. A click handler copies the page's current parent id
+    # into an empty hidden field as the form is sent.
+    "copy7": """
+window.currentPid = '7';
+document.querySelector('[name=submit]').addEventListener('click', () => {
+  document.querySelector('[name=pid]').value = window.currentPid;
+});""",
+    "copy9": """
+window.currentPid = '9';
+document.querySelector('[name=submit]').addEventListener('click', () => {
+  document.querySelector('[name=pid]').value = window.currentPid;
+});""",
+    # A disabled hidden record id the click handler enables.
+    "toggle": """
+document.querySelector('[name=submit]').addEventListener('click', () => {
+  document.querySelector('[name=id]').disabled = false;
+});""",
+    # The click handler waits, then submits another form.
+    "delayed_other": """
+document.querySelector('[name=submit]').addEventListener('click', (e) => {
+  e.preventDefault();
+  setTimeout(() => document.getElementById('other').requestSubmit(), 300);
+});""",
+    # The click handler waits, adds a record id, then submits with the button.
+    "delayed_mutate": """
+document.querySelector('[name=submit]').addEventListener('click', (e) => {
+  e.preventDefault();
+  setTimeout(() => {
+    const f = document.getElementById('ticket');
+    const h = document.createElement('input'); h.type = 'hidden'; h.name = 'id';
+    h.value = '42'; f.appendChild(h);
+    f.requestSubmit(document.querySelector('[name=submit]'));
+  }, 300);
+});""",
+    # A script sets the hidden parent id when typing starts.
+    "pid_input7": """
+document.querySelector('[name=field_summary]').addEventListener('input', () => {
+  document.querySelector('[name=pid]').value = '7';
+}, {once: true});""",
+    "pid_input9": """
+document.querySelector('[name=field_summary]').addEventListener('input', () => {
+  document.querySelector('[name=pid]').value = '9';
+}, {once: true});""",
     # A script sets a different action and method, and adds a record id,
     # after the run has typed.
     "action_swap": """
@@ -122,6 +165,19 @@ def _page(variant: str) -> str:
         else (_PORTAL if variant == "portal" else "")
     )
     title, action, hidden, extra = "New ticket", "/newticket", "", ""
+    if variant in ("query_new", "query_42"):
+        action = "/save?mode=new" if variant == "query_new" else "/save?id=42"
+    if variant in ("copy7", "copy9", "pid_input7", "pid_input9"):
+        hidden = '<input type="hidden" name="pid" value="">'
+    if variant == "toggle":
+        hidden = '<input type="hidden" name="id" value="42" disabled>'
+    if variant in ("enc7", "enc9"):
+        # Named like a token, but a short number: a record id, not a token.
+        hidden = (
+            '<input type="hidden" name="encounter_token" value="'
+            + ("7" if variant == "enc7" else "9")
+            + '">'
+        )
     if variant == "edit":
         # Ticket 42's edit form: the same blank fields, a record id, another
         # address. Its save updates ticket 42.
@@ -454,24 +510,70 @@ def test_a_click_that_submits_another_form_is_cancelled(
     assert "submitted a different form" in (save.error or "")
 
 
-@pytest.mark.parametrize("variant", ["csrf", "rotating"])
-def test_a_rotating_token_still_verifies(
-    url: str, tmp_path: Path, variant: str
-) -> None:
-    """A per-session token (named like one) and a hidden value that changed
-    while the demonstration was typed are not compared, so a new page load
-    with a new token still verifies, and the token's value is never kept."""
+def test_a_per_session_token_still_verifies(url: str, tmp_path: Path) -> None:
+    """A hidden token named like one and shaped like one (Trac's
+    __FORM_TOKEN) differs on every page load. It isn't compared, and its
+    value is never kept, so a new load with a new token still verifies."""
 
-    bundle = _record(f"{url}?v={variant}", tmp_path / "rec")
+    bundle = _record(f"{url}?v=csrf", tmp_path / "rec")
     save = Workflow.load(bundle).steps[-1]
     assert save.anchor is not None and save.anchor.form_identity is not None
-    assert save.anchor.form_identity.exempt == (
-        ("__FORM_TOKEN",) if variant == "csrf" else ("draft_rev",)
-    )
-    report, created = _replay(f"{url}?v={variant}", bundle, tmp_path / "run")
+    assert save.anchor.form_identity.exempt == ("__FORM_TOKEN",)
+    report, created = _replay(f"{url}?v=csrf", bundle, tmp_path / "run")
     assert report.success, [(r.step_id, r.error) for r in report.results]
     assert created == ["Scanner offline on floor 3"]
     assert report.results[-1].identity.status == "verified"
+
+
+@pytest.mark.parametrize(
+    "recorded, replayed, expected",
+    [
+        # A hidden value that changed while the demonstration was typed is
+        # not exempt for that reason alone.
+        ("rotating", "rotating", "'draft_rev' field, which this run did not type"),
+        # A parent id a script sets when typing starts is compared.
+        ("pid_input7", "pid_input9", "'pid' field, which this run did not type"),
+        # A short number under a token-like name is compared.
+        ("enc7", "enc9", "'encounter_token' field, which this run did not type"),
+        # The address's query parameter names count.
+        ("query_new", "query_42", "submits to a different address"),
+    ],
+)
+def test_values_that_only_look_like_tokens_are_compared(
+    url: str, tmp_path: Path, recorded: str, replayed: str, expected: str
+) -> None:
+    bundle = _record(f"{url}?v={recorded}", tmp_path / "rec")
+    report, created = _replay(f"{url}?v={replayed}", bundle, tmp_path / "run")
+    _halted_by_form(report, created, expected)
+
+
+@pytest.mark.parametrize(
+    "recorded, replayed, expected",
+    [
+        ("copy7", "copy9", "what the form would send changed after it was checked"),
+        ("plain", "toggle", "what the form would send changed after it was checked"),
+        ("plain", "delayed_other", "submitted a different form"),
+        (
+            "plain",
+            "delayed_mutate",
+            "what the form would send changed after it was checked",
+        ),
+    ],
+)
+def test_a_submission_that_differs_from_the_checked_one_is_cancelled(
+    url: str, tmp_path: Path, recorded: str, replayed: str, expected: str
+) -> None:
+    """The form checks out before the click; then a click handler changes
+    what is sent, or submits something else, now or 300 ms later. The guard
+    cancels it and the run halts."""
+
+    bundle = _record(f"{url}?v={recorded}", tmp_path / "rec")
+    report, created = _replay(f"{url}?v={replayed}", bundle, tmp_path / "run")
+    assert not report.success
+    assert created == []
+    save = report.results[-1]
+    assert save.identity is not None and save.identity.status == "verified"
+    assert expected in (save.error or ""), save.error
 
 
 def test_a_keyed_remount_halts_a_known_limit(

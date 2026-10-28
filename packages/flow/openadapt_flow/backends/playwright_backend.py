@@ -676,9 +676,7 @@ _SUBMIT_BINDING_AT_JS = (
     + OBSERVE_SUBMIT_BINDING_JS
     + r""";
     const fills = window[args.fillKey];
-    return observe(
-        control, Array.isArray(fills) ? fills : [], window[args.fillKey + '_hidden']
-    );
+    return observe(control, Array.isArray(fills) ? fills : []);
 }"""
 )
 
@@ -696,17 +694,6 @@ _REGISTER_FILLED_FIELD_JS = (
         Object.defineProperty(window, key, {value: fills, configurable: true});
     }
     if (fills.indexOf(el) < 0) fills.push(el);
-    // Each hidden control's value as typing starts, so a create-new form's
-    // fingerprint can tell a token that rotates while the form is filled in.
-    let hidden = window[key + '_hidden'];
-    if (!(hidden instanceof WeakMap)) {
-        hidden = new WeakMap();
-        Object.defineProperty(
-            window, key + '_hidden', {value: hidden, configurable: true});
-    }
-    for (const input of el.ownerDocument.querySelectorAll('input[type="hidden"]')) {
-        if (!hidden.has(input)) hidden.set(input, String(input.value));
-    }
     return true;
 }"""
 )
@@ -755,7 +742,7 @@ _FORM_IDENTITY_AT_JS = (
     + OBSERVE_SUBMIT_BINDING_JS
     + r""";
     const fills = Array.isArray(window[args.fillKey]) ? window[args.fillKey] : [];
-    const out = observe(control, fills, window[args.fillKey + '_hidden']);
+    const out = observe(control, fills);
     const values = window[args.valueKey];
     const form = control.form || control.closest('form');
     let changed = 0;
@@ -772,10 +759,13 @@ _FORM_IDENTITY_AT_JS = (
 }"""
 )
 
-# Before a create-new form's save: cancel any submit during the click that is
-# not the checked form submitted by the checked button (a click handler that
-# submits another form, or the form without its button), and remember why.
-# One shot: it removes itself at the first submit or after 30 s.
+# Before a create-new form's save: guard the form's submission. At arm time it
+# keeps, in the page, what the checked button would send (address with query,
+# method, and every name/value pair except the exempt tokens). Every submit
+# while it is armed is checked: one from another form, from this form without
+# its button, with different contents, or a second one, is cancelled and
+# recorded. It stays armed after the click (a script may submit later) until
+# the run reads and disarms it, or after 120 s.
 _ARM_FORM_SUBMIT_GUARD_JS = (
     r"""(args) => {
     const hit = document.elementFromPoint(args.x, args.y);
@@ -784,33 +774,71 @@ _ARM_FORM_SUBMIT_GUARD_JS = (
     + r""") : null;
     const form = control ? (control.form || control.closest('form')) : null;
     if (!form) return false;
+    const exempt = new Set(args.exempt || []);
+    const canon = () => {
+        let data;
+        try { data = new FormData(form, control); } catch (_) { data = new FormData(form); }
+        const pairs = [];
+        for (const [key, value] of data.entries()) {
+            if (exempt.has(key)) continue;
+            pairs.push([key, (typeof value === 'string') ? value
+                : ('file:' + value.name + ':' + value.size)]);
+        }
+        pairs.sort((x, y) => (x[0] + '\u0000' + x[1]) < (y[0] + '\u0000' + y[1]) ? -1 : 1);
+        const target = control.hasAttribute('formaction') ? control.formAction : form.action;
+        let address = target;
+        try {
+            const url = new URL(target, document.baseURI);
+            const query = [];
+            for (const [k, v] of url.searchParams) if (!exempt.has('?' + k)) query.push([k, v]);
+            query.sort();
+            address = url.origin + url.pathname + '?' + JSON.stringify(query);
+        } catch (_) {}
+        const method = String((control.hasAttribute('formmethod')
+            ? control.formMethod : form.method) || 'get').toLowerCase();
+        return JSON.stringify([address, method, pairs]);
+    };
     const previous = window[args.key];
     if (previous && previous.remove) previous.remove();
-    const state = {refused: null};
+    const expected = canon();
+    const state = {refused: [], allowed: 0};
     const handler = (event) => {
-        state.remove();
-        if (event.target === form && event.submitter === control) return;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        state.refused = event.target === form
-            ? 'the form was submitted by something other than its save button'
-            : 'the click submitted a different form';
+        let why = null;
+        if (event.target !== form) why = 'the click submitted a different form';
+        else if (event.submitter !== control) {
+            why = 'the form was submitted by something other than its save button';
+        } else if (canon() !== expected) {
+            why = 'what the form would send changed after it was checked';
+        } else if (state.allowed > 0) {
+            why = 'the form was submitted a second time';
+        }
+        if (why) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            state.refused.push(why);
+        } else {
+            state.allowed += 1;
+        }
     };
     state.remove = () => window.removeEventListener('submit', handler, true);
     window.addEventListener('submit', handler, true);
-    setTimeout(state.remove, 30000);
+    setTimeout(state.remove, 120000);
     Object.defineProperty(
         window, args.key, {value: state, configurable: true, writable: true});
     return true;
 }"""
 )
 
-_FORM_SUBMIT_GUARD_RESULT_JS = r"""(key) => {
-    const state = window[key];
+# Read the guard's refusals; with ``disarm`` also remove it.
+_FORM_SUBMIT_GUARD_RESULT_JS = r"""(args) => {
+    const state = window[args.key];
     if (!state) return null;
-    if (state.remove) state.remove();
-    delete window[key];
-    return state.refused || null;
+    const refused = state.refused.slice();
+    if (args.disarm) {
+        if (state.remove) state.remove();
+        delete window[args.key];
+    }
+    return refused.length ? refused.join('; ') : null;
 }"""
 
 # Page-structure identity of a FORM FIELD that sits in no record row.
@@ -2418,7 +2446,12 @@ class PlaywrightBackend:
         try:
             armed = point.scope.evaluate(
                 _ARM_FORM_SUBMIT_GUARD_JS,
-                {"x": point.x, "y": point.y, "key": self._form_guard_slot},
+                {
+                    "x": point.x,
+                    "y": point.y,
+                    "key": self._form_guard_slot,
+                    "exempt": list(identity.exempt),
+                },
             )
         except Exception:
             armed = False
@@ -2427,28 +2460,33 @@ class PlaywrightBackend:
         self._form_guard_scope = point.scope
         return None
 
-    def form_submit_guard_refusal(self) -> Optional[str]:
-        """After the click: why the guard cancelled a submit, or None.
+    def form_submit_guard_refusal(self, *, disarm: bool = False) -> Optional[str]:
+        """Why the guard cancelled a submit so far, or None. ``disarm`` also
+        removes the guard. A page that navigated away (the checked form's own
+        submit) has nothing to report."""
 
-        Disarms the guard. A page that navigated away (the checked form's own
-        submit) has nothing to report.
-        """
-
-        scope, self._form_guard_scope = self._form_guard_scope, None
+        scope = self._form_guard_scope
         if scope is None:
             return None
+        if disarm:
+            self._form_guard_scope = None
         try:
             refused = scope.evaluate(
-                _FORM_SUBMIT_GUARD_RESULT_JS, self._form_guard_slot
+                _FORM_SUBMIT_GUARD_RESULT_JS,
+                {"key": self._form_guard_slot, "disarm": disarm},
             )
         except Exception:
             return None
         return refused if isinstance(refused, str) else None
 
-    def cancel_form_submit_guard(self) -> None:
-        """Disarm a guard whose click never happened."""
+    @property
+    def form_submit_guard_armed(self) -> bool:
+        return self._form_guard_scope is not None
 
-        self.form_submit_guard_refusal()
+    def cancel_form_submit_guard(self) -> Optional[str]:
+        """Read the guard's last refusals and disarm it."""
+
+        return self.form_submit_guard_refusal(disarm=True)
 
     def form_values_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
         """RECORD-TIME: the values of the form's fields the demonstration did

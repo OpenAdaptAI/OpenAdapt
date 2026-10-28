@@ -747,6 +747,11 @@ PIXEL_CENSUS_OCR_MIN_CONFIDENCE = 0.8
 PIXEL_CENSUS_OCR_MAX_SIMILARITY = 0.6
 
 
+#: How long after a create-new form's save the replayer keeps watching its
+#: submit guard before the next step (a script may submit after the click).
+_FORM_GUARD_SETTLE_S = 2.0
+
+
 class Replayer:
     """Replays a Workflow against a Backend using injected vision.
 
@@ -13006,21 +13011,41 @@ class Replayer:
 
         guarded = step.anchor is not None and step.anchor.form_identity is not None
         backend = self.backend
-        try:
-            error = self._act_closing_surface(step, resolution, params, **kwargs)
-        finally:
-            # A create-new form's save: the identity check armed a guard that
-            # cancels any other submit during the click (ir.FormIdentity).
-            refusal_of = getattr(backend, "form_submit_guard_refusal", None)
-            refusal = refusal_of() if guarded and callable(refusal_of) else None
-        if refusal is not None and error is None:
-            result = kwargs.get("result")
+        result = kwargs.get("result")
+
+        def halt(message: str) -> str:
             if result is not None:
                 result.safety_halt = True
                 result.failure_category = "safety_halt"
-            return (
-                f"Step '{step.id}' ({step.intent}): {refusal}; the submission was "
-                "cancelled before it left the page — run aborted"
+            return message
+
+        # A create-new form's save armed a guard that cancels any submit that
+        # isn't exactly the checked one (ir.FormIdentity). It stays armed
+        # after its click; the next step reads what it cancelled since, then
+        # disarms it so that step can submit its own forms.
+        if not guarded and getattr(backend, "form_submit_guard_armed", False):
+            late = backend.cancel_form_submit_guard()  # type: ignore[attr-defined]
+            if late is not None:
+                return halt(
+                    f"Step '{step.id}' ({step.intent}): after the previous save, "
+                    f"{late}; that submission was cancelled before it left the "
+                    "page — run aborted"
+                )
+        error = self._act_closing_surface(step, resolution, params, **kwargs)
+        refusal_of = getattr(backend, "form_submit_guard_refusal", None)
+        if not guarded or not callable(refusal_of):
+            return error
+        # A script may submit after the click returns (setTimeout): watch the
+        # guard through a short settle window.
+        refusal = refusal_of()
+        deadline = time.monotonic() + _FORM_GUARD_SETTLE_S
+        while refusal is None and error is None and time.monotonic() < deadline:
+            time.sleep(0.1)
+            refusal = refusal_of()
+        if refusal is not None and error is None:
+            return halt(
+                f"Step '{step.id}' ({step.intent}): {refusal}; that submission "
+                "was cancelled before it left the page — run aborted"
             )
         return error
 

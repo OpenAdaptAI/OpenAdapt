@@ -106,7 +106,7 @@ _MAX_ICON_GEOMETRY_CHARS = 20_000
 #: the list of elements the program (or the demonstrator) typed into. Returns
 #: the structural observation and ``canon``, its canonical JSON (with the raw
 #: icon geometry), which the delivery guard recomputes and compares.
-_OBSERVE_SUBMIT_BINDING_TEMPLATE = r"""(control, fields, baseline) => {
+_OBSERVE_SUBMIT_BINDING_TEMPLATE = r"""(control, fields) => {
     const ACTIONABLE = __ACTIONABLE__;
     const FIELD = __FIELD__;
     const ROW = 'tr, [role="row"], li, [role="listitem"]';
@@ -181,23 +181,23 @@ _OBSERVE_SUBMIT_BINDING_TEMPLATE = r"""(control, fields, baseline) => {
         earlier.compareDocumentPosition(later) &
             Node.DOCUMENT_POSITION_FOLLOWING
     ) && !earlier.contains(later);
-    const formFingerprint = (form, submitter, typed, baseline) => {
-        // Where and how the form submits (origin and path only), the name and
-        // type of every control the submission would carry, and the values of
-        // the controls the run did not type into. Hidden values that changed
-        // since the first field was filled (a rotating token) are named.
+    const formFingerprint = (form, submitter, typed) => {
+        // Where and how the form submits (origin, path and query), the
+        // name and type of every control the submission would carry, and
+        // the values of the controls the run did not type into.
         let action = '';
+        const query = [];
         try {
             const target = submitter.hasAttribute('formaction')
                 ? submitter.formAction : form.action;
             const url = new URL(target, doc.baseURI);
             action = url.origin + url.pathname;
+            for (const [key, value] of url.searchParams) query.push([key, value]);
         } catch (_) {}
         const method = String((submitter.hasAttribute('formmethod')
             ? submitter.formMethod : form.method) || 'get').toLowerCase();
         const controls = [];
         const values = [];
-        const rotated = [];
         for (const el of Array.from(form.elements)) {
             const name = el.name;
             if (!name) continue;
@@ -209,8 +209,14 @@ _OBSERVE_SUBMIT_BINDING_TEMPLATE = r"""(control, fields, baseline) => {
                 controls.push(name + '\t' + type);
                 continue;
             }
-            if (['submit', 'button', 'reset', 'image', 'file'].indexOf(type) >= 0 ||
+            if (['submit', 'button', 'reset', 'image'].indexOf(type) >= 0 ||
                     ['fieldset', 'object', 'output'].indexOf(el.localName) >= 0) {
+                continue;
+            }
+            if (type === 'file') {
+                // How many files it would send: an unexpected upload changes it.
+                controls.push(name + '\t' + type);
+                values.push([name, type, String(el.files ? el.files.length : 0)]);
                 continue;
             }
             if ((type === 'checkbox' || type === 'radio') && !el.checked) continue;
@@ -224,13 +230,9 @@ _OBSERVE_SUBMIT_BINDING_TEMPLATE = r"""(control, fields, baseline) => {
             } else {
                 values.push([name, type, String(el.value)]);
             }
-            if (type === 'hidden' && baseline instanceof WeakMap &&
-                    baseline.has(el) && baseline.get(el) !== String(el.value)) {
-                rotated.push(name);
-            }
         }
         controls.sort();
-        return {action, method, controls, values, rotated};
+        return {action, query, method, controls, values};
     };
     const fieldLocal = (el, stop) => {
         // The first ancestor that holds any field decides: exactly one field
@@ -381,7 +383,7 @@ _OBSERVE_SUBMIT_BINDING_TEMPLATE = r"""(control, fields, baseline) => {
         // can tell this form from an edit form or a form scoped elsewhere
         // that looks the same (openadapt_flow.ir.FormIdentity).
         if (formOwner === 'shared' && result.submit_role === 'form_submit') {
-            result.form = formFingerprint(scope, control, live, baseline);
+            result.form = formFingerprint(scope, control, live);
         }
         return {observation: result, canon: JSON.stringify(result)};
     }
@@ -476,14 +478,26 @@ _TOKEN_NAME = re.compile(
 )
 
 
+def _is_token(name: str, value: str) -> bool:
+    """A hidden value (or query value) that is a per-session or per-page
+    token: named like one AND shaped like one (at least 16 characters, not
+    all digits). A name alone (``encounter_token=7``) or a value that merely
+    changed while the form was filled (a parent id a script sets) is not
+    enough: those are compared."""
+
+    bare = name.lstrip("?")
+    return bool(_TOKEN_NAME.search(bare)) and len(value) >= 16 and not value.isdigit()
+
+
 @dataclass(frozen=True)
 class FormValues:
     """Values of the controls a run did not type into, by control name.
 
     Plaintext, so it never goes into an observation or a bundle: the
     compiler keeps salted digests (:func:`decide_form_identity`) and a run
-    compares digests. ``exempt`` names hidden tokens that are not compared:
-    named like one, or changed while the demonstration was being typed.
+    compares digests. ``exempt`` names hidden or query tokens that are not
+    compared: named like a token and shaped like one (see :func:`_is_token`).
+    Query parameter values are keyed ``?name``.
     """
 
     values: Mapping[str, tuple[str, ...]]
@@ -499,14 +513,18 @@ def form_values_from_page(raw: object) -> Optional[FormValues]:
     form = raw.get("form")
     if not isinstance(form, Mapping):
         return None
-    rotated = {str(name) for name in form.get("rotated") or ()}
     grouped: dict[str, list[str]] = {}
     exempt: set[str] = set()
-    for item in form.get("values") or ():
-        if not isinstance(item, (list, tuple)) or len(item) != 3:
+    items = [tuple(str(part) for part in item) for item in form.get("values") or ()]
+    for item in form.get("query") or ():
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise ValueError("form query values are malformed")
+        items.append(("?" + str(item[0]), "query", str(item[1])))
+    for item in items:
+        if len(item) != 3:
             raise ValueError("form values are malformed")
-        name, kind, value = (str(part) for part in item)
-        if kind == "hidden" and (name in rotated or _TOKEN_NAME.search(name)):
+        name, kind, value = item
+        if kind in ("hidden", "query") and _is_token(name, value):
             exempt.add(name)
             continue
         grouped.setdefault(name, []).append(value)
@@ -566,6 +584,14 @@ def observation_from_page(raw: object) -> SubmitBindingObservation:
         if not isinstance(form, Mapping):
             raise ValueError("submit-binding form fingerprint is malformed")
         action = str(form.get("action") or "")
+        query = form.get("query") or []
+        if not isinstance(query, list) or not all(
+            isinstance(q, (list, tuple)) and len(q) == 2 for q in query
+        ):
+            raise ValueError("submit-binding form query is malformed")
+        # The address includes its query parameter NAMES; their values are
+        # compared like the form's other untouched values.
+        action += "?" + "&".join(sorted(str(q[0]) for q in query))
         controls = form.get("controls") or []
         if not isinstance(controls, list) or not all(
             isinstance(c, str) for c in controls

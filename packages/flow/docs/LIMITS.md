@@ -386,22 +386,40 @@ field typed since the last save, the compiler gives it a **form identity**
 
 - the button is still that form's submit button, and the form owns exactly the
   fields this run typed into, each holding exactly what the run typed;
-- the form submits to the same origin and path with the same method, and would
-  send the same set of field names and types, hidden ones included, so an edit
-  form that looks like the create form, or an address, method or record id a
-  script changed or added, halts;
+- the form submits to the same origin, path and query parameter names with the
+  same method, and would send the same set of field names and types, hidden
+  and file ones included, so an edit form that looks like the create form, or
+  an address, method or record id a script changed or added, halts;
 - every field the run did not type into (a hidden parent or record id, a
-  select left on its default, a checked box) holds its demonstrated value,
-  stored as a salted digest. Hidden tokens are not compared: ones named like a
-  token (`csrf`, `token`, `nonce` and the like), whose value changes with every
-  page load, and ones that changed while the demonstration was typed. A
-  program that should create under a different parent on each run therefore
-  halts until that parent is checked another way.
+  select left on its default, a checked box, a query parameter's value) holds
+  its demonstrated value, stored as a salted digest. Only a per-page token is
+  not compared: a hidden field or query value named like one (`csrf`, `token`,
+  `nonce` and the like) whose value is shaped like one (16 characters or more,
+  not all digits). A short or numeric value under such a name, and a value a
+  script set while the form was filled in, are compared. A program that
+  should create under a different parent on each run therefore halts until
+  that parent is checked another way.
 
-During the click, a submit from any other form, or from the right form without
-its save button (`requestSubmit()` from a click handler), is cancelled and
-halts the run. A script that submits with `form.submit()` or `fetch` sends no
-submit event, so the guard doesn't see it.
+From the check until the next step, a guard in the page compares every submit
+with what the checked button would have sent (address and query, method, and
+every field's value except the exempt tokens). A submit from another form,
+from the right form without its save button, with contents that changed after
+the check (a click handler that fills in or enables a field), or a second
+submit, is cancelled. The run watches the guard for two seconds after the
+click, then again at the start of the next step, and halts on any cancelled
+submit. A script that submits with `form.submit()` or `fetch` sends no submit
+event, so the guard doesn't see it. A submit a script delays past the start
+of the next step is still cancelled until the page changes, but the run no
+longer reports it. A page whose own click handler fills in or enables a field
+as the form is sent changes what is sent after the check, so its save halts
+even when the demonstration did the same: a false halt, in the safe
+direction.
+
+The digests of untouched values are salted; with the per-bundle salt stored in
+the bundle (the default, unless `OPENADAPT_FLOW_IDENTITY_SALT` is set), a
+low-entropy value such as a numeric id or a select option can be recovered by
+trying candidates. The recording itself holds those values in plain text, as
+it holds the typed ones.
 
 A backend that can't read the page leaves the identity unreadable, which halts
 too. Each field must hold exactly what the run typed, so a controlled input
