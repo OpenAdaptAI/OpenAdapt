@@ -4,10 +4,16 @@ The org is on GitHub's free Actions plan: 20 concurrent jobs, 5 of them
 macOS. Every pull request and every queue group competes for those runners.
 To keep pull requests fast, CI runs in three tiers:
 
-- **PR tier** (`pull_request`): one fast Linux lane. That's one Python
-  version (3.12) and only the packages a change touches, including Flow's
-  unit suite. The checkout is the pull request merged with main, so this tier
-  already tests the change on top of main.
+- **PR tier** (`pull_request`): one required check, `ci` (ci.yml), that
+  finishes in under ten minutes. ci.yml calls packages.yml and main.yml on
+  this tier: lint, the oldest-Python syntax check, and the Linux tests of the
+  packages a change touches, on Python 3.12. Flow's unit shards leave out the
+  slow tests listed in `packages/flow/tests/nightly_only.txt`. Those are tests
+  over about 5 s on CI, except the realism tests that guard safety, which stay.
+  Flow's critical tests run in two parallel steps, end-to-end and unit. A smoke test
+  (`scripts/ci/smoke.py`) installs every package from its lock, imports it
+  and runs its command with `--help`, whatever changed. The checkout is the
+  pull request merged with main, so this tier tests the change on top of main.
 - **Queue tier** (`merge_group`), when the merge queue is on (ruleset
   25486718; it is off as of 2026-10-25, so a pull request merges once its
   PR-tier checks pass and the PR tier is the only gate before main): a lean re-check of the group on top of the
@@ -25,47 +31,63 @@ To keep pull requests fast, CI runs in three tiers:
   (including the native installers) ran, so no Desktop release ships without
   this tier.
 
+- **Nightly** (`nightly.yml`, daily at 07:23 UTC and on dispatch): calls
+  Packages (with the Desktop test and build workflows) and the launcher CI as
+  a scheduled run, so every package's full suite runs against main on every
+  platform its CI covers, whatever changed. The merge queue's push and a pull
+  request run only the packages a change touches; this catches a package
+  nobody touched breaking on main. When a job fails, the run opens the
+  `main is red` issue (label `main-is-red`), or updates it if one is open. A
+  passing run closes it. The nightly run is not a required check.
+
 **Drafts run nothing.** Every job in a workflow that runs on pull requests
 checks `github.event.pull_request.draft != true`, and `ready_for_review` is a
-trigger, so marking a draft ready starts CI. `packages-gate` fails on a draft
+trigger, so marking a draft ready starts CI. `ci` fails on a draft
 with "draft PR: CI runs when marked ready for review", so a draft never shows
 a stale green. A draft can't merge anyway.
 
-Nothing that used to run before merge was dropped: every job removed from the
-PR and queue tiers runs in the post-merge tier.
+Nothing that used to run before merge was dropped: every job or test removed
+from the PR and queue tiers runs in the post-merge tier and nightly.
 
 ## Required checks
 
-Branch protection requires these five checks, both on pull requests and in the
-merge queue:
+`ci` is the check a pull request needs, with `gitleaks` and
+`dependency-review`:
 
 | Check | Workflow | On a PR | In the queue |
 |---|---|---|---|
+| `ci` | ci.yml | runs; fails on a draft | runs |
 | `gitleaks` | secret-scan.yml | runs | runs |
 | `dependency-review` | dependency-review.yml | runs | runs |
-| `Analyze (python)` | codeql.yml | reports; analyzes when Python files change | reports; analyzes when the group changes Python files |
-| `run-ci (ubuntu-latest, 3.12)` | main.yml | runs (skips the suite for package-only changes) | runs |
-| `packages-gate` | packages.yml | runs; fails on a draft | runs |
 
-`packages-gate` needs every job in packages.yml. It fails when a job fails. It
-also fails when a job the change selects was skipped, except on a tier where
-that job doesn't run:
+The `ci` job needs Packages, the launcher CI and the smoke test. It fails
+unless each one passed. Inside Packages, `packages-gate` still requires every
+job the change selects to run and pass, except on a tier where that job
+doesn't run:
 
-- Post-merge-only jobs (`capture-macos`, `capture-windows`) may be skipped on
-  a pull request and in the queue, and must run and pass on main and on
-  dispatch.
-- `flow-unit` may be skipped in the queue only. A pull request can't enter
-  the queue until `packages-gate` passed with it green.
+- Post-merge-only jobs (`capture-macos`, `capture-windows`,
+  `flow-native-census`) may be skipped on a pull request and in the queue,
+  and must run and pass on main and on dispatch.
+- `flow-unit` may be skipped in the queue only.
 - `desktop-release-intent` runs on pull requests only.
 
-Inside the reusable desktop workflows, the native installers and the macOS and
-Windows legs run only post-merge. The gate sees each reusable workflow as one
-result, so a tier-skipped job inside it is never "skipped although selected".
+packages.yml and main.yml no longer trigger on pull requests or the merge
+queue themselves. ci.yml calls them, so each job runs once per pull request.
 
-Jobs in other workflows that run only post-merge, such as main.yml's macOS
-and older-Python legs and the macOS Intel audit, are not required checks.
-Adding their check names to branch protection would block every pull request,
-because they never report there.
+**Switching branch protection.** Until branch protection names `ci`, ci.yml
+also reports the two old required names, `run-ci (ubuntu-latest, 3.12)` and
+`packages-gate`, with `ci`'s result. CodeQL keeps reporting
+`Analyze (python)` from codeql.yml, as a non-required check after the
+switch. An admin switches it with:
+
+```bash
+gh api -X PATCH repos/OpenAdaptAI/OpenAdapt/branches/main/protection/required_status_checks --input - <<'EOF'
+{"strict": false, "checks": [{"context": "ci", "app_id": 15368}, {"context": "gitleaks", "app_id": 15368}, {"context": "dependency-review", "app_id": 15368}]}
+EOF
+```
+
+Then remove the `legacy-run-ci` and `legacy-packages-gate` jobs from ci.yml.
+App 15368 is GitHub Actions, the app the current checks are pinned to.
 
 ## Jobs by tier
 
@@ -75,7 +97,9 @@ because they never report there.
 | main.yml | `unsupported-python-guard` | no | no | Python 3.13 and 3.14 |
 | packages.yml | `types`, `agent` | Python 3.12 | Python 3.12 | Python 3.10 and 3.12 |
 | packages.yml | `flow-lint`, `flow-critical` | yes | yes | yes |
-| packages.yml | `flow-unit` | 2 xdist shards | no | 2 xdist shards |
+| ci.yml | `smoke`, `ci` | yes | yes | no |
+| packages.yml | `flow-unit` | 2 xdist shards, fast lane (without `nightly_only.txt`) | no | 2 xdist shards |
+| packages.yml | `flow-native-census` | no | no | Windows and macOS |
 | packages.yml | `capture-linux` | Python 3.12 | Python 3.12 | Python 3.10 (ubuntu-22.04), 3.11, 3.12 |
 | packages.yml | `capture-macos`, `capture-windows` | no | no | yes |
 | packages.yml | `capture-contract`, `capture-core-record` | yes | yes | yes |

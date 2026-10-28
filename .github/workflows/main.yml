@@ -1,18 +1,14 @@
 name: Python CI
 
 on:
-  pull_request:
-    # Drafts run nothing (each job checks `draft`); marking one ready runs CI.
-    types: [opened, synchronize, reopened, ready_for_review]
-    branches:
-      - '**'
-  # The merge queue tests each group before it lands on main.
-  merge_group:
+  # Pull requests and the merge queue reach this through ci.yml, the one
+  # required check; nightly.yml calls it on the scheduled tier.
   push:
     branches:
       - main
   # Runs the post-merge tier (every Python on Linux and macOS) on demand.
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
   # A pull request's newer push cancels its older run. Every other event (the
