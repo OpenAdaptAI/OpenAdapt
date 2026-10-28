@@ -108,7 +108,7 @@ frame:
     # OpenEMR's own bookkeeping, shared with rollback and the RL grader
     # (openadapt_flow/app_profiles/openemr.yaml).
     profile: openemr
-    profile_sha256: "sha256:b626d14a92a9170a35bff156671a4ee5d850772f9769c73a05b9c3e6be090bb5"  # openemr-frame-profile/2026-10-29.1
+    profile_sha256: "sha256:a3daefcf7b7f96e0c68a7d5c1829c3e358dc1ce9366e3098d18bc80441685bed"  # openemr-frame-profile/2026-10-29.2
     views: {patient_data: patient}
     new_row_fields:
       # What OpenEMR's New Patient form fills on a new chart beyond the
