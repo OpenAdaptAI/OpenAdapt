@@ -10627,7 +10627,7 @@ class Replayer:
                 )
             )
         ):
-            return None
+            return self._unarmed_row_pick_error(step, resolution, workflow, result)
         # A hover check needs an anchor too (see _hover_check).
         assert step.anchor is not None
 
@@ -10726,7 +10726,17 @@ class Replayer:
                 f"({reason}) — refusing to click; run aborted"
             )
         elif check.ambiguity_halt is not None:
-            if check.ambiguity_halt == "identical_candidates":
+            teach_twin = bool(
+                step.anchor is not None
+                and step.anchor.identity_template is not None
+                and step.anchor.identity_template.teach_ambiguous
+            )
+            if check.ambiguity_halt == "identical_candidates" and teach_twin:
+                why = (
+                    "teach time saw another row with the same identity and no "
+                    "record id between them (it may be out of view now)"
+                )
+            elif check.ambiguity_halt == "identical_candidates":
                 why = (
                     f"{check.candidate_count} shown rows carry the same "
                     "identity and no recorded record id tells them apart"
@@ -10791,6 +10801,63 @@ class Replayer:
         if error is not None and (governed or signal_quorum):
             result.safety_halt = True
         return error
+
+    def _unarmed_row_pick_error(
+        self,
+        step: Step,
+        resolution: Resolution,
+        workflow: Workflow,
+        result: StepResult,
+    ) -> Optional[str]:
+        """Halt a click with no identity evidence on a row nothing can count.
+
+        A click on "Open" in a worklist whose rows show no readable identity
+        (every row's own label reads the same) carries no identity evidence
+        at all, so the identity check never runs and the click lands on
+        whichever row now sits there. When the backend's census reports such
+        a row and a consequential write follows, the step halts before input.
+        """
+        if step.action not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
+            return None
+        getter = getattr(self.backend, "identity_candidates_at", None)
+        if getter is None:
+            return None
+        try:
+            census = getter(int(resolution.point[0]), int(resolution.point[1]))
+        except Exception:
+            return None
+        if not isinstance(census, Mapping):
+            return None
+        uncountable = census.get("uncountable") is True
+        # Teach saw no row here, but the live page shows one, and the clicked
+        # control's name repeats in other rows: the click cannot be tied to
+        # the recorded record.
+        unrecorded_row = (
+            census.get("row") is not False
+            and bool(census.get("candidates"))
+            and census.get("label_repeats") is True
+        )
+        if not (uncountable or unrecorded_row):
+            return None
+        if not self._leads_into_consequential(step, workflow):
+            return None
+        result.identity = IdentityCheck(
+            status="abstain",
+            mode="structured",
+            ambiguity_halt="identity_uncounted",
+        )
+        result.safety_halt = True
+        why = (
+            "whose identity cannot be read (every row's own label reads the same)"
+            if uncountable
+            else "that teach time did not record as a row, and other rows show "
+            "the same control"
+        )
+        return (
+            f"Step '{step.id}' ({step.intent}) clicks a control in a repeated "
+            f"row {why}, and a consequential write follows (identity_uncounted) "
+            "— acting could open another record; refusing to act"
+        )
 
     @staticmethod
     def _retain_pixel_identity_evidence(
@@ -15719,6 +15786,8 @@ class Replayer:
         ):
             return check
         teach_role = census_mod.teach_time_role(step)
+        tmpl = step.anchor.identity_template if step.anchor is not None else None
+        teach_twin = bool(tmpl is not None and tmpl.teach_ambiguous)
         if check.mode == "structured":
             decision = self._structured_census(step, resolution.point)
         else:
@@ -15729,6 +15798,17 @@ class Replayer:
                 decision = self._pixel_census(
                     step, resolution, before_png, workflow, bundle_dir
                 )
+        if teach_twin and self._leads_into_consequential(step, workflow):
+            # Teach time already saw a look-alike row with no record id
+            # between them. Its twin may be out of view now (a virtualized
+            # list), so a unique live count proves nothing.
+            return check.model_copy(
+                update={
+                    "status": "abstain",
+                    "ambiguity_halt": "identical_candidates",
+                    "candidate_count": decision.candidate_count,
+                }
+            )
         if decision.verdict == "cannot_count" and teach_role == "control":
             # Teach time recorded a form field or a control, and no census can
             # count here. A census that can count always decides.

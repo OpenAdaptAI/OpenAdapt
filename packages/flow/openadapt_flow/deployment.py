@@ -388,6 +388,15 @@ class EffectsConfig(BaseModel):
     base_url: Optional[str] = None
     records_path: str = "/api/db"
     records_key: Optional[str] = "records"
+    #: ``rest`` only: dotted path in the response body to the next page's URL
+    #: (``links.next``). Set, the read follows every page on the same origin
+    #: and reads as unreadable when a page fails or the chain is too long.
+    #: Unset: one response is the whole read, as before.
+    records_next_path: Optional[str] = None
+    #: ``rest`` only: dotted path in the first page's body to the number of
+    #: records the read should return (``meta.total``). Set, a read whose
+    #: count differs reads as unreadable. Unset: the read trusts the chain.
+    records_total_path: Optional[str] = None
     #: Secret-isolated auth headers for the records read (bearer_env /
     #: header+value_env / basic_env). Never a credential literal.
     auth: Optional[AuthRef] = None
@@ -613,7 +622,12 @@ class EffectsConfig(BaseModel):
         """Keep configs without a desktop read-back byte-identical."""
 
         data: dict[str, Any] = handler(self)
-        for added in ("desktop_readback", "deferred_report"):
+        for added in (
+            "desktop_readback",
+            "deferred_report",
+            "records_next_path",
+            "records_total_path",
+        ):
             if data.get(added, "") is None:
                 data.pop(added, None)
         return data
@@ -2004,6 +2018,8 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         "fresh_session",
         "desktop_readback",
         "deferred_report",
+        "records_next_path",
+        "records_total_path",
     ):
         if config.get(added) is None:
             config.pop(added, None)
@@ -2156,6 +2172,8 @@ def _build_effect_verifier_unredacted(
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
             drop_fields=tuple(cfg.records_drop_fields),
+            next_path=cfg.records_next_path,
+            total_path=cfg.records_total_path,
         )
 
     if kind == "fhir":
