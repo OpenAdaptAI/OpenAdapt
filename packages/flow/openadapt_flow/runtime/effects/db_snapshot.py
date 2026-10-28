@@ -569,6 +569,7 @@ def take_snapshot(
     ignore: Mapping[str, Sequence[str]] = {},
     ref_columns: Sequence[str] = (),
     schemas: Sequence[str] = (),
+    optional_modes: Mapping[str, TableMode] = {},
 ) -> Snapshot:
     """Read every table in one read-only transaction.
 
@@ -587,6 +588,9 @@ def take_snapshot(
         ref_columns: Columns attribution and side records read (a record
             key, a link field): their cell MACs are kept in every table.
         schemas: Schemas the read must see (MySQL); refused if one isn't.
+        optional_modes: Like ``modes``, for tables an app profile names that
+            this database may not have (a profile covers several versions).
+            ``ignore`` may name ``*`` for every table.
 
     Raises:
         SnapshotError: the database can't be read as the frame needs it.
@@ -598,7 +602,16 @@ def take_snapshot(
         raise SnapshotError(f"could not open a connection: {exc}") from exc
     try:
         return _snapshot(
-            s, key, modes, max_rows, before, extra_queries, ignore, ref_columns, schemas
+            s,
+            key,
+            modes,
+            max_rows,
+            before,
+            extra_queries,
+            ignore,
+            ref_columns,
+            schemas,
+            optional_modes,
         )
     except SnapshotError:
         raise
@@ -618,6 +631,7 @@ def _snapshot(
     ignore: Mapping[str, Sequence[str]],
     ref_columns: Sequence[str],
     schemas: Sequence[str],
+    optional_modes: Mapping[str, TableMode] = {},
 ) -> Snapshot:
     dialect = s.dialect
     counters: dict[str, int] = {}
@@ -655,6 +669,7 @@ def _snapshot(
     for name, sql in extra_queries.items():
         snap.extra[name] = s.dicts(sql)
     unknown = sorted(set(modes) - set(defs))
+    modes = {**{t: m for t, m in optional_modes.items() if t in defs}, **modes}
     if unknown:
         raise SnapshotError(
             "allow-listed tables not in the database: " + ", ".join(unknown)
@@ -718,7 +733,7 @@ def _snapshot(
             table.cell_columns = [c for c in d.columns if c in refs]
         else:
             table.cell_columns = list(d.columns)
-        skip = ignore.get(t, ())
+        skip = [*ignore.get(t, ()), *ignore.get("*", ())]
         seen_keys: dict[str, int] = {}
         for row in _read_rows(s, t, d) if table.count else []:
             k = row_key_hash(key, _row_key(d, row, seen_keys), t)
