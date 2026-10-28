@@ -15,6 +15,36 @@
 
 <!-- version list -->
 
+## v2.4.0 (2026-10-25)
+
+A person's approval counts only when a registered approver key signed it, and the verification, identity and recovery paths below fail closed where they used to pass.
+
+### Features
+
+- A person's approval of a gated save carries an Ed25519 signature from a key registered under the `approvers` role (`jit register --role approver`), made with the route's own method (`desktop_key` for Desktop, `portal_key` for the decision portal). Item approvals, the durable `approve` and `resume`, the console and the agent tools all verify it; an unsigned, claimed or hand-written answer gives no authority. `approve`, `resume`, `run` and `run-case` take `--key-dir` to name the registry ([#1486](https://github.com/OpenAdaptAI/OpenAdapt/pull/1486), [#1501](https://github.com/OpenAdaptAI/OpenAdapt/pull/1501)).
+- Loop induction learns worklists that are not back-to-back repeats: a click names the parameter that identifies its row (`Step.target_param`), and each pass works on, and is checked against, its own row's record ([#1435](https://github.com/OpenAdaptAI/OpenAdapt/pull/1435)).
+- Pipelined read-back runs under durable, Standard and Regulated runs. The deferred check is written into the durable pause before the side thread gets it, and a `problems_only` run decides each item from its settled check ([#1442](https://github.com/OpenAdaptAI/OpenAdapt/pull/1442), [#1460](https://github.com/OpenAdaptAI/OpenAdapt/pull/1460)).
+- An admitted API step runs inside a multi-surface program on its own surface, under a managed dispatch that names it, and under a qualification admission that qualified its path ([#1439](https://github.com/OpenAdaptAI/OpenAdapt/pull/1439), [#1444](https://github.com/OpenAdaptAI/OpenAdapt/pull/1444), [#1451](https://github.com/OpenAdaptAI/OpenAdapt/pull/1451)).
+- `verify-run` judges frame conditions: a record that no effect declares, added, removed or changed, is a collateral change, with optional attribution from an audit log or a modified-by field ([#1443](https://github.com/OpenAdaptAI/OpenAdapt/pull/1443)). A record check is admitted only after it catches its faults on a test copy of the system of record (`fault_gate`, `openadapt.check-coverage/v1`) ([#1445](https://github.com/OpenAdaptAI/OpenAdapt/pull/1445)). A saved record is compared with its source document through a second extraction by a different method (`provenance`) ([#1446](https://github.com/OpenAdaptAI/OpenAdapt/pull/1446)).
+- A pinned bundle can be repaired: the fix is re-qualified on a test copy and re-admitted with signed lineage, and the pin accepts the new version only through that lineage ([#1450](https://github.com/OpenAdaptAI/OpenAdapt/pull/1450)). A renamed save button is repaired when the recorded identity hash proves only the label changed ([#1514](https://github.com/OpenAdaptAI/OpenAdapt/pull/1514)). `qualify` handles a bundle that already has a qualification project, an encrypted bundle and a sealed set ([#1454](https://github.com/OpenAdaptAI/OpenAdapt/pull/1454)).
+- The record check reads a typed label back as its stored code (`ValueExpr` `map`) and can require exactly the new record (`record.exact_new_set`) ([#1456](https://github.com/OpenAdaptAI/OpenAdapt/pull/1456)).
+- Under `problems_only`, problems with an item's own input leave the switch on and send that item to a person; program and environment problems turn it off, and a person re-arms it with one signed tap ([#1517](https://github.com/OpenAdaptAI/OpenAdapt/pull/1517)).
+- Look-alike rows are counted on Windows, macOS, Linux and pixel-only surfaces, so a step that picks a row halts when it cannot tell the target from its twin ([#1504](https://github.com/OpenAdaptAI/OpenAdapt/pull/1504), [#1518](https://github.com/OpenAdaptAI/OpenAdapt/pull/1518), [#1557](https://github.com/OpenAdaptAI/OpenAdapt/pull/1557)).
+- `openadapt-agent serve --teach-browser` lets a coding agent turn a read-only browser task into a named tool it calls again with new values; `openadapt setup` registers it with Claude Code, Cursor, Codex and Gemini CLI ([#1502](https://github.com/OpenAdaptAI/OpenAdapt/pull/1502)).
+- `induce --held-out` scores each held-out item by running it and checking the record independently ([#1527](https://github.com/OpenAdaptAI/OpenAdapt/pull/1527)).
+
+### Fixes
+
+- A save that was sent but not confirmed never resumes as a plain retry; the pause offers reconcile or an explicit single retry ([#1485](https://github.com/OpenAdaptAI/OpenAdapt/pull/1485)).
+- A value typed whole in one step and inside longer text in another is reported as unlifted, and a canary that reuses run 1's values returns the draft to review ([#1465](https://github.com/OpenAdaptAI/OpenAdapt/pull/1465)).
+- Record identity stays stable across the JSON baseline, so rows read back from UUID, decimal and datetime columns are not counted as new ([#1482](https://github.com/OpenAdaptAI/OpenAdapt/pull/1482)).
+- An empty or not-found page in a separate-session read-back is indeterminate, not proof that a record is absent ([#1515](https://github.com/OpenAdaptAI/OpenAdapt/pull/1515), thanks @yunusarda-sudo).
+- A binary SQL column (such as OpenEMR's `uuid`) is read as hex by `verify-run` and `scaffold-verifier` ([#1503](https://github.com/OpenAdaptAI/OpenAdapt/pull/1503)).
+- Recording and replay follow a window by a stable handle after its title changes ([#1468](https://github.com/OpenAdaptAI/OpenAdapt/pull/1468)).
+- `seal` works on a bundle certified by a qualification campaign ([#1453](https://github.com/OpenAdaptAI/OpenAdapt/pull/1453)); the approval gate classifies saves with the certifying policy, as the run gate does ([#1455](https://github.com/OpenAdaptAI/OpenAdapt/pull/1455)).
+- Process workers always end their child process, even on failure ([#1498](https://github.com/OpenAdaptAI/OpenAdapt/pull/1498)).
+- The `run --profile standard` examples name an execution surface ([#1525](https://github.com/OpenAdaptAI/OpenAdapt/pull/1525)). Synthetic referral last names in the OpenEMR benchmark are unique ([#1420](https://github.com/OpenAdaptAI/OpenAdapt/pull/1420), thanks @xiaofeilovecoding).
+
 ## v2.3.0 (2026-10-20)
 
 The shared contracts are back in `openadapt-types`, which depends only on Pydantic; this package requires `openadapt-types>=0.24.0,<0.25.0`, and `openadapt_flow.contracts` returns the same modules as `openadapt_types` ([#1270](https://github.com/OpenAdaptAI/OpenAdapt/pull/1270)).

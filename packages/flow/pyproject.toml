@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-flow"
-version = "2.3.0"
+version = "2.4.0"
 description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
 readme = "README.md"
 license = { text = "MIT" }
@@ -127,6 +127,9 @@ dev = [
     # Browser tests remain part of the full development matrix even though the
     # published base runtime no longer installs Playwright for non-web users.
     "playwright>=1.44",
+    # The Windows real-app row census drives a WPF list through UI Automation
+    # (tests/test_native_census_real_apps.py).
+    "uiautomation>=2.0.20; sys_platform == 'win32'",
 ]
 grounder = ["anthropic>=0.40"]
 # PRIMARY grounding rung: OCR text-anchoring via openadapt-grounding
