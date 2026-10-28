@@ -48,9 +48,26 @@ the stored form.
 
 ## Held-out 3
 
-The check is fixed at `6d0b1525d` before the suite is written. The suite
-will be authored, stored and run privately; its hash and aggregate result
-will be added here.
+`sha256 a00983b9f7b5a6de587c99c12352fa8c6cf961d8cb67ca28b9be7c1304965c08`.
+The check was fixed at `6d0b1525d` before the suite was written; the run is at
+harness commit `5efb2986d`, with no check changes. 17 cases: concurrent
+legitimate 5 (clean), mixed 3, misread source 3, unrelated change 3, wrong
+record 1, missing side record 1, duplicate 1.
+
+| contract | right | faults passed as verified | false alarms | counted |
+|---|---|---|---|---|
+| production | 12/17 | 0 | 5 | yes |
+| read-list candidate | 12/17 | 0 | 5 | yes |
+| whole database | **14/17** | 0 | 3 | yes: **gate not met** |
+
+Every contract caught all 12 faults. The whole-database contract flagged
+three of the five clean cases, from two gaps:
+
+- **Value kinds:** a phone typed with other punctuation, and a date typed in
+  another format, are compared as text, where the spec compares digits and
+  calendar dates.
+- **Concurrent edits to the new chart:** another user's change to the bot's
+  new record is never excused, even in a field the save didn't set.
 
 ## Live OpenEMR
 
