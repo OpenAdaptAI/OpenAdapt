@@ -2,10 +2,10 @@
   "schema": "openadapt.rollback-measurement/v1",
   "app": "mockmed",
   "mode": "live (real browser, in-process app declared a test copy)",
-  "measured_at": "2026-10-28T14:19:33-0400",
+  "measured_at": "2026-10-28T14:39:47-0400",
   "host": "macOS-15.7.3-arm64-arm-64bit",
-  "load_1m": 162.41,
-  "seconds": 89.6,
+  "load_1m": 37.96,
+  "seconds": 72.0,
   "rows": {
     "qualify": {
       "exit_code": 0,
@@ -22,7 +22,7 @@
       "stopped_at": "stop_here",
       "transaction_outcome": "ROLLED_BACK",
       "rollback_status": "rolled_back",
-      "rollback_reason": "every change was compensated and the system of record matches the read from before the run",
+      "rollback_reason": "every change the run made was compensated and the system of record matches the read from before the run",
       "after_stop_diff": {
         "records": {
           "added": 1,
@@ -47,7 +47,7 @@
       "stopped_at": "stop_here",
       "transaction_outcome": "HALTED_BEFORE_EFFECT",
       "rollback_status": "nothing_landed",
-      "rollback_reason": "after the stop the system of record matches the read from before the run; nothing to undo",
+      "rollback_reason": "after the stop nothing the run did is in the system of record",
       "after_stop_diff": {},
       "remaining_diff": {},
       "steps": [],
