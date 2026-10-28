@@ -142,7 +142,6 @@ and three `openadapt-flow replay` runs, each made to stop by one added step.
 `rollback qualify` passed both halt points (before and after the save).
 None of the runs made a model call.
 
-OPENEMR_RESULTS
 
 ## What this doesn't do
 
