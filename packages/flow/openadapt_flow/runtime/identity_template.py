@@ -219,6 +219,7 @@ def build_identity_template(
     salt_hex: Optional[str] = None,
     record_key: Optional[str] = None,
     structured_row: Optional[bool] = None,
+    structured_ambiguous: bool = False,
 ) -> Optional[IdentityTemplate]:
     """Build a PHI-free identity template from the recorded plaintext band.
 
@@ -237,6 +238,8 @@ def build_identity_template(
             run's.
         structured_row: Whether the structured identity came from a record
             row at teach time (None: unknown).
+        structured_ambiguous: Teach time saw a look-alike row no record id
+            separated.
 
     Returns:
         An :class:`IdentityTemplate`, or None when there is neither a usable
@@ -264,6 +267,7 @@ def build_identity_template(
         if record_key and not structured_params:
             tmpl.record_key = record_key_hash(salt, record_key)
         tmpl.structured_row = structured_row
+        tmpl.teach_ambiguous = bool(structured_ambiguous)
 
     # Mirror the compiler's context_from_lines gate: a band shorter than
     # MIN_CONTEXT_CHARS is too generic to discriminate and is never stored (any

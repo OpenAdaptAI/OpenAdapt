@@ -82,6 +82,10 @@ def decide(
         return CensusDecision("cannot_count")
     if census.get("row") is False:
         return CensusDecision("not_a_row")
+    if census.get("uncountable") is True:
+        # A row whose identity cannot be read (a repeated structure whose
+        # rows all show the same label): nothing can count it.
+        return CensusDecision("cannot_count")
     if census.get("incomplete"):
         return CensusDecision("uncounted")
     raw = census.get("candidates")
