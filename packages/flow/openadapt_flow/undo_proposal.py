@@ -263,7 +263,10 @@ _VOID_WORDS = re.compile(
 _DISCARD_WORDS = re.compile(r"\b(discard|abandon)\b", re.I)
 
 
-def recording_kind(workflow: Workflow) -> str:
+CompensationKind = Literal["discard_draft", "restore", "void", "delete"]
+
+
+def recording_kind(workflow: Workflow) -> CompensationKind:
     """The kind of a recorded compensation, from its own words; ``delete``
     unless it says void, cancel or discard."""
     text = " ".join([workflow.name, *(s.intent or "" for s in workflow.steps)])
