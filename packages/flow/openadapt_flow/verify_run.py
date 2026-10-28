@@ -51,6 +51,8 @@ import json
 import os
 import re
 import secrets
+import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Mapping, Optional, Sequence, cast
@@ -431,7 +433,36 @@ def _db_connect(read: Mapping[str, Any]) -> Any:
     return lambda: module.connect(**args)
 
 
-def _read_database(cfg: VerifyConfig) -> Optional[dict[str, Any]]:
+def _same_connection(
+    audit: Optional[Mapping[str, Any]], read: Mapping[str, Any]
+) -> bool:
+    """Does the audit read use the database read's own connection?"""
+
+    if not audit or audit.get("kind") != "sql":
+        return False
+    keys = ("sqlite_database", "sql_driver", "sql_connect_args")
+    return all(audit.get(k) == read.get(k) for k in keys)
+
+
+def _audit_sql(cfg: VerifyConfig) -> dict[str, str]:
+    """The audit query, when it can run inside the database snapshot."""
+
+    frame = cfg.frame
+    if frame is None or frame.database is None or frame.attribution is None:
+        return {}
+    audit = frame.attribution.read
+    if (
+        _same_connection(audit, frame.database.read)
+        and audit
+        and audit.get("sql_query")
+    ):
+        return {"audit": str(audit["sql_query"])}
+    return {}
+
+
+def _read_database(
+    cfg: VerifyConfig, salt: bytes, before: Optional[Any] = None
+) -> Optional[Any]:
     """The whole-database snapshot, or None when it can't be read."""
 
     from openadapt_flow.runtime.effects.db_snapshot import take_snapshot
@@ -440,69 +471,140 @@ def _read_database(cfg: VerifyConfig) -> Optional[dict[str, Any]]:
     if database is None:
         return None
     try:
-        snap = take_snapshot(
+        return take_snapshot(
             _db_connect(database.read),
             database.dialect,
-            skip=database.allow_tables,
+            key=salt,
+            modes=database.modes(),  # type: ignore[arg-type]
             max_rows=database.max_rows,
+            before=before,
+            extra_queries=_audit_sql(cfg),
         )
     except Exception:  # noqa: BLE001 - unreadable -> the frame is not checked
         return None
-    return snap.to_json()
 
 
-DatabaseSlices = tuple[
-    dict[str, tuple[EffectState, Optional[list[dict[str, Any]]]]],
-    dict[str, dict[str, Optional[str]]],
-    list[str],
-]
+def _audit_ids_each(entries: Sequence[Mapping[str, Any]], salt: bytes) -> list[str]:
+    from openadapt_flow.runtime.effects.effect import stable_id
+
+    return [
+        hmac.new(salt, repr(stable_id(dict(e))).encode(), hashlib.sha256).hexdigest()
+        for e in entries
+    ]
 
 
-def _database_slices(
-    cfg: VerifyConfig, before: EffectState
-) -> Optional[DatabaseSlices]:
-    """Slices for every table, their column defaults, and tables moved unread.
+def _audit_ids(entries: Sequence[Mapping[str, Any]], salt: bytes) -> list[str]:
+    """Keyed hashes of audit entries: the baseline keeps which entries
+    existed, never what they say."""
+
+    from openadapt_flow.runtime.effects.effect import stable_id
+
+    return sorted(
+        hmac.new(salt, repr(stable_id(dict(e))).encode(), hashlib.sha256).hexdigest()
+        for e in entries
+    )
+
+
+@dataclass
+class _DatabaseFrame:
+    slices: dict[str, tuple[EffectState, Optional[list[dict[str, Any]]]]]
+    defaults: dict[str, dict[str, Optional[str]]]
+    unread: list[tuple[str, str]]
+    hashers: dict[str, Any]
+    clock: tuple[str, str]
+    evidence: dict[str, Any]
+    audit_after: Optional[list[dict[str, Any]]]
+
+
+def _database_frame(
+    cfg: VerifyConfig, before: EffectState, salt: bytes
+) -> Optional[_DatabaseFrame]:
+    """Every table as a slice, from the baseline snapshot and one read now.
 
     None when there is no ``frame.database``. A baseline without a readable
-    snapshot, or an unreadable post-save read, gives one unreachable slice, so
-    the frame is not checked.
+    snapshot, or an unreadable read now, gives one unreachable slice, so the
+    frame is not checked.
     """
 
     from openadapt_flow.runtime.effects.db_snapshot import (
-        ANY_VALUE,
+        KEY,
         Snapshot,
-        keyed_rows,
+        SnapshotError,
+        cell_hash,
+        unpack,
+        unread_reasons,
     )
 
-    if cfg.frame is None or cfg.frame.database is None:
+    database = cfg.frame.database if cfg.frame is not None else None
+    if database is None:
         return None
+    unreachable = _DatabaseFrame(
+        {"database": (EffectState(substrate="database", reachable=False), None)},
+        {},
+        [],
+        {},
+        ("", ""),
+        {},
+        None,
+    )
     stored = (
         before.detail.get(FRAME_DB_DETAIL) if isinstance(before.detail, dict) else None
     )
-    after_json = _read_database(cfg)
-    if not isinstance(stored, dict) or after_json is None:
-        unreachable = EffectState(substrate="database", reachable=False, records=[])
-        return {"database": (unreachable, None)}, {}, []
-    old, new = Snapshot.from_json(stored), Snapshot.from_json(after_json)
-    slices: dict[str, tuple[EffectState, Optional[list[dict[str, Any]]]]] = {}
-    defaults: dict[str, dict[str, Optional[str]]] = {}
-    unread: list[str] = []
+    if not isinstance(stored, dict):
+        return unreachable
+    old = Snapshot.from_json(stored)
+    if database.settle_s:
+        time.sleep(database.settle_s)
+    new = _read_database(cfg, salt, before=old)
+    if new is None:
+        return unreachable
+    out = _DatabaseFrame({}, {}, [], {}, (old.clock, new.clock), {}, None)
+    if "audit" in new.extra:
+        out.audit_after = list(new.extra["audit"])
+    if old.objects != new.objects:
+        out.unread.append(
+            ("(database code)", "triggers, views, routines or events changed")
+        )
+    hasher = lambda value: cell_hash(salt, value)  # noqa: E731
+    counts = {"compare": 0, "append_only": 0, "skip": 0}
     for name in sorted(set(old.tables) | set(new.tables)):
         a, b = old.tables.get(name), new.tables.get(name)
-        if a is None or b is None or a.columns != b.columns:
-            unread.append(name)  # created, dropped or altered in the window
+        try:
+            reasons = unread_reasons(a, b, new.dialect)
+        except SnapshotError as exc:
+            reasons = [str(exc)]
+        out.unread.extend((name, why) for why in reasons)
+        if b is not None:
+            counts[b.mode] = counts.get(b.mode, 0) + 1
+        if (
+            a is None
+            or b is None
+            or a.mode != "compare"
+            or (reasons and reasons[0] in ("definition changed", "created or dropped"))
+        ):
             continue
-        if a.rows is None or b.rows is None:
-            if (a.count, a.digest) != (b.count, b.digest):
-                unread.append(name)
-            continue
-        slices[name] = (
-            EffectState(substrate="database", reachable=True, records=keyed_rows(a)),
-            keyed_rows(b),
+        if b.rows is None and b.buckets is None:
+            continue  # a whole-table digest: moved or not, nothing row by row
+        before_rows = [
+            {KEY: k, **unpack(a.columns, cells)} for k, cells in (a.rows or {}).items()
+        ]
+        after_rows = [{KEY: k, **row} for k, row in b.values.items()]
+        out.slices[name] = (
+            EffectState(substrate="database", reachable=True, records=before_rows),
+            after_rows,
         )
-        # The primary key is the row's identity: every new row sets it.
-        defaults[name] = {**b.defaults, **dict.fromkeys(b.primary_key, ANY_VALUE)}
-    return slices, defaults, unread
+        out.defaults[name] = dict(b.defaults)
+        out.hashers[name] = hasher
+    out.evidence = {
+        "tables_compared": counts.get("compare", 0),
+        "tables_append_only": counts.get("append_only", 0),
+        "tables_skipped": counts.get("skip", 0),
+        "tables_without_snapshot_isolation": sum(
+            1 for t in new.tables.values() if t.non_transactional
+        ),
+        "allow_list_sha256": database.allow_list_sha256(),
+    }
+    return out
 
 
 def _read_audit(verifier: Any) -> Optional[list[dict[str, Any]]]:
@@ -523,6 +625,7 @@ def judge_run_frame(
     *,
     audit_verifier: Any = None,
     run_actors: Sequence[str] = (),
+    salt: bytes = b"",
 ) -> FrameVerdict:
     """Read the slice after the save and judge the frame against ``before``."""
 
@@ -575,14 +678,11 @@ def judge_run_frame(
     else:
         slices[""] = (before, _post_records(after))
     identities: Optional[dict[str, str]] = None
-    defaults: Optional[dict[str, dict[str, Optional[str]]]] = None
-    unread: list[str] = []
-    database = _database_slices(cfg, before)
-    if database is not None:
+    db = _database_frame(cfg, before, salt)
+    if db is not None:
         from openadapt_flow.runtime.effects.db_snapshot import KEY
 
-        db_slices, defaults, unread = database
-        clash = sorted(set(db_slices) & set(slices))
+        clash = sorted(set(db.slices) & set(slices))
         if clash:
             return FrameVerdict(
                 status="not_checked",
@@ -594,19 +694,34 @@ def judge_run_frame(
         routes = {k: list(v) for k, v in routes.items()}
         for own in routes.values():
             own.extend(t for t, surface in views.items() if surface in own)
-        slices.update(db_slices)
-        identities = {name: KEY for name in db_slices}
+        slices.update(db.slices)
+        identities = {name: KEY for name in db.slices}
     audit_before: Optional[list[dict[str, Any]]] = None
     audit_after: Optional[list[dict[str, Any]]] = None
-    if audit_verifier is not None:
-        stored = (
-            before.detail.get(FRAME_AUDIT_DETAIL)
-            if isinstance(before.detail, dict)
-            else None
+    stored = (
+        before.detail.get(FRAME_AUDIT_DETAIL)
+        if isinstance(before.detail, dict)
+        else None
+    )
+    if isinstance(stored, dict) and stored.get("reachable"):
+        entries_now = (
+            db.audit_after
+            if db is not None and db.audit_after is not None
+            else _read_audit(audit_verifier)
         )
-        if isinstance(stored, dict) and stored.get("reachable"):
-            audit_before = list(stored.get("records", []))
-        audit_after = _read_audit(audit_verifier)
+        if entries_now is not None:
+            if "ids" in stored:
+                # The window: entries now that the baseline didn't hold.
+                seen = set(stored["ids"])
+                audit_before = []
+                audit_after = [
+                    e
+                    for e, h in zip(entries_now, _audit_ids_each(entries_now, salt))
+                    if h not in seen
+                ]
+            else:
+                audit_before = list(stored.get("records", []))
+                audit_after = entries_now
     return judge_frame(
         spec,
         bound_effects,
@@ -617,8 +732,11 @@ def judge_run_frame(
         audit_after=audit_after,
         run_actors=run_actors,
         identities=identities,
-        new_row_defaults=defaults,
-        unread_changes=unread,
+        new_row_defaults=None if db is None else db.defaults,
+        unread_changes=() if db is None else db.unread,
+        hashers=None if db is None else db.hashers,
+        clock=("", "") if db is None else db.clock,
+        database_evidence=None if db is None else db.evidence,
     )
 
 
@@ -814,36 +932,36 @@ def capture_baseline(
     identity = verifier_identity(verifier)
     execution_id = _new_execution_id()
     _tag_reads(verifier, execution_id)
+    salt = secrets.token_bytes(32)
     state = verifier.capture_pre_state()
     if not isinstance(state, EffectState):
         raise VerifyRunError("verifier returned no readable baseline")
+    detail: dict[str, Any] = {}
+    entries: Optional[list[dict[str, Any]]] = None
+    snapshot = None
+    if cfg.frame is not None and cfg.frame.database is not None:
+        snapshot = _read_database(cfg, salt)
+        if snapshot is not None:
+            detail[FRAME_DB_DETAIL] = snapshot.to_json()
+            entries = snapshot.extra.get("audit")
     audit_verifier = _audit_verifier(cfg, params)
     if audit_verifier is not None:
-        entries = _read_audit(audit_verifier)
-        state = state.model_copy(
-            update={
-                "detail": {
-                    **state.detail,
-                    FRAME_AUDIT_DETAIL: {
-                        "reachable": entries is not None,
-                        "records": entries or [],
-                    },
-                }
-            }
-        )
-    if cfg.frame is not None and cfg.frame.database is not None:
-        snapshot = _read_database(cfg)
-        if snapshot is not None:
-            state = state.model_copy(
-                update={"detail": {**state.detail, FRAME_DB_DETAIL: snapshot}}
-            )
+        if entries is None:
+            entries = _read_audit(audit_verifier)
+        # Which entries existed, as keyed hashes: never what they say.
+        detail[FRAME_AUDIT_DETAIL] = {
+            "reachable": entries is not None,
+            "ids": _audit_ids(entries or [], salt),
+        }
+    if detail:
+        state = state.model_copy(update={"detail": {**state.detail, **detail}})
     payload = {
         "schema_version": BASELINE_SCHEMA,
         "execution_id": execution_id,
         "baseline_read_at": _now(),
         "verifier_identity": identity,
         "state": state.model_dump(mode="json"),
-        "salt": secrets.token_bytes(32).hex(),
+        "salt": salt.hex(),
     }
     _write_private(Path(out), payload)
     return payload
@@ -1195,6 +1313,7 @@ def verify_run(
             audit_verifier=_audit_verifier(cfg, params),
             # The executor's own id is this run, never "another user".
             run_actors=[str(run_record.get("executor_id") or "")],
+            salt=salt,
         )
     else:
         frame = FrameVerdict(
