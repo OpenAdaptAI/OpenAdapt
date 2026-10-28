@@ -105,37 +105,64 @@ def _field_names(step: Step) -> set[str]:
     return names - {""}
 
 
-def _pick_repeated(
+def _pick_match(
     workflow: Workflow, step_ids: list[str], value: str
 ) -> tuple[Optional[str], str]:
     """The one step whose field the saved record holds ``value`` in, or why not."""
 
-    listed = ", ".join(step_ids)
     held = _saved_fields(workflow)
     if not held:
+        if len(step_ids) == 1:
+            return step_ids[0], ""
+        listed = ", ".join(step_ids)
         return None, (
             f"typed in {len(step_ids)} steps ({listed}); no mined record check "
             "shows which field kept it"
         )
     holders = {field_key(name) for name, values in held.items() if value in values}
     if not holders:
+        if len(step_ids) == 1:
+            return (
+                None,
+                f"typed in {step_ids[0]}; the saved record holds it in no field",
+            )
+        listed = ", ".join(step_ids)
         return None, (
             f"typed in {len(step_ids)} steps ({listed}); the saved record holds "
             "it in no field"
         )
     steps = {step.id: step for step in workflow.steps}
-    hits = [sid for sid in step_ids if _field_names(steps[sid]) & holders]
+    hits = [
+        sid
+        for sid in step_ids
+        if _field_names(steps[sid]) & holders
+        or (len(step_ids) == 1 and not _field_names(steps[sid]))
+    ]
     if len(hits) == 1:
         return hits[0], ""
+
     if not hits:
+        if len(step_ids) == 1:
+            return None, (
+                f"typed in {step_ids[0]}; its field is not a record field that holds it "
+                f"({', '.join(sorted(holders))})"
+            )
+        listed = ", ".join(step_ids)
         return None, (
             f"typed in {len(step_ids)} steps ({listed}); none of their fields is "
             f"a record field that holds it ({', '.join(sorted(holders))})"
         )
+    listed = ", ".join(step_ids)
     return None, (
         f"typed in {len(step_ids)} steps ({listed}); steps {', '.join(hits)} all "
         "write a record field that holds it"
     )
+
+
+def _pick_repeated(
+    workflow: Workflow, step_ids: list[str], value: str
+) -> tuple[Optional[str], str]:
+    return _pick_match(workflow, step_ids, value)
 
 
 def lift_params(bundle_dir: Path | str, inputs: Mapping[str, str]) -> LiftReport:
@@ -176,13 +203,10 @@ def lift_params(bundle_dir: Path | str, inputs: Mapping[str, str]) -> LiftReport
                 "demonstrated value"
             )
             continue
-        step_id = whole[0]
-        if len(whole) > 1:
-            picked, why = _pick_repeated(workflow, whole, value)
-            if picked is None:
-                report.unlifted[name] = why
-                continue
-            step_id = picked
+        step_id, why = _pick_match(workflow, whole, value)
+        if step_id is None:
+            report.unlifted[name] = why
+            continue
         clash = [
             e for e in existing if e.get("name") == name and e.get("step_id") != step_id
         ]

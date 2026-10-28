@@ -170,6 +170,22 @@ def test_removed_records_and_shared_parameter_values_are_reported_not_proposed()
     assert "parameters a, b share one value" in notes
 
 
+def test_short_values_and_bare_numerics_not_bound_by_value_alone():
+    # Issue #1474: With quantity="1" typed into refills, refills must not become the quantity parameter.
+    diff = diff_snapshots(
+        [],
+        [{"id": 1, "refills": "1", "quantity": "1", "code": "ab", "other": "ab"}],
+    )
+    proposal = propose_effects(diff, {"quantity": "1", "code": "ab"})
+    [effect] = proposal.effects
+    assert effect.match == {
+        "quantity": ValueExpr(param="quantity"),
+        "refills": ValueExpr(literal="1"),
+        "code": ValueExpr(param="code"),
+        "other": ValueExpr(literal="ab"),
+    }
+
+
 # -- observer ------------------------------------------------------------------
 
 

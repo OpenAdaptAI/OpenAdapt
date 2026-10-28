@@ -286,9 +286,27 @@ def _param_lookup(params: Mapping[str, str]) -> tuple[dict[str, str], list[str]]
     return lookup, shared
 
 
-def _expr(value: Any, lookup: Mapping[str, str]) -> ValueExpr:
+def _is_short_or_numeric(value: Any) -> bool:
+    s = str(value).strip()
+    if len(s) < 3:
+        return True
+    if s.lstrip("-+").isdigit():
+        return True
+    return False
+
+
+def _expr(
+    value: Any, lookup: Mapping[str, str], field: Optional[str] = None
+) -> ValueExpr:
     name = lookup.get(str(value))
-    return ValueExpr(param=name) if name else ValueExpr(literal=str(value))
+    if not name:
+        return ValueExpr(literal=str(value))
+    if _is_short_or_numeric(value):
+        from openadapt_flow.compiler.distill import field_key
+
+        if field is None or field_key(field) != field_key(name):
+            return ValueExpr(literal=str(value))
+    return ValueExpr(param=name)
 
 
 def _describe(expr: ValueExpr) -> str:
@@ -312,7 +330,7 @@ def propose_effects(
             if not isinstance(value, _SCALARS):
                 skipped.append(name)
                 continue
-            match[name] = _expr(value, lookup)
+            match[name] = _expr(value, lookup, field=name)
         if skipped:
             proposal.not_proposed.append(
                 f"new record: nested field(s) {', '.join(skipped)} are not matched"
@@ -338,7 +356,11 @@ def propose_effects(
         )
 
     for change in diff.changed:
-        identity = {str(diff.identity_field): _expr(change.identity, lookup)}
+        identity = {
+            str(diff.identity_field): _expr(
+                change.identity, lookup, field=str(diff.identity_field)
+            )
+        }
         for item in change.changes:
             if item.after is None or str(item.after) == "":
                 proposal.not_proposed.append(
@@ -350,7 +372,7 @@ def propose_effects(
                     f"changed record: nested field {item.field!r} changed"
                 )
                 continue
-            value = _expr(item.after, lookup)
+            value = _expr(item.after, lookup, field=item.field)
             proposal.effects.append(
                 Effect(
                     kind=EffectKind.FIELD_EQUALS,
