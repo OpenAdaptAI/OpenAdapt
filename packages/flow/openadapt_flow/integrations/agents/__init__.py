@@ -32,6 +32,7 @@ The adapters are :mod:`.claude_sdk`, :mod:`.openai_agents` and
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import hashlib
 import inspect
 import json
@@ -162,15 +163,14 @@ class WriteGuard:
         while not self._lock.acquire(blocking=False):
             await asyncio.sleep(0.01)
         try:
-            begun = _POOL.submit(self._begin, arguments)
             try:
-                pending, refusal = await asyncio.wrap_future(begun)
-            except asyncio.CancelledError:
-                pending, refusal = begun.result()
+                pending, refusal = await _off_loop(self._begin, arguments)
+            except _Cancelled as stop:
+                pending, refusal = stop.value
                 if refusal is None:
                     # The store was read, nothing was written.
                     pending[0].baseline_path.unlink(missing_ok=True)
-                raise
+                raise asyncio.CancelledError from None
             if refusal is not None:
                 return refusal
             try:
@@ -180,12 +180,11 @@ class WriteGuard:
                 raise
             except Exception as exc:  # the write may still have been sent
                 output = _failed(exc)
-            finished = _POOL.submit(self._finish, pending, output, True)
             try:
-                return await asyncio.wrap_future(finished)
-            except asyncio.CancelledError:
-                self._lost(pending, finished.result())
-                raise
+                return await _off_loop(self._finish, pending, output, True)
+            except _Cancelled as stop:
+                self._lost(pending, stop.value)
+                raise asyncio.CancelledError from None
         finally:
             self._lock.release()
 
@@ -245,6 +244,35 @@ class WriteGuard:
 
     def _lost(self, pending: Any, reply: dict) -> None:
         self._lost_replies[pending[1]] = reply
+
+
+class _Cancelled(Exception):
+    """The caller was cancelled; ``value`` is what the call returned anyway."""
+
+    def __init__(self, value: Any) -> None:
+        super().__init__("cancelled")
+        self.value = value
+
+
+async def _off_loop(fn: Callable[..., Any], *args: Any) -> Any:
+    """``fn(*args)`` on the pool; a cancelled caller still gets its result.
+
+    The pool job is shielded, so cancelling the caller never cancels the
+    job. On cancellation, a job that hasn't started is taken back and run
+    here; one that has is waited for. Either way the result comes back in
+    :class:`_Cancelled`, so a read-back is never skipped.
+    """
+
+    job = _POOL.submit(fn, *args)
+    try:
+        return await asyncio.shield(asyncio.wrap_future(job))
+    except asyncio.CancelledError:
+        if job.cancel():
+            raise _Cancelled(fn(*args)) from None
+        try:
+            raise _Cancelled(job.result()) from None
+        except concurrent.futures.CancelledError:
+            raise _Cancelled(fn(*args)) from None
 
 
 def _failed(exc: Exception) -> str:
