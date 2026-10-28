@@ -5048,6 +5048,10 @@ class RollbackRecord(BaseModel):
     conflicts: int = 0
     #: Voided records left in place by a ``void`` compensation.
     retained_rows: int = 0
+    #: The verifier's own whole-database diff (``openadapt_flow.verifier``)
+    #: agreed with the final check. None when it wasn't available or didn't
+    #: apply (a collection read, attribution, or voided rows).
+    cross_checked: Optional[bool] = None
     #: Run-directory-relative path of the full diff, when anything remains.
     diff_path: Optional[str] = None
     steps: list[RollbackStepRecord] = Field(default_factory=list)

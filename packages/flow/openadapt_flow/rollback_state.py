@@ -69,6 +69,26 @@ class DatabaseReader:
         )
 
     def read(self) -> Snapshot:
+        try:
+            # The verifier's own whole-database read (openadapt_flow.verifier,
+            # #1588), when this build has it; the same take_snapshot otherwise.
+            from openadapt_flow.verifier import (  # type: ignore[import-not-found,unused-ignore]
+                capture_database,
+            )
+        except ImportError:
+            capture_database = None
+        if capture_database is not None:
+            try:
+                return capture_database(  # type: ignore[no-any-return]
+                    self.read_config,
+                    self.dialect,
+                    allow_tables=list(self.allow_tables),
+                    max_rows=self.max_rows,
+                )
+            except Exception as exc:  # noqa: BLE001 - BaselineUnreadable and kin
+                raise StateUnreadable(
+                    f"the database could not be read ({type(exc).__name__})"
+                ) from exc
         from openadapt_flow.runtime.effects.db_snapshot import take_snapshot
         from openadapt_flow.verify_run import _db_connect
 
@@ -83,6 +103,20 @@ class DatabaseReader:
             raise StateUnreadable(
                 f"the database could not be read ({type(exc).__name__})"
             ) from exc
+
+    def verifier_diff(
+        self, before: Snapshot, after: Snapshot
+    ) -> Optional[dict[str, Any]]:
+        """The verifier's own ``diff_database`` of two reads (table -> counts),
+        or None when this build doesn't have it."""
+        try:
+            from openadapt_flow.verifier import (  # type: ignore[import-not-found,unused-ignore]
+                diff_database,
+            )
+        except ImportError:
+            return None
+        moved = diff_database(before, after, allow_tables=list(self.allow_tables))
+        return {str(k): v for k, v in dict(moved).items()}
 
 
 @dataclass

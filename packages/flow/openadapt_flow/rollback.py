@@ -535,6 +535,20 @@ def roll_back(
         residue.append(change)
     record.retained_rows = kept
     left = keep_rows(remaining, residue)
+    if not residue and attributor is None and not kept:
+        # With nothing set aside, the verifier's own whole-database diff must
+        # agree that the store is back. It decides when the two differ.
+        cross = getattr(reader, "verifier_diff", None)
+        verdict = cross(before, final) if callable(cross) else None
+        record.cross_checked = verdict is not None
+        if verdict:
+            return finish(
+                "not_rolled_back",
+                "the verifier's database diff still sees changes in "
+                + ", ".join(sorted(verdict))
+                + "; a person checks the record",
+                remaining,
+            )
     if not residue:
         return finish(
             "rolled_back",
