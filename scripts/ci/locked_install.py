@@ -21,8 +21,10 @@ longer matches its pyproject.toml, and installed with `--require-hashes
 --no-deps` into the interpreter that runs this script. Where two locks pin the
 same package, the later one wins. The in-tree packages then install editable
 with `--no-deps`, in place of any published copy a lock names. Nothing
-resolves at install time: `uv pip check` fails the job when an in-tree package
-needs something no lock provides, and the fix is to update a lock.
+resolves at install time: `uv pip check` fails the job when a package this
+script installed needs something no lock provides, and the fix is to update a
+lock. Packages it did not install, such as pipx on the Windows runner's Python
+or a lock's deliberate override in a uv venv, are reported but not fatal.
 """
 
 from __future__ import annotations
@@ -69,6 +71,44 @@ def _export_command(spec: str, skip: list[str], output: Path) -> list[str]:
     return command
 
 
+def _normalize(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _requirement_names(path: Path) -> set[str]:
+    names = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = re.match(r"([A-Za-z0-9][A-Za-z0-9._-]*)", line)
+        if match:
+            names.add(_normalize(match.group(1)))
+    return names
+
+
+_CONFLICT = re.compile(r"^The package `([^`]+)` ")
+
+
+def problems_with(output: str, installed: set[str]) -> tuple[list[str], list[str]]:
+    """Split `uv pip check` findings into ours and the environment's own.
+
+    A finding names the package whose requirement is unmet. It is ours when
+    this script installed that package. A line in an unknown format counts as
+    ours, so a new kind of finding fails the job.
+    """
+    ours, others = [], []
+    for line in output.splitlines():
+        line = line.strip()
+        if not line or line.startswith(
+            ("Using Python", "Checked ", "Found ", "All installed")
+        ):
+            continue
+        match = _CONFLICT.match(line)
+        if match and _normalize(match.group(1)) not in installed:
+            others.append(line)
+        else:
+            ours.append(line)
+    return ours, others
+
+
 def _run(command: list[str]) -> None:
     print("+", " ".join(command), flush=True)
     subprocess.run(command, check=True)
@@ -83,10 +123,12 @@ def main(argv: list[str] | None = None) -> int:
     editables = [ROOT / path for path in args.editable]
     skip = [_project_name(path) for path in editables]
     target = ["--python", sys.executable]
+    installed = {_normalize(name) for name in skip}
     with tempfile.TemporaryDirectory() as temp:
         for index, spec in enumerate(args.lock):
             requirements = Path(temp) / f"layer-{index}.txt"
             _run(_export_command(spec, skip, requirements))
+            installed |= _requirement_names(requirements)
             _run(["uv", "pip", "install", *target, "--require-hashes", "--no-deps",
                   "--requirement", str(requirements)])  # fmt: skip
     if editables:
@@ -94,7 +136,16 @@ def main(argv: list[str] | None = None) -> int:
         for path in editables:
             command += ["--editable", str(path)]
         _run(command)
-    _run(["uv", "pip", "check", *target])
+    check = subprocess.run(
+        ["uv", "pip", "check", *target], capture_output=True, text=True, check=False
+    )
+    ours, others = problems_with(check.stdout + check.stderr, installed)
+    for line in others:
+        print(f"not installed here, ignored: {line}")
+    if ours:
+        print("\n".join(["Locked packages conflict:", *ours]), file=sys.stderr)
+        return 1
+    print(f"{len(installed)} locked packages are compatible")
     return 0
 
 

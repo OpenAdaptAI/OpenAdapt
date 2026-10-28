@@ -152,3 +152,26 @@ def test_the_helper_exports_with_hashes_and_skips_in_tree_packages(
     assert helper._project_name(ROOT / "packages" / "types") == "openadapt-types"
     with pytest.raises(SystemExit):
         helper._export_command("packages/no-such-package", [], out)
+
+
+def test_pip_check_fails_only_on_what_the_helper_installed() -> None:
+    helper = _helper()
+    output = "\n".join(
+        [
+            "Using Python 3.12.10 environment at: C:\\python",
+            "Checked 92 packages in 4ms",
+            "Found 3 incompatibilities",
+            "The package `pipx` requires `packaging>=26.3`, but `26.2` is installed",
+            "The package `Openadapt_Capture` requires `sqlalchemy>=2.0.54`, but `2.0.51` is installed",
+            "Something new the helper has not seen",
+        ]
+    )
+    ours, others = helper.problems_with(output, {"openadapt-capture", "packaging"})
+    assert others == [
+        "The package `pipx` requires `packaging>=26.3`, but `26.2` is installed"
+    ]
+    assert len(ours) == 2 and "Openadapt_Capture" in ours[0]
+    assert helper.problems_with("All installed packages are compatible", set()) == (
+        [],
+        [],
+    )
