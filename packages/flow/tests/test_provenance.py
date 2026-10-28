@@ -376,3 +376,78 @@ def test_round_trip_maps_a_label_to_the_stored_code() -> None:
 
     assert judge("MA") == "held"
     assert judge("RI") == "refuted"
+
+
+def _mapped_round_trip(label: str, stored: dict, effects: list) -> str:
+    from openadapt_flow.provenance import bound_fields, bound_maps, default_extractor
+
+    document = IntakeDocument("r.txt", "text", ["Last name: Okafor", label])
+    sha = sha256_bytes(document.text.encode("utf-8"))
+    source_label, value = (part.strip() for part in label.split(":", 1))
+    prov = ProvenanceFile(
+        params={
+            name: ParamProvenance(
+                value=v,
+                source=SourceRef(kind="document", sha256=sha, line=line, label=lab),
+                extractor="model:first-reader",
+            )
+            for name, v, line, lab in (
+                ("lname", "Okafor", 1, "Last name"),
+                ("p", value, 2, source_label),
+            )
+        }
+    )
+    return round_trip(
+        prov,
+        {"id": 1, "lname": "Okafor", **stored},
+        bound_fields(effects),
+        {sha: document},
+        default_extractor(prov),
+        maps=bound_maps(effects),
+    ).status
+
+
+_MATCH = {"lname": {"param": "lname"}}
+
+
+def _equals(field: str, mapping: dict | None = None) -> Effect:
+    value: dict = {"param": "p"}
+    if mapping:
+        value["map"] = mapping
+    return Effect(kind=EffectKind.FIELD_EQUALS, match=_MATCH, field=field, value=value)
+
+
+def test_a_mapped_code_is_compared_exactly() -> None:
+    """Adversarial review of #1572: codes that differ in case or separators."""
+
+    written = Effect(kind=EffectKind.RECORD_WRITTEN, match=_MATCH)
+    by_case = _equals("prov", {"Dr. Smith": "pr1A", "Dr. Jones": "PR1a"})
+    assert (
+        _mapped_round_trip("Provider: Dr. Smith", {"prov": "PR1a"}, [written, by_case])
+        == "refuted"
+    )
+    by_dash = _equals("prov", {"Dr. Smith": "A1-23", "Dr. Jones": "A12-3"})
+    assert (
+        _mapped_round_trip("Provider: Dr. Smith", {"prov": "A12-3"}, [written, by_dash])
+        == "refuted"
+    )
+    empty = _equals("sex", {"Unknown": ""})
+    assert _mapped_round_trip("Sex: Unknown", {"sex": None}, [written, empty]) == (
+        "not_checked"
+    )
+
+
+def test_a_map_follows_the_binding_its_field_comes_from() -> None:
+    state = {"Massachusetts": "MA"}
+    on_match = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={**_MATCH, "state": {"param": "p", "map": state}},
+    )
+    assert (
+        _mapped_round_trip("State: Massachusetts", {"state": "MA"}, [on_match])
+        == "held"
+    )
+    written = Effect(kind=EffectKind.RECORD_WRITTEN, match=_MATCH)
+    two = [written, _equals("state_name"), _equals("state", state)]
+    stored = {"state_name": "Massachusetts", "state": "MA"}
+    assert _mapped_round_trip("State: Massachusetts", stored, two) == "held"

@@ -359,14 +359,24 @@ def bound_fields(effects: Any) -> dict[str, str]:
 
 
 def bound_maps(effects: Any) -> dict[str, dict[str, str]]:
-    """Parameter name -> the value map its field declares (label -> code)."""
+    """Parameter name -> the value map its field declares (label -> code).
 
-    out: dict[str, dict[str, str]] = {}
+    The map comes from the same binding :func:`bound_fields` picks for the
+    parameter (the first one), so a map is never applied to another field.
+    """
+
+    first: dict[str, Any] = {}
     for effect in effects:
-        value = getattr(effect, "value", None)
-        if value is not None and value.param and value.map:
-            out.setdefault(value.param, dict(value.map))
-    return out
+        for expr in effect.match.values():
+            if expr.param is not None:
+                first.setdefault(expr.param, expr)
+        if effect.field and effect.value is not None and effect.value.param:
+            first.setdefault(effect.value.param, effect.value)
+    return {
+        param: dict(expr.map)
+        for param, expr in first.items()
+        if getattr(expr, "map", None)
+    }
 
 
 def round_trip(
@@ -416,8 +426,14 @@ def round_trip(
             # state's name and "MA", a provider's name and their id).
             source_value = mapping.get(source_value.strip())
         stored = "" if record.get(record_field) is None else str(record[record_field])
-        if source_value is None:
+        if source_value is None or (mapping is not None and source_value == ""):
+            # No code, or an empty one: nothing to compare an unsaved field with.
             checks.append(FieldCheck(name, "missing", stored))
+        elif mapping is not None:
+            # A code is the exact stored value, as ``field_equals`` compares
+            # it: "PR1a" is not "pr1A", and the label's kind doesn't apply.
+            result = "agree" if stored == source_value else "disagree"
+            checks.append(FieldCheck(name, result, stored, source_value))
         elif same_value(stored, source_value, _kind(prov, source_value)):
             checks.append(FieldCheck(name, "agree", stored, source_value))
         else:
