@@ -326,68 +326,99 @@ def test_a_lock_without_provenance_is_refused(tmp_path):
     assert "no registry provenance" in skills.pulled_skill_refusal(tmp_path / "b")
 
 
-# -- signatures ------------------------------------------------------------------------
-
-SEED = bytes(range(32))
+# -- the index's attestation -------------------------------------------------------------
 
 
-def _signed_registry(tmp_path):
-    from openadapt_flow.ed25519ph import public_key
+def _attest(index: Path, *, now=None) -> Path:
+    """Stamp the local index and attest it, and its archives, with the test signer."""
 
-    index = _registry(tmp_path)
+    import hashlib
+
+    from openadapt_flow import registry_attest
+
     data = json.loads(index.read_text())
-    registry.sign_index(data, SEED, "test-key")
+    registry.stamp_index(data, now=now)
     index.write_text(json.dumps(data))
-    return index, {"test-key": public_key(SEED)}
+    subjects = {"index.json": hashlib.sha256(index.read_bytes()).hexdigest()}
+    for archive in index.parent.glob("*.tar.gz"):
+        subjects[archive.name] = hashlib.sha256(archive.read_bytes()).hexdigest()
+    (index.parent / registry_attest.ATTESTATION_NAME).write_text(
+        json.dumps(registry_attest.sign_test(subjects))
+    )
+    return index
 
 
-def test_a_signed_entry_pulls_and_records_its_signer(tmp_path):
+def test_an_attested_index_pulls_and_records_who_attested_it(tmp_path):
     from openadapt_flow.ir import Workflow
 
-    index, keys = _signed_registry(tmp_path)
+    index = _attest(_registry(tmp_path))
     dest = registry.pull(
-        "openemr/new-referral", tmp_path / "s", index_url=str(index), keys=keys
+        "openemr/new-referral",
+        tmp_path / "s",
+        index_url=str(index),
+        allow_test_key=True,
     )
     origin = Workflow.load(dest).registry
-    assert origin.signed_by == "test-key" and origin.version == "1.0.0"
+    assert origin.signed_by == "test:openadapt-registry-test"
+    assert origin.version == "1.0.0"
+    assert skills.read_lock(dest)["signed_by"] == origin.signed_by
 
 
-def test_an_unsigned_entry_needs_allow_unsigned(tmp_path):
+def test_an_index_without_an_attestation_needs_allow_unsigned(tmp_path):
     index = _registry(tmp_path)
-    with pytest.raises(registry.RegistryError, match="not signed"):
-        registry.pull(
-            "openemr/new-referral", tmp_path / "u", index_url=str(index), keys={}
-        )
+    with pytest.raises(registry.RegistryError, match="no attestation"):
+        registry.pull("openemr/new-referral", tmp_path / "u", index_url=str(index))
     assert not (tmp_path / "u").exists()
 
 
-@pytest.mark.parametrize("tamper", ["file_hash", "version", "signature", "unknown_key"])
-def test_a_tampered_or_foreign_entry_is_refused_before_anything_is_written(
+def test_the_test_signer_needs_allow_test_key(tmp_path):
+    index = _attest(_registry(tmp_path))
+    with pytest.raises(registry.RegistryError, match="local test signer"):
+        registry.pull("openemr/new-referral", tmp_path / "u", index_url=str(index))
+    with pytest.raises(registry.RegistryError, match="local test signer"):
+        # An attestation that is present must hold, even with --allow-unsigned.
+        registry.pull(
+            "openemr/new-referral",
+            tmp_path / "u",
+            index_url=str(index),
+            allow_unsigned=True,
+        )
+
+
+@pytest.mark.parametrize("tamper", ["file_hash", "version", "signature", "subject"])
+def test_a_changed_index_or_attestation_is_refused_before_anything_is_written(
     tmp_path, tamper
 ):
-    index, keys = _signed_registry(tmp_path)
+    from openadapt_flow import registry_attest
+
+    index = _attest(_registry(tmp_path))
+    attestation = index.parent / registry_attest.ATTESTATION_NAME
     data = json.loads(index.read_text())
     item = next(i for i in data["workflows"] if i["id"] == "openemr/new-referral")
     if tamper == "file_hash":
         item["files"]["workflow.json"] = "0" * 64
+        index.write_text(json.dumps(data))
     elif tamper == "version":
         item["version"] = "9.9.9"
+        index.write_text(json.dumps(data))
     elif tamper == "signature":
-        item["signature"]["ed25519ph"] = registry.sign_entry(
-            item, bytes(32), "test-key"
-        )["ed25519ph"]
+        envelope = json.loads(attestation.read_text())
+        envelope["dsseEnvelope"]["signatures"][0]["sig"] = registry_attest.sign_test(
+            {"index.json": "0" * 64}
+        )["dsseEnvelope"]["signatures"][0]["sig"]
+        attestation.write_text(json.dumps(envelope))
     else:
-        item["signature"]["key_id"] = "someone-else"
-    index.write_text(json.dumps(data))
+        attestation.write_text(
+            json.dumps(registry_attest.sign_test({"index.json": "0" * 64}))
+        )
     with pytest.raises(
-        registry.RegistryError, match="signed by an unknown key|does not match"
+        registry.RegistryError, match="does not name this index|does not hold"
     ):
         registry.pull(
             "openemr/new-referral",
             tmp_path / "t",
             index_url=str(index),
-            keys=keys,
-            allow_unsigned=True,
+            allow_test_key=True,
         )
     assert not (tmp_path / "t").exists()
 
@@ -556,34 +587,6 @@ def test_a_full_contract_needs_a_url_and_a_digest():
         registry.validate_index({"workflows": [item]})
 
 
-# -- no key whose seed is public is trusted ------------------------------------------
-
-
-def test_a_key_flagged_test_in_the_trust_root_is_ignored(tmp_path, monkeypatch):
-    from openadapt_flow.ed25519ph import public_key
-
-    keys_file = tmp_path / "keys.json"
-    keys_file.write_text(
-        json.dumps(
-            {
-                "keys": {
-                    "test-key": {
-                        "public": __import__("base64")
-                        .b64encode(public_key(SEED))
-                        .decode(),
-                        "test": True,
-                    }
-                }
-            }
-        )
-    )
-    monkeypatch.setattr(registry, "KEYS_FILE", keys_file)
-    assert registry.trusted_keys() == {}
-    index, _ = _signed_registry(tmp_path)
-    with pytest.raises(registry.RegistryError, match="unknown key"):
-        registry.pull("openemr/new-referral", tmp_path / "a", index_url=str(index))
-
-
 # -- bundles as release assets --------------------------------------------------------------
 
 
@@ -632,74 +635,3 @@ def test_the_archive_is_reproducible(tmp_path):
     a = registry.build_archive(bundle, tmp_path / "a.tar.gz")
     b = registry.build_archive(bundle, tmp_path / "b.tar.gz")
     assert a == b
-
-
-# -- the index's transparency-log anchor ------------------------------------------------
-
-
-@pytest.fixture
-def rekor():
-    from tests.test_seal_anchor import FakeRekor
-
-    return FakeRekor()
-
-
-def _anchored(tmp_path, rekor):
-    from openadapt_flow.ed25519ph import public_key
-
-    index = _registry(tmp_path)
-    data = json.loads(index.read_text())
-    registry.sign_index(data, SEED, "test-key")
-    index.write_text(json.dumps(data))
-    registry.anchor_index(
-        index, SEED, log_keys=[rekor.log], submit=rekor.submit, env={}
-    )
-    return index, {"test-key": public_key(SEED)}
-
-
-def test_an_anchored_index_pulls(tmp_path, rekor):
-    index, keys = _anchored(tmp_path, rekor)
-    assert (index.parent / registry.ANCHOR_NAME).is_file()
-    dest = registry.pull(
-        "openemr/new-referral",
-        tmp_path / "s",
-        index_url=str(index),
-        keys=keys,
-        log_keys=[rekor.log],
-    )
-    assert (dest / "workflow.json").is_file()
-
-
-def test_an_index_changed_after_anchoring_is_refused(tmp_path, rekor):
-    index, keys = _anchored(tmp_path, rekor)
-    data = json.loads(index.read_text())
-    # A change no entry signature covers (a planned entry's title), re-signed
-    # as a whole: only the anchor still names the published index.
-    for item in data["workflows"]:
-        if item["status"] == "planned":
-            item["title"] = "something else"
-    registry.sign_index(data, SEED, "test-key")
-    index.write_text(json.dumps(data))
-    with pytest.raises(registry.RegistryError, match="anchor does not hold"):
-        registry.pull(
-            "openemr/new-referral",
-            tmp_path / "s",
-            index_url=str(index),
-            keys=keys,
-            log_keys=[rekor.log],
-        )
-    assert not (tmp_path / "s").exists()
-
-
-def test_an_anchor_by_a_key_the_registry_does_not_trust_is_refused(tmp_path, rekor):
-    index, _ = _anchored(tmp_path, rekor)
-    with pytest.raises(
-        registry.RegistryError, match="unknown key|anchor does not hold"
-    ):
-        registry.pull(
-            "openemr/new-referral",
-            tmp_path / "s",
-            index_url=str(index),
-            keys={"other": bytes(32)},
-            log_keys=[rekor.log],
-        )

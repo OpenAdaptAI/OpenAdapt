@@ -13,18 +13,28 @@ openadapt-flow run new-referral --params-file params.json
 file's sha256 against the index, and loads the bundle so its manifest digest is
 checked as well. It doesn't run anything.
 
-Before it downloads anything, `pull` checks the index against keys that ship
-with the package (`openadapt_flow/registry_keys.json`), never keys it fetches:
+Before it downloads anything, `pull` checks who published the index:
 
-- The index is signed as a whole (Ed25519ph, the form Rekor accepts), and so
-  is each entry.
-- The index carries `issued_at`, `expires_at` and a `serial`. `pull` refuses
-  an expired index, and one whose serial is lower than the highest it has
-  seen from that address (kept in `$OPENADAPT_HOME/registry-state.json`).
-- A remote index must have a Rekor anchor (`index.anchor.json`) naming its
-  exact digest, signed by a registry key.
-- A remote index is fetched over https only. `--allow-unsigned` takes an
-  unsigned index from the local disk only, for one you are authoring.
+- The registry release workflow attests `index.json` and every bundle
+  archive with GitHub's keyless artifact attestations: a Sigstore signature,
+  recorded in Rekor, over the sha256 of each file. The attestation is
+  published beside the index as `index.sigstore.json`.
+- `pull` verifies it against a pinned identity: issued by GitHub Actions to
+  `release-registry.yml` on a `registry-*` tag of OpenAdaptAI/OpenAdapt. The
+  attestation must name the exact index it read, and an archive must be one it
+  names too. This needs the `registry` extra
+  (`pip install 'openadapt-flow[registry]'`).
+- Verification is offline, against the Sigstore trusted root shipped with the
+  package. `openadapt-flow pull --refresh-trust` fetches the current one
+  through Sigstore's TUF repository into `$OPENADAPT_HOME`.
+- The attested index carries `issued_at`, `expires_at` and a `serial`. `pull`
+  refuses an expired index, and one whose serial is lower than the highest it
+  has seen from that address (kept in `$OPENADAPT_HOME/registry-state.json`).
+- A remote index is fetched over https only. For an index you are authoring
+  on the local disk, `--allow-unsigned` takes one with no attestation, and
+  `--allow-test-key` one attested by the local test signer
+  (`openadapt_flow.registry_attest.sign_test`). Both are refused for a remote
+  index.
 
 A bundle holds only allowlisted files: the program, its screen templates
 (crops of a copy holding made-up data, which each entry attests) and a minimal
@@ -87,17 +97,19 @@ it is given. See
 
 `.github/workflows/release-registry.yml` publishes the registry:
 1. It builds each bundle as a reproducible archive.
-2. It signs every entry and the index, with a 30-day expiry, in the protected
-   `registry-signing` environment. That job installs only hash-pinned wheels
-   ([`signing-requirements.txt`](signing-requirements.txt)).
-3. It anchors the signed index in Rekor (`index.anchor.json`).
-4. It releases the archives under a `registry-*` tag.
-5. It opens a pull request with the signed index and its anchor.
+2. It tags the commit `registry-<suffix>`. The tag push stamps the index
+   with a 30-day expiry and attests the index and every archive, in the
+   protected `release-identity` environment. Then it checks its own
+   attestation with the pull verifier, using only hash-pinned wheels
+   ([`verify-requirements.txt`](verify-requirements.txt)).
+3. It releases the archives, the index and `index.sigstore.json` under that
+   tag.
+4. It opens a pull request with the attested index and its attestation.
 
-The index expires 30 days after it is signed, so the workflow runs at least
-that often.
+There is no signing key to keep. The index expires 30 days after it is
+stamped, so the workflow runs at least that often.
 
-After the first signed release, only that workflow writes `index.json`;
+After the first attested release, only that workflow writes `index.json`;
 `build_registry_index.py --check` confirms it still matches `sources.json`.
 
 ## Adding a bundle

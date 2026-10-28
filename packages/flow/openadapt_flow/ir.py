@@ -2729,8 +2729,10 @@ class RegistryOrigin(BaseModel):
     index_url: str = Field(max_length=2048)
     #: SHA-256 of the signed entry statement (``registry.entry_statement``).
     entry_sha256: str = Field(pattern="^[a-f0-9]{64}$")
-    #: The key that signed the entry, or None for an unsigned local index.
-    signed_by: Optional[str] = Field(default=None, max_length=128)
+    #: Who attested the index: the release workflow's certificate identity,
+    #: ``test:...`` for the local test signer, or None for a local index with
+    #: no attestation.
+    signed_by: Optional[str] = Field(default=None, max_length=256)
     #: The bundle's content digest as the registry published it.
     published_digest: str = Field(pattern="^[a-f0-9]{64}$")
     pulled_at: str

@@ -1,5 +1,0 @@
-{
-  "schema": "openadapt.registry-keys/v1",
-  "note": "Public keys that sign the skills-registry index and its entries. The production key's seed lives only in the protected REGISTRY_SIGNING_SEED secret of the registry release workflow; only its public half is committed here. A key flagged test is ignored.",
-  "keys": {}
-}

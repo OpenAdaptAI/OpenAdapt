@@ -14,6 +14,7 @@ import io
 import json
 import tarfile
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -22,8 +23,8 @@ from openadapt_flow import qualification, registry, skills
 from tests.test_skills_registry import (
     CONTRACT,
     ROOT,
-    SEED,
     VARS,
+    _attest,
     _bind_all,
     _qualify_on,
     _record_qualified,
@@ -35,12 +36,6 @@ from tests.test_skills_registry import (
 @pytest.fixture(autouse=True)
 def _own_state(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path / "openadapt-home"))
-
-
-def _keys():
-    from openadapt_flow.ed25519ph import public_key
-
-    return {"test-key": public_key(SEED)}
 
 
 def _index(tmp_path, *, contract=CONTRACT, contract_vars=VARS, mutate=None):
@@ -298,23 +293,24 @@ def test_an_oversized_private_contract_is_refused(tmp_path, monkeypatch):
     assert not (tmp_path / "skill.private").exists()
 
 
-# -- 4. the signature checks can't be switched off -------------------------------------------
+# -- 4. the attestation checks can't be switched off for a remote index ---------------------
 
 
-def test_allow_unsigned_is_refused_for_a_remote_index(tmp_path, monkeypatch):
+def test_the_local_flags_are_refused_for_a_remote_index(tmp_path, monkeypatch):
     def no_read(*a, **k):
         raise AssertionError("nothing may be fetched")
 
     monkeypatch.setattr(registry, "_read", no_read)
-    with pytest.raises(
-        registry.RegistryError, match="only to an index on the local disk"
-    ):
-        registry.pull(
-            "openemr/new-referral",
-            tmp_path / "s",
-            index_url="https://evil.example/index.json",
-            allow_unsigned=True,
-        )
+    for flag in ("allow_unsigned", "allow_test_key"):
+        with pytest.raises(
+            registry.RegistryError, match="only to an index on the local disk"
+        ):
+            registry.pull(
+                "openemr/new-referral",
+                tmp_path / "s",
+                index_url="https://evil.example/index.json",
+                **{flag: True},
+            )
     with pytest.raises(registry.RegistryError, match="plain http"):
         registry.pull(
             "openemr/new-referral",
@@ -323,122 +319,178 @@ def test_allow_unsigned_is_refused_for_a_remote_index(tmp_path, monkeypatch):
         )
 
 
-def test_the_shipped_trust_root_holds_no_key_with_a_public_seed():
-    from openadapt_flow.ed25519ph import public_key
+def _mirror(monkeypatch, index):
+    """Serve a local index directory as if from an https mirror."""
 
-    data = json.loads(registry.KEYS_FILE.read_text())
-    published = {
-        spec["public"] if isinstance(spec, dict) else spec
-        for spec in (data.get("keys") or {}).values()
-    }
-    old_test_seed = hashlib.sha256(
-        b"openadapt-registry-TEST-key: not secret, accepted only with --allow-test-key"
-    ).digest()
-    assert base64.b64encode(public_key(old_test_seed)).decode() not in published
-    assert not any(
-        isinstance(spec, dict) and spec.get("test")
-        for spec in (data.get("keys") or {}).values()
-    )
-    assert not hasattr(registry, "TEST_KEY_SEED")
+    base = "https://mirror.example/registry/"
+    real = registry._read
+
+    def read(location, **kw):
+        if location.startswith(base):
+            return (index.parent / location[len(base) :]).read_bytes()
+        return real(location, **kw)
+
+    monkeypatch.setattr(registry, "_read", read)
+    return base + "index.json"
 
 
-def test_pull_has_no_test_key_flag_and_no_hint_to_bypass(tmp_path):
-    import argparse
+def test_a_remote_index_attested_by_the_test_signer_is_refused(tmp_path, monkeypatch):
+    url = _mirror(monkeypatch, _attest(_index(tmp_path)))
+    with pytest.raises(registry.RegistryError, match="local test signer"):
+        registry.pull("openemr/new-referral", tmp_path / "s", index_url=url)
+    assert not (tmp_path / "s").exists()
 
-    parser = argparse.ArgumentParser()
-    registry.add_parser(parser.add_subparsers())
-    with pytest.raises(SystemExit):
-        parser.parse_args(["pull", "a/b", "--allow-test-key"])
+
+def test_a_remote_index_without_an_attestation_is_refused(tmp_path, monkeypatch):
+    url = _mirror(monkeypatch, _index(tmp_path))
+    with pytest.raises(registry.RegistryError, match="attestation .* can't be read"):
+        registry.pull("openemr/new-referral", tmp_path / "s", index_url=url)
+    assert not (tmp_path / "s").exists()
+
+
+def test_no_signing_key_ships_and_no_error_hints_at_a_bypass(tmp_path):
+    from openadapt_flow import registry_attest
+
+    package = Path(registry.__file__).parent
+    assert not (package / "registry_keys.json").exists()
+    assert not hasattr(registry, "trusted_keys")
     with pytest.raises(registry.RegistryError) as info:
         registry.pull(
             "openemr/new-referral", tmp_path / "s", index_url=str(_index(tmp_path))
         )
     assert "--allow" not in str(info.value)
+    assert registry_attest.REGISTRY_IDENTITY.san.match(
+        "https://github.com/OpenAdaptAI/OpenAdapt/.github/workflows/"
+        "release-registry.yml@refs/tags/registry-2026-10-28"
+    )
+    for other in (
+        "https://github.com/OpenAdaptAI/OpenAdapt/.github/workflows/"
+        "release-registry.yml@refs/heads/main",
+        "https://github.com/OpenAdaptAI/OpenAdapt/.github/workflows/"
+        "desktop-release.yml@refs/tags/registry-1",
+        "https://github.com/someone/OpenAdapt/.github/workflows/"
+        "release-registry.yml@refs/tags/registry-1",
+    ):
+        assert not registry_attest.REGISTRY_IDENTITY.san.match(other)
 
 
-# -- 5. no rollback, no freeze, no stripped anchor -----------------------------------------
-
-
-def _signed(tmp_path, *, now=None, drop=None):
-    index = _index(tmp_path)
-    data = json.loads(index.read_text())
-    registry.sign_index(data, SEED, "test-key", now=now)
-    if drop:
-        data["workflows"] = [i for i in data["workflows"] if i["id"] != drop]
-    index.write_text(json.dumps(data))
-    return index, data
+# -- 5. no rollback, no freeze ---------------------------------------------------------------
 
 
 def test_an_expired_index_is_refused(tmp_path):
-    index, _ = _signed(tmp_path, now=datetime.now(timezone.utc) - timedelta(days=31))
+    index = _attest(
+        _index(tmp_path), now=datetime.now(timezone.utc) - timedelta(days=31)
+    )
     with pytest.raises(registry.RegistryError, match="expired"):
         registry.pull(
-            "openemr/new-referral", tmp_path / "s", index_url=str(index), keys=_keys()
+            "openemr/new-referral",
+            tmp_path / "s",
+            index_url=str(index),
+            allow_test_key=True,
         )
 
 
 def test_an_index_issued_in_the_future_is_refused(tmp_path):
-    index, _ = _signed(tmp_path, now=datetime.now(timezone.utc) + timedelta(hours=1))
+    index = _attest(
+        _index(tmp_path), now=datetime.now(timezone.utc) + timedelta(hours=1)
+    )
     with pytest.raises(registry.RegistryError, match="future"):
         registry.pull(
-            "openemr/new-referral", tmp_path / "s", index_url=str(index), keys=_keys()
+            "openemr/new-referral",
+            tmp_path / "s",
+            index_url=str(index),
+            allow_test_key=True,
         )
 
 
 def test_an_older_index_is_refused_once_a_newer_one_was_seen(tmp_path):
     now = datetime.now(timezone.utc)
-    index, data = _signed(tmp_path, now=now)
+    index = _attest(_index(tmp_path), now=now)
     registry.pull(
-        "openemr/new-referral", tmp_path / "a", index_url=str(index), keys=_keys()
+        "openemr/new-referral",
+        tmp_path / "a",
+        index_url=str(index),
+        allow_test_key=True,
     )
-    # Yesterday's index, validly signed, served again from the same place.
-    registry.sign_index(data, SEED, "test-key", now=now - timedelta(days=2))
-    index.write_text(json.dumps(data))
+    # Yesterday's index, validly attested, served again from the same place.
+    _attest(index, now=now - timedelta(days=2))
     with pytest.raises(registry.RegistryError, match="older than"):
         registry.pull(
-            "openemr/new-referral", tmp_path / "b", index_url=str(index), keys=_keys()
+            "openemr/new-referral",
+            tmp_path / "b",
+            index_url=str(index),
+            allow_test_key=True,
         )
     assert not (tmp_path / "b").exists()
 
 
-def test_an_entry_dropped_from_a_signed_index_is_refused(tmp_path):
-    index, _ = _signed(tmp_path, drop="openimis/claim-intake")
-    with pytest.raises(
-        registry.RegistryError, match="index's signature does not match"
-    ):
-        registry.pull(
-            "openemr/new-referral", tmp_path / "s", index_url=str(index), keys=_keys()
-        )
-
-
-def test_a_remote_index_without_an_anchor_is_refused(tmp_path, monkeypatch):
-    index, _ = _signed(tmp_path)
-    base = "https://mirror.example/registry/"
-    real = registry._read
-
-    def mirror(location, **kw):
-        if location.startswith(base):
-            return (index.parent / location[len(base) :]).read_bytes()
-        return real(location, **kw)
-
-    monkeypatch.setattr(registry, "_read", mirror)
-    with pytest.raises(registry.RegistryError, match="anchor .* can't be read"):
+def test_an_entry_dropped_from_an_attested_index_is_refused(tmp_path):
+    index = _attest(_index(tmp_path))
+    data = json.loads(index.read_text())
+    data["workflows"] = [
+        i for i in data["workflows"] if i["id"] != "openimis/claim-intake"
+    ]
+    index.write_text(json.dumps(data))
+    with pytest.raises(registry.RegistryError, match="does not name this index"):
         registry.pull(
             "openemr/new-referral",
             tmp_path / "s",
-            index_url=base + "index.json",
-            keys=_keys(),
+            index_url=str(index),
+            allow_test_key=True,
         )
-    assert not (tmp_path / "s").exists()
 
 
-def test_the_release_workflow_adds_the_anchor_by_name():
+def test_an_archive_the_attestation_does_not_name_is_refused(tmp_path):
+    index = _index(tmp_path)
+    bundle = index.parent / "bundles/openemr/new-referral"
+    asset = index.parent / "a.tar.gz"
+    digest = registry.build_archive(bundle, asset)
+    _attest(index)  # the attestation names a.tar.gz as built
+    data = json.loads(index.read_text())
+    for item in data["workflows"]:
+        if item["id"] == "openemr/new-referral":
+            # A different archive, pinned by an index that is then attested.
+            other = index.parent / "b.tar.gz"
+            item["archive"] = {
+                "url": other.name,
+                "sha256": registry.build_archive(bundle, other, notice="x\n"),
+            }
+    index.write_text(json.dumps(data))
+    other.unlink()
+    asset.rename(index.parent / "kept.tar.gz")
+    _attest(index)  # names index.json and kept.tar.gz, not b.tar.gz
+    with pytest.raises(
+        registry.RegistryError, match="does not name this entry's archive"
+    ):
+        registry.pull(
+            "openemr/new-referral",
+            tmp_path / "s",
+            index_url=str(index),
+            allow_test_key=True,
+        )
+    assert digest
+
+
+def test_the_release_workflow_attests_and_adds_the_attestation_by_name():
     text = (ROOT.parents[1] / ".github/workflows/release-registry.yml").read_text()
+    assert "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6" in text
     assert (
-        "git add packages/flow/registry/index.json packages/flow/registry/index.anchor.json"
-        in text
+        "git add packages/flow/registry/index.json "
+        "packages/flow/registry/index.sigstore.json" in text
     )
     assert "commit -am" not in text
+    assert "REGISTRY_SIGNING_SEED" not in text and "registry-signing" not in text
+    # id-token: write only on the job that attests.
+    import yaml
+
+    jobs = yaml.safe_load(text)["jobs"]
+    granted = [
+        name
+        for name, job in jobs.items()
+        if (job.get("permissions") or {}).get("id-token") == "write"
+    ]
+    assert granted == ["attest"]
+    assert jobs["attest"]["environment"] == "release-identity"
 
 
 # -- 6. stripping the provenance doesn't make an unqualified pull runnable ------------------
@@ -683,13 +735,130 @@ def test_a_release_outranks_its_pre_release():
     assert ordered == ["1.2.0-rc.1", "1.2.0-rc.2", "1.2.0-rc.10", "1.2.0"]
 
 
-def test_the_signing_environment_is_hash_pinned():
-    text = (ROOT / "registry/signing-requirements.txt").read_text()
+def test_the_release_verifier_environment_is_hash_pinned():
+    text = (ROOT / "registry/verify-requirements.txt").read_text()
     requirements = [
         line for line in text.splitlines() if line and not line.startswith((" ", "#"))
     ]
     assert requirements and all("==" in line for line in requirements)
+    assert any(line.startswith("sigstore==") for line in requirements)
     assert text.count("--hash=sha256:") >= len(requirements)
     workflow = (ROOT.parents[1] / ".github/workflows/release-registry.yml").read_text()
-    sign_job = workflow.split("\n  sign:\n", 1)[1].split("\n  publish-github:\n", 1)[0]
-    assert "--require-hashes" in sign_job and "pip install -e" not in sign_job
+    attest_job = workflow.split("\n  attest:\n", 1)[1].split("\n  publish:\n", 1)[0]
+    assert "--require-hashes" in attest_job and "pip install -e" not in attest_job
+
+
+# -- the real Sigstore path: a bundle GitHub attested for an OpenAdapt release -----------------
+
+FIXTURES = ROOT / "tests/fixtures/registry"
+
+
+def _desktop_identity():
+    import re
+
+    from openadapt_flow import registry_attest
+
+    return registry_attest.Identity(
+        issuer="https://token.actions.githubusercontent.com",
+        san=re.compile(
+            r"^https://github\.com/OpenAdaptAI/OpenAdapt/\.github/workflows/"
+            r"desktop-release\.yml@refs/heads/main$"
+        ),
+        source_repository_uri="https://github.com/OpenAdaptAI/OpenAdapt",
+    )
+
+
+def _desktop_bundle():
+    return json.loads(
+        (FIXTURES / "desktop-0.24.1-SHA256SUMS.sigstore.json").read_text()
+    )
+
+
+def test_a_real_release_attestation_verifies_offline_with_the_pinned_root():
+    pytest.importorskip("sigstore")
+    from openadapt_flow import registry_attest
+
+    signer, subjects = registry_attest.verify_sigstore(
+        _desktop_bundle(),
+        identity=_desktop_identity(),
+        trusted_root=registry_attest.TRUSTED_ROOT_FILE,
+    )
+    assert signer.endswith("desktop-release.yml@refs/heads/main")
+    assert subjects == {
+        "SHA256SUMS": hashlib.sha256(
+            (FIXTURES / "desktop-0.24.1-SHA256SUMS").read_bytes()
+        ).hexdigest()
+    }
+
+
+def test_a_real_attestation_from_another_workflow_is_not_the_registry():
+    pytest.importorskip("sigstore")
+    from openadapt_flow import registry_attest
+
+    with pytest.raises(
+        registry_attest.AttestationError, match="not the pinned workflow"
+    ):
+        registry_attest.verify_sigstore(
+            _desktop_bundle(), trusted_root=registry_attest.TRUSTED_ROOT_FILE
+        )
+
+
+def test_a_real_attestation_with_its_statement_changed_is_refused():
+    pytest.importorskip("sigstore")
+    from openadapt_flow import registry_attest
+
+    bundle = _desktop_bundle()
+    statement = json.loads(base64.b64decode(bundle["dsseEnvelope"]["payload"]))
+    statement["subject"][0]["digest"]["sha256"] = "0" * 64
+    bundle["dsseEnvelope"]["payload"] = base64.b64encode(
+        json.dumps(statement).encode()
+    ).decode()
+    with pytest.raises(registry_attest.AttestationError, match="does not hold"):
+        registry_attest.verify_sigstore(
+            bundle,
+            identity=_desktop_identity(),
+            trusted_root=registry_attest.TRUSTED_ROOT_FILE,
+        )
+
+
+def test_a_trusted_root_without_the_signers_keys_refuses_it(tmp_path):
+    pytest.importorskip("sigstore")
+    from openadapt_flow import registry_attest
+
+    root = json.loads(registry_attest.TRUSTED_ROOT_FILE.read_text())
+    root["certificateAuthorities"] = []
+    empty = tmp_path / "trusted_root.json"
+    empty.write_text(json.dumps(root))
+    with pytest.raises(registry_attest.AttestationError):
+        registry_attest.verify_sigstore(
+            _desktop_bundle(), identity=_desktop_identity(), trusted_root=empty
+        )
+
+
+def test_a_refreshed_trusted_root_is_preferred(tmp_path, monkeypatch):
+    from openadapt_flow import registry_attest
+
+    assert registry_attest.trusted_root_path() == registry_attest.TRUSTED_ROOT_FILE
+    refreshed = registry_attest.refreshed_trusted_root()
+    refreshed.parent.mkdir(parents=True)
+    refreshed.write_text("{}")
+    assert registry_attest.trusted_root_path() == refreshed
+
+
+def test_without_sigstore_a_remote_pull_says_what_to_install(monkeypatch):
+    import builtins
+
+    from openadapt_flow import registry_attest
+
+    real_import = builtins.__import__
+
+    def no_sigstore(name, *a, **k):
+        if name == "sigstore" or name.startswith("sigstore."):
+            raise ImportError(name)
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", no_sigstore)
+    with pytest.raises(
+        registry_attest.AttestationError, match=r"openadapt-flow\[registry\]"
+    ):
+        registry_attest.verify_sigstore(_desktop_bundle())

@@ -22,17 +22,17 @@ needs. A pulled skill is marked (``skill.lock.json``) and any certification it
 carries is expired: it runs only after ``openadapt-flow skill qualify`` on the
 user's own instance (:mod:`openadapt_flow.skills`).
 
-A remote index must be signed as a whole (``issued_at``, ``expires_at`` and a
-``serial`` are part of what is signed) and anchored in Rekor, and every entry
-must be signed too, by a key shipped with the package. ``pull`` refuses an
-expired index and one whose serial is lower than the highest it has seen for
-that index (``$OPENADAPT_HOME/registry-state.json``). ``--allow-unsigned``
-applies only to an index on the local disk.
+A remote index must carry a Sigstore attestation from the registry release
+workflow (:mod:`openadapt_flow.registry_attest`) naming its exact sha256, and
+every archive's. The attested index carries ``issued_at``, ``expires_at`` and
+a ``serial``: ``pull`` refuses an expired index and one whose serial is lower
+than the highest it has seen for that index
+(``$OPENADAPT_HOME/registry-state.json``). ``--allow-unsigned`` and
+``--allow-test-key`` apply only to an index on the local disk.
 """
 
 from __future__ import annotations
 
-import base64
 import fnmatch
 import hashlib
 import json
@@ -54,11 +54,13 @@ MAX_FILE_BYTES = 20 * 1024 * 1024
 #: An archive's members, all together, and how many there may be.
 MAX_ARCHIVE_BYTES = 100 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 2000
+#: An index's attestation bundle, at most.
+MAX_ATTESTATION_BYTES = 1024 * 1024
 #: The private tier's record check, at most.
 MAX_FULL_CONTRACT_BYTES = 1024 * 1024
 #: Hosts the private tier is fetched from; the bearer token goes nowhere else.
 PRIVATE_TIER_HOSTS = frozenset({"registry.openadapt.ai"})
-#: How long a signed index is valid when the release workflow signs it.
+#: How long an index is valid from when the release workflow stamps it.
 INDEX_LIFETIME = timedelta(days=30)
 #: Clock skew allowed for an index's ``issued_at``.
 _CLOCK_SKEW = timedelta(minutes=5)
@@ -68,18 +70,11 @@ class RegistryError(RuntimeError):
     """The index or a bundle failed a check. Nothing was written to ``out``."""
 
 
-# -- signatures ---------------------------------------------------------------------
-
-#: Domain separation for a signed entry (Ed25519ph over SHA-512, the form Rekor
-#: checks for an Ed25519 key in a ``hashedrekord`` entry, so an entry can be
-#: anchored as Seals are).
+#: Domain separation for an entry's digest (``RegistryOrigin.entry_sha256``).
 _ENTRY_DOMAIN = b"openadapt.registry-entry/v1\n"
-#: Domain separation for the signed index as a whole.
-_INDEX_DOMAIN = b"openadapt.registry-index/v1\n"
-#: The index fields the index signature makes fresh: when it was signed, when
-#: it expires and its place in the sequence.
+#: The index fields that make an attested index fresh: when it was stamped,
+#: when it expires and its place in the sequence.
 INDEX_FRESHNESS_FIELDS = ("issued_at", "expires_at", "serial")
-KEYS_FILE = Path(__file__).with_name("registry_keys.json")
 
 #: The files a public bundle may hold. Anything else is refused, so a
 #: private-tier file can't slip in under another spelling.
@@ -119,7 +114,7 @@ def private_tier_file(rel: str) -> bool:
 
 
 def entry_statement(raw: dict[str, Any]) -> bytes:
-    """The bytes a signature covers: every field of the entry but the signature."""
+    """The canonical bytes of an entry, the record its digest names."""
 
     body = {k: v for k, v in raw.items() if k != "signature"}
     return _ENTRY_DOMAIN + json.dumps(
@@ -131,80 +126,26 @@ def entry_sha256(raw: dict[str, Any]) -> str:
     return hashlib.sha256(entry_statement(raw)).hexdigest()
 
 
-def _signature_block(statement: bytes, seed: bytes, key_id: str) -> dict[str, str]:
-    from openadapt_flow.ed25519ph import sign_prehashed
-
-    signature = sign_prehashed(seed, hashlib.sha512(statement).digest())
-    return {"key_id": key_id, "ed25519ph": base64.b64encode(signature).decode("ascii")}
-
-
-def _signature_problem(
-    statement: bytes, signature: Any, keys: dict[str, bytes], what: str
-) -> Optional[str]:
-    from openadapt_flow.ed25519ph import verify_prehashed
-
-    if not isinstance(signature, dict):
-        return f"the {what} is not signed"
-    key = keys.get(str(signature.get("key_id")))
-    if key is None:
-        return f"the {what} is signed by an unknown key {signature.get('key_id')!r}"
-    try:
-        sig = base64.b64decode(str(signature.get("ed25519ph", "")), validate=True)
-    except ValueError:
-        return f"the {what}'s signature is not base64"
-    if not verify_prehashed(key, hashlib.sha512(statement).digest(), sig):
-        return f"the {what}'s signature does not match its content"
-    return None
-
-
-def sign_entry(raw: dict[str, Any], seed: bytes, key_id: str) -> dict[str, str]:
-    """A signature block for ``raw``, made with the 32-byte Ed25519 ``seed``."""
-
-    return _signature_block(entry_statement(raw), seed, key_id)
-
-
-def index_statement(index: dict[str, Any]) -> bytes:
-    """What the index signature covers: the whole index but its signature.
-
-    That includes every entry (with its own signature) and the freshness
-    fields, so an old index can't be replayed as new and an entry can't be
-    dropped from a signed index.
-    """
-
-    body = {k: v for k, v in index.items() if k not in ("signature", "anchor")}
-    return _INDEX_DOMAIN + json.dumps(
-        body, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
-
-
 def _stamp(moment: datetime) -> str:
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def sign_index(
+def stamp_index(
     index: dict[str, Any],
-    seed: bytes,
-    key_id: str,
     *,
     now: Optional[datetime] = None,
     lifetime: timedelta = INDEX_LIFETIME,
 ) -> dict[str, Any]:
-    """Sign every entry, stamp the freshness fields, then sign the index."""
+    """Stamp ``issued_at``, ``expires_at`` and ``serial``, before attesting."""
 
     now = now or datetime.now(timezone.utc)
-    for item in index["workflows"]:
-        if item.get("status") != "planned":
-            item.pop("signature", None)
-            item["signature"] = sign_entry(item, seed, key_id)
-    index.pop("signature", None)
     index.update(
         issued_at=_stamp(now),
         expires_at=_stamp(now + lifetime),
-        # Seconds since the epoch: it only ever grows from one signing to
-        # the next.
+        # Seconds since the epoch: it only ever grows from one release to the
+        # next.
         serial=int(now.timestamp()),
     )
-    index["signature"] = _signature_block(index_statement(index), seed, key_id)
     return index
 
 
@@ -217,16 +158,11 @@ def _parse_stamp(value: Any) -> Optional[datetime]:
         return None
 
 
-def index_signature_problem(
-    index: dict[str, Any], keys: dict[str, bytes], *, now: Optional[datetime] = None
+def index_freshness_problem(
+    index: dict[str, Any], *, now: Optional[datetime] = None
 ) -> Optional[str]:
-    """Why the index's own signature or freshness doesn't hold, or None."""
+    """Why an attested index is stale or unstamped, or None."""
 
-    problem = _signature_problem(
-        index_statement(index), index.get("signature"), keys, "index"
-    )
-    if problem is not None:
-        return problem
     issued = _parse_stamp(index.get("issued_at"))
     expires = _parse_stamp(index.get("expires_at"))
     serial = index.get("serial")
@@ -284,104 +220,6 @@ def record_serial(index_url: str, serial: int) -> None:
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
         tmp.replace(path)
-
-
-#: The index's Rekor anchor, published beside it (``index.anchor.json``).
-ANCHOR_NAME = "index.anchor.json"
-
-
-def index_digest(index: dict[str, Any]) -> str:
-    """SHA-256 of the canonical index, the record its Rekor anchor names."""
-
-    body = {k: v for k, v in index.items() if k != "anchor"}
-    return hashlib.sha256(
-        json.dumps(
-            body, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-        ).encode("utf-8")
-    ).hexdigest()
-
-
-def anchor_index(
-    index_path: Path,
-    seed: bytes,
-    *,
-    log_keys: Optional[Any] = None,
-    submit: Optional[Any] = None,
-    env: Optional[Any] = None,
-) -> Path:
-    """Anchor the signed index in Rekor with the registry key; write the anchor.
-
-    Contacts the transparency log: the release workflow does this once per
-    registry release, in its protected environment.
-    """
-
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
-    from openadapt_flow.seal_anchor import anchor_record, submit_hashedrekord
-    from openadapt_flow.seal_keys import SoftwareSigner
-
-    signer = SoftwareSigner(Ed25519PrivateKey.from_private_bytes(seed), "file")
-    out = index_path.with_name(ANCHOR_NAME)
-    anchor_record(
-        {"registry_index_sha256": index_digest(json.loads(index_path.read_text()))},
-        out,
-        signer,
-        log_keys=log_keys,
-        submit=submit or submit_hashedrekord,
-        env=env,
-    )
-    return out
-
-
-def index_anchor_problem(
-    index: dict[str, Any],
-    anchor: Any,
-    keys: dict[str, bytes],
-    *,
-    log_keys: Optional[Any] = None,
-) -> Optional[str]:
-    """Why an index's Rekor anchor doesn't hold, or None when it does.
-
-    The anchor must name this exact index and be signed by a registry key.
-    """
-
-    from openadapt_flow.seal_anchor import verify_record_anchor
-
-    fields = {"registry_index_sha256": index_digest(index)}
-    reasons = set()
-    for public in keys.values():
-        result = verify_record_anchor(fields, anchor, public, log_keys=log_keys)
-        if result.ok:
-            return None
-        reasons.add(str(result.reason))
-    return (
-        "the index's transparency-log anchor does not hold ("
-        + ", ".join(sorted(reasons) or ["no registry key"])
-        + ")"
-    )
-
-
-def trusted_keys() -> dict[str, bytes]:
-    """The registry's public keys, shipped with the package (never fetched)."""
-
-    data = json.loads(KEYS_FILE.read_text())
-    keys = {}
-    for kid, spec in (data.get("keys") or {}).items():
-        if isinstance(spec, str):
-            spec = {"public": spec}
-        if spec.get("test"):
-            # A key whose seed is public signs nothing a user should trust.
-            continue
-        keys[kid] = base64.b64decode(spec["public"])
-    return keys
-
-
-def entry_signature_problem(
-    raw: dict[str, Any], keys: dict[str, bytes]
-) -> Optional[str]:
-    """Why an entry's signature doesn't hold, or None when it does."""
-
-    return _signature_problem(entry_statement(raw), raw.get("signature"), keys, "entry")
 
 
 @dataclass(frozen=True)
@@ -611,17 +449,19 @@ def find(entries: list[Entry], workflow_id: str) -> Entry:
     raise RegistryError(f"no workflow {workflow_id!r} in the registry (known: {known})")
 
 
-def _read_anchor(index_url: str) -> Optional[Any]:
-    """The index's published anchor; None only when a local index has none."""
+def _read_attestation(index_url: str) -> Optional[Any]:
+    """The index's attestation; None only when a local index has none."""
 
-    location = _join(index_url, ANCHOR_NAME)
+    from openadapt_flow.registry_attest import ATTESTATION_NAME
+
+    location = _join(index_url, ATTESTATION_NAME)
     if not _remote(index_url) and not Path(location).exists():
         return None
     try:
-        return json.loads(_read(location))
+        return json.loads(_read(location, limit=MAX_ATTESTATION_BYTES))
     except (RegistryError, OSError, json.JSONDecodeError) as exc:
         raise RegistryError(
-            f"the index's transparency-log anchor ({ANCHOR_NAME}) can't be read: {exc}"
+            f"the index's attestation ({ATTESTATION_NAME}) can't be read: {exc}"
         ) from exc
 
 
@@ -631,60 +471,78 @@ def pull(
     *,
     index_url: str = DEFAULT_INDEX_URL,
     overwrite: bool = False,
-    keys: Optional[dict[str, bytes]] = None,
     allow_unsigned: bool = False,
-    log_keys: Optional[Any] = None,
+    allow_test_key: bool = False,
+    identity: Optional[Any] = None,
+    trusted_root: Optional[Path] = None,
     now: Optional[datetime] = None,
 ) -> Path:
     """Download and verify a bundle into ``out`` (default ``./<name>``).
 
     Before anything is downloaded:
 
-    - the index's own signature, its expiry and its serial (never lower than
-      the highest seen from this index) are checked;
-    - its Rekor anchor must hold, and a remote index must have one;
-    - the entry's signature is checked.
+    - the index's attestation (``index.sigstore.json``) must hold for the
+      pinned release-workflow identity and name the exact sha256 of the index
+      that was read;
+    - the attested index must be unexpired, with a serial never lower than
+      the highest seen from it.
 
-    Every key comes from the package, never from the index. ``allow_unsigned``
-    takes an unsigned index and entry, and only from the local disk (an index
-    you are authoring); a signature that is present must always hold.
+    An archive must be one the attestation names too. ``allow_unsigned``
+    takes an index with no attestation, and ``allow_test_key`` one attested by
+    the local test signer; both only from the local disk (an index you are
+    authoring). An attestation that is present must always hold.
     """
+    from openadapt_flow import registry_attest
+
     remote = _remote(index_url)
     if remote and not index_url.startswith("https://"):
         raise RegistryError(f"{index_url}: plain http is refused; use https")
-    if allow_unsigned and remote:
-        raise RegistryError(
-            "--allow-unsigned applies only to an index on the local disk, never "
-            f"to {index_url}"
-        )
+    for flag, used in (
+        ("--allow-unsigned", allow_unsigned),
+        ("--allow-test-key", allow_test_key),
+    ):
+        if used and remote:
+            raise RegistryError(
+                f"{flag} applies only to an index on the local disk, never to "
+                f"{index_url}"
+            )
     local_root = None if remote else Path(index_url).resolve().parent
+    raw_index = _read(index_url)
     try:
-        index_data = json.loads(_read(index_url))
+        index_data = json.loads(raw_index)
     except json.JSONDecodeError as exc:
         raise RegistryError(f"index is not JSON: {exc}") from exc
     entry = find(validate_index(index_data), workflow_id)
     if entry.status == "planned":
         raise RegistryError(f"{workflow_id} is planned and has no bundle yet")
-    trusted = trusted_keys() if keys is None else keys
-    index_signed = index_data.get("signature") is not None
-    if index_signed or not allow_unsigned:
-        problem = index_signature_problem(index_data, trusted, now=now)
+    attestation = _read_attestation(index_url)
+    attested_by: Optional[str] = None
+    subjects: Optional[dict[str, str]] = None
+    if attestation is None:
+        if remote or not allow_unsigned:
+            raise RegistryError(
+                f"the index has no attestation ({registry_attest.ATTESTATION_NAME})"
+            )
+    else:
+        try:
+            attested_by, subjects = registry_attest.verify(
+                attestation,
+                allow_test_key=allow_test_key and not remote,
+                identity=identity or registry_attest.REGISTRY_IDENTITY,
+                trusted_root=trusted_root,
+            )
+        except registry_attest.AttestationError as exc:
+            raise RegistryError(str(exc)) from exc
+        if (
+            subjects.get(registry_attest.INDEX_SUBJECT)
+            != hashlib.sha256(raw_index).hexdigest()
+        ):
+            raise RegistryError("the attestation does not name this index")
+        problem = index_freshness_problem(index_data, now=now)
         if problem is None:
             problem = serial_problem(index_url, index_data["serial"])
         if problem is not None:
             raise RegistryError(problem)
-    anchor = _read_anchor(index_url)
-    if anchor is None and remote:
-        raise RegistryError(f"the index has no transparency-log anchor ({ANCHOR_NAME})")
-    if anchor is not None:
-        anchored = index_anchor_problem(index_data, anchor, trusted, log_keys=log_keys)
-        if anchored is not None:
-            raise RegistryError(anchored)
-    problem = entry_signature_problem(entry.raw, trusted)
-    if problem is not None and not (
-        allow_unsigned and entry.raw.get("signature") is None
-    ):
-        raise RegistryError(f"{entry.ref}: {problem}")
     dest = Path(out) if out else Path(entry.id.split("/", 1)[1])
     if dest.exists() and not overwrite:
         raise RegistryError(f"{dest} exists; pass --force to replace it")
@@ -692,6 +550,12 @@ def pull(
     archive = entry.raw.get("archive")
     with tempfile.TemporaryDirectory() as tmp:
         stage = Path(tmp) / "bundle"
+        if (
+            archive
+            and subjects is not None
+            and archive.get("sha256") not in set(subjects.values())
+        ):
+            raise RegistryError("the attestation does not name this entry's archive")
         unpacked = (
             _unpack_archive(archive, expected=set(entry.files), local_root=local_root)
             if archive
@@ -723,14 +587,14 @@ def pull(
 
         # Mark it as pulled and expire any certification it carries: a
         # registry certification is about our test copy, never the user's.
-        mark_pulled(stage, entry, index_url=index_url)
+        mark_pulled(stage, entry, index_url=index_url, attested_by=attested_by)
         if unpacked is not None and NOTICE_NAME in unpacked:
             (stage / NOTICE_NAME).write_bytes(unpacked[NOTICE_NAME])
         if dest.exists():
             shutil.rmtree(dest)
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(stage, dest)
-    if index_signed:
+    if subjects is not None:
         record_serial(index_url, index_data["serial"])
     return dest
 
@@ -871,6 +735,19 @@ def cmd_pull(args: Any) -> int:
     import sys
 
     try:
+        if getattr(args, "refresh_trust", False):
+            from openadapt_flow import registry_attest
+
+            try:
+                path = registry_attest.refresh_trusted_root()
+            except Exception as exc:  # noqa: BLE001 - report any TUF failure
+                print(
+                    f"pull: refreshing the Sigstore trusted root failed: {exc}",
+                    file=sys.stderr,
+                )
+                return 1
+            print(f"Sigstore trusted root refreshed: {path}")
+            return 0
         if args.list or not args.workflow:
             for entry in load_index(args.index):
                 print(_describe(entry))
@@ -882,6 +759,7 @@ def cmd_pull(args: Any) -> int:
             index_url=args.index,
             overwrite=args.force,
             allow_unsigned=getattr(args, "allow_unsigned", False),
+            allow_test_key=getattr(args, "allow_test_key", False),
         )
     except RegistryError as exc:
         print(f"pull: {exc}", file=sys.stderr)
@@ -923,7 +801,19 @@ def add_parser(sub: Any) -> None:
     p.add_argument(
         "--allow-unsigned",
         action="store_true",
-        help="Take an unsigned index on the local disk (one you are authoring); "
-        "refused for a remote index",
+        help="Take an index with no attestation from the local disk (one you are "
+        "authoring); refused for a remote index",
+    )
+    p.add_argument(
+        "--allow-test-key",
+        action="store_true",
+        help="Take an index attested by the local test signer, from the local disk "
+        "only; refused for a remote index",
+    )
+    p.add_argument(
+        "--refresh-trust",
+        action="store_true",
+        help="Fetch Sigstore's current trusted root through its TUF repository "
+        "(into $OPENADAPT_HOME) and exit",
     )
     p.set_defaults(func=cmd_pull)

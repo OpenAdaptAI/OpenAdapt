@@ -114,8 +114,6 @@ def statement(seal_sha256: str, nonce: str) -> bytes:
 _RECORD_FIELDS = (
     ("seal_sha256",),
     ("run_authorization_sha256", "signature_sha256"),
-    # The skills registry's signed index (openadapt_flow.registry.anchor_index).
-    ("registry_index_sha256",),
 )
 
 

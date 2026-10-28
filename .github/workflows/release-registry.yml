@@ -1,32 +1,32 @@
-# Publish the skills registry: sign the index and release the bundles.
+# Publish the skills registry: attest the index and the bundle archives.
 #
-# - Manual dispatch only, from the current tip of main. The registry release
-#   is tagged registry-<suffix>.
-# - build (no secrets) writes each bundle in packages/flow/registry as a
-#   reproducible .tar.gz and an index whose entries point at this release's
-#   assets, and checks that no bundle holds a private-tier file.
-# - sign runs in the protected `registry-signing` environment, the only place
-#   the REGISTRY_SIGNING_SEED secret exists. Its Python environment is only
-#   the hash-pinned wheels in packages/flow/registry/signing-requirements.txt
-#   (cryptography and pydantic); the engine is read from the checkout, with
-#   nothing resolved from PyPI. It signs every entry and then the index as a
-#   whole, with issued_at, expires_at (30 days) and a serial, using the
-#   registry key (Ed25519ph, the form Rekor accepts). It checks every
-#   signature against the public keys shipped in
-#   openadapt_flow/registry_keys.json, so a seed that doesn't match a
-#   published key fails the run. It then anchors the signed index in Rekor (a
-#   public transparency log): the anchor names only the index's SHA-256 and
-#   the registry's public key. pull requires that anchor for a remote index.
-# - publish-github tags the commit with the openadapt-release App and
-#   publishes an immutable GitHub Release with the archives and the signed
-#   index, then opens a pull request that updates
-#   packages/flow/registry/index.json to the signed index.
+# There is no signing key. The registry is attested keylessly, as the other
+# releases are: actions/attest signs an in-toto statement naming each file's
+# sha256 with a short-lived Sigstore certificate for this workflow's identity,
+# and records it in Rekor. `openadapt-flow pull` checks that attestation
+# against the pinned identity
+#   issuer https://token.actions.githubusercontent.com
+#   SAN    https://github.com/OpenAdaptAI/OpenAdapt/.github/workflows/release-registry.yml@refs/tags/registry-*
+# (openadapt_flow/registry_attest.py), offline, with the trusted root shipped
+# in the package.
 #
-# One-time setup (founder): the registry key. Generate the seed offline, store
-# it base64-encoded as REGISTRY_SIGNING_SEED in the `registry-signing`
-# environment (required reviewers), set REGISTRY_KEY_ID as an environment
-# variable, commit only the public key to registry_keys.json, and add the
-# registry-* tag to the release ruleset.
+# - tag (manual dispatch from the tip of main) tags the commit registry-<suffix>
+#   with the openadapt-release App. The tag push starts this workflow again.
+# - check (the tag push, no privileges) installs the engine and runs the
+#   registry's repository checks: no private-tier file and only allowlisted
+#   files in any bundle.
+# - attest (the tag push, the protected release-identity environment, the only
+#   job with id-token: write) builds each bundle as a reproducible .tar.gz
+#   and an index stamped with issued_at, expires_at (30 days) and serial,
+#   attests the index and every archive, and checks its own attestation with
+#   the pull verifier. Its Python environment is only the hash-pinned wheels
+#   in packages/flow/registry/verify-requirements.txt; the engine is read from
+#   the checkout.
+# - publish (release-identity) publishes a GitHub Release with the archives,
+#   the index and its attestation (index.sigstore.json), and opens a pull
+#   request that updates packages/flow/registry/ to them.
+#
+# The index expires 30 days after it is stamped, so run this at least monthly.
 name: Release registry
 
 on:
@@ -36,148 +36,198 @@ on:
         description: "Release tag suffix (the tag is registry-<suffix>), e.g. 2026-10-28"
         required: true
         type: string
+  push:
+    tags:
+      - "registry-*"
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-registry
+  group: release-registry-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: build registry-${{ inputs.suffix }}
+  tag:
+    name: tag registry-${{ inputs.suffix }}
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    outputs:
-      tag: ${{ steps.check.outputs.tag }}
+    timeout-minutes: 10
+    environment: release-identity
+    permissions:
+      contents: read
     steps:
-      - name: Require the tip of main
+      - name: Require the tip of main and a plain suffix
         env:
           REF: ${{ github.ref }}
+          SUFFIX: ${{ inputs.suffix }}
         run: |
+          set -euo pipefail
           if [ "$REF" != "refs/heads/main" ]; then
             echo "Releases run only from refs/heads/main, not $REF." >&2
             exit 1
           fi
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: "3.12"
-      - name: Check the tag name
-        id: check
-        env:
-          SUFFIX: ${{ inputs.suffix }}
-        run: |
-          set -euo pipefail
           if ! printf '%s' "$SUFFIX" | grep -Eq '^[0-9A-Za-z][0-9A-Za-z.-]{0,40}$'; then
             echo "The suffix must be letters, digits, dots and dashes." >&2
             exit 1
           fi
-          echo "tag=registry-$SUFFIX" >> "$GITHUB_OUTPUT"
-      - name: Install the engine
-        run: python -m pip install -e packages/types -e packages/flow
-      - name: Build the archives and the unsigned index
+      - name: Create a repository-scoped release App token
+        id: release-app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-metadata: read
+      - name: Require the exact release App identity
         env:
-          TAG: ${{ steps.check.outputs.tag }}
+          ACTUAL_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+        run: |
+          if [ "$ACTUAL_APP_SLUG" != openadapt-release ]; then
+            echo "Tagging requires the openadapt-release App, not $ACTUAL_APP_SLUG." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          token: ${{ steps.release-app.outputs.token }}
+      - name: Tag the commit
+        env:
+          TAG: registry-${{ inputs.suffix }}
+        run: |
+          set -euo pipefail
+          git -c user.name="openadapt-release[bot]" \
+            -c user.email="openadapt-release[bot]@users.noreply.github.com" \
+            tag -a "$TAG" "$GITHUB_SHA" -m "Skills registry $TAG"
+          git push origin "refs/tags/$TAG"
+
+  check:
+    name: check ${{ github.ref_name }}
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/registry-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install the engine
+        run: python -m pip install -e packages/types -e 'packages/flow[dev]'
+      - name: Check the bundles
+        run: |
+          set -euo pipefail
+          python packages/flow/scripts/build_registry_index.py --check
+          python -m pytest -q \
+            packages/flow/tests/test_skills_registry.py::test_no_registry_bundle_in_the_repo_holds_a_private_tier_file \
+            packages/flow/tests/test_skills_registry.py::test_every_file_of_a_registry_bundle_in_the_repo_is_allowlisted
+
+  attest:
+    name: build and attest ${{ github.ref_name }}
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release-identity
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      PYTHONPATH: packages/flow:packages/types
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Require a release App tag
+        env:
+          EXPECTED_ACTOR: openadapt-release[bot]
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_TYPE" != tag ] || [ "$GITHUB_ACTOR" != "$EXPECTED_ACTOR" ]; then
+            echo "Attesting requires a tag pushed by $EXPECTED_ACTOR." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require the tag to be on protected main
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+            echo "The registry tag is not contained in protected main." >&2
+            exit 1
+          fi
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install only the hash-pinned verifier wheels
+        run: |
+          python -m pip install --require-hashes --no-deps --only-binary=:all: \
+            -r packages/flow/registry/verify-requirements.txt
+      - name: Build the archives and the stamped index
         run: |
           set -euo pipefail
           python packages/flow/scripts/build_registry_index.py \
             --archives dist-registry \
             --asset-base "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/" \
-            --out dist-registry/index.json
-          python -m pytest -q \
-            packages/flow/tests/test_skills_registry.py::test_no_registry_bundle_in_the_repo_holds_a_private_tier_file \
-            packages/flow/tests/test_skills_registry.py::test_every_file_of_a_registry_bundle_in_the_repo_is_allowlisted
-          (cd dist-registry && sha256sum -- *.tar.gz index.json > SHA256SUMS)
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+            --out dist-registry/index.json \
+            --stamp
+      - name: Attest the index and every archive
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          name: registry-unsigned
-          path: dist-registry/
-          if-no-files-found: error
-
-  sign:
-    name: sign registry-${{ inputs.suffix }}
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: registry-signing
-    env:
-      PYTHONPATH: packages/flow:packages/types
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: "3.12"
-      - name: Install only the hash-pinned signing wheels
-        run: |
-          python -m pip install --require-hashes --no-deps --only-binary=:all: \
-            -r packages/flow/registry/signing-requirements.txt
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: registry-unsigned
-          path: dist-registry/
-      - name: Sign every entry with the registry key
+          subject-path: |
+            dist-registry/index.json
+            dist-registry/*.tar.gz
+      - name: Keep the attestation beside the index and check it as pull will
         env:
-          REGISTRY_SIGNING_SEED: ${{ secrets.REGISTRY_SIGNING_SEED }}
-          OPENADAPT_REGISTRY_KEY_ID: ${{ vars.REGISTRY_KEY_ID }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
         run: |
           set -euo pipefail
-          umask 077
-          seed="$RUNNER_TEMP/registry-seed"
-          printf '%s' "$REGISTRY_SIGNING_SEED" | base64 --decode > "$seed"
-          OPENADAPT_REGISTRY_SIGNING_SEED="$seed" \
-            python packages/flow/scripts/build_registry_index.py --sign dist-registry/index.json
-          rm -f "$seed"
-      - name: Check every signature against the published keys
-        run: |
-          set -euo pipefail
+          if [ "$(grep -c . "$BUNDLE")" != 1 ]; then
+            echo "Expected one attestation bundle in $BUNDLE." >&2
+            exit 1
+          fi
+          head -n 1 "$BUNDLE" > dist-registry/index.sigstore.json
           python - <<'PY'
+          import hashlib
           import json
-          from openadapt_flow import registry
-          index = json.load(open("dist-registry/index.json"))
-          keys = registry.trusted_keys()
-          problem = registry.index_signature_problem(index, keys)
-          if problem:
-              raise SystemExit(f"index: {problem}")
-          for item in index["workflows"]:
-              if item["status"] == "planned":
-                  continue
-              problem = registry.entry_signature_problem(item, keys)
-              if problem:
-                  raise SystemExit(f"{item['id']}: {problem}")
-          print(f"{len(index['workflows'])} entries signed and checked")
-          PY
-      - name: Anchor the signed index in Rekor
-        env:
-          REGISTRY_SIGNING_SEED: ${{ secrets.REGISTRY_SIGNING_SEED }}
-        run: |
-          set -euo pipefail
-          umask 077
-          seed="$RUNNER_TEMP/registry-seed"
-          printf '%s' "$REGISTRY_SIGNING_SEED" | base64 --decode > "$seed"
-          python - "$seed" <<'PY'
-          import sys
           from pathlib import Path
-          from openadapt_flow import registry
-          seed = Path(sys.argv[1]).read_bytes()
-          print(registry.anchor_index(Path("dist-registry/index.json"), seed))
+
+          from openadapt_flow import registry, registry_attest
+
+          dist = Path("dist-registry")
+          index = json.loads((dist / "index.json").read_text())
+          signer, subjects = registry_attest.verify_sigstore(
+              json.loads((dist / "index.sigstore.json").read_text())
+          )
+          index_digest = hashlib.sha256((dist / "index.json").read_bytes()).hexdigest()
+          if subjects.get("index.json") != index_digest:
+              raise SystemExit("the attestation does not name the index")
+          for archive in dist.glob("*.tar.gz"):
+              digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+              if subjects.get(archive.name) != digest:
+                  raise SystemExit(f"the attestation does not name {archive.name}")
+          problem = registry.index_freshness_problem(index)
+          if problem:
+              raise SystemExit(problem)
+          print(f"attested by {signer}: {sorted(subjects)}")
           PY
-          rm -f "$seed"
-          (cd dist-registry && sha256sum -- *.tar.gz index.json index.anchor.json > SHA256SUMS)
+          (cd dist-registry && sha256sum -- *.tar.gz index.json index.sigstore.json > SHA256SUMS)
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: registry-signed
+          name: registry-attested
           path: dist-registry/
           if-no-files-found: error
 
-  publish-github:
-    name: tag and release ${{ needs.build.outputs.tag }}
-    needs: [build, sign]
+  publish:
+    name: release ${{ github.ref_name }}
+    needs: attest
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: release-identity
@@ -198,46 +248,40 @@ jobs:
       - name: Require the exact release App identity
         env:
           ACTUAL_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
-          EXPECTED_APP_SLUG: openadapt-release
         run: |
-          set -euo pipefail
-          if [ "$ACTUAL_APP_SLUG" != "$EXPECTED_APP_SLUG" ]; then
-            echo "Publishing requires the $EXPECTED_APP_SLUG App, not $ACTUAL_APP_SLUG." >&2
+          if [ "$ACTUAL_APP_SLUG" != openadapt-release ]; then
+            echo "Publishing requires the openadapt-release App, not $ACTUAL_APP_SLUG." >&2
             exit 1
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
+          ref: main
           token: ${{ steps.release-app.outputs.token }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: registry-signed
+          name: registry-attested
           path: dist-registry/
-      - name: Tag, release, and propose the signed index
+      - name: Release, and propose the attested index
         env:
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
-          TAG: ${{ needs.build.outputs.tag }}
+          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           (cd dist-registry && sha256sum --check --strict SHA256SUMS)
-          git -c user.name="openadapt-release[bot]" \
-            -c user.email="openadapt-release[bot]@users.noreply.github.com" \
-            tag -a "$TAG" "$GITHUB_SHA" -m "Skills registry $TAG"
-          git push origin "refs/tags/$TAG"
           gh release create "$TAG" dist-registry/*.tar.gz dist-registry/index.json \
-            dist-registry/index.anchor.json dist-registry/SHA256SUMS \
+            dist-registry/index.sigstore.json dist-registry/SHA256SUMS \
+            --verify-tag \
             --title "Skills registry $TAG" \
-            --notes "Signed skills-registry index and bundles. See packages/flow/registry/README.md."
+            --notes "Attested skills-registry index and bundles. See packages/flow/registry/README.md."
           branch="registry/$TAG"
           git switch -c "$branch"
-          cp dist-registry/index.json dist-registry/index.anchor.json packages/flow/registry/
-          # The anchor is a new file the first time: add both by name.
-          git add packages/flow/registry/index.json packages/flow/registry/index.anchor.json
+          cp dist-registry/index.json dist-registry/index.sigstore.json packages/flow/registry/
+          # The attestation is a new file the first time: add both by name.
+          git add packages/flow/registry/index.json packages/flow/registry/index.sigstore.json
           git -c user.name="openadapt-release[bot]" \
             -c user.email="openadapt-release[bot]@users.noreply.github.com" \
-            commit -m "registry: signed index for $TAG"
+            commit -m "registry: attested index for $TAG"
           git push origin "refs/heads/$branch"
           gh pr create --base main --head "$branch" \
-            --title "registry: signed index for $TAG" \
-            --body "The signed index the $TAG release published. Bundles are its release assets."
+            --title "registry: attested index for $TAG" \
+            --body "The attested index the $TAG release published. Bundles are its release assets."

@@ -97,7 +97,9 @@ def read_binding(bundle_dir: Path | str) -> dict[str, str]:
     return {str(k): str(v) for k, v in (data.get("values") or {}).items()}
 
 
-def mark_pulled(bundle_dir: Path, entry: Any, *, index_url: str) -> None:
+def mark_pulled(
+    bundle_dir: Path, entry: Any, *, index_url: str, attested_by: Optional[str] = None
+) -> None:
     """Write the lock and expire any certification the pulled bundle carries."""
 
     from openadapt_flow.bundle_sealing import _invalidate_prior_certification
@@ -108,7 +110,6 @@ def mark_pulled(bundle_dir: Path, entry: Any, *, index_url: str) -> None:
     published = workflow.manifest.content_digest if workflow.manifest else ""
     expired = _invalidate_prior_certification(workflow, reason=EXPIRED_REASON)
     raw = entry.raw
-    signature = raw.get("signature")
     # The provenance is part of the workflow content, so the digest covers
     # it: removing it makes a different, unverified local bundle.
     workflow.registry = RegistryOrigin(
@@ -116,7 +117,7 @@ def mark_pulled(bundle_dir: Path, entry: Any, *, index_url: str) -> None:
         version=entry.version,
         index_url=index_url,
         entry_sha256=entry_sha256(raw),
-        signed_by=signature.get("key_id") if isinstance(signature, dict) else None,
+        signed_by=attested_by,
         published_digest=published,
         pulled_at=_now(),
     )
@@ -604,10 +605,11 @@ def qualify_skill(
     lock = read_lock(bundle_dir)
     if lock is None:
         raise SkillError(f"{bundle_dir} is not a pulled skill (no {LOCK})")
-    if not lock.get("signed_by"):
+    signer = str(lock.get("signed_by") or "")
+    if not signer or signer.startswith("test:"):
         log(
-            f"{lock.get('id')} is UNSIGNED: it came from a local index with "
-            "--allow-unsigned, and nothing vouches for it but that file."
+            f"{lock.get('id')} is not attested by the registry release workflow: "
+            "it came from a local index, and nothing vouches for it but that file."
         )
     ships = bool(lock.get("contract"))
     if contract is None and not ships:
@@ -741,11 +743,12 @@ def cmd_skill(args: Any) -> int:
                 f"{lock['id']}@{lock.get('version')}: " + (refusal or "qualified; runs")
             )
             signer = lock.get("signed_by")
-            print(
-                f"Signed by {signer}"
-                if signer
-                else "UNSIGNED: pulled from a local index with --allow-unsigned"
-            )
+            if not signer:
+                print("UNSIGNED: pulled from a local index with --allow-unsigned")
+            elif signer.startswith("test:"):
+                print("TEST SIGNER: pulled from a local index with --allow-test-key")
+            else:
+                print(f"Attested by {signer}")
             missing = missing_bindings(args.bundle)
             if missing:
                 print("Unbound: " + ", ".join(missing))

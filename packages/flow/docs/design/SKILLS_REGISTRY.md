@@ -1,7 +1,7 @@
 # Verified skills registry
 
 Status: reviewed (coordinator, 2026-10-28). The first stage is implemented:
-signed entries, provenance in the workflow, bind, qualify and the run
+an attested index, provenance in the workflow, bind, qualify and the run
 refusal. It builds on `openadapt pull` (#1173, `openadapt_flow/registry.py`).
 
 ## What it is
@@ -44,11 +44,12 @@ them can be listed, but `pull` labels it "no record check".
 
 ## Pull, bind, qualify, run
 
-1. **Pull.** `openadapt pull openemr/register-patient` checks the entry's
-   signature against the keys shipped with the package, then downloads the
+1. **Pull.** `openadapt pull openemr/register-patient` checks the index's
+   Sigstore attestation against the pinned release-workflow identity, then
+   downloads the
    files and checks each sha256 and the manifest digest, as today. It then:
-   - records the provenance (entry id, version, index, the signed entry's
-     sha256, the signer and the published digest) in the workflow itself, so
+   - records the provenance (entry id, version, index, the entry's sha256,
+     who attested it and the published digest) in the workflow itself, so
      the content digest covers it;
    - writes `skill.lock.json` beside the bundle: the entry id, version, index
      URL, file digests and the time;
@@ -123,15 +124,22 @@ AGPL entry is published.
 
 ## Decisions (review, 2026-10-28)
 
-- **Signatures.** Each entry is signed with the Seals signing (Ed25519ph). The
-  release workflow anchors the signed index in Rekor as Seals are (record
-  type `registry_index_sha256`), and `pull` verifies a published anchor
-  offline. The production key is a founder action: the release workflow
-  (`.github/workflows/release-registry.yml`) reads its seed only from the
-  REGISTRY_SIGNING_SEED secret of the protected `registry-signing`
-  environment, and only the public key is committed. No key whose seed is
-  public is trusted: tests pass their own keys.
-- **Where it lives.** The signed index stays in `packages/flow/registry/`.
+- **Attestation, not a key (revised 2026-10-28).** The release workflow
+  attests `index.json` and every archive with GitHub's keyless artifact
+  attestations (`actions/attest`, as the other releases do), in the
+  `release-identity` environment, the only job with `id-token: write`.
+  `pull` verifies the Sigstore bundle (`index.sigstore.json`) with the
+  `sigstore` package (the `registry` extra), offline, against a pinned
+  trusted root and a pinned identity: issuer
+  `https://token.actions.githubusercontent.com`, SAN
+  `https://github.com/OpenAdaptAI/OpenAdapt/.github/workflows/release-registry.yml@refs/tags/registry-*`
+  and that source repository. The statement must name the sha256 of the
+  index that was read and of the archive pulled. There is no signing key,
+  no entry signature and no separate Rekor anchor: the attestation is
+  already in Rekor. `pull --refresh-trust` updates the trusted root through
+  Sigstore's TUF repository. A local test signer stands in for an index you
+  are authoring, and only with `--allow-test-key` on the local disk.
+- **Where it lives.** The attested index stays in `packages/flow/registry/`.
   Bundles are release assets on OpenAdaptAI/OpenAdapt under a `registry-*`
   tag, published by the reviewed release workflow. An entry's `archive` pins
   the asset's URL and sha256, and `pull` checks the archive, extracts only
@@ -145,7 +153,7 @@ AGPL entry is published.
   `full_contract` pins its URL and sha256. `skill qualify` fetches it with the
   bearer token in `OPENADAPT_REGISTRY_TOKEN` (never a variable the entry
   names), only from an https host the package names
-  (`registry.PRIVATE_TIER_HOSTS`), size-capped, checks it against the signed
+  (`registry.PRIVATE_TIER_HOSTS`), size-capped, checks it against the attested
   entry, and keeps it beside the bundle, never in it. Without a token it qualifies with the public minimal contract and
   says so. `verifier_score` publishes only the counts and the private suite's
   sha256. The index validator and a repository test refuse any private-tier
@@ -171,14 +179,13 @@ AGPL entry is published.
   - every `${NAME}` is a declared variable.
 
   Expansion then uses the binding alone, never `os.environ`.
-- **The signature checks can't be switched off.** `--allow-unsigned` applies
-  only to an index on the local disk. There is no test-key flag, and the
-  shipped trust root holds no key whose seed is public.
-- **Rollback and freeze.** The index as a whole is signed, with `issued_at`,
+- **The checks can't be switched off for a remote index.** `--allow-unsigned`
+  and `--allow-test-key` apply only to an index on the local disk, and no
+  error suggests either.
+- **Rollback and freeze.** The attested index carries `issued_at`,
   `expires_at` (30 days) and a `serial`. `pull` refuses an expired index and
   a serial lower than the highest seen for that index
-  (`$OPENADAPT_HOME/registry-state.json`). A remote index must have a Rekor
-  anchor.
+  (`$OPENADAPT_HOME/registry-state.json`).
 - **Stripping the provenance.** `pull` records the program's steps digest in
   `$OPENADAPT_HOME/pulled.json`. A bundle without provenance whose steps
   match is refused until it carries a current certification on a named
@@ -196,5 +203,5 @@ AGPL entry is published.
   entry lists, or the `NOTICE`.
 - **Lower.** Public bundle files are an allowlist. Screen templates need the
   entry's `screens.data: synthetic` attestation. Versions order as semver (a
-  pre-release before its release). The signing job installs only
-  hash-pinned wheels.
+  pre-release before its release). The attest job checks its own
+  attestation using only hash-pinned wheels.

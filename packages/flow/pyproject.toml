@@ -127,6 +127,8 @@ dev = [
     # Browser tests remain part of the full development matrix even though the
     # published base runtime no longer installs Playwright for non-web users.
     "playwright>=1.44",
+    # The registry's Sigstore attestation tests; see the `registry` extra.
+    "sigstore>=4.5,<5",
 ]
 grounder = ["anthropic>=0.40"]
 # PRIMARY grounding rung: OCR text-anchoring via openadapt-grounding
@@ -197,6 +199,10 @@ linux = [
 # (legacy EMR over RDP). Lazily imported by AardwolfTransport — never
 # needed for the mock-tested adapter, only for the real/live transport.
 rdp = ["aardwolf==0.2.14"]
+# `pull` from the skills registry: verifies the release workflow's Sigstore
+# attestation of the index (openadapt_flow.registry_attest), offline against
+# the pinned trusted root. Only `pull` of a remote index needs it.
+registry = ["sigstore>=4.5,<5"]
 # PHI/PII scrubbing on persist/log paths (Presidio-backed). Optional: the
 # runtime imports openadapt_flow.privacy unconditionally, but it degrades to a
 # no-op when this extra is absent (OPENADAPT_FLOW_SCRUB=auto). A regulated

@@ -3,23 +3,21 @@
     python scripts/build_registry_index.py            # write the committed index
     python scripts/build_registry_index.py --check    # fail when it is stale
     python scripts/build_registry_index.py --archives DIR --asset-base URL --out PATH
-    python scripts/build_registry_index.py --sign PATH
+    python scripts/build_registry_index.py --archives DIR --asset-base URL --out PATH --stamp
 
 ``--archives`` writes each bundle as a reproducible ``.tar.gz`` into DIR and
 points its entry at ``<URL><name>`` (the registry release's assets).
-Each archive carries a NOTICE naming the app's license. ``--sign`` signs
-every entry of the index at PATH, stamps ``issued_at``, ``expires_at`` and
-``serial``, and signs the index as a whole, in place, with the seed in the
-file named by ``OPENADAPT_REGISTRY_SIGNING_SEED`` and the key id in
-``OPENADAPT_REGISTRY_KEY_ID``. Only the registry release workflow does that,
-in its protected environment; the seed never lives in this repository.
+Each archive carries a NOTICE naming the app's license. ``--stamp`` writes
+``issued_at``, ``expires_at`` and ``serial`` into the index. The registry
+release workflow does that, then attests the index and the archives with
+GitHub's keyless artifact attestations (``actions/attest``); there is no
+signing key.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -33,7 +31,7 @@ from openadapt_flow.registry import (  # noqa: E402
     build_archive,
     build_entry_files,
     license_notice,
-    sign_index,
+    stamp_index,
     validate_index,
 )
 
@@ -57,39 +55,28 @@ def build(archives: Optional[Path] = None, asset_base: Optional[str] = None) -> 
     return sources
 
 
-def sign(path: Path) -> None:
-    seed = Path(os.environ["OPENADAPT_REGISTRY_SIGNING_SEED"]).read_bytes()
-    key_id = os.environ["OPENADAPT_REGISTRY_KEY_ID"]
-    index = json.loads(path.read_text())
-    sign_index(index, seed, key_id)
-    validate_index(index)
-    path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--archives", type=Path)
     parser.add_argument("--asset-base")
     parser.add_argument("--out", type=Path)
-    parser.add_argument("--sign", type=Path)
+    parser.add_argument("--stamp", action="store_true")
     args = parser.parse_args()
-    if args.sign:
-        sign(args.sign)
-        return 0
     if args.archives:
         args.archives.mkdir(parents=True, exist_ok=True)
     out = args.out or ROOT / "registry/index.json"
     index = build(args.archives, args.asset_base)
+    if args.stamp:
+        stamp_index(index)
     text = json.dumps(index, indent=2, sort_keys=True) + "\n"
     if args.check:
         committed = json.loads(out.read_text())
-        # The release workflow adds the signatures, the freshness fields and
-        # each entry's archive.
-        for field in (*INDEX_FRESHNESS_FIELDS, "signature"):
+        # The release workflow adds the freshness fields and each entry's
+        # archive.
+        for field in INDEX_FRESHNESS_FIELDS:
             committed.pop(field, None)
         for item in committed["workflows"]:
-            item.pop("signature", None)
             item.pop("archive", None)
         if committed != index:
             print("registry/index.json is stale; run scripts/build_registry_index.py")
