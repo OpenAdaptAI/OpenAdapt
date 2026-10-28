@@ -792,3 +792,34 @@ def diff(
         if moved.added or moved.removed or moved.changed or moved.unread:
             out[name] = moved
     return out
+
+
+def same_state(a: Snapshot, b: Snapshot, key: bytes) -> bool:
+    """Do two reads taken after the save show the same database? Compared on
+    what the frame judges: code, definitions, counts, counters, rows (by
+    MAC), bucket digests, and the rows read in full."""
+
+    if a.objects != b.objects or set(a.tables) != set(b.tables):
+        return False
+    for name, x in a.tables.items():
+        y = b.tables[name]
+        if (x.mode, x.schema, x.count, x.counter, x.max_key) != (
+            y.mode,
+            y.schema,
+            y.count,
+            y.counter,
+            y.max_key,
+        ):
+            return False
+        if (x.rows, x.buckets, x.digest) != (y.rows, y.buckets, y.digest):
+            return False
+
+        def macs(t: Table) -> dict[str, str]:
+            return {
+                k: "".join(cell_hash(key, v.get(c)) for c in t.columns)
+                for k, v in t.values.items()
+            }
+
+        if macs(x) != macs(y):
+            return False
+    return True

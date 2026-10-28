@@ -256,9 +256,10 @@ class FrameDatabase(BaseModel):
     #: Over this many rows a table is digested by key bucket: its existing
     #: rows by digest, the rows the save adds in full.
     max_rows: int = Field(default=20000, ge=1)
-    #: Seconds to wait after the save before the read, so writes the app
-    #: makes a moment later (background jobs) fall inside the window.
-    settle_s: float = Field(default=0.0, ge=0)
+    #: Seconds between the two reads after the save. They must match: a
+    #: write the app makes a moment later (a background job) shows as a
+    #: difference, and the frame is not checked until the database settles.
+    settle_s: float = Field(default=1.0, ge=0)
 
     @model_validator(mode="before")
     @classmethod
