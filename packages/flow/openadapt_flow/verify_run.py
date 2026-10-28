@@ -770,6 +770,9 @@ def _excuse_attributed_additions(
         for c in frame.concurrent
         if c.change == "added" and c.key is not None
     }
+    # When a database table is judged in place of the surface it holds, the
+    # frame names those additions as the surface does.
+    excused |= set(getattr(frame, "added_by_others", ()))
     if not excused:
         return
 

@@ -374,6 +374,9 @@ class FrameVerdict:
     #: ``frame.database`` only: tables compared, append-only and skipped,
     #: and the allow-list's digest.
     database: Optional[dict[str, Any]] = None
+    #: In memory only: (surface, identity) of records another actor added,
+    #: as their surface names them, when a table is judged in its place.
+    added_by_others: set[tuple[str, str]] = field(default_factory=set)
 
     @property
     def held(self) -> bool:
@@ -764,6 +767,8 @@ def judge_frame(
 
     collateral: list[FrameChange] = []
     concurrent: list[FrameChange] = []
+    added_by_others: set[tuple[str, str]] = set()
+    views_of = dict(database.views) if database is not None else {}
     declared_keys: set[str] = set()
     compared = 0
 
@@ -801,10 +806,15 @@ def judge_frame(
             collateral.append(change)
 
     # Side records: the links each new declared record gives its side rows.
+    # A new record another actor created gives its side rows the same way:
+    # those rows are that actor's too (OpenEMR logs a contact row with no
+    # patient, so only its link to the colleague's chart attributes it).
     side_links: list[set[str]] = []
+    other_links: list[set[str]] = []
     side_found: list[dict[str, int]] = []
     for side in spec.side_records:
         links: set[str] = set()
+        theirs: set[str] = set()
         before_state, after_records = slices.get(side.of_surface, (None, None))
         if before_state is not None and after_records is not None:
             sels = selectors_for(side.of_surface)
@@ -812,11 +822,20 @@ def judge_frame(
             for record in after_records:
                 if key_of(record, side.of_surface) in old:
                     continue
+                value = record.get(side.of_field)
+                if value in (None, ""):
+                    continue
                 if any(record_matches(dict(record), s) for s in sels):
-                    value = record.get(side.of_field)
-                    if value not in (None, ""):
-                        links.add(str(value))
+                    links.add(str(value))
+                elif (
+                    attribute(
+                        side.of_surface, key_of(record, side.of_surface), None, record
+                    )
+                    == "other"
+                ):
+                    theirs.add(str(value))
         side_links.append(links)
+        other_links.append(theirs - links)
         side_found.append({link: 0 for link in links})
 
     for name, (before_state, after_records) in slices.items():
@@ -964,15 +983,24 @@ def judge_frame(
                     declared_keys.add(str(ref_of(name, key, None, after)[0]))
                     new_row(name, key, after, (side.link_field,))
                     continue
-                note(
-                    FrameChange(
-                        name,
-                        "added",
-                        attribute(name, key, None, after),
-                        sorted(_without(after, ignore_for(name))),
-                        key=key,
-                    )
+                theirs = any(
+                    side.surface == name
+                    and str(after.get(side.link_field)) in other_links[i]
+                    for i, side in enumerate(spec.side_records)
                 )
+                change = FrameChange(
+                    name,
+                    "added",
+                    "other" if theirs else attribute(name, key, None, after),
+                    sorted(_without(after, ignore_for(name))),
+                    key=key,
+                )
+                note(change)
+                view = views_of.get(name)
+                if change.attribution == "other" and view and spec.identity_field:
+                    # The same record as its surface names it, for checks
+                    # that read the surface (an exact_new_set's additions).
+                    added_by_others.add((view, str(after.get(spec.identity_field))))
             elif after is None and before is not None:
                 note(
                     FrameChange(
@@ -1038,6 +1066,7 @@ def judge_frame(
         collateral=collateral,
         concurrent=concurrent,
         database=database_evidence,
+        added_by_others=added_by_others,
     )
     verdict.reason = _reason(verdict)
     return verdict
