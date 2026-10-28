@@ -358,14 +358,15 @@ def bound_fields(effects: Any) -> dict[str, str]:
     return out
 
 
-def bound_maps(effects: Any) -> dict[str, dict[str, str]]:
-    """Parameter name -> the value map its field declares (label -> code)."""
+def bound_maps(effects: Any) -> dict[str, Any]:
+    """Parameter name -> the value expression that says how its field stores
+    what was entered: a label's code (``map``), a stored form (``stored``)."""
 
-    out: dict[str, dict[str, str]] = {}
+    out: dict[str, Any] = {}
     for effect in effects:
         value = getattr(effect, "value", None)
-        if value is not None and value.param and value.map:
-            out.setdefault(value.param, dict(value.map))
+        if value is not None and value.param and (value.map or value.stored):
+            out.setdefault(value.param, value)
     return out
 
 
@@ -375,7 +376,7 @@ def round_trip(
     fields: Mapping[str, str],
     documents: Mapping[str, Any],
     second: Extractor,
-    maps: Optional[Mapping[str, Mapping[str, str]]] = None,
+    maps: Optional[Mapping[str, Any]] = None,
 ) -> RoundTrip:
     """Compare ``record`` (as read back) with the source of each value.
 
@@ -413,8 +414,13 @@ def round_trip(
         mapping = (maps or {}).get(name)
         if mapping is not None and source_value is not None:
             # The document shows the label, the record stores its code (a
-            # state's name and "MA", a provider's name and their id).
-            source_value = mapping.get(source_value.strip())
+            # state's name and "MA", a provider's name and their id), or a
+            # stored form (a street in capitals).
+            source_value = (
+                mapping.get(source_value.strip())
+                if isinstance(mapping, Mapping)
+                else mapping.stored_form(source_value.strip())
+            )
         stored = "" if record.get(record_field) is None else str(record[record_field])
         if source_value is None:
             checks.append(FieldCheck(name, "missing", stored))
