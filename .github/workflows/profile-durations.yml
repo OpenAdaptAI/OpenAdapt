@@ -62,6 +62,7 @@ jobs:
       - name: Test with timings
         run: |
           set +e
+          mkdir -p runs
           mapfile -t files < "$RUNNER_TEMP/files.txt"
           start=$(date +%s)
           pytest -n auto --dist loadfile -q -p no:cacheprovider --basetemp=runs/ci \
