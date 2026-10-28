@@ -420,9 +420,15 @@ def judge_frame(
 
         if attribution is None or not attribution.record_key:
             return key
-        record = after if after is not None else before
-        value = None if record is None else record.get(attribution.record_key)
-        return None if value in (None, "") else str(value)
+        values = {
+            None if v in (None, "") else str(v)
+            for v in (
+                r.get(attribution.record_key) for r in (before, after) if r is not None
+            )
+        }
+        # A record moved to another ``record_key`` (a note refiled to another
+        # patient) names neither: no entry can explain it.
+        return values.pop() if len(values) == 1 else None
 
     def other_on_target(
         key: Any,
@@ -496,6 +502,8 @@ def judge_frame(
     collateral: list[FrameChange] = []
     concurrent: list[FrameChange] = []
     declared_keys: set[str] = set()
+    #: ``record_key`` only: what an audit entry names for each compared record.
+    refs: dict[tuple[str, str], Optional[str]] = {}
     compared = 0
 
     def note(change: FrameChange) -> None:
@@ -521,12 +529,19 @@ def judge_frame(
         if before_state is not None and after_records is not None:
             sels = selectors_for(side.of_surface)
             old = {key_of(r) for r in before_state.records}
+            # A link an existing record already has is not a new record's: a
+            # side row for it belongs to that record's chart.
+            taken = {
+                str(r.get(side.of_field))
+                for r in before_state.records
+                if r.get(side.of_field) not in (None, "")
+            }
             for record in after_records:
                 if key_of(record) in old:
                     continue
                 if any(record_matches(dict(record), s) for s in sels):
                     value = record.get(side.of_field)
-                    if value not in (None, ""):
+                    if value not in (None, "") and str(value) not in taken:
                         links.add(str(value))
         side_links.append(links)
         side_found.append({link: 0 for link in links})
@@ -577,8 +592,16 @@ def judge_frame(
             is_declared = (before is not None and declared(before)) or (
                 after is not None and declared(after)
             )
+            ref = ref_of(key, before, after)
+            refs[(name, str(key))] = None if ref is None else str(ref)
             if is_declared:
-                declared_keys.add(str(ref_of(key, before, after)))
+                if ref is None:
+                    return _not_checked(
+                        "a declared record carries no record_key value (or it "
+                        "changed), so its log entries can't be matched",
+                        mode,
+                    )
+                declared_keys.add(str(ref))
                 if other_on_target(key, before, after):
                     # The saved value may not stand: never excused.
                     collateral.append(
@@ -626,7 +649,8 @@ def judge_frame(
                     # A side record of a new declared record: part of the save.
                     link = str(after.get(spec.side_records[side_index].link_field))
                     side_found[side_index][link] += 1
-                    declared_keys.add(str(ref_of(key, None, after)))
+                    if ref is not None:
+                        declared_keys.add(str(ref))
                     continue
                 note(
                     FrameChange(
@@ -674,7 +698,15 @@ def judge_frame(
             # the bot's own log entries can't be checked: say so.
             mode = "audit_read_unavailable"
         else:
-            moved = {str(c.key) for c in collateral + concurrent}
+            if attribution.record_key:  # type: ignore[union-attr]
+                # Compare like with like: entries name ``record_key`` values.
+                moved = {
+                    r
+                    for c in collateral + concurrent
+                    if (r := refs.get((c.surface, str(c.key)))) is not None
+                }
+            else:
+                moved = {str(c.key) for c in collateral + concurrent}
             for entry in window_entries:
                 actor = get_path(entry, attribution.actor_field)  # type: ignore[union-attr]
                 ref = get_path(entry, attribution.record_field or "")  # type: ignore[union-attr]
