@@ -323,6 +323,7 @@ def capture_database(
     allow_tables: Sequence[str] = (),
     max_rows: int = 2000,
     key: Optional[bytes] = None,
+    profile: Optional[str] = None,
 ) -> DatabaseSnapshot:
     """Snapshot every table of a database, in one read-only transaction.
 
@@ -332,8 +333,9 @@ def capture_database(
     (to read through ``podman exec``, say). It talks to the database over
     that connection only; no application code is imported. The snapshot
     holds keyed MACs, never values: ``key`` keys them (default: one key per
-    process). ``allow_tables`` are kept append-only. Raises
-    :class:`BaselineUnreadable`.
+    process). ``allow_tables`` are kept append-only. ``profile`` (``openemr``)
+    applies an app profile's bookkeeping rules, the same ones the frame uses
+    (``openadapt_flow.app_profiles``). Raises :class:`BaselineUnreadable`.
     """
 
     from openadapt_flow.verify_run import _db_connect
@@ -348,9 +350,22 @@ def capture_database(
             key=key or _PROCESS_KEY,
             modes=dict.fromkeys(allow_tables, "append_only"),
             max_rows=max_rows,
+            **_profile_args(profile),
         )
     except Exception as exc:  # noqa: BLE001 - any read failure is unreadable
         raise BaselineUnreadable(f"the database could not be read: {exc}") from exc
+
+
+def _profile_args(profile: Optional[str]) -> dict[str, Any]:
+    if profile is None:
+        return {}
+    from openadapt_flow.app_profiles import load_profile
+
+    p = load_profile(profile)
+    return {
+        "optional_modes": {t["table"]: t["mode"] for t in p.allow_tables()},
+        "ignore": p.ignore_columns(),
+    }
 
 
 def diff_database(

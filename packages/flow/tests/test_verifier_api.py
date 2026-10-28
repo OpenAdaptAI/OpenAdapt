@@ -207,6 +207,14 @@ def test_the_public_api_is_stable() -> None:
         ("authorization_ref", "KEYWORD_ONLY"),
         ("write_attempted", "KEYWORD_ONLY"),
     ]
+    assert [n for n in inspect.signature(capture_database).parameters] == [
+        "read",
+        "dialect",
+        "allow_tables",
+        "max_rows",
+        "key",
+        "profile",
+    ]
     assert [f for f in WriteResult.__dataclass_fields__] == [
         "verified",
         "status",
