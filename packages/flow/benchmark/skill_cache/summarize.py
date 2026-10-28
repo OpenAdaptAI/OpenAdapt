@@ -13,10 +13,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 
-def main(app: str) -> int:
+def main(app: str, sources: list[str]) -> int:
     rows = [
         json.loads(line)
-        for line in (HERE / "results" / app / "runs.jsonl").read_text().splitlines()
+        for source in sources
+        for line in Path(source).read_text().splitlines()
         if line.strip()
     ]
     first = [r for r in rows if r["path"] == "agent"]
@@ -61,10 +62,11 @@ def main(app: str) -> int:
         ],
     }
     out = HERE / "results" / app / "summary.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2))
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1]))
+    sys.exit(main(sys.argv[1], sys.argv[2:]))

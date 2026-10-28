@@ -1,8 +1,7 @@
-# Skill cache: run 1 by an agent, later runs by the compiled skill
+# Skill cache: run 1 by an agent, repeats by the compiled skill
 
-Measured on 2026-10-28 with `measure.py` in this folder, engine commit
-`7c7f36b1a2` (in this branch's history; later commits change no engine
-code), model `claude-sonnet-5-5`.
+Measured on 2026-10-28 with `measure.py` in this folder, model
+`claude-sonnet-5-5`.
 
 The agent is a LangGraph graph (`ToolNode`) on `ChatAnthropic`, with the
 skill cache's browser tools (`openadapt_flow.integrations.agents.skills`).
@@ -17,6 +16,11 @@ Run 1 goes through compile-agent:
 
 Runs 2 to 10 call that server's one tool over stdio, from a new process each
 time.
+
+**Scope:** every later run repeats the same task on the same record (Jane
+Sample's referral) with a new note. This measures repeats. It doesn't
+measure serving a task for another record: the cache treats that as a
+different task and sends it to the agent.
 
 ## MockMed (synthetic clinic app): 3 trials of 10 runs
 
@@ -50,49 +54,49 @@ How to read it:
   by compile-agent's record check, which read it before the canary.
 - Cost uses $2 per million input tokens, $10 output, $2.50 cache write and
   $0.20 cache read (`PRICES_PER_MTOK`). Token counts were nearly the same in
-  all three trials: $0.02243, $0.02241, $0.02232.
+  all three trials.
 - The host is shared. Its 1-minute load average was 14 to 34 during these
-  runs (in every row).
+  runs.
+- These runs predate the skill path's second record check (this task's own
+  record and values, which `SkillCache` now runs after every skill call).
+  The separate store read in the table checks the same thing.
 
-Files: `results/mockmed/runs.jsonl` holds one row per run, and
-`results/mockmed/summary.json` is computed from it by `summarize.py`. No row
-holds a typed value.
+`results/mockmed/summary.json` holds the aggregate. The per-run rows are kept
+as private evidence.
 
-## Trac 1.6 (open-source issue tracker): not reached past run 1
+## Trac 1.6 (open-source issue tracker): not past run 1
 
-Trac 1.6 (BSD license) was installed with pip into its own virtual
-environment and served by `tracd` on 127.0.0.1:9580 over SQLite. The contract
-reads Trac's own `ticket` table (`apps/trac.verify.yaml`).
+Trac 1.6 (BSD license) was installed with pip and served by `tracd` over
+SQLite. The contract reads Trac's own `ticket` table
+(`apps/trac.verify.yaml`).
 
-Run 1's write verified in Trac's database 7 times in 12 attempts. No attempt
-reached run 2: every program was refused or halted before it was admitted.
-The cause is in the engine, not the agent:
+Run 1's write verified in Trac's database in 7 of 12 attempts, but no program
+was admitted, so there is no repeat row. Every stop came before a wrong
+write:
 
-| Task and setup | What stopped it |
-| --- | --- |
-| Comment on an existing ticket | The save gate reads the form's visible text, and Trac's ticket form shows the summary only inside an input. The save was refused as unidentified. |
-| File a new ticket, on `main` | The save compiled without an identity, and `clinical-write` refused it. This is the create-new form case that #1581 addresses. |
-| File a new ticket, with #1581 merged locally | The identity was armed. `clinical-write` still requires an idempotency key, which Trac's form doesn't have. With the `permissive` policy: (1) the recorder named `<input type=submit value="Create ticket">` a textbox called "submit" (fixed on this branch); (2) Trac's radios named `action` shadow `form.action`, so #1581's submit guard cancelled every real submit (fix proposed to #1581); (3) after that fix, the durable checkpoint refused #1581's form-identity evidence ("verified identity evidence is only a status label") and the run raised. |
+- A comment on an existing ticket: the save check reads the form's visible
+  text, and Trac's ticket form shows the ticket's summary only inside an
+  input, so the save was refused as unidentified.
+- A new ticket: a create-new form shows no existing record, so the save
+  compiles without an identity, and `clinical-write` refuses it. That policy
+  also requires an idempotency key for a save, which Trac's form doesn't
+  have.
 
-Each of these stopped the run before a wrong write. None let an unverified
-write through. The attempt rows are in `results/trac-attempts/rows.jsonl`.
-The setup changed between attempts (task, policy, tools), so they are not
-trials of one configuration. Their spend was $0.35.
+The setup changed between the attempts (task, policy, tools), so they are not
+trials of one configuration.
 
 ## OpenEMR: not measured
 
-The OpenEMR fixture is shared through a lease queue, and this measurement was
-seventh in it. The local OpenEMR task (`benchmark/openemr_local`) registers a
-new patient, which is the same create-new form case that blocks Trac. It also
-needs OpenEMR's sign-in, which the skill cache doesn't yet pass to
-compile-agent.
+The local OpenEMR task (`benchmark/openemr_local`) registers a new patient.
+That is the create-new form case above, and it also needs OpenEMR's sign-in,
+which `SkillCache` doesn't pass to compile-agent.
 
 ## Reproduce
 
 ```bash
 set -a; source .env; set +a   # ANTHROPIC_API_KEY
 PYTHONPATH=. python benchmark/skill_cache/measure.py --app mockmed --runs 10 --trial 1 --work /tmp/skill-cache-1
-python benchmark/skill_cache/summarize.py mockmed
+python benchmark/skill_cache/summarize.py mockmed /tmp/skill-cache-1/runs.jsonl
 ```
 
 `measure.py` needs `openadapt-flow[dev,agent,langgraph]` and

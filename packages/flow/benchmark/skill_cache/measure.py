@@ -10,8 +10,9 @@ check against the system of record, the proposed checks confirmed through
 registered admitter key, then the emitted MCP server. Every later run calls
 that server's tool over stdio. Each row records the path, verified, model
 calls, tokens, cost and wall time, with the host's load average before and
-after. Rows go to ``results/<app>/runs.jsonl``; nothing in a row holds a
-typed value.
+after. Rows go to ``<work>/runs.jsonl`` (private evidence, not for this
+repository); nothing in a row holds a typed value. ``summarize.py`` turns
+them into the public ``results/<app>/summary.json``.
 
 Apps (see README.md for setting each one up):
 
@@ -275,8 +276,8 @@ def main() -> int:
     if "setup" in app:
         app.update(app.pop("setup")(args.work))
     reset = app.get("reset")
-    out = HERE / "results" / args.app
-    out.mkdir(parents=True, exist_ok=True)
+    # Per-run rows are private evidence: they stay with the work folder.
+    out = args.work
     key_dir = args.work / "keys"
     offered: list[str] = []
 

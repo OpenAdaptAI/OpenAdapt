@@ -15,8 +15,9 @@ right record is on screen before every save. Run 1 goes through
 3. Canary runs with new values, then admission by a registered admitter.
 4. The program is emitted as an MCP server with one tool.
 
-Every later call with the same task (``prompt`` and ``task_id``) runs that
-tool: no model calls, each save read back, and a verify-run receipt. ::
+Every later call with the same task, on the same record, runs that tool: no
+model calls, each save read back twice (see :class:`SkillCache`), and a
+verify-run receipt. ::
 
     cache = SkillCache(url=..., verify="verify.yaml", expect=..., on_screen=...,
                        offer=ask_a_person, admitter=..., canary_params=[...])
@@ -29,6 +30,7 @@ tool: no model calls, each save read back, and a verify-run receipt. ::
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import queue
 import sys
@@ -236,7 +238,10 @@ class SkillRun:
 
     ``path`` is ``agent`` (run 1, compiled when verified and admitted) or
     ``skill`` (the compiled program through MCP). ``verified`` is true only
-    when the system of record shows the task's record.
+    when the system of record shows the record this task names, with its
+    values. ``wire_checked`` says whether the run's writes were also checked
+    before they left (compile-agent's write adapter): run 1 only, and only
+    with ``write_adapter``.
     """
 
     path: str
@@ -246,11 +251,18 @@ class SkillRun:
     cost_usd: float
     seconds: float
     detail: Optional[str] = None
+    wire_checked: bool = False
     compile: dict[str, Any] = field(default_factory=dict)
     replay: dict[str, Any] = field(default_factory=dict)
+    record_check: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return dict(self.__dict__)
+
+
+#: Where skills are kept unless ``cache_dir`` says otherwise: per user.
+DEFAULT_CACHE_DIR = "~/.openadapt/skills"
+_KEY_FILE = "skill-key.json"
 
 
 class SkillCache:
@@ -263,6 +275,16 @@ class SkillCache:
     (the customer's key the framework's model runs on) and ``reset`` (tests
     only). ``offer`` is ``confirm_checks``: it gets the proposed checks and
     returns who confirmed them, or None to keep the run a draft.
+
+    A skill is reused only for the same task: the same instruction,
+    parameter names, ``expect``, ``on_screen``, ``url``, ``verify.yaml``
+    contents, policy and ``environment`` (name the app's version or
+    deployment there, so a changed app compiles again). Every skill run is
+    checked twice in the system of record: by the program's own confirmed
+    checks (its receipt) and by this task's record check, the one run 1
+    passed: exactly one new record, with this task's ``expect`` fields and
+    values. A skill run that fails either is evicted, and the next run of
+    the task goes to the agent again.
     """
 
     def __init__(
@@ -277,23 +299,25 @@ class SkillCache:
         admitter: Any = None,
         person: Optional[str] = None,
         drop_fields: Sequence[str] = (),
-        cache_dir: Union[str, Path] = ".openadapt-skills",
+        cache_dir: Union[str, Path] = DEFAULT_CACHE_DIR,
         key_dir: Optional[Union[str, Path]] = None,
         model_key: Any = None,
         reset: Optional[Callable[[], None]] = None,
+        environment: str = "",
         python: str = sys.executable,
         **compile_options: Any,
     ) -> None:
         self.common: dict[str, Any] = dict(
             url=url,
             verify=verify,
-            expect=expect,
+            expect=dict(expect),
             on_screen=list(on_screen),
-            cache_dir=cache_dir,
+            cache_dir=Path(cache_dir).expanduser().resolve(),
             key_dir=key_dir,
             reset=reset,
             **compile_options,
         )
+        self.environment = environment
         self.offer = offer
         self.canary_params = [dict(row) for row in canary_params]
         self.admitter = admitter
@@ -302,45 +326,120 @@ class SkillCache:
         self.model_key = model_key
         self.python = python
 
+    # -- which skill ---------------------------------------------------------
+
+    def key(self, prompt: str, params: Mapping[str, Any]) -> dict[str, Any]:
+        """Everything that names the task and its record, as stored with it."""
+
+        verify = Path(self.common["verify"])
+        return {
+            "instruction": prompt,
+            "params": sorted(params),
+            "expect": {str(k): str(v) for k, v in self.common["expect"].items()},
+            "on_screen": [str(s) for s in self.common["on_screen"]],
+            "url": str(self.common["url"]),
+            "verify_sha256": hashlib.sha256(verify.read_bytes()).hexdigest(),
+            "policy": str(self.common.get("policy", "clinical-write")),
+            "environment": self.environment,
+        }
+
     def _compiler(self, prompt: str, params: Mapping[str, Any]) -> Any:
         from openadapt_flow.compile_agent import FirstRunCompiler
 
-        common = {k: v for k, v in self.common.items() if k != "reset"}
-        return FirstRunCompiler(prompt, params=list(params), **common)
+        key = self.key(prompt, params)
+        digest = hashlib.sha256(
+            json.dumps(key, sort_keys=True).encode("utf-8")
+        ).hexdigest()[:16]
+        base = self.common.get("task_id") or "skill"
+        common = {k: v for k, v in self.common.items() if k not in ("reset", "task_id")}
+        compiler = FirstRunCompiler(
+            prompt, params=list(params), task_id=f"{base}-{digest}", **common
+        )
+        return compiler, key
 
     def server(self, prompt: str, params: Mapping[str, Any]) -> Optional[Path]:
         """The task's compiled MCP server, when it has an admitted one."""
 
-        compiler = self._compiler(prompt, params)
-        if not compiler._jit().admitted:
+        compiler, key = self._compiler(prompt, params)
+        return self._server(compiler, key)
+
+    def _server(self, compiler: Any, key: dict[str, Any]) -> Optional[Path]:
+        stored = compiler.dir / _KEY_FILE
+        if not compiler._jit().admitted or not stored.is_file():
+            return None
+        if json.loads(stored.read_text()) != key:
+            # Never serve a program compiled for another task or record.
             return None
         emitted = compiler.out_dir / "emitted.json"
         if not emitted.is_file():
             compiler.emit()
         return Path(json.loads(emitted.read_text())["mcp_server"])
 
+    def evict(self, prompt: str, params: Mapping[str, Any]) -> Optional[Path]:
+        """Set the task's skill aside (kept as evidence); None if it had none."""
+
+        compiler, _key = self._compiler(prompt, params)
+        return _set_aside(compiler)
+
+    # -- a task ----------------------------------------------------------------
+
     def run(self, prompt: str, params: Mapping[str, Any], agent: Any) -> SkillRun:
         started = time.monotonic()
-        server = self.server(prompt, params)
+        compiler, key = self._compiler(prompt, params)
+        server = self._server(compiler, key)
         if server is not None:
-            reply = asyncio.run(_call_skill(self.python, server, dict(params)))
-            return SkillRun(
-                path="skill",
-                status=str(reply.get("status")),
-                verified=bool(reply.get("verified")),
-                model_calls=int(reply.get("model_calls") or 0),
-                cost_usd=0.0,
-                seconds=round(time.monotonic() - started, 3),
-                detail=reply.get("detail") or reply.get("halt_reason"),
-                replay=reply,
-            )
-        return self._first_run(prompt, params, agent, started)
+            return self._skill_run(compiler, server, params, started)
+        return self._first_run(compiler, key, prompt, params, agent, started)
+
+    def _skill_run(
+        self, compiler: Any, server: Path, params: Mapping[str, Any], started: float
+    ) -> SkillRun:
+        from openadapt_flow.compile_agent import check_run_record
+
+        before = compiler.observer.system_of_record
+        reply = asyncio.run(_call_skill(self.python, server, dict(params)))
+        after = compiler.observer.system_of_record
+        check = check_run_record(
+            before,
+            after,
+            expect=self.common["expect"],
+            values={k: str(v) for k, v in params.items()},
+        )
+        verified = bool(reply.get("verified")) and check.passed
+        status = str(reply.get("status"))
+        detail = reply.get("detail") or reply.get("halt_reason")
+        if bool(reply.get("verified")) and not check.passed:
+            status = "RECORD_CHECK_FAILED"
+            detail = "; ".join(check.reasons)
+        if not verified:
+            # A halted or refuted skill is not served again: the next run of
+            # this task goes to the agent and compiles afresh.
+            _set_aside(compiler)
+        return SkillRun(
+            path="skill",
+            status=status,
+            verified=verified,
+            model_calls=int(reply.get("model_calls") or 0),
+            cost_usd=0.0,
+            seconds=round(time.monotonic() - started, 3),
+            detail=detail,
+            replay=reply,
+            record_check=check.to_dict(),
+        )
 
     def _first_run(
-        self, prompt: str, params: Mapping[str, Any], agent: Any, started: float
+        self,
+        compiler: Any,
+        key: dict[str, Any],
+        prompt: str,
+        params: Mapping[str, Any],
+        agent: Any,
+        started: float,
     ) -> SkillRun:
         from openadapt_flow.compile_agent import compile_first_run
 
+        common = dict(self.common)
+        common["task_id"] = compiler.task.task_id
         result = compile_first_run(
             prompt,
             params=dict(params),
@@ -351,8 +450,10 @@ class SkillCache:
             person=self.person,
             canary_params=self.canary_params,
             model_key=self.model_key,
-            **self.common,
+            **common,
         )
+        if result.admitted:
+            (compiler.dir / _KEY_FILE).write_text(json.dumps(key, sort_keys=True))
         agent_run = result.run1.get("agent") or {}
         check = result.record_check or {}
         return SkillRun(
@@ -364,8 +465,19 @@ class SkillCache:
             cost_usd=float(agent_run.get("cost_usd") or 0.0),
             seconds=round(time.monotonic() - started, 3),
             detail=result.detail,
+            wire_checked=self.common.get("write_adapter") is not None,
             compile=result.to_dict(),
+            record_check=check,
         )
+
+
+def _set_aside(compiler: Any) -> Optional[Path]:
+    if not compiler.dir.exists():
+        return None
+    target = compiler.cache_dir / "evicted" / f"{compiler.dir.name}-{time.time_ns()}"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    compiler.dir.rename(target)
+    return target
 
 
 async def _call_skill(python: str, server: Path, params: dict[str, Any]) -> dict:

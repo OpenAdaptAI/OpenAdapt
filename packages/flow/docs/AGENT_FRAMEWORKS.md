@@ -217,6 +217,27 @@ The first run goes through [compile-agent](COMPILE_AGENT.md):
 4. Canary runs with new values, then admission by your admitter key.
 5. The program is written out as an MCP server with one tool.
 
-Every later call with the same task runs that tool over MCP. Each save is
-read back, and the run gets a receipt. A run that doesn't end verified stops
-and goes to the exception inbox. It is never handed back to the agent.
+Every later call of the same task runs that tool over MCP. "The same task"
+means the same instruction, parameter names, `expect`, `on_screen`, `url`,
+`verify.yaml` contents, policy and `environment`. Pass `environment=` (the
+app's version or deployment) so a changed app compiles again. A task for
+another record is another task, and it goes to the agent.
+
+What each skill run has:
+
+- **The record check, twice.** The program's own confirmed checks give the
+  run its receipt. Then the cache reads the system of record again against
+  this task: exactly one new record, with this task's `expect` fields and
+  values.
+- **No wire check.** A skill run's writes are not checked before they leave
+  (`wire_checked` is false). Run 1 has one only when you pass
+  `write_adapter=`.
+- **A person.** A failed run is never handed back to the agent. When the
+  program stops, the run goes to the exception inbox. When only this task's
+  record check fails, the result is `RECORD_CHECK_FAILED` with the check's
+  reasons, for a person to look at the record.
+
+A skill that fails a run is evicted: it moves to `<cache_dir>/evicted/`, and
+the next run of the task goes to the agent and compiles afresh.
+`cache.evict(prompt, params)` does the same by hand. Skills live in
+`~/.openadapt/skills` unless you pass `cache_dir=`.

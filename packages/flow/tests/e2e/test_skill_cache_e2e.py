@@ -233,3 +233,94 @@ def test_a_wrong_patient_is_refused_and_not_cached(
     assert not first.verified and offered == []
     assert _records(mockmed) == []
     assert cache.server(PROMPT, {"note": NOTE}) is None
+
+
+P_JANE = "Open the referral and save a Triage note for Jane Sample: {note}"
+P_ALEX = "Open the referral and save a Triage note for Alex Testcase: {note}"
+
+
+def _for_alex(jane: SkillCache) -> SkillCache:
+    common = {k: v for k, v in jane.common.items()}
+    common.update(
+        expect={"patient_id": "p2", "type": "Triage"},
+        on_screen=["Alex Testcase", "MRN P2"],
+    )
+    return SkillCache(
+        **common,
+        offer=jane.offer,
+        admitter=jane.admitter,
+        canary_params=jane.canary_params,
+        drop_fields=jane.drop_fields,
+        model_key=jane.model_key,
+    )
+
+
+def test_a_skill_never_serves_another_record(
+    mockmed: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The review's probe: another patient's task on the same cache."""
+
+    reset = lambda: _http_json(f"{mockmed}/api/reset", method="POST", body={})  # noqa: E731
+    reset()
+    jane = _cache(tmp_path, mockmed, monkeypatch, [])
+    jane.common.pop("task_id")
+    first = jane.run(
+        P_JANE,
+        {"note": "Jane note"},
+        _agent(ScriptedChat(patient="Jane Sample", note="Jane note")),
+    )
+    assert first.status == "admitted", first.detail
+    assert jane.server(P_JANE, {"note": "x"}) is not None
+
+    # Alex's task is another task: it goes to the agent and lands on p2.
+    reset()
+    alex = _for_alex(jane)
+    alex_chat = ScriptedChat(patient="Alex Testcase", note="Alex note")
+    second = alex.run(P_ALEX, {"note": "Alex note"}, _agent(alex_chat))
+    assert second.path == "agent" and alex_chat.calls > 0
+    # Its own record check (one new record with patient_id p2) passed.
+    assert second.status == "admitted" and second.verified, second.detail
+    assert second.record_check["passed"] and second.record_check["created"] == 1
+
+    # Even a program served for Alex's task by a key collision is caught:
+    # this task's record check fails, and the program is evicted.
+    reset()
+    poisoned = _for_alex(jane)
+    jane_key = jane.key(P_JANE, {"note": "x"})
+    monkeypatch.setattr(poisoned, "key", lambda prompt, params: jane_key)
+    served = poisoned.run(
+        P_JANE,
+        {"note": "Alex again"},
+        _agent(ScriptedChat(patient="Alex Testcase", note="x")),
+    )
+    assert served.path == "skill"
+    assert served.replay.get("verified") is True  # its own checks pass on p1
+    assert served.verified is False and served.status == "RECORD_CHECK_FAILED"
+    assert "wrong record" in (served.detail or "")
+    assert jane.server(P_JANE, {"note": "x"}) is None  # evicted
+    assert list((tmp_path / "cache" / "evicted").iterdir())
+
+
+def test_the_cache_is_per_user_by_default(tmp_path: Path) -> None:
+    verify = tmp_path / "verify.yaml"
+    verify.write_text("verifier: {}\n")
+    cache = SkillCache(
+        url="http://127.0.0.1:1/",
+        verify=verify,
+        expect={"patient_id": "p1"},
+        on_screen=["Jane Sample"],
+        offer=lambda proposal: None,
+        canary_params=[{"note": "n"}],
+    )
+    assert cache.common["cache_dir"] == Path("~/.openadapt/skills").expanduser()
+    key = cache.key("Save {note}", {"note": "a"})
+    assert set(key) == {
+        "instruction",
+        "params",
+        "expect",
+        "on_screen",
+        "url",
+        "verify_sha256",
+        "policy",
+        "environment",
+    }
