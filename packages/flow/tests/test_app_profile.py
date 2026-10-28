@@ -254,3 +254,23 @@ def test_a_clean_run_lists_only_the_rules_it_used(tmp_path: Path) -> None:
     assert _frame(result) == "held"
     used = result["evidence"]["frame"]["database"]["profile"]["rules_used"]
     assert used == ["log"]
+
+
+def test_a_colleague_who_wrote_in_the_window_owns_their_ui_state(
+    tmp_path: Path,
+) -> None:
+    active = _x(
+        "INSERT INTO log (user, patient_id, event, tbl) "
+        "VALUES ('clinic2', 3, 'update', 'patient_data')",
+        "INSERT INTO user_settings VALUES (1, 'dem_expand', '1')",
+    )
+    assert _frame(_run(tmp_path / "a", active)) == "held"
+    idle = _x("INSERT INTO user_settings VALUES (1, 'dem_expand', '1')")
+    assert _frame(_run(tmp_path / "b", idle)) == "refuted"
+    # Credentials never widen: an active colleague's password still refutes.
+    password = _x(
+        "INSERT INTO log (user, patient_id, event, tbl) "
+        "VALUES ('clinic2', 3, 'update', 'patient_data')",
+        "UPDATE users_secure SET login_fail_counter = 3 WHERE username = 'clinic2'",
+    )
+    assert _frame(_run(tmp_path / "c", password)) == "refuted"
