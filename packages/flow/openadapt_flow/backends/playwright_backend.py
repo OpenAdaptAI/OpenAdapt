@@ -817,7 +817,11 @@ _FORM_EXPECTED_JS = (
             }
             pairs.push([name, String(el.value)]);
         }
-        const target = control.hasAttribute('formaction') ? control.formAction : form.action;
+        // A control named "action" or "method" (Trac's action radios)
+        // shadows form.action; read the form's own properties.
+        const formProp = (name) => Object.getOwnPropertyDescriptor(
+            HTMLFormElement.prototype, name).get.call(form);
+        const target = control.hasAttribute('formaction') ? control.formAction : formProp('action');
         let address = String(target);
         const query = [];
         try {
@@ -826,7 +830,7 @@ _FORM_EXPECTED_JS = (
             for (const [k, v] of url.searchParams) if (!exempt.has('?' + k)) query.push([k, v]);
         } catch (_) {}
         const method = String((control.hasAttribute('formmethod')
-            ? control.formMethod : form.method) || 'get').toLowerCase();
+            ? control.formMethod : formProp('method')) || 'get').toLowerCase();
         const order = (x, y) => (x[0] + '\u0000' + x[1]) < (y[0] + '\u0000' + y[1]) ? -1 : 1;
         pairs.sort(order);
         query.sort(order);

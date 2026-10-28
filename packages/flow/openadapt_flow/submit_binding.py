@@ -188,14 +188,20 @@ _OBSERVE_SUBMIT_BINDING_TEMPLATE = r"""(control, fields, baseline) => {
         let action = '';
         const query = [];
         try {
+            // A control named "action" or "method" (Trac's action radios)
+            // shadows form.action; read the form's own properties.
+            const formProp = (name) => Object.getOwnPropertyDescriptor(
+                HTMLFormElement.prototype, name).get.call(form);
             const target = submitter.hasAttribute('formaction')
-                ? submitter.formAction : form.action;
+                ? submitter.formAction : formProp('action');
             const url = new URL(target, doc.baseURI);
             action = url.origin + url.pathname;
             for (const [key, value] of url.searchParams) query.push([key, value]);
         } catch (_) {}
         const method = String((submitter.hasAttribute('formmethod')
-            ? submitter.formMethod : form.method) || 'get').toLowerCase();
+            ? submitter.formMethod : Object.getOwnPropertyDescriptor(
+                HTMLFormElement.prototype, 'method').get.call(form))
+            || 'get').toLowerCase();
         const controls = [];
         const values = [];
         // Hidden values that changed since the first field was filled in.
