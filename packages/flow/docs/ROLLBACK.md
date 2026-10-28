@@ -90,7 +90,8 @@ and the report says so.
    run. Every row the run touched must be back as it was. A `void`
    compensation may leave the run's own record, by its id, in the tables it
    declares (`retains`), and nowhere else. Every other row must match too,
-   apart from rows another user changed:
+   apart from rows another user changed and the app's own bookkeeping
+   (`rollback.profile`):
    - Nothing else differs: `ROLLED_BACK`. For a whole-database read with
      nothing set aside, the verifier's own `diff_database`
      (`openadapt_flow.verifier`) must agree, or the run isn't called rolled
@@ -135,10 +136,8 @@ rollback:
       sql_connect_args: {host: 127.0.0.1, user: readonly, database: app}
       sql_password_env: APP_READONLY_PASSWORD
     allow_tables: [log, sessions]   # tables the app writes on its own
-  ignore_columns:
-    "*": [modified_at]              # columns that change on their own
   allow_delete: false               # the default: no hard deletes
-  profile: openemr-frame-exclusions.yaml   # the app's own bookkeeping
+  profile: openemr                  # the app's own bookkeeping (app_profiles)
   attribution:                      # optional: who changed a row
     kind: record_field
     actor_field: modified_by
@@ -211,21 +210,21 @@ no compensation to run.
 ## The app's own bookkeeping: one profile per app
 
 Every app writes some rows on its own while a person is signed in: logs,
-session state, ids. A rollback must not count those as the run's, and must
-not excuse anything else. `rollback.profile` points at the app's versioned
-profile, the same file the verifier's frame and the RL grader use, so the
-three agree on what "the app's own" means. Each table gets the narrowest rule
-that holds:
+session state, ids. A rollback must not count those as the run's, and must not
+excuse anything else. `rollback.profile` names the app's versioned profile in
+`openadapt_flow.app_profiles` (`openemr`), the same profile the verifier's
+frame and the RL grader load, so all three agree on what "the app's own"
+means. The read applies it:
 
-| Rule | Allows |
+| Rule | What the read does |
 | --- | --- |
-| `append_only` | New rows. An existing row that changes or goes still counts. |
-| `session` | Any change (per-user or per-session state). |
-| `columns` | Changes to the named columns of existing rows; no rows added or removed. |
+| `append_only` | Reads the table; new rows are fine, and an existing row that changes or goes shows as a difference. |
+| `session` | Doesn't compare the table (per-user or per-session state), with the rule's reason recorded. |
+| `columns` | Leaves the named columns out of each row's comparison; any other change shows. |
 
-A profile can never name a patient-data table: it lists the patient-table
-prefixes, and loading refuses one that names such a table. The report records
-the profile's id and how many rows it excused (`profile_id`, `profile_rows`).
+A profile can't excuse patient data: a rule on a patient-data table may name
+only system columns, and loading refuses anything else. The report records the
+profile as `app/version` (`profile_id`).
 
 ## What this doesn't do
 
