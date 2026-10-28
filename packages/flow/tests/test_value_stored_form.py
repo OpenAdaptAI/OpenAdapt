@@ -51,3 +51,34 @@ def test_field_equals_expects_the_stored_capitals() -> None:
     assert verdict("41 LARCH WAY") == "confirmed"
     assert verdict("41 Larch Way") != "confirmed"  # exact: the stored form only
     assert verdict("14 LARCH WAY") != "confirmed"
+
+
+def test_the_stored_form_changes_ascii_letters_only() -> None:
+    # PHP's strtoupper (OpenEMR) leaves accented letters as they are.
+    upper = ValueExpr(param="street", stored="upper")
+    assert upper.resolve({"street": "12 Rue Café"}) == "12 RUE CAFé"
+    lower = ValueExpr(param="email", stored="lower")
+    assert lower.resolve({"email": "ÉLodie@Example.TEST"}) == "Élodie@example.test"
+
+
+def test_a_binding_comes_from_one_effect() -> None:
+    from openadapt_flow.provenance import bindings, bound_maps
+
+    city = {"param": "city", "stored": "upper"}
+    one = [
+        Effect(
+            kind=EffectKind.FIELD_EQUALS, match={"id": "1"}, field="city", value=city
+        )
+    ]
+    assert bindings(one)["city"][0] == "city"
+    assert bound_maps(one)["city"].stored == "upper"
+    # The same parameter written to two fields two ways: not compared.
+    two = one + [
+        Effect(
+            kind=EffectKind.FIELD_EQUALS,
+            match={"id": "1"},
+            field="town",
+            value={"param": "city"},
+        )
+    ]
+    assert "city" not in bindings(two)
