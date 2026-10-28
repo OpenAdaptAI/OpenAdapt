@@ -51,6 +51,18 @@ jobs:
 
       - name: Lint
         run: uv run ruff check openadapt_desktop/ tests/ scripts/
+      - name: Syntax at the oldest supported Python (3.11)
+        if: runner.os == 'Linux' && matrix.python-version == '3.12'
+        # The PR lane runs Python 3.12 only, so syntax that needs a newer
+        # Python than requires-python allows (a 3.12 f-string, say) passed it
+        # and failed only after merge. Check every file at the minimum.
+        # Bytecode goes to a temp directory, so later archive checks see a
+        # clean tree.
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
+        run: |
+          uv run ruff check --isolated --select E9 --target-version py311 .
+          uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
 
       - name: Run tests
         run: uv run pytest tests/ -v
@@ -96,6 +108,16 @@ jobs:
           tests/test_engine/test_dispatch.py::TestLibraryCommands::test_fresh_first_compile_creates_review_and_reaches_supervised_replay
           tests/test_engine/test_dispatch.py::TestLibraryCommands::test_uncertain_first_replay_requires_reconciliation_before_retry
           tests/test_engine/test_dispatch.py::TestLibraryCommands::test_completed_first_workflow_allows_exact_environment_on_draft_descendant
+          -v
+
+      # Unit tests fake the Flow bridge, so a flag Desktop sends that its
+      # bundled Flow doesn't know passes them all and fails every real run.
+      # Parse each command line Desktop builds with the bundled Flow's parser.
+      - name: Exercise the Desktop and Flow command-line contract
+        run: >-
+          uv run pytest
+          tests/test_flow_command_contract.py
+          tests/test_dependency_compat.py
           -v
 
       # The capture floor is only checkable where the bundled Flow runtime is
