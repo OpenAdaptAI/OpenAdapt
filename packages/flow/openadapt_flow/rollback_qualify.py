@@ -126,6 +126,12 @@ def _prefix(workflow: Workflow, end: int, undos: list[UndoStep]) -> Workflow:
     )
 
 
+def _kind_rank(undo: UndoStep) -> int:
+    from openadapt_flow.rollback import KIND_ORDER
+
+    return KIND_ORDER.index(undo.kind or "delete")
+
+
 def _as_approved(undo: UndoStep) -> UndoStep:
     """A candidate counted as approved inside the test copy only."""
     return undo.model_copy(update={"proposal": None})
@@ -141,6 +147,7 @@ def halt_point(
     bundle_dir: Path,
     run_dir: Path,
     ignore_columns: Optional[dict[str, list[str]]] = None,
+    allow_delete: bool = False,
 ) -> tuple[bool, str, Optional[RollbackRecord]]:
     """Reset, read, run steps ``[:end]``, roll back; did the store come back?"""
     try:
@@ -179,6 +186,7 @@ def halt_point(
         read_records=getattr(target, "read_records", None),
         ignore_columns=ignore_columns,
         assume_stopped=True,
+        allow_delete=allow_delete,
     )
     assert record is not None
     try:
@@ -218,9 +226,14 @@ def qualify_rollback(
     sources: Sources,
     work_dir: Optional[Path] = None,
     ignore_columns: Optional[dict[str, list[str]]] = None,
+    allow_delete: bool = False,
 ) -> tuple[QualifyReport, dict[str, tuple[Candidate, CandidateResult]]]:
     """Run the halt matrix; return the report and the new compensations that
-    passed (for :func:`openadapt_flow.undo_proposal.write_proposals`)."""
+    passed (for :func:`openadapt_flow.undo_proposal.write_proposals`).
+
+    Candidates are tried least destructive first (discard a draft, restore
+    old values, void, delete). A delete is tried only with ``allow_delete``.
+    """
     from openadapt_flow.after_stop import _has_loop
 
     if workflow.program is not None or _has_loop(workflow):
@@ -252,6 +265,7 @@ def qualify_rollback(
                 bundle_dir=bundle_dir,
                 run_dir=work / slug / "before",
                 ignore_columns=ignore_columns,
+                allow_delete=allow_delete,
             )
             report.halt_points.append(
                 HaltPoint(
@@ -270,6 +284,16 @@ def qualify_rollback(
             else:
                 candidates, notes = find_candidates(workflow, index, sources)
                 built = [c for c in candidates if c.undo is not None]
+                built.sort(key=lambda c: _kind_rank(c.undo))  # type: ignore[arg-type]
+                if not allow_delete:
+                    skipped = [c for c in built if _kind_rank(c.undo) >= 3]  # type: ignore[arg-type]
+                    built = [c for c in built if _kind_rank(c.undo) < 3]  # type: ignore[arg-type]
+                    if skipped:
+                        notes = [
+                            *notes,
+                            f"{len(skipped)} delete candidate(s) not tried: this "
+                            "deployment doesn't allow deletes (rollback.allow_delete)",
+                        ]
                 tries = [(c.undo, c.source, c) for c in built]  # type: ignore[misc]
                 if not tries:
                     report.halt_points.append(
@@ -302,6 +326,7 @@ def qualify_rollback(
                     bundle_dir=stage,
                     run_dir=work / slug / f"after-{n}",
                     ignore_columns=ignore_columns,
+                    allow_delete=allow_delete,
                 )
                 point = HaltPoint(
                     step_id=step.id,

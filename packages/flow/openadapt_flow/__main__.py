@@ -918,7 +918,7 @@ def _build_and_run_replayer(
     if api_steps_off_reason is not None:
         replayer.api_steps = False
         replayer.api_steps_off_reason = api_steps_off_reason
-    before = rollback_plan.arm() if rollback_plan is not None else None
+    before = rollback_plan.arm(dict(params)) if rollback_plan is not None else None
     report = replayer.run(
         workflow,
         params=params,

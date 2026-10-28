@@ -2147,6 +2147,17 @@ class UndoStep(BaseModel):
     #: Set by ``undo propose``: verified on a test copy, waiting for (or
     #: holding) a person's one-time approval. None for a declared undo.
     proposal: Optional[UndoProposal] = None
+    #: What the compensation does, least destructive first: ``discard_draft``
+    #: (drops an unsaved draft), ``restore`` (writes old values back),
+    #: ``void`` (marks the record void, cancelled or inactive; it stays),
+    #: ``delete`` (removes it). None is treated as ``delete``. A rollback runs
+    #: a ``delete`` only when the deployment allows hard deletes
+    #: (``rollback.allow_delete``). See docs/ROLLBACK.md.
+    kind: Optional[Literal["discard_draft", "restore", "void", "delete"]] = None
+    #: ``void`` only: the tables or collections where the voided record stays.
+    #: A rollback accepts the run's own record there, by its id, and nothing
+    #: else.
+    retains: list[str] = Field(default_factory=list)
 
     @property
     def awaiting_approval(self) -> bool:
@@ -2157,9 +2168,11 @@ class UndoStep(BaseModel):
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Keep declared undos byte-identical (the bundle digest covers them)."""
         data: dict[str, Any] = handler(self)
-        for name in ("locate", "restore", "proposal"):
+        for name in ("locate", "restore", "proposal", "kind"):
             if getattr(self, name) is None:
                 data.pop(name, None)
+        if not self.retains:
+            data.pop("retains", None)
         return data
 
     @model_validator(mode="after")
@@ -5025,8 +5038,16 @@ class RollbackRecord(BaseModel):
     final_sha256: Optional[str] = None
     #: What the stop left, against the read from before the run.
     after_stop_diff: dict[str, dict[str, Any]] = Field(default_factory=dict)
-    #: What still differs at the end (empty when rolled back).
+    #: What still differs at the end and isn't another actor's (empty when
+    #: rolled back).
     remaining_diff: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    #: Rows other actors changed during the run, set aside by attribution
+    #: (``rollback.attribution``). Without attribution, none are set aside.
+    other_actor_rows: int = 0
+    #: Rows the run touched that another actor also changed: not compensated.
+    conflicts: int = 0
+    #: Voided records left in place by a ``void`` compensation.
+    retained_rows: int = 0
     #: Run-directory-relative path of the full diff, when anything remains.
     diff_path: Optional[str] = None
     steps: list[RollbackStepRecord] = Field(default_factory=list)

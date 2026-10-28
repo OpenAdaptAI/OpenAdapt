@@ -58,6 +58,7 @@ def test_matrix_qualifies_a_compensation_for_every_save_on_mockmed(tmp_path, moc
         reader=VerifierReader(RestRecordVerifier(mockmed)),
         sources=Sources(network_lines=_network()),
         work_dir=tmp_path / "work",
+        allow_delete=True,
     )
     points = [(p.step_id, p.when, p.passed) for p in report.halt_points]
     assert points == [
@@ -191,7 +192,7 @@ def _delete_recording(tmp_path: Path) -> Path:
     return path
 
 
-def _qualify_clinic(tmp_path: Path, **copy_kwargs):
+def _qualify_clinic(tmp_path: Path, *, allow_delete: bool = True, **copy_kwargs):
     db = tmp_path / "clinic.db"
     target = ClinicCopy(db, **copy_kwargs)
     target.reset()
@@ -208,6 +209,7 @@ def _qualify_clinic(tmp_path: Path, **copy_kwargs):
         reader=reader,
         sources=Sources(recordings=[_delete_recording(tmp_path)]),
         work_dir=tmp_path / "work",
+        allow_delete=allow_delete,
     )
 
 
@@ -250,3 +252,11 @@ def test_cli_refuses_a_target_not_declared_a_test_copy(tmp_path, capsys):
     config.write_text("name: prod\nbackend:\n  kind: web\n  url: http://127.0.0.1:9\n")
     assert main(["rollback", "qualify", str(bundle), "--config", str(config)]) == 3
     assert "declared test copy" in capsys.readouterr().err
+
+
+def test_matrix_never_tries_a_delete_the_deployment_does_not_allow(tmp_path):
+    report, new = _qualify_clinic(tmp_path, allow_delete=False)
+    after = report.halt_points[-1]
+    assert after.when == "after_save" and not after.passed
+    assert "rollback.allow_delete" in after.reason
+    assert new == {}

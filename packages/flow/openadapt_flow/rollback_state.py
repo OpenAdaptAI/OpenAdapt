@@ -285,7 +285,174 @@ def diff_states(
     return out
 
 
+def keep_rows(diff: StateDiff, rows: Sequence[Any]) -> StateDiff:
+    """``diff`` limited to the rows in ``rows`` (``Change`` tuples)."""
+    wanted = {(t, k) for t, k, *_rest in rows}
+    out = StateDiff(ignored_columns=dict(diff.ignored_columns))
+    for t in diff.tables:
+        kept = TableDiff(
+            table=t.table,
+            unread=t.unread if (t.table, UNREAD_KEY) in wanted else None,
+        )
+        kept.added = [r for r in t.added if (t.table, str(r[KEY])) in wanted]
+        kept.removed = [r for r in t.removed if (t.table, str(r[KEY])) in wanted]
+        kept.changed = [c for c in t.changed if (t.table, c[0]) in wanted]
+        out.tables.append(kept)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Who changed a row: the frame's attribution, applied to a rollback
+# ---------------------------------------------------------------------------
+
+#: The row key of a table whose rows couldn't be compared.
+UNREAD_KEY = "*unread*"
+
+#: ``(table, row key, row before, row after)``; a side is None when the row
+#: was added or removed.
+Change = tuple[str, str, Optional[dict[str, Any]], Optional[dict[str, Any]]]
+
+
+def changes(diff: StateDiff) -> list[Change]:
+    """Every row that moved, one entry per row."""
+    out: list[Change] = []
+    for t in diff.tables:
+        if t.unread:
+            # Rows can't be compared (fingerprinted, or the table changed
+            # shape): one change nothing can attribute.
+            out.append((t.table, UNREAD_KEY, None, None))
+        out += [(t.table, str(r[KEY]), None, r) for r in t.added]
+        out += [(t.table, str(r[KEY]), r, None) for r in t.removed]
+        out += [(t.table, key, before, after) for key, before, after, _c in t.changed]
+    return out
+
+
+class Attributor:
+    """Says who changed a row, with ``frame.attribution`` settings.
+
+    The same two sources ``verify-run``'s frame uses: ``audit_read`` (the
+    app's audit log, read before the run and again later; the entries in
+    between are the window) or ``record_field`` (each record carries its last
+    modifier, a field only the server sets). A row nothing attributes is
+    ``unattributed`` and counts as the run's: a rollback never sets aside a
+    change it can't explain.
+    """
+
+    def __init__(
+        self,
+        spec: Any,
+        *,
+        self_actors: set[str],
+        audit_read: Optional[Any] = None,
+    ) -> None:
+        self.spec = spec
+        self.self_actors = {str(a) for a in self_actors}
+        self.audit_read = audit_read
+        self._before: Optional[list[dict[str, Any]]] = None
+
+    @classmethod
+    def from_spec(
+        cls, spec: Any, params: Mapping[str, Any], audit_read: Optional[Any] = None
+    ) -> Optional["Attributor"]:
+        from openadapt_flow.runtime.effects.frame import _resolve_self
+
+        actors = _resolve_self(spec, params)
+        if actors is None:
+            return None
+        return cls(spec, self_actors=actors, audit_read=audit_read)
+
+    def start(self) -> None:
+        """Read the audit log before the run (``audit_read`` only)."""
+        if self.spec.kind == "audit_read" and self.audit_read is not None:
+            self._before = self.audit_read()
+
+    def window(self) -> Optional[list[dict[str, Any]]]:
+        """Audit entries since :meth:`start`; None when either read failed."""
+        if self.spec.kind != "audit_read" or self.audit_read is None:
+            return None
+        if self._before is None:
+            return None
+        after = self.audit_read()
+        if after is None:
+            return None
+        from openadapt_flow.runtime.effects.effect import stable_id
+
+        seen = {stable_id(e) for e in self._before}
+        return [e for e in after if stable_id(e) not in seen]
+
+    def _ref(self, table: str, key: str, before, after) -> Optional[str]:  # type: ignore[no-untyped-def]
+        field = self.spec.record_keys.get(table, self.spec.record_key)
+        if not field:
+            return key
+        record = after if after is not None else before
+        value = None if record is None else record.get(field)
+        return None if value in (None, "") else str(value)
+
+    def _actors(
+        self, ref: Optional[str], window: Optional[list[dict[str, Any]]]
+    ) -> set[str]:
+        from openadapt_flow.runtime.effects.frame import get_path
+
+        if ref is None or window is None:
+            return set()
+        return {
+            str(get_path(e, self.spec.actor_field))
+            for e in window
+            if str(get_path(e, self.spec.record_field or "")) == ref
+            and get_path(e, self.spec.actor_field) not in (None, "")
+        }
+
+    def attribute(self, change: Change, window: Optional[list[dict[str, Any]]]) -> str:
+        """``self``, ``other`` or ``unattributed`` for one changed row."""
+        from openadapt_flow.runtime.effects.frame import _same, get_path
+
+        table, key, before, after = change
+        if self.spec.kind == "audit_read":
+            actors = self._actors(self._ref(table, key, before, after), window)
+            if actors & self.self_actors:
+                return "self"
+            return "other" if actors else "unattributed"
+        if after is None:
+            return "unattributed"
+        actor = get_path(after, self.spec.actor_field)
+        if actor in (None, ""):
+            return "unattributed"
+        if str(actor) in self.self_actors:
+            return "self"
+        if self.spec.version_field:
+            new = get_path(after, self.spec.version_field)
+            old = None if before is None else get_path(before, self.spec.version_field)
+            if new in (None, "") or (before is not None and _same(old, new)):
+                return "unattributed"
+        elif before is not None and _same(
+            get_path(before, self.spec.actor_field), actor
+        ):
+            return "unattributed"
+        return "other"
+
+    def others_touched(
+        self, change: Change, window: Optional[list[dict[str, Any]]]
+    ) -> bool:
+        """Did another actor also write this row in the window?"""
+        from openadapt_flow.runtime.effects.frame import get_path
+
+        table, key, before, after = change
+        if self.spec.kind == "audit_read":
+            return bool(
+                self._actors(self._ref(table, key, before, after), window)
+                - self.self_actors
+            )
+        if after is None:
+            return False
+        actor = get_path(after, self.spec.actor_field)
+        return actor not in (None, "") and str(actor) not in self.self_actors
+
+
 __all__ = [
+    "keep_rows",
+    "Attributor",
+    "Change",
+    "changes",
     "DatabaseReader",
     "StateDiff",
     "StateReader",

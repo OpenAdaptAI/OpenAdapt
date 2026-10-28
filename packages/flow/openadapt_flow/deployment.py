@@ -50,7 +50,7 @@ from openadapt_flow.runtime.effects.auth import AuthRef, ResolvedSecrets
 from openadapt_flow.runtime.effects.deferred_report import DeferredReportSpec
 from openadapt_flow.runtime.effects.desktop_readback import DesktopReadbackSpec
 from openadapt_flow.runtime.effects.effect import Region, ValueExpr
-from openadapt_flow.runtime.effects.frame import FrameDatabase
+from openadapt_flow.runtime.effects.frame import FrameAttribution, FrameDatabase
 from openadapt_flow.runtime.effects.fresh_session import FreshSessionSpec
 from openadapt_flow.runtime.effects.smart_auth import SmartBackendConfig
 from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
@@ -1010,6 +1010,14 @@ class RollbackSection(BaseModel):
     #: Table (or ``"*"``) -> columns that change on their own (a modified-at
     #: time). Reviewed per app; the report lists them.
     ignore_columns: dict[str, list[str]] = Field(default_factory=dict)
+    #: A compensation that hard-deletes a record runs only when this is true.
+    #: Many record systems forbid deleting a chart for audit or legal reasons:
+    #: prefer a ``void`` compensation there.
+    allow_delete: bool = False
+    #: Who changed a row (``frame.attribution`` in ``verify.yaml``). Rows
+    #: another actor changed during the run are set aside; rows nothing
+    #: attributes count as the run's.
+    attribution: Optional[FrameAttribution] = None
 
 
 #: Sentinel written by ``config init`` for fields the operator must fill.

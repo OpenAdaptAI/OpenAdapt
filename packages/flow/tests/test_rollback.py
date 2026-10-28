@@ -203,14 +203,20 @@ def _mockmed_replayer(url: str) -> Replayer:
     )
 
 
-def _run_with_rollback(tmp_path: Path, url: str, workflow: Workflow) -> RunReport:
+def _run_with_rollback(
+    tmp_path: Path, url: str, workflow: Workflow, *, allow_delete: bool = True
+) -> RunReport:
     bundle = tmp_path / "bundle"
     workflow.save(bundle)
     workflow = Workflow.load(bundle)
     verifier = RestRecordVerifier(url)
     from openadapt_flow.after_stop import records_reader
 
-    plan = RollbackPlan(VerifierReader(verifier), read_records=records_reader(verifier))
+    plan = RollbackPlan(
+        VerifierReader(verifier),
+        read_records=records_reader(verifier),
+        allow_delete=allow_delete,
+    )
     before = plan.arm()
     run_dir = tmp_path / "run"
     report = _mockmed_replayer(url).run(workflow, bundle_dir=bundle, run_dir=run_dir)
@@ -278,10 +284,12 @@ def test_an_unapproved_proposal_is_never_used(tmp_path, mockmed):
 
 
 SCHEMA = """
-CREATE TABLE patients (id INTEGER PRIMARY KEY, name TEXT, dob TEXT);
-CREATE TABLE history (id INTEGER PRIMARY KEY, patient_id INTEGER, smoker TEXT);
+CREATE TABLE patients (id INTEGER PRIMARY KEY, name TEXT, dob TEXT,
+    status TEXT DEFAULT 'active', modified_by TEXT);
+CREATE TABLE history (id INTEGER PRIMARY KEY, patient_id INTEGER, smoker TEXT,
+    modified_by TEXT);
 CREATE TABLE log (id INTEGER PRIMARY KEY, event TEXT);
-CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT);
+CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT, modified_by TEXT);
 """
 
 
@@ -297,48 +305,73 @@ def _make_db(path: Path) -> None:
 
 
 class ClinicBackend(FakeBackend):
-    """Enter creates a patient, its history row and a log row. Delete removes
-    the newest patient; with ``thorough`` it removes its history row too.
-    F2 is a later step that fails on screen and writes nothing."""
+    """Enter creates a patient (and, with ``history``, its history row) and a
+    log row, as the bot. Delete undoes it: ``delete`` removes the patient
+    (and its history row when ``thorough``); ``void`` marks it void. F2 is a
+    later step that fails on screen; with ``colleague`` another user writes
+    at that moment: ``note`` adds an unrelated note, ``edit`` changes the
+    patient the run just created."""
 
-    def __init__(self, path: Path, *, thorough: bool = True):
+    def __init__(
+        self,
+        path: Path,
+        *,
+        thorough: bool = True,
+        mode: str = "delete",
+        history: bool = True,
+        colleague: Optional[str] = None,
+    ):
         super().__init__(viewport=(300, 200))
         self.path = path
         self.thorough = thorough
-
-    def _sql(self, *statements: tuple[str, tuple]) -> None:
-        conn = sqlite3.connect(self.path)
-        for sql, args in statements:
-            conn.execute(sql, args)
-        conn.commit()
-        conn.close()
+        self.mode = mode
+        self.history = history
+        self.colleague = colleague
 
     def press(self, key):
         super().press(key)
+        conn = sqlite3.connect(self.path)
         if key == "Enter":
-            conn = sqlite3.connect(self.path)
             cur = conn.execute(
-                "INSERT INTO patients (name, dob) VALUES ('Ada Synthetic', '1980-02-03')"
+                "INSERT INTO patients (name, dob, modified_by) "
+                "VALUES ('Ada Synthetic', '1980-02-03', 'bot')"
             )
-            conn.execute(
-                "INSERT INTO history (patient_id, smoker) VALUES (?, 'no')",
-                (cur.lastrowid,),
-            )
+            if self.history:
+                conn.execute(
+                    "INSERT INTO history (patient_id, smoker, modified_by) "
+                    "VALUES (?, 'no', 'bot')",
+                    (cur.lastrowid,),
+                )
             conn.execute("INSERT INTO log (event) VALUES ('patient created')")
-            conn.commit()
-            conn.close()
+        elif key == "F2" and self.colleague == "note":
+            conn.execute(
+                "INSERT INTO notes (body, modified_by) VALUES ('call back', 'nurse')"
+            )
+        elif key == "F2" and self.colleague == "edit":
+            conn.execute(
+                "UPDATE patients SET dob = '1980-02-04', modified_by = 'nurse' "
+                "WHERE name = 'Ada Synthetic'"
+            )
         elif key == "Delete":
-            conn = sqlite3.connect(self.path)
             row = conn.execute(
                 "SELECT MAX(id) FROM patients WHERE name = 'Ada Synthetic'"
             ).fetchone()
             if row and row[0] is not None:
-                conn.execute("DELETE FROM patients WHERE id = ?", (row[0],))
-                if self.thorough:
-                    conn.execute("DELETE FROM history WHERE patient_id = ?", (row[0],))
-                conn.execute("INSERT INTO log (event) VALUES ('patient deleted')")
-            conn.commit()
-            conn.close()
+                if self.mode == "void":
+                    conn.execute(
+                        "UPDATE patients SET status = 'void', modified_by = 'bot' "
+                        "WHERE id = ?",
+                        (row[0],),
+                    )
+                else:
+                    conn.execute("DELETE FROM patients WHERE id = ?", (row[0],))
+                    if self.thorough:
+                        conn.execute(
+                            "DELETE FROM history WHERE patient_id = ?", (row[0],)
+                        )
+                conn.execute("INSERT INTO log (event) VALUES ('patient undone')")
+        conn.commit()
+        conn.close()
 
 
 def _sql_verifier(path: Path) -> SqlRecordVerifier:
@@ -352,7 +385,7 @@ def _sql_verifier(path: Path) -> SqlRecordVerifier:
     return SqlRecordVerifier(connect, "SELECT * FROM patients", poll_interval_s=0.01)
 
 
-def _clinic_workflow() -> Workflow:
+def _clinic_workflow(*, kind: str = "delete", retains=()) -> Workflow:
     created = Effect(
         kind=EffectKind.RECORD_WRITTEN,
         match={"name": ValueExpr(param="name")},
@@ -374,6 +407,15 @@ def _clinic_workflow() -> Workflow:
         risk="irreversible",
         effects=[
             Effect(
+                kind=EffectKind.FIELD_EQUALS,
+                match={"id": ValueExpr(param="undo_record_id")},
+                field="status",
+                value="void",
+                risk="irreversible",
+                timeout_s=1.0,
+            )
+            if kind == "void"
+            else Effect(
                 kind=EffectKind.RECORD_WRITTEN,
                 match={"id": ValueExpr(param="undo_record_id")},
                 expected_count=0,
@@ -408,6 +450,8 @@ def _clinic_workflow() -> Workflow:
                 undoes="create_patient",
                 intent="delete the patient the run created",
                 source="hand_written",
+                kind=kind,
+                retains=list(retains),
                 steps=[delete],
                 locate={"match": {"name": {"param": "name"}}},
             )
@@ -415,33 +459,61 @@ def _clinic_workflow() -> Workflow:
     )
 
 
-def _run_clinic(tmp_path: Path, *, thorough: bool) -> RunReport:
+def _run_clinic(
+    tmp_path: Path,
+    *,
+    thorough: bool = True,
+    mode: str = "delete",
+    kind: str = "delete",
+    retains=(),
+    history: bool = True,
+    colleague: Optional[str] = None,
+    attribution: bool = False,
+    allow_delete: bool = True,
+) -> RunReport:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     db = tmp_path / "clinic.db"
     _make_db(db)
-    workflow = _clinic_workflow()
+    workflow = _clinic_workflow(kind=kind, retains=retains)
     bundle = tmp_path / "bundle"
     workflow.save(bundle)
     workflow = Workflow.load(bundle)
     from openadapt_flow.after_stop import records_reader
+    from openadapt_flow.runtime.effects.frame import FrameAttribution
 
     reader = DatabaseReader(
         dialect="sqlite", read_config={"sqlite_database": str(db)}, allow_tables=["log"]
     )
-    plan = RollbackPlan(reader, read_records=records_reader(_sql_verifier(db)))
-    before = plan.arm()
+    plan = RollbackPlan(
+        reader,
+        read_records=records_reader(_sql_verifier(db)),
+        attribution=(
+            FrameAttribution(
+                kind="record_field",
+                actor_field="modified_by",
+                self=["bot"],
+                server_set=["modified_by"],
+            )
+            if attribution
+            else None
+        ),
+        allow_delete=allow_delete,
+    )
+    params = {"name": "Ada Synthetic"}
+    before = plan.arm(params)
 
     def replayer() -> Replayer:
         return Replayer(
-            ClinicBackend(db, thorough=thorough),
+            ClinicBackend(
+                db, thorough=thorough, mode=mode, history=history, colleague=colleague
+            ),
             vision=_vision(),
             effect_verifier=_sql_verifier(db),
             poll_interval_s=0.01,
         )
 
     run_dir = tmp_path / "run"
-    report = replayer().run(
-        workflow, bundle_dir=bundle, run_dir=run_dir, params={"name": "Ada Synthetic"}
-    )
+    report = replayer().run(workflow, bundle_dir=bundle, run_dir=run_dir, params=params)
     assert not report.success
     return plan.finish(
         report,
@@ -562,6 +634,7 @@ def _uncertain(tmp_path, after_stop, *, kept=()):
         before=records_snapshot([]),
         runner=runner,
         read_records=lambda: after_stop,
+        allow_delete=True,
     )
     return record, runner
 
@@ -665,3 +738,115 @@ def test_diff_names_columns_never_values():
     }
     assert "B" not in json.dumps(diff.summary())
     assert diff_states(before, after, ignore_columns={"*": ["name"]}).empty
+
+
+# ---------------------------------------------------------------------------
+# Safeguards: no hard delete unless allowed, void, other actors, conflicts
+# ---------------------------------------------------------------------------
+
+
+def test_a_hard_delete_is_refused_unless_the_deployment_allows_it(tmp_path, mockmed):
+    report = _run_with_rollback(
+        tmp_path, mockmed, _mockmed_workflow(), allow_delete=False
+    )
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back"
+    [step] = rollback.steps
+    assert step.decision == "refused"
+    assert "rollback.allow_delete" in step.reason
+    assert [r["type"] for r in _records(mockmed)] == ["Triage"]
+    assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+
+
+def test_a_void_compensation_keeps_only_the_runs_own_record(tmp_path):
+    report = _run_clinic(
+        tmp_path,
+        mode="void",
+        kind="void",
+        retains=["patients"],
+        history=False,
+        allow_delete=False,
+    )
+    rollback = report.rollback
+    assert rollback.status == "rolled_back", rollback.reason
+    assert rollback.retained_rows == 1
+    assert "voided record row(s) kept" in rollback.reason
+    assert report.transaction_outcome == "ROLLED_BACK"
+
+
+def test_a_void_that_leaves_a_side_record_is_not_a_rollback(tmp_path):
+    report = _run_clinic(
+        tmp_path, mode="void", kind="void", retains=["patients"], allow_delete=False
+    )
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back"
+    assert rollback.retained_rows == 1
+    assert rollback.remaining_diff == {
+        "history": {"added": 1, "removed": 0, "changed": 0}
+    }
+
+
+def test_another_actors_write_is_set_aside_only_with_attribution(tmp_path):
+    attributed = _run_clinic(tmp_path / "a", colleague="note", attribution=True)
+    assert attributed.rollback.status == "rolled_back", attributed.rollback.reason
+    assert attributed.rollback.other_actor_rows == 1
+    assert "another actor changed were set aside" in attributed.rollback.reason
+
+    plain = _run_clinic(tmp_path / "b", colleague="note", attribution=False)
+    assert plain.rollback.status == "not_rolled_back"
+    assert plain.rollback.remaining_diff == {
+        "notes": {"added": 1, "removed": 0, "changed": 0}
+    }
+    assert plain.transaction_outcome == "RECONCILIATION_REQUIRED"
+
+
+def test_a_record_another_actor_changed_after_the_run_is_not_compensated(tmp_path):
+    report = _run_clinic(tmp_path, colleague="edit", attribution=True)
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back"
+    assert rollback.conflicts == 1
+    assert "isn't lost" in rollback.reason
+    assert rollback.steps == []
+    # The patient, with the nurse's change, is still there.
+    conn = sqlite3.connect(tmp_path / "clinic.db")
+    assert conn.execute(
+        "SELECT dob, modified_by FROM patients WHERE name = 'Ada Synthetic'"
+    ).fetchall() == [("1980-02-04", "nurse")]
+    assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+
+
+def test_a_change_after_the_stop_blocks_the_compensation(tmp_path):
+    landed = [{"id": 7, "patient_id": "p1", "type": "Triage", "note": "n"}]
+    edited = [{"id": 7, "patient_id": "p1", "type": "Triage", "note": "edited"}]
+    runner = RecordingRunner()
+    workflow = _single_save_workflow()
+    keep_prior_state(workflow, workflow.steps[0], [], {}, tmp_path)
+    record = roll_back(
+        _stopped([_entry()]),
+        workflow,
+        run_dir=tmp_path,
+        bundle_dir=tmp_path,
+        reader=ListReader(landed, edited, edited),
+        before=records_snapshot([]),
+        runner=runner,
+        read_records=lambda: edited,
+        allow_delete=True,
+    )
+    [step] = record.steps
+    assert step.decision == "refused"
+    assert "changed again after the stop" in step.reason
+    assert record.conflicts == 1
+    assert runner.runs == []
+    assert record.status == "not_rolled_back"
+
+
+def test_an_uncomparable_table_is_never_set_aside():
+    from openadapt_flow.rollback_state import changes
+    from openadapt_flow.runtime.effects.db_snapshot import Snapshot, Table
+
+    before = Snapshot(tables={"big": Table(["a"], ["a"], {}, 5, None, "x")})
+    after = Snapshot(tables={"big": Table(["a"], ["a"], {}, 6, None, "y")})
+    diff = diff_states(before, after)
+    assert not diff.empty
+    [change] = changes(diff)
+    assert change[0] == "big" and change[2] is None and change[3] is None

@@ -11,9 +11,9 @@ ends in one of three ways:
 
 | Outcome | Meaning |
 | --- | --- |
-| `ROLLED_BACK` | Flow undid every change, and a read of the whole system of record matches the read taken before the run. |
-| `HALTED_BEFORE_EFFECT` | Nothing landed: right after the stop, the whole system of record already matches the read from before the run. |
-| `RECONCILIATION_REQUIRED` | It doesn't match. The report says what differs, and a private file holds the rows a person needs to repair it. |
+| `ROLLED_BACK` | Flow undid every change the run made, and a read of the whole system of record shows each of the run's rows back as it was and nothing else changed, apart from rows another user changed. |
+| `HALTED_BEFORE_EFFECT` | Nothing landed: right after the stop, nothing the run did is in the system of record. |
+| `RECONCILIATION_REQUIRED` | Anything else. The report says what differs, and a private file holds the rows a person needs to repair it. |
 
 Flow never reports a partial rollback as done.
 
@@ -40,7 +40,9 @@ and the report says so.
 ### After a stop
 
 1. **Fresh read.** Flow reads the store again and compares it with the first
-   read. If they're equal, nothing landed, and the read itself proves it.
+   read. Each row that changed is the run's, another user's, or nobody's
+   (see [Other users](#other-users)). If no row is the run's, nothing
+   landed, and the read itself proves it.
 2. **Compensate, latest change first.** For each change in the run's
    [change ledger](AFTER_A_STOP.md#the-change-ledger), Flow uses the
    compensation a person approved for that step. That is either a declared
@@ -56,16 +58,32 @@ and the report says so.
 
    If the effect is absent, there is nothing to undo. If the read can't
    tell, the rollback stops there. Flow doesn't compensate on a guess.
-4. **Each compensation runs in a fresh session** through the normal replayer.
+4. **Kinds.** Each compensation declares what it does: `discard_draft`,
+   `restore` (old values back), `void` (the record is voided, cancelled or
+   made inactive, and stays), or `delete`. A compensation that declares no
+   kind counts as `delete`. Many record systems forbid deleting a chart for
+   audit or legal reasons, so a `delete` runs only when the deployment sets
+   `rollback.allow_delete: true`. `rollback qualify` tries the least
+   destructive kind first and never tries a delete the deployment doesn't
+   allow.
+5. **Conflicts.** If another user changed a record the run wrote, after the
+   run wrote it, Flow compensates nothing and ends `RECONCILIATION_REQUIRED`
+   with the diff, so their change isn't overwritten. The same happens if a
+   record the run touched changes between the stop and the first
+   compensation.
+6. **Each compensation runs in a fresh session** through the normal replayer.
    Identity checks, the risk gate, the deployment's save-approval gate and the
    compensation's own effect check all apply. In the default approval mode, a
    person still answers each compensation's card. A web run gets a fresh
    session: cookies and storage are cleared, and the browser goes back to the
    entry URL. When Flow is attached to the operator's own browser, it never
    clears it, so only API-only compensations run there.
-5. **Final read.** Flow compares the whole store with the read from before the
-   run:
-   - Equal: `ROLLED_BACK`.
+7. **Final read.** Flow compares the whole store with the read from before the
+   run. Every row the run touched must be back as it was. A `void`
+   compensation may leave the run's own record, by its id, in the tables it
+   declares (`retains`), and nowhere else. Every other row must match too,
+   apart from rows another user changed:
+   - Nothing else differs: `ROLLED_BACK`.
    - Anything else: `RECONCILIATION_REQUIRED`. `report.json` holds a summary
      with counts and column names only. `<run-dir>/rollback/diff.json`
      (owner-only) holds every added, removed and changed row, with the values
@@ -78,6 +96,21 @@ Rolled back: the system of record matches the read from before the run.
   every change was compensated and the system of record matches the read from before the run
   step `step_010`: compensated with `undo-step_010-network-1` (every undo step ran and an independent read of the system of record confirmed its declared effects)
 ```
+
+## Other users
+
+A rollback isn't a transaction: a colleague can save something while the run
+is going. With `rollback.attribution` (the same shape as `frame.attribution`
+in `verify.yaml`), Flow learns who changed each row, from the app's audit log
+or a modified-by field only the server sets:
+
+- A row another user changed, that the run didn't touch, is set aside. The
+  report counts it (`other_actor_rows`).
+- A row nothing attributes counts as the run's. A rollback never sets aside a
+  change it can't explain, so without attribution, any other write in the
+  window makes the run `RECONCILIATION_REQUIRED`.
+- A record the run wrote that another user also changed is a conflict
+  (`conflicts`). Nothing is compensated.
 
 ## Turn it on
 
@@ -93,6 +126,12 @@ rollback:
     allow_tables: [log, sessions]   # tables the app writes on its own
   ignore_columns:
     "*": [modified_at]              # columns that change on their own
+  allow_delete: false               # the default: no hard deletes
+  attribution:                      # optional: who changed a row
+    kind: record_field
+    actor_field: modified_by
+    self: [openadapt_bot]
+    server_set: [modified_by]
 ```
 
 Both lists are a person's reviewed decision for one app. The report records
@@ -147,10 +186,13 @@ None of the runs made a model call.
 
 - **It undoes only what a person approved.** A step without an approved
   compensation stops the rollback, and the store is reported as it is.
-- **It isn't a transaction.** Another user's write between the first and
-  final reads makes the store differ, and the run ends
-  `RECONCILIATION_REQUIRED`. That is the safe answer, not a rollback of their
-  write.
+- **It isn't a transaction.** Without attribution, another user's write
+  between the first and final reads ends the run `RECONCILIATION_REQUIRED`.
+  With it, their writes are set aside, but a record both of you changed is
+  left for a person.
+- **No hard delete by default.** A `delete` compensation runs only with
+  `rollback.allow_delete: true`. A `void` keeps the run's record, voided,
+  only in the tables its compensation declares.
 - **The collection read sees one collection.** Without `rollback.database`,
   a side record in another table isn't compared. The report says
   `scope: collection`.

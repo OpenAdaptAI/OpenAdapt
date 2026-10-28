@@ -120,7 +120,9 @@ def main(argv: list[str] | None = None) -> int:
                 work / "deployment.yaml", fixture, base, contract
             )
             cfg = yaml.safe_load(deployment.read_text())
-            cfg["rollback"] = {"enabled": True}
+            # MockMed's only compensation is a DELETE; this synthetic app has no
+            # retention rule, so the deployment allows deletes explicitly.
+            cfg["rollback"] = {"enabled": True, "allow_delete": True}
             deployment.write_text(yaml.safe_dump(cfg, sort_keys=False))
 
             qualify_report = args.out / "mockmed-qualify.json"

@@ -110,6 +110,7 @@ def _cmd_rollback_qualify(args: argparse.Namespace) -> int:
             ),
             work_dir=Path(args.work_dir) if args.work_dir else None,
             ignore_columns=ignore,
+            allow_delete=bool(section.allow_delete) if section else False,
         )
     except ValueError as exc:
         print(f"rollback qualify REFUSED: {exc}", file=sys.stderr)

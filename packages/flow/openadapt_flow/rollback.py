@@ -53,10 +53,14 @@ from openadapt_flow.ir import (
     Workflow,
 )
 from openadapt_flow.rollback_state import (
+    Attributor,
+    Change,
     StateDiff,
     StateReader,
     StateUnreadable,
+    changes,
     diff_states,
+    keep_rows,
 )
 from openadapt_flow.runtime.effects.db_snapshot import Snapshot
 
@@ -221,6 +225,36 @@ def _judge_declared(
 # ---------------------------------------------------------------------------
 
 
+def _run_selectors(
+    report: RunReport, workflow: Workflow, params: dict[str, Any]
+) -> list[dict[str, str]]:
+    """The record selectors of every step in the ledger, bound to the run."""
+    from openadapt_flow.after_stop import _resolved_selector
+    from openadapt_flow.traversal import iter_workflow_steps
+
+    steps = {s.id: s for s in iter_workflow_steps(workflow)}
+    out: list[dict[str, str]] = []
+    for entry in report.change_ledger:
+        step = steps.get(entry.step_id)
+        for effect in step.effects if step is not None else []:
+            match = {k: v.model_dump(mode="json") for k, v in effect.match.items()}
+            selector = _resolved_selector(match, params) if match else None
+            if selector:
+                out.append(selector)
+    return out
+
+
+def _is_runs_record(change: Change, selectors: list[dict[str, str]]) -> bool:
+    from openadapt_flow.runtime.effects.effect import record_matches
+
+    _table, _key, before, after = change
+    rows = [r for r in (before, after) if r is not None]
+    return any(record_matches(dict(r), s) for r in rows for s in selectors)
+
+
+KIND_ORDER = ("discard_draft", "restore", "void", "delete")
+
+
 def roll_back(
     report: RunReport,
     workflow: Workflow,
@@ -233,17 +267,27 @@ def roll_back(
     read_records: Optional[RecordsReader] = None,
     ignore_columns: Optional[dict[str, list[str]]] = None,
     assume_stopped: bool = False,
+    attributor: Optional[Attributor] = None,
+    allow_delete: bool = False,
 ) -> Optional[RollbackRecord]:
-    """Undo what a stopped run left, then prove the store is as it was.
+    """Undo what a stopped run left, then prove the run's changes are gone.
 
     ``before`` is the read taken before the run (None when it failed: the
     record says the rollback was unarmed and nothing runs). ``read_records``
     reads the collection the compensations' own checks use; it settles
-    uncertain writes and finds created records. Returns None for a run that
-    finished. Never raises for a failed read or compensation; those end as
-    ``not_rolled_back`` with the reason. ``assume_stopped`` treats a finished
-    run as stopped there (``rollback qualify`` stops runs on purpose by
-    running only the steps up to a halt point).
+    uncertain writes and finds created records.
+
+    With an ``attributor``, rows another actor changed during the run are set
+    aside; rows nothing attributes count as the run's. The run's own rows
+    must be back as they were and nothing else may differ. A row the run
+    touched that another actor also changed is a conflict: nothing is
+    compensated and a person decides. A ``delete`` compensation (or one that
+    declares no kind) runs only with ``allow_delete``.
+
+    Returns None for a run that finished. Never raises for a failed read or
+    compensation; those end as ``not_rolled_back`` with the reason.
+    ``assume_stopped`` treats a finished run as stopped there (``rollback
+    qualify`` stops runs on purpose).
     """
     if report.success and not assume_stopped:
         return None
@@ -285,13 +329,52 @@ def roll_back(
         return finish("not_rolled_back", f"after the stop, {exc}; nothing ran")
     record.after_stop_sha256 = snapshot_sha256(after_stop)
     landed = diff_states(before, after_stop, ignore_columns=ignore_columns)
-    record.after_stop_diff = landed.summary()
-    if landed.empty:
+    params = dict(report.params)
+    selectors = _run_selectors(report, workflow, params)
+    window = attributor.window() if attributor is not None else None
+
+    def whose(change: Change) -> str:
+        return attributor.attribute(change, window) if attributor else "unattributed"
+
+    run_changes: list[Change] = []
+    conflicts: list[Change] = []
+    others = 0
+    for change in changes(landed):
+        who = whose(change)
+        runs_record = _is_runs_record(change, selectors)
+        if who == "other" and not runs_record:
+            others += 1
+            continue
+        if (
+            runs_record
+            and attributor is not None
+            and (who == "other" or attributor.others_touched(change, window))
+        ):
+            conflicts.append(change)
+        run_changes.append(change)
+    record.other_actor_rows = others
+    record.after_stop_diff = keep_rows(landed, run_changes).summary()
+    run_keys = {(t, k) for t, k, *_rest in run_changes}
+    if not run_changes:
         record.final_sha256 = record.after_stop_sha256
         return finish(
             "nothing_landed",
-            "after the stop the system of record matches the read from before "
-            "the run; nothing to undo",
+            "after the stop nothing the run did is in the system of record"
+            + (
+                f" ({others} row(s) another actor changed were set aside)"
+                if others
+                else ""
+            ),
+        )
+    if conflicts:
+        record.conflicts = len(conflicts)
+        return finish(
+            "not_rolled_back",
+            f"another actor changed {len(conflicts)} record(s) the run wrote, "
+            "after the run wrote them; nothing was compensated, so their change "
+            "isn't lost. A person decides. Different now: "
+            + keep_rows(landed, run_changes).describe(),
+            keep_rows(landed, run_changes),
         )
 
     from openadapt_flow.after_stop import _has_loop
@@ -309,7 +392,8 @@ def roll_back(
             "the workflow has a loop: a compensation runs with the run's base "
             "parameters, not one iteration's"
         )
-    params = dict(report.params)
+    retained: set[tuple[str, str]] = set()
+    checked_since_stop = False
     for entry in entries if stop_reason is None else []:
         step_record = RollbackStepRecord(
             step_id=entry.step_id,
@@ -352,6 +436,41 @@ def roll_back(
                 )
                 stop_reason = f"step {entry.step_id}: {step_record.reason}"
                 break
+        kind = undo.kind or "delete"
+        if kind == "delete" and not allow_delete:
+            step_record.reason = (
+                "its compensation hard-deletes a record"
+                + ("" if undo.kind else " (it declares no kind)")
+                + " and this deployment doesn't allow deletes (rollback.allow_delete); "
+                "use a void, restore or discard compensation"
+            )
+            stop_reason = f"step {entry.step_id}: {step_record.reason}"
+            break
+        if not checked_since_stop:
+            # Right before the first compensation: has anyone changed a row
+            # the run touched since the stop? Then don't overwrite it.
+            checked_since_stop = True
+            try:
+                now = reader.read()
+            except StateUnreadable as exc:
+                step_record.reason = f"the read before compensating failed ({exc})"
+                stop_reason = step_record.reason
+                break
+            moved = [
+                c
+                for c in changes(
+                    diff_states(after_stop, now, ignore_columns=ignore_columns)
+                )
+                if (c[0], c[1]) in run_keys
+            ]
+            if moved:
+                record.conflicts = len(moved)
+                step_record.reason = (
+                    f"{len(moved)} record(s) the run wrote changed again after the "
+                    "stop; not compensated, so that change isn't lost"
+                )
+                stop_reason = step_record.reason
+                break
         try:
             undo_params = resolve_undo_params(undo, run_dir, params, read_records)
         except UndoRefused as exc:
@@ -384,6 +503,9 @@ def roll_back(
             break
         step_record.decision = "compensated"
         step_record.reason = judged
+        if kind == "void" and undo.locate is not None:
+            located = str(undo_params.get(undo.locate.param, ""))
+            retained |= {(table, located) for table in undo.retains}
 
     try:
         final = reader.read()
@@ -391,15 +513,43 @@ def roll_back(
         return finish(
             "not_rolled_back",
             f"the final read failed ({exc}); what was undone can't be proven",
-            landed,
+            keep_rows(landed, run_changes),
         )
     record.final_sha256 = snapshot_sha256(final)
     remaining = diff_states(before, final, ignore_columns=ignore_columns)
-    if remaining.empty:
+    final_window = attributor.window() if attributor is not None else None
+    residue: list[Change] = []
+    kept = 0
+    for change in changes(remaining):
+        table, key, *_rest = change
+        if (table, key) in retained:
+            kept += 1
+            continue
+        mine = (table, key) in run_keys or _is_runs_record(change, selectors)
+        if (
+            not mine
+            and attributor is not None
+            and (attributor.attribute(change, final_window) == "other")
+        ):
+            continue
+        residue.append(change)
+    record.retained_rows = kept
+    left = keep_rows(remaining, residue)
+    if not residue:
         return finish(
             "rolled_back",
-            "every change was compensated and the system of record matches the "
-            "read from before the run"
+            "every change the run made was compensated and the system of record "
+            "matches the read from before the run"
+            + (
+                f", apart from {kept} voided record row(s) kept as the app requires"
+                if kept
+                else ""
+            )
+            + (
+                f"; {others} row(s) another actor changed were set aside"
+                if others
+                else ""
+            )
             + (f" (a step was left: {stop_reason})" if stop_reason else ""),
         )
     reason = (
@@ -409,8 +559,8 @@ def roll_back(
     )
     return finish(
         "not_rolled_back",
-        f"{reason}. Still different: {remaining.describe()}",
-        remaining,
+        f"{reason}. Still different: {left.describe()}",
+        left,
     )
 
 
@@ -527,7 +677,8 @@ def web_fresh_session(
 
 class RollbackPlan:
     """What a run needs to roll back after a stop: how to read the store,
-    how to read the compensations' own collection, and columns to ignore."""
+    how to read the compensations' own collection, who changed a row, and
+    whether a hard delete may run."""
 
     def __init__(
         self,
@@ -535,13 +686,31 @@ class RollbackPlan:
         *,
         read_records: Optional[RecordsReader] = None,
         ignore_columns: Optional[dict[str, list[str]]] = None,
+        attribution: Any = None,
+        audit_read: Optional[RecordsReader] = None,
+        allow_delete: bool = False,
     ) -> None:
         self.reader = reader
         self.read_records = read_records
         self.ignore_columns = dict(ignore_columns or {})
+        self.attribution = attribution
+        self.audit_read = audit_read
+        self.allow_delete = allow_delete
+        self.attributor: Optional[Attributor] = None
 
-    def arm(self) -> Optional[Snapshot]:
-        """The read from before the run, or None when the store can't be read."""
+    def arm(self, params: Optional[dict[str, Any]] = None) -> Optional[Snapshot]:
+        """The read from before the run, or None when the store can't be read.
+
+        With attribution, the audit log is read here too. Attribution whose
+        own actors can't be resolved from ``params`` is left off, so every
+        row counts as the run's.
+        """
+        if self.attribution is not None:
+            self.attributor = Attributor.from_spec(
+                self.attribution, params or {}, self.audit_read
+            )
+            if self.attributor is not None:
+                self.attributor.start()
         try:
             return self.reader.read()
         except StateUnreadable:
@@ -567,6 +736,8 @@ class RollbackPlan:
             runner=runner,
             read_records=self.read_records,
             ignore_columns=self.ignore_columns,
+            attributor=self.attributor,
+            allow_delete=self.allow_delete,
         )
         return apply_rollback(report, workflow, record, run_dir)
 
@@ -589,10 +760,22 @@ def plan_from_deployment(cfg: Any, effect_verifier: Any) -> Optional[RollbackPla
             "rollback needs rollback.database or an effects verifier to read "
             "the system of record"
         )
+    audit_read = None
+    if section.attribution is not None and section.attribution.read is not None:
+        from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+
+        audit_read = records_reader(
+            build_effect_verifier(
+                EffectsConfig.model_validate(section.attribution.read), {}
+            )
+        )
     return RollbackPlan(
         reader,
         read_records=records_reader(effect_verifier),
         ignore_columns={k: list(v) for k, v in section.ignore_columns.items()},
+        attribution=section.attribution,
+        audit_read=audit_read,
+        allow_delete=section.allow_delete,
     )
 
 

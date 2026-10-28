@@ -691,10 +691,12 @@ The limits of that:
 - The write-ordering check covers straight-line bundles only, and it can't
   tell whether a later check depends on an earlier write.
 - A rollback undoes only what a person approved, and only proves what it
-  reads: without `rollback.database` it reads one collection. Another user's
-  write between the first and final reads makes the run
-  `RECONCILIATION_REQUIRED`, not a rollback of their write. Rollback is armed
-  on web runs only, and never in a workflow with a loop.
+  reads: without `rollback.database` it reads one collection. Without
+  `rollback.attribution`, another user's write between the first and final
+  reads makes the run `RECONCILIATION_REQUIRED`; with it, their writes are set
+  aside, and a record both changed is left for a person. A hard delete runs
+  only with `rollback.allow_delete`. Rollback is armed on web runs only, and
+  never in a workflow with a loop.
 - Duplicate-write compensation (`effects.compensation`) repairs a duplicate
   on its own, only where a deployment has implemented and verified it.
 
