@@ -83,7 +83,10 @@ and the report says so.
    compensation may leave the run's own record, by its id, in the tables it
    declares (`retains`), and nowhere else. Every other row must match too,
    apart from rows another user changed:
-   - Nothing else differs: `ROLLED_BACK`.
+   - Nothing else differs: `ROLLED_BACK`. For a whole-database read with
+     nothing set aside, the verifier's own `diff_database`
+     (`openadapt_flow.verifier`) must agree, or the run isn't called rolled
+     back.
    - Anything else: `RECONCILIATION_REQUIRED`. `report.json` holds a summary
      with counts and column names only. `<run-dir>/rollback/diff.json`
      (owner-only) holds every added, removed and changed row, with the values
