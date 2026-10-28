@@ -51,7 +51,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Sequence
 
 from openadapt_flow.ir import ActionKind, PostconditionKind, Region, Step
 from openadapt_flow.runtime.effects.effect import (
@@ -154,6 +154,35 @@ def _as_records(value: Any) -> Optional[list[dict]]:
     if isinstance(value, list):
         return [r for r in value if isinstance(r, dict)]
     return None
+
+
+def store_unchanged_through_next(
+    events: Sequence[Mapping[str, Any]], i: int
+) -> Optional[bool]:
+    """Did the record store stay the same across event ``i`` and until the next
+    action began?
+
+    ``True`` only when the recorder snapshotted the store before and after
+    event ``i`` AND before the event that followed it, and all three
+    snapshots are equal: nothing the reader can see changed across the
+    action, nor in the settle and think time after it (a write that lands
+    late shows up in the next snapshot). ``False`` when any two differ.
+    ``None`` when a snapshot is missing, or there is no next event: no proof
+    either way.
+    """
+
+    by_index = {e.get("i"): e for e in events if isinstance(e, Mapping)}
+    event, nxt = by_index.get(i), by_index.get(i + 1)
+    if event is None or nxt is None:
+        return None
+    before = event.get(SOR_BEFORE_KEY)
+    after = event.get(SOR_AFTER_KEY)
+    later = nxt.get(SOR_BEFORE_KEY)
+    if _as_records(before) is None or _as_records(after) is None:
+        return None
+    if _as_records(later) is None:
+        return None
+    return before == after == later
 
 
 def _new_records(before: list[dict], after: list[dict]) -> list[dict]:
@@ -823,6 +852,7 @@ def mine_step_effects(
     *,
     exclude_texts: tuple[str, ...] = (),
     param_bindings: Optional[Mapping[str, str]] = None,
+    store_unchanged: Optional[bool] = None,
 ) -> StepEffectMining:
     """Derive candidate system-of-record effects for one compiled step.
 
@@ -856,6 +886,13 @@ def mine_step_effects(
             parameter (``ValueExpr(param=...)``) instead of the demonstrated
             literal. Only system-of-record deltas use it. ``None`` keeps the
             literal, as before.
+        store_unchanged: The caller's proof that the step wrote nothing:
+            ``True`` only when the store snapshots before and after the step
+            and before the next action are equal (see
+            :func:`store_unchanged_through_next`) and no write request was
+            captured in the step's window. A consequential step with that
+            proof gets no placeholder ``record_written``. ``None`` (the
+            default) keeps the placeholder, as before.
 
     Returns:
         A :class:`StepEffectMining` describing the decision. ``effects`` is
@@ -867,8 +904,24 @@ def mine_step_effects(
         mined = _mine_from_sor_delta(step, before, after, exclude_texts, param_bindings)
         if mined is not None:
             return mined
-        # A snapshot existed but showed no single-record write. If the step is
-        # consequential, that is itself worth surfacing; otherwise it is an
+        # A snapshot existed but showed no single-record write. When the
+        # caller proved the store did not change at all, across the step and
+        # until the next action began, with no write request captured, the
+        # step changed only the screen (a dismissed notice, #1377): it gets no
+        # record_written, whatever its label's risk. A placeholder there would
+        # name a write the recording shows did not happen.
+        if store_unchanged is True and before == after:
+            return StepEffectMining(
+                step_id=step.id,
+                disposition="none",
+                reason=(
+                    "record store snapshot unchanged across this step and until "
+                    "the next action, and no write request captured: a "
+                    "screen-only change is not a write"
+                ),
+            )
+        # If the step is consequential, a store change the miner cannot bind
+        # to one new record is itself worth surfacing; otherwise it is an
         # honest no-op (e.g. a navigation click that touched no record).
         if step.risk == "irreversible":
             ph = _placeholder(step)

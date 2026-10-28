@@ -3198,12 +3198,30 @@ def _compile_recording(
                 if pvalue:
                     by_value.setdefault(pvalue, []).append(pname)
             bindings = {v: names[0] for v, names in by_value.items() if len(names) == 1}
+        from openadapt_flow.compiler.effect_mining import store_unchanged_through_next
+        from openadapt_flow.compiler.local_edit import _no_write
+
         for step, _sb, _sa, event in pending:
+            # The step wrote nothing when the record store stayed the same
+            # across it and until the next action, and the network capture
+            # (when there is one) shows no write request in its window (#1377).
+            unchanged = store_unchanged_through_next(events, int(event["i"]))
+            if unchanged is True and network_lines is not None:
+                position = next(
+                    (k for k, e in enumerate(events) if e.get("i") == event["i"]),
+                    None,
+                )
+                if (
+                    position is None
+                    or _no_write(events, position, network_lines) is not True
+                ):
+                    unchanged = None
             mined = mine_step_effects(
                 event,
                 step,
                 exclude_texts=exclude_texts,
                 param_bindings=bindings or None,
+                store_unchanged=unchanged,
             )
             if mined.effects:
                 step.effects = mined.effects

@@ -83,6 +83,17 @@ HOVER_DWELL_MS = 800
 # How long a recorded action that raises a browser dialog waits for it.
 _DIALOG_WAIT_S = 5.0
 
+#: Bound on waiting for an action's effect to reach the screen when the
+#: action has visibly started something (the URL or title changed, or the page
+#: is still loading) but the frame still shows the screen from before it. A
+#: slow app (#1378) keeps the old screen up while the server answers; two
+#: identical frames then are not a settled result, they are the wait.
+SETTLE_PENDING_TIMEOUT_S = 8.0
+
+#: Quiet window for the browser's DOM + network probe (``page_quiescent``)
+#: while a change is pending. Mirrors the runtime's standard page-quiet window.
+_PENDING_QUIET_WINDOW_S = 0.1
+
 
 def _has_window_opener(page: Any) -> bool:
     """Whether the page's own ``window.opener`` is set (False for noopener)."""
@@ -157,6 +168,7 @@ class Recorder:
         settle_interval_s: float = 0.1,
         settle_stable_frames: int = 2,
         settle_timeout_s: float = 3.0,
+        settle_pending_timeout_s: float = SETTLE_PENDING_TIMEOUT_S,
         network_capture: Optional[Any] = None,
         surface_id: str = PRIMARY_SURFACE_ID,
         surface_kind: Optional[str] = None,
@@ -219,6 +231,7 @@ class Recorder:
         self._settle_interval_s = settle_interval_s
         self._settle_stable_frames = settle_stable_frames
         self._settle_timeout_s = settle_timeout_s
+        self._settle_pending_timeout_s = settle_pending_timeout_s
         self._params: dict[str, str] = {}
         # Names of parameters declared secret (never their values).
         self._withheld_param_names: set[str] = set()
@@ -781,7 +794,7 @@ class Recorder:
                     "message": str(seen[0]["message"]),
                 },
             }
-        after = self._wait_settled()
+        after = self._wait_settled(before=before, structural_before=structural_before)
         if focus_before is not None:
             focus_after = self._focus_identity(event)
             if focus_after is not None:
@@ -1124,17 +1137,42 @@ class Recorder:
                 state["sor"] = records
         return state
 
-    def _wait_settled(self) -> bytes:
+    def _wait_settled(
+        self,
+        *,
+        before: Optional[bytes] = None,
+        structural_before: Optional[dict[str, Any]] = None,
+    ) -> bytes:
         """Poll screenshots until N consecutive identical hashes or timeout.
+
+        With ``before`` (the frame from before the action), stable frames that
+        still equal it do not count as settled while a change is pending (see
+        :meth:`_change_pending`): a slow app keeps the old screen up while it
+        loads the next one. The wait then extends to
+        ``settle_pending_timeout_s``; on timeout the last frame is returned,
+        exactly as without the extension.
 
         Returns:
             The last PNG frame captured (settled if achieved before timeout).
         """
-        deadline = time.monotonic() + self._settle_timeout_s
+        start = time.monotonic()
+        limit = start + self._settle_timeout_s
+        pending_limit = start + max(
+            self._settle_timeout_s, self._settle_pending_timeout_s
+        )
+        before_hash = _phash(before) if before is not None else None
         png = self._backend.screenshot()
         prev = _phash(png)
         consecutive = 1
-        while consecutive < self._settle_stable_frames and time.monotonic() < deadline:
+        while True:
+            if consecutive >= self._settle_stable_frames:
+                if before_hash is None or not self._change_pending(
+                    prev, before_hash, structural_before or {}
+                ):
+                    return png
+                limit = pending_limit
+            if time.monotonic() >= limit:
+                return png
             time.sleep(self._settle_interval_s)
             png = self._backend.screenshot()
             cur = _phash(png)
@@ -1143,4 +1181,36 @@ class Recorder:
             else:
                 consecutive = 1
             prev = cur
-        return png
+
+    def _change_pending(
+        self, frame_hash: str, before_hash: str, structural_before: dict[str, Any]
+    ) -> bool:
+        """The action started a change the screen does not show yet.
+
+        Only while the frame still equals the one from before the action, and
+        only when the action visibly started something: the URL or title
+        changed (a client-side route that renders late), or the browser page
+        reports DOM or network activity (a request still in flight). A click
+        that changed nothing, on a quiet page, is settled at once, as before.
+        """
+        if frame_hash != before_hash:
+            return False
+        for attr, key in (("url", "url"), ("page_title", "title")):
+            was = structural_before.get(key)
+            if was is None:
+                continue
+            try:
+                now = getattr(self._backend, attr, None)
+            except Exception:
+                now = None
+            if now is not None and now != was:
+                return True
+        probe = getattr(self._backend, "page_quiescent", None)
+        if callable(probe):
+            try:
+                quiet = probe(_PENDING_QUIET_WINDOW_S)
+            except Exception:
+                quiet = None
+            if quiet is False:
+                return True
+        return False
