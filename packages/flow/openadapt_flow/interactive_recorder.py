@@ -97,6 +97,8 @@ from openadapt_flow.section_capture import SECTION_CONTEXT_JS
 from openadapt_flow.submit_binding import (
     OBSERVE_SUBMIT_BINDING_JS,
     SUBMIT_BINDING_FIELD_SELECTOR,
+    form_values_from_page,
+    form_values_record,
     observation_from_page,
 )
 
@@ -441,6 +443,9 @@ _INIT_JS = r"""
   const SUBMIT_FIELD = __SUBMIT_FIELD__;
   const observeSubmitBinding = __OBSERVE_SUBMIT_BINDING__;
   const filledFields = [];
+  // Each hidden control's value as typing starts: a create-new form's
+  // fingerprint names the hidden values that change while it is filled in.
+  const hiddenBaseline = new WeakMap();
   // One identity for this DOCUMENT. The init script builds a fresh closure per
   // document, so this closure never saw a value an earlier document received.
   // Python compares this id against the document that received a secret and
@@ -1927,18 +1932,22 @@ _INIT_JS = r"""
     emitInFrameSpace(dragEvent);
   });
 
-  // How the clicked control relates to the fields typed into so far. Only an
-  // unlabeled control yields an observation; it is structure only (tags,
-  // roles, counts, relation words, icon geometry), captured before the page
-  // reacts to the click.
+  // How the clicked control relates to the fields typed into so far: for an
+  // unlabeled control, or a labelled one inside the form those fields belong
+  // to. It is structure only (tags, roles, counts, relation words, icon
+  // geometry), captured before the page reacts to the click.
   function submitBindingEvidence(target) {
     try {
       const control = target && target.closest
         ? target.closest(SUBMIT_ACTIONABLE) : null;
       if (!control || control.matches(
           'canvas, input[type="range"], [role="slider"]')) return null;
-      const out = observeSubmitBinding(control, filledFields);
-      if (!out || !out.observation || out.observation.labelled) return null;
+      const out = observeSubmitBinding(control, filledFields, hiddenBaseline);
+      if (!out || !out.observation) return null;
+      // A labelled control matters only as the save of the form the fields
+      // were typed into (openadapt_flow.ir.FormIdentity).
+      if (out.observation.labelled
+          && out.observation.form_owner !== 'shared') return null;
       return out.observation;
     } catch (e) { return null; }
   }
@@ -2143,6 +2152,9 @@ _INIT_JS = r"""
       if (e.isTrusted && el.matches(SUBMIT_FIELD)
           && filledFields.indexOf(el) < 0) {
         filledFields.push(el);
+        for (const input of document.querySelectorAll('input[type="hidden"]')) {
+          if (!hiddenBaseline.has(input)) hiddenBaseline.set(input, String(input.value));
+        }
       }
     } catch (err) {}
     emitInFrameSpace(o);
@@ -4139,21 +4151,24 @@ class InteractiveRecorder:
             event["section"] = {
                 k: section[k] for k in ("kind", "text", "header") if k in section
             }
-        if (
-            kind in ("click", "double_click")
-            and ev.get("submit_binding")
-            and not _locatable_structural(ev.get("structural"))
-        ):
-            # An unlabeled control (no usable locator). Structure only: the
-            # icon geometry becomes its SHA-256 here, and a malformed
-            # observation is dropped (no binding, so a later consequential
-            # click on that control is refused).
+        if kind in ("click", "double_click") and ev.get("submit_binding"):
+            # An unlabeled control (no usable locator), or a labelled one in
+            # the form the run typed into (a create-new form's save).
+            # Structure only: the icon geometry becomes its SHA-256 here, and
+            # a malformed observation is dropped (no binding or form identity,
+            # so a later consequential click on that control is refused).
             try:
                 event["submit_binding"] = observation_from_page(
                     ev["submit_binding"]
                 ).model_dump(mode="json", exclude_none=True)
+                # A create-new form's other field values, for the compiler
+                # to keep as salted digests. Tokens are dropped here.
+                values = form_values_from_page(ev["submit_binding"])
+                if values is not None:
+                    event["form_values"] = form_values_record(values)
             except ValueError:
-                pass
+                event.pop("submit_binding", None)
+                event.pop("form_values", None)
         # Marked identifier field rect (--identifier FIELD), captured in-page
         # at click time: the compiler crops these pixels
         # (anchor.identifier_crop) to arm the pixel identity tier.
