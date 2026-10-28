@@ -104,6 +104,51 @@ per runner, one test file per worker at a time, each worker with its own
 `--basetemp` directory. A test file that can't share the runner with others
 should get its own serial step rather than turning xdist off.
 
+## Releases
+
+One pattern for every PyPI package: merging a reviewed version bump is the
+authorization to publish it. No one dispatches a release.
+
+- **Desktop** (`desktop-release.yml`) publishes its wheel, sdist and native
+  installers as one release.
+- **types, flow, agent, capture, privacy and tray** publish through
+  `release-package.yml`.
+
+Both start after each Packages run on main, every three hours, and on a
+dispatch. The dispatch is a fallback for the same commit, not an approval.
+A package publishes only when all of these hold:
+
+- The newest commit on main's first-parent history that changed the package
+  has a successful push run on main, with the package's own jobs run and
+  passed (`scripts/ci/newest_green.py`). A cancelled or failed run blocks the
+  release until a re-run passes.
+- Its version is not on PyPI, is higher than every version there, and has no
+  tag yet.
+- Its CHANGELOG.md starts with an entry for exactly that version.
+
+Each package's GitHub environment (`pypi-<package>`) still gates its upload.
+The release builds main's tip, where the package is unchanged since that
+commit, and tags it only after PyPI serves exactly the built files.
+`scripts/ci/release_plan.py` makes these decisions, and a run's plan job
+prints each package's decision.
+
+A version is never republished. A half-published version is resumed, not
+rebuilt:
+
+- **Re-run the failed jobs** of the run that published it. That reuses its
+  built files.
+- **Dispatch with `resume`** when PyPI serves the version and its tag exists
+  but the GitHub release isn't published. It fetches the files PyPI serves,
+  checks them against PyPI's digests, and publishes the release at the
+  tag's commit.
+
+A version on PyPI with no package tag counts as done. Capture 1.3.0, Privacy
+1.1.3 and Tray 0.3.7 predate package tags.
+
+The launcher (`release-and-publish.yml`) and `@openadapt/program-graph`
+(`release-program-graph.yml`) still start from a dispatch. Both refuse to
+build unless the newest commit that changed them has a green run on main.
+
 ## Concurrency
 
 Every workflow that runs on pull requests uses one rule. A newer push to a
@@ -129,11 +174,9 @@ Three kinds of workflow keep their own groups:
 
 ## Caches
 
-The Flow and agent jobs install with `uv pip install --system` into the
-`actions/setup-python` interpreter, with the uv cache keyed on the pyproject
-files they resolve; uv takes seconds where pip took two to three minutes. The
-other pip jobs use `cache: pip`. Every other `setup-uv` step sets
-`enable-cache: true` and keys the cache on its package's own `uv.lock`.
+Every `setup-uv` step sets `enable-cache: true` and keys the cache on the
+`uv.lock` files its job installs from; uv takes seconds where pip took two to
+three minutes.
 npm uses `cache: npm`. The Tauri builds use `Swatinem/rust-cache`, and the
 Rust audit caches its `cargo-audit` binary. The release workflows keep caching
 off on purpose: release builds start from a clean cache.
@@ -152,7 +195,39 @@ are branch-protection settings, so an admin changes them. How GitHub fills a
 group at those values hasn't been tested here; check the result on the next
 few queue runs.
 
+## Locked installs
+
+Every job installs Python packages from a uv lockfile, test tools included, so
+nothing changes version between two runs of the same commit. A floating
+pytest 9.2 once broke flow-unit on every pull request at once.
+
+- Jobs that own a package directory run `uv sync --locked`, then
+  `uv run --no-sync` or `uv run --locked`.
+- Jobs that install into the setup-python interpreter run
+  `scripts/ci/locked_install.py`. It exports each named lock with
+  `uv export --locked` and installs it with `--require-hashes --no-deps`.
+  In-tree packages then install editable without dependencies, and
+  `uv pip check` fails the job if one of them needs something no lock has.
+  Where an in-tree sibling needs newer dependencies than the published copy
+  another lock names, the job adds the sibling's own lock after it. For
+  example, flow-unit installs Flow's lock, then Capture's.
+- Jobs that test no package of their own (Python support, platform manifest,
+  wheel builds, release builds) use the groups in `.github/ci-tools/uv.lock`.
+  The Desktop audit's pip-audit has its own lock in `.github/ci-tools/audit/`,
+  because the fixed filelock it pulls in needs Python 3.11.
+
+When a job fails with "The lockfile at `uv.lock` needs to be updated", run
+`uv lock` in that directory and commit the lock.
+`tests/test_ci_locked_installs.py` fails on any workflow install that resolves
+at run time. The few that do on purpose are listed there with their reasons:
+the launcher's check of what a user's pip picks, the uv bootstrap and the
+Harness² commit pin.
+
 ## Dependabot
 
-Each ecosystem and directory opens at most one grouped version-update pull
-request a week (`.github/dependabot.yml`). Security updates are not grouped.
+`.github/dependabot.yml` opens grouped version-update pull requests weekly.
+One uv entry covers every lock except Desktop's and opens at most two pull
+requests a week, each across all of those directories: `test-tools` (pytest
+and its plugins, ruff, mypy, Playwright, build, pip, pip-audit, twine) and
+`python` (everything else). Desktop's uv, npm and cargo locks keep their own
+entries. Security updates are not grouped.
