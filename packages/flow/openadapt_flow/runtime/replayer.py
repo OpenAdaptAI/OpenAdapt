@@ -15481,6 +15481,7 @@ class Replayer:
             else None
         )
         if masked is not None:
+            self._identity_dialog_box = box
             return masked
         observed = (
             "no dialog holds the target"
@@ -15547,6 +15548,10 @@ class Replayer:
         """
         anchor = step.anchor
         assert anchor is not None
+        # The live dialog box this check reads in, for the extra looks it may
+        # take on fresh frames (see _look_again). None outside a dialog.
+        self._identity_dialog_box: Optional[Region] = None
+        unscoped_png = before_png
         if anchor.dialog_region is not None:
             # The target was recorded inside a dialog and its identity band
             # was read on the dialog alone. Read the live band the same way,
@@ -15564,10 +15569,12 @@ class Replayer:
                 identity_policy is not None
                 and identity_policy.enforcement.value == "signal_quorum"
             ):
+                # Quorum signals name their own regions (a banner outside
+                # the dialog is one), so they read the whole frame.
                 return self._verify_signal_quorum(
                     step=step,
                     resolution=resolution,
-                    before_png=before_png,
+                    before_png=unscoped_png,
                     params=runtime_params_for_gui(params),
                     workflow=workflow,
                     bundle_dir=bundle_dir,
@@ -16909,6 +16916,10 @@ class Replayer:
         for _ in range(looks_mod.FRAME_LOOKS):
             time.sleep(self.poll_interval_s)
             png = self.backend.screenshot()
+            box = self.__dict__.get("_identity_dialog_box")
+            if box is not None:
+                # Read the fresh frame in the same dialog as the first look.
+                png = identity_mod.mask_outside(png, box) or png
             frames.append((read(png), sha256_bytes(png)))
             if frames[-1][0].status == "mismatch":
                 break  # final; no further looks

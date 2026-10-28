@@ -101,6 +101,31 @@ def test_point_on_the_overlay_outside_the_box_reads_the_dialog(page_backend) -> 
     assert box == (0, 0, 1000, 400)
 
 
+def test_fading_out_modal_is_not_a_dialog(page_backend) -> None:
+    page, backend = page_backend
+    page.evaluate("document.querySelector('.modal').style.opacity = '0'")
+    try:
+        status, _ = backend.dialog_region_at(*_center(page, "#confirm", "#body"))
+        assert status == "none"
+    finally:
+        page.evaluate("document.querySelector('.modal').style.opacity = '1'")
+
+
+def test_non_modal_popover_is_not_a_dialog(page_backend) -> None:
+    page, backend = page_backend
+    page.evaluate("document.querySelector('.modal').style.display = 'none'")
+    page.evaluate(
+        "document.body.insertAdjacentHTML('beforeend', '<div id=pop role=dialog"
+        ' style="position:fixed;left:20px;top:300px;width:200px;height:60px">'
+        "<button id=yes>Delete?</button></div>')"
+    )
+    try:
+        assert backend.dialog_region_at(*_center(page, "#yes")) == ("none", None)
+    finally:
+        page.evaluate("document.getElementById('pop').remove()")
+        page.evaluate("document.querySelector('.modal').style.display = 'block'")
+
+
 def test_no_dialog_open_is_none(page_backend) -> None:
     page, backend = page_backend
     page.evaluate("document.querySelector('.modal').style.display = 'none'")
@@ -228,3 +253,29 @@ def test_live_dialog_masks_the_frame() -> None:
     got = cv2.imdecode(np.frombuffer(result, np.uint8), cv2.IMREAD_COLOR)
     assert (got[60:260, 300:700] == 0).all()
     assert (got[:60] == 255).all()
+
+
+def test_render_scaled_view_maps_the_dialog_box_back() -> None:
+    from openadapt_flow.runtime import render_scale as rs
+
+    class Inner:
+        viewport = (1250, 500)
+
+        def screenshot(self):
+            return b""
+
+        def dialog_region_at(self, x, y):
+            assert (x, y) == (500, 200)
+            return ("dialog", (375, 75, 500, 250))
+
+    transform = rs.RenderTransform(
+        scale=1.25,
+        offset=(0.0, 0.0),
+        recorded_viewport=(1000, 400),
+        live_viewport=(1250, 500),
+        landmarks_used=5,
+        landmarks_located=5,
+        max_residual_px=1.0,
+    )
+    view = rs.render_scaled_backend(Inner(), transform)
+    assert view.dialog_region_at(400, 160) == ("dialog", (300, 60, 400, 200))

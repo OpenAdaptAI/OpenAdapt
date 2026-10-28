@@ -1466,7 +1466,7 @@ _FRAME_SELECTOR_JS = r"""(el) => {
     return null;
 }"""
 
-# The active dialog holding the element under a viewport point. Walks the
+# The active modal dialog holding the element under a viewport point. Walks the
 # hit-tested chain from the top document down through same-origin frames; the
 # first dialog met is the outermost one, and hit testing already follows the
 # stacking order, so a dialog painted over another wins. The box is the
@@ -1476,11 +1476,14 @@ _FRAME_SELECTOR_JS = r"""(el) => {
 # or ``{status: "unknown"}`` when a frame on the chain is cross-origin or
 # transformed and the chain cannot be followed.
 _DIALOG_AT_JS = r"""([x, y]) => {
-    const SELECTOR = 'dialog[open], [aria-modal="true"], [role="dialog"], ' +
-        '[role="alertdialog"], .modal.show';
+    // Modal dialogs only: a popover or date picker with role="dialog" leaves
+    // the page behind live, and its rows stay identity evidence.
+    const SELECTOR = 'dialog:modal, [aria-modal="true"], [role="alertdialog"], ' +
+        '.modal.show';
     const visible = (el, win) => {
         const style = win.getComputedStyle(el);
         if (style.display === 'none' || style.visibility === 'hidden') return false;
+        if (parseFloat(style.opacity) < 0.05) return false;
         const r = el.getBoundingClientRect();
         return r.width > 0 && r.height > 0;
     };
@@ -2207,8 +2210,8 @@ class PlaywrightBackend:
         """The box of the active dialog holding viewport pixel (x, y).
 
         Returns ``("dialog", (x, y, w, h))`` when the element under the point
-        sits in an open dialog (``dialog[open]``, ``aria-modal``, a dialog
-        role, or a shown Bootstrap modal), the outermost one along the frame
+        sits in an open modal dialog (a modal ``dialog``, ``aria-modal``, an
+        ``alertdialog``, or a shown Bootstrap modal), the outermost one along the frame
         chain; ``("none", None)`` when the chain was followed and no dialog
         holds the point; ``("unknown", None)`` when it could not be followed
         (a cross-origin or transformed frame, an evaluation error). Callers
@@ -2233,6 +2236,8 @@ class PlaywrightBackend:
             and box[3] > 0
         ):
             bx, by, bw, bh = (int(v) for v in box)
+            if not (bx <= int(x) < bx + bw and by <= int(y) < by + bh):
+                return ("unknown", None)
             return ("dialog", (bx, by, bw, bh))
         return ("unknown", None)
 

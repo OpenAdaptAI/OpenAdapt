@@ -288,8 +288,10 @@ def build_worker(user: str, opts: dict[str, Any]) -> Any:
                 raise
             page.wait_for_load_state("load", timeout=60_000)
             for frame in page.frames:
-                if not frame.is_detached():
+                try:
                     frame.wait_for_load_state("load", timeout=60_000)
+                except Exception:  # noqa: BLE001 - a frame may detach meanwhile
+                    continue
             _open_form(page)
 
     def _open_form(page: Any) -> None:
