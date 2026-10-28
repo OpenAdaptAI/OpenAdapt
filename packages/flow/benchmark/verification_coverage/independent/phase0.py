@@ -340,7 +340,9 @@ def grant_reader() -> str:
     live.sql(
         f"CREATE USER IF NOT EXISTS '{live.AUDIT_USER}'@'%' IDENTIFIED BY '{password}'; "
         f"ALTER USER '{live.AUDIT_USER}'@'%' IDENTIFIED BY '{password}'; "
-        f"GRANT SELECT, SHOW VIEW ON openemr.* TO '{live.AUDIT_USER}'@'%'; "
+        # TRIGGER: MariaDB shows a trigger only to an account that holds it,
+        # and the frame must see a trigger planted in the window.
+        f"GRANT SELECT, SHOW VIEW, TRIGGER ON openemr.* TO '{live.AUDIT_USER}'@'%'; "
         "FLUSH PRIVILEGES;"
     )
     out = live.fx()._compose("ps", "-q", "db").stdout.decode().split()
