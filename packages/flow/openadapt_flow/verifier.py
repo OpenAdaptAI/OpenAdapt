@@ -324,6 +324,8 @@ def capture_database(
     max_rows: int = 2000,
     key: Optional[bytes] = None,
     profile: Optional[str] = None,
+    before: Optional[DatabaseSnapshot] = None,
+    actor_names: Sequence[str] = (),
 ) -> DatabaseSnapshot:
     """Snapshot every table of a database, in one read-only transaction.
 
@@ -333,9 +335,14 @@ def capture_database(
     (to read through ``podman exec``, say). It talks to the database over
     that connection only; no application code is imported. The snapshot
     holds keyed MACs, never values: ``key`` keys them (default: one key per
-    process). ``allow_tables`` are kept append-only. ``profile`` (``openemr``)
-    applies an app profile's bookkeeping rules, the same ones the frame uses
-    (``openadapt_flow.app_profiles``). Raises :class:`BaselineUnreadable`.
+    process). ``allow_tables`` are kept append-only.
+
+    ``profile`` (``openemr``) applies an app profile's bookkeeping rules, the
+    same ones the frame uses (``openadapt_flow.app_profiles``); its own-row
+    rules need the acting user's sign-in names (``actor_names``), whose ids
+    are read in the same transaction. ``before``: a snapshot taken earlier
+    with the same key, so this one keeps the plain values of the rows that
+    differ from it, in memory only. Raises :class:`BaselineUnreadable`.
     """
 
     from openadapt_flow.verify_run import _db_connect
@@ -343,6 +350,13 @@ def capture_database(
     if dialect not in ("sqlite", "mysql"):
         raise VerifierError(f"dialect {dialect!r} is not sqlite or mysql")
     connect = read if callable(read) else _db_connect(read)
+    extra: dict[str, str] = {}
+    if profile is not None:
+        from openadapt_flow.app_profiles import load_profile
+
+        query = load_profile(profile).actor_ids_query(list(actor_names), dialect)
+        if query:
+            extra["actor_ids"] = query
     try:
         return take_snapshot(
             connect,
@@ -350,6 +364,8 @@ def capture_database(
             key=key or _PROCESS_KEY,
             modes=dict.fromkeys(allow_tables, "append_only"),
             max_rows=max_rows,
+            before=before,
+            extra_queries=extra,
             **_profile_args(profile),
         )
     except Exception as exc:  # noqa: BLE001 - any read failure is unreadable
@@ -365,6 +381,7 @@ def _profile_args(profile: Optional[str]) -> dict[str, Any]:
     return {
         "optional_modes": {t["table"]: t["mode"] for t in p.allow_tables()},
         "ignore": p.ignore_columns(),
+        "ref_columns": p.ref_columns(),
     }
 
 
@@ -374,11 +391,68 @@ def diff_database(
     *,
     allow_tables: Sequence[str] = (),
     key: Optional[bytes] = None,
+    profile: Optional[str] = None,
+    actor_names: Sequence[str] = (),
 ) -> dict[str, TableDiff]:
     """Every table that moved, with counts of rows added, removed and changed
     and the changed column names, never values. Empty when the database is
     back where it was (a compensation that undid everything). Append-only
     tables whose existing rows moved, changed definitions or code, and a row
-    written then removed all show, under ``unread``."""
+    written then removed all show, under ``unread``.
 
-    return diff(before, after, key=key or _PROCESS_KEY, allow_tables=allow_tables)
+    With ``profile`` (captured with the same profile and ``actor_names``, and
+    ``after`` captured with ``before=``), a row change the profile's
+    conditional rules call the app's own (the acting user's sign-in
+    counters, a uuid backfill) is left out, as the frame leaves it out.
+    """
+
+    from openadapt_flow.runtime.effects.db_snapshot import cell_hash, unpack
+
+    k = key or _PROCESS_KEY
+    moved = diff(before, after, key=k, allow_tables=allow_tables)
+    if profile is None:
+        return moved
+    from openadapt_flow.app_profiles import load_profile
+
+    p = load_profile(profile)
+    names = set(actor_names)
+    ids = {str(r.get("id")) for r in after.extra.get("actor_ids", [])}
+    out: dict[str, TableDiff] = {}
+    for name, d in moved.items():
+        a, b = before.tables.get(name), after.tables.get(name)
+        if d.unread or a is None or b is None or a.cell_columns != b.cell_columns:
+            out[name] = d
+            continue
+        hasher = (lambda t: lambda col, v: cell_hash(k, v, t, col))(name)
+        kept = TableDiff()
+        columns: set[str] = set()
+        for row_key in a.rows.keys() | b.rows.keys():
+            old, new = a.rows.get(row_key), b.rows.get(row_key)
+            if old is not None and new is not None and old[0] == new[0]:
+                continue
+            was = None if old is None else unpack(a.cell_columns, old[1])
+            now = None if new is None else b.values.get(row_key)
+            if new is not None and now is None:
+                kept.changed += 1  # no plain values to judge: keep it
+                continue
+            fields = (
+                []
+                if was is None or now is None
+                else sorted(
+                    c for c in a.cell_columns if was[c] != hasher(c, now.get(c))
+                )
+                or ["(columns not compared)"]
+            )
+            if p.excuse(name, was, now, fields, hasher, names, ids):
+                continue
+            if was is None:
+                kept.added += 1
+            elif now is None:
+                kept.removed += 1
+            else:
+                kept.changed += 1
+                columns.update(fields)
+        kept.changed_columns = sorted(columns)
+        if kept.added or kept.removed or kept.changed:
+            out[name] = kept
+    return out
