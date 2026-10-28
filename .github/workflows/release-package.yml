@@ -74,6 +74,12 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
+      # build and twine come from the CI tools lock, with hashes. No cache:
+      # release builds start clean.
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          version: "0.11.29"
+          enable-cache: false
       - name: Check the dispatched commit, version and PyPI state
         id: check
         env:
@@ -136,7 +142,7 @@ jobs:
           PACKAGE: ${{ inputs.package }}
         run: |
           set -euo pipefail
-          python -m pip install 'build==1.6.1' 'twine==7.0.0'
+          python scripts/ci/locked_install.py --lock .github/ci-tools:release
           if [ "$PACKAGE" = flow ]; then
             # Flow commits a reviewed list of artifact paths, not their
             # hashes, so parallel pull requests don't collide on hash rows.

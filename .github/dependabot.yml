@@ -1,61 +1,53 @@
 # SOC 2: automated dependency updates (OA-C-23).
 #
-# Each ecosystem and directory opens at most one version-update pull request a
-# week: every update is in one group (`patterns: ["*"]`). CI runner time is
-# the scarce resource (the org is on the free GitHub Actions plan), and one
-# grouped PR runs CI once instead of once per dependency. Security updates are
-# not grouped and still open as they are published.
+# Each entry opens at most one version-update pull request per group a week.
+# CI runner time is the scarce resource (the org is on the free GitHub Actions
+# plan), and one grouped PR runs CI once instead of once per dependency.
+# Security updates are not grouped and still open as they are published.
 version: 2
 updates:
-  - package-ecosystem: "pip"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-    groups:
-      pip-root:
-        patterns: ["*"]
-  # packages/capture keeps its own uv.lock. The uv ecosystem updates it with
-  # pyproject.toml, so the capture lanes' `uv sync --locked` accepts the bump.
+  # Every uv.lock except Desktop's, in one entry. CI installs from these locks
+  # (scripts/ci/locked_install.py, `uv sync --locked`), so a test tool moves
+  # only when a lock changes. Two weekly pull requests at most, each across
+  # all of these directories, so every package moves to the same version:
+  # the test tools in one, everything else in the other.
   - package-ecosystem: "uv"
-    directory: "/packages/capture"
+    directories:
+      - "/"
+      - "/packages/types"
+      - "/packages/flow"
+      - "/packages/agent"
+      - "/packages/capture"
+      - "/packages/privacy"
+      - "/packages/tray"
+      - "/.github/ci-tools"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
     groups:
-      uv-capture:
+      # Listed first: a dependency joins the first group it matches.
+      test-tools:
+        patterns:
+          - "pytest"
+          - "pytest-*"
+          - "hypothesis"
+          - "coverage"
+          - "ruff"
+          - "mypy"
+          - "playwright"
+          - "build"
+          - "pip"
+          - "pip-audit"
+          - "twine"
+      python:
         patterns: ["*"]
     ignore:
       # Keep PyGObject >=3.46,<3.51 so the Linux extra installs on GLib 2.64
       # distros; 3.51+ needs newer GLib. See packages/capture/docs/DESIGN.md.
       - dependency-name: "pygobject"
         versions: [">=3.51"]
-  # packages/privacy keeps its own uv.lock, like packages/capture.
-  - package-ecosystem: "uv"
-    directory: "/packages/privacy"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-    groups:
-      uv-privacy:
-        patterns: ["*"]
-  # packages/tray keeps its own uv.lock, like packages/capture.
-  - package-ecosystem: "uv"
-    directory: "/packages/tray"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-    groups:
-      uv-tray:
-        patterns: ["*"]
   # packages/desktop: its uv.lock, the frontend's package-lock.json and the
   # Tauri shell's Cargo.lock, each in one weekly group.
   - package-ecosystem: "uv"

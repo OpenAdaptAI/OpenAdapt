@@ -70,14 +70,25 @@ jobs:
         uses: actions/setup-python@v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: pyproject.toml
+
+      - name: Install uv
+        if: steps.scope.outputs.run == 'true'
+        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            packages/capture/uv.lock
+            packages/privacy/uv.lock
+          cache-suffix: run-ci-${{ matrix.os }}-py${{ matrix.python-version }}
 
       - name: Install dependencies
         if: steps.scope.outputs.run == 'true'
         run: |
-          python -m pip install --upgrade pip
-          # Sibling packages are installed explicitly so the
+          # Everything comes from the launcher's lock, then Capture's and
+          # Privacy's for the in-tree copies of those two (their own
+          # dependencies can be newer than the published ones the launcher's
+          # lock names). Sibling packages are installed explicitly so the
           # cross-package seam tests (tests/test_import_integrity.py and
           # the cmd_serve contract in tests/test_cli_smoke.py) run
           # instead of skipping. Issue #999 shipped because the
@@ -87,9 +98,10 @@ jobs:
           # openadapt-capture and openadapt-privacy are in-tree
           # (packages/capture, packages/privacy), so the seam is tested
           # against the source that will ship.
-          pip install -e ".[dev]" -e packages/capture -e packages/privacy openadapt-ml \
-            openadapt-evals openadapt-viewer openadapt-grounding \
-            openadapt-retrieval
+          python scripts/ci/locked_install.py \
+            --lock '.[dev,ml,evals,viewer,grounding,retrieval]' \
+            --lock packages/capture --lock packages/privacy \
+            --editable . --editable packages/capture --editable packages/privacy
 
       - name: Lint with ruff
         if: steps.scope.outputs.run == 'true'
@@ -146,9 +158,18 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: .github/ci-tools/uv.lock
+          cache-suffix: python-support-py${{ matrix.python-version }}
+
+      # pip and build come from the CI tools lock. The launcher itself is the
+      # subject here: it resolves from PyPI below, as a user's pip would.
       - name: Build the launcher wheel
         run: |
-          python -m pip install --upgrade pip build
+          python scripts/ci/locked_install.py --lock .github/ci-tools:build
           python -m build --wheel
 
       # Installing dist/*.whl directly would hide the original bug, which was
@@ -218,5 +239,5 @@ jobs:
 
       - name: Run the Python support tests
         run: |
-          python -m pip install pytest packaging
+          python scripts/ci/locked_install.py --lock .github/ci-tools:test
           pytest tests/test_python_support.py -v

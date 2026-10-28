@@ -129,11 +129,9 @@ Three kinds of workflow keep their own groups:
 
 ## Caches
 
-The Flow and agent jobs install with `uv pip install --system` into the
-`actions/setup-python` interpreter, with the uv cache keyed on the pyproject
-files they resolve; uv takes seconds where pip took two to three minutes. The
-other pip jobs use `cache: pip`. Every other `setup-uv` step sets
-`enable-cache: true` and keys the cache on its package's own `uv.lock`.
+Every `setup-uv` step sets `enable-cache: true` and keys the cache on the
+`uv.lock` files its job installs from; uv takes seconds where pip took two to
+three minutes.
 npm uses `cache: npm`. The Tauri builds use `Swatinem/rust-cache`, and the
 Rust audit caches its `cargo-audit` binary. The release workflows keep caching
 off on purpose: release builds start from a clean cache.
@@ -152,7 +150,38 @@ are branch-protection settings, so an admin changes them. How GitHub fills a
 group at those values hasn't been tested here; check the result on the next
 few queue runs.
 
+## Locked installs
+
+Every job installs Python packages from a uv lockfile, test tools included, so
+nothing changes version between two runs of the same commit. A floating
+pytest 9.2 once broke flow-unit on every pull request at once.
+
+- Jobs that own a package directory run `uv sync --locked`, then
+  `uv run --no-sync` or `uv run --locked`.
+- Jobs that install into the setup-python interpreter run
+  `scripts/ci/locked_install.py`. It exports each named lock with
+  `uv export --locked` and installs it with `--require-hashes --no-deps`.
+  In-tree packages then install editable without dependencies, and
+  `uv pip check` fails the job if one of them needs something no lock has.
+  Where an in-tree sibling needs newer dependencies than the published copy
+  another lock names, the job adds the sibling's own lock after it. For
+  example, flow-unit installs Flow's lock, then Capture's.
+- Jobs that test no package of their own (Python support, platform manifest,
+  wheel builds, the Desktop audit, release builds) use the groups in
+  `.github/ci-tools/uv.lock`.
+
+When a job fails with "The lockfile at `uv.lock` needs to be updated", run
+`uv lock` in that directory and commit the lock.
+`tests/test_ci_locked_installs.py` fails on any workflow install that resolves
+at run time. The few that do on purpose are listed there with their reasons:
+the launcher's check of what a user's pip picks, the uv bootstrap and the
+Harness² commit pin.
+
 ## Dependabot
 
-Each ecosystem and directory opens at most one grouped version-update pull
-request a week (`.github/dependabot.yml`). Security updates are not grouped.
+`.github/dependabot.yml` opens grouped version-update pull requests weekly.
+One uv entry covers every lock except Desktop's and opens at most two pull
+requests a week, each across all of those directories: `test-tools` (pytest
+and its plugins, ruff, mypy, Playwright, build, pip, pip-audit, twine) and
+`python` (everything else). Desktop's uv, npm and cargo locks keep their own
+entries. Security updates are not grouped.
