@@ -88,7 +88,7 @@ shipping in the next release.
 | Builds the record check itself. After a save, the app usually reads the record back to show it; `scaffold-verifier` finds that read in the captured traffic or a read-only database, builds the check from it and tries to break it before a person reviews it. No API or SQL needs to be written by hand. | [EFFECT_KIT.md](packages/flow/docs/EFFECT_KIT.md#a-record-check-built-from-the-apps-own-reads-scaffold-verifier) |
 | Checks a save on desktop, RDP and Citrix apps with no API at all, by looking the record up in the app's own screens in a separate session. | [EFFECT_KIT.md](packages/flow/docs/EFFECT_KIT.md#separate-session-desktop-read-back-desktop_readback) |
 | Keeps pixel-path runs working across display scaling from 100% to 175% and font smoothing on or off, and stops rather than saves when the record changed. | [benchmark/pixel_scale](packages/flow/benchmark/pixel_scale/README.md) |
-| Lists every change made before a stop, and reverses them with undo steps a person approves. | `undo`, [AFTER_A_STOP.md](packages/flow/docs/AFTER_A_STOP.md) |
+| Lists every change made before a stop and rolls it back with compensations a person approved once, then proves it by reading the whole database: equal to the read from before the run is `ROLLED_BACK`, anything else names the exact rows. | `undo`, `rollback`, [ROLLBACK.md](packages/flow/docs/ROLLBACK.md), [AFTER_A_STOP.md](packages/flow/docs/AFTER_A_STOP.md) |
 | Repairs itself when the app changes: governed repair, agent-demonstrated fixes, fleet patches, and self-repair probed up to the save. | [REPAIR_LIFECYCLE.md](packages/flow/docs/REPAIR_LIFECYCLE.md) |
 | Repairs a change that needs new steps, such as a new required dialog or a control moved into a menu: up to three new steps, each with its own record check, probed up to the save before one person approves. | [SELF_REPAIR.md](packages/flow/docs/SELF_REPAIR.md), [#1325](https://github.com/OpenAdaptAI/OpenAdapt/pull/1325) |
 | Compiles a computer-use agent's verified run, with no human demonstration needed. | [JIT.md](packages/flow/docs/JIT.md) |
@@ -149,6 +149,7 @@ improvising or retrying when something is off.
 | Keep the server's own answer to a save as lower-level evidence on the receipt | On main ([#1298](https://github.com/OpenAdaptAI/OpenAdapt/pull/1298)) | Synthetic | receipts |
 | A ledger of what changed before a stop, a write-ordering lint, and undo steps a person approves | On main ([#1263](https://github.com/OpenAdaptAI/OpenAdapt/pull/1263)) | Synthetic (MockMed) | change ledger |
 | Propose an undo for each saving step (another recording, captured traffic, or the old value), keep it only if a test copy shows every record restored, and offer it after a stop once a person approves it | On main ([#1346](https://github.com/OpenAdaptAI/OpenAdapt/pull/1346)) | Synthetic (MockMed, MockLoan, live browser) | `openadapt-flow undo propose`, `undo accept`; [AFTER_A_STOP.md](packages/flow/docs/AFTER_A_STOP.md) |
+| Roll a stopped run back on its own: the approved compensation for each change, latest first, an uncertain write only when a fresh read shows it landed, then a read of the whole database that must match the read from before the run (`ROLLED_BACK`), or the exact rows a person repairs (`RECONCILIATION_REQUIRED`). `rollback qualify` stops the run before and after every save on a test copy and keeps only compensations that restore the whole store | On main (PRNUM) | MockMed, live browser through the CLI; SQLite whole-database tests | `openadapt-flow rollback qualify`, `rollback:` in deployment.yaml; [ROLLBACK.md](packages/flow/docs/ROLLBACK.md) |
 
 ## Approvals
 
@@ -340,6 +341,7 @@ A test fails when a command has no file or this list is out of date.
 
 - `fleet`
 - `repair`
+- `rollback`: Compensating rollback after a stop; `rollback qualify` stops the run before and after every save on a test copy and keeps the compensations that restore the whole database.
 - `teach-branch`
 - `teach`
 - `undo`: The undo steps a person approves after a stop; `undo propose` finds and verifies them on a test copy, `undo accept` is a person's one-time approval of a proposal.
