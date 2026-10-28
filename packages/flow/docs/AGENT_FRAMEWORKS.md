@@ -88,7 +88,7 @@ does: `ToolNode`, `bind_tools` or a prebuilt agent.
 ## CrewAI
 
 ```bash
-pip install "openadapt-flow[crewai]"
+pip install openadapt-flow crewai
 ```
 
 ```python
