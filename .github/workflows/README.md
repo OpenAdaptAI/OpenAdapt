@@ -98,7 +98,7 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | packages.yml | `types`, `agent` | Python 3.12 | Python 3.12 | Python 3.10 and 3.12 |
 | packages.yml | `flow-lint`, `flow-critical` | yes | yes | yes |
 | ci.yml | `smoke`, `ci` | yes | yes | no |
-| packages.yml | `flow-unit` | 2 xdist shards, fast lane (without `nightly_only.txt`) | no | 2 xdist shards |
+| packages.yml | `flow-unit` | 4 xdist shards, fast lane (without `nightly_only.txt`) | no | 2 xdist shards |
 | packages.yml | `flow-native-census` | no | no | Windows and macOS |
 | packages.yml | `capture-linux` | Python 3.12 | Python 3.12 | Python 3.10 (ubuntu-22.04), 3.11, 3.12 |
 | packages.yml | `capture-macos`, `capture-windows` | no | no | yes |

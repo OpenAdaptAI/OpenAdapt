@@ -431,12 +431,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Two shards, each running pytest-xdist on all four runner cores. Each
-        # job pays a few minutes of setup and runners are capped, so more
-        # shards cost more runner time than they save.
-        include:
-          - { shard: 1, of: 2 }
-          - { shard: 2, of: 2 }
+        # Each shard runs pytest-xdist on all four runner cores and pays about
+        # a minute and a half of setup. A pull request's fast lane takes four
+        # shards to fit `ci` in ten minutes at about the same runner time; the
+        # full suite on main and nightly takes two.
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"shard":1,"of":4},{"shard":2,"of":4},{"shard":3,"of":4},{"shard":4,"of":4}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
     defaults:
       run:
         working-directory: packages/flow
