@@ -14,6 +14,23 @@ For the current evidence behind each capability claim, see
 [`VERIFICATION.md`](VERIFICATION.md). For the package-wide evidence map, see
 [`PRODUCT_STATUS.md`](PRODUCT_STATUS.md).
 
+## Validated on
+
+Every published result used synthetic patients, claims and records.
+
+| System | What ran |
+| --- | --- |
+| OpenEMR 8.0.0.3, local test copies (open-source EHR; its 7.0 release is ONC-certified) | Referral entry by agent, screen program and API step; injected database faults; repair of a relabeled save button; duplicate check |
+| openIMIS, local test copy (open-source insurance and claims system) | Claim entry over a worklist; a relabeled Save sent to repair with no wrong save |
+| Windows 11 over RDP, real network | 3 of 3 effect-confirmed trials, plus a FreeRDP batch |
+| Citrix stand-in, no DOM | 3 healthy runs and 3 drift stops through the Citrix backend |
+| WinForms, TextEdit, a GTK3 app | 3 of 3 effects on each native backend |
+| MockMed, MockLoan and fixtures (OpenAdapt's own test apps) | Fault suites, approvals, repair and the agent comparisons |
+
+Each workflow is qualified on the customer's own system before it touches a
+real record. Windows installers are unsigned and macOS builds are ad-hoc
+signed; the Python packages are published from the reviewed release workflow.
+
 ## Product boundary
 
 | Capability | Evidence basis | What the claim means | What it does not mean |
