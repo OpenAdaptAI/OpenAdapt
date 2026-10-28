@@ -675,8 +675,23 @@ def test_look_alike_rows_that_differ_in_markup_never_sign_the_other_chart(
     assert signed in {"Nothing signed", "Signed chart 1001"}, f"WRONG RECORD: {signed}"
 
 
-@pytest.mark.parametrize("s", ["iconshape", "stateclass", "attr", "hidden"])
-def test_look_alike_markup_rows_in_the_recorded_order_still_verify(
+@pytest.mark.parametrize(
+    "s",
+    [
+        # Look-alike rows that differ only in markup.
+        pytest.param("iconshape", id="look-alike-iconshape"),
+        pytest.param("stateclass", id="look-alike-stateclass"),
+        pytest.param("attr", id="look-alike-attr"),
+        pytest.param("hidden", id="look-alike-hidden"),
+        # Linked names, MRN buttons and grouped rows.
+        pytest.param("linkname", id="linked-linkname"),
+        pytest.param("mrnbutton", id="linked-mrnbutton"),
+        pytest.param("groups", id="grouped-groups"),
+        pytest.param("tbody", id="grouped-tbody"),
+        pytest.param("lowcell", id="grouped-lowcell"),
+    ],
+)
+def test_repeated_rows_in_the_recorded_order_still_verify(
     probe_app, browser, tmp_path, s
 ):
     bundle = _rec_open_sign(probe_app, browser, tmp_path / "rec", s, "cbad", "1003")
@@ -845,20 +860,6 @@ def test_grouped_varied_and_virtualized_rows_never_sign_the_other_chart(
     assert signed in {"Nothing signed", f"Signed chart {chart}"}, (
         f"WRONG RECORD: {signed}"
     )
-
-
-@pytest.mark.parametrize("s", ["linkname", "mrnbutton", "groups", "tbody", "lowcell"])
-def test_linked_names_and_grouped_rows_in_the_recorded_order_still_verify(
-    probe_app, browser, tmp_path, s
-):
-    bundle = _rec_open_sign(probe_app, browser, tmp_path / "rec", s, "cbad", "1003")
-    report, page = _replay(
-        browser, f"{probe_app}?s={s}&order=cbad", bundle, tmp_path / "run"
-    )
-    signed = page.locator("#signed").inner_text()
-    _note(f"\n[{s} same] success={report.success} signed={signed!r}\n{_summ(report)}")
-    page.close()
-    assert report.success and signed == "Signed chart 1003"
 
 
 def test_a_1500_row_census_finishes_in_under_a_second(probe_app, browser) -> None:
