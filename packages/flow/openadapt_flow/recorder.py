@@ -675,6 +675,10 @@ class Recorder:
         """Capture before frame, act, wait settle, capture after, log event."""
         before = self._backend.screenshot()
         structural_before = self._structural_state()
+        # Who has the focus before and after a key press, for a key that moves
+        # the focus and changes nothing visible (the ``focus_on``
+        # postcondition). Key events only.
+        focus_before = self._focus_identity(event)
         # Structured identity of the clicked target (DOM / a11y text), when
         # the backend exposes it: captured on the BEFORE frame, before the
         # action, so the compiler can store it on the anchor and the replayer
@@ -778,6 +782,14 @@ class Recorder:
                 },
             }
         after = self._wait_settled()
+        if focus_before is not None:
+            focus_after = self._focus_identity(event)
+            if focus_after is not None:
+                event = {
+                    **event,
+                    "focus_before": focus_before,
+                    "focus_after": focus_after,
+                }
         opened = self._claim_new_pages(self._i)
         if opened:
             event = {**event, "opens": opened}
@@ -1078,6 +1090,20 @@ class Recorder:
         except Exception:
             return None
         return census if isinstance(census, dict) else None
+
+    def _focus_identity(self, event: dict[str, Any]) -> Optional[dict[str, Any]]:
+        """The focused element's identity around a key event, if readable."""
+
+        if event.get("kind") not in ("key", "hotkey"):
+            return None
+        reader = getattr(self._backend, "focus_identity", None)
+        if not callable(reader):
+            return None
+        try:
+            value = reader()
+        except Exception:
+            return None
+        return value if isinstance(value, dict) else None
 
     def _structural_state(self) -> dict[str, Any]:
         """Structural observations the backend can provide right now.
