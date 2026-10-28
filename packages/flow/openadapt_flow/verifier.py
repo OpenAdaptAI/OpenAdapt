@@ -31,8 +31,9 @@ The public names are ``Contract``, ``Snapshot``, ``Source``, ``capture``,
 from __future__ import annotations
 
 import json
+import secrets
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -309,30 +310,43 @@ def verify_write(
     )
 
 
+#: The key the snapshots of this process share, when the caller gives none:
+#: two captures taken in one process compare. Saved snapshots need an
+#: explicit ``key``.
+_PROCESS_KEY = secrets.token_bytes(32)
+
+
 def capture_database(
-    read: Mapping[str, Any],
+    read: Mapping[str, Any] | Callable[[], Any],
     dialect: str,
     *,
     allow_tables: Sequence[str] = (),
     max_rows: int = 20000,
+    key: Optional[bytes] = None,
 ) -> DatabaseSnapshot:
-    """Snapshot every table of a database, except ``allow_tables``.
+    """Snapshot every table of a database, in one read-only transaction.
 
-    ``read`` is a read-only connection, as in ``frame.database.read``:
-    ``sqlite_database``, or ``sql_driver`` with ``sql_connect_args`` and
-    ``sql_password_env``. It talks to the database over its own driver; no
-    application code is imported. Raises :class:`BaselineUnreadable`.
+    ``read`` is a read-only connection, as in ``frame.database.read``
+    (``sqlite_database``, or ``sql_driver`` with ``sql_connect_args`` and
+    ``sql_password_env``), or a function that opens one DB-API connection
+    (to read through ``podman exec``, say). It talks to the database over
+    that connection only; no application code is imported. The snapshot
+    holds keyed MACs, never values: ``key`` keys them (default: one key per
+    process). ``allow_tables`` are kept append-only. Raises
+    :class:`BaselineUnreadable`.
     """
 
     from openadapt_flow.verify_run import _db_connect
 
     if dialect not in ("sqlite", "mysql"):
         raise VerifierError(f"dialect {dialect!r} is not sqlite or mysql")
+    connect = read if callable(read) else _db_connect(read)
     try:
         return take_snapshot(
-            _db_connect(read),
+            connect,
             dialect,  # type: ignore[arg-type]
-            skip=allow_tables,
+            key=key or _PROCESS_KEY,
+            modes=dict.fromkeys(allow_tables, "append_only"),
             max_rows=max_rows,
         )
     except Exception as exc:  # noqa: BLE001 - any read failure is unreadable
@@ -344,9 +358,12 @@ def diff_database(
     after: DatabaseSnapshot,
     *,
     allow_tables: Sequence[str] = (),
+    key: Optional[bytes] = None,
 ) -> dict[str, TableDiff]:
     """Every table that moved, with counts of rows added, removed and changed
     and the changed column names, never values. Empty when the database is
-    back where it was (a compensation that undid everything)."""
+    back where it was (a compensation that undid everything). Append-only
+    tables whose existing rows moved, changed definitions or code, and a row
+    written then removed all show, under ``unread``."""
 
-    return diff(before, after, allow_tables=allow_tables)
+    return diff(before, after, key=key or _PROCESS_KEY, allow_tables=allow_tables)
