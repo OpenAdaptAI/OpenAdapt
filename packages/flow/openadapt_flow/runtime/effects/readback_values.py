@@ -38,6 +38,7 @@ from typing import Literal, Optional
 __all__ = [
     "OCR_CONFUSABLE",
     "Comparison",
+    "ReadbackKind",
     "ValueKind",
     "compare_value",
     "infer_value_kind",
@@ -45,6 +46,8 @@ __all__ = [
 ]
 
 ValueKind = Literal["text", "code", "date", "currency", "phone", "email"]
+#: The kinds an on-screen read-back field compares in (``ReadbackField``).
+ReadbackKind = Literal["text", "code", "date", "currency"]
 Comparison = Literal["match", "mismatch", "ambiguous"]
 ReadSource = Literal["ocr", "structure"]
 
@@ -278,7 +281,7 @@ _MONEY = re.compile(
 _CODE_SHAPE = re.compile(r"^(?=.*\d)(?=.*[A-Za-z])[A-Za-z0-9\-./]{4,}$")
 
 
-def infer_value_kind(value: str) -> ValueKind:
+def infer_value_kind(value: str) -> ReadbackKind:
     """Guess the kind of a demonstrated value, conservatively.
 
     Only clear shapes are recognized: an ISO or numeric date, an amount with a
