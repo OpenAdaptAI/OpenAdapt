@@ -81,8 +81,13 @@ class SnapshotError(RuntimeError):
 def _host_secret() -> bytes:
     """The host's frame secret: ``OPENADAPT_FRAME_SECRET`` (hex), the file
     ``OPENADAPT_FRAME_SECRET_FILE``, or ``~/.config/openadapt/frame.key``
-    (created owner-only on first use). Keep it unreadable to the agent's
-    account; it is never written into a baseline."""
+    (created owner-only on first use). It is never written into a baseline.
+
+    The default file only keeps the secret out of the baseline: an agent
+    running as the same OS user can read it. A deployment sets
+    ``OPENADAPT_FRAME_SECRET`` (or the file) from a store the agent's account
+    can't read, so a baseline the agent can see still can't be tested
+    against guesses."""
 
     env = os.environ.get("OPENADAPT_FRAME_SECRET")
     if env:
@@ -92,11 +97,24 @@ def _host_secret() -> bytes:
         or Path.home() / ".config" / "openadapt" / "frame.key"
     )
     if not path.exists():
+        # Written whole to a private temp file, then linked into place: a
+        # process that loses the race reads the winner's secret, never a
+        # half-written one.
         path.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        tmp = path.with_name(f".{path.name}.{os.getpid()}.{secrets.token_hex(4)}")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "wb") as handle:
             handle.write(secrets.token_bytes(32))
-    return path.read_bytes()
+        try:
+            os.link(tmp, path)
+        except FileExistsError:
+            pass
+        finally:
+            os.unlink(tmp)
+    secret = path.read_bytes()
+    if len(secret) < 32:
+        raise SnapshotError(f"the frame secret {path} is too short")
+    return secret
 
 
 def mac_key(salt: bytes) -> bytes:
