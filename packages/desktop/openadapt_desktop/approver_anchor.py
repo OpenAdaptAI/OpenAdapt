@@ -90,7 +90,8 @@ def read_anchor(path: Path | None = None, *, trusted_uids: Iterable[int] = (0,))
 
     Raises :class:`AnchorError` when an anchor (or its folder) exists but
     this user could have written it, or it doesn't parse. ``trusted_uids``
-    is for tests: real callers trust only root.
+    is POSIX only and for tests: real callers trust only root. Windows
+    trusts owners and access entries by SID (:data:`TRUSTED_SIDS`).
     """
 
     return _read_anchor(Path(os.path.abspath(path or anchor_path())), frozenset(trusted_uids))

@@ -25,8 +25,13 @@ _read_anchor = approver_anchor.read_anchor
 
 
 def _me() -> frozenset[int]:
-    """Root plus this test's own account, standing in for the administrator."""
-    return frozenset({0, os.getuid()})
+    """Root plus this test's own account, standing in for the administrator.
+
+    POSIX only: Windows checks owners and access entries by SID, so there
+    ``trusted_uids`` is unused and only root's 0 is passed.
+    """
+    getuid = getattr(os, "getuid", None)
+    return frozenset({0, getuid()}) if getuid else frozenset({0})
 
 
 @pytest.fixture
@@ -141,10 +146,10 @@ def test_pinning_needs_an_administrator(anchor: Path) -> None:
 
 
 def test_the_anchor_lives_where_only_an_administrator_writes() -> None:
-    assert str(approver_anchor.anchor_path("darwin")) == (
+    assert approver_anchor.anchor_path("darwin").as_posix() == (
         "/Library/Application Support/OpenAdapt/approver-root.json"
     )
-    assert str(approver_anchor.anchor_path("linux")) == "/etc/openadapt/approver-root.json"
+    assert approver_anchor.anchor_path("linux").as_posix() == "/etc/openadapt/approver-root.json"
 
 
 # -- macOS extended ACLs ---------------------------------------------------------
@@ -396,7 +401,7 @@ def test_the_pin_command_shows_and_refuses_without_elevation(monkeypatch, tmp_pa
         cli.main(["approver-pin", "--show"])
     assert shown.value.code == 0
     assert "no approver root pinned" in capsys.readouterr().out
-    if sys.platform != "win32" and os.geteuid() != 0:
+    if sys.platform != "win32" and getattr(os, "geteuid", lambda: 0)() != 0:
         with pytest.raises(SystemExit) as refused:
             cli.main(["approver-pin", ROOT])
         assert refused.value.code == 1
