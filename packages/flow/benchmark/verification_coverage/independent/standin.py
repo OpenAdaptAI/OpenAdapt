@@ -280,8 +280,9 @@ class Store:
             "lname": v["lname"],
             "DOB": v["DOB"],
             "sex": v["sex"],
-            "street": v["street"],
-            "city": v["city"],
+            # OpenEMR's New Patient form saves these in capitals (WITNESS.md).
+            "street": str(v["street"]).upper(),
+            "city": str(v["city"]).upper(),
             "state": v["state"],
             "postal_code": v["postal_code"],
             "phone_home": v["phone_home"],
