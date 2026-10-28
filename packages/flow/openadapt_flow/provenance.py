@@ -445,8 +445,17 @@ def round_trip(
                 else mapping.stored_form(source_value.strip())
             )
         stored = "" if record.get(record_field) is None else str(record[record_field])
-        if source_value is None:
+        coded = mapping is not None and (
+            isinstance(mapping, Mapping) or getattr(mapping, "map", None) is not None
+        )
+        if source_value is None or (coded and source_value == ""):
+            # No code, or an empty one: nothing to compare an unsaved field with.
             checks.append(FieldCheck(name, "missing", stored))
+        elif coded:
+            # A code is the exact stored value, as ``field_equals`` compares
+            # it: "PR1a" is not "pr1A", and the label's kind doesn't apply.
+            result = "agree" if stored == source_value else "disagree"
+            checks.append(FieldCheck(name, result, stored, source_value))
         elif kind is not None:
             # A declared kind: the stored value against the document's, in
             # canonical form. The document is read in its own date order (the
