@@ -81,8 +81,13 @@ class SnapshotError(RuntimeError):
 def _host_secret() -> bytes:
     """The host's frame secret: ``OPENADAPT_FRAME_SECRET`` (hex), the file
     ``OPENADAPT_FRAME_SECRET_FILE``, or ``~/.config/openadapt/frame.key``
-    (created owner-only on first use). Keep it unreadable to the agent's
-    account; it is never written into a baseline."""
+    (created owner-only on first use). It is never written into a baseline.
+
+    The default file only keeps the secret out of the baseline: an agent
+    running as the same OS user can read it. A deployment sets
+    ``OPENADAPT_FRAME_SECRET`` (or the file) from a store the agent's account
+    can't read, so a baseline the agent can see still can't be tested
+    against guesses."""
 
     env = os.environ.get("OPENADAPT_FRAME_SECRET")
     if env:
