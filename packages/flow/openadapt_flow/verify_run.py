@@ -157,6 +157,9 @@ SEALED_DETAIL = "openadapt:sealed_records"
 CHECKED_PARTS: tuple[str, ...] = ("delta", "frame", "source")
 #: ``checked.coverage``, present only under an admission policy.
 COVERAGE_KEYS = frozenset({"killed", "applicable", "sha256", "policy"})
+#: Also in ``checked.coverage`` since the per-class rule: each claimed fault
+#: class and how it came out. Receipts issued before it lack the key.
+COVERAGE_CLASSES_KEY = "classes"
 CHECKED_VALUES = ("held", "refuted", "not_checked")
 SOURCE_VALUES = CHECKED_VALUES + ("instruction",)
 
@@ -748,10 +751,10 @@ def judge_run_frame(
             )
         if routes is None:
             routes = {str(i): [""] for i in range(len(bound_effects))}
-        views = spec.database.views if spec.database is not None else {}
+        db_views = spec.database.views if spec.database is not None else {}
         routes = {k: list(v) for k, v in routes.items()}
-        for own in routes.values():
-            own.extend(t for t, surface in views.items() if surface in own)
+        for route in routes.values():
+            route.extend(t for t, surface in db_views.items() if surface in route)
         slices.update(db.slices)
         identities = {name: KEY for name in db.slices}
     audit_before: Optional[list[dict[str, Any]]] = None
@@ -1520,6 +1523,7 @@ def verify_run(
             "applicable": record.applicable if record is not None else 0,
             "sha256": record.digest() if record is not None else None,
             "policy": "met" if admitted else str(problem),
+            COVERAGE_CLASSES_KEY: record.class_results() if record is not None else {},
         }
     claim_holds = (
         read_proves_write
@@ -1723,7 +1727,8 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
                 "coverage" in parts
                 and (
                     not isinstance(cover, Mapping)
-                    or set(cover) != COVERAGE_KEYS
+                    or set(cover) - {COVERAGE_CLASSES_KEY} != COVERAGE_KEYS
+                    or not isinstance(cover.get(COVERAGE_CLASSES_KEY, {}), Mapping)
                     or not isinstance(cover.get("killed"), int)
                     or not isinstance(cover.get("applicable"), int)
                     or not isinstance(cover.get("policy"), str)
