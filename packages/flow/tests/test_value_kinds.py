@@ -127,3 +127,103 @@ def test_a_duplicate_key_with_a_kind_matches_in_canonical_form() -> None:
         effect, before, [{"id": "1", "email": "Ada.Quill@Example.TEST"}], substrate="t"
     )
     assert verdict.verdict.value == "confirmed"
+
+
+# -- round 2 of the review ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "stored",
+    ["617-555-0142 do not call", "Tel 617 555 0142", "617-555-0142; 617-555-0199"],
+)
+def test_a_phone_with_any_other_text_never_matches(stored: str) -> None:
+    want = ValueExpr(param="p", kind="phone").resolved({"p": "617-555-0142"})
+    assert not want.matches(stored)
+
+
+@pytest.mark.parametrize(
+    "value,form",
+    [
+        ("1984-03-07 00:00:00", "1984-03-07"),
+        ("1984-03-07T23:30:00", "1984-03-07"),
+        ("1984-03-07 junk", None),
+        ("1984-03-07T23:30:00-05:00", None),
+    ],
+)
+def test_only_a_time_of_day_may_follow_an_iso_date(value: str, form) -> None:
+    assert kind_form("date", value) == form
+
+
+def test_resolve_returns_the_entered_value() -> None:
+    # Kinds apply only where values are compared, so an on-screen read-back
+    # or an undo request sees what was typed.
+    expr = ValueExpr(param="p", kind="phone")
+    assert expr.resolve({"p": "(617) 555-0142"}) == "(617) 555-0142"
+    assert expr.resolved({"p": "(617) 555-0142"}).matches("617-555-0142")
+
+
+def test_the_screen_read_back_and_the_record_check_share_one_normalizer() -> None:
+    from openadapt_flow.runtime.effects.readback_values import compare_value
+
+    assert compare_value("(617) 555-0142", "617-555-0142", kind="phone") == "match"
+    assert (
+        compare_value("617-555-0142 call me", "617-555-0142", kind="phone")
+        == "mismatch"
+    )
+    assert compare_value("ADA@X.TEST", "ada@x.test", kind="email") == "match"
+
+
+def _round_trip(printed: str, stored: str, order) -> str:
+    from openadapt_flow.intake.document import IntakeDocument
+    from openadapt_flow.provenance import (
+        ParamProvenance,
+        ProvenanceFile,
+        SourceRef,
+        bound_fields,
+        bound_maps,
+        default_extractor,
+        round_trip,
+        sha256_bytes,
+    )
+
+    document = IntakeDocument("r.txt", "text", [f"Date of birth: {printed}"])
+    sha = sha256_bytes(document.text.encode("utf-8"))
+    prov = ProvenanceFile(
+        params={
+            "DOB": ParamProvenance(
+                value=printed,
+                source=SourceRef(
+                    kind="document", sha256=sha, line=1, label="Date of birth"
+                ),
+                extractor="model:first-reader",
+                value_kind="date",
+                date_order=order,
+            )
+        }
+    )
+    effects = [
+        Effect(
+            kind=EffectKind.FIELD_EQUALS,
+            match={"id": "1"},
+            field="DOB",
+            value={"param": "DOB", "kind": "date", "date_order": "mdy"},
+        )
+    ]
+    return round_trip(
+        prov,
+        {"id": 1, "DOB": stored},
+        bound_fields(effects),
+        {sha: document},
+        default_extractor(prov),
+        maps=bound_maps(effects),
+    ).status
+
+
+def test_the_document_is_read_in_its_own_date_order() -> None:
+    # The referral prints 03/07/1984 day-first (7 March): the app, set to
+    # month-day, stored 1984-03-07 from a typed "03/07/1984". The round trip
+    # reads the document day-first and refutes the misread.
+    assert _round_trip("03/07/1984", "1984-03-07", "dmy") == "refuted"
+    assert _round_trip("03/07/1984", "1984-07-03", "dmy") == "held"
+    # With no order for the document, a date it prints two ways stays unchecked.
+    assert _round_trip("03/07/1984", "1984-03-07", None) == "not_checked"

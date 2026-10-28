@@ -56,56 +56,34 @@ from pydantic import (
 )
 from pydantic_core import to_jsonable_python
 
-#: ASCII-only case maps: PHP's strtoupper and strtolower (OpenEMR) change
-#: a-z and A-Z only, so "Café" is stored "CAFé", not "CAFÉ".
-_ASCII_UPPER = str.maketrans("abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-_ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
-
-
 ValueKind = Literal["phone", "date", "email"]
 
 
 def kind_form(
     kind: Optional[str], value: Any, date_order: Optional[str] = None
 ) -> Optional[str]:
-    """``value`` in the canonical form of a declared value kind, or None
-    when it can't be read as one (which then matches nothing).
+    """``value`` in the canonical form of a declared value kind, or None when
+    it can't be read as one (which then matches nothing). The one normalizer
+    is :mod:`openadapt_flow.runtime.effects.readback_values`, shared with the
+    on-screen read-back:
 
-    - ``phone``: the digits, with an extension kept apart
-      (``(617) 555-0142 x12`` -> ``6175550142x12``);
-    - ``date``: ISO ``YYYY-MM-DD``; a numeric date like ``03/07/1984`` needs
-      ``date_order`` (``mdy`` or ``dmy``), or it is ambiguous;
-    - ``email``: trimmed, case folded.
+    - ``phone``: the digits, with an extension kept apart; a value with
+      anything but digits, ``( ) + - . /``, spaces and one trailing extension
+      isn't a phone number;
+    - ``date``: ISO ``YYYY-MM-DD`` (a stored date-time keeps its date; nothing
+      else may follow); a numeric date needs ``date_order``, or it is
+      ambiguous;
+    - ``email``: one address, case folded.
     """
+
+    from openadapt_flow.runtime.effects.readback_values import normalize_value
 
     if value is None:
         return None
     text = str(value).strip()
     if kind is None:
         return text
-    if kind == "email":
-        return text.lower() if "@" in text else None
-    if kind == "phone":
-        ext = re.search(r"(?i)\s*(?:x|ext\.?|extension)\s*(\d+)\s*$", text)
-        digits = re.sub(r"\D", "", text[: ext.start()] if ext else text)
-        if not digits:
-            return None
-        return digits + (f"x{ext.group(1)}" if ext else "")
-    if kind == "date":
-        iso = re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T].*)?", text)
-        if iso:
-            y, m, d = (int(g) for g in iso.groups())
-        else:
-            num = re.fullmatch(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", text)
-            if not num or date_order not in ("mdy", "dmy"):
-                return None
-            a, b, y = (int(g) for g in num.groups())
-            m, d = (a, b) if date_order == "mdy" else (b, a)
-        try:
-            return datetime(y, m, d).date().isoformat()
-        except ValueError:
-            return None
-    return None
+    return normalize_value(text, kind, date_order=date_order)  # type: ignore[arg-type]
 
 
 class ValueExpr(BaseModel):
@@ -144,9 +122,10 @@ class ValueExpr(BaseModel):
     map: Optional[dict[str, str]] = None
     #: For a ``param`` the system of record stores transformed: how it stores
     #: what was entered (OpenEMR's New Patient form saves street and city in
-    #: capitals). Applied after :attr:`map`, to ASCII letters only, as PHP's
-    #: strtoupper does. The check stays exact: it expects the stored form,
-    #: not any casing.
+    #: capitals). Applied after :attr:`map`, with full Unicode case mapping,
+    #: as the browser's ``toUpperCase()`` does for OpenEMR's "U" fields
+    #: ("Peña" is stored "PEÑA", "Straße" "STRASSE"). The check stays exact:
+    #: it expects the stored form, not any casing.
     stored: Optional[Literal["upper", "lower"]] = None
     #: A declared value kind (:func:`kind_form`): the expected value and the
     #: stored one are compared in canonical form, so formatting alone never
@@ -198,12 +177,8 @@ class ValueExpr(BaseModel):
             from openadapt_flow.runtime.authorization import runtime_param_text
 
             entered = runtime_param_text(params[self.param])  # type: ignore[arg-type]
-            value = self.stored_form(entered)
-        else:
-            value = self.literal
-        if self.kind is not None:
-            return kind_form(self.kind, value, self.date_order)
-        return value
+            return self.stored_form(entered)
+        return self.literal
 
     def stored_form(self, entered: str) -> Optional[str]:
         """What the system of record stores for ``entered``: its code under
@@ -213,14 +188,16 @@ class ValueExpr(BaseModel):
         if self.map is not None:
             value = self.map.get(entered)
         if value is not None and self.stored == "upper":
-            value = value.translate(_ASCII_UPPER)
+            value = value.upper()
         elif value is not None and self.stored == "lower":
-            value = value.translate(_ASCII_LOWER)
+            value = value.lower()
         return value
 
     def resolved(self, params: Mapping[str, object]) -> "ValueExpr":
         """Return a pure-literal copy of this expression bound to ``params``."""
-        return ValueExpr(literal=self.resolve(params), kind=self.kind)
+        return ValueExpr(
+            literal=self.resolve(params), kind=self.kind, date_order=self.date_order
+        )
 
     def matches(self, stored: Any) -> bool:
         """Does a stored value equal this (resolved) value? In canonical form
@@ -228,7 +205,8 @@ class ValueExpr(BaseModel):
 
         if self.kind is None:
             return str(stored) == str(self)
-        return self.literal is not None and kind_form(self.kind, stored) == self.literal
+        want = kind_form(self.kind, self.literal, self.date_order)
+        return want is not None and kind_form(self.kind, stored) == want
 
     # -- transparent str-compatibility (back-compat with the v1 plain-string
     #    form): a literal ValueExpr compares, hashes, stringifies, and reprs
