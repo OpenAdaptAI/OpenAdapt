@@ -49,7 +49,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: |
             packages/desktop/uv.lock
-            .github/ci-tools/uv.lock
+            .github/ci-tools/audit/uv.lock
       - name: Set up Python 3.12
         run: uv python install 3.12
       - name: Export the exact locked dependency set
@@ -58,7 +58,7 @@ jobs:
           --output-file "${{ runner.temp }}/openadapt-desktop-requirements.txt"
       - name: Audit Python dependencies
         run: >-
-          uv run --locked --project "$GITHUB_WORKSPACE/.github/ci-tools"
+          uv run --locked --project "$GITHUB_WORKSPACE/.github/ci-tools/audit"
           --only-group audit pip-audit
           --require-hashes --disable-pip --progress-spinner off
           --requirement "${{ runner.temp }}/openadapt-desktop-requirements.txt"
@@ -79,7 +79,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: |
             packages/desktop/uv.lock
-            .github/ci-tools/uv.lock
+            .github/ci-tools/audit/uv.lock
       - name: Set up Python 3.12
         run: uv python install 3.12
       - name: Export the exact Intel macOS dependency set
@@ -88,7 +88,7 @@ jobs:
           --output-file "${{ runner.temp }}/openadapt-desktop-requirements.txt"
       - name: Audit Intel macOS Python dependencies
         run: >-
-          uv run --locked --project "$GITHUB_WORKSPACE/.github/ci-tools"
+          uv run --locked --project "$GITHUB_WORKSPACE/.github/ci-tools/audit"
           --only-group audit pip-audit
           --require-hashes --disable-pip --progress-spinner off
           --requirement "${{ runner.temp }}/openadapt-desktop-requirements.txt"

@@ -21,6 +21,7 @@ updates:
       - "/packages/privacy"
       - "/packages/tray"
       - "/.github/ci-tools"
+      - "/.github/ci-tools/audit"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5

@@ -1,6 +1,7 @@
 # Locked tools for CI jobs that test no package of their own: the launcher's
-# Python-support and platform-manifest tests, wheel builds, the Desktop
-# dependency audit and the package release build. Each group is one job's set.
+# Python-support and platform-manifest tests, wheel builds and the package
+# release build. Each group is one job's set. The Desktop audit's pip-audit
+# has its own lock in audit/, because it needs Python 3.11.
 # Jobs install a group with scripts/ci/locked_install.py (hashes from
 # uv.lock) or `uv run --locked --only-group`, so no tool version floats.
 # Dependabot proposes updates to the lock weekly (.github/dependabot.yml).
@@ -15,7 +16,6 @@ test = ["pytest>=9.1.1", "packaging>=25.0"]
 build = ["build>=1.6.1", "pip>=25.3"]
 pip = ["pip>=25.3"]
 lint = ["ruff==0.17.0"]
-audit = ["pip-audit>=2.10.1"]
 release = ["build>=1.6.1", "twine>=7.0.0"]
 
 [tool.uv]
