@@ -699,7 +699,9 @@ def judge_frame(
             entry_ref = get_path(e, attribution.record_field or "")
             if entry_ref in (None, ""):
                 continue
-            if (hasher(field, entry_ref) if hasher else str(entry_ref)) != str(ref):
+            if (
+                hasher(field, entry_ref) if hasher and field else str(entry_ref)
+            ) != str(ref):
                 continue
             if attribution.table_field:
                 if table is None or str(get_path(e, attribution.table_field)) != table:
@@ -1088,7 +1090,7 @@ def judge_frame(
                     declared_keys.add(str(ref_of(name, key, None, after)[0]))
                     new_row(name, key, after, (side.link_field,))
                     continue
-                theirs = any(
+                theirs_side = any(
                     side.surface == name
                     and str(after.get(side.link_field)) in other_links[i]
                     for i, side in enumerate(spec.side_records)
@@ -1096,7 +1098,7 @@ def judge_frame(
                 change = FrameChange(
                     name,
                     "added",
-                    "other" if theirs else attribute(name, key, None, after),
+                    "other" if theirs_side else attribute(name, key, None, after),
                     sorted(_without(after, ignore_for(name))),
                     key=key,
                 )

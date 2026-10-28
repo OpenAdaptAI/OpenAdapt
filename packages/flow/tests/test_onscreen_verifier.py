@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from openadapt_flow.runtime.effects import EffectVerifier
 from openadapt_flow.runtime.effects.effect import (
     Effect,
@@ -302,14 +304,24 @@ def test_is_default_readback_effect_gate() -> None:
     assert not is_default_readback_effect(Effect(kind=EffectKind.RECORD_WRITTEN))
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Known gap: value_matches accepts a 90% longest-run overlap, so the "
+        "same-surface read-back confirms 'patient 8' for an expected 'patient 3'. "
+        "The identity gate, not this read-back, keeps the wrong record out."
+    ),
+)
 def test_single_glyph_difference_not_discriminated_same_surface_limit() -> None:
-    """DOCUMENTED HONEST LIMIT: fuzzy same-surface read-back cannot tell a
-    single trailing-glyph difference apart (patient "3" vs "8") — the same
-    glyph-collapse that defeats OCR identity. This is precisely why the pixel
-    -only safety guarantee rests on the IDENTITY GATE (right record) and
-    halt-on-ambiguity, NOT on this read-back. Asserting the real behavior keeps
-    the proof honest rather than claiming a discrimination it does not have."""
+    """A one-glyph difference in the saved value must not confirm.
+
+    Fuzzy same-surface read-back cannot yet tell a single trailing-glyph
+    difference apart (patient "3" vs "8"), the same glyph collapse that
+    defeats OCR identity. The pixel-only safety guarantee rests on the
+    identity gate (right record) and halt-on-ambiguity, not on this read-back.
+    The test asserts the correct behavior and is a strict xfail until the
+    matcher discriminates, so a fix shows up as an XPASS.
+    """
     v = _verifier([_Line("Saved note for patient 8")], min_ratio=0.9)
     verdict = v.read_back("Saved note for patient 3")
-    # It CONFIRMS the near-identical string — a coarse consistency signal only.
-    assert verdict.verdict is Verdict.CONFIRMED
+    assert verdict.verdict is not Verdict.CONFIRMED

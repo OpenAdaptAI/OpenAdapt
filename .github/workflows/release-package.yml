@@ -1,65 +1,98 @@
-# Publish ONE package from packages/ to PyPI.
+# Publish the packages under packages/ to PyPI: types, flow, agent, capture,
+# privacy and tray. Each publishes through its own GitHub environment and PyPI
+# Trusted Publisher:
 #
-# release-and-publish.yml publishes only the root `openadapt` launcher. Each
-# package publishes separately from here, through its own GitHub environment
-# and PyPI Trusted Publisher:
-#
-#   package  PyPI project     environment
-#   flow     openadapt-flow   pypi-flow
-#   types    openadapt-types  pypi-types
-#   agent    openadapt-agent  pypi-agent
+#   package  PyPI project       environment
+#   flow     openadapt-flow     pypi-flow
+#   types    openadapt-types    pypi-types
+#   agent    openadapt-agent    pypi-agent
 #   capture  openadapt-capture  pypi-capture
 #   privacy  openadapt-privacy  pypi-privacy
 #   tray     openadapt-tray     pypi-tray
 #
-# Manual dispatch only: there is no tag or push trigger, so nothing here runs
-# unless someone starts it. openadapt-desktop is not here: desktop-release.yml
-# publishes its wheel, sdist and native installers as one release. It refuses any ref other than the current tip of
-# main, a version that does not match the package's pyproject.toml, and a
-# version that already exists on PyPI. The publish job holds the only
-# id-token permission and runs in the package's environment, so the
-# environment's protection rules gate the upload.
+# One release pattern, Desktop's (desktop-release.yml): merging a reviewed
+# version bump is the authorization. A run starts after each Packages run on
+# main, every three hours, or on a dispatch (the fallback, for the same
+# commit). The plan job (scripts/ci/release_plan.py) publishes a package only
+# when the newest commit on main that changed it has a green push run with the
+# package's jobs run and passed, its version is new on PyPI and higher than
+# every version there, no tag names it yet, and its CHANGELOG.md starts with
+# exactly that version. Each package's environment protection still gates its
+# upload. The release builds main's tip, where the package is unchanged since
+# that commit. openadapt-desktop is not here: desktop-release.yml publishes its
+# wheel, sdist and native installers as one release.
+#
+# A version is never republished. A half-published one is resumed, not
+# rebuilt: re-run the failed jobs of the run that published it, which reuses
+# its built bytes. If PyPI serves the version and its tag exists but the
+# GitHub release is not published, dispatch with `resume`: it rebuilds
+# nothing, fetches the bytes PyPI serves (checked against PyPI's digests) and
+# publishes the release at the tag's commit.
 #
 # Each release is tagged <pypi-project>-v<version> (openadapt-flow-v2.2.0),
 # never v*, which belongs to the launcher. The tag rulesets for each package
 # pattern let only the openadapt-release App create those tags and make them
 # immutable; preflight-github refuses to start if those rules or immutable
-# releases are not in force. Only after the PyPI upload succeeds does
-# publish-github, as the openadapt-release App, create the annotated tag at
-# the dispatched commit and an immutable GitHub Release. The release carries
-# the same sdist and wheel, with notes from packages/<package>/CHANGELOG.md.
+# releases are not in force. Only after PyPI serves exactly the built files
+# does publish-github, as the openadapt-release App, create the annotated tag
+# at the built commit and an immutable GitHub Release. The release carries the
+# same sdist and wheel, with notes from packages/<package>/CHANGELOG.md.
+#
+# Each package's legs (build, preflight, publish, tag) run in their own matrix
+# entry, so one package's failure does not hold another's release.
 name: Release package
 
 on:
+  workflow_run:
+    workflows: [Packages]
+    types: [completed]
+    branches: [main]
+  # A safety net: releases a commit whose Packages run passed on a re-run,
+  # when no later Packages run completes to start a release.
+  schedule:
+    - cron: "11 */3 * * *"
   workflow_dispatch:
     inputs:
       package:
-        description: "Package directory under packages/"
+        description: "Package directory under packages/, or all"
         required: true
+        default: all
         type: choice
-        options: [flow, types, agent, capture, privacy, tray]
-      version:
-        description: "Version to publish; must equal packages/<package>/pyproject.toml"
-        required: true
-        type: string
+        options: [all, flow, types, agent, capture, privacy, tray]
+      resume:
+        description: "Publish the GitHub release of a version PyPI serves and a tag names"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
+# One transaction owns each tag and release. Every Packages run on main starts
+# a run here, most of them no-ops; without a queue, each new pending run would
+# cancel the release waiting before it.
 concurrency:
-  group: release-package-${{ inputs.package }}
+  group: release-package
   cancel-in-progress: false
+  queue: max
 
 jobs:
-  build:
-    name: build ${{ inputs.package }} ${{ inputs.version }}
+  plan:
+    name: plan (which packages to publish)
+    # A Packages run that did not pass cannot make anything green.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Reads each package's newest green run on main.
+      actions: read
     outputs:
-      project: ${{ steps.check.outputs.project }}
-      tag: ${{ steps.check.outputs.tag }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      release: ${{ steps.plan.outputs.release }}
+      any: ${{ steps.plan.outputs.any }}
     steps:
-      - name: Require the tip of main
+      - name: Require main
         env:
           REF: ${{ github.ref }}
         run: |
@@ -74,69 +107,52 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - name: Check the dispatched commit, version and PyPI state
-        id: check
+      - name: Decide each package's release
+        id: plan
         env:
-          PACKAGE: ${{ inputs.package }}
-          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PACKAGE: ${{ inputs.package || 'all' }}
+          RESUME: ${{ inputs.resume && 'true' || 'false' }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          if [ "$(git rev-parse HEAD)" != "$(git rev-parse refs/remotes/origin/main)" ]; then
-            echo "main moved after dispatch; re-run on the current tip." >&2
-            exit 1
-          fi
-          python - <<'PY'
-          import json, os, sys, tomllib, urllib.error, urllib.request
-          pkg, version = os.environ["PACKAGE"], os.environ["VERSION"]
-          with open(f"packages/{pkg}/pyproject.toml", "rb") as fh:
-              project = tomllib.load(fh)["project"]
-          expected = {
-              "flow": "openadapt-flow",
-              "types": "openadapt-types",
-              "agent": "openadapt-agent",
-              "capture": "openadapt-capture",
-              "privacy": "openadapt-privacy",
-              "tray": "openadapt-tray",
-          }[pkg]
-          if project["name"] != expected:
-              sys.exit(f"packages/{pkg} is {project['name']!r}, expected {expected!r}")
-          if project["version"] != version:
-              sys.exit(f"input version {version} != pyproject version {project['version']}")
-          try:
-              urllib.request.urlopen(f"https://pypi.org/pypi/{expected}/{version}/json", timeout=30)
-          except urllib.error.HTTPError as exc:
-              if exc.code != 404:
-                  raise
-          else:
-              sys.exit(f"{expected} {version} is already on PyPI")
-          import re
-          changelog = open(f"packages/{pkg}/CHANGELOG.md", encoding="utf-8").read()
-          headers = re.findall(r"^## v([^ ]+) \(\d{4}-\d{2}-\d{2}\)$", changelog, re.MULTILINE)
-          if not headers or headers[0] != version:
-              actual = headers[0] if headers else "missing"
-              sys.exit(f"packages/{pkg}/CHANGELOG.md must start with v{version}; found v{actual}")
-          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
-              out.write(f"project={expected}\n")
-              out.write(f"tag={expected}-v{version}\n")
-          print(f"releasing {expected} {version}")
-          PY
-          tag="$(sed -n 's/^tag=//p' "$GITHUB_OUTPUT" | tail -n 1)"
-          status=0
-          git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null || status=$?
-          if [ "$status" -eq 0 ]; then
-            echo "Tag $tag already exists." >&2
-            exit 1
-          elif [ "$status" -ne 2 ]; then
-            echo "Could not check whether tag $tag exists (git exit $status)." >&2
-            exit 1
-          fi
+          args=(--package "$PACKAGE" --tip "$RELEASE_COMMIT" --github-output "$GITHUB_OUTPUT")
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then args+=(--dispatch); fi
+          if [ "$RESUME" = true ]; then args+=(--resume); fi
+          python scripts/ci/release_plan.py "${args[@]}"
+
+  build:
+    name: build ${{ matrix.project }} ${{ matrix.version }}
+    needs: plan
+    if: needs.plan.outputs.release != '[]' && needs.plan.outputs.release != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.release) }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ matrix.commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      # build and twine come from the CI tools lock, with hashes. No cache:
+      # release builds start clean.
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          version: "0.11.29"
+          enable-cache: false
       - name: Build sdist and wheel
         env:
-          PACKAGE: ${{ inputs.package }}
+          PACKAGE: ${{ matrix.package }}
         run: |
           set -euo pipefail
-          python -m pip install 'build==1.6.1' 'twine==7.0.0'
+          python scripts/ci/locked_install.py --lock .github/ci-tools:release
           if [ "$PACKAGE" = flow ]; then
             # Flow commits a reviewed list of artifact paths, not their
             # hashes, so parallel pull requests don't collide on hash rows.
@@ -160,13 +176,20 @@ jobs:
           ls -l dist
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: dist-${{ inputs.package }}
+          name: dist-${{ matrix.package }}
           path: dist/
           if-no-files-found: error
 
   preflight-github:
-    name: check release hosting for ${{ needs.build.outputs.tag }}
-    needs: build
+    name: check release hosting for ${{ matrix.tag }}
+    needs: [plan, build]
+    # Each leg stands alone: a release leg needs its own build's files (the
+    # download below), not every package's build.
+    if: ${{ !cancelled() && needs.plan.outputs.any == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: release-identity
@@ -195,15 +218,21 @@ jobs:
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ matrix.commit }}
           persist-credentials: false
+      - name: Require this package's build
+        if: matrix.action == 'release'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist-${{ matrix.package }}
+          path: dist/
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Require immutable releases and closed rules for the package tag
         env:
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
-          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          RELEASE_TAG: ${{ matrix.tag }}
         run: |
           set -euo pipefail
           if [ "$GITHUB_REPOSITORY" != "OpenAdaptAI/OpenAdapt" ]; then
@@ -213,21 +242,39 @@ jobs:
           python scripts/verify_release_hosting.py \
             --repository "$GITHUB_REPOSITORY" \
             --tag "$RELEASE_TAG"
+      - name: Record that this package's hosting checks passed
+        run: echo "${{ matrix.tag }}" > preflight.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: preflight-${{ matrix.package }}
+          path: preflight.txt
+          if-no-files-found: error
 
   publish:
-    name: publish ${{ needs.build.outputs.project }} ${{ inputs.version }}
-    needs: [build, preflight-github]
+    name: publish ${{ matrix.project }} ${{ matrix.version }}
+    needs: [plan, preflight-github]
+    if: ${{ !cancelled() && needs.plan.outputs.release != '[]' && needs.plan.outputs.release != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.release) }}
     environment:
-      name: pypi-${{ inputs.package }}
-      url: https://pypi.org/project/${{ needs.build.outputs.project }}/${{ inputs.version }}/
+      name: pypi-${{ matrix.package }}
+      url: https://pypi.org/project/${{ matrix.project }}/${{ matrix.version }}/
     permissions:
       id-token: write
     steps:
+      # Only this package's own build and hosting checks gate its upload.
+      - name: Require this package's hosting checks
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: preflight-${{ matrix.package }}
+          path: preflight/
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: dist-${{ inputs.package }}
+          name: dist-${{ matrix.package }}
           path: dist/
       - name: Publish to PyPI (Trusted Publishing)
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
@@ -235,8 +282,13 @@ jobs:
           packages-dir: dist/
 
   publish-github:
-    name: tag and release ${{ needs.build.outputs.tag }}
-    needs: [build, publish]
+    name: tag and release ${{ matrix.tag }}
+    needs: [plan, preflight-github, publish]
+    if: ${{ !cancelled() && needs.plan.outputs.any == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: release-identity
@@ -269,7 +321,7 @@ jobs:
       - name: Checkout the exact published commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ matrix.commit }}
           fetch-depth: 0
           token: ${{ steps.release-app.outputs.token }}
 
@@ -277,10 +329,35 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - name: Require this package's hosting checks
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: dist-${{ inputs.package }}
+          name: preflight-${{ matrix.package }}
+          path: preflight/
+
+      - name: Take the built files
+        if: matrix.action == 'release'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist-${{ matrix.package }}
           path: dist/
+
+      # A release tags only what PyPI serves: its own upload must have
+      # finished with exactly these bytes. A resume builds nothing and takes
+      # the bytes PyPI serves, checked against PyPI's digests.
+      - name: Require PyPI to serve exactly these files
+        if: matrix.action == 'release'
+        env:
+          PROJECT: ${{ matrix.project }}
+          VERSION: ${{ matrix.version }}
+        run: python scripts/ci/pypi_dist.py compare "$PROJECT" "$VERSION" dist
+
+      - name: Fetch the files PyPI serves
+        if: matrix.action == 'resume'
+        env:
+          PROJECT: ${{ matrix.project }}
+          VERSION: ${{ matrix.version }}
+        run: python scripts/ci/pypi_dist.py fetch "$PROJECT" "$VERSION" dist
 
       - name: Install the pinned GitHub release verification CLI
         id: release-cli
@@ -301,9 +378,10 @@ jobs:
       - name: Create the annotated package tag at the published commit
         env:
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
-          RELEASE_TAG: ${{ needs.build.outputs.tag }}
-          PROJECT: ${{ needs.build.outputs.project }}
-          VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ matrix.tag }}
+          PROJECT: ${{ matrix.project }}
+          VERSION: ${{ matrix.version }}
+          RELEASE_COMMIT: ${{ matrix.commit }}
         run: |
           set -euo pipefail
           test "$RELEASE_TAG" = "${PROJECT}-v${VERSION}"
@@ -314,8 +392,8 @@ jobs:
           # main may have moved since the upload; the tag still names the
           # exact commit that was built and published, which main contains.
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
-            echo "The published commit $GITHUB_SHA is not on main." >&2
+          if ! git merge-base --is-ancestor "$RELEASE_COMMIT" refs/remotes/origin/main; then
+            echo "The published commit $RELEASE_COMMIT is not on main." >&2
             exit 1
           fi
 
@@ -324,25 +402,26 @@ jobs:
             # A rerun after a partial failure: keep the tag only if it
             # already names the published commit.
             tag_commit="$(git rev-list -n 1 "refs/tags/$RELEASE_TAG")"
-            if [ "$tag_commit" != "$GITHUB_SHA" ]; then
-              echo "Tag $RELEASE_TAG names $tag_commit, not the published $GITHUB_SHA." >&2
+            if [ "$tag_commit" != "$RELEASE_COMMIT" ]; then
+              echo "Tag $RELEASE_TAG names $tag_commit, not the published $RELEASE_COMMIT." >&2
               exit 1
             fi
             exit 0
           fi
           git -c user.name="openadapt-release[bot]" \
             -c user.email="openadapt-release[bot]@users.noreply.github.com" \
-            tag -a "$RELEASE_TAG" "$GITHUB_SHA" -m "$PROJECT $VERSION"
+            tag -a "$RELEASE_TAG" "$RELEASE_COMMIT" -m "$PROJECT $VERSION"
           git push origin "refs/tags/$RELEASE_TAG"
 
       - name: Publish the immutable GitHub Release with the exact artifacts
         env:
           GH_TOKEN: ${{ steps.release-app.outputs.token }}
           GH_CLI: ${{ steps.release-cli.outputs.path }}
-          RELEASE_TAG: ${{ needs.build.outputs.tag }}
-          PROJECT: ${{ needs.build.outputs.project }}
-          PACKAGE: ${{ inputs.package }}
-          VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ matrix.tag }}
+          PROJECT: ${{ matrix.project }}
+          PACKAGE: ${{ matrix.package }}
+          VERSION: ${{ matrix.version }}
+          RELEASE_COMMIT: ${{ matrix.commit }}
           EXPECTED_AUTHOR: openadapt-release[bot]
         run: |
           set -euo pipefail
@@ -367,7 +446,7 @@ jobs:
 
           git fetch --force origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
           tag_commit="$(git rev-list -n 1 "refs/tags/$RELEASE_TAG")"
-          if [ "$tag_commit" != "$GITHUB_SHA" ]; then
+          if [ "$tag_commit" != "$RELEASE_COMMIT" ]; then
             echo "The remote tag $RELEASE_TAG does not name the published commit." >&2
             exit 1
           fi
