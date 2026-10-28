@@ -236,6 +236,21 @@ jobs:
           PY
       - name: Ruff
         run: ruff check openadapt_types tests scripts
+      - name: Install uv (for the oldest-Python syntax check)
+        if: matrix.python-version == '3.12'
+        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - name: Syntax at the oldest supported Python (3.10)
+        if: matrix.python-version == '3.12'
+        # The PR lane runs Python 3.12 only, so syntax that needs a newer
+        # Python than requires-python allows (a 3.12 f-string, say) passed it
+        # and failed only after merge. Check every file at the minimum.
+        # Bytecode goes to a temp directory, so later archive checks see a
+        # clean tree.
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
+        run: |
+          ruff check --isolated --select E9 --target-version py310 .
+          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Test
         run: pytest -q
       - name: Build and verify the public distribution boundary
@@ -288,6 +303,21 @@ jobs:
           PY
       - name: Ruff
         run: ruff check src tests scripts
+      - name: Install uv (for the oldest-Python syntax check)
+        if: matrix.python-version == '3.12'
+        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - name: Syntax at the oldest supported Python (3.10)
+        if: matrix.python-version == '3.12'
+        # The PR lane runs Python 3.12 only, so syntax that needs a newer
+        # Python than requires-python allows (a 3.12 f-string, say) passed it
+        # and failed only after merge. Check every file at the minimum.
+        # Bytecode goes to a temp directory, so later archive checks see a
+        # clean tree.
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
+        run: |
+          ruff check --isolated --select E9 --target-version py310 .
+          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Test
         run: pytest -q
 
@@ -325,6 +355,19 @@ jobs:
         run: python scripts/check_release_consistency.py
       - name: Ruff lint
         run: ruff check openadapt_flow
+      - name: Install uv (for the oldest-Python syntax check)
+        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - name: Syntax at the oldest supported Python (3.10)
+        # The PR lane runs Python 3.12 only, so syntax that needs a newer
+        # Python than requires-python allows (a 3.12 f-string, say) passed it
+        # and failed only after merge. Check every file at the minimum.
+        # Bytecode goes to a temp directory, so later archive checks see a
+        # clean tree.
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
+        run: |
+          ruff check --isolated --select E9 --target-version py310 .
+          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Ruff format check
         run: ruff format --check openadapt_flow tests
       - name: Mypy
@@ -782,6 +825,17 @@ jobs:
         run: uv sync --locked --extra dev
       - name: Ruff
         run: uv run --no-sync ruff check openadapt_capture/
+      - name: Syntax at the oldest supported Python (3.10)
+        # The PR lane runs Python 3.12 only, so syntax that needs a newer
+        # Python than requires-python allows (a 3.12 f-string, say) passed it
+        # and failed only after merge. Check every file at the minimum.
+        # Bytecode goes to a temp directory, so later archive checks see a
+        # clean tree.
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
+        run: |
+          uv run --no-sync ruff check --isolated --select E9 --target-version py310 .
+          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Verify the maintained changelog
         # --skip-tags: the monorepo's v* tags are the launcher's. Capture's
         # release tags through v1.2.2 live in OpenAdaptAI/openadapt-capture.
@@ -872,6 +926,17 @@ jobs:
         run: uv sync --locked --python 3.12 --extra dev
       - name: Ruff
         run: uv run --no-sync ruff check openadapt_privacy tests scripts
+      - name: Syntax at the oldest supported Python (3.10)
+        # The PR lane runs Python 3.12 only, so syntax that needs a newer
+        # Python than requires-python allows (a 3.12 f-string, say) passed it
+        # and failed only after merge. Check every file at the minimum.
+        # Bytecode goes to a temp directory, so later archive checks see a
+        # clean tree.
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
+        run: |
+          uv run --no-sync ruff check --isolated --select E9 --target-version py310 .
+          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Changelog matches the version and the release workflow
         run: uv run --no-sync pytest tests/test_release_config.py -v
       - name: Build wheel and source distribution
@@ -949,6 +1014,17 @@ jobs:
       # The whole package, including examples/ and the root helper scripts.
       - name: Ruff
         run: uv run --no-sync ruff check .
+      - name: Syntax at the oldest supported Python (3.10)
+        # The PR lane runs Python 3.12 only, so syntax that needs a newer
+        # Python than requires-python allows (a 3.12 f-string, say) passed it
+        # and failed only after merge. Check every file at the minimum.
+        # Bytecode goes to a temp directory, so later archive checks see a
+        # clean tree.
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
+        run: |
+          uv run --no-sync ruff check --isolated --select E9 --target-version py310 .
+          uv run --no-project --python 3.10 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
       - name: Build wheel and source distribution
         run: uv build
       - name: Versions agree and both distributions exist
