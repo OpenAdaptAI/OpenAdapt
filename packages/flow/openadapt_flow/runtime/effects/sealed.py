@@ -84,16 +84,16 @@ def unseal(
     out: list[dict[str, Any]] = []
     for entry in sealed:
         cells: Mapping[str, str] = entry["cells"]
-        record = now.get(str(entry["id"]))
-        if record is None:
+        found = now.get(str(entry["id"]))
+        if found is None:
             gone = REMOVED + str(entry["id"])
             out.append({f: CHANGED for f in cells} | {identity_field or "id": gone})
             continue
         out.append(
             {
                 f: (
-                    record.get(f)
-                    if cell_hash(key, record.get(f), where, f) == mac
+                    found.get(f)
+                    if cell_hash(key, found.get(f), where, f) == mac
                     else CHANGED
                 )
                 for f, mac in cells.items()
