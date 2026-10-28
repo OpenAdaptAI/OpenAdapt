@@ -39,18 +39,18 @@ record:
   exact_new_set: true
   identity_field: uuid
   fields:
-    email: email
+    email: {param: email, kind: email}
     lname: lname
     title: title
     fname: fname
-    DOB: DOB
+    DOB: {param: DOB, kind: date, date_order: mdy}
     sex: sex
     # OpenEMR's New Patient form saves these in capitals (WITNESS.md, #1524).
     street: {param: street, stored: upper}
     city: {param: city, stored: upper}
     state: {param: state_label, map: {Massachusetts: MA}}
     postal_code: postal_code
-    phone_home: phone_home
+    phone_home: {param: phone_home, kind: phone}
     country_code: country_code
     # The fixture's two providers (users.id as seeded by the suite).
     providerID: {param: provider, map: {"Dr. Iris Holt": "6", "Dr. Owen Hale": "7"}}
@@ -66,6 +66,13 @@ frame:
     record_field: patient_id
     record_key: pid
     record_keys: {contact: foreign_id}
+    # Only a write to the same table attributes a change; a chart viewed is
+    # never a chart written.
+    event_field: event
+    write_events: [patient-record-insert, patient-record-update,
+                   patient-record-delete, api-POST, api-PUT, api-PATCH, api-DELETE]
+    insert_events: [patient-record-insert, api-POST]
+    table_field: tbl
     self: [openadapt_actor]
     read:
       kind: sql
@@ -75,12 +82,22 @@ frame:
         user: ${OPENEMR_READONLY_DB_USER:-oa_audit_reader}
         database: openemr
       sql_password_env: OPENEMR_READONLY_DB_PASSWORD
+      # A UI write's table is decoded from the statement OpenEMR logs in
+      # `comments`; an API write's from its endpoint.
       sql_query: >-
-        SELECT CONCAT('log-', id) AS id, user, patient_id FROM log
+        SELECT CONCAT('log-', id) AS id, user, patient_id, event,
+        LOWER(REGEXP_REPLACE(FROM_BASE64(comments),
+        '(?is)^\\s*(?:insert\\s+into|update|delete\\s+from|replace\\s+into)\\s+`?([a-z_0-9]+).*$',
+        '\\1')) AS tbl FROM log
         WHERE event LIKE 'patient-record-%' AND event <> 'patient-record-select'
         AND patient_id > 0 AND user <> ''
         UNION ALL
-        SELECT CONCAT('api-', a.id) AS id, u.username AS user, a.patient_id
+        SELECT CONCAT('api-', a.id) AS id, u.username AS user, a.patient_id,
+        CONCAT('api-', a.method) AS event,
+        CASE WHEN a.request_url LIKE '%/allergy%' THEN 'lists'
+        WHEN a.request_url LIKE '%/message%' THEN 'pnotes'
+        WHEN a.request_url LIKE '%/insurance%' THEN 'insurance_data'
+        WHEN a.request_url LIKE '%/patient%' THEN 'patient_data' ELSE '' END AS tbl
         FROM api_log a JOIN users u ON u.id = a.user_id
         WHERE a.method IN ('POST', 'PUT', 'PATCH', 'DELETE') AND a.patient_id > 0
   database:
@@ -89,20 +106,22 @@ frame:
       sql_driver: benchmark.lifecycle_proof.readonly_db
       sql_connect_args: *db
       sql_password_env: OPENEMR_READONLY_DB_PASSWORD
+    # Append-only: rows may be added, existing rows must not change.
     allow_tables:
-      # SPEC.md F3: bookkeeping for any signed-in user.
+      # SPEC.md F3: logs for any signed-in user (the attribution channel).
       - log
       - log_comment_encrypt
       - api_log
-      - sessions
-      - users_secure
-      - uuid_registry
       - uuid_mapping
-      - sequences
-      # WITNESS.md amendment 1: per-user UI state, written on opening a chart.
-      - recent_patients
-      - user_settings
+      # WITNESS.md amendment 1.
       - clinical_rules_log
+      # Not read: tables OpenEMR rewrites in place for any signed-in user.
+      - {table: sessions, mode: skip, reason: "login sessions, rewritten on every request"}
+      - {table: users_secure, mode: skip, reason: "password hashes, updated at login"}
+      - {table: uuid_registry, mode: skip, reason: "id registry; each id's record is compared in its own table"}
+      - {table: sequences, mode: skip, reason: "one id counter row, incremented by every insert"}
+      - {table: recent_patients, mode: skip, reason: "per-user list of charts opened (WITNESS.md amendment 1)"}
+      - {table: user_settings, mode: skip, reason: "per-user UI state (WITNESS.md amendment 1)"}
     views: {patient_data: patient}
     new_row_fields:
       # Set by OpenEMR on every new chart: ids, the creation dates.

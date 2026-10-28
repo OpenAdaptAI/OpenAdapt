@@ -82,14 +82,25 @@ SIDE_TABLES = {
 #: OpenEMR's audit trail: UI writes in ``log`` (by user name), API writes in
 #: ``api_log`` (by user id). The stand-in emulates ``log`` only.
 AUDIT_LOG_SQL = (
-    "SELECT id, user, patient_id FROM log WHERE event LIKE 'patient-record-%' "
-    "AND event <> 'patient-record-select' AND patient_id > 0"
+    "SELECT id, user, patient_id, event, user_notes AS tbl FROM log "
+    "WHERE event LIKE 'patient-record-%' AND event <> 'patient-record-select' "
+    "AND patient_id > 0"
 )
+#: Live: the table a UI write touched, decoded from the statement OpenEMR logs
+#: base64-encoded in `comments`; for an API write, from the endpoint.
 AUDIT_LIVE_SQL = (
-    "SELECT CONCAT('log-', id) AS id, user, patient_id FROM log "
+    "SELECT CONCAT('log-', id) AS id, user, patient_id, event, "
+    "LOWER(REGEXP_REPLACE(FROM_BASE64(comments), "
+    "'(?is)^\\\\s*(?:insert\\\\s+into|update|delete\\\\s+from|replace\\\\s+into)"
+    "\\\\s+`?([a-z_0-9]+).*$', '\\\\1')) AS tbl FROM log "
     "WHERE event LIKE 'patient-record-%' AND event <> 'patient-record-select' "
     "AND patient_id > 0 AND user <> '' "
-    "UNION ALL SELECT CONCAT('api-', a.id) AS id, u.username AS user, a.patient_id "
+    "UNION ALL SELECT CONCAT('api-', a.id) AS id, u.username AS user, a.patient_id, "
+    "CONCAT('api-', a.method) AS event, "
+    "CASE WHEN a.request_url LIKE '%/allergy%' THEN 'lists' "
+    "WHEN a.request_url LIKE '%/message%' THEN 'pnotes' "
+    "WHEN a.request_url LIKE '%/insurance%' THEN 'insurance_data' "
+    "WHEN a.request_url LIKE '%/patient%' THEN 'patient_data' ELSE '' END AS tbl "
     "FROM api_log a JOIN users u ON u.id = a.user_id "
     "WHERE a.method IN ('POST', 'PUT', 'PATCH', 'DELETE') AND a.patient_id > 0"
 )
@@ -145,7 +156,16 @@ def whole_doc(
     doc = yaml.safe_load(DATABASE_YAML.read_text())
     frame = copy.deepcopy(doc["frame"])
     frame["attribution"]["read"] = audit
+    tables = database.pop("tables", None)
     frame["database"].update(database)
+    if tables is not None:
+        # The stand-in keeps a slice of OpenEMR's tables: allow-list entries
+        # for tables it doesn't have are left out (the live run keeps all).
+        frame["database"]["allow_tables"] = [
+            t
+            for t in frame["database"]["allow_tables"]
+            if (t if isinstance(t, str) else t["table"]) in tables
+        ]
     return {
         "schema_version": "openadapt.verify/v1",
         "minimum_effect_strength": doc["minimum_effect_strength"],
@@ -226,7 +246,11 @@ def standin_case(case: dict[str, Any], work: Path, contract: str) -> dict[str, A
             sql("SELECT * FROM patient_data"),
             lambda t: sql(f"SELECT * FROM {t}"),
             sql(AUDIT_LOG_SQL),
-            {"dialect": "sqlite", "read": {"sqlite_database": str(db)}},
+            {
+                "dialect": "sqlite",
+                "read": {"sqlite_database": str(db)},
+                "tables": run.SLICE,
+            },
         )
     )
     source = None if contract == "production" else _source(cdir, told, run.REFERRAL)

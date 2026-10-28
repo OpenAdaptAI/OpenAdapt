@@ -239,10 +239,24 @@ class Store:
         if user is None:
             return
         comment = base64.b64encode(statement.encode()).decode()
+        # The table the statement wrote: live OpenEMR's audit query decodes it
+        # from `comments`; SQLite can't decode base64, so the stand-in also
+        # keeps it in `user_notes`.
+        table = re.search(r"(?:INTO|UPDATE|FROM)\s+(\w+)", statement)
         cur = self.con.execute(
             "INSERT INTO log (date, event, category, user, groupname, comments, "
-            "patient_id, success, log_from) VALUES (?,?,?,?,?,?,?,1,'open-emr')",
-            (self._now(), event, "Patient Demographics", user, "Default", comment, pid),
+            "user_notes, patient_id, success, log_from) "
+            "VALUES (?,?,?,?,?,?,?,?,1,'open-emr')",
+            (
+                self._now(),
+                event,
+                "Patient Demographics",
+                user,
+                "Default",
+                comment,
+                table.group(1) if table else "",
+                pid,
+            ),
         )
         self.con.execute(
             "INSERT INTO log_comment_encrypt (log_id, encrypt, checksum, checksum_api, "
