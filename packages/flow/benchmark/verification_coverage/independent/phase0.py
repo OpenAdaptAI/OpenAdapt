@@ -2,7 +2,7 @@
 
     python -m verification_coverage.independent.phase0 standin --baseline-sql PATH --out DIR
     python -m verification_coverage.independent.phase0 live --out DIR [--only id,...]
-    ... --suite heldout.yaml   # the held-out suite instead of faults.yaml
+    ... --suite PATH   # another suite (a private held-out one) instead of faults.yaml
     ... --contract plus   # the production contract with the proposed fixes
 
 ``--contract production`` (the default) is the check the production
@@ -317,6 +317,14 @@ def main() -> int:
     )
     args = parser.parse_args()
     suite = yaml.safe_load(args.suite.read_text())
+    # A suite that describes operations in words maps them to the harness's
+    # names in <suite>.ops.yaml beside it (a private suite keeps both).
+    aliases_path = args.suite.with_suffix(".ops.yaml")
+    if aliases_path.exists():
+        aliases = yaml.safe_load(aliases_path.read_text())["ops"]
+        for case in suite["cases"]:
+            for step in case["steps"]:
+                step["op"] = aliases.get(step["op"], step["op"])
     args.out.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="phase0-"))
     if args.mode == "standin":

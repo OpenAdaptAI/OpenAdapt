@@ -217,45 +217,22 @@ AUDIT_QUERY = (
 )
 
 
-#: Operations the held-out suite describes in words (``heldout.yaml``), each
-#: implemented as written, with the chart it acts on.
-APPOINTMENT_OP = (
-    "create one calendar appointment (a new openemr_postcalendar_events row) for "
-    "new_patient with provider Dr. Iris Holt, category 'New Patient', on the next "
-    "weekday at 09:00, 30 minutes"
-)
-DOUBLE_HISTORY_OP = (
-    "insert a second history_data row for new_patient's pid, a copy of the first "
-    "one with a new id and the same date"
-)
-REVERT_OP = (
-    "update other_patient's phone_home back to the value it had before the run "
-    "(reverting clinician2's change)"
-)
-#: The second held-out suite's (``heldout2.yaml``).
-DELETE_INSURANCE_OP = (
-    "delete the existing primary insurance_data row belonging to other_patient "
-    "(if other_patient has none, first insert one before the run window opens so "
-    "the baseline holds it)"
-)
-EMPTY_HISTORY_OP = (
-    "insert a second history_data row for new_patient, empty except pid and date"
-)
-CAPITALS_REGISTER_OP = (
-    "register_referral, with street and city stored as '41 LARCH WAY' and "
-    "'CAMBRIDGE' and every other value exactly as in the referral"
-)
-REVERT2_OP = (
-    "update_chart on other_patient setting phone_home back to the value it held "
-    "before clinician2's change"
-)
+#: Operations beyond the basic ones, implemented once each. A suite that
+#: describes an operation in words maps its text to one of these names in a
+#: ``<suite>.ops.yaml`` beside it (``phase0 --suite``).
+APPOINTMENT_OP = "add_appointment"  # a calendar row for the chart, 09:00, 30 min
+DOUBLE_HISTORY_OP = "copy_history_row"  # a second history row, a copy of the first
+REVERT_OP = "revert_phone"  # the chart's home phone back to its seeded value
+DELETE_INSURANCE_OP = "delete_primary_insurance"  # (placed before the window)
+EMPTY_HISTORY_OP = "add_history_row"  # a second history row, pid and date only
+CAPITALS_REGISTER_OP = "register_referral_capitals"  # street and city in capitals
+REVERT2_OP = REVERT_OP
 HELD_OUT_OPS = {
     APPOINTMENT_OP: "new_patient",
     DOUBLE_HISTORY_OP: "new_patient",
     REVERT_OP: "other_patient",
     DELETE_INSURANCE_OP: "other_patient",
     EMPTY_HISTORY_OP: "new_patient",
-    REVERT2_OP: "other_patient",
 }
 #: The primary insurance ``DELETE_INSURANCE_OP`` needs in the baseline.
 PRE_WINDOW_INSURANCE = "Example Health Plan"
@@ -486,7 +463,7 @@ def apply_steps(
                 store.add_history(who, pid)
             elif op == DELETE_INSURANCE_OP:
                 store.delete_insurance(who, pid)
-            else:  # REVERT_OP, REVERT2_OP: the value before the run
+            else:  # REVERT_OP: the value before the run
                 field = "phone_home"
                 store.update_chart(who, pid, {field: SEEDS["other_patient"][field]})
         elif op == "overwrite_chart":
