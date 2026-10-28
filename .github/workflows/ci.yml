@@ -63,6 +63,10 @@ jobs:
       - name: Install, import and start each package from its lock
         env:
           UV_PYTHON: "3.12"
+          # The tray's input and icon backends, as its own CI job sets them:
+          # a headless runner has no X display.
+          PYNPUT_BACKEND: dummy
+          PYSTRAY_BACKEND: dummy
         run: python3 scripts/ci/smoke.py
 
   ci:

@@ -10,7 +10,7 @@ To keep pull requests fast, CI runs in three tiers:
   packages a change touches, on Python 3.12. Flow's unit shards leave out the
   slow tests listed in `packages/flow/tests/nightly_only.txt`. Those are tests
   over about 5 s on CI, except the realism tests that guard safety, which stay.
-  Flow's critical end-to-end tests run as one parallel step. A smoke test
+  Flow's critical tests run in two parallel steps, end-to-end and unit. A smoke test
   (`scripts/ci/smoke.py`) installs every package from its lock, imports it
   and runs its command with `--help`, whatever changed. The checkout is the
   pull request merged with main, so this tier tests the change on top of main.

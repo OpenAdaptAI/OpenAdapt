@@ -75,3 +75,4 @@ deploy/.env
 !/packages/*/src/
 !/llms.txt
 /.smoke/
+!packages/flow/tests/nightly_only.txt
