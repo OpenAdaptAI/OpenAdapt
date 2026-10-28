@@ -104,6 +104,51 @@ per runner, one test file per worker at a time, each worker with its own
 `--basetemp` directory. A test file that can't share the runner with others
 should get its own serial step rather than turning xdist off.
 
+## Releases
+
+One pattern for every PyPI package: merging a reviewed version bump is the
+authorization to publish it. No one dispatches a release.
+
+- **Desktop** (`desktop-release.yml`) publishes its wheel, sdist and native
+  installers as one release.
+- **types, flow, agent, capture, privacy and tray** publish through
+  `release-package.yml`.
+
+Both start after each Packages run on main, every three hours, and on a
+dispatch. The dispatch is a fallback for the same commit, not an approval.
+A package publishes only when all of these hold:
+
+- The newest commit on main's first-parent history that changed the package
+  has a successful push run on main, with the package's own jobs run and
+  passed (`scripts/ci/newest_green.py`). A cancelled or failed run blocks the
+  release until a re-run passes.
+- Its version is not on PyPI, is higher than every version there, and has no
+  tag yet.
+- Its CHANGELOG.md starts with an entry for exactly that version.
+
+Each package's GitHub environment (`pypi-<package>`) still gates its upload.
+The release builds main's tip, where the package is unchanged since that
+commit, and tags it only after PyPI serves exactly the built files.
+`scripts/ci/release_plan.py` makes these decisions, and a run's plan job
+prints each package's decision.
+
+A version is never republished. A half-published version is resumed, not
+rebuilt:
+
+- **Re-run the failed jobs** of the run that published it. That reuses its
+  built files.
+- **Dispatch with `resume`** when PyPI serves the version and its tag exists
+  but the GitHub release isn't published. It fetches the files PyPI serves,
+  checks them against PyPI's digests, and publishes the release at the
+  tag's commit.
+
+A version on PyPI with no package tag counts as done. Capture 1.3.0, Privacy
+1.1.3 and Tray 0.3.7 predate package tags.
+
+The launcher (`release-and-publish.yml`) and `@openadapt/program-graph`
+(`release-program-graph.yml`) still start from a dispatch. Both refuse to
+build unless the newest commit that changed them has a green run on main.
+
 ## Concurrency
 
 Every workflow that runs on pull requests uses one rule. A newer push to a

@@ -130,7 +130,6 @@ def test_the_subject_is_the_newest_first_parent_commit_that_changed_the_package(
 @pytest.mark.parametrize(
     "workflow, package",
     [
-        ("release-package.yml", '"$PACKAGE"'),
         ("release-program-graph.yml", "program-graph"),
         ("release-and-publish.yml", "launcher"),
     ],
@@ -160,5 +159,5 @@ def test_every_released_package_has_a_rule() -> None:
     choices = yaml.safe_load((WORKFLOWS / "release-package.yml").read_text())[True][
         "workflow_dispatch"
     ]["inputs"]["package"]["options"]
-    assert set(choices) <= set(NG.PACKAGES)
+    assert set(choices) - {"all"} <= set(NG.PACKAGES)
     assert {"desktop", "launcher", "program-graph"} <= set(NG.PACKAGES)
