@@ -117,15 +117,17 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 ```
 
-Three kinds of workflow keep their own groups:
+The release workflows, `desktop-release.yml` among them, keep a fixed group
+and never cancel, so releases run one at a time.
 
-- The release workflows use a fixed group and never cancel, so releases run
-  one at a time.
-- `desktop-release.yml` follows the same pattern.
-- `packages.yml` has its own rule (#1398). A push to main that doesn't touch
-  Desktop may cancel an older one, because `desktop-release.yml` waits only
-  for runs on commits that touch Desktop. Queue groups and dispatches are never
-  cancelled.
+`packages.yml` follows the same rule as the others (its group is named
+`packages-…`). It used to let a push to main without a Desktop change cancel
+an older one, judging the change from the push payload's file lists. Those
+lists missed Desktop files on PR merge pushes, so Desktop-changing runs were
+cancelled and Desktop 0.23.0 and 0.24.1 never released. Now no push to main is
+cancelled. `desktop-release.yml` also no longer depends on one particular run:
+each time Packages completes on main, and every three hours, it releases from
+the newest Desktop-changing commit's latest successful Packages push run.
 
 ## Caches
 

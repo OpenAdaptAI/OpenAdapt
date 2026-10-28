@@ -110,7 +110,7 @@ def test_native_workflows_are_pinned_and_preserve_candidate_boundary() -> None:
     assert all(re.fullmatch(r"[^@]+@[0-9a-f]{40}", use) for use in uses)
 
     trigger = release[True]
-    assert set(trigger) == {"workflow_run", "workflow_dispatch"}
+    assert set(trigger) == {"workflow_run", "schedule", "workflow_dispatch"}
     assert trigger["workflow_run"] == {
         "workflows": ["Packages"],
         "types": ["completed"],

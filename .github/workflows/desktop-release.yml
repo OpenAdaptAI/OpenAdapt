@@ -8,20 +8,24 @@
 # is no bot version commit.
 #
 # A release starts when Packages finishes successfully for a push to main
-# (workflow_run), so time spent queued behind other CI cannot fail it. That
-# Packages commit is the subject: its checks decide the release. GitHub runs
-# this workflow, and signs its attestations, at main's tip (github.sha), so the
+# (workflow_run), every three hours (schedule), or on a manual dispatch. Each
+# run takes the same subject: the newest commit on main's first-parent history,
+# up to the tip it builds, that changed packages/desktop. That commit's latest
+# successful Packages push run decides the release, whichever run started this
+# one. So a cancelled or failed run for the Desktop commit no longer strands
+# the release: once a re-run passes, the next Packages completion or the next
+# scheduled run releases it. (Desktop 0.23.0 and 0.24.1 were stranded that
+# way, when a newer push cancelled the Desktop commit's run.) GitHub runs this
+# workflow, and signs its attestations, at main's tip (github.sha), so the
 # release builds and tags that tip and requires its packages/desktop tree to
-# equal the subject's. A manual dispatch does the same with the newest
-# first-parent commit that changed Desktop as the subject, and waits for that
-# commit's Packages run.
+# equal the subject's. A dispatch waits for the subject's Packages run.
 #
-#   gate         stops quietly when the subject does not change
-#                packages/desktop, when a newer Desktop change on main will
-#                release itself, or when this version is already released;
-#                requires the subject's Packages run to have passed with its
-#                desktop test and build jobs; refuses if packages/desktop
-#                changed on main since a dispatched subject.
+#   gate         stops quietly when this version is already released, when the
+#                subject has no successful Packages push run yet, or when a
+#                newer Desktop change on main will release itself; requires the
+#                subject's Packages run to have passed with its desktop test
+#                and build jobs; refuses if packages/desktop changed on main
+#                since a dispatched subject.
 #   build-*      the Python distributions and every native installer, smoke-
 #                tested. The macOS and Windows jobs run in the native-release
 #                environment, which holds the signing secrets.
@@ -62,6 +66,10 @@ on:
     workflows: [Packages]
     types: [completed]
     branches: [main]
+  # A safety net: releases a Desktop commit whose Packages run passed on a
+  # re-run, when no later Packages run completes to start the release.
+  schedule:
+    - cron: "41 */3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -87,7 +95,8 @@ jobs:
     # successful push run on this repository's main can release.
     if: >-
       github.ref == 'refs/heads/main' && (
-        github.event_name == 'workflow_dispatch' || (
+        github.event_name == 'workflow_dispatch' ||
+        github.event_name == 'schedule' || (
           github.event_name == 'workflow_run' &&
           github.event.workflow_run.conclusion == 'success' &&
           github.event.workflow_run.event == 'push' &&
@@ -105,7 +114,6 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       EVENT_NAME: ${{ github.event_name }}
-      PACKAGES_RUN_ID: ${{ github.event.workflow_run.id }}
       PACKAGES_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
     outputs:
       release: ${{ steps.fresh.outputs.release }}
@@ -129,40 +137,35 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${EVENT_NAME}" = workflow_run ]; then
-            # The Packages commit, never main's tip: its checks are the ones
-            # that finished.
-            subject="${PACKAGES_HEAD_SHA}"
-            if ! [[ "${subject}" =~ ^[0-9a-f]{40}$ ]]; then
-              echo "Packages head commit '${subject}' is not a commit id." >&2
+            # The run that started this one only says "Packages finished on
+            # main"; it is a trigger, not the evidence.
+            if ! [[ "${PACKAGES_HEAD_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Packages head commit '${PACKAGES_HEAD_SHA}' is not a commit id." >&2
               exit 1
             fi
-            git merge-base --is-ancestor "${subject}" "${GITHUB_SHA}"
-            echo "sha=${subject}" >> "${GITHUB_OUTPUT}"
-            if git diff --quiet "${subject}^1" "${subject}" -- .; then
-              echo "No release: ${subject} does not change packages/desktop."
-              echo "candidate=false" >> "${GITHUB_OUTPUT}"
-              exit 0
-            fi
-            if ! git diff --quiet "${subject}" "${GITHUB_SHA}" -- .; then
-              newer="$(git log -1 --first-parent --format=%H "${GITHUB_SHA}" -- .)"
-              echo "No release: main changed packages/desktop again at ${newer}; that commit's Packages run starts its own release."
-              echo "candidate=false" >> "${GITHUB_OUTPUT}"
-              exit 0
-            fi
-          else
-            # A dispatch builds the tip; its checks are those of the newest
-            # commit on main's own history (first parent) that changed
-            # Desktop, whose tree the tip must equal. A commit from inside a
-            # merged branch never had a Packages push run on main.
-            subject="$(git log -1 --first-parent --format=%H "${GITHUB_SHA}" -- .)"
-            echo "sha=${subject}" >> "${GITHUB_OUTPUT}"
+            git merge-base --is-ancestor "${PACKAGES_HEAD_SHA}" "${GITHUB_SHA}"
+            echo "Started by the Packages run for ${PACKAGES_HEAD_SHA}."
           fi
+          # Every event: the newest commit on main's own history (first
+          # parent) that changed Desktop, up to the tip this run builds. A
+          # commit from inside a merged branch never had a Packages push run
+          # on main. Its tree equals the tip's, since nothing changed Desktop
+          # after it.
+          subject="$(git log -1 --first-parent --format=%H "${GITHUB_SHA}" -- .)"
+          if ! [[ "${subject}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "No release: no commit on main changes packages/desktop."
+            echo "candidate=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          echo "sha=${subject}" >> "${GITHUB_OUTPUT}"
           echo "Release checks follow ${subject}; the release builds ${GITHUB_SHA}."
           echo "candidate=true" >> "${GITHUB_OUTPUT}"
 
       - name: Read the version and the state of its release
         if: steps.subject.outputs.candidate == 'true'
         id: state
+        env:
+          SUBJECT: ${{ steps.subject.outputs.sha }}
         run: |
           set -euo pipefail
           version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
@@ -213,6 +216,14 @@ jobs:
               echo "resume-commit=${commit}"
             } >> "${GITHUB_OUTPUT}"
           elif [ "${pypi}" = 200 ] || [ "${pypi}" = 404 ]; then
+            # Loud for a dispatch and for the Desktop commit's own Packages
+            # run; every other Packages completion and schedule only warns,
+            # so unrelated merges don't all fail.
+            if [ "${EVENT_NAME}" != workflow_dispatch ] && [ "${PACKAGES_HEAD_SHA:-}" != "${SUBJECT}" ]; then
+              echo "::warning::${tag} is partly published (PyPI ${pypi}, GitHub ${release}). Re-run the failed jobs of the run that started it; do not rebuild."
+              echo "release=false" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
             echo "${tag} is partly published (PyPI ${pypi}, GitHub ${release})." >&2
             echo "Re-run the failed jobs of the run that started it; do not rebuild." >&2
             exit 1
@@ -244,11 +255,11 @@ jobs:
 
       - name: Require that commit's Packages run and its desktop jobs to have passed
         if: steps.state.outputs.release == 'true'
+        id: packages
         env:
           SUBJECT: ${{ steps.subject.outputs.sha }}
         run: |
           set -euo pipefail
-          packages_workflow="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/packages.yml" --jq .id)"
           require_desktop_jobs() {
             # A green run with the desktop jobs skipped proves nothing about
             # Desktop. Require that both desktop workflows ran and passed.
@@ -266,24 +277,49 @@ jobs:
             fi
           }
 
-          if [ "${EVENT_NAME}" = workflow_run ]; then
-            # The Packages run that started this one has finished. Read it back
-            # instead of trusting the event: it must be this repository's push
-            # run on main for the subject, and it must have succeeded.
-            run="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${PACKAGES_RUN_ID}" \
-              --jq '"\(.workflow_id) \(.head_sha) \(.event) \(.head_branch) \(.head_repository.full_name) \(.status) \(.conclusion)"')"
-            echo "Packages run ${PACKAGES_RUN_ID}: ${run}"
-            read -r workflow_id head_sha event branch repository status conclusion <<<"${run}"
-            if [ "${workflow_id}" != "${packages_workflow}" ] || [ "${head_sha}" != "${SUBJECT}" ] || \
-               [ "${event}" != push ] || [ "${branch}" != main ] || [ "${repository}" != "${GITHUB_REPOSITORY}" ]; then
-              echo "Refusing to release: run ${PACKAGES_RUN_ID} is not the Packages push run for ${SUBJECT} on main." >&2
-              exit 1
+          # The subject's latest successful Packages push run on this
+          # repository's main, whichever run started this one. A re-run that
+          # passed counts: GitHub reports a run's latest attempt.
+          passed="$(gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/packages.yml/runs" \
+            --raw-field head_sha="${SUBJECT}" \
+            --raw-field event=push \
+            --raw-field status=success \
+            --raw-field per_page=20 \
+            --jq '[.workflow_runs[]
+                    | select(.head_sha == env.SUBJECT
+                             and .event == "push"
+                             and .head_branch == "main"
+                             and .conclusion == "success"
+                             and .head_repository.full_name == env.GITHUB_REPOSITORY)]
+                  | sort_by(.updated_at) | last | .id // empty')"
+          if [ -n "${passed}" ]; then
+            echo "Packages run ${passed} passed for ${SUBJECT}."
+            require_desktop_jobs "${passed}"
+            echo "ready=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          if [ "${EVENT_NAME}" != workflow_dispatch ]; then
+            # Nothing to release from yet. The subject's run is still going
+            # (its completion starts a release), or it failed or was cancelled
+            # and needs a re-run; the next Packages completion or scheduled run
+            # picks it up once it passes.
+            latest="$(gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/packages.yml/runs" \
+              --raw-field head_sha="${SUBJECT}" \
+              --raw-field event=push \
+              --raw-field per_page=20 \
+              --jq '[.workflow_runs[] | select(.head_sha == env.SUBJECT)]
+                    | sort_by(.created_at) | last
+                    | "\(.id // 0) \(.status // "missing") \(.conclusion // "pending")"')"
+            read -r run_id status conclusion <<<"${latest}"
+            if [ "${status}" = completed ]; then
+              echo "::warning::No release yet: the Packages push run for ${SUBJECT} (${run_id}) concluded ${conclusion}. Re-run it; once it passes, the next Packages completion or scheduled run releases."
+            else
+              echo "No release yet: the Packages push run for ${SUBJECT} is ${status}; its completion starts the release."
             fi
-            if [ "${status}" != completed ] || [ "${conclusion}" != success ]; then
-              echo "Refusing to release: Packages is ${status}/${conclusion}." >&2
-              exit 1
-            fi
-            require_desktop_jobs "${PACKAGES_RUN_ID}"
+            echo "ready=false" >> "${GITHUB_OUTPUT}"
             exit 0
           fi
 
@@ -310,6 +346,7 @@ jobs:
                   exit 1
                 fi
                 require_desktop_jobs "${run_id}"
+                echo "ready=true" >> "${GITHUB_OUTPUT}"
                 exit 0
                 ;;
               in_progress)
@@ -330,7 +367,7 @@ jobs:
           done
 
       - name: Require that main has not changed Desktop since that commit
-        if: steps.state.outputs.release == 'true'
+        if: steps.state.outputs.release == 'true' && steps.packages.outputs.ready == 'true'
         id: fresh
         env:
           SUBJECT: ${{ steps.subject.outputs.sha }}
@@ -341,7 +378,7 @@ jobs:
           git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main
           for later in refs/remotes/origin/main "${GITHUB_SHA}"; do
             if ! git diff --quiet "${SUBJECT}" "${later}" -- .; then
-              if [ "${EVENT_NAME}" = workflow_run ]; then
+              if [ "${EVENT_NAME}" != workflow_dispatch ]; then
                 # The newer commit's own Packages run starts its release.
                 echo "No release: packages/desktop changed on main after ${SUBJECT}; the newer change releases itself."
                 echo "release=false" >> "${GITHUB_OUTPUT}"
