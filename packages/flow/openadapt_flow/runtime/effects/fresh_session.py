@@ -314,6 +314,8 @@ class FreshSessionReadbackVerifier(VerifierAdapterBase):
         )
 
     def _wait_ready(self, backend: Any) -> bool:
+        from openadapt_flow.runtime.effects.readback_values import token_occurrences
+
         want = _normalize(self._spec.ready_text or "")
         if not want:
             return True
@@ -325,7 +327,7 @@ class FreshSessionReadbackVerifier(VerifierAdapterBase):
                     line.text for line in lines if line.confidence >= READABLE_CONF
                 )
             )
-            if want in text:
+            if token_occurrences(text, want) >= 1:  # whole tokens
                 return True
             if self._clock() >= deadline:
                 return False

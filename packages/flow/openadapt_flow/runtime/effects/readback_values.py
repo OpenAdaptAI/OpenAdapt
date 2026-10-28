@@ -19,7 +19,16 @@ Values are compared after normalizing by kind:
 - ``date``: both sides are parsed to a calendar date. ``03/04/2026`` is
   ambiguous unless the field declares the order (``date_order``);
 - ``currency``: both sides are parsed to a decimal amount, ignoring the
-  currency symbol, thousands separators and a trailing ``.00``.
+  currency symbol, thousands separators and a trailing ``.00``;
+- ``number``: both sides are parsed to a decimal number. An expected value
+  that is a plain number (``250``, ``1,250.00``) is compared as a number even
+  when the field is declared ``text``.
+
+Exact after normalization, never by substring. A value read inside a longer
+read (``exact=False``: an OCR region that also shows a label) must appear as
+whole tokens, or for a number or an amount as a whole number: ``250`` is not
+inside ``$1,250.00``. A value that appears more than once in the read is
+``ambiguous``: two rows showing it are two records, not one confirmation.
 
 Glyph confusions are only considered for OCR. Structure and accessibility
 reads return the real characters, so a ``0`` that should be an ``O`` there is
@@ -42,9 +51,10 @@ __all__ = [
     "compare_value",
     "infer_value_kind",
     "normalize_value",
+    "token_occurrences",
 ]
 
-ValueKind = Literal["text", "code", "date", "currency"]
+ValueKind = Literal["text", "code", "date", "currency", "number"]
 Comparison = Literal["match", "mismatch", "ambiguous"]
 ReadSource = Literal["ocr", "structure"]
 
@@ -70,6 +80,71 @@ _DATE_FORMATS = (
 )
 _DAY_MONTH = ("%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y")
 _MONTH_DAY = ("%m/%d/%Y", "%m-%d-%Y", "%m.%d.%Y")
+
+
+#: A plain number: digits, optional thousands commas, optional decimals.
+_PLAIN_NUMBER = re.compile(r"^[+-]?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$")
+_TOKEN_EDGES = ".,:;!?()[]{}\"'"
+
+
+def _plain_number(value: str) -> bool:
+    """A value that is only a number (and no identifier with a leading zero)."""
+
+    text = value.strip()
+    return bool(_PLAIN_NUMBER.match(text)) and not _leading_zero(text)
+
+
+def _tokens(value: str) -> list[str]:
+    return [t.strip(_TOKEN_EDGES) for t in value.split() if t.strip(_TOKEN_EDGES)]
+
+
+def _token_runs(seen: list[str], want: list[str]) -> int:
+    """How many times ``want`` appears as a run of whole tokens in ``seen``."""
+
+    if not want or len(want) > len(seen):
+        return 0
+    n = len(want)
+    return sum(1 for i in range(len(seen) - n + 1) if seen[i : i + n] == want)
+
+
+def _amount_runs(seen: str, want: Decimal, *, keep_zeros: bool = False) -> int:
+    """How many whole tokens of ``seen`` are amounts equal to ``want``.
+
+    A number joined to a hyphen or a letter (``250-1``, ``A250``) is part of a
+    code, not a number. With ``keep_zeros`` (a value compared as a number only
+    because it looks like one), a token with a leading zero is an identifier
+    and never equals a number.
+    """
+
+    words = seen.split()
+    tokens = [w.strip(_TOKEN_EDGES.replace("(", "").replace(")", "")) for w in words]
+    # A currency symbol or code may stand apart from its number: "USD 1,250".
+    joined = tokens + [f"{a} {b}" for a, b in zip(tokens, tokens[1:])]
+    count = 0
+    for token in tokens:
+        if keep_zeros and _leading_zero(token.lstrip("$€£¥")):
+            continue
+        if _amount(token) == want:
+            count += 1
+    if count == 0:
+        count = sum(1 for t in joined[len(tokens) :] if _amount(t) == want)
+    return count
+
+
+def token_occurrences(seen: str, want: str, kind: ValueKind = "text") -> int:
+    """How many times ``want`` appears in ``seen`` as whole tokens (or, for a
+    number or an amount, as a whole number), after normalizing by kind."""
+
+    declared = kind in ("currency", "number")
+    if declared or _plain_number(want):
+        amount = _amount(want)
+        return (
+            0 if amount is None else _amount_runs(seen, amount, keep_zeros=not declared)
+        )
+    norm = _code if kind == "code" else _text
+    return _token_runs(
+        [norm(t) for t in _tokens(seen)], [norm(t) for t in _tokens(want)]
+    )
 
 
 def _text(value: str) -> str:
@@ -105,24 +180,40 @@ def _dates(value: str, order: Optional[str]) -> set[date]:
     return found
 
 
+#: A well-formed amount: an optional currency symbol or code, an optional
+#: sign or parentheses, and digits with valid thousands grouping and decimals,
+#: or a decimal comma with two places. ``1,2,5`` and ``12 50`` don't parse.
+_STRICT_AMOUNT = re.compile(
+    r"^(?P<pre>[$€£¥]|USD|CAD|EUR|GBP)?\s?(?P<open>\()?(?P<sign>[+-])?\s?"
+    r"(?P<num>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\d+,\d{2})"
+    r"(?P<close>\))?\s?(?P<post>USD|CAD|EUR|GBP)?$",
+    re.IGNORECASE,
+)
+
+
 def _amount(value: str) -> Optional[Decimal]:
-    match = _CURRENCY.match(value.strip())
-    if match is None:
+    """A well-formed amount or number as a Decimal, else None."""
+
+    match = _STRICT_AMOUNT.match(value.strip())
+    if match is None or bool(match["open"]) != bool(match["close"]):
         return None
-    sign, digits = match.groups()
-    digits = digits.replace(" ", "")
-    if "," in digits and "." in digits:
-        digits = digits.replace(",", "")
-    elif digits.count(",") == 1 and len(digits.split(",")[1]) == 2:
-        digits = digits.replace(",", ".")  # 12,50 written with a decimal comma
+    num = match["num"]
+    if re.fullmatch(r"\d+,\d{2}", num):
+        num = num.replace(",", ".")  # 12,50 written with a decimal comma
     else:
-        digits = digits.replace(",", "")
+        num = num.replace(",", "")
     try:
-        amount = Decimal(digits)
+        amount = Decimal(num)
     except InvalidOperation:
         return None
-    negative = bool(sign) or value.strip().startswith("(")
+    negative = match["sign"] == "-" or bool(match["open"])
     return -amount if negative else amount
+
+
+def _leading_zero(value: str) -> bool:
+    """``007``, ``0012345``: an identifier, not a number."""
+
+    return re.match(r"^[+-]?0\d", value.strip()) is not None
 
 
 def normalize_value(
@@ -139,7 +230,7 @@ def normalize_value(
     if kind == "date":
         found = _dates(value, date_order)
         return found.pop().isoformat() if len(found) == 1 else None
-    if kind == "currency":
+    if kind in ("currency", "number"):
         amount = _amount(value)
         return None if amount is None else format(amount.normalize(), "f")
     return _text(value) or None
@@ -169,6 +260,9 @@ def compare_value(
     """
 
     ocr = source == "ocr"
+    promoted = kind == "text" and _plain_number(expected)
+    if promoted:
+        kind = "number"
     if kind == "date":
         seen = _dates(observed, date_order)
         want = _dates(expected, date_order)
@@ -180,30 +274,53 @@ def compare_value(
             return "mismatch"
         # A read that can mean the expected date or another date proves nothing.
         return "match" if len(seen) == 1 and len(want) == 1 else "ambiguous"
-    if kind == "currency":
-        seen_amount = _amount(observed)
+    if kind in ("currency", "number"):
         want_amount = _amount(expected)
-        if seen_amount is not None and want_amount is not None:
-            if seen_amount == want_amount:
-                return "match"
+        if want_amount is None:
             return "mismatch"
-        if ocr and want_amount is not None:
-            folded = _amount(observed.lower().translate(OCR_CONFUSABLE))
-            if folded == want_amount:
+        if exact:
+            whole = observed.strip()
+            if promoted and (not _PLAIN_NUMBER.match(whole) or _leading_zero(whole)):
+                seen_amount = None  # "MRN 12345", "0012345": not this number
+            else:
+                seen_amount = _amount(whole)
+            if seen_amount is not None:
+                return "match" if seen_amount == want_amount else "mismatch"
+        else:
+            runs = _amount_runs(observed, want_amount, keep_zeros=promoted)
+            if runs == 1:
+                return "match"
+            if runs > 1:
+                return "ambiguous"  # the same number twice: two records
+        if ocr:
+            folded = observed.lower().translate(OCR_CONFUSABLE)
+            if exact:
+                if _amount(folded) == want_amount:
+                    return "ambiguous"
+            elif _amount_runs(folded, want_amount, keep_zeros=promoted):
                 return "ambiguous"
         return "mismatch"
     if kind == "code":
         seen_code, want_code = _code(observed), _code(expected)
         if not want_code:
             return "mismatch"
-        if seen_code == want_code or (not exact and want_code in seen_code):
+        if seen_code == want_code:
             return "match"
+        if not exact:
+            runs = token_occurrences(observed, expected, "code")
+            if runs == 1:
+                return "match"
+            if runs > 1:
+                return "ambiguous"
         if ocr and (
             _folded_equal(seen_code, want_code)
             or (
                 not exact
-                and want_code.translate(OCR_CONFUSABLE)
-                in seen_code.translate(OCR_CONFUSABLE)
+                and token_occurrences(
+                    observed.lower().translate(OCR_CONFUSABLE),
+                    expected.lower().translate(OCR_CONFUSABLE),
+                    "code",
+                )
             )
         ):
             return "ambiguous"
@@ -211,12 +328,20 @@ def compare_value(
     seen_text, want_text = _text(observed), _text(expected)
     if not want_text:
         return "mismatch"
-    if seen_text == want_text or (not exact and want_text in seen_text):
+    if seen_text == want_text:
         return "match"
+    if not exact:
+        runs = token_occurrences(observed, expected, "text")
+        if runs == 1:
+            return "match"
+        if runs > 1:
+            return "ambiguous"
     if ocr:
         folded_seen = seen_text.translate(OCR_CONFUSABLE)
         folded_want = want_text.translate(OCR_CONFUSABLE)
-        if folded_seen == folded_want or (not exact and folded_want in folded_seen):
+        if folded_seen == folded_want or (
+            not exact and token_occurrences(folded_seen, folded_want, "text")
+        ):
             return "ambiguous"
     return "mismatch"
 

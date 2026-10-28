@@ -148,6 +148,8 @@ def channel_read(
     engine_confidence: Optional[float] = None,
     session: Optional[str] = None,
     source_kind: Optional[SourceKind] = None,
+    record_id: Optional[str] = None,
+    record_count: Optional[int] = None,
 ) -> ChannelRead:
     """One channel's read of ``spec``, normalized for its kind.
 
@@ -168,6 +170,8 @@ def channel_read(
         engine_confidence=engine_confidence,
         session=session,  # type: ignore[arg-type]
         source_kind=source_kind,
+        record_id=record_id,
+        record_count=record_count,
     )
 
 
@@ -295,20 +299,39 @@ def combine_reads(
 
     if not reads:
         raise ValueError("combine_reads needs at least one channel read")
+    # Which record, and only one: a value read from two records, or from a
+    # read that matched several, is not one record's value.
+    record_problems = []
+    for r in reads:
+        if r.record_count is not None and r.record_count != 1:
+            record_problems.append(
+                f"the {r.channel} read matched {r.record_count} records"
+            )
+        elif r.session == "independent" and r.record_count is None and r.normalized:
+            record_problems.append(
+                f"the {r.channel} read did not state that it read exactly one record"
+            )
+    ids = {r.record_id for r in reads if r.record_id is not None}
+    if len(ids) > 1:
+        record_problems.append("the reads are of different records")
     parsed = [r for r in reads if r.normalized is not None]
     agreement = _agreement(spec, parsed)
+    if record_problems and agreement in ("agree", "single"):
+        agreement = "disagree" if len(ids) > 1 else "ambiguous"
     confidence = _confidence(agreement, parsed)
     grade = grade_for(tuple(parsed), agreement)
     value = None
     if agreement in ("agree", "single") and parsed:
         value = canonical_value(spec, _preferred(parsed).raw)
-    reasons = []
+    reasons = list(record_problems)
     if not parsed:
         reasons.append("no channel read a valid value")
         if not spec.required and not any(r.raw and r.raw.strip() for r in reads):
             # An optional field that is empty on every channel is fine; one
             # that shows text no channel could parse is not.
             reasons.clear()
+    elif record_problems:
+        pass
     elif agreement == "disagree":
         reasons.append("channels disagree")
     elif agreement == "ambiguous":
