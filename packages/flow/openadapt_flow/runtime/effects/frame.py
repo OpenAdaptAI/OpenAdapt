@@ -879,6 +879,8 @@ def judge_frame(
     added_by_others: set[tuple[str, str]] = set()
     views_of = dict(database.views) if database is not None else {}
     declared_keys: set[str] = set()
+    #: What an audit entry names for each compared record (``ref_of``).
+    refs: dict[tuple[str, str], tuple[Any, Optional[str]]] = {}
     compared = 0
 
     def note(change: FrameChange) -> None:
@@ -928,11 +930,23 @@ def judge_frame(
         if before_state is not None and after_records is not None:
             sels = selectors_for(side.of_surface)
             old = {key_of(r, side.of_surface) for r in before_state.records}
+            # A link an existing record already has is not a new record's: a
+            # side row for it belongs to that record's chart.
+            taken = {
+                str(r.get(side.of_field))
+                for r in before_state.records
+                if r.get(side.of_field) not in (None, "")
+            }
+            of_hasher = hashers.get(side.of_surface)
             for record in after_records:
                 if key_of(record, side.of_surface) in old:
                     continue
                 value = record.get(side.of_field)
                 if value in (None, ""):
+                    continue
+                if (
+                    of_hasher(side.of_field, value) if of_hasher else str(value)
+                ) in taken:
                     continue
                 if any(record_matches(dict(record), s) for s in sels):
                     links.add(str(value))
@@ -995,8 +1009,16 @@ def judge_frame(
             is_declared = (
                 before is not None and declared(before, hashed=hasher is not None)
             ) or (after is not None and declared(after))
+            refs[(name, str(key))] = ref_of(name, key, before, after)
             if is_declared:
-                declared_keys.add(str(ref_of(name, key, before, after)[0]))
+                ref = refs[(name, str(key))][0]
+                if ref is None:
+                    return _not_checked(
+                        "a declared record carries no record_key value, so its "
+                        "log entries can't be matched",
+                        mode,
+                    )
+                declared_keys.add(str(ref))
                 if before is None and after is not None:
                     # A new declared record. In a database table, with write
                     # and insert events to tell actors apart, anything it sets
@@ -1086,7 +1108,9 @@ def judge_frame(
                     side = spec.side_records[side_index]
                     link = str(after.get(side.link_field))
                     side_found[side_index][link] += 1
-                    declared_keys.add(str(ref_of(name, key, None, after)[0]))
+                    side_ref = ref_of(name, key, None, after)[0]
+                    if side_ref is not None:
+                        declared_keys.add(str(side_ref))
                     new_row(name, key, after, (side.link_field,))
                     continue
                 theirs_side = any(
@@ -1151,15 +1175,38 @@ def judge_frame(
             # the bot's own log entries can't be checked: say so.
             mode = "audit_read_unavailable"
         else:
-            moved = {str(c.key) for c in collateral + concurrent}
+            # What the moved records' entries name: their ``ref_of`` value
+            # (a record_key, a baseline MAC of one, or the row key), never
+            # the row key when the entry names another field.
+            moved_refs = [
+                (c.surface, *refs[(c.surface, str(c.key))])
+                for c in collateral + concurrent
+                if (c.surface, str(c.key)) in refs
+            ]
+
+            def names_moved(entry_ref: Any) -> bool:
+                for surface, value, column in moved_refs:
+                    if value is None:
+                        continue
+                    hasher = hashers.get(surface) if column else None
+                    text = (
+                        hasher(column, entry_ref)
+                        if hasher and column
+                        else str(entry_ref)
+                    )
+                    if text == str(value):
+                        return True
+                return False
+
+            logged: set[str] = set()
             for entry in window_entries:
                 actor = get_path(entry, attribution.actor_field)  # type: ignore[union-attr]
                 ref = get_path(entry, attribution.record_field or "")  # type: ignore[union-attr]
                 if actor is None or str(actor) not in self_ids:
                     continue
-                if str(ref) in declared_keys or str(ref) in moved:
+                if str(ref) in declared_keys or str(ref) in logged or names_moved(ref):
                     continue
-                moved.add(str(ref))
+                logged.add(str(ref))
                 collateral.append(
                     FrameChange("", "changed", "self", audit_only=True, key=ref)
                 )
