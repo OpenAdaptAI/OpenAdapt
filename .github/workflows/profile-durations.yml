@@ -1,0 +1,126 @@
+name: Profile test durations
+
+# Temporary: measures every package suite's per-test time on CI hardware, to
+# choose the PR lane. Runs only on pushes to this branch; delete after use.
+
+on:
+  push:
+    branches: [claude/profile-test-durations]
+
+permissions:
+  contents: read
+
+jobs:
+  flow:
+    name: flow ${{ matrix.part }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [unit-1, unit-2, unit-3, unit-4, e2e]
+    defaults:
+      run:
+        working-directory: packages/flow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: packages/flow/uv.lock
+      - name: Install
+        run: >-
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]'
+          --lock packages/capture --editable packages/types --editable packages/capture
+          --editable packages/flow
+      - name: Harness2
+        run: >-
+          uv pip install --system --no-deps
+          'harness2 @ git+https://github.com/google-research/harness2@1cfe254e8d25b15f37048c3730134686abe60335'
+      - name: Playwright browser
+        run: python scripts/install_playwright_browser.py --attempts 2 --attempt-timeout-seconds 270
+      - name: Select files
+        env:
+          PART: ${{ matrix.part }}
+        run: |
+          set -euo pipefail
+          if [ "$PART" = e2e ]; then
+            find tests/e2e -name 'test_*.py' | LC_ALL=C sort > "$RUNNER_TEMP/files.txt"
+          else
+            n="${PART#unit-}"
+            find tests -name 'test_*.py' -not -path 'tests/e2e/*' \
+              -not -path 'tests/test_install_playwright_browser.py' \
+              -not -path 'tests/test_qualification_gate_campaign.py' \
+              | LC_ALL=C sort | awk -v s="$n" 'NR % 4 == s % 4' > "$RUNNER_TEMP/files.txt"
+          fi
+          wc -l < "$RUNNER_TEMP/files.txt"
+      - name: Test with timings
+        run: |
+          set +e
+          mapfile -t files < "$RUNNER_TEMP/files.txt"
+          start=$(date +%s)
+          pytest -n auto --dist loadfile -q -p no:cacheprovider --basetemp=runs/ci \
+            --junitxml="$RUNNER_TEMP/junit-flow-${{ matrix.part }}.xml" --durations=50 "${files[@]}"
+          echo "exit=$? wall=$(( $(date +%s) - start ))s nproc=$(nproc)"
+          exit 0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-flow-${{ matrix.part }}
+          path: ${{ runner.temp }}/junit-*.xml
+
+  others:
+    name: ${{ matrix.pkg }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        pkg: [types, agent, launcher, capture, privacy, tray, desktop]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+      - name: System packages
+        if: matrix.pkg == 'capture'
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg libportaudio2
+      - name: Install and test with timings
+        env:
+          PKG: ${{ matrix.pkg }}
+          JUNIT: ${{ runner.temp }}/junit-${{ matrix.pkg }}.xml
+        run: |
+          set -uo pipefail
+          t0=$(date +%s)
+          case "$PKG" in
+            types) python scripts/ci/locked_install.py --lock 'packages/types[dev]' --editable packages/types
+                   cd packages/types; run=(python -m pytest) ;;
+            agent) python scripts/ci/locked_install.py --lock 'packages/agent[dev]' --lock 'packages/flow[agent]' \
+                     --editable packages/types --editable packages/flow --editable packages/agent
+                   cd packages/agent; run=(python -m pytest) ;;
+            launcher) python scripts/ci/locked_install.py --lock '.[dev,ml,evals,viewer,grounding,retrieval]' \
+                     --lock packages/capture --lock packages/privacy --editable . --editable packages/capture \
+                     --editable packages/privacy
+                   run=(python -m pytest tests) ;;
+            capture) cd packages/capture; uv sync --locked --extra dev; run=(uv run --no-sync pytest tests --timeout=120) ;;
+            privacy) cd packages/privacy; uv sync --locked --extra dev; run=(uv run --no-sync pytest tests --ignore=tests/test_presidio.py) ;;
+            tray) cd packages/tray; uv sync --locked --extra dev; run=(uv run --no-sync pytest tests) ;;
+            desktop) cd packages/desktop; uv sync --locked --extra dev; run=(uv run --no-sync pytest tests) ;;
+          esac
+          t1=$(date +%s)
+          "${run[@]}" -q -p no:cacheprovider --junitxml="$JUNIT" --durations=30
+          echo "exit=$? install=$((t1 - t0))s test=$(( $(date +%s) - t1 ))s"
+          exit 0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: junit-${{ matrix.pkg }}
+          path: ${{ runner.temp }}/junit-*.xml
