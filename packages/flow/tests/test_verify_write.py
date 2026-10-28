@@ -29,6 +29,12 @@ NOTE = "Follow-up in two weeks"
 AGENT = {"kind": "agent", "id": "intake-bot"}
 
 
+@pytest.fixture(autouse=True)
+def _seal_home(tmp_path, monkeypatch):
+    # Receipts are sealed; keep the test's Seal key out of the home folder.
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
+
+
 @pytest.fixture
 def sor():
     url, db, stop = fault_serve()

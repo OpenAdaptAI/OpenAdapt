@@ -573,6 +573,7 @@ jobs:
             tests/e2e/test_mcp_teach_e2e.py \
             tests/e2e/test_browser_teach_e2e.py \
             tests/e2e/test_browser_teach_write_e2e.py \
+            tests/e2e/test_browser_teach_write_guard_e2e.py \
             tests/test_agent_guard.py \
             tests/e2e/test_agent_guard_e2e.py \
             --basetemp=runs/ci-critical --junitxml=runs/critical-junit.xml

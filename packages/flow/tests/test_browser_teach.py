@@ -114,7 +114,7 @@ def test_browser_sends_no_write_request(browser: bt._Browser, portal: str) -> No
             ".then(() => 'sent', () => 'failed')"
         )
         assert sent == "failed"
-        assert browser.blocked == ["POST /reports/email"]
+        assert browser.blocked == ["POST /reports/email, a write this run doesn't send"]
 
     _on(browser, check)
     assert _writes(portal) == 0
