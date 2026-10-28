@@ -18,7 +18,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 from urllib.parse import urlsplit
 
 from openadapt_flow.backends._page_quiescence import PageQuiescence
@@ -48,6 +48,11 @@ from openadapt_flow.submit_binding import (
     observation_from_page,
     verify_form_identity,
     verify_submit_binding,
+)
+from openadapt_flow.wire_check import (
+    ExpectedSubmission,
+    WireCheck,
+    expected_submission,
 )
 
 VIEWPORT: tuple[int, int] = (1280, 800)
@@ -772,24 +777,19 @@ _FORM_IDENTITY_AT_JS = (
 }"""
 )
 
-# Before a create-new form's save: guard the form's submission. At arm time it
-# keeps, in the page, what the checked button would send (address with query,
-# method, and every name/value pair except the exempt tokens). Every submit
-# while it is armed is checked: one from another form, from this form without
-# its button, with different contents, or a second one, is cancelled and
-# recorded. It stays armed after the click (a script may submit later) until
-# the run reads and disarms it, or after 120 s.
-_ARM_FORM_SUBMIT_GUARD_JS = (
+# Before a create-new form's save: what the checked button would send (the
+# address with its query, the method, and every field, from the form's
+# controls, never from new FormData(), which runs the page's own formdata
+# listeners). The wire check holds the save's request to exactly this.
+_FORM_EXPECTED_JS = (
     r"""(args) => {
     const hit = document.elementFromPoint(args.x, args.y);
     const control = hit ? hit.closest("""
     + json.dumps(GUARDED_ACTIONABLE_SELECTOR)
     + r""") : null;
     const form = control ? (control.form || control.closest('form')) : null;
-    if (!form) return false;
+    if (!form) return null;
     const exempt = new Set(args.exempt || []);
-    // What the button would send, built from the form's controls: never from
-    // new FormData(), which runs the page's own formdata listeners.
     const expected_parts = () => {
         const pairs = [];
         for (const el of Array.from(form.elements)) {
@@ -832,150 +832,10 @@ _ARM_FORM_SUBMIT_GUARD_JS = (
         query.sort(order);
         return {address, query, method, pairs};
     };
-    const canon = () => JSON.stringify(expected_parts());
-    const previous = window[args.key];
-    if (previous && previous.remove) previous.remove();
-    const expected = canon();
-    const state = {refused: [], allowed: 0};
-    const handler = (event) => {
-        let why = null;
-        if (event.target !== form) why = 'the click submitted a different form';
-        else if (event.submitter !== control) {
-            why = 'the form was submitted by something other than its save button';
-        } else if (canon() !== expected) {
-            why = 'what the form would send changed after it was checked';
-        } else if (state.allowed > 0) {
-            why = 'the form was submitted a second time';
-        }
-        if (why) {
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            state.refused.push(why);
-        } else {
-            state.allowed += 1;
-        }
-    };
-    state.remove = () => window.removeEventListener('submit', handler, true);
-    window.addEventListener('submit', handler, true);
-    setTimeout(state.remove, 120000);
-    Object.defineProperty(
-        window, args.key, {value: state, configurable: true, writable: true});
     return expected_parts();
 }"""
 )
 
-
-def _wire_pairs(request: Any) -> Optional[list[tuple[str, str]]]:
-    """The fields a request carries in its body, or None when its body is
-    not a form or a flat JSON object."""
-
-    body = request.post_data_buffer or b""
-    ctype = (request.headers.get("content-type") or "").lower()
-    if not body:
-        return []
-    if ctype.startswith("application/x-www-form-urlencoded"):
-        from urllib.parse import parse_qsl
-
-        return parse_qsl(body.decode("utf-8", "replace"), keep_blank_values=True)
-    if ctype.startswith("multipart/form-data"):
-        from email.parser import BytesParser
-        from email.policy import HTTP
-
-        message = BytesParser(policy=HTTP).parsebytes(
-            b"Content-Type: " + ctype.encode() + b"\r\n\r\n" + body
-        )
-        pairs: list[tuple[str, str]] = []
-        for part in message.iter_parts():
-            name = part.get_param("name", header="content-disposition")
-            filename = part.get_param("filename", header="content-disposition")
-            if name is None:
-                continue
-            if filename is not None:
-                pairs.append((str(name), f"file:{filename}"))
-            else:
-                payload = part.get_payload(decode=True) or b""
-                pairs.append((str(name), payload.decode("utf-8", "replace")))
-        return pairs
-    if ctype.startswith("application/json"):
-        try:
-            data = json.loads(body)
-        except ValueError:
-            return None
-        if not isinstance(data, dict) or any(
-            isinstance(v, (dict, list)) for v in data.values()
-        ):
-            return None
-        return [(str(k), "" if v is None else str(v)) for k, v in data.items()]
-    return None
-
-
-def _wire_mismatch(request: Any, state: Mapping[str, Any]) -> Optional[str]:
-    """``""``: not the guard's business. ``None``: the checked submission.
-    Otherwise why the request must not be sent."""
-
-    from urllib.parse import parse_qsl, urlsplit
-
-    method = request.method.upper()
-    expected = state["expected"]
-    exempt = state["exempt"]
-    parts = urlsplit(request.url)
-    address = f"{parts.scheme}://{parts.netloc}{parts.path}"
-    writes = method not in ("GET", "HEAD", "OPTIONS")
-    navigation_here = (
-        method == "GET"
-        and request.is_navigation_request()
-        and address == expected["address"]
-    )
-    if not (writes or navigation_here) or request.redirected_from is not None:
-        return ""
-    if state["sent"]:
-        return "the page sent a second submission after the checked one"
-    if method.lower() != expected["method"]:
-        return (
-            f"the save was sent with {method}, the checked form sends with "
-            f"{expected['method'].upper()}"
-        )
-    if address != expected["address"]:
-        return "the save was sent to a different address than the checked form's"
-
-    def norm(pairs: Any, *, query: bool = False) -> list[tuple[str, str]]:
-        out = []
-        for key, value in pairs:
-            key = str(key)
-            if (("?" + key) if query else key) in exempt:
-                continue
-            out.append((key, str(value).replace("\r\n", "\n")))
-        return sorted(out)
-
-    url_query = parse_qsl(parts.query, keep_blank_values=True)
-    if method == "GET":
-        sent = norm(url_query)
-    else:
-        if norm(url_query, query=True) != norm(expected["query"], query=True):
-            return "the save was sent with a different query than the checked form's"
-        body = _wire_pairs(request)
-        if body is None:
-            return (
-                "the save was sent in a shape this check can't compare with "
-                "the form (not form fields or flat JSON)"
-            )
-        sent = norm(body)
-    if sent != norm(expected["pairs"]):
-        return "what the save sent differs from the checked form"
-    return None
-
-
-# Read the guard's refusals; with ``disarm`` also remove it.
-_FORM_SUBMIT_GUARD_RESULT_JS = r"""(args) => {
-    const state = window[args.key];
-    if (!state) return null;
-    const refused = state.refused.slice();
-    if (args.disarm) {
-        if (state.remove) state.remove();
-        delete window[args.key];
-    }
-    return refused.length ? refused.join('; ') : null;
-}"""
 
 # Page-structure identity of a FORM FIELD that sits in no record row.
 #
@@ -1884,8 +1744,6 @@ class PlaywrightBackend:
         # references only) for submit bindings. A new backend starts empty.
         self._fill_store_key = f"__oaflow_filled_{uuid.uuid4().hex}"
         self._fill_value_slot = f"__oaflow_filled_values_{uuid.uuid4().hex}"
-        self._form_guard_slot = f"__oaflow_form_guard_{uuid.uuid4().hex}"
-        self._form_guard_scope: Any = None
         self._form_wire: Any = None
         self._structural_tokens: dict[str, _StructuralGuard] = {}
         self._guarded_coordinate: Optional[_CoordinateGuard] = None
@@ -2583,82 +2441,51 @@ class PlaywrightBackend:
         if reason is not None:
             return reason
         try:
-            armed = point.scope.evaluate(
-                _ARM_FORM_SUBMIT_GUARD_JS,
-                {
-                    "x": point.x,
-                    "y": point.y,
-                    "key": self._form_guard_slot,
-                    "exempt": list(identity.exempt),
-                },
+            expected = point.scope.evaluate(
+                _FORM_EXPECTED_JS,
+                {"x": point.x, "y": point.y, "exempt": list(identity.exempt)},
             )
         except Exception:
-            armed = None
-        if not isinstance(armed, dict):
-            return "could not guard the form's submission"
-        self._form_guard_scope = point.scope
-        self._arm_form_wire_guard(armed, set(identity.exempt))
+            expected = None
+        if not isinstance(expected, dict):
+            return "could not read what the form would send"
+        self._arm_wire_check(expected_submission(expected, identity.exempt))
         return None
 
-    # -- the wire guard: what the browser actually sends ----------------------
+    # -- the wire check (openadapt_flow.wire_check) --------------------------
 
-    def _arm_form_wire_guard(
-        self, expected: Mapping[str, Any], exempt: set[str]
-    ) -> None:
-        """Compare the request the save actually sends with the checked form.
+    def _arm_wire_check(self, submission: ExpectedSubmission) -> None:
+        """Hold the save's request at the network to the checked form.
 
-        Page listeners (a submit or formdata listener, a timer) can still
-        change a submission after every in-page check. So until the guard is
-        disarmed, every write request the page sends, and a GET navigation to
-        the form's address, is held at the network: it continues only when
-        its method, address, query and fields equal what the checked button
-        would have sent, and only once. Anything else is aborted before it
-        leaves the browser, and recorded.
+        Until it is disarmed, every write request the page sends, and a GET
+        navigation to the form's address, goes through a
+        :class:`~openadapt_flow.wire_check.WireCheck`: the checked submission
+        goes once; anything else is aborted before it is sent.
         """
 
-        self._disarm_form_wire_guard()
-        state: dict[str, Any] = {
-            "expected": expected,
-            "exempt": exempt,
-            "sent": False,
-            "refused": [],
-        }
+        self._disarm_wire_check()
+        check = WireCheck(submission=submission)
 
         def handler(route: Any) -> None:
-            try:
-                why = _wire_mismatch(route.request, state)
-            except Exception:  # noqa: BLE001 - unreadable request: refuse
-                why = "the save's request could not be read"
-            if why == "":
-                route.fallback()
-                return
-            if why is None:
-                state["sent"] = True
-                route.fallback()
-                return
-            state["refused"].append(why)
-            try:
-                route.abort()
-            except Exception:  # noqa: BLE001 - already handled
-                pass
+            check.handle(route, proceed=route.fallback)
 
         self.page.route("**/*", handler)
-        self._form_wire = (handler, state)
+        self._form_wire = (handler, check)
 
-    def _disarm_form_wire_guard(self) -> list[str]:
-        wire = getattr(self, "_form_wire", None)
+    def _disarm_wire_check(self) -> list[str]:
+        wire = self._form_wire
         self._form_wire = None
         if wire is None:
             return []
-        handler, state = wire
+        handler, check = wire
         try:
             self.page.unroute("**/*", handler)
         except Exception:  # noqa: BLE001 - the page is gone
             pass
-        return list(state["refused"])
+        return list(check.refused)
 
     def wait_form_submit_guard(self, ms: int) -> None:
-        """Let the page and the wire guard run for ``ms`` milliseconds."""
+        """Let the page and the wire check run for ``ms`` milliseconds."""
 
         try:
             self.page.wait_for_timeout(ms)
@@ -2666,41 +2493,23 @@ class PlaywrightBackend:
             time.sleep(ms / 1000)
 
     def form_submit_guard_refusal(self, *, disarm: bool = False) -> Optional[str]:
-        """Why the guard cancelled a submit so far, or None. ``disarm`` also
-        removes the guard. A page that navigated away (the checked form's own
-        submit) has nothing to report."""
+        """Why the wire check refused a request so far, or None. ``disarm``
+        also removes it."""
 
-        scope = self._form_guard_scope
-        if scope is None and getattr(self, "_form_wire", None) is None:
+        wire = self._form_wire
+        if wire is None:
             return None
-        reasons: list[str] = []
-        wire = getattr(self, "_form_wire", None)
-        if wire is not None:
-            reasons.extend(wire[1]["refused"])
+        reasons = list(wire[1].refused)
         if disarm:
-            self._form_guard_scope = None
-            self._disarm_form_wire_guard()
-        if scope is not None:
-            try:
-                refused = scope.evaluate(
-                    _FORM_SUBMIT_GUARD_RESULT_JS,
-                    {"key": self._form_guard_slot, "disarm": disarm},
-                )
-            except Exception:
-                refused = None
-            if isinstance(refused, str):
-                reasons.insert(0, refused)
+            self._disarm_wire_check()
         return "; ".join(dict.fromkeys(reasons)) if reasons else None
 
     @property
     def form_submit_guard_armed(self) -> bool:
-        return (
-            self._form_guard_scope is not None
-            or getattr(self, "_form_wire", None) is not None
-        )
+        return self._form_wire is not None
 
     def cancel_form_submit_guard(self) -> Optional[str]:
-        """Read the guard's last refusals and disarm it."""
+        """Read the wire check's last refusals and disarm it."""
 
         return self.form_submit_guard_refusal(disarm=True)
 

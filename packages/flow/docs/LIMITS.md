@@ -402,25 +402,24 @@ field typed since the last save, the compiler gives it a **form identity**
   should create under a different parent on each run therefore halts until
   that parent is checked another way.
 
-From the check until the next step, the browser holds every write request the
-page sends, and a GET navigation to the form's address, at the network: it
-leaves only when its method, address, query and fields equal what the checked
-button would send (form fields or a flat JSON object), and only once. Page
-listeners that run after every in-page check (a form submit listener, a
-document capture listener, a `formdata` listener, a timer) can't change a save
-on its way out. A save sent in another shape (nested JSON, a custom encoding)
-can't be compared, so it is held too. In the page, a guard also compares every submit
-with what the checked button would have sent (address and query, method, and
-every field's value except the exempt tokens). A submit from another form,
-from the right form without its save button, with contents that changed after
-the check (a click handler that fills in or enables a field), or a second
-submit, is cancelled. The run watches the guard for two seconds after the
-click, then again at the start of the next step, and halts on any cancelled
-submit. A save sent by script (`form.submit()`, `fetch`) raises no submit
-event, but its request is still held at the network. A submission a script
-delays past the end of the run is still held until the page changes, but the
-run, already over, doesn't report it. A page whose own click or submit
-listener fills in or enables a field as the form is sent changes what is sent
+The checks above read the page before the click; they are pre-checks. The
+safety layer is the wire check (`openadapt_flow/wire_check.py`, shared with
+taught browser writes): from the check until the next step, a Playwright route
+holds every write request the page sends, and a GET navigation to the form's
+address, at the network, where page scripts can't reach it. A request leaves
+only when its method, address, query and fields equal what the checked button
+would send (form fields or a flat JSON object, every value except the exempt
+tokens), and only once; anything else is aborted before it is sent. So a page
+listener that runs after the check (a submit, capture or `formdata` listener,
+a click handler that fills in or enables a field, a timer), a save sent by
+script (`form.submit()`, `fetch`), a submit from another form and a second
+submit can't send anything the check didn't see. A save sent in another shape
+(nested JSON, a custom encoding) can't be compared, so it is held too. The run
+watches the wire check for two seconds after the click, then again at the
+start of the next step and at the end of the run, and halts on any held
+request. A submission a script delays past the end of the run is still held
+until the page closes, but the run, already over, doesn't report it. A page
+whose own listener changes a field as the form is sent changes what is sent
 after the check, so its save halts even when the demonstration did the same: a
 false halt, in the safe direction.
 

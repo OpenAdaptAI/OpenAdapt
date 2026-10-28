@@ -24,7 +24,7 @@ import secrets
 import threading
 from pathlib import Path
 from typing import Any, Callable, Iterator
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, parse_qsl, urlsplit
 
 import pytest
 
@@ -222,8 +222,7 @@ def _page(variant: str) -> str:
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>{title}</title></head><body style="font:16px Arial;margin:24px">
 <h1>{title}</h1>
-<form id="ticket" action="{action}" onsubmit="event.preventDefault();
-  window.created.push(document.querySelector('[name=field_summary]').value)">
+<form id="ticket" method="post" action="{action}">
   {hidden}
   <p><label>Summary <input name="field_summary" size="40"></label></p>
   <p><label>Description <textarea name="field_description" rows="3"
@@ -232,9 +231,7 @@ def _page(variant: str) -> str:
   <p>{inside}</p>
 </form>
 <div id="footer"><p>{outside}</p></div>
-<form id="other" onsubmit="event.preventDefault(); window.created.push('other')">
-</form>
-<script>window.created = [];</script>
+<form id="other" method="post" action="/other"></form>
 {_TAMPER if variant == "tamper" else ""}
 {_REFORMAT if variant == "reformat" else ""}
 {_BLUR_FORMAT if variant == "blurformat" else ""}
@@ -242,11 +239,35 @@ def _page(variant: str) -> str:
 </body></html>"""
 
 
+#: Every submission the server received: what actually left the browser.
+SUBMISSIONS: list[dict[str, Any]] = []
+
+
+def _created(since: int) -> list[str]:
+    """The submissions since ``since``: the summary saved, or ``other``."""
+
+    return [
+        "other" if s["path"] == "/other" else s["fields"].get("field_summary", "")
+        for s in SUBMISSIONS[since:]
+    ]
+
+
 def _serve() -> tuple[str, Callable[[], None]]:
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 (http.server API)
             query = parse_qs(urlsplit(self.path).query)
-            body = _page(query.get("v", ["plain"])[0]).encode()
+            self._send(_page(query.get("v", ["plain"])[0]))
+
+        def do_POST(self) -> None:  # noqa: N802
+            length = int(self.headers.get("Content-Length") or 0)
+            fields = dict(
+                parse_qsl(self.rfile.read(length).decode(), keep_blank_values=True)
+            )
+            SUBMISSIONS.append({"path": urlsplit(self.path).path, "fields": fields})
+            self._send("<!doctype html><title>Created</title><h1>Ticket created</h1>")
+
+        def _send(self, html: str) -> None:
+            body = html.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
             self.send_header("Content-Length", str(len(body)))
@@ -269,6 +290,8 @@ def url() -> Iterator[str]:
 
 
 def _record(url: str, out: Path, *, armed: bool = True) -> Path:
+    since = len(SUBMISSIONS)
+
     def drive(page: Any, pump: Any) -> None:
         def settle() -> None:
             for _ in range(12):
@@ -288,7 +311,6 @@ def _record(url: str, out: Path, *, armed: bool = True) -> Path:
         # Let the recorder capture the page after the save before it ends.
         for _ in range(30):
             pump()
-        assert page.evaluate("window.created") == ["Printer jams on tray 2"]
 
     recording = record_interactive(
         url,
@@ -297,6 +319,7 @@ def _record(url: str, out: Path, *, armed: bool = True) -> Path:
         script=drive,
         param_fields=("field_summary", "field_description"),
     )
+    assert _created(since) == ["Printer jams on tray 2"]
     compile_recording(recording, out / "bundle", name="newticket")
     # A save recorded unarmed has nothing to check: say so here, so a slow
     # recording can't pass (or fail) a case for the wrong reason.
@@ -319,6 +342,7 @@ def _replay(url: str, bundle: Path, run_dir: Path) -> tuple[Any, list]:
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.runtime import Replayer
 
+    since = len(SUBMISSIONS)
     with sync_api.sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
@@ -334,10 +358,10 @@ def _replay(url: str, bundle: Path, run_dir: Path) -> tuple[Any, list]:
                 bundle_dir=bundle,
                 run_dir=run_dir,
             )
-            created = page.evaluate("window.created")
+            page.wait_for_timeout(500)
         finally:
             browser.close()
-    return report, created
+    return report, _created(since)
 
 
 def test_the_create_button_is_armed_by_its_form(bundle: Path) -> None:
@@ -521,7 +545,7 @@ def test_a_click_that_submits_another_form_is_cancelled(
     assert created == []
     save = report.results[-1]
     assert save.identity is not None and save.identity.status == "verified"
-    assert "submitted a different form" in (save.error or "")
+    assert "different address than the checked form's" in (save.error or "")
 
 
 def test_a_per_session_token_still_verifies(url: str, tmp_path: Path) -> None:
@@ -566,13 +590,13 @@ def test_values_that_only_look_like_tokens_are_compared(
 @pytest.mark.parametrize(
     "recorded, replayed, expected",
     [
-        ("copy7", "copy9", "what the form would send changed after it was checked"),
-        ("plain", "toggle", "what the form would send changed after it was checked"),
-        ("plain", "delayed_other", "submitted a different form"),
+        ("copy7", "copy9", "what the save sent differs from the checked form"),
+        ("plain", "toggle", "what the save sent differs from the checked form"),
+        ("plain", "delayed_other", "different address than the checked form's"),
         (
             "plain",
             "delayed_mutate",
-            "what the form would send changed after it was checked",
+            "what the save sent differs from the checked form",
         ),
     ],
 )
@@ -580,8 +604,8 @@ def test_a_submission_that_differs_from_the_checked_one_is_cancelled(
     url: str, tmp_path: Path, recorded: str, replayed: str, expected: str
 ) -> None:
     """The form checks out before the click; then a click handler changes
-    what is sent, or submits something else, now or 300 ms later. The guard
-    cancels it and the run halts."""
+    what is sent, or submits something else, now or 300 ms later. The wire
+    check stops the request before it leaves, and the run halts."""
 
     bundle = _record(f"{url}?v={recorded}", tmp_path / "rec")
     report, created = _replay(f"{url}?v={replayed}", bundle, tmp_path / "run")
