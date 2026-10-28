@@ -647,11 +647,12 @@ def judge_frame(
                         for i, side in enumerate(spec.side_records)
                         if side.surface == name
                         and str(after.get(side.link_field)) in side_links[i]
-                        # Filed under its parent's record_key, not another's.
+                        # Filed under its parent's record_key (or none), not another's.
                         and (
                             attribution is None
                             or not attribution.record_key
-                            or ref == side_parent[i][str(after.get(side.link_field))]
+                            or ref
+                            in (None, side_parent[i][str(after.get(side.link_field))])
                         )
                     ),
                     None,
