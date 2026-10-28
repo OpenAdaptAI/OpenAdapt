@@ -616,22 +616,28 @@ GUARDED_ACTIONABLE_SELECTOR = (
 _FOCUS_IDENTITY_JS = r"""(el) => {
     const doc = el.ownerDocument;
     if (el === doc.body || el === doc.documentElement) return {none: true};
+    // activeElement names a shadow host when the focus is inside its shadow
+    // root. An open root is not followed, and a custom element may hide a
+    // closed one: either way the focused control can't be told apart.
+    if (el.shadowRoot || el.localName.includes('-')) return {unreadable: true};
     const count = (sel) => {
         try { return doc.querySelectorAll(sel).length; } catch (e) { return 0; }
     };
     const testid = el.getAttribute('data-testid') || null;
     const id = el.id || null;
+    // An option is active only inside the listbox the control names by
+    // aria-controls: aria-activedescendant points at one of its role=option
+    // elements, or one of them is aria-selected.
     let active = false;
-    const activeId = el.getAttribute('aria-activedescendant');
-    if (activeId && doc.getElementById(activeId)) active = true;
-    if (!active) {
-        for (const attr of ['aria-controls', 'aria-owns']) {
-            const ref = el.getAttribute(attr);
-            const box = ref ? doc.getElementById(ref) : null;
-            if (box && box.querySelector('[role="option"][aria-selected="true"]')) {
-                active = true;
-                break;
-            }
+    const boxId = el.getAttribute('aria-controls');
+    const box = boxId ? doc.getElementById(boxId) : null;
+    if (box && box.getAttribute('role') === 'listbox') {
+        const activeId = el.getAttribute('aria-activedescendant');
+        const option = activeId ? doc.getElementById(activeId) : null;
+        if (option) {
+            active = option.getAttribute('role') === 'option' && box.contains(option);
+        } else {
+            active = !!box.querySelector('[role="option"][aria-selected="true"]');
         }
     }
     let top = false;
@@ -2220,8 +2226,9 @@ class PlaywrightBackend:
         nothing has the focus; None when it can't be read.
         """
 
-        info = self._focused_element_call(_FOCUS_IDENTITY_JS)
-        if not isinstance(info, dict):
+        frame_path: list[str] = []
+        info = self._focused_element_call(_FOCUS_IDENTITY_JS, frame_path_out=frame_path)
+        if not isinstance(info, dict) or info.get("unreadable"):
             return None
         if info.get("none"):
             return {"none": True}
@@ -2258,6 +2265,7 @@ class PlaywrightBackend:
             "name": name,
             "role_name_count": role_name_count,
             "active_option": info.get("active_option") is True,
+            "frame_path": list(frame_path),
         }
 
     def element_texts(
@@ -2331,11 +2339,18 @@ class PlaywrightBackend:
         )
 
     def _focused_element_call(
-        self, js: str, *, arg: Any = None, with_arg: bool = False
+        self,
+        js: str,
+        *,
+        arg: Any = None,
+        with_arg: bool = False,
+        frame_path_out: Optional[list[str]] = None,
     ) -> Any:
         """Evaluate ``js`` on the exactly bound focused element (see above).
 
         Returns the raw result, or None on any frame mismatch or failure.
+        ``frame_path_out``, when given, receives the frame chain the focused
+        element is in (outermost first; empty in the top document).
         """
 
         scope: Any = self.page
@@ -2356,6 +2371,8 @@ class PlaywrightBackend:
                             scope, tuple(frame_path), box
                         ):
                             return None
+                        if frame_path_out is not None:
+                            frame_path_out[:] = frame_path
                         if with_arg:
                             return focused.evaluate(js, arg)
                         return focused.evaluate(js)

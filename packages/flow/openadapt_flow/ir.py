@@ -599,6 +599,9 @@ class Postcondition(BaseModel):
     focus_name: Optional[str] = Field(default=None, min_length=1, max_length=256)
     #: FOCUS_ON: an option of the focused control must be active.
     focus_active_option: bool = False
+    #: FOCUS_ON: the frame chain the focused element is in (outermost first;
+    #: empty in the top document). A testid or id is unique within its frame.
+    focus_frame_path: Optional[tuple[str, ...]] = Field(default=None, max_length=8)
     #: NO_DUPLICATE_CANDIDATE: parameters whose value in any row makes it a
     #: real candidate.
     candidate_params: Optional[tuple[str, ...]] = Field(
@@ -623,6 +626,7 @@ class Postcondition(BaseModel):
             "focus_value",
             "focus_role",
             "focus_name",
+            "focus_frame_path",
         ):
             if getattr(self, name) is None:
                 data.pop(name, None)

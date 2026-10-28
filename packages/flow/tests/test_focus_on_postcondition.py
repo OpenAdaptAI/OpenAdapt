@@ -43,6 +43,7 @@ def _focus(**over):
         "name": "Add Telecom",
         "role_name_count": 1,
         "active_option": False,
+        "frame_path": [],
     }
     seen.update(over)
     return seen
@@ -226,3 +227,115 @@ def test_the_recorder_keeps_the_focus_around_a_key(backend, tmp_path):
     event = json.loads((tmp_path / "rec" / "events.jsonl").read_text().splitlines()[-1])
     assert event["focus_before"]["name"] == "Add Telecom"
     assert event["focus_after"]["name"] == "Add Address"
+
+
+# -- the review's holes, each in a real browser ------------------------------------------
+
+
+def _launch(html):
+    pytest.importorskip("playwright")
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    try:
+        return PlaywrightBackend.launch("data:text/html," + html)
+    except Exception as exc:  # noqa: BLE001 - no browser on this machine
+        pytest.skip(f"chromium unavailable: {exc}")
+
+
+def _mined(backend, before):
+    return _focus_postcondition(before, backend.focus_identity())
+
+
+def test_an_iframe_button_with_the_same_testid_fails():
+    backend, close = _launch(
+        "<button data-testid=save>Save</button>"
+        "<iframe srcdoc='<button data-testid=save>Save</button>'></iframe>"
+    )
+    try:
+        page = backend.page
+        page.wait_for_timeout(300)
+        page.locator("button[data-testid=save]").focus()
+        pc = _mined(backend, BEFORE)
+        assert pc.focus_by == "testid" and pc.focus_frame_path == ()
+        assert _held(backend, pc) is True
+        page.frame_locator("iframe").locator("button").focus()
+        assert backend.focus_identity()["frame_path"] != []
+        assert _held(backend, pc) is False
+    finally:
+        close()
+
+
+def test_focus_inside_a_shadow_root_is_unreadable():
+    backend, close = _launch(
+        "<div id=host></div><script>"
+        "const r=document.getElementById('host').attachShadow({mode:'open'});"
+        "r.innerHTML='<button>One</button><button>Two</button>';</script>"
+    )
+    try:
+        page = backend.page
+        page.locator("#host button", has_text="Two").focus()
+        assert backend.focus_identity() is None
+        # Nothing to mine, and any check fails there.
+        assert _focus_postcondition(BEFORE, backend.focus_identity()) is None
+        assert _held(backend, ADD_TELECOM) is False
+    finally:
+        close()
+
+
+def test_a_generated_id_falls_back_to_role_and_name():
+    backend, close = _launch(
+        "<button id=':r1:'>Cancel</button><button id=':r2:'>Save</button>"
+    )
+    try:
+        page = backend.page
+        page.get_by_role("button", name="Save").focus()
+        pc = _mined(backend, BEFORE)
+        assert (pc.focus_by, pc.focus_name) == ("role_name", "Save")
+        # The ids shift on the next render: the check still follows the name.
+        page.evaluate(
+            "document.querySelectorAll('button').forEach((b, i) => b.id = ':r' + (i + 7) + ':')"
+        )
+        assert _held(backend, pc) is True
+        page.get_by_role("button", name="Cancel").focus()
+        assert _held(backend, pc) is False
+    finally:
+        close()
+
+
+@pytest.mark.parametrize(
+    "markup, active",
+    [
+        ("<div id=box role=listbox><div id=o1 role=option>A</div></div>", True),
+        ("<div id=box role=listbox></div><div id=o1 role=option>A</div>", False),
+        ("<div id=box role=listbox><div id=o1>A</div></div>", False),
+        ("<div id=box><div id=o1 role=option>A</div></div>", False),
+    ],
+    ids=[
+        "option in the listbox",
+        "option outside it",
+        "not an option",
+        "not a listbox",
+    ],
+)
+def test_an_active_option_must_be_in_the_controlled_listbox(markup, active):
+    backend, close = _launch(
+        "<input role=combobox aria-label=Gender aria-controls=box "
+        "aria-activedescendant=o1>" + markup
+    )
+    try:
+        backend.page.get_by_role("combobox", name="Gender").focus()
+        assert backend.focus_identity()["active_option"] is active
+    finally:
+        close()
+
+
+def test_aria_owns_alone_is_not_an_active_option():
+    backend, close = _launch(
+        "<input role=combobox aria-label=Gender aria-owns=box>"
+        "<div id=box role=listbox><div role=option aria-selected=true>A</div></div>"
+    )
+    try:
+        backend.page.get_by_role("combobox", name="Gender").focus()
+        assert backend.focus_identity()["active_option"] is False
+    finally:
+        close()

@@ -1134,6 +1134,22 @@ def _structural_postconditions(event: dict) -> list[Postcondition]:
     return pcs
 
 
+#: Ids a UI framework generates per render: React's useId (``:r2:``,
+#: ``«r2»``), Radix, Headless UI, MUI, Ember, react-select, downshift, Reach,
+#: Mantine, and bare UUIDs or long numeric suffixes.
+_GENERATED_ID = re.compile(
+    r"^(?::r[0-9a-z]+:|«r[0-9a-z]+»|:[0-9a-z]+:)$"
+    r"|^(?:radix-|headlessui-|mui-|ember|react-select-|downshift-|reach-|mantine-)"
+    r"|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    r"|\d{4,}$",
+    re.IGNORECASE,
+)
+
+
+def _generated_id(value: str) -> bool:
+    return bool(_GENERATED_ID.search(value))
+
+
 def _focus_postcondition(before: Any, after: Any) -> Optional[Postcondition]:
     """A ``focus_on`` check for a key that moved the focus, or None.
 
@@ -1164,8 +1180,20 @@ def _focus_postcondition(before: Any, after: Any) -> Optional[Postcondition]:
     )
     if not (moved or activated):
         return None
-    common: dict[str, Any] = {"focus_active_option": activated}
+    frame_path = after.get("frame_path")
+    if not isinstance(frame_path, list) or not all(
+        isinstance(f, str) for f in frame_path
+    ):
+        return None
+    common: dict[str, Any] = {
+        "focus_active_option": activated,
+        "focus_frame_path": tuple(frame_path),
+    }
     testid, ident_id = after.get("testid"), after.get("id")
+    if isinstance(ident_id, str) and _generated_id(ident_id):
+        # A framework-generated id (React useId, Radix, MUI ...) shifts from
+        # run to run, so it names no element; fall back to role and name.
+        ident_id = None
     role, name = after.get("role"), after.get("name")
     if isinstance(testid, str) and testid.strip() and after.get("testid_count") == 1:
         return Postcondition(

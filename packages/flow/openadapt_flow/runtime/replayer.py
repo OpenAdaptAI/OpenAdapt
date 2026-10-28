@@ -18238,6 +18238,8 @@ class Replayer:
             return False
         if not isinstance(seen, dict) or seen.get("none") is not False:
             return False
+        if tuple(seen.get("frame_path") or ()) != tuple(pc.focus_frame_path or ()):
+            return False
         if pc.focus_by == "testid":
             held = (
                 seen.get("testid") == pc.focus_value and seen.get("testid_count") == 1
