@@ -539,7 +539,9 @@ def _verify_flow_command_contract(
         raise RuntimeError(f"the bundled Flow refuses Desktop's command lines: {refused}")
 
     config = root / "contract-deployment.yaml"
-    config.write_text("name: frozen-contract-smoke\n", encoding="utf-8")
+    # Exact bytes, as Desktop stages every config (no newline translation):
+    # write_text would write CRLF on Windows.
+    config.write_bytes(b"name: frozen-contract-smoke\n")
     digest = hashlib.sha256(config.read_bytes()).hexdigest()
 
     def governed(sha: str, run_dir: str) -> str:
