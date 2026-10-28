@@ -79,12 +79,13 @@ class DatabaseReader:
             capture_database = None
         if capture_database is not None:
             try:
-                return capture_database(  # type: ignore[no-any-return]
+                snapshot: Snapshot = capture_database(
                     self.read_config,
                     self.dialect,
                     allow_tables=list(self.allow_tables),
                     max_rows=self.max_rows,
                 )
+                return snapshot
             except Exception as exc:  # noqa: BLE001 - BaselineUnreadable and kin
                 raise StateUnreadable(
                     f"the database could not be read ({type(exc).__name__})"
@@ -414,7 +415,13 @@ class Attributor:
         seen = {stable_id(e) for e in self._before}
         return [e for e in after if stable_id(e) not in seen]
 
-    def _ref(self, table: str, key: str, before, after) -> Optional[str]:  # type: ignore[no-untyped-def]
+    def _ref(
+        self,
+        table: str,
+        key: str,
+        before: Optional[dict[str, Any]],
+        after: Optional[dict[str, Any]],
+    ) -> Optional[str]:
         field = self.spec.record_keys.get(table, self.spec.record_key)
         if not field:
             return key
