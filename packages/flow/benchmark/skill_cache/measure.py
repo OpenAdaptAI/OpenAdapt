@@ -252,6 +252,7 @@ def main() -> int:
     parser.add_argument("--app", choices=sorted(APPS), required=True)
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--work", type=Path, required=True, help="private state")
+    parser.add_argument("--trial", type=int, default=1)
     args = parser.parse_args()
     global TRACE
     args.work.mkdir(parents=True, exist_ok=True)
@@ -262,6 +263,14 @@ def main() -> int:
     from openadapt_flow.integrations.agents.skills import SkillCache
     from openadapt_flow.jit.keys import load_customer_model_key
 
+    import subprocess
+
+    commit = subprocess.run(
+        ["git", "rev-parse", "--short=10", "HEAD"],
+        capture_output=True,
+        text=True,
+        cwd=HERE,
+    ).stdout.strip()
     app = dict(APPS[args.app])
     if "setup" in app:
         app.update(app.pop("setup")(args.work))
@@ -306,6 +315,9 @@ def main() -> int:
         result = cache.run(app["prompt"], values, agent)
         row = {
             "app": args.app,
+            "trial": args.trial,
+            "engine_commit": commit,
+            "model": MODEL,
             "run": number,
             "path": result.path,
             "status": result.status,
