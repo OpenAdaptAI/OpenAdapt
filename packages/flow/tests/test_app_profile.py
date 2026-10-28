@@ -126,7 +126,7 @@ def test_bookkeeping_holds_and_the_receipt_names_the_rules(tmp_path: Path) -> No
     result = _run(tmp_path, bookkeeping)
     assert _frame(result) == "held"
     profile = result["evidence"]["frame"]["database"]["profile"]
-    assert profile["version"] == "openemr-frame-profile/2026-10-28.1"
+    assert profile["version"] == "openemr-frame-profile/2026-10-28.2"
     assert {"uuid-backfill", "users-uuid-backfill", "log", "session-tracker"} <= set(
         profile["rules_used"]
     )
