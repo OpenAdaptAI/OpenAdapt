@@ -55,6 +55,10 @@ jobs:
     name: build ${{ inputs.package }} ${{ inputs.version }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      # Reads the package's newest green run on main.
+      actions: read
     outputs:
       project: ${{ steps.check.outputs.project }}
       tag: ${{ steps.check.outputs.tag }}
@@ -80,6 +84,14 @@ jobs:
         with:
           version: "0.11.29"
           enable-cache: false
+      - name: Require the newest green main run for this package
+        # One release rule for every package: the newest commit on main that
+        # changed it must have a passed push run with its jobs run, and the
+        # release builds main's tip, where the package is unchanged since.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE: ${{ inputs.package }}
+        run: python3 scripts/ci/newest_green.py "$PACKAGE" --tip "$GITHUB_SHA"
       - name: Check the dispatched commit, version and PyPI state
         id: check
         env:
