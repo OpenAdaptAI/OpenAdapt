@@ -345,29 +345,48 @@ class RoundTrip:
         }
 
 
-def bound_fields(effects: Any) -> dict[str, str]:
-    """Parameter name -> record field, from the effects' selectors and values."""
+def bindings(effects: Any) -> dict[str, tuple[str, Any]]:
+    """Parameter name -> (record field, value expression), each pair taken
+    from one place in one effect, so a field's transform is never another
+    field's. A parameter bound two different ways is left out: its round
+    trip can't be compared, so it stays unchecked."""
 
-    out: dict[str, str] = {}
+    out: dict[str, tuple[str, Any]] = {}
+    ambiguous: set[str] = set()
+
+    def add(param: str, record_field: str, expr: Any) -> None:
+        seen = out.get(param)
+        transform = (expr.map, expr.stored)
+        if seen is None:
+            out[param] = (record_field, expr)
+        elif seen[0] != record_field or (seen[1].map, seen[1].stored) != transform:
+            ambiguous.add(param)
+
     for effect in effects:
         for record_field, expr in effect.match.items():
             if expr.param is not None:
-                out.setdefault(expr.param, record_field)
+                add(expr.param, record_field, expr)
         if effect.field and effect.value is not None and effect.value.param:
-            out.setdefault(effect.value.param, effect.field)
-    return out
+            add(effect.value.param, effect.field, effect.value)
+    return {k: v for k, v in out.items() if k not in ambiguous}
+
+
+def bound_fields(effects: Any) -> dict[str, str]:
+    """Parameter name -> record field (:func:`bindings`)."""
+
+    return {param: field for param, (field, _expr) in bindings(effects).items()}
 
 
 def bound_maps(effects: Any) -> dict[str, Any]:
     """Parameter name -> the value expression that says how its field stores
-    what was entered: a label's code (``map``), a stored form (``stored``)."""
+    what was entered: a label's code (``map``), a stored form (``stored``).
+    From the same effect as the field (:func:`bindings`)."""
 
-    out: dict[str, Any] = {}
-    for effect in effects:
-        value = getattr(effect, "value", None)
-        if value is not None and value.param and (value.map or value.stored):
-            out.setdefault(value.param, value)
-    return out
+    return {
+        param: expr
+        for param, (_field, expr) in bindings(effects).items()
+        if expr.map or expr.stored
+    }
 
 
 def round_trip(
