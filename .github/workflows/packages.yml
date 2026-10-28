@@ -71,15 +71,12 @@
 name: Packages
 
 on:
-  pull_request:
-    # Drafts run nothing (each job checks `draft`); marking one ready runs CI.
-    types: [opened, synchronize, reopened, ready_for_review]
-  # The merge queue tests each group before it lands on main.
-  merge_group:
+  # Pull requests and the merge queue reach this through ci.yml, the one
+  # required check, which calls it on their tier (the github context is
+  # theirs). nightly.yml calls it on the scheduled tier.
   push:
     branches: [main]
   workflow_dispatch:
-  # nightly.yml runs every job against main.
   workflow_call:
 
 permissions:
@@ -509,6 +506,10 @@ jobs:
             | LC_ALL=C sort | awk -v s="$SHARD" -v n="$SHARDS" 'NR % n == s % n' > "$RUNNER_TEMP/shard.txt"
           wc -l < "$RUNNER_TEMP/shard.txt"
       - name: Test
+        # A pull request runs the fast lane: tests/nightly_only.txt lists the
+        # slow tests (over about 5 s on CI) that main and nightly run instead.
+        env:
+          OPENADAPT_TEST_LANE: ${{ github.event_name == 'pull_request' && 'fast' || 'full' }}
         # -n auto: one xdist worker per core. --dist loadfile keeps each file
         # on one worker, so module fixtures and file-local state stay in one
         # process. xdist gives each worker its own directory under --basetemp
@@ -560,18 +561,16 @@ jobs:
         run: >-
           python scripts/install_playwright_browser.py
           --attempts 2 --attempt-timeout-seconds 270
-      - name: Golden task (free path -> VERIFIED)
+      - name: Golden task, record/compile/replay and the critical tests
+        # One xdist run (one file per worker at a time): the golden free path
+        # (VERIFIED, zero model calls), record -> compile -> replay, the
+        # read-back and zero-model-call tests, and the agent guard's wire
+        # check end to end. Serially these took about 13 minutes.
         run: |
           mkdir -p runs
-          pytest -vv --durations=20 tests/e2e/test_free_path_e2e.py \
-            --basetemp=runs/ci-golden --junitxml=runs/golden-junit.xml
-      - name: Record / compile / replay E2E
-        run: |
-          pytest -vv --durations=20 tests/e2e/test_record_compile_replay.py \
-            --basetemp=runs/ci-rcr --junitxml=runs/rcr-junit.xml
-      - name: Read-back and zero-model-call tests, by name
-        run: |
-          pytest -vv --durations=20 \
+          pytest -n auto --dist loadfile -v --durations=20 \
+            tests/e2e/test_free_path_e2e.py \
+            tests/e2e/test_record_compile_replay.py \
             tests/test_replayer_readback.py \
             tests/test_readback_authoring.py \
             tests/test_run_receipt.py \
@@ -592,7 +591,7 @@ jobs:
           import sys
           import xml.etree.ElementTree as ET
           bad = False
-          for name in ("golden", "rcr", "critical"):
+          for name in ("critical",):
               root = ET.parse(f"runs/{name}-junit.xml").getroot()
               suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
               tests = sum(int(s.get("tests", 0)) for s in suites)
@@ -610,7 +609,8 @@ jobs:
   flow-native-census:
     name: flow native row census (${{ matrix.os }})
     needs: scope
-    if: needs.scope.outputs.flow == 'true'
+    # Post-merge tier (main and nightly): a pull request's `ci` lane is Linux.
+    if: needs.scope.outputs.flow == 'true' && github.event_name != 'pull_request' && github.event_name != 'merge_group'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
@@ -1242,6 +1242,7 @@ jobs:
               "flow-lint": "flow",
               "flow-unit": "flow",
               "flow-critical": "flow",
+              "flow-native-census": "flow",
               "capture-linux": "capture",
               "capture-macos": "capture",
               "capture-windows": "capture",
@@ -1261,7 +1262,7 @@ jobs:
           }
           # Post-merge tier only: skipped on a pull request and in the merge
           # queue; required on a push to main and on dispatch.
-          post_merge_only = {"capture-macos", "capture-windows"}
+          post_merge_only = {"capture-macos", "capture-windows", "flow-native-census"}
           # Skipped in the merge queue only: the pull request already passed
           # it on its merge with main (packages-gate is required there).
           not_in_queue = {"flow-unit"}

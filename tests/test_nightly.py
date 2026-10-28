@@ -63,12 +63,10 @@ def test_it_calls_every_package_suite() -> None:
     } <= called
 
 
-def test_the_pr_lane_triggers_are_unchanged() -> None:
+def test_main_and_dispatch_still_run_both_workflows() -> None:
     for name in ("packages.yml", "main.yml"):
         triggers = _triggers(_load(name))
-        assert {"pull_request", "merge_group", "push", "workflow_dispatch"} <= set(
-            triggers
-        )
+        assert {"push", "workflow_dispatch", "workflow_call"} <= set(triggers)
 
 
 def test_its_group_differs_from_the_groups_its_callees_compute() -> None:

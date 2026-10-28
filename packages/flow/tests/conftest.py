@@ -17,6 +17,13 @@ from tests.repo_tree_guard import (  # noqa: E402 - needs the sys.path line abov
     capture_baseline,
     check_and_report,
 )
+from tests import lanes  # noqa: E402 - needs the sys.path line above
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """In the fast lane, leave out the tests in tests/nightly_only.txt."""
+
+    lanes.deselect(config, items)
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:
