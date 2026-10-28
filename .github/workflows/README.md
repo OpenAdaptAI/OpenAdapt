@@ -167,8 +167,9 @@ pytest 9.2 once broke flow-unit on every pull request at once.
   another lock names, the job adds the sibling's own lock after it. For
   example, flow-unit installs Flow's lock, then Capture's.
 - Jobs that test no package of their own (Python support, platform manifest,
-  wheel builds, the Desktop audit, release builds) use the groups in
-  `.github/ci-tools/uv.lock`.
+  wheel builds, release builds) use the groups in `.github/ci-tools/uv.lock`.
+  The Desktop audit's pip-audit has its own lock in `.github/ci-tools/audit/`,
+  because the fixed filelock it pulls in needs Python 3.11.
 
 When a job fails with "The lockfile at `uv.lock` needs to be updated", run
 `uv lock` in that directory and commit the lock.
