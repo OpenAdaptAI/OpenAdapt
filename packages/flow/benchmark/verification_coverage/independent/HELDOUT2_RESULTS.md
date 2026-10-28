@@ -72,3 +72,18 @@ not counted.
 ## Live OpenEMR
 
 Pending: queued for the fixture lease.
+
+## After the fix (not counted)
+
+The one wrong verdict above was a value comparison, not attribution. The
+record check compared street and city with the referral's mixed case, while
+OpenEMR saves them in capitals. #1586 lets a contract value declare how the
+store saves what was entered (`{param: street, stored: upper}`), applied
+exactly, not as a case-insensitive match. `verify.database.yaml` now declares
+it for street and city. The stand-in now saves those two fields in capitals,
+as OpenEMR's form does (WITNESS.md); before, it kept the case it was given.
+
+At commit `6d0b1525d`, the whole-database contract gets 17/17 on the
+stand-in on all three suites: the original, held-out 1 and held-out 2. The
+two held-out scores **don't count**: both sets shaped the change. The counted
+held-out-2 score stays 16/17 (above).
