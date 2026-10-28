@@ -61,6 +61,19 @@ hooks, because a pulled skill never runs code it downloaded. See
   that record.
 - `planned`: no files yet.
 
+## Releases
+
+`.github/workflows/release-registry.yml` publishes the registry:
+1. It builds each bundle as a reproducible archive.
+2. It signs every entry in the protected `registry-signing` environment.
+3. It anchors the signed index in Rekor (`index.anchor.json`). `pull` checks
+   that anchor whenever it is present.
+4. It releases the archives under a `registry-*` tag.
+5. It opens a pull request with the signed index.
+
+After the first signed release, only that workflow writes `index.json`;
+`build_registry_index.py --check` confirms it still matches `sources.json`.
+
 ## Adding a bundle
 
 1. Put the bundle under `bundles/<app>/<task>/`. Use synthetic data only.

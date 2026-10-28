@@ -100,6 +100,81 @@ def sign_entry(raw: dict[str, Any], seed: bytes, key_id: str) -> dict[str, str]:
     return {"key_id": key_id, "ed25519ph": base64.b64encode(signature).decode("ascii")}
 
 
+#: The index's Rekor anchor, published beside it (``index.anchor.json``).
+ANCHOR_NAME = "index.anchor.json"
+
+
+def index_digest(index: dict[str, Any]) -> str:
+    """SHA-256 of the canonical index, the record its Rekor anchor names."""
+
+    body = {k: v for k, v in index.items() if k != "anchor"}
+    return hashlib.sha256(
+        json.dumps(
+            body, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def anchor_index(
+    index_path: Path,
+    seed: bytes,
+    *,
+    log_keys: Optional[Any] = None,
+    submit: Optional[Any] = None,
+    env: Optional[Any] = None,
+) -> Path:
+    """Anchor the signed index in Rekor with the registry key; write the anchor.
+
+    Contacts the transparency log: the release workflow does this once per
+    registry release, in its protected environment.
+    """
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from openadapt_flow.seal_anchor import anchor_record, submit_hashedrekord
+    from openadapt_flow.seal_keys import SoftwareSigner
+
+    signer = SoftwareSigner(Ed25519PrivateKey.from_private_bytes(seed), "file")
+    out = index_path.with_name(ANCHOR_NAME)
+    anchor_record(
+        {"registry_index_sha256": index_digest(json.loads(index_path.read_text()))},
+        out,
+        signer,
+        log_keys=log_keys,
+        submit=submit or submit_hashedrekord,
+        env=env,
+    )
+    return out
+
+
+def index_anchor_problem(
+    index: dict[str, Any],
+    anchor: Any,
+    keys: dict[str, bytes],
+    *,
+    log_keys: Optional[Any] = None,
+) -> Optional[str]:
+    """Why an index's Rekor anchor doesn't hold, or None when it does.
+
+    The anchor must name this exact index and be signed by a registry key.
+    """
+
+    from openadapt_flow.seal_anchor import verify_record_anchor
+
+    fields = {"registry_index_sha256": index_digest(index)}
+    reasons = set()
+    for public in keys.values():
+        result = verify_record_anchor(fields, anchor, public, log_keys=log_keys)
+        if result.ok:
+            return None
+        reasons.add(str(result.reason))
+    return (
+        "the index's transparency-log anchor does not hold ("
+        + ", ".join(sorted(reasons) or ["no registry key"])
+        + ")"
+    )
+
+
 def trusted_keys(*, allow_test_key: bool = False) -> dict[str, bytes]:
     """The registry's public keys, shipped with the package (never fetched).
 
@@ -286,6 +361,7 @@ def pull(
     keys: Optional[dict[str, bytes]] = None,
     allow_unsigned: bool = False,
     allow_test_key: bool = False,
+    log_keys: Optional[Any] = None,
 ) -> Path:
     """Download and verify a bundle into ``out`` (default ``./<name>``).
 
@@ -294,12 +370,27 @@ def pull(
     unsigned entry (a local index while authoring); a signature that is
     present must always hold.
     """
-    entry = find(load_index(index_url), workflow_id)
+    try:
+        index_data = json.loads(_read(index_url))
+    except json.JSONDecodeError as exc:
+        raise RegistryError(f"index is not JSON: {exc}") from exc
+    entry = find(validate_index(index_data), workflow_id)
     if entry.status == "planned":
         raise RegistryError(f"{workflow_id} is planned and has no bundle yet")
+    trusted = trusted_keys(allow_test_key=allow_test_key) if keys is None else keys
+    # A published anchor must hold; an index without one is checked by its
+    # entries' signatures alone (until anchoring is required).
+    try:
+        anchor = json.loads(_read(_join(index_url, ANCHOR_NAME)))
+    except (RegistryError, OSError, json.JSONDecodeError):
+        anchor = None
+    if anchor is not None:
+        anchored = index_anchor_problem(index_data, anchor, trusted, log_keys=log_keys)
+        if anchored is not None:
+            raise RegistryError(anchored)
     problem = entry_signature_problem(
         entry.raw,
-        trusted_keys(allow_test_key=allow_test_key) if keys is None else keys,
+        trusted,
     )
     if problem is not None and not (
         allow_unsigned and entry.raw.get("signature") is None

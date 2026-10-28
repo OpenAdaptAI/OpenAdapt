@@ -595,3 +595,72 @@ def test_the_archive_is_reproducible(tmp_path):
     a = registry.build_archive(bundle, tmp_path / "a.tar.gz")
     b = registry.build_archive(bundle, tmp_path / "b.tar.gz")
     assert a == b
+
+
+# -- the index's transparency-log anchor ------------------------------------------------
+
+
+@pytest.fixture
+def rekor():
+    from tests.test_seal_anchor import FakeRekor
+
+    return FakeRekor()
+
+
+def _anchored(tmp_path, rekor):
+    index = _registry(tmp_path)
+    data = json.loads(index.read_text())
+    for item in data["workflows"]:
+        if item["id"] == "openemr/new-referral":
+            item["signature"] = registry.sign_entry(
+                item, registry.TEST_KEY_SEED, registry.TEST_KEY_ID
+            )
+    index.write_text(json.dumps(data))
+    registry.anchor_index(
+        index, registry.TEST_KEY_SEED, log_keys=[rekor.log], submit=rekor.submit, env={}
+    )
+    return index
+
+
+def test_an_anchored_index_pulls(tmp_path, rekor):
+    index = _anchored(tmp_path, rekor)
+    assert (index.parent / registry.ANCHOR_NAME).is_file()
+    dest = registry.pull(
+        "openemr/new-referral",
+        tmp_path / "s",
+        index_url=str(index),
+        allow_test_key=True,
+        log_keys=[rekor.log],
+    )
+    assert (dest / "workflow.json").is_file()
+
+
+def test_an_index_changed_after_anchoring_is_refused(tmp_path, rekor):
+    index = _anchored(tmp_path, rekor)
+    data = json.loads(index.read_text())
+    # A change no entry signature covers: a planned entry's title.
+    for item in data["workflows"]:
+        if item["status"] == "planned":
+            item["title"] = "something else"
+    index.write_text(json.dumps(data))
+    with pytest.raises(registry.RegistryError, match="anchor does not hold"):
+        registry.pull(
+            "openemr/new-referral",
+            tmp_path / "s",
+            index_url=str(index),
+            allow_test_key=True,
+            log_keys=[rekor.log],
+        )
+    assert not (tmp_path / "s").exists()
+
+
+def test_an_anchor_by_a_key_the_registry_does_not_trust_is_refused(tmp_path, rekor):
+    index = _anchored(tmp_path, rekor)
+    with pytest.raises(registry.RegistryError, match="anchor does not hold"):
+        registry.pull(
+            "openemr/new-referral",
+            tmp_path / "s",
+            index_url=str(index),
+            keys={"other": bytes(32)},
+            log_keys=[rekor.log],
+        )

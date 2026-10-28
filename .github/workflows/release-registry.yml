@@ -10,7 +10,9 @@
 #   registry key (Ed25519ph, the form Rekor accepts) and checks each signature
 #   against the public keys shipped in openadapt_flow/registry_keys.json, so a
 #   seed that doesn't match a published key fails the run. The TEST key is
-#   refused here.
+#   refused here. It then anchors the signed index in Rekor (a public
+#   transparency log): the anchor names only the index's SHA-256 and the
+#   registry's public key.
 # - publish-github tags the commit with the openadapt-release App and
 #   publishes an immutable GitHub Release with the archives and the signed
 #   index, then opens a pull request that updates
@@ -137,7 +139,23 @@ jobs:
                   raise SystemExit(f"{item['id']}: {problem}")
           print(f"{len(index['workflows'])} entries signed and checked")
           PY
-          (cd dist-registry && sha256sum -- *.tar.gz index.json > SHA256SUMS)
+      - name: Anchor the signed index in Rekor
+        env:
+          REGISTRY_SIGNING_SEED: ${{ secrets.REGISTRY_SIGNING_SEED }}
+        run: |
+          set -euo pipefail
+          umask 077
+          seed="$RUNNER_TEMP/registry-seed"
+          printf '%s' "$REGISTRY_SIGNING_SEED" | base64 --decode > "$seed"
+          python - "$seed" <<'PY'
+          import sys
+          from pathlib import Path
+          from openadapt_flow import registry
+          seed = Path(sys.argv[1]).read_bytes()
+          print(registry.anchor_index(Path("dist-registry/index.json"), seed))
+          PY
+          rm -f "$seed"
+          (cd dist-registry && sha256sum -- *.tar.gz index.json index.anchor.json > SHA256SUMS)
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: registry-signed
@@ -195,11 +213,12 @@ jobs:
             tag -a "$TAG" "$GITHUB_SHA" -m "Skills registry $TAG"
           git push origin "refs/tags/$TAG"
           gh release create "$TAG" dist-registry/*.tar.gz dist-registry/index.json \
-            dist-registry/SHA256SUMS --title "Skills registry $TAG" \
+            dist-registry/index.anchor.json dist-registry/SHA256SUMS \
+            --title "Skills registry $TAG" \
             --notes "Signed skills-registry index and bundles. See packages/flow/registry/README.md."
           branch="registry/$TAG"
           git switch -c "$branch"
-          cp dist-registry/index.json packages/flow/registry/index.json
+          cp dist-registry/index.json dist-registry/index.anchor.json packages/flow/registry/
           git -c user.name="openadapt-release[bot]" \
             -c user.email="openadapt-release[bot]@users.noreply.github.com" \
             commit -am "registry: signed index for $TAG"

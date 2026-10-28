@@ -124,8 +124,9 @@ AGPL entry is published.
 ## Decisions (review, 2026-10-28)
 
 - **Signatures.** Each entry is signed with the Seals signing (Ed25519ph). The
-  index is to be anchored in Rekor as Seals are, as a new record type (a
-  follow-up). The production key is a founder action: the release workflow
+  release workflow anchors the signed index in Rekor as Seals are (record
+  type `registry_index_sha256`), and `pull` verifies a published anchor
+  offline. The production key is a founder action: the release workflow
   (`.github/workflows/release-registry.yml`) reads its seed only from the
   REGISTRY_SIGNING_SEED secret of the protected `registry-signing`
   environment, and only the public key is committed. Until then a TEST key,
