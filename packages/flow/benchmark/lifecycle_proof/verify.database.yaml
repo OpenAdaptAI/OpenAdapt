@@ -45,8 +45,9 @@ record:
     fname: fname
     DOB: DOB
     sex: sex
-    street: street
-    city: city
+    # OpenEMR's New Patient form saves these in capitals (WITNESS.md, #1524).
+    street: {param: street, stored: upper}
+    city: {param: city, stored: upper}
     state: {param: state_label, map: {Massachusetts: MA}}
     postal_code: postal_code
     phone_home: phone_home
