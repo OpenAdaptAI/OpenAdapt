@@ -1,0 +1,90 @@
+{
+  "schema": "openadapt.rollback-measurement/v1",
+  "app": "mockmed",
+  "mode": "live (real browser, in-process app declared a test copy)",
+  "measured_at": "2026-10-28T14:19:33-0400",
+  "host": "macOS-15.7.3-arm64-arm-64bit",
+  "load_1m": 162.41,
+  "seconds": 89.6,
+  "rows": {
+    "qualify": {
+      "exit_code": 0,
+      "summary": {
+        "before_save_clean": 1,
+        "halt_points": 2,
+        "halt_points_rolled_back": 2,
+        "saves_with_qualified_compensation": 1,
+        "saving_steps": 1
+      }
+    },
+    "after_save": {
+      "exit_code": 1,
+      "stopped_at": "stop_here",
+      "transaction_outcome": "ROLLED_BACK",
+      "rollback_status": "rolled_back",
+      "rollback_reason": "every change was compensated and the system of record matches the read from before the run",
+      "after_stop_diff": {
+        "records": {
+          "added": 1,
+          "removed": 0,
+          "changed": 0
+        }
+      },
+      "remaining_diff": {},
+      "steps": [
+        {
+          "step_id": "step_010",
+          "decision": "compensated",
+          "fresh_read": null
+        }
+      ],
+      "diff_file_written": false,
+      "records_left": 0,
+      "model_calls": 0
+    },
+    "before_save": {
+      "exit_code": 1,
+      "stopped_at": "stop_here",
+      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "rollback_status": "nothing_landed",
+      "rollback_reason": "after the stop the system of record matches the read from before the run; nothing to undo",
+      "after_stop_diff": {},
+      "remaining_diff": {},
+      "steps": [],
+      "diff_file_written": false,
+      "records_left": 0,
+      "model_calls": 0
+    },
+    "after_save_unapproved": {
+      "exit_code": 1,
+      "stopped_at": "stop_here",
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "rollback_status": "not_rolled_back",
+      "rollback_reason": "step step_010: no compensation a person approved for this step (declare one, or accept a verified proposal). Still different: records: 1 added",
+      "after_stop_diff": {
+        "records": {
+          "added": 1,
+          "removed": 0,
+          "changed": 0
+        }
+      },
+      "remaining_diff": {
+        "records": {
+          "added": 1,
+          "removed": 0,
+          "changed": 0
+        }
+      },
+      "steps": [
+        {
+          "step_id": "step_010",
+          "decision": "refused",
+          "fresh_read": null
+        }
+      ],
+      "diff_file_written": true,
+      "records_left": 1,
+      "model_calls": 0
+    }
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "halt_points": [
+    {
+      "compensation": null,
+      "compensation_source": null,
+      "passed": true,
+      "reason": "after the stop the system of record matches the read from before the run; nothing to undo",
+      "rollback": {
+        "after_stop_diff": {},
+        "after_stop_sha256": "bdeb3eed13c5bb84e13d59a6d6a41686cb7c109f90c95946abcb56efd49db39b",
+        "allow_tables": [],
+        "before_sha256": "bdeb3eed13c5bb84e13d59a6d6a41686cb7c109f90c95946abcb56efd49db39b",
+        "diff_path": null,
+        "final_sha256": "bdeb3eed13c5bb84e13d59a6d6a41686cb7c109f90c95946abcb56efd49db39b",
+        "finished_at": "2026-10-28T18:18:40.721805+00:00",
+        "ignored_columns": {},
+        "reason": "after the stop the system of record matches the read from before the run; nothing to undo",
+        "remaining_diff": {},
+        "scope": "collection",
+        "started_at": "2026-10-28T18:18:40.717834+00:00",
+        "status": "nothing_landed",
+        "steps": []
+      },
+      "step_id": "step_010",
+      "when": "before_save"
+    },
+    {
+      "compensation": "undo-step_010-network-1",
+      "compensation_source": "network",
+      "passed": true,
+      "reason": "every change was compensated and the system of record matches the read from before the run",
+      "rollback": {
+        "after_stop_diff": {
+          "records": {
+            "added": 1,
+            "changed": 0,
+            "removed": 0
+          }
+        },
+        "after_stop_sha256": "a2123987a7fc31c4a59e686e59cd328bbacca6b64ce749d329af48fe35a92650",
+        "allow_tables": [],
+        "before_sha256": "bdeb3eed13c5bb84e13d59a6d6a41686cb7c109f90c95946abcb56efd49db39b",
+        "diff_path": null,
+        "final_sha256": "bdeb3eed13c5bb84e13d59a6d6a41686cb7c109f90c95946abcb56efd49db39b",
+        "finished_at": "2026-10-28T18:19:01.044269+00:00",
+        "ignored_columns": {},
+        "reason": "every change was compensated and the system of record matches the read from before the run",
+        "remaining_diff": {},
+        "scope": "collection",
+        "started_at": "2026-10-28T18:18:56.277519+00:00",
+        "status": "rolled_back",
+        "steps": [
+          {
+            "decision": "compensated",
+            "fresh_read": null,
+            "position": 11,
+            "reason": "every undo step ran and an independent read of the system of record confirmed its declared effects",
+            "step_id": "step_010",
+            "undo_id": "undo-step_010-network-1",
+            "undo_outcome": "COMPLETED_UNVERIFIED"
+          }
+        ]
+      },
+      "step_id": "step_010",
+      "when": "after_save"
+    }
+  ],
+  "qualified": {
+    "step_010": "undo-step_010-network-1"
+  },
+  "schema": "openadapt.rollback-qualification/v1",
+  "scope": "collection",
+  "summary": {
+    "before_save_clean": 1,
+    "halt_points": 2,
+    "halt_points_rolled_back": 2,
+    "saves_with_qualified_compensation": 1,
+    "saving_steps": 1
+  },
+  "test_copy": "mockmed-test-copy",
+  "workflow_name": "mockmed-triage",
+  "written": [
+    "undo-step_010-network-1"
+  ]
+}
