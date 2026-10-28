@@ -129,7 +129,10 @@ What each part does:
 
 - **record**: a shorter way to write the same list. `match` finds the record,
   `fields` says which input each field must equal, and `duplicate_key` is the
-  field that makes a second write a duplicate. It expands to one
+  field that makes a second write a duplicate. A list, such as
+  `duplicate_key: [lname, fname, DOB]`, names fields that are a duplicate only
+  together; the check then fails when more than one record carries all of
+  them, counting records that were already there. It expands to one
   `record_written` plus a `field_equals` per other field. Give `effects` or
   `record`, not both; leave both out when the compiler already bound the
   save's checks from the demonstration.

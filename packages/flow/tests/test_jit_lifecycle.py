@@ -731,7 +731,7 @@ def _claim_jit(tmp_path: Path) -> Any:
     return jit
 
 
-def _confirm(jit: Any, key: str | None = None) -> dict:
+def _confirm(jit: Any, key: str | list[str] | None = None) -> dict:
     return jit.confirm_params(
         principal_id=REVIEWER,
         accept_params=["claim_no", "insurance_no"],
@@ -770,6 +770,97 @@ def test_a_named_parameter_becomes_the_record_checks_idempotency_key(
     )
     assert one.verdict.value == "confirmed"
     assert two.verdict.value == "refuted"
+
+
+def test_several_named_parameters_become_a_composite_key(tmp_path: Path) -> None:
+    from openadapt_flow.policy import effect_has_idempotency_key
+    from openadapt_flow.runtime.effects import EffectState
+    from openadapt_flow.runtime.effects._common import judge_records
+
+    jit = _claim_jit(tmp_path)
+    record = jit.confirm_params(
+        principal_id=REVIEWER,
+        accept_params=["claim_no", "insurance_no"],
+        confirm="ok",
+        idempotency_key=["claim_no", "insurance_no"],
+    )
+    assert record["idempotency_key"] == [
+        {
+            "step_id": "step_001",
+            "fields": ["claim_no", "insurance_no"],
+            "params": ["claim_no", "insurance_no"],
+        }
+    ]
+    save = Workflow.load(jit.bundle_dir).steps[1]
+    assert save.effects[0].idempotency_key is None
+    assert effect_has_idempotency_key(save)
+
+    # Same claim number for another insured person is a different record;
+    # the same pair twice is a duplicate.
+    effect = save.effects[0].resolve({"claim_no": "CX002", "insurance_no": "1"})
+    row = {"claim_no": "CX002", "insurance_no": "1", "hf_code": "HF001"}
+    other = {**row, "insurance_no": "2"}
+    before = EffectState(substrate="sql", reachable=True, records=[])
+    ok = judge_records(
+        effect, before, [{"id": 1, **row}, {"id": 2, **other}], substrate="sql"
+    )
+    dup = judge_records(
+        effect, before, [{"id": 1, **row}, {"id": 2, **row}], substrate="sql"
+    )
+    assert ok.verdict.value == "confirmed"
+    assert dup.verdict.value == "refuted"
+
+
+def test_a_composite_key_needs_every_parameter_selected(tmp_path: Path) -> None:
+    from openadapt_flow.runtime.effects import ValueExpr
+
+    jit = _claim_jit(tmp_path)
+    with pytest.raises(AdmissionError, match="names a parameter twice"):
+        _confirm(jit, ["claim_no", "claim_no"])
+    workflow = Workflow.load(jit.bundle_dir)
+    workflow.steps[1].effects[0].match = {
+        "claim_no": ValueExpr(param="claim_no"),
+        "hf_code": ValueExpr(literal="HF001"),
+    }
+    workflow.save(jit.bundle_dir)
+    candidate = json.loads((jit.program_dir / "candidate.json").read_text())
+    candidate = lifecycle.sign_recorder(jit.program_dir, candidate, key_dir=jit.key_dir)
+    (jit.program_dir / "candidate.json").write_text(json.dumps(candidate))
+    with pytest.raises(
+        AdmissionError,
+        match=r"no record check selects its record by \['claim_no', 'insurance_no'\]",
+    ):
+        _confirm(jit, ["claim_no", "insurance_no"])
+    assert not (jit.program_dir / "params.json").exists()
+
+
+@pytest.mark.usefixtures("at_terminal")
+def test_cli_review_takes_a_repeated_idempotency_key(tmp_path: Path) -> None:
+    jit = _claim_jit(tmp_path)
+    assert (
+        _cli(
+            "review",
+            str(jit.task_dir),
+            "--principal",
+            REVIEWER,
+            "--accept-param",
+            "claim_no",
+            "--accept-param",
+            "insurance_no",
+            "--idempotency-key",
+            "claim_no",
+            "--idempotency-key",
+            "insurance_no",
+            "--all-steps-shown",
+            "--key-dir",
+            str(tmp_path / "keys"),
+        )
+        == 0
+    )
+    assert jit.status()["idempotency_keys"][0]["params"] == [
+        "claim_no",
+        "insurance_no",
+    ]
 
 
 def test_without_a_named_key_the_record_check_stays_unkeyed(tmp_path: Path) -> None:

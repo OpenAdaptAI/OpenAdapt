@@ -408,10 +408,16 @@ def effect_has_idempotency_key(step: Step) -> bool:
     """True when at least one of the step's system-of-record effects carries a
     non-empty idempotency / at-most-once key — the guard that collapses a
     retried or double-delivered submission to a single record instead of a
-    silent duplicate write."""
+    silent duplicate write. A key of one field (``idempotency_key``) or of
+    several (``composite_key``, such as last name, first name and birth date)
+    both count."""
     paths = list(iter_effect_paths(step))
     return bool(paths) and all(
-        any(getattr(effect, "idempotency_key", None) for effect in effects)
+        any(
+            getattr(effect, "idempotency_key", None)
+            or getattr(effect, "composite_key", None)
+            for effect in effects
+        )
         for _path, effects in paths
     )
 

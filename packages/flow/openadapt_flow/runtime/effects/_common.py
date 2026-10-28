@@ -102,6 +102,14 @@ def judge_records(
             for r in matched
             if str(r.get(effect.key_field, None)) == str(effect.idempotency_key)
         ]
+    key_holders: list[dict[str, Any]] = []
+    if effect.composite_key:
+        # Several fields together are the key (OpenEMR: lname + fname + DOB).
+        # Records sharing the key are counted across the WHOLE read set,
+        # pre-existing ones included, before any newness filter below.
+        key = _key_text(effect.composite_key)
+        matched = [r for r in matched if record_matches(r, key)]
+        key_holders = [r for r in current if record_matches(r, key)]
 
     # Duplicate-write guard (count_new_only): judge only the records that
     # APPEARED since the pre-state -- "exactly expected_count NEW record(s)".
@@ -120,7 +128,49 @@ def judge_records(
 
     if effect.kind is EffectKind.FIELD_EQUALS:
         return _judge_field_equals(effect, matched, substrate)
-    return _judge_record_written(effect, before, current, matched, substrate)
+    verdict = _judge_record_written(effect, before, current, matched, substrate)
+    if len(key_holders) > 1:
+        return _refute_duplicate_key(effect, verdict, key_holders, substrate)
+    return verdict
+
+
+def _key_text(selector: dict[str, Any]) -> dict[str, Any]:
+    """A key selector for :func:`record_matches`.
+
+    Values compare as text, the rule every selector here uses. A value that
+    declares a value kind (``kind: date`` for a birth date, see the value-kinds
+    change) stays an expression so the record is matched in that kind's
+    canonical form; on a ValueExpr without kinds this is plain ``str()``.
+    """
+
+    return {k: (v if getattr(v, "kind", None) else str(v)) for k, v in selector.items()}
+
+
+def _refute_duplicate_key(
+    effect: Effect,
+    verdict: EffectVerdict,
+    holders: list[dict[str, Any]],
+    substrate: str,
+) -> EffectVerdict:
+    """REFUTE: more than one record carries the composite duplicate key."""
+
+    fields = ", ".join(sorted(effect.composite_key))
+    reason = (
+        f"{len(holders)} records share the duplicate key ({fields}) after the "
+        "action, counting records that existed before it -- a duplicate "
+        "record (not at-most-once)"
+    )
+    if verdict.verdict is Verdict.REFUTED and verdict.reason:
+        reason = f"{verdict.reason}; {reason}"
+    return EffectVerdict(
+        verdict=Verdict.REFUTED,
+        kind=effect.kind,
+        substrate=substrate,
+        reason=reason,
+        observed_count=verdict.observed_count,
+        expected_count=effect.expected_count,
+        matched_records=holders,
+    )
 
 
 #: How many offending records one refutation reason names before it stops

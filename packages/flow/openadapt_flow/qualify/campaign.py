@@ -170,9 +170,13 @@ def record_effects(config: VerifyConfig) -> list[Any]:
         probe=f"exactly {record.expected_count} {record.name} record(s) written",
         timeout_s=record.timeout_s,
     )
-    if record.duplicate_key is not None:
+    if isinstance(record.duplicate_key, str):
         written.idempotency_key = record.expr(record.duplicate_key)
         written.key_field = record.duplicate_key
+    elif record.duplicate_key:
+        written.composite_key = {
+            name: record.expr(name) for name in record.duplicate_key
+        }
     effects = [written]
     if record.exact_new_set:
         # Exactly these records were added since the snapshot before the
@@ -244,11 +248,20 @@ def apply_verify_config(
             }
         )
     elif config.record.duplicate_key is not None:
+        key = config.record.duplicate_key
         for effect in save.effects:
-            if effect.kind.value == "record_written" and effect.idempotency_key is None:
-                effect.idempotency_key = ValueExpr(param=config.record.duplicate_key)
-                effect.key_field = config.record.duplicate_key
-                notes.append({"change": "duplicate_key", "step": save.id})
+            if (
+                effect.kind.value != "record_written"
+                or effect.idempotency_key is not None
+                or effect.composite_key
+            ):
+                continue
+            if isinstance(key, str):
+                effect.idempotency_key = ValueExpr(param=key)
+                effect.key_field = key
+            else:
+                effect.composite_key = {name: ValueExpr(param=name) for name in key}
+            notes.append({"change": "duplicate_key", "step": save.id})
     if (
         config.minimum_readback is not None
         and workflow.minimum_readback != config.minimum_readback

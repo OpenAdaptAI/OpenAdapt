@@ -219,8 +219,10 @@ class RecordConfig(BaseModel):
     #: Record fields whose values select the written record.
     match: list[str] = Field(default_factory=list)
     fields: dict[str, FieldValue] = Field(default_factory=dict)
-    #: The record field that must be unique per write (idempotency key).
-    duplicate_key: Optional[str] = None
+    #: The record field that must be unique per write (idempotency key), or a
+    #: list of fields that are unique together, such as OpenEMR's
+    #: ``[lname, fname, DOB]``. A one-item list reads as the single field.
+    duplicate_key: Optional[Union[str, list[str]]] = None
     expected_count: int = Field(default=1, ge=1)
     timeout_s: float = Field(default=5.0, gt=0)
     #: Also check that the save added exactly this record and nothing else:
@@ -231,6 +233,29 @@ class RecordConfig(BaseModel):
     #: The field that tells a new record from one that was already there, for
     #: ``exact_new_set`` (an id the system of record assigns).
     identity_field: str = "id"
+
+    @field_validator("duplicate_key")
+    @classmethod
+    def _duplicate_key_shape(
+        cls, value: Optional[Union[str, list[str]]]
+    ) -> Optional[Union[str, list[str]]]:
+        if not isinstance(value, list):
+            return value
+        if not value or any(not name for name in value):
+            raise ValueError("record.duplicate_key must name at least one field")
+        if len(set(value)) != len(value):
+            raise ValueError("record.duplicate_key names a field twice")
+        # One field is the single-field key, so its contract is unchanged.
+        return value[0] if len(value) == 1 else list(value)
+
+    @property
+    def duplicate_key_fields(self) -> list[str]:
+        """The duplicate key's fields (empty without one)."""
+        if self.duplicate_key is None:
+            return []
+        if isinstance(self.duplicate_key, str):
+            return [self.duplicate_key]
+        return list(self.duplicate_key)
 
     def expr(self, field: str) -> ValueExpr:
         value = self.fields[field]
@@ -367,12 +392,10 @@ class VerifyConfig(BaseModel):
             )
         if record.fields and not record.match:
             raise ValueError("record.match must name the fields that select the record")
-        if (
-            record.duplicate_key is not None
-            and record.fields
-            and record.duplicate_key not in record.fields
+        if record.fields and any(
+            name not in record.fields for name in record.duplicate_key_fields
         ):
-            raise ValueError("record.duplicate_key must be one of record.fields")
+            raise ValueError("record.duplicate_key must name fields in record.fields")
         return self
 
     def resolve_path(self, value: str) -> Path:
