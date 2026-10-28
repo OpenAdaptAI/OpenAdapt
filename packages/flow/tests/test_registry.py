@@ -24,6 +24,10 @@ def test_committed_index_is_current() -> None:
 
     build = runpy.run_path(str(ROOT / "scripts/build_registry_index.py"))["build"]
     committed = json.loads((ROOT / "registry/index.json").read_text())
+    # The release workflow adds each entry's signature and archive.
+    for item in committed["workflows"]:
+        item.pop("signature", None)
+        item.pop("archive", None)
     assert committed == build()
 
 

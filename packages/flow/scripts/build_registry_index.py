@@ -1,52 +1,98 @@
 """Write registry/index.json from registry/sources.json and the bundle files.
 
-With ``OPENADAPT_REGISTRY_SIGNING_SEED`` (the path of a file holding the
-registry key's 32-byte Ed25519 seed, kept off this repository) and
-``OPENADAPT_REGISTRY_KEY_ID``, every entry is signed. Without them the index is
-unsigned, and ``pull`` takes it only with ``--allow-unsigned``.
+    python scripts/build_registry_index.py            # write the committed index
+    python scripts/build_registry_index.py --check    # fail when it is stale
+    python scripts/build_registry_index.py --archives DIR --asset-base URL --out PATH
+    python scripts/build_registry_index.py --sign PATH
+
+``--archives`` writes each bundle as a reproducible ``.tar.gz`` into DIR and
+points its entry at ``<URL><name>`` (the registry release's assets).
+``--sign`` signs every entry of the index at PATH in place, with the seed in
+the file named by ``OPENADAPT_REGISTRY_SIGNING_SEED`` and the key id in
+``OPENADAPT_REGISTRY_KEY_ID``. Only the registry release workflow does that,
+in its protected environment; the seed never lives in this repository.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from openadapt_flow.registry import (  # noqa: E402
+    build_archive,
     build_entry_files,
     sign_entry,
     validate_index,
 )
 
 
-def build() -> dict:
+def build(archives: Optional[Path] = None, asset_base: Optional[str] = None) -> dict:
     sources = json.loads((ROOT / "registry/sources.json").read_text())
     for item in sources["workflows"]:
         bundle = ROOT / "registry" / item["path"]
         item["files"] = build_entry_files(bundle) if bundle.is_dir() else {}
+        if archives is not None and asset_base and bundle.is_dir():
+            name = item["id"].replace("/", "-") + (
+                f"-{item['version']}" if item.get("version") else ""
+            )
+            asset = archives / f"{name}.tar.gz"
+            item["archive"] = {
+                "url": asset_base.rstrip("/") + "/" + asset.name,
+                "sha256": build_archive(bundle, asset),
+            }
     sources["schema_version"] = 1
     validate_index(sources)
-    seed_path = os.environ.get("OPENADAPT_REGISTRY_SIGNING_SEED")
-    if seed_path:
-        seed = Path(seed_path).read_bytes()
-        key_id = os.environ["OPENADAPT_REGISTRY_KEY_ID"]
-        for item in sources["workflows"]:
-            if item["status"] != "planned":
-                item["signature"] = sign_entry(item, seed, key_id)
     return sources
 
 
+def sign(path: Path) -> None:
+    seed = Path(os.environ["OPENADAPT_REGISTRY_SIGNING_SEED"]).read_bytes()
+    key_id = os.environ["OPENADAPT_REGISTRY_KEY_ID"]
+    index = json.loads(path.read_text())
+    for item in index["workflows"]:
+        if item["status"] != "planned":
+            item.pop("signature", None)
+            item["signature"] = sign_entry(item, seed, key_id)
+    validate_index(index)
+    path.write_text(json.dumps(index, indent=2, sort_keys=True) + "\n")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--check", action="store_true")
+    parser.add_argument("--archives", type=Path)
+    parser.add_argument("--asset-base")
+    parser.add_argument("--out", type=Path)
+    parser.add_argument("--sign", type=Path)
+    args = parser.parse_args()
+    if args.sign:
+        sign(args.sign)
+        return 0
+    if args.archives:
+        args.archives.mkdir(parents=True, exist_ok=True)
+    out = args.out or ROOT / "registry/index.json"
+    index = build(args.archives, args.asset_base)
+    text = json.dumps(index, indent=2, sort_keys=True) + "\n"
+    if args.check:
+        committed = json.loads(out.read_text())
+        # The release workflow adds each entry's signature and archive.
+        for item in committed["workflows"]:
+            item.pop("signature", None)
+            item.pop("archive", None)
+        if committed != index:
+            print("registry/index.json is stale; run scripts/build_registry_index.py")
+            return 1
+        return 0
+    out.write_text(text)
+    return 0
+
+
 if __name__ == "__main__":
-    out = ROOT / "registry/index.json"
-    text = json.dumps(build(), indent=2, sort_keys=True) + "\n"
-    if "--check" in sys.argv:
-        if out.read_text() != text:
-            sys.exit(
-                "registry/index.json is stale; run scripts/build_registry_index.py"
-            )
-    else:
-        out.write_text(text)
+    raise SystemExit(main())

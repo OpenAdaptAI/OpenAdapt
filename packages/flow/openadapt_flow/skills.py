@@ -115,6 +115,7 @@ def mark_pulled(bundle_dir: Path, entry: Any, *, index_url: str) -> None:
             "files": entry.files,
             "certification_expired": expired,
             "contract": raw.get("contract"),
+            "full_contract": raw.get("full_contract"),
             "contract_vars": raw.get("contract_vars") or [],
             "credentials": raw.get("credentials") or [],
             "qualified": None,
@@ -265,6 +266,50 @@ def refuse_unqualified_skill(
         raise SystemExit(f"REFUSED: {refusal}")
 
 
+#: Where the private tier's bearer token is read from by default.
+DEFAULT_TOKEN_ENV = "OPENADAPT_REGISTRY_TOKEN"
+
+
+def fetch_full_contract(
+    bundle_dir: Path, lock: dict[str, Any], *, env: Mapping[str, str]
+) -> Optional[Path]:
+    """Fetch the private tier's full record check, if the entry has one.
+
+    The signed entry pins its URL and sha256. It is fetched with a bearer
+    token from the environment and stored beside the bundle, never inside it
+    (``<bundle>.private/verify.full.yaml``). None when the entry has no full
+    contract or no token is set: the public minimal contract is used then.
+    """
+
+    import hashlib
+
+    full = lock.get("full_contract")
+    if not full:
+        return None
+    token = env.get(str(full.get("token_env") or DEFAULT_TOKEN_ENV))
+    if not token:
+        return None
+    import httpx
+
+    resp = httpx.get(
+        full["url"],
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=30.0,
+        follow_redirects=False,
+    )
+    if resp.status_code != 200:
+        raise SkillError(f"the private record check returned HTTP {resp.status_code}")
+    digest = hashlib.sha256(resp.content).hexdigest()
+    if digest != full["sha256"]:
+        raise SkillError("the private record check does not match the signed entry")
+    private = bundle_dir.parent / f"{bundle_dir.name}.private"
+    private.mkdir(mode=0o700, exist_ok=True)
+    path = private / "verify.full.yaml"
+    path.write_bytes(resp.content)
+    path.chmod(0o600)
+    return path
+
+
 def qualify_skill(
     bundle_dir: Path | str,
     *,
@@ -302,9 +347,19 @@ def qualify_skill(
         )
     env = {**os.environ, **read_binding(bundle_dir)}
     shipped = contract is None
-    contract_path = (
-        bundle_dir / lock["contract"] if contract is None else Path(contract)
-    )
+    full_path = fetch_full_contract(bundle_dir, lock, env=env) if shipped else None
+    if shipped and full_path is None and lock.get("full_contract"):
+        token_env = lock["full_contract"].get("token_env") or DEFAULT_TOKEN_ENV
+        log(
+            f"The full record check is in the private tier (set {token_env}); "
+            "qualifying with the public minimal check."
+        )
+    if contract is not None:
+        contract_path = Path(contract)
+    elif full_path is not None:
+        contract_path = full_path
+    else:
+        contract_path = bundle_dir / lock["contract"]
     config = load_verify_config(contract_path, env=env)
     if shipped and (
         config.app.session is not None
@@ -337,6 +392,9 @@ def qualify_skill(
             if workflow.manifest
             else None,
             "app_origin": config.app.origin,
+            "contract": "full"
+            if full_path is not None
+            else ("yours" if contract is not None else "minimal"),
             "evidence": str(out),
         }
         _write_json(bundle_dir / LOCK, lock)

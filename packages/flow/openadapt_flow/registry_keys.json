@@ -1,5 +1,10 @@
 {
   "schema": "openadapt.registry-keys/v1",
-  "note": "Public keys that sign skills-registry entries. Empty until the registry signing key is published; until then pull needs --allow-unsigned.",
-  "keys": {}
+  "note": "Public keys that sign skills-registry entries. The production key's seed lives only in the protected REGISTRY_SIGNING_SEED secret of the registry release workflow. The TEST key's seed is public (openadapt_flow.registry.TEST_KEY_SEED); pull accepts it only with --allow-test-key.",
+  "keys": {
+    "openadapt-registry-test-1": {
+      "public": "faYJ38w9U5kf+qjZ3bSxvesGnC9UiHIqSJ4zku1z6FQ=",
+      "test": true
+    }
+  }
 }

@@ -54,6 +54,27 @@ class RegistryError(RuntimeError):
 #: anchored as Seals are).
 _ENTRY_DOMAIN = b"openadapt.registry-entry/v1\n"
 KEYS_FILE = Path(__file__).with_name("registry_keys.json")
+#: The TEST key's seed: public on purpose, for tests and local seeding. Its
+#: public half is flagged ``test`` in ``registry_keys.json``, and ``pull``
+#: accepts an entry it signed only with ``allow_test_key``.
+TEST_KEY_ID = "openadapt-registry-test-1"
+TEST_KEY_SEED = hashlib.sha256(
+    b"openadapt-registry-TEST-key: not secret, accepted only with --allow-test-key"
+).digest()
+
+#: Files that belong to the private, credentialed tier and never to a public
+#: bundle (source-policy.yaml: per-system oracle recipes and fault suites).
+PRIVATE_FILE_NAMES = frozenset(
+    {"verify.full.yaml", "check_coverage.json", "faults.yaml", "SPEC.md", "WITNESS.md"}
+)
+PRIVATE_FILE_PREFIXES = ("heldout", "fault-brief", "rows")
+
+
+def private_tier_file(rel: str) -> bool:
+    """Whether a bundle path names a private-tier file."""
+
+    name = Path(rel).name
+    return name in PRIVATE_FILE_NAMES or name.startswith(PRIVATE_FILE_PREFIXES)
 
 
 def entry_statement(raw: dict[str, Any]) -> bytes:
@@ -79,11 +100,21 @@ def sign_entry(raw: dict[str, Any], seed: bytes, key_id: str) -> dict[str, str]:
     return {"key_id": key_id, "ed25519ph": base64.b64encode(signature).decode("ascii")}
 
 
-def trusted_keys() -> dict[str, bytes]:
-    """The registry's public keys, shipped with the package (never fetched)."""
+def trusted_keys(*, allow_test_key: bool = False) -> dict[str, bytes]:
+    """The registry's public keys, shipped with the package (never fetched).
+
+    A key flagged ``test`` is left out unless ``allow_test_key``.
+    """
 
     data = json.loads(KEYS_FILE.read_text())
-    return {kid: base64.b64decode(pub) for kid, pub in (data.get("keys") or {}).items()}
+    keys = {}
+    for kid, spec in (data.get("keys") or {}).items():
+        if isinstance(spec, str):
+            spec = {"public": spec}
+        if spec.get("test") and not allow_test_key:
+            continue
+        keys[kid] = base64.b64decode(spec["public"])
+    return keys
 
 
 def entry_signature_problem(
@@ -98,7 +129,14 @@ def entry_signature_problem(
         return "the entry is not signed"
     key = keys.get(str(signature.get("key_id")))
     if key is None:
-        return f"the entry is signed by an unknown key {signature.get('key_id')!r}"
+        hint = (
+            " (the TEST key: pass --allow-test-key)"
+            if signature.get("key_id") == TEST_KEY_ID
+            else ""
+        )
+        return (
+            f"the entry is signed by an unknown key {signature.get('key_id')!r}{hint}"
+        )
     try:
         sig = base64.b64decode(str(signature.get("ed25519ph", "")), validate=True)
     except ValueError:
@@ -183,6 +221,18 @@ def validate_index(index: dict[str, Any]) -> list[Entry]:
         for rel in item.get("files") or {}:
             if rel.startswith("/") or ".." in Path(rel).parts:
                 raise RegistryError(f"{wid}: unsafe path {rel!r}")
+            if private_tier_file(rel):
+                raise RegistryError(
+                    f"{wid}: {rel!r} belongs to the private tier, never a public bundle"
+                )
+        full = item.get("full_contract")
+        if full is not None:
+            if (
+                not isinstance(full, dict)
+                or not full.get("url")
+                or not full.get("sha256")
+            ):
+                raise RegistryError(f"{wid}: full_contract needs a url and a sha256")
         contract = item.get("contract")
         if contract is not None and contract not in (item.get("files") or {}):
             raise RegistryError(f"{wid}: contract {contract!r} is not one of its files")
@@ -235,6 +285,7 @@ def pull(
     overwrite: bool = False,
     keys: Optional[dict[str, bytes]] = None,
     allow_unsigned: bool = False,
+    allow_test_key: bool = False,
 ) -> Path:
     """Download and verify a bundle into ``out`` (default ``./<name>``).
 
@@ -247,7 +298,8 @@ def pull(
     if entry.status == "planned":
         raise RegistryError(f"{workflow_id} is planned and has no bundle yet")
     problem = entry_signature_problem(
-        entry.raw, trusted_keys() if keys is None else keys
+        entry.raw,
+        trusted_keys(allow_test_key=allow_test_key) if keys is None else keys,
     )
     if problem is not None and not (
         allow_unsigned and entry.raw.get("signature") is None
@@ -262,12 +314,21 @@ def pull(
     if dest.exists() and not overwrite:
         raise RegistryError(f"{dest} exists; pass --force to replace it")
     base = _join(index_url, entry.raw["path"].rstrip("/") + "/")
+    archive = entry.raw.get("archive")
     with tempfile.TemporaryDirectory() as tmp:
         stage = Path(tmp) / "bundle"
+        unpacked = _unpack_archive(archive, Path(tmp)) if archive else None
         for rel, expected in sorted(entry.files.items()):
-            data = _read(
-                urljoin(base, rel) if base.startswith("http") else str(Path(base) / rel)
-            )
+            if unpacked is not None:
+                if rel not in unpacked:
+                    raise RegistryError(f"{rel} is missing from the archive")
+                data = unpacked[rel]
+            else:
+                data = _read(
+                    urljoin(base, rel)
+                    if base.startswith("http")
+                    else str(Path(base) / rel)
+                )
             actual = hashlib.sha256(data).hexdigest()
             if actual != expected:
                 raise RegistryError(f"{rel}: sha256 {actual} does not match the index")
@@ -290,6 +351,66 @@ def pull(
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(stage, dest)
     return dest
+
+
+def _unpack_archive(archive: Any, tmp: Path) -> dict[str, bytes]:
+    """The files of a bundle published as a release asset (``.tar.gz``).
+
+    The signed entry pins the archive's sha256. Members must be regular files
+    at safe relative paths; links, devices, absolute paths and ``..`` are
+    refused.
+    """
+
+    import io
+    import tarfile
+
+    if (
+        not isinstance(archive, dict)
+        or not archive.get("url")
+        or not archive.get("sha256")
+    ):
+        raise RegistryError("archive needs a url and a sha256")
+    data = _read(str(archive["url"]))
+    if hashlib.sha256(data).hexdigest() != archive["sha256"]:
+        raise RegistryError("the archive's sha256 does not match the index")
+    out: dict[str, bytes] = {}
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+        for member in tar.getmembers():
+            name = member.name
+            if name.startswith("/") or ".." in Path(name).parts:
+                raise RegistryError(f"the archive has an unsafe path {name!r}")
+            if member.isdir():
+                continue
+            if not member.isfile():
+                raise RegistryError(
+                    f"the archive member {name!r} is not a regular file"
+                )
+            handle = tar.extractfile(member)
+            if handle is None:
+                raise RegistryError(f"the archive member {name!r} can't be read")
+            out[name] = handle.read()
+            if len(out[name]) > MAX_FILE_BYTES:
+                raise RegistryError(f"{name} is larger than {MAX_FILE_BYTES} bytes")
+    return out
+
+
+def build_archive(bundle_dir: Path, out: Path) -> str:
+    """Write ``bundle_dir`` as a reproducible ``.tar.gz``; returns its sha256."""
+
+    import gzip
+    import io
+    import tarfile
+
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w", format=tarfile.PAX_FORMAT) as tar:
+        for path in sorted(p for p in bundle_dir.rglob("*") if p.is_file()):
+            data = path.read_bytes()
+            info = tarfile.TarInfo(path.relative_to(bundle_dir).as_posix())
+            info.size, info.mtime, info.mode = len(data), 0, 0o644
+            tar.addfile(info, io.BytesIO(data))
+    packed = gzip.compress(buf.getvalue(), mtime=0)
+    out.write_bytes(packed)
+    return hashlib.sha256(packed).hexdigest()
 
 
 def build_entry_files(bundle_dir: Path) -> dict[str, str]:
@@ -334,6 +455,7 @@ def cmd_pull(args: Any) -> int:
             index_url=args.index,
             overwrite=args.force,
             allow_unsigned=getattr(args, "allow_unsigned", False),
+            allow_test_key=getattr(args, "allow_test_key", False),
         )
     except RegistryError as exc:
         print(f"pull: {exc}", file=sys.stderr)
@@ -372,6 +494,11 @@ def add_parser(sub: Any) -> None:
         "--force", action="store_true", help="Replace an existing destination"
     )
     p.add_argument("--list", action="store_true", help="List available workflows")
+    p.add_argument(
+        "--allow-test-key",
+        action="store_true",
+        help="Take an entry signed by the public TEST key (tests and local seeding)",
+    )
     p.add_argument(
         "--allow-unsigned",
         action="store_true",

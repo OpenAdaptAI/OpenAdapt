@@ -17,7 +17,15 @@ Each entry is signed (Ed25519ph, the form Rekor accepts) by a key whose
 public half ships with the package (`openadapt_flow/registry_keys.json`).
 `pull` checks the signature before it downloads anything. Until the registry
 key is published the index is unsigned, and `pull` takes an entry only with
-`--allow-unsigned`.
+`--allow-unsigned`. Entries signed by the public TEST key need
+`--allow-test-key`.
+
+A bundle holds the program and a minimal record check. The full record check
+and the fault suites are in a private tier: `skill qualify` fetches the full
+check with the token in `OPENADAPT_REGISTRY_TOKEN` when the entry names one,
+and otherwise qualifies with the minimal check. A bundle never holds
+`verify.full.yaml`, `check_coverage.json` or a fault suite; the index
+validator refuses them.
 
 A pulled skill doesn't run until it is qualified on your own instance. `pull`
 writes `skill.lock.json` beside the bundle and expires any certification it

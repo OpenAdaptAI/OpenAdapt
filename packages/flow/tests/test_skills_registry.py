@@ -404,3 +404,194 @@ def test_a_skill_without_a_contract_takes_the_users_own(tmp_path, monkeypatch):
     )
     # The user's own contract may name their own hooks.
     assert seen["origin"] == "https://emr.example.org"
+
+
+# -- the public bundle and the private tier ---------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "verify.full.yaml",
+        "check_coverage.json",
+        "faults.yaml",
+        "heldout2.yaml",
+        "SPEC.md",
+    ],
+)
+def test_a_public_bundle_never_lists_a_private_tier_file(name):
+    item = {"id": "a/b", "status": "example", "files": {name: "0" * 64}}
+    with pytest.raises(registry.RegistryError, match="private tier"):
+        registry.validate_index({"workflows": [item]})
+
+
+def test_no_registry_bundle_in_the_repo_holds_a_private_tier_file():
+    found = [
+        p.relative_to(ROOT).as_posix()
+        for p in (ROOT / "registry").rglob("*")
+        if p.is_file() and registry.private_tier_file(p.name)
+    ]
+    assert found == []
+
+
+def _with_full_contract(tmp_path, body: bytes):
+    import hashlib
+
+    index = _registry(tmp_path)
+    data = json.loads(index.read_text())
+    for item in data["workflows"]:
+        if item["id"] == "openemr/new-referral":
+            item["full_contract"] = {
+                "url": "https://private.example/registry/openemr/verify.full.yaml",
+                "sha256": hashlib.sha256(body).hexdigest(),
+                "token_env": "MY_REGISTRY_TOKEN",
+            }
+    index.write_text(json.dumps(data))
+    dest = registry.pull(
+        "openemr/new-referral",
+        tmp_path / "skill",
+        index_url=str(index),
+        allow_unsigned=True,
+    )
+    _bind_all(dest, tmp_path)
+    return dest
+
+
+def _serve(monkeypatch, body: bytes, seen: dict):
+    import httpx
+
+    def get(url, headers=None, **kw):
+        seen.update(url=url, auth=(headers or {}).get("Authorization"))
+        return SimpleNamespace(status_code=200, content=body)
+
+    monkeypatch.setattr(httpx, "get", get)
+
+
+def test_without_a_token_the_minimal_contract_is_used(tmp_path, monkeypatch):
+    full = CONTRACT.replace("name: Demo", "name: Demo full").encode()
+    dest = _with_full_contract(tmp_path, full)
+    monkeypatch.delenv("MY_REGISTRY_TOKEN", raising=False)
+    lines, seen = [], {}
+    skills.qualify_skill(
+        dest,
+        certify="p",
+        log=lines.append,
+        run=lambda bundle, config, **kw: seen.setdefault("name", config.app.name),
+    )
+    assert seen["name"] == "Demo"
+    assert any("private tier" in line for line in lines)
+
+
+def test_the_full_contract_is_fetched_checked_and_kept_outside_the_bundle(
+    tmp_path, monkeypatch
+):
+    full = CONTRACT.replace("name: Demo", "name: Demo full").encode()
+    dest = _with_full_contract(tmp_path, full)
+    monkeypatch.setenv("MY_REGISTRY_TOKEN", "t0k3n")
+    served, seen = {}, {}
+    _serve(monkeypatch, full, served)
+    skills.qualify_skill(
+        dest,
+        certify="p",
+        run=lambda bundle, config, **kw: seen.setdefault("name", config.app.name),
+    )
+    assert seen["name"] == "Demo full"
+    assert served["auth"] == "Bearer t0k3n"
+    assert not (dest / "verify.full.yaml").exists()
+    stored = tmp_path / "skill.private" / "verify.full.yaml"
+    assert stored.read_bytes() == full and stored.stat().st_mode & 0o077 == 0
+
+
+def test_a_full_contract_that_does_not_match_the_signed_entry_is_refused(
+    tmp_path, monkeypatch
+):
+    dest = _with_full_contract(tmp_path, b"the signed one")
+    monkeypatch.setenv("MY_REGISTRY_TOKEN", "t0k3n")
+    _serve(monkeypatch, b"something else", {})
+    with pytest.raises(skills.SkillError, match="does not match the signed entry"):
+        skills.qualify_skill(dest, certify="p", run=lambda *a, **k: None)
+
+
+def test_a_full_contract_needs_a_url_and_a_digest():
+    item = {
+        "id": "a/b",
+        "status": "example",
+        "files": {"x": "0"},
+        "full_contract": {"url": "u"},
+    }
+    with pytest.raises(registry.RegistryError, match="full_contract needs"):
+        registry.validate_index({"workflows": [item]})
+
+
+# -- the TEST key ------------------------------------------------------------------------
+
+
+def test_the_test_key_needs_allow_test_key(tmp_path):
+    index = _registry(tmp_path)
+    data = json.loads(index.read_text())
+    for item in data["workflows"]:
+        if item["id"] == "openemr/new-referral":
+            item["signature"] = registry.sign_entry(
+                item, registry.TEST_KEY_SEED, registry.TEST_KEY_ID
+            )
+    index.write_text(json.dumps(data))
+    with pytest.raises(registry.RegistryError, match="allow-test-key"):
+        registry.pull("openemr/new-referral", tmp_path / "a", index_url=str(index))
+    dest = registry.pull(
+        "openemr/new-referral",
+        tmp_path / "b",
+        index_url=str(index),
+        allow_test_key=True,
+    )
+    from openadapt_flow.ir import Workflow
+
+    assert Workflow.load(dest).registry.signed_by == registry.TEST_KEY_ID
+
+
+# -- bundles as release assets --------------------------------------------------------------
+
+
+def _with_archive(tmp_path, *, tamper=None):
+    index = _registry(tmp_path)
+    bundle = index.parent / "bundles/openemr/new-referral"
+    asset = tmp_path / "openemr-new-referral-1.0.0.tar.gz"
+    digest = registry.build_archive(bundle, asset)
+    if tamper == "bytes":
+        asset.write_bytes(asset.read_bytes() + b"x")
+    shutil.rmtree(bundle)  # nothing left to fetch file by file
+    data = json.loads(index.read_text())
+    for item in data["workflows"]:
+        if item["id"] == "openemr/new-referral":
+            item["archive"] = {"url": str(asset), "sha256": digest}
+    index.write_text(json.dumps(data))
+    return index
+
+
+def test_a_bundle_can_come_from_a_release_asset(tmp_path):
+    index = _with_archive(tmp_path)
+    dest = registry.pull(
+        "openemr/new-referral",
+        tmp_path / "s",
+        index_url=str(index),
+        allow_unsigned=True,
+    )
+    assert (dest / "workflow.json").is_file()
+
+
+def test_a_changed_archive_is_refused(tmp_path):
+    index = _with_archive(tmp_path, tamper="bytes")
+    with pytest.raises(registry.RegistryError, match="archive's sha256"):
+        registry.pull(
+            "openemr/new-referral",
+            tmp_path / "s",
+            index_url=str(index),
+            allow_unsigned=True,
+        )
+    assert not (tmp_path / "s").exists()
+
+
+def test_the_archive_is_reproducible(tmp_path):
+    bundle = ROOT / "registry/bundles/openemr/new-referral"
+    a = registry.build_archive(bundle, tmp_path / "a.tar.gz")
+    b = registry.build_archive(bundle, tmp_path / "b.tar.gz")
+    assert a == b

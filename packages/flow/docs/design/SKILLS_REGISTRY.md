@@ -123,17 +123,32 @@ AGPL entry is published.
 
 ## Decisions (review, 2026-10-28)
 
-- **Signatures.** Each entry is signed with the Seals signing (Ed25519ph), and
-  the index is to be anchored in Rekor as Seals are. The registry signing key
-  and the first anchoring are maintainer actions; until then entries are
-  unsigned and `pull` needs `--allow-unsigned`.
-- **Where it lives.** A static index in a public repository, with the bundles
-  as release assets.
+- **Signatures.** Each entry is signed with the Seals signing (Ed25519ph). The
+  index is to be anchored in Rekor as Seals are, as a new record type (a
+  follow-up). The production key is a founder action: the release workflow
+  (`.github/workflows/release-registry.yml`) reads its seed only from the
+  REGISTRY_SIGNING_SEED secret of the protected `registry-signing`
+  environment, and only the public key is committed. Until then a TEST key,
+  whose seed is public and whose public key is flagged `test`, is accepted
+  only with `--allow-test-key`.
+- **Where it lives.** The signed index stays in `packages/flow/registry/`.
+  Bundles are release assets on OpenAdaptAI/OpenAdapt under a `registry-*`
+  tag, published by the reviewed release workflow. An entry's `archive` pins
+  the asset's URL and sha256, and `pull` checks the archive, extracts only
+  regular files at safe paths and checks every file against the entry.
 - **Public and private tiers.** `source-policy.yaml` keeps per-system
   read-back recipes private. The public bundle carries the program and a
   minimal contract (app identity, record match keys, identity field, one
   check per typed value). The full contract (frame conditions, exact new set,
-  duplicate rules, fault-derived checks) and the fault suites come from a
-  private tier fetched with credentials. `verifier_score` publishes only the
-  counts and the private suite's sha256. The exact file split is with the
-  coordinator.
+  duplicate rules, value maps, SQL text and extra field paths) and the fault
+  suites come from a private tier fetched with credentials. An entry's
+  `full_contract` pins its URL and sha256. `skill qualify` fetches it with the
+  bearer token in `OPENADAPT_REGISTRY_TOKEN` (or the entry's `token_env`),
+  checks it against the signed entry, and keeps it beside the bundle, never
+  in it. Without a token it qualifies with the public minimal contract and
+  says so. `verifier_score` publishes only the counts and the private suite's
+  sha256. The index validator and a repository test refuse any private-tier
+  file (`verify.full.yaml`, `check_coverage.json`, fault, held-out and SPEC
+  files) in a public bundle. The benchmark contracts on synthetic fixtures
+  stay public as synthetic samples, without whole-database frame
+  configurations or extra field paths.
