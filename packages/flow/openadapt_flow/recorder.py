@@ -721,6 +721,12 @@ class Recorder:
                         # scrolls out of a virtualized list, the text check
                         # alone would pass on it: replay halts before a write.
                         event = {**event, "structured_ambiguous": True}
+            # The active dialog holding the target, when it sits in one: the
+            # compiler cuts the identity band to its box, so a label of the
+            # page behind the dialog is not frozen into the identity.
+            dialog = self._dialog_region_at(int(event["x"]), int(event["y"]))
+            if dialog is not None:
+                event = {**event, "dialog_region": list(dialog)}
             # The part of the form the target sits in (a legend, an accordion
             # or tab header, a heading), for the program's named sections.
             # Display only: the compiler never puts it on a step.
@@ -1059,6 +1065,22 @@ class Recorder:
             return getter(int(x), int(y))
         except Exception:
             return None
+
+    def _dialog_region_at(self, x: int, y: int) -> Optional[tuple[int, ...]]:
+        """Box of the active dialog holding (x, y), if the backend can say.
+
+        Backends MAY expose ``dialog_region_at`` (the Playwright backend
+        does). None when the point is in no dialog, the backend cannot tell,
+        or the probe failed: the band then stays full width, as before.
+        """
+        getter = getattr(self._backend, "dialog_region_at", None)
+        if getter is None:
+            return None
+        try:
+            status, box = getter(int(x), int(y))
+        except Exception:
+            return None
+        return tuple(box) if status == "dialog" and box else None
 
     def _identity_census_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
         """The row census under (x, y), if the backend exposes one.

@@ -502,6 +502,18 @@ class Anchor(BaseModel):
             " tiers compare like-for-like. Set iff `identifier_crop` is set."
         ),
     )
+    dialog_region: Optional[Region] = Field(
+        default=None,
+        description=(
+            "Box of the active dialog (the topmost modal) that held the target"
+            " in the recorded frame, when it sat in one. The context band was"
+            " cut to it, so text of the page behind the dialog is not identity"
+            " evidence. Replay cuts the live band to the live dialog's box,"
+            " and fails the identity check closed when no dialog holds the"
+            " resolved point. None outside a dialog and on bundles compiled"
+            " before this capability."
+        ),
+    )
     landmarks: list[Landmark] = Field(default_factory=list)
     search_pad: int = Field(
         default=80,
@@ -512,6 +524,8 @@ class Anchor(BaseModel):
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Leave unset census metadata out, so older bundle bytes stay equal."""
         data: dict[str, Any] = handler(self)
+        if self.dialog_region is None:
+            data.pop("dialog_region", None)
         if self.record_key is None:
             data.pop("record_key", None)
         if self.structured_row is None:

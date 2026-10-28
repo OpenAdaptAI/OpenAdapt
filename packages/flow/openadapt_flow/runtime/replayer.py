@@ -15458,6 +15458,42 @@ class Replayer:
             parameter_names,
         )
 
+    def _dialog_scoped_frame(
+        self, resolution: Resolution, before_png: bytes
+    ) -> Union[bytes, IdentityCheck]:
+        """The step's frame with everything outside the live dialog blanked.
+
+        Returns a ``mismatch`` :class:`IdentityCheck` instead when no dialog
+        holds the resolved point, the backend cannot locate one, or the frame
+        cannot be masked: a target recorded inside a dialog is not the same
+        target outside one.
+        """
+        probe = getattr(self.backend, "dialog_region_at", None)
+        status, box = "unknown", None
+        if callable(probe):
+            try:
+                status, box = probe(int(resolution.point[0]), int(resolution.point[1]))
+            except Exception:
+                status, box = "unknown", None
+        masked = (
+            identity_mod.mask_outside(before_png, box)
+            if status == "dialog" and box is not None
+            else None
+        )
+        if masked is not None:
+            return masked
+        observed = (
+            "no dialog holds the target"
+            if status == "none"
+            else "the dialog holding the target could not be located"
+        )
+        return IdentityCheck(
+            status="mismatch",
+            mode="context",
+            expected="the target inside the dialog it was recorded in",
+            observed=observed,
+        )
+
     @timed_span("identity")
     def _verify_identity(
         self,
@@ -15511,6 +15547,16 @@ class Replayer:
         """
         anchor = step.anchor
         assert anchor is not None
+        if anchor.dialog_region is not None:
+            # The target was recorded inside a dialog and its identity band
+            # was read on the dialog alone. Read the live band the same way,
+            # on the live topmost dialog, so the page behind it is not
+            # evidence (#1347). No dialog at the point, or one that cannot be
+            # located, fails the check closed.
+            scoped = self._dialog_scoped_frame(resolution, before_png)
+            if isinstance(scoped, IdentityCheck):
+                return scoped
+            before_png = scoped
         project = getattr(workflow, "qualification", None)
         if project is not None:
             identity_policy = project.identity_policies.get(step.id)

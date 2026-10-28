@@ -274,7 +274,27 @@ def build_worker(user: str, opts: dict[str, Any]) -> Any:
             self.page = page
 
     def open_form(page: Any) -> None:
+        """Open the blank form, once more if a navigation raced the setup (#1348).
+
+        Sign-in or the previous item's chart can still be navigating the page
+        when a worker claims its next item; an ``evaluate`` then loses its
+        execution context. That is a setup race, not an engine failure: wait
+        for the page to load and run the setup again, once.
+        """
+        try:
+            _open_form(page)
+        except Exception as exc:  # noqa: BLE001 - only the navigation race retries
+            if "Execution context was destroyed" not in str(exc):
+                raise
+            page.wait_for_load_state("load", timeout=60_000)
+            for frame in page.frames:
+                if not frame.is_detached():
+                    frame.wait_for_load_state("load", timeout=60_000)
+            _open_form(page)
+
+    def _open_form(page: Any) -> None:
         """Start each item where the recording started: no chart open, blank form."""
+        page.wait_for_load_state("load", timeout=60_000)
         if page.evaluate(
             "() => !!(window.app_view_model && app_view_model.application_data.patient())"
         ):
