@@ -2696,6 +2696,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
     headed = args.headed or cfg.backend.headed
     url = args.url or cfg.backend.url
+    refuse_unqualified_skill(bundle, target_url=url)
     if url and args.drift:
         raise SystemExit(
             "--drift only applies to the bundled MockMed demo app; "
@@ -3724,6 +3725,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 2
     if _refuse_missing_citrix_readiness(backend_cfg, operation="run"):
         return 2
+    # A pulled skill runs only on the instance it was qualified on: the
+    # deployment's app address, not only an explicit --url.
+    refuse_unqualified_skill(
+        bundle,
+        target_url=getattr(args, "url", None) or getattr(backend_cfg, "url", None),
+    )
     will_actuate = not bool(getattr(args, "dry_run", False))
     authority_file = getattr(args, "qualification_authority_file", None)
     dispatch_file = getattr(args, "managed_dispatch_file", None)

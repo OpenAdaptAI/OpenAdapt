@@ -6,13 +6,17 @@
 #   reproducible .tar.gz and an index whose entries point at this release's
 #   assets, and checks that no bundle holds a private-tier file.
 # - sign runs in the protected `registry-signing` environment, the only place
-#   the REGISTRY_SIGNING_SEED secret exists. It signs every entry with the
-#   registry key (Ed25519ph, the form Rekor accepts) and checks each signature
-#   against the public keys shipped in openadapt_flow/registry_keys.json, so a
-#   seed that doesn't match a published key fails the run. The TEST key is
-#   refused here. It then anchors the signed index in Rekor (a public
-#   transparency log): the anchor names only the index's SHA-256 and the
-#   registry's public key.
+#   the REGISTRY_SIGNING_SEED secret exists. Its Python environment is only
+#   the hash-pinned wheels in packages/flow/registry/signing-requirements.txt
+#   (cryptography and pydantic); the engine is read from the checkout, with
+#   nothing resolved from PyPI. It signs every entry and then the index as a
+#   whole, with issued_at, expires_at (30 days) and a serial, using the
+#   registry key (Ed25519ph, the form Rekor accepts). It checks every
+#   signature against the public keys shipped in
+#   openadapt_flow/registry_keys.json, so a seed that doesn't match a
+#   published key fails the run. It then anchors the signed index in Rekor (a
+#   public transparency log): the anchor names only the index's SHA-256 and
+#   the registry's public key. pull requires that anchor for a remote index.
 # - publish-github tags the commit with the openadapt-release App and
 #   publishes an immutable GitHub Release with the archives and the signed
 #   index, then opens a pull request that updates
@@ -84,7 +88,9 @@ jobs:
             --archives dist-registry \
             --asset-base "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/" \
             --out dist-registry/index.json
-          python -m pytest -q packages/flow/tests/test_skills_registry.py::test_no_registry_bundle_in_the_repo_holds_a_private_tier_file
+          python -m pytest -q \
+            packages/flow/tests/test_skills_registry.py::test_no_registry_bundle_in_the_repo_holds_a_private_tier_file \
+            packages/flow/tests/test_skills_registry.py::test_every_file_of_a_registry_bundle_in_the_repo_is_allowlisted
           (cd dist-registry && sha256sum -- *.tar.gz index.json > SHA256SUMS)
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -98,6 +104,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: registry-signing
+    env:
+      PYTHONPATH: packages/flow:packages/types
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -105,8 +113,10 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - name: Install the engine
-        run: python -m pip install -e packages/types -e packages/flow
+      - name: Install only the hash-pinned signing wheels
+        run: |
+          python -m pip install --require-hashes --no-deps --only-binary=:all: \
+            -r packages/flow/registry/signing-requirements.txt
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: registry-unsigned
@@ -123,14 +133,17 @@ jobs:
           OPENADAPT_REGISTRY_SIGNING_SEED="$seed" \
             python packages/flow/scripts/build_registry_index.py --sign dist-registry/index.json
           rm -f "$seed"
-      - name: Check every signature against the published keys (no TEST key)
+      - name: Check every signature against the published keys
         run: |
           set -euo pipefail
           python - <<'PY'
           import json
           from openadapt_flow import registry
           index = json.load(open("dist-registry/index.json"))
-          keys = registry.trusted_keys(allow_test_key=False)
+          keys = registry.trusted_keys()
+          problem = registry.index_signature_problem(index, keys)
+          if problem:
+              raise SystemExit(f"index: {problem}")
           for item in index["workflows"]:
               if item["status"] == "planned":
                   continue
@@ -219,9 +232,11 @@ jobs:
           branch="registry/$TAG"
           git switch -c "$branch"
           cp dist-registry/index.json dist-registry/index.anchor.json packages/flow/registry/
+          # The anchor is a new file the first time: add both by name.
+          git add packages/flow/registry/index.json packages/flow/registry/index.anchor.json
           git -c user.name="openadapt-release[bot]" \
             -c user.email="openadapt-release[bot]@users.noreply.github.com" \
-            commit -am "registry: signed index for $TAG"
+            commit -m "registry: signed index for $TAG"
           git push origin "refs/heads/$branch"
           gh pr create --base main --head "$branch" \
             --title "registry: signed index for $TAG" \

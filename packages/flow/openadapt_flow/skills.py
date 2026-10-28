@@ -17,15 +17,28 @@ registry's test copy, never about the user's instance. From there:
 3. ``run``, ``replay``, ``emit-skill`` and ``emit-mcp`` call
    :func:`pulled_skill_refusal` and refuse a pulled skill until then.
 
-The bundled contract names no Python hooks: a pulled skill never runs code it
-downloaded. Sign-in is a saved browser state (``storage_state``), and the
-per-case reset is a command the user binds.
+A shipped contract (the bundled ``verify.yaml`` or the private tier's full
+one) never runs code it downloaded and never reads the user's environment
+(:func:`shipped_contract_problems`, checked on the raw YAML before any
+``${}`` expansion):
+
+- it names no Python hooks and no plugin;
+- every address, credential name, path and the reset command is a
+  ``${VAR}`` naming one of the entry's declared variables, so the user's
+  binding decides where requests go and what runs;
+- ``${}`` expands only against the binding, never ``os.environ``.
+
+Sign-in is a saved browser state (``storage_state``), and the per-case reset
+is a command the user binds. ``pull`` also records the pulled program outside
+the bundle (``$OPENADAPT_HOME/pulled.json``), so stripping the registry
+provenance from the workflow doesn't make an unqualified pull runnable.
 
 See docs/design/SKILLS_REGISTRY.md.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -41,6 +54,10 @@ BINDING_SCHEMA = "openadapt.skill-binding/v1"
 EXPIRED_REASON = "pulled from the registry; qualify it on your instance"
 
 _ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]{0,127}$")
+
+#: Where the private tier's bearer token is read from: this one variable,
+#: never one an entry names.
+TOKEN_ENV = "OPENADAPT_REGISTRY_TOKEN"
 
 
 class SkillError(RuntimeError):
@@ -104,6 +121,7 @@ def mark_pulled(bundle_dir: Path, entry: Any, *, index_url: str) -> None:
         pulled_at=_now(),
     )
     workflow.save(bundle_dir)
+    _record_pull(workflow, workflow.registry)
     _write_json(
         bundle_dir / LOCK,
         {
@@ -111,6 +129,8 @@ def mark_pulled(bundle_dir: Path, entry: Any, *, index_url: str) -> None:
             "id": entry.id,
             "version": entry.version,
             "index": index_url,
+            "signed_by": workflow.registry.signed_by,
+            "app_license": raw.get("app_license"),
             "pulled_at": _now(),
             "files": entry.files,
             "certification_expired": expired,
@@ -121,6 +141,51 @@ def mark_pulled(bundle_dir: Path, entry: Any, *, index_url: str) -> None:
             "qualified": None,
         },
     )
+
+
+def program_digest(workflow: Any) -> str:
+    """SHA-256 of the workflow's steps alone, whatever provenance it carries."""
+
+    steps = [step.model_dump(mode="json") for step in workflow.steps]
+    return hashlib.sha256(
+        json.dumps(steps, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _ledger_path() -> Path:
+    home = Path(os.environ.get("OPENADAPT_HOME", Path.home() / ".openadapt"))
+    return home / "pulled.json"
+
+
+def _read_ledger() -> dict[str, Any]:
+    try:
+        ledger = json.loads(_ledger_path().read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return ledger if isinstance(ledger, dict) else {}
+
+
+def _record_pull(workflow: Any, origin: Any) -> None:
+    """Remember the pulled program by its steps, outside the bundle."""
+
+    ledger = _read_ledger()
+    ledger.setdefault("programs", {})[program_digest(workflow)] = origin.model_dump(
+        mode="json"
+    )
+    path = _ledger_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n")
+    tmp.replace(path)
+
+
+def _pulled_id(workflow: Any) -> Optional[str]:
+    """The registry id of a workflow whose steps were pulled here, or None."""
+
+    record = (_read_ledger().get("programs") or {}).get(program_digest(workflow))
+    if not isinstance(record, dict):
+        return None
+    return str(record.get("id") or "a registry skill")
 
 
 def _check_value(name: str, kind: str, value: str) -> str:
@@ -195,11 +260,20 @@ def pulled_skill_refusal(
     """Why a pulled skill may not run yet, or None (not pulled, or qualified).
 
     A bundle whose workflow carries registry provenance (``Workflow.registry``,
-    set by ``pull`` and covered by the content digest) runs only with a
-    current certification of this exact bundle, made on an instance it
-    records. A run aimed at ``target_url`` must be on that instance. A lock
-    file without provenance means the bundle was edited, and is refused. A
-    bundle with neither is an ordinary local bundle and this says nothing.
+    set by ``pull`` and covered by the content digest) runs only when:
+
+    - it has a current certification of this exact bundle, made on an
+      instance it records;
+    - ``skill qualify`` recorded that qualification in the lock, for this
+      digest, with the shipped (or private full) contract, or with the user's
+      own contract they opted into;
+    - a run aimed at ``target_url`` is on the qualified instance.
+
+    A lock file without provenance means the bundle was edited, and is
+    refused. A bundle with neither whose steps match a pull recorded under
+    ``$OPENADAPT_HOME`` had its provenance stripped: it is refused until it
+    carries a current certification on a named instance. Anything else is an
+    ordinary local bundle and this says nothing.
     """
 
     bundle_dir = Path(bundle_dir)
@@ -216,39 +290,74 @@ def pulled_skill_refusal(
         if lock is None:
             return None
         return f"pulled skill {lock.get('id')} failed to load: {exc}"
+    if not isinstance(workflow, Workflow):
+        # A stand-in loader (tests, adapters) returned no workflow to check.
+        return None if lock is None else f"pulled skill {lock.get('id')} failed to load"
     provenance = workflow.registry
+    hint = f"openadapt-flow skill qualify {bundle_dir} --certify <policy>"
     if provenance is None:
         if lock is not None:
             return (
                 f"{bundle_dir} has a skill lock but no registry provenance; pull "
                 f"{lock.get('id')} again"
             )
-        return None
-    hint = f"openadapt-flow skill qualify {bundle_dir} --certify <policy>"
+        stripped = _pulled_id(workflow)
+        if stripped is None:
+            return None
+        if current_certification_matches(workflow) and _qualified_origin(workflow):
+            # The user's own qualification of this program on a named
+            # instance, under ordinary local-bundle rules.
+            return _origin_refusal(stripped, workflow, target_url, hint)
+        return (
+            f"{bundle_dir} is pulled skill {stripped} with its registry "
+            f"provenance removed, and it is not qualified; pull it again and run "
+            "openadapt-flow skill qualify"
+        )
     if not current_certification_matches(workflow):
         return (
             f"pulled skill {provenance.id} has no current certification on your "
             f"instance; run {hint}"
         )
-    project = workflow.qualification
-    qualified_origin = (
-        project.environment.application_identity if project is not None else None
-    )
-    if not qualified_origin:
+    if not _qualified_origin(workflow):
         return (
             f"pulled skill {provenance.id} was not qualified on a named instance; "
             f"run {hint}"
         )
-    if target_url and _origin(target_url) != qualified_origin:
-        return (
-            f"pulled skill {provenance.id} was qualified on {qualified_origin}, "
-            f"not {_origin(target_url)}; run {hint} for this one"
-        )
-    qualified = (lock or {}).get("qualified")
+    if lock is None:
+        return f"pulled skill {provenance.id} has lost its {LOCK}; pull it again"
+    qualified = lock.get("qualified")
     digest = workflow.manifest.content_digest if workflow.manifest else None
-    if qualified and qualified.get("bundle_digest") != digest:
+    if not isinstance(qualified, dict):
+        return f"pulled skill {provenance.id} was not qualified by skill qualify; run {hint}"
+    if qualified.get("bundle_digest") != digest:
         return (
             f"pulled skill {provenance.id} changed since it was qualified; run {hint}"
+        )
+    if qualified.get("contract") not in ("full", "minimal") and not qualified.get(
+        "contract_opt_in"
+    ):
+        return (
+            f"pulled skill {provenance.id} was qualified with a contract it doesn't "
+            f"ship; run {hint}"
+        )
+    return _origin_refusal(provenance.id, workflow, target_url, hint)
+
+
+def _qualified_origin(workflow: Any) -> Optional[str]:
+    project = workflow.qualification
+    if project is None:
+        return None
+    return project.environment.application_identity or None
+
+
+def _origin_refusal(
+    skill_id: str, workflow: Any, target_url: Optional[str], hint: str
+) -> Optional[str]:
+    qualified_origin = _qualified_origin(workflow)
+    if target_url and _origin(target_url) != qualified_origin:
+        return (
+            f"pulled skill {skill_id} was qualified on {qualified_origin}, "
+            f"not {_origin(target_url)}; run {hint} for this one"
         )
     return None
 
@@ -266,48 +375,198 @@ def refuse_unqualified_skill(
         raise SystemExit(f"REFUSED: {refusal}")
 
 
-#: Where the private tier's bearer token is read from by default.
-DEFAULT_TOKEN_ENV = "OPENADAPT_REGISTRY_TOKEN"
-
-
 def fetch_full_contract(
-    bundle_dir: Path, lock: dict[str, Any], *, env: Mapping[str, str]
+    bundle_dir: Path,
+    lock: dict[str, Any],
+    *,
+    env: Mapping[str, str],
+    client: Optional[Any] = None,
 ) -> Optional[Path]:
     """Fetch the private tier's full record check, if the entry has one.
 
-    The signed entry pins its URL and sha256. It is fetched with a bearer
-    token from the environment and stored beside the bundle, never inside it
-    (``<bundle>.private/verify.full.yaml``). None when the entry has no full
-    contract or no token is set: the public minimal contract is used then.
+    The signed entry pins its URL and sha256. The URL must be https on a
+    private-tier host the package names (``registry.PRIVATE_TIER_HOSTS``);
+    only then is the bearer token in ``OPENADAPT_REGISTRY_TOKEN`` sent. The
+    body is size-capped and checked against the sha256, and stored beside
+    the bundle, never inside it (``<bundle>.private/verify.full.yaml``).
+    None when the entry has no full contract or no token is set: the public
+    minimal contract is used then.
     """
 
-    import hashlib
+    from openadapt_flow.registry import (
+        MAX_FULL_CONTRACT_BYTES,
+        private_tier_url_problem,
+    )
 
     full = lock.get("full_contract")
     if not full:
         return None
-    token = env.get(str(full.get("token_env") or DEFAULT_TOKEN_ENV))
+    token = env.get(TOKEN_ENV)
     if not token:
         return None
+    url = str(full.get("url") or "")
+    problem = private_tier_url_problem(url)
+    if problem is not None:
+        raise SkillError(f"the private record check's url {problem}; nothing was sent")
     import httpx
 
-    resp = httpx.get(
-        full["url"],
-        headers={"Authorization": f"Bearer {token}"},
-        timeout=30.0,
-        follow_redirects=False,
-    )
-    if resp.status_code != 200:
-        raise SkillError(f"the private record check returned HTTP {resp.status_code}")
-    digest = hashlib.sha256(resp.content).hexdigest()
-    if digest != full["sha256"]:
+    owned = client is None
+    http = client or httpx.Client(timeout=30.0, follow_redirects=False)
+    try:
+        with http.stream(
+            "GET", url, headers={"Authorization": f"Bearer {token}"}
+        ) as resp:
+            if resp.status_code != 200:
+                raise SkillError(
+                    f"the private record check returned HTTP {resp.status_code}"
+                )
+            chunks, size = [], 0
+            for chunk in resp.iter_bytes():
+                size += len(chunk)
+                if size > MAX_FULL_CONTRACT_BYTES:
+                    raise SkillError(
+                        "the private record check is larger than "
+                        f"{MAX_FULL_CONTRACT_BYTES} bytes"
+                    )
+                chunks.append(chunk)
+    finally:
+        if owned:
+            http.close()
+    body = b"".join(chunks)
+    if hashlib.sha256(body).hexdigest() != full.get("sha256"):
         raise SkillError("the private record check does not match the signed entry")
     private = bundle_dir.parent / f"{bundle_dir.name}.private"
     private.mkdir(mode=0o700, exist_ok=True)
     path = private / "verify.full.yaml"
-    path.write_bytes(resp.content)
+    path.write_bytes(body)
     path.chmod(0o600)
     return path
+
+
+_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}")
+_ONE_REF = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$")
+#: An address: one url variable, then at most a path, query or fragment.
+_ADDRESS_REF = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}(?:[/?#].*)?$")
+_HOOK_KEYS = frozenset({"session", "python"})
+_SECRET_KEYS = frozenset({"access_token", "client_secret"})
+#: Sections that hold data (record fields, test inputs), not addresses or
+#: settings: only their ``${}`` references are checked.
+_DATA_SECTIONS = frozenset({"record", "inputs", "campaign", "save_step"})
+_ADDRESS_KEYS = frozenset({"url", "entry_url", "jku", "host", "dsn"})
+_PATH_KEYS = frozenset({"storage_state", "sqlite_database", "root"})
+#: The read-back kinds a shipped contract may use: each reads a system the
+#: user's binding names, and none loads a plugin.
+SHIPPED_VERIFIER_KINDS = ("rest", "fhir", "sql", "graphql")
+#: DB-API drivers a shipped SQL check may name (``sql_driver`` imports it).
+SHIPPED_SQL_DRIVERS = frozenset(
+    {"psycopg", "psycopg2", "pymysql", "MySQLdb", "mysql.connector", "pymssql"}
+)
+
+
+def shipped_contract_problems(data: Any, kinds: Mapping[str, str]) -> list[str]:
+    """Why a contract that came with a pulled skill may not run, if it may not.
+
+    Checked on the raw YAML, before any ``${}`` expansion. ``kinds`` maps each
+    declared contract variable to its kind (``url``, ``env_var_name``,
+    ``path``, ``command``).
+    """
+
+    problems: list[str] = []
+
+    def undeclared(path: str, value: str) -> None:
+        for match in _REF.finditer(value):
+            if match.group(1) not in kinds:
+                problems.append(
+                    f"{path}: ${{{match.group(1)}}} is not a declared contract variable"
+                )
+
+    def need(path: str, value: Any, kind: str, *, address: bool = False) -> None:
+        if value is None:
+            return
+        pattern = _ADDRESS_REF if address else _ONE_REF
+        match = pattern.match(value) if isinstance(value, str) else None
+        if match is None or kinds.get(match.group(1)) != kind:
+            problems.append(
+                f"{path} must be ${{VAR}} naming a declared {kind} variable"
+                + (", then at most a path" if address else "")
+            )
+        if isinstance(value, str):
+            undeclared(path, value)
+
+    def walk(node: Any, path: str, keyed: bool = True) -> None:
+        if isinstance(node, dict):
+            for raw_key, value in node.items():
+                key = str(raw_key)
+                where = f"{path}.{key}" if path else key
+                if not keyed or (not path and key in _DATA_SECTIONS):
+                    walk(value, where, keyed=False)
+                elif key in _HOOK_KEYS:
+                    problems.append(
+                        f"{where}: a shipped contract names no Python hooks"
+                    )
+                elif key in _SECRET_KEYS and isinstance(value, str):
+                    problems.append(
+                        f"{where}: a shipped contract carries no credential"
+                    )
+                elif key == "verify_tls" and value is False:
+                    problems.append(
+                        f"{where}: a shipped contract can't turn off TLS checks"
+                    )
+                elif key.endswith("_env"):
+                    if isinstance(value, dict):
+                        for name, item in value.items():
+                            need(f"{where}.{name}", item, "env_var_name")
+                    else:
+                        need(where, value, "env_var_name")
+                elif key in _ADDRESS_KEYS or key.endswith("_url"):
+                    need(where, value, "url", address=True)
+                elif key in _PATH_KEYS or key.endswith("_file"):
+                    need(where, value, "path")
+                elif key == "sql_connect_args" and isinstance(value, dict):
+                    for name, item in value.items():
+                        if isinstance(item, str) and (
+                            not _ONE_REF.match(item) or item[2:-1] not in kinds
+                        ):
+                            problems.append(
+                                f"{where}.{name} must be ${{VAR}} naming a declared variable"
+                            )
+                elif key == "sql_driver" and value not in SHIPPED_SQL_DRIVERS:
+                    problems.append(
+                        f"{where}: {value!r} is not a known SQL driver "
+                        f"({', '.join(sorted(SHIPPED_SQL_DRIVERS))})"
+                    )
+                else:
+                    walk(value, where)
+        elif isinstance(node, list):
+            for i, item in enumerate(node):
+                walk(item, f"{path}[{i}]", keyed)
+        elif isinstance(node, str):
+            undeclared(path, node)
+
+    if not isinstance(data, dict):
+        return ["the contract is not a YAML mapping"]
+    walk(data, "")
+    app = data.get("app")
+    reset: Any = app.get("reset") if isinstance(app, dict) else None
+    if not isinstance(reset, dict):
+        reset = {}
+    if "command" in reset:
+        need("app.reset.command", reset["command"], "command")
+    http = reset.get("http")
+    if isinstance(http, dict):
+        # The whole reset address is the user's: no path the contract adds.
+        need("app.reset.http.url", http.get("url"), "url")
+    for section in ("verifier", "system_of_record"):
+        node = data.get(section)
+        while isinstance(node, dict):
+            kind = node.get("kind")
+            if kind is not None and kind not in SHIPPED_VERIFIER_KINDS:
+                problems.append(
+                    f"{section}.kind {kind!r}: a shipped contract reads with "
+                    f"{', '.join(SHIPPED_VERIFIER_KINDS)}"
+                )
+            node = node.get("verifier")
+    return sorted(set(problems))
 
 
 def qualify_skill(
@@ -317,59 +576,96 @@ def qualify_skill(
     out: Optional[Path | str] = None,
     trials: Optional[int] = None,
     contract: Optional[Path | str] = None,
+    replace_contract: bool = False,
     log: Callable[[str], None] = print,
     run: Optional[Callable[..., Any]] = None,
+    http_client: Optional[Any] = None,
 ) -> Any:
     """Qualify a pulled skill in place against the bound instance.
 
-    ``contract`` is the user's own verify.yaml, for a skill that ships none
-    (or to replace the shipped one). It is the user's file, so it may name
-    Python hooks; the shipped contract may not.
+    The skill's own contract is used: the private tier's full one when the
+    registry token is set, else the bundled minimal one. ``contract`` is the
+    user's own verify.yaml, for a skill that ships none; replacing a shipped
+    contract with it takes ``replace_contract``, and the lock records that.
+    The user's file may name Python hooks and read their environment; a
+    shipped contract may not (:func:`shipped_contract_problems`).
     """
 
+    import yaml
+
     from openadapt_flow.qualify.campaign import _default_hooks, qualify
-    from openadapt_flow.qualify.config import load_verify_config
+    from openadapt_flow.qualify.config import (
+        QualifyConfigError,
+        load_verify_config,
+        parse_verify_config,
+    )
 
     bundle_dir = Path(bundle_dir)
     lock = read_lock(bundle_dir)
     if lock is None:
         raise SkillError(f"{bundle_dir} is not a pulled skill (no {LOCK})")
-    if contract is None and not lock.get("contract"):
+    if not lock.get("signed_by"):
+        log(
+            f"{lock.get('id')} is UNSIGNED: it came from a local index with "
+            "--allow-unsigned, and nothing vouches for it but that file."
+        )
+    ships = bool(lock.get("contract"))
+    if contract is None and not ships:
         raise SkillError(
             f"{lock.get('id')} ships no record check; pass --verify with your own"
         )
-    missing = [] if contract is not None else missing_bindings(bundle_dir)
+    if contract is not None and ships and not replace_contract:
+        raise SkillError(
+            f"{lock.get('id')} ships its own record check; pass --replace-contract "
+            "to qualify it with yours instead"
+        )
+    shipped = contract is None
+    missing = [] if not shipped else missing_bindings(bundle_dir)
     if missing:
         raise SkillError(
             "bind these first: "
             + ", ".join(missing)
             + f" (openadapt-flow skill bind {bundle_dir} --set NAME=VALUE)"
         )
-    env = {**os.environ, **read_binding(bundle_dir)}
-    shipped = contract is None
-    full_path = fetch_full_contract(bundle_dir, lock, env=env) if shipped else None
+    binding = read_binding(bundle_dir)
+    full_path = (
+        fetch_full_contract(bundle_dir, lock, env=os.environ, client=http_client)
+        if shipped
+        else None
+    )
     if shipped and full_path is None and lock.get("full_contract"):
-        token_env = lock["full_contract"].get("token_env") or DEFAULT_TOKEN_ENV
         log(
-            f"The full record check is in the private tier (set {token_env}); "
+            f"The full record check is in the private tier (set {TOKEN_ENV}); "
             "qualifying with the public minimal check."
         )
-    if contract is not None:
-        contract_path = Path(contract)
-    elif full_path is not None:
-        contract_path = full_path
+    if not shipped:
+        # The user's own file: their environment, their hooks.
+        config = load_verify_config(Path(str(contract)), env={**os.environ, **binding})
     else:
-        contract_path = bundle_dir / lock["contract"]
-    config = load_verify_config(contract_path, env=env)
-    if shipped and (
-        config.app.session is not None
-        or getattr(config.app.reset, "python", None)
-        or getattr(config.verifier, "session", None)
-    ):
-        raise SkillError(
-            "a pulled skill's contract may not name Python hooks; it never runs "
-            "code it downloaded"
-        )
+        contract_path = full_path or bundle_dir / lock["contract"]
+        try:
+            data = yaml.safe_load(contract_path.read_text())
+        except yaml.YAMLError as exc:
+            raise SkillError(f"the skill's record check is not YAML: {exc}") from exc
+        kinds = {
+            str(v["name"]): str(v["kind"])
+            for v in lock.get("contract_vars") or []
+            if isinstance(v, dict) and v.get("name")
+        }
+        problems = shipped_contract_problems(data, kinds)
+        if problems:
+            raise SkillError(
+                "the skill's record check may not run here (a pulled skill never "
+                "runs code it downloaded or reads your environment):\n  "
+                + "\n  ".join(problems)
+            )
+        try:
+            # Only the binding: never os.environ.
+            config = parse_verify_config(
+                data, base_dir=contract_path.resolve().parent, env=binding
+            )
+        except QualifyConfigError as exc:
+            raise SkillError(f"the skill's record check is invalid: {exc}") from exc
     out = Path(out) if out else bundle_dir.parent / f"{bundle_dir.name}-qualification"
     result = (run or qualify)(
         bundle_dir,
@@ -394,7 +690,10 @@ def qualify_skill(
             "app_origin": config.app.origin,
             "contract": "full"
             if full_path is not None
-            else ("yours" if contract is not None else "minimal"),
+            else ("minimal" if shipped else "yours"),
+            # The user chose their own contract: for a skill that ships none,
+            # or by --replace-contract.
+            "contract_opt_in": not shipped,
             "evidence": str(out),
         }
         _write_json(bundle_dir / LOCK, lock)
@@ -425,6 +724,7 @@ def cmd_skill(args: Any) -> int:
                 out=args.out,
                 trials=args.trials,
                 contract=args.verify,
+                replace_contract=args.replace_contract,
             )
             if getattr(result, "certified", False):
                 print(f"Qualified on your instance and certified under {args.certify}.")
@@ -439,6 +739,12 @@ def cmd_skill(args: Any) -> int:
             refusal = pulled_skill_refusal(args.bundle)
             print(
                 f"{lock['id']}@{lock.get('version')}: " + (refusal or "qualified; runs")
+            )
+            signer = lock.get("signed_by")
+            print(
+                f"Signed by {signer}"
+                if signer
+                else "UNSIGNED: pulled from a local index with --allow-unsigned"
             )
             missing = missing_bindings(args.bundle)
             if missing:
@@ -472,6 +778,11 @@ def add_parser(sub: Any) -> None:
         "--verify",
         default=None,
         help="Your own verify.yaml, for a skill that ships no record check",
+    )
+    q.add_argument(
+        "--replace-contract",
+        action="store_true",
+        help="Qualify with --verify even though the skill ships its own record check",
     )
     s = ssub.add_parser("status", help="Whether the pulled skill may run")
     s.add_argument("bundle")

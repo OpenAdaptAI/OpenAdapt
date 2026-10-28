@@ -129,9 +129,8 @@ AGPL entry is published.
   offline. The production key is a founder action: the release workflow
   (`.github/workflows/release-registry.yml`) reads its seed only from the
   REGISTRY_SIGNING_SEED secret of the protected `registry-signing`
-  environment, and only the public key is committed. Until then a TEST key,
-  whose seed is public and whose public key is flagged `test`, is accepted
-  only with `--allow-test-key`.
+  environment, and only the public key is committed. No key whose seed is
+  public is trusted: tests pass their own keys.
 - **Where it lives.** The signed index stays in `packages/flow/registry/`.
   Bundles are release assets on OpenAdaptAI/OpenAdapt under a `registry-*`
   tag, published by the reviewed release workflow. An entry's `archive` pins
@@ -144,12 +143,58 @@ AGPL entry is published.
   duplicate rules, value maps, SQL text and extra field paths) and the fault
   suites come from a private tier fetched with credentials. An entry's
   `full_contract` pins its URL and sha256. `skill qualify` fetches it with the
-  bearer token in `OPENADAPT_REGISTRY_TOKEN` (or the entry's `token_env`),
-  checks it against the signed entry, and keeps it beside the bundle, never
-  in it. Without a token it qualifies with the public minimal contract and
+  bearer token in `OPENADAPT_REGISTRY_TOKEN` (never a variable the entry
+  names), only from an https host the package names
+  (`registry.PRIVATE_TIER_HOSTS`), size-capped, checks it against the signed
+  entry, and keeps it beside the bundle, never in it. Without a token it qualifies with the public minimal contract and
   says so. `verifier_score` publishes only the counts and the private suite's
   sha256. The index validator and a repository test refuse any private-tier
   file (`verify.full.yaml`, `check_coverage.json`, fault, held-out and SPEC
   files) in a public bundle. The benchmark contracts on synthetic fixtures
   stay public as synthetic samples, without whole-database frame
   configurations or extra field paths.
+
+## Decisions (supply-chain review, 2026-10-28)
+
+- **A shipped contract runs nothing it names and reads nothing but the
+  binding.** `skill qualify` checks the raw YAML of the bundled or private
+  contract before any `${}` expansion
+  (`skills.shipped_contract_problems`):
+  - no Python hooks and no plugin read-back;
+  - `app.reset.command` and `app.reset.http.url` are exactly one `${VAR}` of
+    kind `command` or `url`;
+  - every address (`url`, `*_url`, `host`, `dsn`, `jku`) starts with a `url`
+    variable and adds at most a path;
+  - every credential name (`*_env`) is an `env_var_name` variable;
+  - every path (`storage_state`, `*_file`, `sqlite_database`, `root`) is a
+    `path` variable;
+  - every `${NAME}` is a declared variable.
+
+  Expansion then uses the binding alone, never `os.environ`.
+- **The signature checks can't be switched off.** `--allow-unsigned` applies
+  only to an index on the local disk. There is no test-key flag, and the
+  shipped trust root holds no key whose seed is public.
+- **Rollback and freeze.** The index as a whole is signed, with `issued_at`,
+  `expires_at` (30 days) and a `serial`. `pull` refuses an expired index and
+  a serial lower than the highest seen for that index
+  (`$OPENADAPT_HOME/registry-state.json`). A remote index must have a Rekor
+  anchor.
+- **Stripping the provenance.** `pull` records the program's steps digest in
+  `$OPENADAPT_HOME/pulled.json`. A bundle without provenance whose steps
+  match is refused until it carries a current certification on a named
+  instance.
+- **The target.** `run` checks the deployment's app address, not only
+  `--url`. An emitted web MCP server checks the URL each call gives against
+  the qualified instance.
+- **Which contract qualifies.** The lock must record a `skill qualify` of
+  this digest with the shipped (minimal or full) contract. The user's own
+  contract counts only when the skill ships none, or with
+  `--replace-contract`.
+- **Archives.** Archives are https only (for a local index, a path inside its
+  directory). Member sizes are checked from the header before any read, the
+  total and the member count are capped, and every member must be one the
+  entry lists, or the `NOTICE`.
+- **Lower.** Public bundle files are an allowlist. Screen templates need the
+  entry's `screens.data: synthetic` attestation. Versions order as semver (a
+  pre-release before its release). The signing job installs only
+  hash-pinned wheels.

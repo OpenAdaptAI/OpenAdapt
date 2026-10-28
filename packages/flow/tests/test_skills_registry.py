@@ -22,6 +22,14 @@ from openadapt_flow import registry, skills
 
 ROOT = Path(__file__).resolve().parents[1]
 
+
+@pytest.fixture(autouse=True)
+def _own_state(tmp_path, monkeypatch):
+    """Each test's pull ledger and serials live in its own OPENADAPT_HOME."""
+
+    monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path / "openadapt-home"))
+
+
 CONTRACT = """\
 schema_version: openadapt.verify/v1
 app:
@@ -97,13 +105,13 @@ def test_versions_pin_and_newest_wins():
                     "id": "a/b",
                     "version": "1.2.0",
                     "status": "example",
-                    "files": {"x": "0"},
+                    "files": {"workflow.json": "0"},
                 },
                 {
                     "id": "a/b",
                     "version": "1.10.0",
                     "status": "example",
-                    "files": {"x": "0"},
+                    "files": {"workflow.json": "0"},
                 },
             ]
         }
@@ -123,7 +131,7 @@ def test_versions_pin_and_newest_wins():
     ],
 )
 def test_the_index_rejects_a_malformed_skill(extra, message):
-    item = {"id": "a/b", "status": "example", "files": {"x": "0"}, **extra}
+    item = {"id": "a/b", "status": "example", "files": {"workflow.json": "0"}, **extra}
     with pytest.raises(registry.RegistryError, match=message):
         registry.validate_index({"workflows": [item]})
 
@@ -262,6 +270,20 @@ def _qualify_on(dest, origin):
     workflow.save(dest)
 
 
+def _record_qualified(dest, contract="minimal", opt_in=False):
+    """What ``skill qualify`` writes in the lock after a passing campaign."""
+
+    from openadapt_flow.ir import Workflow
+
+    lock = skills.read_lock(dest)
+    lock["qualified"] = {
+        "bundle_digest": Workflow.load(dest).manifest.content_digest,
+        "contract": contract,
+        "contract_opt_in": opt_in,
+    }
+    (dest / skills.LOCK).write_text(json.dumps(lock))
+
+
 def test_only_the_qualified_instance_runs(tmp_path, monkeypatch):
     from openadapt_flow import qualification
 
@@ -271,6 +293,8 @@ def test_only_the_qualified_instance_runs(tmp_path, monkeypatch):
     )
     assert "not qualified on a named instance" in skills.pulled_skill_refusal(dest)
     _qualify_on(dest, "https://emr.example.org")
+    assert "not qualified by skill qualify" in skills.pulled_skill_refusal(dest)
+    _record_qualified(dest)
     assert skills.pulled_skill_refusal(dest) is None
     assert (
         skills.pulled_skill_refusal(dest, target_url="https://emr.example.org/x")
@@ -312,9 +336,7 @@ def _signed_registry(tmp_path):
 
     index = _registry(tmp_path)
     data = json.loads(index.read_text())
-    for item in data["workflows"]:
-        if item["id"] == "openemr/new-referral":
-            item["signature"] = registry.sign_entry(item, SEED, "test-key")
+    registry.sign_index(data, SEED, "test-key")
     index.write_text(json.dumps(data))
     return index, {"test-key": public_key(SEED)}
 
@@ -332,7 +354,7 @@ def test_a_signed_entry_pulls_and_records_its_signer(tmp_path):
 
 def test_an_unsigned_entry_needs_allow_unsigned(tmp_path):
     index = _registry(tmp_path)
-    with pytest.raises(registry.RegistryError, match="not signed.*allow-unsigned"):
+    with pytest.raises(registry.RegistryError, match="not signed"):
         registry.pull(
             "openemr/new-referral", tmp_path / "u", index_url=str(index), keys={}
         )
@@ -434,6 +456,12 @@ def test_no_registry_bundle_in_the_repo_holds_a_private_tier_file():
     assert found == []
 
 
+def test_every_file_of_a_registry_bundle_in_the_repo_is_allowlisted():
+    for bundle in (ROOT / "registry/bundles").glob("*/*"):
+        for rel in registry.build_entry_files(bundle):
+            assert registry.public_bundle_file(rel), f"{bundle.name}: {rel}"
+
+
 def _with_full_contract(tmp_path, body: bytes):
     import hashlib
 
@@ -442,9 +470,8 @@ def _with_full_contract(tmp_path, body: bytes):
     for item in data["workflows"]:
         if item["id"] == "openemr/new-referral":
             item["full_contract"] = {
-                "url": "https://private.example/registry/openemr/verify.full.yaml",
+                "url": "https://registry.openadapt.ai/private/openemr/verify.full.yaml",
                 "sha256": hashlib.sha256(body).hexdigest(),
-                "token_env": "MY_REGISTRY_TOKEN",
             }
     index.write_text(json.dumps(data))
     dest = registry.pull(
@@ -457,20 +484,22 @@ def _with_full_contract(tmp_path, body: bytes):
     return dest
 
 
-def _serve(monkeypatch, body: bytes, seen: dict):
+def _serve(body: bytes, seen: dict, status: int = 200):
+    """An httpx client whose transport answers every request with ``body``."""
+
     import httpx
 
-    def get(url, headers=None, **kw):
-        seen.update(url=url, auth=(headers or {}).get("Authorization"))
-        return SimpleNamespace(status_code=200, content=body)
+    def handle(request):
+        seen.update(url=str(request.url), auth=request.headers.get("Authorization"))
+        return httpx.Response(status, content=body)
 
-    monkeypatch.setattr(httpx, "get", get)
+    return httpx.Client(transport=httpx.MockTransport(handle))
 
 
 def test_without_a_token_the_minimal_contract_is_used(tmp_path, monkeypatch):
     full = CONTRACT.replace("name: Demo", "name: Demo full").encode()
     dest = _with_full_contract(tmp_path, full)
-    monkeypatch.delenv("MY_REGISTRY_TOKEN", raising=False)
+    monkeypatch.delenv(skills.TOKEN_ENV, raising=False)
     lines, seen = [], {}
     skills.qualify_skill(
         dest,
@@ -487,13 +516,13 @@ def test_the_full_contract_is_fetched_checked_and_kept_outside_the_bundle(
 ):
     full = CONTRACT.replace("name: Demo", "name: Demo full").encode()
     dest = _with_full_contract(tmp_path, full)
-    monkeypatch.setenv("MY_REGISTRY_TOKEN", "t0k3n")
+    monkeypatch.setenv(skills.TOKEN_ENV, "t0k3n")
     served, seen = {}, {}
-    _serve(monkeypatch, full, served)
     skills.qualify_skill(
         dest,
         certify="p",
         run=lambda bundle, config, **kw: seen.setdefault("name", config.app.name),
+        http_client=_serve(full, served),
     )
     assert seen["name"] == "Demo full"
     assert served["auth"] == "Bearer t0k3n"
@@ -506,46 +535,53 @@ def test_a_full_contract_that_does_not_match_the_signed_entry_is_refused(
     tmp_path, monkeypatch
 ):
     dest = _with_full_contract(tmp_path, b"the signed one")
-    monkeypatch.setenv("MY_REGISTRY_TOKEN", "t0k3n")
-    _serve(monkeypatch, b"something else", {})
+    monkeypatch.setenv(skills.TOKEN_ENV, "t0k3n")
     with pytest.raises(skills.SkillError, match="does not match the signed entry"):
-        skills.qualify_skill(dest, certify="p", run=lambda *a, **k: None)
+        skills.qualify_skill(
+            dest,
+            certify="p",
+            run=lambda *a, **k: None,
+            http_client=_serve(b"something else", {}),
+        )
 
 
 def test_a_full_contract_needs_a_url_and_a_digest():
     item = {
         "id": "a/b",
         "status": "example",
-        "files": {"x": "0"},
+        "files": {"workflow.json": "0"},
         "full_contract": {"url": "u"},
     }
-    with pytest.raises(registry.RegistryError, match="full_contract needs"):
+    with pytest.raises(registry.RegistryError, match="full_contract takes exactly"):
         registry.validate_index({"workflows": [item]})
 
 
-# -- the TEST key ------------------------------------------------------------------------
+# -- no key whose seed is public is trusted ------------------------------------------
 
 
-def test_the_test_key_needs_allow_test_key(tmp_path):
-    index = _registry(tmp_path)
-    data = json.loads(index.read_text())
-    for item in data["workflows"]:
-        if item["id"] == "openemr/new-referral":
-            item["signature"] = registry.sign_entry(
-                item, registry.TEST_KEY_SEED, registry.TEST_KEY_ID
-            )
-    index.write_text(json.dumps(data))
-    with pytest.raises(registry.RegistryError, match="allow-test-key"):
-        registry.pull("openemr/new-referral", tmp_path / "a", index_url=str(index))
-    dest = registry.pull(
-        "openemr/new-referral",
-        tmp_path / "b",
-        index_url=str(index),
-        allow_test_key=True,
+def test_a_key_flagged_test_in_the_trust_root_is_ignored(tmp_path, monkeypatch):
+    from openadapt_flow.ed25519ph import public_key
+
+    keys_file = tmp_path / "keys.json"
+    keys_file.write_text(
+        json.dumps(
+            {
+                "keys": {
+                    "test-key": {
+                        "public": __import__("base64")
+                        .b64encode(public_key(SEED))
+                        .decode(),
+                        "test": True,
+                    }
+                }
+            }
+        )
     )
-    from openadapt_flow.ir import Workflow
-
-    assert Workflow.load(dest).registry.signed_by == registry.TEST_KEY_ID
+    monkeypatch.setattr(registry, "KEYS_FILE", keys_file)
+    assert registry.trusted_keys() == {}
+    index, _ = _signed_registry(tmp_path)
+    with pytest.raises(registry.RegistryError, match="unknown key"):
+        registry.pull("openemr/new-referral", tmp_path / "a", index_url=str(index))
 
 
 # -- bundles as release assets --------------------------------------------------------------
@@ -554,15 +590,15 @@ def test_the_test_key_needs_allow_test_key(tmp_path):
 def _with_archive(tmp_path, *, tamper=None):
     index = _registry(tmp_path)
     bundle = index.parent / "bundles/openemr/new-referral"
-    asset = tmp_path / "openemr-new-referral-1.0.0.tar.gz"
-    digest = registry.build_archive(bundle, asset)
+    asset = index.parent / "openemr-new-referral-1.0.0.tar.gz"
+    digest = registry.build_archive(bundle, asset, notice="GPL-3.0 notice\n")
     if tamper == "bytes":
         asset.write_bytes(asset.read_bytes() + b"x")
     shutil.rmtree(bundle)  # nothing left to fetch file by file
     data = json.loads(index.read_text())
     for item in data["workflows"]:
         if item["id"] == "openemr/new-referral":
-            item["archive"] = {"url": str(asset), "sha256": digest}
+            item["archive"] = {"url": asset.name, "sha256": digest}
     index.write_text(json.dumps(data))
     return index
 
@@ -576,6 +612,7 @@ def test_a_bundle_can_come_from_a_release_asset(tmp_path):
         allow_unsigned=True,
     )
     assert (dest / "workflow.json").is_file()
+    assert (dest / registry.NOTICE_NAME).read_text() == "GPL-3.0 notice\n"
 
 
 def test_a_changed_archive_is_refused(tmp_path):
@@ -608,55 +645,57 @@ def rekor():
 
 
 def _anchored(tmp_path, rekor):
+    from openadapt_flow.ed25519ph import public_key
+
     index = _registry(tmp_path)
     data = json.loads(index.read_text())
-    for item in data["workflows"]:
-        if item["id"] == "openemr/new-referral":
-            item["signature"] = registry.sign_entry(
-                item, registry.TEST_KEY_SEED, registry.TEST_KEY_ID
-            )
+    registry.sign_index(data, SEED, "test-key")
     index.write_text(json.dumps(data))
     registry.anchor_index(
-        index, registry.TEST_KEY_SEED, log_keys=[rekor.log], submit=rekor.submit, env={}
+        index, SEED, log_keys=[rekor.log], submit=rekor.submit, env={}
     )
-    return index
+    return index, {"test-key": public_key(SEED)}
 
 
 def test_an_anchored_index_pulls(tmp_path, rekor):
-    index = _anchored(tmp_path, rekor)
+    index, keys = _anchored(tmp_path, rekor)
     assert (index.parent / registry.ANCHOR_NAME).is_file()
     dest = registry.pull(
         "openemr/new-referral",
         tmp_path / "s",
         index_url=str(index),
-        allow_test_key=True,
+        keys=keys,
         log_keys=[rekor.log],
     )
     assert (dest / "workflow.json").is_file()
 
 
 def test_an_index_changed_after_anchoring_is_refused(tmp_path, rekor):
-    index = _anchored(tmp_path, rekor)
+    index, keys = _anchored(tmp_path, rekor)
     data = json.loads(index.read_text())
-    # A change no entry signature covers: a planned entry's title.
+    # A change no entry signature covers (a planned entry's title), re-signed
+    # as a whole: only the anchor still names the published index.
     for item in data["workflows"]:
         if item["status"] == "planned":
             item["title"] = "something else"
+    registry.sign_index(data, SEED, "test-key")
     index.write_text(json.dumps(data))
     with pytest.raises(registry.RegistryError, match="anchor does not hold"):
         registry.pull(
             "openemr/new-referral",
             tmp_path / "s",
             index_url=str(index),
-            allow_test_key=True,
+            keys=keys,
             log_keys=[rekor.log],
         )
     assert not (tmp_path / "s").exists()
 
 
 def test_an_anchor_by_a_key_the_registry_does_not_trust_is_refused(tmp_path, rekor):
-    index = _anchored(tmp_path, rekor)
-    with pytest.raises(registry.RegistryError, match="anchor does not hold"):
+    index, _ = _anchored(tmp_path, rekor)
+    with pytest.raises(
+        registry.RegistryError, match="unknown key|anchor does not hold"
+    ):
         registry.pull(
             "openemr/new-referral",
             tmp_path / "s",

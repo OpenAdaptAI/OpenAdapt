@@ -13,6 +13,13 @@ from openadapt_flow import registry
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def _own_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each test's pull ledger and serials live in its own OPENADAPT_HOME."""
+
+    monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path / "openadapt-home"))
+
+
 def _local_registry(tmp_path: Path) -> Path:
     dest = tmp_path / "registry"
     shutil.copytree(ROOT / "registry", dest)
@@ -24,7 +31,10 @@ def test_committed_index_is_current() -> None:
 
     build = runpy.run_path(str(ROOT / "scripts/build_registry_index.py"))["build"]
     committed = json.loads((ROOT / "registry/index.json").read_text())
-    # The release workflow adds each entry's signature and archive.
+    # The release workflow adds the signatures, the freshness fields and each
+    # entry's archive.
+    for field in (*registry.INDEX_FRESHNESS_FIELDS, "signature"):
+        committed.pop(field, None)
     for item in committed["workflows"]:
         item.pop("signature", None)
         item.pop("archive", None)
@@ -38,7 +48,15 @@ def test_no_entry_claims_certified_without_a_record() -> None:
     assert ids["openimis/claim-intake"].status == "planned"
     with pytest.raises(registry.RegistryError, match="certification"):
         registry.validate_index(
-            {"workflows": [{"id": "a/b", "status": "certified", "files": {"x": "0"}}]}
+            {
+                "workflows": [
+                    {
+                        "id": "a/b",
+                        "status": "certified",
+                        "files": {"workflow.json": "0"},
+                    }
+                ]
+            }
         )
 
 
