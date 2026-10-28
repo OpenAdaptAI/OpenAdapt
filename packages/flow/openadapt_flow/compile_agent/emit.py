@@ -35,7 +35,10 @@ Run with: python {out_name}
 
 from __future__ import annotations
 
-from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.mcpserver import MCPServer as FastMCP  # mcp 2
+except ImportError:  # mcp 1
+    from mcp.server.fastmcp import FastMCP
 
 TASK_DIR = {task_dir!r}
 
