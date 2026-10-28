@@ -84,8 +84,22 @@ The figure that counts today is held-out 3's **14/17** at `6d0b1525d`.
 
 ## Held-out 4
 
-The check is fixed at `1821c79c8` before the suite is written. The suite
-will be authored, stored and run privately.
+`sha256 b2f3ccb62f5c0159a26224f29b1abf8f67008b014b872ce4f92d6f41c6ad41b3`.
+The check was fixed at `1821c79c8` before the suite was written; the run is
+at harness commit `e299dd69c`, with no check changes. 17 cases: wrong record
+2, unrelated change 3, misread source 3, missing side record 2, duplicate 2,
+concurrent legitimate 3 (clean), mixed 2.
+
+| contract | right | faults passed as verified | false alarms | counted |
+|---|---|---|---|---|
+| production | 14/17 | 0 | 3 | yes |
+| read-list candidate | 14/17 | 0 | 3 | yes |
+| whole database | **17/17** | 0 | 0 | yes: **gate met** |
+
+All three contracts caught all 14 faults. Only the whole-database contract
+passed the three clean cases: another user's work in the same window,
+including on the bot's new chart, and values that differ only in stored
+format. This is a stand-in result; the live OpenEMR run is next.
 
 ## Live OpenEMR
 
