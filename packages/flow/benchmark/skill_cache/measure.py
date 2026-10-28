@@ -16,7 +16,9 @@ typed value.
 Apps (see README.md for setting each one up):
 
 * ``trac``: Trac 1.6 (BSD) on 127.0.0.1:9580, SQLite. Task: file a ticket.
-* ``openemr``: the pinned OpenEMR fixture. Task: register a patient.
+* ``mockmed``: MockMed's fault server (synthetic, in this process). Task: a
+  triage note on Jane Sample's referral.
+* ``openemr``: the pinned OpenEMR fixture.
 """
 
 from __future__ import annotations
@@ -81,6 +83,67 @@ APPS: dict[str, dict[str, Any]] = {
         # requires for a save; permissive still requires the read-back.
         "policy": "permissive",
     },
+}
+
+
+NOTES = [
+    "Recheck knee in ten days",
+    "Start physio twice a week",
+    "Follow up on the blood panel",
+    "Repeat the X-ray in six weeks",
+    "Refer to dietitian next visit",
+    "Reduce the dose and review in a month",
+]
+
+
+def mockmed(run: int) -> dict[str, Any]:
+    return {"note": f"{NOTES[run % len(NOTES)]} (ref {secrets.token_hex(3)})"}
+
+
+def mockmed_setup(work: Path) -> dict[str, Any]:
+    """MockMed's fault server, in this process; verify.yaml reads /api/db."""
+
+    from openadapt_flow.mockmed.fault_server import serve
+    from openadapt_flow.tutorial import _http_json
+
+    base, _db, _stop = serve()
+    base = base.rstrip("/")
+    verify = work / "mockmed.verify.yaml"
+    verify.write_text(
+        "verifier:\n  kind: rest\n"
+        f"  base_url: {base}\n"
+        "  records_path: /api/db\n  records_key: records\n"
+        "  timeout_s: 2.0\n  poll_interval_s: 0.05\n"
+    )
+
+    def reset() -> None:
+        _http_json(f"{base}/api/reset", method="POST", body={})
+
+    def oracle(values: dict[str, Any]) -> bool:
+        """Independent of the receipt: the store holds exactly this note on p1."""
+
+        rows = _http_json(f"{base}/api/db")["records"]
+        mine = [r for r in rows if r.get("note") == values["note"]]
+        return len(mine) == 1 and mine[0].get("patient_id") == "p1"
+
+    return {
+        "url": f"{base}/?fault=ok&idempotency=demo#tasks",
+        "verify": verify,
+        "reset": reset,
+        "oracle": oracle,
+    }
+
+
+APPS["mockmed"] = {
+    "prompt": (
+        "Open the referral for Jane Sample, start a Triage encounter, and save "
+        "this note: {note}"
+    ),
+    "expect": {"patient_id": "p1", "type": "Triage"},
+    "on_screen": ["Jane Sample", "MRN P1"],
+    "values": mockmed,
+    "setup": mockmed_setup,
+    "drop_fields": ["key", "source"],
 }
 
 
@@ -164,8 +227,16 @@ def agent_for(chat: Any) -> Any:
 def admitter_for(key_dir: Path) -> Any:
     from openadapt_flow.jit import authority
 
-    os.environ.setdefault(authority.KEY_PASSPHRASE_ENV, secrets.token_hex(16))
     pem = key_dir.parent / "keyfiles" / "operator.pem"
+    secret = key_dir.parent / "keyfiles" / "passphrase"
+    if authority.KEY_PASSPHRASE_ENV not in os.environ:
+        # A rerun on the same work folder (a draft waiting for admission)
+        # opens the same key.
+        if not secret.exists():
+            secret.parent.mkdir(parents=True, exist_ok=True)
+            secret.write_text(secrets.token_hex(16))
+            secret.chmod(0o600)
+        os.environ[authority.KEY_PASSPHRASE_ENV] = secret.read_text()
     if not pem.exists():
         authority.register_principal(
             key_dir,
@@ -191,7 +262,10 @@ def main() -> int:
     from openadapt_flow.integrations.agents.skills import SkillCache
     from openadapt_flow.jit.keys import load_customer_model_key
 
-    app = APPS[args.app]
+    app = dict(APPS[args.app])
+    if "setup" in app:
+        app.update(app.pop("setup")(args.work))
+    reset = app.get("reset")
     out = HERE / "results" / args.app
     out.mkdir(parents=True, exist_ok=True)
     key_dir = args.work / "keys"
@@ -215,6 +289,8 @@ def main() -> int:
         key_dir=key_dir,
         model_key=load_customer_model_key("anthropic"),
         policy=app.get("policy", "clinical-write"),
+        drop_fields=app.get("drop_fields", ()),
+        reset=reset,
         on_warning=lambda text: None,
     )
     chat = ChatAnthropic(model=MODEL, max_tokens=1024)
@@ -222,6 +298,10 @@ def main() -> int:
     rows = []
     for number in range(1, args.runs + 1):
         values = app["values"](number)
+        if reset is not None:
+            # A test app: MockMed's demo idempotency key makes a second note
+            # on p1 a duplicate, so it is reset before every task.
+            reset()
         before = load_1m()
         result = cache.run(app["prompt"], values, agent)
         row = {
@@ -237,6 +317,8 @@ def main() -> int:
             "host_load_1m_after": load_1m(),
             "detail": result.detail,
         }
+        if app.get("oracle") is not None:
+            row["store_shows_record"] = app["oracle"](values)
         if result.path == "agent":
             run1 = result.compile.get("run1") or {}
             ledger = run1.get("agent") or {}
