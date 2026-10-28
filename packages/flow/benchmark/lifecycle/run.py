@@ -23,11 +23,12 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from .apps import APPS
 from .arm import INTERFACE_VERSION, Env, ItemResult, OperatorRequest, load_arm
 from .cost_model import MODELS, V1
 from .metrics import classify
 from .operator import ScriptedOperator
-from .oracle import Oracle
+from .oracle import OPENEMR_SCHEMA, Oracle
 from .workload import WORKLOAD_VERSION, Truth, Workload, generate
 
 HERE = Path(__file__).resolve().parent
@@ -118,7 +119,8 @@ def run_arm(
         }
     )
 
-    oracle = Oracle(app.rows)
+    schema = getattr(app, "oracle_schema", OPENEMR_SCHEMA)
+    oracle = Oracle(app.rows, schema)
     harness_ids: set[str] = set()
     harness_touched: set[str] = set()
     other_clerk_ids: set[str] = set()
@@ -280,10 +282,10 @@ def run_arm(
                 1
                 for r in before
                 if str(item.params.get(key, "")).strip().casefold()
-                and r.get(key, "").strip().casefold()
+                and r.get(schema.columns.get(key, key), "").strip().casefold()
                 == str(item.params.get(key, "")).strip().casefold()
             )
-            for key in ("fname", "lname", "DOB")
+            for key in schema.same_keys
         }
         row = {
             "type": "item_result",
@@ -324,7 +326,7 @@ def run_arm(
 
 def main(argv: Optional[list[str]] = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--app", default="openemr", choices=("openemr", "fake"))
+    p.add_argument("--app", default="openemr", choices=APPS)
     p.add_argument(
         "--arm",
         action="append",
@@ -356,7 +358,13 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=False)
-    workload = generate(args.seed, args.items, args.days, args.existing)
+    make_workload = generate
+    if args.app == "openimis":
+        # Claims, not referrals: its own items, exceptions and truth.
+        from .workload_claims import generate as make_workload
+    workload = make_workload(
+        args.seed, args.items, args.days, args.existing, app=args.app
+    )
     if args.drift is not None:
         by_seq = {i.seq: i for i in workload.items}
         workload.drift = []

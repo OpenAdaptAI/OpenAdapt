@@ -1,0 +1,17 @@
+[
+  {
+    "origin": "fhir search Patient",
+    "section": {
+      "kind": "fhir",
+      "base_url": "http://localhost:9410/fhir/R4",
+      "resource_type": "Patient",
+      "search_params": {
+        "_count": "200"
+      },
+      "access_token_env": "MEDPLUM_RECORD_TOKEN",
+      "field_paths": {
+        "id": "id"
+      }
+    }
+  }
+]

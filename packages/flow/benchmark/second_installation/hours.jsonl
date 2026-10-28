@@ -1,0 +1,36 @@
+{"app": "both", "at": 1792886992.818742, "event": "start", "note": "offline inventory of harness, fixtures, FHIR duplicate check", "step": "prep"}
+{"app": "both", "at": 1792887357.8493319, "event": "stop", "note": "", "step": "prep"}
+{"app": "both", "at": 1792887357.87052, "event": "start", "note": "app registry, oracle schema, claims workload, openIMIS soak adapter", "step": "harness"}
+{"app": "both", "at": 1792887615.28961, "event": "stop", "note": "", "step": "harness"}
+{"app": "fhir", "at": 1792887615.310915, "event": "start", "note": "Medplum fixture: pinned compose, secrets, readiness, admin token, client app, SQL oracle", "step": "setup"}
+{"app": "fhir", "at": 1792887787.2145972, "event": "stop", "note": "", "step": "setup"}
+{"app": "fhir", "at": 1792887787.234221, "event": "start", "note": "verify.yaml (fhir kind), session/reset hooks, signed-in probe (offline draft)", "step": "contract"}
+{"app": "fhir", "at": 1792887849.225984, "event": "stop", "note": "", "step": "contract"}
+{"app": "openimis", "at": 1792887849.245452, "event": "start", "note": "verify.yaml (sql on tblClaim), claims oracle role, hooks, signed-in probe (offline draft)", "step": "contract"}
+{"app": "openimis", "at": 1792887932.2611232, "event": "stop", "note": "", "step": "contract"}
+{"app": "both", "at": 1792887988.1452, "event": "start", "note": "FHIR and openIMIS soak adapters (offline drafts)", "step": "harness"}
+{"app": "both", "at": 1792888053.092582, "event": "stop", "note": "", "step": "harness"}
+{"app": "openimis", "at": 1792897385.426445, "event": "start", "note": "lease, VM, pull pinned images, bring up, bootstrap", "step": "setup"}
+{"app": "openimis", "at": 1792903243.3119738, "event": "stop", "note": "blocked: amd64 backend hangs under qemu-user on the Podman VM", "step": "setup"}
+{"app": "fhir", "at": 1792903254.20307, "event": "start", "note": "bring up Medplum, verify login, admin token, clients, actor user, oracle", "step": "setup"}
+{"app": "fhir", "at": 1792904767.628521, "event": "stop", "note": "", "step": "setup"}
+{"app": "fhir", "at": 1792904767.6521542, "event": "start", "note": "scripted demonstration of Medplum's new-patient form; compile", "step": "teach"}
+{"app": "fhir-phaseB", "at": 1792905171.439326, "event": "start", "note": "generate-parts worktree, channels from the CapabilityStatement", "step": "setup"}
+{"app": "fhir-phaseB", "at": 1792905193.203636, "event": "stop", "note": "", "step": "setup"}
+{"app": "fhir", "at": 1792905514.009442, "event": "stop", "note": "", "step": "teach"}
+{"app": "fhir", "at": 1792905514.034531, "event": "start", "note": "openadapt-flow qualify (6 cases), certify clinical-write", "step": "admission"}
+{"app": "fhir", "at": 1792905720.030832, "event": "stop", "note": "blocked: Create has no armed identity check and no selector (labeled save, no row context)", "step": "admission"}
+{"app": "fhir-phaseB", "at": 1792905720.056152, "event": "start", "note": "demo2 and demo3 with snapshots", "step": "teach"}
+{"app": "fhir-phaseB", "at": 1792905827.3503091, "event": "stop", "note": "", "step": "teach"}
+{"app": "both", "at": 1792905863.6359308, "event": "start", "note": "teardown", "step": "setup"}
+{"app": "both", "at": 1792905871.216518, "event": "stop", "note": "", "step": "setup"}
+{"app": "fhir", "at": 1792936976.547175, "event": "start", "note": "lease 2: VM, bring up Medplum again", "step": "setup"}
+{"app": "fhir", "at": 1792937358.940762, "event": "stop", "note": "", "step": "setup"}
+{"app": "fhir", "at": 1792937358.98381, "event": "start", "note": "re-record on #1543 (form identity), compile, classify Add buttons", "step": "teach"}
+{"app": "fhir", "at": 1792937526.0736792, "event": "stop", "note": "", "step": "teach"}
+{"app": "fhir", "at": 1792937538.237288, "event": "start", "note": "qualify on #1543 + #1564 (6 cases)", "step": "admission"}
+{"app": "fhir", "at": 1792937653.2309928, "event": "stop", "note": "refused: 7 unarmed field clicks (placeholder-only rows)", "step": "admission"}
+{"app": "fhir", "at": 1792937653.257854, "event": "start", "note": "keyboard navigation re-teach", "step": "teach"}
+{"app": "fhir", "at": 1792938122.615865, "event": "stop", "note": "", "step": "teach"}
+{"app": "fhir", "at": 1792938122.638038, "event": "start", "note": "qualify, keyboard program", "step": "admission"}
+{"app": "fhir", "at": 1792938223.243816, "event": "stop", "note": "refused: 2 key steps with no postcondition (focus moves only)", "step": "admission"}

@@ -224,7 +224,9 @@ def _pick(rng: random.Random) -> str:
     return "clean"
 
 
-def generate(seed: int, n_items: int, days: int, n_existing: int = 12) -> Workload:
+def generate(
+    seed: int, n_items: int, days: int, n_existing: int = 12, app: str = "openemr"
+) -> Workload:
     """The stream for ``seed``: ``n_items`` referrals over ``days`` days."""
 
     rng = random.Random(seed)
@@ -333,11 +335,14 @@ def generate(seed: int, n_items: int, days: int, n_existing: int = 12) -> Worklo
             inject.append({"event": "failed_save", "times": 1, "when": "during_item"})
             why = "the save fails once"
 
+        if app == "fhir" and params.get("sex"):
+            # A FHIR gender is a code; intake writes the code the form takes.
+            params["sex"] = params["sex"].lower()
         item = WorkItem(
             seq=seq,
             item_id=item_id,
             day=day,
-            app="openemr",
+            app=app,
             params=params,
             source_text=_source_text(params),
         )

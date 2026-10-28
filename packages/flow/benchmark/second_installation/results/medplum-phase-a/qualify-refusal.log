@@ -1,0 +1,4 @@
+verify.yaml cannot qualify this bundle:
+  - save step step_036 has no armed identity check
+  - save step step_036 has no structural selector: the web fault driver needs it for the ambiguity and identity faults
+EXIT 2

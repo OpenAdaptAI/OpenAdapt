@@ -60,6 +60,8 @@ DATA_EXCEPTIONS = {
     "missing_optional",
     "malformed_dob",
     "malformed_case",
+    # Claims (workload_claims.py): the insuree number matches no insuree.
+    "unknown_insuree",
 }
 
 

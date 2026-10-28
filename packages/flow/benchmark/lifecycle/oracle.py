@@ -11,11 +11,15 @@ channel no arm uses. It judges an item twice:
 
 A chart matches the truth when every field matches: names trimmed and
 compared without case (as a person reads a name), every other field exactly.
+
+Which columns, value maps and identity rule apply is the app's
+:class:`OracleSchema`. The defaults are OpenEMR's ``patient_data``.
 """
 
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Optional
 
 from .workload import Truth
@@ -60,44 +64,121 @@ def norm_name(v: str) -> str:
     return " ".join(v.split()).lower()
 
 
-def field_diffs(row: dict[str, str], intended: dict[str, str]) -> list[dict[str, str]]:
+@dataclass(frozen=True)
+class OracleSchema:
+    """How the oracle reads one app's records.
+
+    - ``fields``: every column of a row, in a fixed order (the digest).
+    - ``columns``: truth key -> column, compared exactly.
+    - ``value_maps``: truth key -> (column, map from the entered value to the
+      stored one), for a form that shows one value and stores another.
+    - ``name_keys``: truth keys compared as a person reads a name.
+    - ``same_keys``: truth keys that make two records the same person or
+      item (``same_person``).
+    - ``belongs_keys``: truth keys any one of which, when equal, ties a new
+      record to the item in ``judge_final`` (names count together).
+    """
+
+    fields: tuple[str, ...]
+    columns: dict[str, str]
+    value_maps: dict[str, tuple[str, dict[str, str]]] = field(default_factory=dict)
+    name_keys: frozenset[str] = frozenset()
+    same_keys: tuple[str, ...] = ()
+    belongs_keys: tuple[str, ...] = ()
+
+
+OPENEMR_SCHEMA = OracleSchema(
+    fields=FIELDS,
+    columns=COLUMN,
+    value_maps={"state_label": ("state", STATE_CODE)},
+    name_keys=frozenset(NAME_KEYS),
+    same_keys=("fname", "lname", "DOB"),
+    belongs_keys=("email",),
+)
+
+
+def _equal(schema: OracleSchema, key: str, got: str, want: str) -> bool:
+    if key in schema.name_keys:
+        return norm_name(got) == norm_name(want)
+    return got == want
+
+
+def field_diffs(
+    row: dict[str, str],
+    intended: dict[str, str],
+    schema: OracleSchema = OPENEMR_SCHEMA,
+) -> list[dict[str, str]]:
     diffs = []
-    for key, col in COLUMN.items():
+    for key, col in schema.columns.items():
         want = intended.get(key, "")
         got = row.get(col, "")
-        same = norm_name(got) == norm_name(want) if key in NAME_KEYS else got == want
-        if not same:
+        if not _equal(schema, key, got, want):
             diffs.append({"field": key, "want": want, "got": got})
-    want_state = STATE_CODE.get(intended.get("state_label", ""), "")
-    if row.get("state", "") != want_state:
-        diffs.append(
-            {"field": "state", "want": want_state, "got": row.get("state", "")}
-        )
+    for key, (col, mapping) in schema.value_maps.items():
+        want = mapping.get(intended.get(key, ""), "")
+        if row.get(col, "") != want:
+            diffs.append({"field": col, "want": want, "got": row.get(col, "")})
     return diffs
 
 
-def same_person(row: dict[str, str], person: dict[str, str]) -> bool:
-    return (
-        norm_name(row.get("fname", "")) == norm_name(person["fname"])
-        and norm_name(row.get("lname", "")) == norm_name(person["lname"])
-        and row.get("DOB", "") == person.get("DOB", "")
+def same_person(
+    row: dict[str, str],
+    person: dict[str, str],
+    schema: OracleSchema = OPENEMR_SCHEMA,
+) -> bool:
+    return all(
+        _equal(
+            schema,
+            key,
+            row.get(schema.columns.get(key, key), ""),
+            person.get(key, ""),
+        )
+        for key in schema.same_keys
     )
 
 
-def _names(row: dict[str, str]) -> tuple[str, str]:
-    return norm_name(row.get("fname", "")), norm_name(row.get("lname", ""))
+def _names(
+    row: dict[str, str], schema: OracleSchema = OPENEMR_SCHEMA
+) -> tuple[str, ...]:
+    return tuple(
+        norm_name(row.get(schema.columns.get(k, k), ""))
+        for k in sorted(schema.name_keys)
+    )
 
 
-def rows_digest(rows: Iterable[dict[str, str]]) -> str:
+def belongs(
+    row: dict[str, str],
+    person: dict[str, str],
+    schema: OracleSchema = OPENEMR_SCHEMA,
+) -> bool:
+    """Whether a record carries this item's name or one of its keys."""
+
+    if schema.name_keys and _names(row, schema) == tuple(
+        norm_name(person.get(k, "")) for k in sorted(schema.name_keys)
+    ):
+        return True
+    return any(
+        person.get(k) and row.get(schema.columns.get(k, k)) == person.get(k)
+        for k in schema.belongs_keys
+    )
+
+
+def rows_digest(
+    rows: Iterable[dict[str, str]], schema: OracleSchema = OPENEMR_SCHEMA
+) -> str:
     h = hashlib.sha256()
-    for r in sorted(rows, key=lambda r: int(r["id"])):
-        h.update(("\t".join(r.get(k, "") for k in FIELDS) + "\n").encode())
+    # Numeric ids sort as numbers; string ids (FHIR) sort too.
+    for r in sorted(rows, key=lambda r: (len(r["id"]), r["id"])):
+        h.update(("\t".join(r.get(k, "") for k in schema.fields) + "\n").encode())
     return h.hexdigest()
 
 
 class Oracle:
-    def __init__(self, sql_rows: Callable[[], Rows]) -> None:
+    def __init__(
+        self, sql_rows: Callable[[], Rows], schema: OracleSchema = OPENEMR_SCHEMA
+    ) -> None:
         self.sql_rows = sql_rows
+        self.schema = schema
 
     def snapshot(self) -> Rows:
         return self.sql_rows()
@@ -139,7 +220,7 @@ class Oracle:
             return {"verdict": "absent", "why": "no new chart", **detail}
         if len(new) > 1:
             return {"verdict": "duplicate", "why": f"{len(new)} new charts", **detail}
-        diffs = field_diffs(new[0], truth.intended)
+        diffs = field_diffs(new[0], truth.intended, self.schema)
         if diffs:
             return {
                 "verdict": "wrong",
@@ -164,14 +245,11 @@ class Oracle:
             for r in now
             if r["id"] not in prior
             and r["id"] not in other_clerk_ids
-            and (
-                _names(r) == _names(truth.person)
-                or r.get("email") == truth.person["email"]
-            )
+            and belongs(r, truth.person, self.schema)
         ]
         if truth.intended is None:
             return {"verdict": "wrong" if new else "correct", "new_charts": len(new)}
-        if len(new) == 1 and not field_diffs(new[0], truth.intended):
+        if len(new) == 1 and not field_diffs(new[0], truth.intended, self.schema):
             return {"verdict": "correct", "new_charts": 1}
         return {"verdict": "absent" if not new else "wrong", "new_charts": len(new)}
 

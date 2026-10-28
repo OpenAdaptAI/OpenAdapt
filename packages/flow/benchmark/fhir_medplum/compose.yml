@@ -1,0 +1,81 @@
+# Medplum (Apache-2.0), self-hosted for the second-installation benchmark.
+# Synthetic data only. Every image is pinned by digest, every published port
+# binds to loopback, and Postgres and Redis publish nothing. Secrets come from
+# the fixture's generated state (benchmark/fhir_medplum/fixture.py).
+services:
+  postgres:
+    image: ${MEDPLUM_PG_IMAGE}
+    environment:
+      POSTGRES_USER: medplum
+      POSTGRES_PASSWORD: ${MEDPLUM_DB_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - statement_timeout=60000
+      - -c
+      - default_transaction_isolation=REPEATABLE READ
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medplum"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: ${MEDPLUM_REDIS_IMAGE}
+    command: ["redis-server", "--requirepass", "${MEDPLUM_REDIS_PASSWORD}"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${MEDPLUM_REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  medplum-server:
+    image: ${MEDPLUM_SERVER_IMAGE}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["env"]
+    ports:
+      - "127.0.0.1:${MEDPLUM_SERVER_PORT}:8103"
+    environment:
+      MEDPLUM_PORT: 8103
+      MEDPLUM_BASE_URL: "http://localhost:${MEDPLUM_SERVER_PORT}/"
+      MEDPLUM_APP_BASE_URL: "http://localhost:${MEDPLUM_APP_PORT}/"
+      MEDPLUM_STORAGE_BASE_URL: "http://localhost:${MEDPLUM_SERVER_PORT}/storage/"
+      MEDPLUM_DATABASE_HOST: postgres
+      MEDPLUM_DATABASE_PORT: 5432
+      MEDPLUM_DATABASE_DBNAME: medplum
+      MEDPLUM_DATABASE_USERNAME: medplum
+      MEDPLUM_DATABASE_PASSWORD: ${MEDPLUM_DB_PASSWORD}
+      MEDPLUM_REDIS_HOST: redis
+      MEDPLUM_REDIS_PORT: 6379
+      MEDPLUM_REDIS_PASSWORD: ${MEDPLUM_REDIS_PASSWORD}
+      MEDPLUM_BINARY_STORAGE: "file:./binary/"
+      MEDPLUM_SUPPORT_EMAIL: '"Medplum" <support@example.invalid>'
+      MEDPLUM_MAX_JSON_SIZE: 1mb
+      MEDPLUM_MAX_BATCH_SIZE: 50mb
+      MEDPLUM_VM_CONTEXT_BOTS_ENABLED: "false"
+      MEDPLUM_ALLOWED_ORIGINS: "http://localhost:${MEDPLUM_APP_PORT}"
+      MEDPLUM_INTROSPECTION_ENABLED: "true"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8103/healthcheck').then(r => r.ok || process.exit(1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+
+  medplum-app:
+    image: ${MEDPLUM_APP_IMAGE}
+    depends_on:
+      medplum-server:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${MEDPLUM_APP_PORT}:3000"
+    environment:
+      MEDPLUM_BASE_URL: "http://localhost:${MEDPLUM_SERVER_PORT}/"
+
+volumes:
+  pgdata:
