@@ -71,14 +71,13 @@
 name: Packages
 
 on:
-  pull_request:
-    # Drafts run nothing (each job checks `draft`); marking one ready runs CI.
-    types: [opened, synchronize, reopened, ready_for_review]
-  # The merge queue tests each group before it lands on main.
-  merge_group:
+  # Pull requests and the merge queue reach this through ci.yml, the one
+  # required check, which calls it on their tier (the github context is
+  # theirs). nightly.yml calls it on the scheduled tier.
   push:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -221,9 +220,17 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
-      - name: Install the package alone
-        run: pip install -e ".[dev]" 'ruff==0.17.0' 'build==1.6.1'
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            packages/types/uv.lock
+            .github/ci-tools/uv.lock
+          cache-suffix: types-py${{ matrix.python-version }}
+      - name: Install the package alone, from its lock
+        run: >-
+          python ../../scripts/ci/locked_install.py --lock 'packages/types[dev]'
+          --lock .github/ci-tools:lint,build --editable packages/types
       - name: Confirm the leaf package installs without Flow
         run: |
           python - <<'PY'
@@ -280,19 +287,20 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
-      # uv installs the same requirements as pip, into the setup-python
-      # interpreter, in seconds instead of minutes, from a cache keyed on the
-      # pyproject files it resolves.
+      # uv installs the locked requirements into the setup-python interpreter,
+      # in seconds instead of minutes, from a cache keyed on the locks.
       - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
         with:
           enable-cache: true
           cache-dependency-glob: |
-            packages/flow/pyproject.toml
-            packages/types/pyproject.toml
-            packages/agent/pyproject.toml
+            packages/agent/uv.lock
+            packages/flow/uv.lock
           cache-suffix: agent-py${{ matrix.python-version }}
       - name: Install the shim against the in-tree core
-        run: uv pip install --system -e ../types -e '../flow[agent]' -e ".[dev]"
+        # Agent's lock for its own tools, then Flow's for the core it tests.
+        run: >-
+          python ../../scripts/ci/locked_install.py --lock 'packages/agent[dev]' --lock 'packages/flow[agent]'
+          --editable packages/types --editable packages/flow --editable packages/agent
       - name: Confirm the in-tree Flow is the one installed
         run: |
           python - <<'PY'
@@ -337,18 +345,17 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      # uv installs the same requirements as pip, into the setup-python
-      # interpreter, in seconds instead of minutes, from a cache keyed on the
-      # pyproject files it resolves.
+      # uv installs the locked requirements into the setup-python interpreter,
+      # in seconds instead of minutes, from a cache keyed on the locks.
       - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
         with:
           enable-cache: true
-          cache-dependency-glob: |
-            packages/flow/pyproject.toml
-            packages/types/pyproject.toml
+          cache-dependency-glob: packages/flow/uv.lock
           cache-suffix: flow-lint
-      - name: Install
-        run: uv pip install --system -e ../types -e '.[dev]'
+      - name: Install from the lock
+        run: >-
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev]'
+          --editable packages/types --editable packages/flow
       - name: Release consistency and public artifact inventory
         # Flow's own gate: version sync across project, module and lock, and
         # every public data/config asset listed in public-artifacts.json.
@@ -440,19 +447,21 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      # uv installs the same requirements as pip, into the setup-python
-      # interpreter, in seconds instead of minutes, from a cache keyed on the
-      # pyproject files it resolves.
+      # uv installs the locked requirements into the setup-python interpreter,
+      # in seconds instead of minutes, from a cache keyed on the locks.
       - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
         with:
           enable-cache: true
           cache-dependency-glob: |
-            packages/flow/pyproject.toml
-            packages/types/pyproject.toml
-            packages/capture/pyproject.toml
+            packages/flow/uv.lock
+            packages/capture/uv.lock
           cache-suffix: flow-unit
-      - name: Install
-        run: uv pip install --system -e ../types -e ../capture -e '.[dev,capture,agent]'
+      - name: Install from the locks
+        # Flow's lock, then Capture's: the in-tree Capture can need newer
+        # dependencies than the published one Flow's lock names.
+        run: >-
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,capture,agent]' --lock packages/capture
+          --editable packages/types --editable packages/capture --editable packages/flow
       - name: Install Harness² for the integration tests
         # Not on PyPI. Pinned to the commit openadapt_flow.integrations.harness2
         # is written against; it has no runtime dependencies.
@@ -497,6 +506,10 @@ jobs:
             | LC_ALL=C sort | awk -v s="$SHARD" -v n="$SHARDS" 'NR % n == s % n' > "$RUNNER_TEMP/shard.txt"
           wc -l < "$RUNNER_TEMP/shard.txt"
       - name: Test
+        # A pull request runs the fast lane: tests/nightly_only.txt lists the
+        # slow tests (over about 5 s on CI) that main and nightly run instead.
+        env:
+          OPENADAPT_TEST_LANE: ${{ github.event_name == 'pull_request' && 'fast' || 'full' }}
         # -n auto: one xdist worker per core. --dist loadfile keeps each file
         # on one worker, so module fixtures and file-local state stay in one
         # process. xdist gives each worker its own directory under --basetemp
@@ -523,18 +536,17 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      # uv installs the same requirements as pip, into the setup-python
-      # interpreter, in seconds instead of minutes, from a cache keyed on the
-      # pyproject files it resolves.
+      # uv installs the locked requirements into the setup-python interpreter,
+      # in seconds instead of minutes, from a cache keyed on the locks.
       - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
         with:
           enable-cache: true
-          cache-dependency-glob: |
-            packages/flow/pyproject.toml
-            packages/types/pyproject.toml
+          cache-dependency-glob: packages/flow/uv.lock
           cache-suffix: flow-critical
-      - name: Install
-        run: uv pip install --system -e ../types -e '.[dev,agent]'
+      - name: Install from the lock
+        run: >-
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,agent]'
+          --editable packages/types --editable packages/flow
       - name: Resolve Playwright version
         id: pw
         run: |
@@ -549,31 +561,35 @@ jobs:
         run: >-
           python scripts/install_playwright_browser.py
           --attempts 2 --attempt-timeout-seconds 270
-      - name: Golden task (free path -> VERIFIED)
+      - name: Golden task, record/compile/replay and the end-to-end critical tests
+        # One xdist run (one file per worker at a time): the golden free path
+        # (VERIFIED, zero model calls), record -> compile -> replay, and the
+        # agent guard's wire check end to end. Serially, these and the step
+        # below took about 13 minutes. tests/e2e runs apart from tests/: in one
+        # xdist run with both, test_structural_action lost its conftest's
+        # `bundle` fixture.
         run: |
           mkdir -p runs
-          pytest -vv --durations=20 tests/e2e/test_free_path_e2e.py \
-            --basetemp=runs/ci-golden --junitxml=runs/golden-junit.xml
-      - name: Record / compile / replay E2E
-        run: |
-          pytest -vv --durations=20 tests/e2e/test_record_compile_replay.py \
-            --basetemp=runs/ci-rcr --junitxml=runs/rcr-junit.xml
+          pytest -n auto --dist loadfile -v --durations=20 \
+            tests/e2e/test_free_path_e2e.py \
+            tests/e2e/test_record_compile_replay.py \
+            tests/e2e/test_structural_action.py \
+            tests/e2e/test_compile_agent_e2e.py \
+            tests/e2e/test_code_action_e2e.py \
+            tests/e2e/test_mcp_teach_e2e.py \
+            tests/e2e/test_browser_teach_e2e.py \
+            tests/e2e/test_agent_guard_e2e.py \
+            --basetemp=runs/ci-critical-e2e --junitxml=runs/critical-e2e-junit.xml
       - name: Read-back and zero-model-call tests, by name
         run: |
-          pytest -vv --durations=20 \
+          pytest -n auto --dist loadfile -v --durations=20 \
             tests/test_replayer_readback.py \
             tests/test_readback_authoring.py \
             tests/test_run_receipt.py \
             tests/test_drift_oracle.py \
             tests/test_effect_e2e_harness.py \
             tests/test_admitted_composition_runtime.py \
-            tests/e2e/test_structural_action.py \
-            tests/e2e/test_compile_agent_e2e.py \
-            tests/e2e/test_code_action_e2e.py \
-            tests/e2e/test_mcp_teach_e2e.py \
-            tests/e2e/test_browser_teach_e2e.py \
             tests/test_agent_guard.py \
-            tests/e2e/test_agent_guard_e2e.py \
             --basetemp=runs/ci-critical --junitxml=runs/critical-junit.xml
       - name: Fail if any critical test was skipped or none ran
         run: |
@@ -581,7 +597,7 @@ jobs:
           import sys
           import xml.etree.ElementTree as ET
           bad = False
-          for name in ("golden", "rcr", "critical"):
+          for name in ("critical-e2e", "critical"):
               root = ET.parse(f"runs/{name}-junit.xml").getroot()
               suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
               tests = sum(int(s.get("tests", 0)) for s in suites)
@@ -599,7 +615,8 @@ jobs:
   flow-native-census:
     name: flow native row census (${{ matrix.os }})
     needs: scope
-    if: needs.scope.outputs.flow == 'true'
+    # Post-merge tier (main and nightly): a pull request's `ci` lane is Linux.
+    if: needs.scope.outputs.flow == 'true' && github.event_name != 'pull_request' && github.event_name != 'merge_group'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
@@ -617,14 +634,17 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip
-      - name: Install
-        run: |
-          pip install -e ../types -e . pytest pytest-timeout
-          if [ "$RUNNER_OS" = "Windows" ]; then pip install uiautomation; fi
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            pip install pyobjc-framework-ApplicationServices pyobjc-framework-Cocoa pyobjc-framework-Quartz
-          fi
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: packages/flow/uv.lock
+          cache-suffix: flow-native-census
+      - name: Install from the lock
+        # The dev extra carries uiautomation on Windows; the macos extra
+        # carries the PyObjC frameworks.
+        run: >-
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,macos]'
+          --editable packages/types --editable packages/flow
       - name: Census unit tests and real-app tests
         env:
           OPENADAPT_TEST_WINDOWS_UIA: "1"
@@ -898,7 +918,7 @@ jobs:
       - name: Install with Presidio and the spaCy model
         run: |
           uv sync --locked --python 3.12 --extra dev --extra presidio
-          uv pip install "pip>=25.3"
+          uv run --no-sync python ../../scripts/ci/locked_install.py --lock .github/ci-tools:pip
           uv run --no-sync python -m spacy download en_core_web_sm
       - name: Test
         run: uv run --no-sync pytest tests/ -v
@@ -1228,6 +1248,7 @@ jobs:
               "flow-lint": "flow",
               "flow-unit": "flow",
               "flow-critical": "flow",
+              "flow-native-census": "flow",
               "capture-linux": "capture",
               "capture-macos": "capture",
               "capture-windows": "capture",
@@ -1247,7 +1268,7 @@ jobs:
           }
           # Post-merge tier only: skipped on a pull request and in the merge
           # queue; required on a push to main and on dispatch.
-          post_merge_only = {"capture-macos", "capture-windows"}
+          post_merge_only = {"capture-macos", "capture-windows", "flow-native-census"}
           # Skipped in the merge queue only: the pull request already passed
           # it on its merge with main (packages-gate is required there).
           not_in_queue = {"flow-unit"}
