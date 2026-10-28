@@ -65,7 +65,29 @@ document.getElementById('ticket').addEventListener('submit', (e) => {
       document.body.innerHTML = '<h1>Ticket created</h1>';
     });
 });""",
+    # The click opens a popup whose page posts a write of its own.
+    "popup": """
+document.getElementById('ticket').addEventListener('submit', () => {
+  window.open('/popup', '_blank');
+}, true);""",
+    # A service worker controls the page: its requests skip page routes.
+    "sw": """
+navigator.serviceWorker.register('/sw.js');""",
+    # The click opens a WebSocket and sends on it.
+    "ws": """
+document.getElementById('ticket').addEventListener('submit', () => {
+  const ws = new WebSocket('ws://' + location.host + '/ws');
+  ws.onopen = () => ws.send('close-account');
+}, true);""",
 }
+_POPUP = """<!doctype html><title>Popup</title>
+<form method="post" action="/account/close"><input name="confirm" value="yes"></form>
+<script>document.forms[0].submit();</script>"""
+_SERVICE_WORKER = """
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request)));
+"""
 _SUBMIT_COPIES = """
 document.getElementById('ticket').addEventListener('submit', () => {
   document.querySelector('[name=pid]').value = window.currentPid;
@@ -99,8 +121,14 @@ class _Server:
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802 (http.server API)
-                query = parse_qs(urlsplit(self.path).query)
-                self._send(_page(query.get("v", ["plain"])[0]))
+                path = urlsplit(self.path).path
+                if path == "/popup":
+                    self._send(_POPUP)
+                elif path == "/sw.js":
+                    self._send(_SERVICE_WORKER, "text/javascript")
+                else:
+                    query = parse_qs(urlsplit(self.path).query)
+                    self._send(_page(query.get("v", ["plain"])[0]))
 
             def do_POST(self) -> None:  # noqa: N802
                 length = int(self.headers.get("Content-Length") or 0)
@@ -114,10 +142,10 @@ class _Server:
                     "<!doctype html><title>Created</title><h1>Ticket created</h1>"
                 )
 
-            def _send(self, html: str) -> None:
+            def _send(self, html: str, ctype: str = "text/html") -> None:
                 body = html.encode()
                 self.send_response(200)
-                self.send_header("Content-Type", "text/html")
+                self.send_header("Content-Type", ctype)
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
@@ -180,7 +208,12 @@ def _bundle(server: _Server, variant: str, root: Path) -> Path:
 
 
 def _replay(
-    server: _Server, variant: str, bundle: Path, run_dir: Path
+    server: _Server,
+    variant: str,
+    bundle: Path,
+    run_dir: Path,
+    *,
+    service_workers: str = "allow",
 ) -> tuple[Any, list]:
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.runtime import Replayer
@@ -189,9 +222,14 @@ def _replay(
     with sync_api.sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
-            page = browser.new_page(viewport={"width": 1280, "height": 800})
+            page = browser.new_page(
+                viewport={"width": 1280, "height": 800},
+                service_workers=service_workers,  # type: ignore[arg-type]
+            )
             page.goto(f"{server.url}?v={variant}")
             page.wait_for_selector("[name=field_summary]", state="visible")
+            if variant == "sw" and service_workers == "allow":
+                page.wait_for_function("!!navigator.serviceWorker.controller")
             report = Replayer(PlaywrightBackend(page)).run(
                 Workflow.load(bundle),
                 params={
@@ -246,3 +284,54 @@ def test_a_submission_changed_after_the_check_never_leaves(
         "differs from the checked form" in errors
         or "changed after it was checked" in errors
     )
+
+
+def test_a_write_from_a_popup_never_leaves(
+    server: _Server, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """A popup is another page: the wire check holds its requests too."""
+
+    bundle = _bundle(server, "plain", tmp_path_factory.mktemp("rec"))
+    report, received = _replay(server, "popup", bundle, tmp_path_factory.mktemp("run"))
+    assert "/account/close" not in [r["path"] for r in received], received
+    assert not report.success
+    errors = " ".join(r.error or "" for r in report.results)
+    # The save or the popup's write goes first; either way only the save left.
+    assert (
+        "different address than the checked form's" in errors
+        or "second submission" in errors
+    ), errors
+
+
+def test_a_page_a_service_worker_controls_is_refused(
+    server: _Server, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """A service worker's requests skip routes: refuse before the click."""
+
+    bundle = _bundle(server, "plain", tmp_path_factory.mktemp("rec"))
+    report, received = _replay(server, "sw", bundle, tmp_path_factory.mktemp("run"))
+    assert not report.success
+    assert received == [], received
+    errors = " ".join(r.error or "" for r in report.results)
+    assert "service worker" in errors, errors
+    # With service workers blocked (as the runner's own browsers are), the
+    # same page saves.
+    report, received = _replay(
+        server,
+        "sw",
+        bundle,
+        tmp_path_factory.mktemp("run"),
+        service_workers="block",
+    )
+    assert report.success, [(r.step_id, r.error) for r in report.results]
+    assert len(received) == 1
+
+
+def test_a_websocket_opened_by_the_save_halts_the_run(
+    server: _Server, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    bundle = _bundle(server, "plain", tmp_path_factory.mktemp("rec"))
+    report, _received = _replay(server, "ws", bundle, tmp_path_factory.mktemp("run"))
+    assert not report.success
+    errors = " ".join(r.error or "" for r in report.results)
+    assert "WebSocket" in errors, errors

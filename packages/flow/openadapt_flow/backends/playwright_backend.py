@@ -1745,6 +1745,13 @@ class PlaywrightBackend:
         self._fill_store_key = f"__oaflow_filled_{uuid.uuid4().hex}"
         self._fill_value_slot = f"__oaflow_filled_values_{uuid.uuid4().hex}"
         self._form_wire: Any = None
+        self._ws_routed = False
+        try:
+            # A frame sent on this page's WebSockets while a save is held is
+            # reported (the wire check routes only sockets opened then).
+            self.page.on("websocket", self._watch_websocket)
+        except Exception:  # noqa: BLE001 - a page stand-in without events
+            pass
         self._structural_tokens: dict[str, _StructuralGuard] = {}
         self._guarded_coordinate: Optional[_CoordinateGuard] = None
         # One-shot expectation that the next click closes this page surface
@@ -2449,38 +2456,92 @@ class PlaywrightBackend:
             expected = None
         if not isinstance(expected, dict):
             return "could not read what the form would send"
-        self._arm_wire_check(expected_submission(expected, identity.exempt))
-        return None
+        return self._arm_wire_check(expected_submission(expected, identity.exempt))
 
     # -- the wire check (openadapt_flow.wire_check) --------------------------
 
-    def _arm_wire_check(self, submission: ExpectedSubmission) -> None:
+    def _arm_wire_check(self, submission: ExpectedSubmission) -> Optional[str]:
         """Hold the save's request at the network to the checked form.
 
-        Until it is disarmed, every write request the page sends, and a GET
-        navigation to the form's address, goes through a
+        Until it is disarmed, every write request from any page of this
+        browser context (a popup or new tab included), and a GET navigation
+        to the form's address, goes through a
         :class:`~openadapt_flow.wire_check.WireCheck`: the checked submission
-        goes once; anything else is aborted before it is sent.
+        goes once; anything else is aborted before it is sent. A WebSocket
+        opened meanwhile is never connected to the server, and a frame sent
+        on one already open is reported. A service worker's requests skip routes, so a page a service
+        worker controls is refused before the click (the runner's contexts
+        block service workers), and one that starts meanwhile is reported.
+        Returns why the save can't be held, or None once it is.
         """
 
         self._disarm_wire_check()
+        context = self.page.context
+        try:
+            controlled = bool(context.service_workers) or bool(
+                self.page.evaluate(
+                    "() => !!(navigator.serviceWorker && navigator.serviceWorker.controller)"
+                )
+            )
+        except Exception:  # noqa: BLE001
+            return "could not tell whether a service worker controls the page"
+        if controlled:
+            return (
+                "a service worker runs on this page, and its requests can't be "
+                "checked; run with service workers blocked"
+            )
         check = WireCheck(submission=submission)
 
         def handler(route: Any) -> None:
             check.handle(route, proceed=route.fallback)
 
-        self.page.route("**/*", handler)
-        self._form_wire = (handler, check)
+        def on_worker(_worker: Any) -> None:
+            check.refused.append(
+                "a service worker started while the save was held, and its "
+                "requests can't be checked"
+            )
+
+        context.route("**/*", handler)
+        context.on("serviceworker", on_worker)
+        if not self._ws_routed:
+            # Routed once for the context's life; it only acts while armed.
+            context.route_web_socket(lambda _url: True, self._route_websocket)
+            self._ws_routed = True
+        self._form_wire = (handler, check, on_worker)
+        return None
+
+    def _route_websocket(self, ws: Any) -> None:
+        wire = self._form_wire
+        if wire is None:
+            ws.connect_to_server()
+            return
+        # Never connected to the server: what the page sends on it goes
+        # nowhere. (Closing it from a sync route handler deadlocks.)
+        wire[1].refused.append(
+            "the page opened a WebSocket while the save was held; it was not connected"
+        )
+
+    def _watch_websocket(self, ws: Any) -> None:
+        def on_frame(_payload: Any) -> None:
+            wire = self._form_wire
+            if wire is not None:
+                wire[1].refused.append(
+                    "the page sent a WebSocket message while the save was held"
+                )
+
+        ws.on("framesent", on_frame)
 
     def _disarm_wire_check(self) -> list[str]:
         wire = self._form_wire
         self._form_wire = None
         if wire is None:
             return []
-        handler, check = wire
+        handler, check, on_worker = wire
+        context = self.page.context
         try:
-            self.page.unroute("**/*", handler)
-        except Exception:  # noqa: BLE001 - the page is gone
+            context.unroute("**/*", handler)
+            context.remove_listener("serviceworker", on_worker)
+        except Exception:  # noqa: BLE001 - the context is gone
             pass
         return list(check.refused)
 
@@ -4384,10 +4445,14 @@ class PlaywrightBackend:
                 device_scale_factor=1,
                 record_video_dir=record_video_dir,
                 record_video_size=viewport,
+                service_workers="block",
             )
             page = context.new_page()
         else:
-            page = browser.new_page(viewport=viewport, device_scale_factor=1)
+            # No service workers: their requests would skip the wire check.
+            page = browser.new_page(
+                viewport=viewport, device_scale_factor=1, service_workers="block"
+            )
 
         def close() -> None:
             if shared is not None:

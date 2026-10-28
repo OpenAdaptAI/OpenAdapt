@@ -110,10 +110,19 @@ def _content_type(request: Any) -> str:
     return (request.headers.get("content-type") or "").lower()
 
 
+def _no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    # json.loads keeps the last of two equal keys; a server may keep the
+    # first. A body that reads two ways can't be compared, so it is refused.
+    keys = [key for key, _ in pairs]
+    if len(set(keys)) != len(keys):
+        raise ValueError("duplicate JSON key")
+    return dict(pairs)
+
+
 def body_fields(request: Any) -> Optional[list[tuple[str, str]]]:
     """The fields a request carries in its body: URL-encoded, multipart
     (files as ``file:<name>``) or a flat JSON object. None when the body is
-    none of those (nested JSON, another encoding)."""
+    none of those (nested JSON, a repeated key, another encoding)."""
 
     body = request.post_data_buffer or b""
     ctype = _content_type(request)
@@ -147,7 +156,7 @@ def body_fields(request: Any) -> Optional[list[tuple[str, str]]]:
         return pairs
     if ctype.startswith("application/json"):
         try:
-            data = json.loads(body)
+            data = json.loads(body, object_pairs_hook=_no_duplicate_keys)
         except ValueError:
             return None
         if not isinstance(data, dict) or any(

@@ -2988,6 +2988,16 @@ def _compile_recording(
         presumed.risk_explanation = PRESUMED_COMMIT_EXPLANATION
         presumed.risk_review_required = False
 
+    # The submit button of the form the demonstration typed into saves that
+    # form, whatever the screen did after the click (a slow recording can
+    # capture the page before it changes). Explicit risk_overrides below
+    # still win.
+    for step in _form_submit_steps(steps, binding_observations):
+        if step.risk != "irreversible":
+            step.risk = "irreversible"
+            step.risk_explanation = "it submits the form the run typed into"
+            step.risk_review_required = False
+
     # A click that only opens a confirmation dialog is not the save: the
     # dialog's Confirm click is. Explicit risk_overrides below still win.
     by_step_id = {step.id: step for step in steps}
@@ -3539,6 +3549,45 @@ def _compile_recording(
     return workflow
 
 
+def _form_submit_steps(
+    steps: list[Step], observations: dict[str, object]
+) -> list[Step]:
+    """Clicks on the labelled submit button of the one form owning every
+    field typed into since the previous such click."""
+
+    found: list[Step] = []
+    typed = False
+    for step in steps:
+        if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
+            typed = True
+            continue
+        raw = observations.get(step.id)
+        if (
+            typed
+            and raw is not None
+            and step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+            and _is_form_save(raw)
+        ):
+            found.append(step)
+            typed = False
+    return found
+
+
+def _is_form_save(raw: object) -> bool:
+    """The observation shows the labelled submit button of the typed form."""
+
+    from openadapt_flow.submit_binding import (
+        _no_form_identity_reason,
+        observation_from_page,
+    )
+
+    try:
+        observation = observation_from_page(raw)
+    except ValueError:
+        return False
+    return observation.labelled and _no_form_identity_reason(observation) is None
+
+
 def _attach_submit_bindings(
     steps: list[Step],
     observations: dict[str, object],
@@ -3605,16 +3654,21 @@ def _attach_submit_bindings(
             # A labelled save with no record on screen to check: a create-new
             # form. The record is the one the run typed into the form.
             try:
-                form_identity, _ = decide_form_identity(
+                form_identity, why = decide_form_identity(
                     observation_from_page(raw),
                     form_values_from_record((form_values or {}).get(step.id)),
                 )
             except ValueError:
-                form_identity = None
+                form_identity, why = None, "the recorded form evidence is malformed"
             if form_identity is not None:
                 step.anchor.form_identity = form_identity
                 step.identity_armed = True
                 step.identity_unarmed_reason = None
+            elif _is_form_save(raw):
+                # The form's own save, but the check can't be armed: say why,
+                # so the refusal names it instead of a generic gap.
+                step.identity_unarmed_reason = f"create-form save not checked: {why}"
+                logger.warning("%s: %s", step.id, step.identity_unarmed_reason)
         if step.risk == "irreversible":
             # A consequential step closes the entry it committed.
             typed_since_commit = []
