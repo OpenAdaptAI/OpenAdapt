@@ -147,15 +147,12 @@ def test_the_apps_own_bookkeeping_holds(tmp_path: Path) -> None:
             # The acting user's own sign-in bookkeeping and UI state.
             "UPDATE users_secure SET login_fail_counter = 0, last_update = '2026-10-29' "
             "WHERE username = 'bot'",
-            "UPDATE login_mfa_registrations SET last_challenge = '2026-10-29' "
-            "WHERE user_id = 2",
             "INSERT INTO user_settings VALUES (2, 'dem_expand', '1')",
             # Session and scheduler state, counters, a key added lazily.
             "INSERT INTO session_tracker VALUES ('s2', 1)",
             "UPDATE session_tracker SET number_scripts = 9 WHERE uuid = 's1'",
             "UPDATE background_services SET next_run = '2026-10-29', running = 1",
             "UPDATE sequences SET id = 6",
-            "INSERT INTO keys (name, value) VALUES ('oauth2passphrase', 'p')",
             # Backfills: a uuid from NULL, and the stamp it bumps.
             "UPDATE history_data SET uuid = 'h-1' WHERE id = 1",
             "UPDATE users SET uuid = 'uu-2', last_updated = '2026-10-29' WHERE id = 2",
@@ -165,12 +162,10 @@ def test_the_apps_own_bookkeeping_holds(tmp_path: Path) -> None:
     used = set(result["evidence"]["frame"]["database"]["profile"]["rules_used"])
     assert {
         "users-secure-sign-in",
-        "mfa-last-challenge",
         "user-settings",
         "session-tracker",
         "background-services",
         "sequences",
-        "keys",
         "uuid-backfill",
         "users-uuid-backfill",
         "users-last-updated",
@@ -197,6 +192,8 @@ def test_the_apps_own_bookkeeping_holds(tmp_path: Path) -> None:
         # Removed bookkeeping rows.
         "DELETE FROM session_tracker",
         "DELETE FROM keys",
+        "INSERT INTO keys (name, value) VALUES ('oauth2passphrase', 'p')",
+        "UPDATE login_mfa_registrations SET last_challenge = '2026-10-29' WHERE user_id = 2",
     ],
 )
 def test_anything_else_in_a_bookkeeping_table_refutes(
@@ -254,3 +251,23 @@ def test_a_clean_run_lists_only_the_rules_it_used(tmp_path: Path) -> None:
     assert _frame(result) == "held"
     used = result["evidence"]["frame"]["database"]["profile"]["rules_used"]
     assert used == ["log"]
+
+
+def test_a_colleague_who_wrote_in_the_window_owns_their_ui_state(
+    tmp_path: Path,
+) -> None:
+    active = _x(
+        "INSERT INTO log (user, patient_id, event, tbl) "
+        "VALUES ('clinic2', 3, 'update', 'patient_data')",
+        "INSERT INTO user_settings VALUES (1, 'dem_expand', '1')",
+    )
+    assert _frame(_run(tmp_path / "a", active)) == "held"
+    idle = _x("INSERT INTO user_settings VALUES (1, 'dem_expand', '1')")
+    assert _frame(_run(tmp_path / "b", idle)) == "refuted"
+    # Credentials never widen: an active colleague's password still refutes.
+    password = _x(
+        "INSERT INTO log (user, patient_id, event, tbl) "
+        "VALUES ('clinic2', 3, 'update', 'patient_data')",
+        "UPDATE users_secure SET login_fail_counter = 3 WHERE username = 'clinic2'",
+    )
+    assert _frame(_run(tmp_path / "c", password)) == "refuted"

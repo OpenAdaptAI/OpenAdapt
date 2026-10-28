@@ -13,8 +13,10 @@ app's own:
   to a value: a backfill, never a swap, overwrite or clear), ``with_fill``
   (only when that column was backfilled in the same row) or ``owner`` (only
   on the acting user's own row).
-- ``own_rows``: the acting user's own rows may be added, changed or removed
-  (per-user UI state); everyone else's are compared.
+- ``own_rows``: per-user UI state. The acting user's own rows may be added,
+  changed or removed, and so may those of another user who wrote in the
+  window (their own work); everyone else's are compared. Credentials never
+  use this: their column rules stay on the acting user's row.
 
 A rule may name only a table in the profile's reviewed ``bookkeeping_tables``
 (lower-cased, unqualified), so anything else, patient data included, is
@@ -183,6 +185,19 @@ class AppProfile(BaseModel):
             f"WHERE {quote(u.name_column)} IN ({listed})"
         )
 
+    def users_query(self, dialect: str) -> Optional[str]:
+        """The SELECT of every user's id and sign-in name, read in the
+        snapshot (in memory only), to find a colleague's own rows."""
+
+        if self.users is None:
+            return None
+        quote = (lambda n: f"`{n}`") if dialect == "mysql" else (lambda n: f'"{n}"')
+        u = self.users
+        return (
+            f"SELECT {quote(u.id_column)} AS id, {quote(u.name_column)} AS name "
+            f"FROM {quote(u.table)}"
+        )
+
     def excuse(
         self,
         table: str,
@@ -192,13 +207,16 @@ class AppProfile(BaseModel):
         hasher: Callable[[str, Any], str],
         names: set[str],
         ids: set[str],
+        colleagues: tuple[set[str], set[str]] = (set(), set()),
     ) -> Optional[list[str]]:
         """The rules that make this row change the app's own, or None.
 
         ``before`` holds the baseline's cell MACs (``hasher`` MACs a value
         for a column of this table); ``after`` holds plain values. A row
         added has no ``before``, a row removed no ``after``; ``fields`` are
-        the columns that changed.
+        the columns that changed. ``names`` and ``ids`` are the acting
+        user's; ``colleagues`` the names and ids of other users who wrote in
+        the window (for ``own_rows`` only).
         """
 
         name = table_name(table)
@@ -207,6 +225,10 @@ class AppProfile(BaseModel):
         def owned(rule: ProfileRule) -> bool:
             assert rule.owner is not None
             who = names if rule.owner.by == "username" else ids
+            if rule.mode == "own_rows":
+                who = who | (
+                    colleagues[0] if rule.owner.by == "username" else colleagues[1]
+                )
             col = rule.owner.column
             if after is not None:
                 return str(after.get(col)) in who
