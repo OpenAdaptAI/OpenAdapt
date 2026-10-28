@@ -52,7 +52,7 @@ import os
 import re
 import secrets
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Mapping, Optional, Sequence, cast
@@ -458,6 +458,9 @@ def _audit_sql(cfg: VerifyConfig) -> dict[str, str]:
         query = profile.actor_ids_query(_self_names(cfg), frame.database.dialect)
         if query:
             out["actor_ids"] = query
+        users = profile.users_query(frame.database.dialect)
+        if users:
+            out["users_map"] = users
     if frame.attribution is None:
         return out
     audit = frame.attribution.read
@@ -572,6 +575,10 @@ class _DatabaseFrame:
     blind: bool = False
     #: The app profile's judgment of one row change (``AppProfile.excuse``).
     excuse: Any = None
+    #: Every user's id by sign-in name (in memory only), and the names and
+    #: ids of other users who wrote in the window.
+    users_map: dict[str, str] = field(default_factory=dict)
+    colleagues: tuple[set[str], set[str]] = (set(), set())
 
 
 def _rules_used(profile: Any, old: Any, new: Any) -> list[str]:
@@ -723,10 +730,21 @@ def _database_frame(
         names = set(_self_names(cfg))
         ids = {str(r.get("id")) for r in new.extra.get("actor_ids", [])}
         hashers = out.hashers
+        out.users_map = {
+            str(r.get("name")): str(r.get("id")) for r in new.extra.get("users_map", [])
+        }
+        frame_out = out
 
         def excuse(name: str, before: Any, after: Any, fields: list[str]) -> Any:
             return profile.excuse(
-                name, before, after, fields, hashers[name], names, ids
+                name,
+                before,
+                after,
+                fields,
+                hashers[name],
+                names,
+                ids,
+                frame_out.colleagues,
             )
 
         out.excuse = excuse
@@ -857,6 +875,19 @@ def judge_run_frame(
             else:
                 audit_before = list(stored.get("records", []))
                 audit_after = entries_now
+    if db is not None and audit_after is not None and spec.attribution is not None:
+        # Other users who wrote in the window: their own per-user state is
+        # their work (the profile's own_rows rules only).
+        a = spec.attribution
+        writes = set(a.write_events)
+        mine = set(_self_names(cfg)) | {str(x) for x in run_actors}
+        active = {
+            str(e.get(a.actor_field))
+            for e in audit_after
+            if (not writes or str(e.get(a.event_field or "")) in writes)
+            and e.get(a.actor_field) not in (None, "")
+        } - mine
+        db.colleagues = (active, {db.users_map[n] for n in active if n in db.users_map})
     verdict = judge_frame(
         spec,
         bound_effects,
