@@ -155,6 +155,9 @@ FRAME_DB_DETAIL = "openadapt:frame_database"
 CHECKED_PARTS: tuple[str, ...] = ("delta", "frame", "source")
 #: ``checked.coverage``, present only under an admission policy.
 COVERAGE_KEYS = frozenset({"killed", "applicable", "sha256", "policy"})
+#: Also in ``checked.coverage`` since the per-class rule: each claimed fault
+#: class and how it came out. Receipts issued before it lack the key.
+COVERAGE_CLASSES_KEY = "classes"
 CHECKED_VALUES = ("held", "refuted", "not_checked")
 SOURCE_VALUES = CHECKED_VALUES + ("instruction",)
 
@@ -1457,6 +1460,7 @@ def verify_run(
             "applicable": record.applicable if record is not None else 0,
             "sha256": record.digest() if record is not None else None,
             "policy": "met" if admitted else str(problem),
+            COVERAGE_CLASSES_KEY: record.class_results() if record is not None else {},
         }
     claim_holds = (
         read_proves_write
@@ -1660,7 +1664,8 @@ def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
                 "coverage" in parts
                 and (
                     not isinstance(cover, Mapping)
-                    or set(cover) != COVERAGE_KEYS
+                    or set(cover) - {COVERAGE_CLASSES_KEY} != COVERAGE_KEYS
+                    or not isinstance(cover.get(COVERAGE_CLASSES_KEY, {}), Mapping)
                     or not isinstance(cover.get("killed"), int)
                     or not isinstance(cover.get("applicable"), int)
                     or not isinstance(cover.get("policy"), str)
