@@ -255,6 +255,28 @@ def _is_runs_record(change: Change, selectors: list[dict[str, str]]) -> bool:
 KIND_ORDER = ("discard_draft", "restore", "void", "delete")
 
 
+def undoable(workflow: Workflow, step_id: str, *, allow_delete: bool) -> bool:
+    """Has this save an approved compensation the deployment lets run?"""
+    undo = approved_undo(workflow, step_id)
+    if undo is None:
+        return False
+    return allow_delete or (undo.kind or "delete") != "delete"
+
+
+def saves_without_undo(workflow: Workflow, *, allow_delete: bool) -> list[str]:
+    """The consequential steps a rollback couldn't undo: each needs a
+    person's approval before it runs."""
+    from openadapt_flow.run_gate import is_consequential
+    from openadapt_flow.traversal import iter_workflow_steps
+
+    return [
+        step.id
+        for step in iter_workflow_steps(workflow)
+        if is_consequential(step, workflow, require_current_risk_certification=False)
+        and not undoable(workflow, step.id, allow_delete=allow_delete)
+    ]
+
+
 def roll_back(
     report: RunReport,
     workflow: Workflow,

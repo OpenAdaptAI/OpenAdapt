@@ -164,16 +164,27 @@ def main(argv: list[str] | None = None) -> int:
                     save_id=save_id,
                 )
                 run_dir = work / f"run-{name}"
-                code = flow(
-                    [
-                        "replay",
-                        str(variant),
-                        "--config",
-                        str(deployment),
-                        "--run-dir",
-                        str(run_dir),
-                    ]
-                )
+                try:
+                    code = flow(
+                        [
+                            "replay",
+                            str(variant),
+                            "--config",
+                            str(deployment),
+                            "--run-dir",
+                            str(run_dir),
+                        ]
+                    )
+                except SystemExit as exc:
+                    # A write that can't be undone and no person to ask:
+                    # refused before the run.
+                    rows[name] = {
+                        "refused_before_run": True,
+                        "message": str(exc.code),
+                        "report_written": (run_dir / "report.json").is_file(),
+                        "records_left": len(_records(base)),
+                    }
+                    continue
                 report = RunReport.model_validate_json(
                     (run_dir / "report.json").read_text()
                 )

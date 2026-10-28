@@ -16,6 +16,9 @@ screen check never passes:
 - ``before_save``: the form is filled, nothing is saved;
 - ``after_save``: the chart is saved and the bundle declares no
   compensation (OpenEMR, as configured, offers no way to delete a chart).
+  In production that save can't be undone, so it runs only after a person
+  approves it; the harness plays that approval and shows what the person gets
+  when the run then stops: the exact rows to repair.
 
 Synthetic data only (example.invalid, 555-01xx); no model calls.
 

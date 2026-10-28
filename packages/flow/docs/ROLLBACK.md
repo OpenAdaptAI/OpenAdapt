@@ -17,6 +17,14 @@ ends in one of three ways:
 
 Flow never reports a partial rollback as done.
 
+**Undo, or a person, before every write.** With rollback on, a save that no
+approved compensation can undo (none approved, or only a `delete` the
+deployment doesn't allow) waits for a person's approval before it runs. In
+`problems_only` it goes to a person like an each-item save (code `each_item`,
+detail `no_approved_compensation`). `each_item` already asks a person about
+every save. A run with no way to ask a person (`not_gated`, or no approval
+mode) is refused before it starts, and the refusal names those saves.
+
 The code is in `openadapt_flow/rollback.py`, `rollback_state.py` and
 `rollback_qualify.py`. The tests are in `tests/test_rollback.py` and
 `tests/test_rollback_qualify.py`.
@@ -179,7 +187,7 @@ and three `openadapt-flow replay` runs, each made to stop by one added step.
 | --- | --- | --- |
 | Stop after the save, with the qualified compensation approved | `ROLLED_BACK` | Empty, as before the run |
 | Stop before the save (a filled form) | `HALTED_BEFORE_EFFECT` (nothing landed) | Empty |
-| Stop after the save, with the proposal not approved | `RECONCILIATION_REQUIRED` | The record stays; `diff.json` names it |
+| The compensation not approved, and no person to ask (`replay`) | Refused before the run: the save can't be undone | Empty; nothing ran |
 
 `rollback qualify` passed both halt points (before and after the save).
 None of the runs made a model call.

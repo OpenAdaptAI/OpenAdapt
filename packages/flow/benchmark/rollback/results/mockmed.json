@@ -2,10 +2,10 @@
   "schema": "openadapt.rollback-measurement/v1",
   "app": "mockmed",
   "mode": "live (real browser, in-process app declared a test copy)",
-  "measured_at": "2026-10-28T14:39:47-0400",
+  "measured_at": "2026-10-28T15:40:33-0400",
   "host": "macOS-15.7.3-arm64-arm-64bit",
-  "load_1m": 37.96,
-  "seconds": 72.0,
+  "load_1m": 11.37,
+  "seconds": 54.8,
   "rows": {
     "qualify": {
       "exit_code": 0,
@@ -56,35 +56,10 @@
       "model_calls": 0
     },
     "after_save_unapproved": {
-      "exit_code": 1,
-      "stopped_at": "stop_here",
-      "transaction_outcome": "RECONCILIATION_REQUIRED",
-      "rollback_status": "not_rolled_back",
-      "rollback_reason": "step step_010: no compensation a person approved for this step (declare one, or accept a verified proposal). Still different: records: 1 added",
-      "after_stop_diff": {
-        "records": {
-          "added": 1,
-          "removed": 0,
-          "changed": 0
-        }
-      },
-      "remaining_diff": {
-        "records": {
-          "added": 1,
-          "removed": 0,
-          "changed": 0
-        }
-      },
-      "steps": [
-        {
-          "step_id": "step_010",
-          "decision": "refused",
-          "fresh_read": null
-        }
-      ],
-      "diff_file_written": true,
-      "records_left": 1,
-      "model_calls": 0
+      "refused_before_run": true,
+      "message": "REFUSED before the run: rollback is on, and these saves have no compensation a person approved (or only a delete this deployment doesn't allow): step_010. A write that can't be undone needs a person's approval first: qualify and approve a compensation (rollback qualify, undo accept), or run with an approval mode that asks a person. Nothing ran.",
+      "report_written": false,
+      "records_left": 0
     }
   }
 }

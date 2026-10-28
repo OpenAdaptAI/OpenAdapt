@@ -918,6 +918,8 @@ def _build_and_run_replayer(
     if api_steps_off_reason is not None:
         replayer.api_steps = False
         replayer.api_steps_off_reason = api_steps_off_reason
+    if rollback_plan is not None:
+        _require_undo_or_person(workflow, rollback_plan, approval_gate)
     before = rollback_plan.arm(dict(params)) if rollback_plan is not None else None
     report = replayer.run(
         workflow,
@@ -966,6 +968,35 @@ def _build_and_run_replayer(
             runner=ReplayerRunner(make_compensation_replayer, fresh_session),
         )
     return report
+
+
+def _require_undo_or_person(workflow, rollback_plan, approval_gate) -> None:
+    """With rollback on, every save is either undoable or approved by a person
+    before it runs (docs/ROLLBACK.md).
+
+    A gate that can ask a person checks each save (``undo_or_person``); with
+    no such gate, a run that holds a save no approved compensation can undo
+    is refused before it starts.
+    """
+    from openadapt_flow.approval_mode.model import ApprovalMode
+    from openadapt_flow.rollback import saves_without_undo
+
+    if approval_gate is not None:
+        approval_gate.undo_or_person = True
+        approval_gate.undo_allows_delete = bool(rollback_plan.allow_delete)
+        if getattr(approval_gate, "mode", None) is not ApprovalMode.NOT_GATED:
+            return
+    missing = saves_without_undo(workflow, allow_delete=rollback_plan.allow_delete)
+    if missing:
+        raise SystemExit(
+            "REFUSED before the run: rollback is on, and these saves have no "
+            "compensation a person approved (or only a delete this deployment "
+            "doesn't allow): "
+            + ", ".join(missing)
+            + ". A write that can't be undone needs a person's approval first: "
+            "qualify and approve a compensation (rollback qualify, undo accept), "
+            "or run with an approval mode that asks a person. Nothing ran."
+        )
 
 
 def _replay_outcome_epilogue(

@@ -850,3 +850,72 @@ def test_an_uncomparable_table_is_never_set_aside():
     assert not diff.empty
     [change] = changes(diff)
     assert change[0] == "big" and change[2] is None and change[3] is None
+
+
+# ---------------------------------------------------------------------------
+# A write that can't be undone needs a person's approval first
+# ---------------------------------------------------------------------------
+
+
+def test_saves_without_undo_name_every_save_no_allowed_compensation_covers():
+    from openadapt_flow.rollback import saves_without_undo, undoable
+
+    workflow = _mockmed_workflow()  # save_triage has a delete; save_vitals none
+    assert saves_without_undo(workflow, allow_delete=True) == ["save_vitals"]
+    assert saves_without_undo(workflow, allow_delete=False) == [
+        "save_triage",
+        "save_vitals",
+    ]
+    assert not undoable(
+        _mockmed_workflow(proposed=True), "save_triage", allow_delete=True
+    )
+
+
+def test_the_gate_sends_a_save_it_cannot_undo_to_a_person():
+    from types import SimpleNamespace
+
+    from openadapt_flow.approval_mode.gate import ApprovalGate
+    from openadapt_flow.approval_mode.model import ItemDecisionKind
+
+    gate = ApprovalGate.__new__(ApprovalGate)
+    workflow = _mockmed_workflow()
+    vitals = SimpleNamespace(workflow=workflow, step=workflow.steps[1])
+    triage = SimpleNamespace(workflow=workflow, step=workflow.steps[0])
+
+    check, decision = gate._check_undo_or_person(vitals)
+    assert check.passed and decision is None  # off unless rollback is on
+
+    gate.undo_or_person = True
+    gate.undo_allows_delete = True
+    check, decision = gate._check_undo_or_person(triage)
+    assert check.passed and decision is None
+    check, decision = gate._check_undo_or_person(vitals)
+    assert not check.passed
+    assert check.detail == "no_approved_compensation"
+    assert decision.kind is ItemDecisionKind.APPROVAL_REQUIRED
+    assert decision.needs_person
+
+    gate.undo_allows_delete = False  # a delete isn't an undo here
+    _check, decision = gate._check_undo_or_person(triage)
+    assert decision is not None and decision.needs_person
+
+
+def test_a_run_with_no_person_to_ask_refuses_a_save_it_cannot_undo():
+    from types import SimpleNamespace
+
+    from openadapt_flow.__main__ import _require_undo_or_person
+    from openadapt_flow.approval_mode.model import ApprovalMode
+
+    plan = SimpleNamespace(allow_delete=True)
+    workflow = _mockmed_workflow()
+    with pytest.raises(SystemExit, match="save_vitals"):
+        _require_undo_or_person(workflow, plan, None)
+    with pytest.raises(SystemExit, match="Nothing ran"):
+        _require_undo_or_person(
+            workflow, plan, SimpleNamespace(mode=ApprovalMode.NOT_GATED)
+        )
+    gate = SimpleNamespace(mode=ApprovalMode.EACH_ITEM)
+    _require_undo_or_person(workflow, plan, gate)  # a person sees every save
+    assert gate.undo_or_person is True and gate.undo_allows_delete is True
+    covered = workflow.model_copy(update={"steps": workflow.steps[:1]})
+    _require_undo_or_person(covered, plan, None)  # every save is undoable
