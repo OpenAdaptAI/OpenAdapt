@@ -282,7 +282,13 @@ class Store:
             "see_auth, cal_ui) VALUES (?,?,?,?,1,3,1,1)",
             (username, fname, lname, authorized),
         )
-        return self.user_id(username)
+        uid = self.user_id(username)
+        # The sign-in row OpenEMR keeps beside each user.
+        self.con.execute(
+            "INSERT INTO users_secure (id, username, password) VALUES (?, ?, ?)",
+            (uid, username, f"$2y$10$seed{username}"),
+        )
+        return uid
 
     def register(self, user: Optional[str], v: Mapping[str, Any]) -> int:
         """The New Patient path: patient_data plus its history_data row."""
@@ -498,3 +504,13 @@ class Store:
             (pid,),
         )
         self.log(user, "patient-record-delete", pid, f"DELETE FROM lists pid={pid}")
+
+    def repoint(
+        self, user: Optional[str], table: str, column: str, old: int, new: int
+    ) -> None:
+        """Move ``table`` rows whose ``column`` is ``old`` to ``new``."""
+
+        self.con.execute(
+            f'UPDATE {table} SET "{column}" = ? WHERE "{column}" = ?', (new, old)
+        )
+        self.log(user, "patient-record-update", old, f"UPDATE {table} pid={old}")

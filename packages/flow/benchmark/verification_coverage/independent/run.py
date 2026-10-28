@@ -199,6 +199,7 @@ SLICE = (
     "documents",
     "openemr_postcalendar_events",
     "users",
+    "users_secure",
     "facility",
     "contact",
     "recent_patients",
@@ -228,6 +229,14 @@ EMPTY_HISTORY_OP = "add_history_row"  # a second history row, pid and date only
 CAPITALS_REGISTER_OP = "register_referral_capitals"  # street and city in capitals
 REVERT2_OP = REVERT_OP
 DELETE_LAST_ALLERGY_OP = "delete_last_allergy"  # the chart's newest lists row
+REPOINT_INSURANCE_OP = "repoint_insurance"  # other_patient's row to new_patient
+REPOINT_CONTACT_OP = "repoint_contact"  # other_patient's contact link to new_patient
+MOVE_HISTORY_OP = "move_history"  # new_patient's history row to other_patient
+FLIP_COLLEAGUE_SETTING_OP = "flip_colleague_setting"  # a clinician2 user_settings row
+RESET_COLLEAGUE_PASSWORD_OP = "reset_colleague_password"  # clinician2's hash
+REVERT_FIELD_OP = "revert_field"  # step: target, field: back to its seeded value
+#: Operations whose target state may need placing before the window opens.
+PRE_WINDOW = {REPOINT_INSURANCE_OP, FLIP_COLLEAGUE_SETTING_OP, REPOINT_CONTACT_OP}
 SET_USER_INFO_OP = "set_user_info"  # a users row's info column (step: user, value)
 HELD_OUT_OPS = {
     APPOINTMENT_OP: "new_patient",
@@ -273,8 +282,23 @@ def prepare_window(
 ) -> None:
     """What a case says the baseline holds before the run window opens."""
 
-    if any(step["op"] == DELETE_INSURANCE_OP for step in case["steps"]):
+    ops = {step["op"] for step in case["steps"]}
+    if DELETE_INSURANCE_OP in ops or REPOINT_INSURANCE_OP in ops:
         store.add_insurance(None, ids["other_patient"], PRE_WINDOW_INSURANCE)
+    if FLIP_COLLEAGUE_SETTING_OP in ops:
+        store.con.execute(
+            "INSERT INTO user_settings VALUES (?, 'gacl_protect', '0')", (ids[OTHER],)
+        )
+    if REPOINT_CONTACT_OP in ops and not store.one(
+        "SELECT COUNT(*) FROM contact WHERE foreign_table_name = 'patient_data' "
+        "AND foreign_id = ?",
+        (ids["other_patient"],),
+    ):
+        store.con.execute(
+            "INSERT INTO contact (foreign_table_name, foreign_id) VALUES "
+            "('patient_data', ?)",
+            (ids["other_patient"],),
+        )
 
 
 def step_values(step: dict[str, Any], told: dict[str, str]) -> dict[str, str]:
@@ -293,8 +317,15 @@ def person_values(step: dict[str, Any], ids: dict[str, int]) -> dict[str, Any]:
     blank = dict.fromkeys(CONCURRENT_PERSON, "")
     out = {**blank, **person}
     out["state"] = "MA" if out["state"] == "Massachusetts" else out["state"]
-    provider = PROVIDERS.get(str(out.pop("providerID", "")))
+    provider = PROVIDERS.get(provider_name(out.pop("providerID", "")))
     return {**out, "providerID": ids[provider] if provider else None}
+
+
+def provider_name(value: Any) -> str:
+    """A provider as a suite names one: ``Dr. Owen Hale`` or ``users.id of
+    Dr. Owen Hale``."""
+
+    return str(value).removeprefix("users.id of ").strip()
 
 
 def told_values(case: dict[str, Any]) -> dict[str, str]:
@@ -303,7 +334,7 @@ def told_values(case: dict[str, Any]) -> dict[str, str]:
 
     told = dict(case.get("told", {}))
     if "providerID" in told:
-        told["provider"] = told.pop("providerID")
+        told["provider"] = provider_name(told.pop("providerID"))
     return told
 
 
@@ -486,6 +517,27 @@ def apply_steps(
             else:  # REVERT_OP: the value before the run
                 field = "phone_home"
                 store.update_chart(who, pid, {field: SEEDS["other_patient"][field]})
+        elif op == REPOINT_INSURANCE_OP:
+            store.repoint(who, "insurance_data", "pid", ids["other_patient"], new_pid)
+        elif op == REPOINT_CONTACT_OP:
+            store.repoint(who, "contact", "foreign_id", ids["other_patient"], new_pid)
+        elif op == MOVE_HISTORY_OP:
+            store.repoint(who, "history_data", "pid", new_pid, ids["other_patient"])
+        elif op == FLIP_COLLEAGUE_SETTING_OP:
+            store.con.execute(
+                "UPDATE user_settings SET setting_value = CASE setting_value "
+                "WHEN '0' THEN '1' ELSE '0' END WHERE setting_user = ?",
+                (ids[OTHER],),
+            )
+        elif op == RESET_COLLEAGUE_PASSWORD_OP:
+            store.con.execute(
+                "UPDATE users_secure SET password = ? WHERE username = ?",
+                ("$2y$10$reset" + OTHER, OTHER),
+            )
+            store.log(who, "security-administration-update", 0, "UPDATE users_secure")
+        elif op == REVERT_FIELD_OP:
+            target, column = step["target"], step["field"]
+            store.update_chart(who, ids[target], {column: SEEDS[target][column]})
         elif op == SET_USER_INFO_OP:
             store.set_user_info(who, step["user"], step["value"])
         elif op == "overwrite_chart":
