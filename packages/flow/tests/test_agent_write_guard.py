@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from pathlib import Path
 
 import pytest
@@ -188,3 +189,61 @@ def test_the_reply_and_receipt_say_who_declared_each_value(
     assert (
         first_build and first_build != other_doc["evidence"]["executor"]["build_sha256"]
     )
+
+
+def _saturate_pool() -> threading.Event:
+    """Fill the guard's read-back pool so the next job waits in its queue."""
+
+    from openadapt_flow.integrations.agents import _POOL
+
+    release = threading.Event()
+    for _ in range(_POOL._max_workers):
+        _POOL.submit(release.wait, 30)
+    return release
+
+
+def test_a_read_back_queued_behind_a_full_pool_survives_a_timeout(
+    portal: Portal, tmp_path: Path
+) -> None:
+    guard = _guard(portal, tmp_path)
+    blockers: list[threading.Event] = []
+
+    async def write():
+        out = await asyncio.to_thread(portal.save_order, **ORDER)
+        blockers.append(_saturate_pool())  # the read-back will queue
+        return out
+
+    async def timed_out():
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0.5):
+                await guard.arun(ORDER, write)
+
+    try:
+        asyncio.run(timed_out())
+    finally:
+        for release in blockers:
+            release.set()
+    retry = guard.run(ORDER, _write(portal, ORDER))
+    assert retry["verified"] is True and retry["not_sent_again"] is True
+    assert portal.posts == 1 and len(portal.orders()) == 1
+
+
+def test_a_first_read_queued_behind_a_full_pool_writes_nothing(
+    portal: Portal, tmp_path: Path
+) -> None:
+    guard = _guard(portal, tmp_path)
+    release = _saturate_pool()
+
+    async def timed_out():
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0.3):
+                await guard.arun(
+                    ORDER, lambda: asyncio.to_thread(portal.save_order, **ORDER)
+                )
+
+    try:
+        asyncio.run(timed_out())
+    finally:
+        release.set()
+    assert portal.posts == 0
+    assert guard.run(ORDER, _write(portal, ORDER))["verified"] is True
