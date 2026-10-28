@@ -9,13 +9,24 @@ tool, with the same name and arguments, that goes through the verifier:
 2. Before the write, the system of record is read. If it can't be read, the
    tool doesn't write and says so.
 3. The tool writes, the way it always did.
-4. The system of record is read again. The tool returns a verified receipt or
-   a refusal. A refused write is held: the same call is not made again until
-   a person has checked the record.
+4. The system of record is read again, also when the call is cancelled or
+   times out after the write may have been sent. The tool returns a verified
+   receipt or a refusal.
 
-The adapters are :mod:`.claude_sdk`, :mod:`.openai_agents`, :mod:`.langgraph`
-and :mod:`.crewai`, each behind its own extra. They share :class:`WriteGuard`,
-which works with any framework or none. See ``docs/AGENT_FRAMEWORKS.md``.
+``verified: true`` means the system of record shows exactly the write the
+call declared. It does not mean the agent picked the right record: values
+the agent supplies are its own (``values_declared_by`` says which, and the
+receipt binds it), so pin any value that names the record or the tenant.
+
+Within one process, a refused write is held (the same values are refused
+until a person checks), and a write whose reply was lost to a cancellation
+is not sent again: the retry gets the first result. This is a convenience
+against retries, not a guarantee across processes.
+
+The adapters are :mod:`.claude_sdk`, :mod:`.openai_agents` and
+:mod:`.langgraph` (each behind its own extra) and :mod:`.crewai`. They share
+:class:`WriteGuard`, which works with any framework or none. See
+``docs/AGENT_FRAMEWORKS.md``.
 """
 
 from __future__ import annotations
@@ -25,6 +36,7 @@ import hashlib
 import inspect
 import json
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Mapping, Optional, Union
 
@@ -40,6 +52,8 @@ __all__ = ["ContractLike", "WriteGuard", "reply_text"]
 
 ContractLike = Union[WriteContract, str, Path, Mapping[str, Any]]
 DEFAULT_WORKDIR = "~/.openadapt/verify"
+#: The reads run here, so a cancelled caller can still wait for them.
+_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="openadapt-verify")
 
 _DO_NOT_RETRY = (
     "Don't retry this write. A person must check the record; tell them the "
@@ -87,6 +101,7 @@ class WriteGuard:
         self.agent_id = agent_id
         self.workdir = Path(workdir).expanduser()
         self._held: set[str] = set()
+        self._lost_replies: dict[str, dict] = {}
         self._lock = threading.Lock()
 
     # -- before the write ------------------------------------------------------
@@ -119,24 +134,58 @@ class WriteGuard:
             pending, refusal = self._begin(arguments)
             if refusal is not None:
                 return refusal
-            output, attempted = _call(write)
-            return self._finish(pending, output, attempted)
+            try:
+                output = write()
+            except Exception as exc:  # the write may still have been sent
+                output = _failed(exc)
+            except BaseException:
+                # Interrupted (KeyboardInterrupt, SystemExit): read back first,
+                # and keep the result for a retry, then let it through.
+                self._lost(pending, self._finish(pending, "interrupted", True))
+                raise
+            if inspect.isawaitable(output):
+                raise TypeError("write() returned an awaitable; use arun")
+            return self._finish(pending, output, True)
 
     async def arun(
         self, arguments: Mapping[str, Any], write: Callable[[], Awaitable[Any]]
     ) -> dict:
-        """:meth:`run` for an async ``write``; the reads run off the loop."""
+        """:meth:`run` for an async ``write``; the reads run off the loop.
 
-        await asyncio.to_thread(self._lock.acquire)
+        A cancelled call (a framework's tool timeout, ``asyncio.timeout``)
+        still reads the write back before the cancellation goes on, and an
+        identical retry gets that result instead of a second write.
+        """
+
+        # Poll rather than block in a thread: a waiter cancelled here must
+        # not take the lock later and never release it.
+        while not self._lock.acquire(blocking=False):
+            await asyncio.sleep(0.01)
         try:
-            pending, refusal = await asyncio.to_thread(self._begin, arguments)
+            begun = _POOL.submit(self._begin, arguments)
+            try:
+                pending, refusal = await asyncio.wrap_future(begun)
+            except asyncio.CancelledError:
+                pending, refusal = begun.result()
+                if refusal is None:
+                    # The store was read, nothing was written.
+                    pending[0].baseline_path.unlink(missing_ok=True)
+                raise
             if refusal is not None:
                 return refusal
             try:
-                output, attempted = await write(), True
+                output = await write()
+            except asyncio.CancelledError:
+                self._lost(pending, self._finish(pending, "cancelled", True))
+                raise
             except Exception as exc:  # the write may still have been sent
-                output, attempted = _failed(exc), True
-            return await asyncio.to_thread(self._finish, pending, output, attempted)
+                output = _failed(exc)
+            finished = _POOL.submit(self._finish, pending, output, True)
+            try:
+                return await asyncio.wrap_future(finished)
+            except asyncio.CancelledError:
+                self._lost(pending, finished.result())
+                raise
         finally:
             self._lock.release()
 
@@ -146,10 +195,20 @@ class WriteGuard:
         except ValueError as exc:
             return None, _not_written(str(exc))
         key = _digest(values)
+        if key in self._lost_replies:
+            # The same write was made and read back, but its reply never
+            # reached the caller (cancelled, timed out). Don't send it again.
+            reply = dict(self._lost_replies[key])
+            reply["not_sent_again"] = True
+            reply["next"] = (
+                "This write was already made once, and its result is above; "
+                "it was not sent again."
+            )
+            return None, reply
         if key in self._held:
             return None, _not_written(
-                "this write was refused before and is held until a person "
-                "checks the record",
+                "the same write was refused earlier in this process; it is "
+                "held until a person checks the record",
                 held=True,
             )
         try:
@@ -160,27 +219,32 @@ class WriteGuard:
 
     def _finish(self, pending: Any, output: Any, attempted: bool) -> dict:
         pending, key = pending
+        declared_by = {
+            name: ("operator" if name in self.pinned else "agent")
+            for name in self.params
+        }
         result = verify_write(
             pending,
-            executor={"kind": "agent", "id": self.agent_id},
+            executor={
+                "kind": "agent",
+                "id": self.agent_id,
+                # Enters the receipt as a digest: which values the operator
+                # pinned and which the agent's tool call declared.
+                "build": "values-declared-by:"
+                + json.dumps(declared_by, sort_keys=True),
+            },
             write_attempted=attempted,
         )
         reply = result.to_dict()
+        reply["values_declared_by"] = declared_by
         reply["tool_output"] = output
         if not result.verified:
             self._held.add(key)
             reply["next"] = _DO_NOT_RETRY
         return reply
 
-
-def _call(write: Callable[[], Any]) -> tuple[Any, bool]:
-    try:
-        output = write()
-    except Exception as exc:  # the write may still have been sent
-        return _failed(exc), True
-    if inspect.isawaitable(output):
-        raise TypeError("write() returned an awaitable; use arun")
-    return output, True
+    def _lost(self, pending: Any, reply: dict) -> None:
+        self._lost_replies[pending[1]] = reply
 
 
 def _failed(exc: Exception) -> str:

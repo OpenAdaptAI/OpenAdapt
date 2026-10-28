@@ -622,8 +622,10 @@ jobs:
           --extra claude-agent-sdk --extra openai-agents --extra langgraph
       - name: Install CrewAI (pinned, outside the lock)
         # CrewAI is no extra of Flow: every release pins a chromadb with open
-        # advisories, and current releases need mcp<2 and openai<3. The
-        # adapter is tested against this one version, in this job only.
+        # critical advisories and no patched release (GHSA-f4j7-r4q5-qw2c,
+        # GHSA-36p7-vc44-83pf; revisit when one ships), and current releases
+        # need mcp<2 and openai<3. The adapter is tested against this one
+        # version, in this job only.
         run: uv pip install "crewai==1.6.1"
       - name: Install and launch Playwright browser
         timeout-minutes: 12

@@ -30,7 +30,7 @@ from claude_agent_sdk import (  # noqa: E402
 )
 from claude_agent_sdk._internal.transport import Transport  # noqa: E402
 
-from openadapt_flow.integrations.agents.claude_sdk import verified  # noqa: E402
+from openadapt_flow.integrations.agents.claude_sdk import only, verified  # noqa: E402
 from tests._orders_portal import Portal, portal  # noqa: E402,F401 - fixture
 
 ORDER = {"customer": "Acme", "product": "Desk lamp", "units": "3"}
@@ -185,6 +185,14 @@ def test_the_agent_gets_a_refusal_for_an_unkept_order(
     assert cli.result.get("isError") is True
 
 
+def test_only_turns_off_the_built_in_tools(portal: Portal, tmp_path: Path) -> None:
+    options = only({"orders": _server(portal, tmp_path)}, max_turns=2)
+    assert options.tools == []
+    assert options.allowed_tools == ["mcp__orders"]
+    with pytest.raises(ValueError, match="allowed_tools"):
+        only({"orders": _server(portal, tmp_path)}, allowed_tools=["Bash"])
+
+
 @pytest.mark.skipif(
     not (
         os.environ.get("OPENADAPT_REAL_MODEL_TESTS") == "1"
@@ -195,9 +203,8 @@ def test_the_agent_gets_a_refusal_for_an_unkept_order(
 )
 def test_real_model_gets_a_receipt(portal: Portal, tmp_path: Path) -> None:
     async def run() -> ResultMessage:
-        options = ClaudeAgentOptions(
-            mcp_servers={"orders": _server(portal, tmp_path)},
-            allowed_tools=["mcp__orders__save_order"],
+        options = only(
+            {"orders": _server(portal, tmp_path)},
             model="claude-haiku-5-5",
             max_turns=4,
         )
