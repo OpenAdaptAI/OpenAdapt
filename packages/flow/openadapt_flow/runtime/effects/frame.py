@@ -898,10 +898,21 @@ def judge_frame(
                 fields = changed(name, before, after)  # type: ignore[arg-type]
                 stray = [f for f in fields if f not in may_change]
                 if other_on_target(name, key, before, after):
-                    if fields and not (set(fields) & may_change):
-                        # Another actor wrote only fields this save doesn't
-                        # declare: theirs. A declared field moved by another
-                        # actor never passes: the saved value may not stand.
+                    ref, hashed = ref_of(name, key, before, after)
+                    if (
+                        fields
+                        and not (set(fields) & may_change)
+                        and attribution is not None
+                        and attribution.write_events
+                        and attribution.table_field
+                        and not (actors(name, ref, hashed) & self_ids)
+                    ):
+                        # Another actor wrote, by a write to this table, only
+                        # fields this save doesn't declare, and the bot wrote
+                        # nothing to this record: theirs. A declared field
+                        # moved by another actor never passes (the saved
+                        # value may not stand), and nor does a record both
+                        # wrote, since nothing says whose change is whose.
                         concurrent.append(
                             FrameChange(name, "changed", "other", fields, key=key)
                         )
