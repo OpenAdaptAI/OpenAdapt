@@ -192,6 +192,27 @@ and three `openadapt-flow replay` runs, each made to stop by one added step.
 `rollback qualify` passed both halt points (before and after the save).
 None of the runs made a model call.
 
+**OpenEMR, live:** the pinned local fixture (its own stack), a real browser,
+the scoreboard's New Patient program, and the whole `openemr` database read
+through a SELECT-only user, skipping the reviewed allow-list of tables
+OpenEMR writes on its own (logs, sessions, id registries). The program
+filled 28 steps of the form and stopped before the save.
+
+| Read | Outcome | What the read showed |
+| --- | --- | --- |
+| Allow-list only | `RECONCILIATION_REQUIRED` | 2 `background_services` rows (`next_run`) and 4 `users` rows (`last_updated`, `uuid`) changed, all bookkeeping OpenEMR does on its own while a user is signed in |
+| Those three columns ignored as reviewed bookkeeping | `HALTED_BEFORE_EFFECT` (nothing landed) | Nothing else in the database moved: the filled form saved nothing |
+
+The first row shows what the whole-database read is for: a column nobody
+listed shows up, by name, rather than being assumed harmless. Which columns
+to ignore is a person's reviewed decision per app, and the report lists
+them.
+
+Not measured yet on OpenEMR: a stop after the save. On this stack the
+recorded program stops at its own scroll step (step 28 of 35), before the
+save, and the fixture ships with chart deletion turned off
+(`allow_pat_delete`), so there is no compensation to run.
+
 
 ## What this doesn't do
 

@@ -75,6 +75,13 @@ ALLOW_TABLES = [
     "clinical_rules_log",
 ]
 RO_USER = "rollback_ro"
+#: Columns OpenEMR moves on its own while a signed-in user works, found by the
+#: first live pass (background job schedule; user rows touched at sign-in).
+#: Ignoring them is a reviewed decision; the "_reviewed" cases use it.
+REVIEWED_IGNORE = {
+    "background_services": ["next_run"],
+    "users": ["last_updated", "uuid"],
+}
 
 
 def _clone_state(source: Path, root: Path) -> Path:
@@ -121,6 +128,23 @@ def _fixture(root: Path) -> Any:
     return PortFixture(root / "state")
 
 
+def _plain_bundle(out: Path, workflow: Any) -> None:
+    """Save a harness-edited copy as an ordinary bundle.
+
+    The source is the scoreboard's agent-compiled program; the copy here adds
+    one step that stops the run on a test copy. It is not an agent draft, so
+    the JIT admission gate (what the scoreboard tests) isn't in play: the
+    draft markers and origin are dropped. The rollback is what's measured.
+    """
+    from openadapt_flow.jit.lifecycle import ADMISSION_FILE, DRAFT_MARKER
+
+    workflow.origin = None
+    workflow.undo_steps = []
+    workflow.save(out)
+    for name in (DRAFT_MARKER, ADMISSION_FILE):
+        (out / name).unlink(missing_ok=True)
+
+
 def _variant(bundle: Path, out: Path, *, before: str) -> Path:
     from openadapt_flow.ir import Step, Workflow
 
@@ -145,8 +169,7 @@ def _variant(bundle: Path, out: Path, *, before: str) -> Path:
             }
         ),
     )
-    workflow.undo_steps = []
-    workflow.save(out)
+    _plain_bundle(out, workflow)
     return out
 
 
@@ -172,8 +195,7 @@ def _after_save(bundle: Path, out: Path) -> Path:
             }
         )
     )
-    workflow.undo_steps = []
-    workflow.save(out)
+    _plain_bundle(out, workflow)
     return out
 
 
@@ -211,7 +233,31 @@ def main(argv: list[str] | None = None) -> int:
     started = time.monotonic()
     fx._compose("up", "-d", "--pull", "never", timeout_s=600.0)
     try:
-        fx.reset()
+        # A fresh stack installs OpenEMR on its first start; let that finish
+        # before the baseline replaces the database.
+        fx._wait_ready(timeout_s=1200.0)
+        # The baseline's encryption ``keys`` rows belong to the stack it was
+        # taken on; this stack's own install made new ones, which its files
+        # match. Keep them and put them back after every reset (as the
+        # independent-verification harness does), or every page fails.
+        keys_sql = (
+            b"USE openemr;\n"
+            + fx._compose(
+                "exec",
+                "-T",
+                "db",
+                "sh",
+                "-c",
+                'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" exec mariadb-dump -uroot openemr keys',
+                timeout_s=120.0,
+            ).stdout
+        )
+
+        def reset() -> None:
+            fx.reset()
+            fx._db(input_bytes=keys_sql)
+
+        reset()
         password = secrets.token_urlsafe(24)
         fx._db(
             f"CREATE USER IF NOT EXISTS '{RO_USER}'@'%' IDENTIFIED BY '{password}'; "
@@ -234,15 +280,23 @@ def main(argv: list[str] | None = None) -> int:
         def connect() -> Any:
             return ro.connect(container, RO_USER, password, "openemr")
 
+        def before_save(b: Path, o: Path) -> Path:
+            return _variant(b, o, before=BEFORE_SAVE_STEP)
+
+        # (bundle maker, columns ignored as reviewed app bookkeeping)
         cases = {
-            "before_save": lambda b, o: _variant(b, o, before=BEFORE_SAVE_STEP),
-            "after_save": _after_save,
+            "before_save": (before_save, {}),
+            "after_save": (_after_save, {}),
+            "before_save_reviewed": (before_save, REVIEWED_IGNORE),
+            "after_save_reviewed": (_after_save, REVIEWED_IGNORE),
         }
         with tempfile.TemporaryDirectory(prefix="rollback-openemr-") as tmp:
             work = Path(tmp)
-            for n, (name, make) in enumerate(cases.items()):
-                fx.reset()
-                values = task.item_values(900 + n)
+            for name, (make, ignore) in cases.items():
+                reset()
+                # The recording's own synthetic values: the program's screen
+                # checks quote them (step_007 checks the recorded last name).
+                values = task.item_values(0)
                 bundle = make(args.bundle, work / f"bundle-{name}")
                 workflow = Workflow.load(bundle)
                 verifier = SqlRecordVerifier(
@@ -253,6 +307,7 @@ def main(argv: list[str] | None = None) -> int:
                         dialect="mysql", read_config=read, allow_tables=ALLOW_TABLES
                     ),
                     read_records=records_reader(verifier),
+                    ignore_columns=ignore,
                 )
                 with sync_playwright() as p:
                     browser = launch_chromium(p.chromium, headless=True)
@@ -297,10 +352,14 @@ def main(argv: list[str] | None = None) -> int:
                     finally:
                         browser.close()
                 rollback = report.rollback
+                failed = next((r for r in report.results if not r.ok), None)
+                keep = root / "runs" / name
+                if keep.exists():
+                    shutil.rmtree(keep)
+                shutil.copytree(run_dir, keep)
                 rows[name] = {
-                    "stopped_at": next(
-                        (r.step_id for r in report.results if not r.ok), None
-                    ),
+                    "stopped_at": failed.step_id if failed else None,
+                    "stop_error": (failed.error or "")[:400] if failed else None,
                     "steps_run": len(report.results),
                     "transaction_outcome": report.transaction_outcome,
                     "rollback_status": rollback.status if rollback else None,
@@ -316,7 +375,7 @@ def main(argv: list[str] | None = None) -> int:
                     "seconds": seconds,
                 }
                 print(name, json.dumps(rows[name])[:600], flush=True)
-        fx.reset()
+        reset()
     finally:
         if not args.keep_up:
             fx._compose("down", "-v", timeout_s=300.0)

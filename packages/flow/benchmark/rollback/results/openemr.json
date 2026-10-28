@@ -1,0 +1,163 @@
+{
+  "schema": "openadapt.rollback-measurement/v1",
+  "app": "openemr",
+  "mode": "live (pinned OpenEMR fixture, real browser, whole-database read)",
+  "bundle": "scoreboard openemr_referral program bundle (New Patient)",
+  "allow_tables": [
+    "log",
+    "log_comment_encrypt",
+    "api_log",
+    "sessions",
+    "users_secure",
+    "uuid_registry",
+    "uuid_mapping",
+    "sequences",
+    "recent_patients",
+    "user_settings",
+    "clinical_rules_log"
+  ],
+  "measured_at": "2026-10-28T16:15:06-0400",
+  "host": "macOS-15.7.3-arm64-arm-64bit",
+  "load_1m": 14.15,
+  "seconds": 267.8,
+  "rows": {
+    "before_save": {
+      "stopped_at": "step_028",
+      "stop_error": "Step 'step_028' (scroll by (0, -3600)): closed-loop scroll exhausted its budget (7200px of 9000px allowed, 2.5x the recorded distance) without the anchor of step 'step_029' (click 'Unassigned') resolving \u2014 target never came into view; run aborted",
+      "steps_run": 29,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "rollback_status": "not_rolled_back",
+      "rollback_reason": "step step_022: no compensation a person approved for this step (declare one, or accept a verified proposal). Still different: background_services: 2 changed, columns next_run; users: 4 changed, columns last_updated, uuid",
+      "after_stop_diff": {
+        "background_services": {
+          "added": 0,
+          "removed": 0,
+          "changed": 2,
+          "changed_columns": [
+            "next_run"
+          ]
+        },
+        "users": {
+          "added": 0,
+          "removed": 0,
+          "changed": 4,
+          "changed_columns": [
+            "last_updated",
+            "uuid"
+          ]
+        }
+      },
+      "remaining_diff": {
+        "background_services": {
+          "added": 0,
+          "removed": 0,
+          "changed": 2,
+          "changed_columns": [
+            "next_run"
+          ]
+        },
+        "users": {
+          "added": 0,
+          "removed": 0,
+          "changed": 4,
+          "changed_columns": [
+            "last_updated",
+            "uuid"
+          ]
+        }
+      },
+      "steps": [
+        {
+          "step_id": "step_022",
+          "decision": "refused"
+        }
+      ],
+      "diff_file_written": true,
+      "model_calls": 0,
+      "seconds": 19.2
+    },
+    "after_save": {
+      "stopped_at": "step_028",
+      "stop_error": "Step 'step_028' (scroll by (0, -3600)): closed-loop scroll exhausted its budget (7200px of 9000px allowed, 2.5x the recorded distance) without the anchor of step 'step_029' (click 'Unassigned') resolving \u2014 target never came into view; run aborted",
+      "steps_run": 29,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "rollback_status": "not_rolled_back",
+      "rollback_reason": "step step_022: no compensation a person approved for this step (declare one, or accept a verified proposal). Still different: background_services: 2 changed, columns next_run; users: 4 changed, columns last_updated, uuid",
+      "after_stop_diff": {
+        "background_services": {
+          "added": 0,
+          "removed": 0,
+          "changed": 2,
+          "changed_columns": [
+            "next_run"
+          ]
+        },
+        "users": {
+          "added": 0,
+          "removed": 0,
+          "changed": 4,
+          "changed_columns": [
+            "last_updated",
+            "uuid"
+          ]
+        }
+      },
+      "remaining_diff": {
+        "background_services": {
+          "added": 0,
+          "removed": 0,
+          "changed": 2,
+          "changed_columns": [
+            "next_run"
+          ]
+        },
+        "users": {
+          "added": 0,
+          "removed": 0,
+          "changed": 4,
+          "changed_columns": [
+            "last_updated",
+            "uuid"
+          ]
+        }
+      },
+      "steps": [
+        {
+          "step_id": "step_022",
+          "decision": "refused"
+        }
+      ],
+      "diff_file_written": true,
+      "model_calls": 0,
+      "seconds": 17.7
+    },
+    "before_save_reviewed": {
+      "stopped_at": "step_028",
+      "stop_error": "Step 'step_028' (scroll by (0, -3600)): closed-loop scroll exhausted its budget (7200px of 9000px allowed, 2.5x the recorded distance) without the anchor of step 'step_029' (click 'Unassigned') resolving \u2014 target never came into view; run aborted",
+      "steps_run": 29,
+      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "rollback_status": "nothing_landed",
+      "rollback_reason": "after the stop nothing the run did is in the system of record",
+      "after_stop_diff": {},
+      "remaining_diff": {},
+      "steps": [],
+      "diff_file_written": false,
+      "model_calls": 0,
+      "seconds": 17.1
+    },
+    "after_save_reviewed": {
+      "stopped_at": "step_028",
+      "stop_error": "Step 'step_028' (scroll by (0, -3600)): closed-loop scroll exhausted its budget (7200px of 9000px allowed, 2.5x the recorded distance) without the anchor of step 'step_029' (click 'Unassigned') resolving \u2014 target never came into view; run aborted",
+      "steps_run": 29,
+      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "rollback_status": "nothing_landed",
+      "rollback_reason": "after the stop nothing the run did is in the system of record",
+      "after_stop_diff": {},
+      "remaining_diff": {},
+      "steps": [],
+      "diff_file_written": false,
+      "model_calls": 0,
+      "seconds": 18.5
+    }
+  }
+}
