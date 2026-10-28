@@ -5057,7 +5057,6 @@ class RollbackRecord(BaseModel):
     #: collection read through the effect verifier.
     scope: Literal["database", "collection"]
     allow_tables: list[str] = Field(default_factory=list)
-    ignored_columns: dict[str, list[str]] = Field(default_factory=dict)
     before_sha256: Optional[str] = None
     after_stop_sha256: Optional[str] = None
     final_sha256: Optional[str] = None
@@ -5073,10 +5072,9 @@ class RollbackRecord(BaseModel):
     conflicts: int = 0
     #: Voided records left in place by a ``void`` compensation.
     retained_rows: int = 0
-    #: The app profile that names the app's own bookkeeping
-    #: (``rollback.profile``), and how many changed rows it excused.
+    #: The app's bookkeeping profile the reads applied (``rollback.profile``),
+    #: as ``app/version``.
     profile_id: Optional[str] = None
-    profile_rows: int = 0
     #: The verifier's own whole-database diff (``openadapt_flow.verifier``)
     #: agreed with the final check. None when it wasn't available or didn't
     #: apply (a collection read, attribution, or voided rows).

@@ -8,17 +8,16 @@ one headless Chromium at a time.
 
 The workflow is the scoreboard's compiled New Patient referral (it starts on
 the signed-in blank form, ``scoreboard/tasks/openemr.py``). The rollback
-reads the whole ``openemr`` database through a SELECT-only user
-(``rollback_readonly_db``), skipping the reviewed allow-list of tables
-OpenEMR writes on its own. Cases, each made to stop by one added step whose
-screen check never passes:
+reads the whole ``openemr`` database in one read-only transaction through one
+``docker exec`` session (MariaDB root, as the RL grader reads it;
+``rollback_readonly_db``). The run is made to stop before the save by one
+added step whose screen check never passes, so the form is filled and nothing
+is saved. Two reads of that stop:
 
-- ``before_save``: the form is filled, nothing is saved;
-- ``after_save``: the chart is saved and the bundle declares no
-  compensation (OpenEMR, as configured, offers no way to delete a chart).
-  In production that save can't be undone, so it runs only after a person
-  approves it; the harness plays that approval and shows what the person gets
-  when the run then stops: the exact rows to repair.
+- ``before_save_no_profile``: every changed row counts as the run's;
+- ``before_save_app_profile``: OpenEMR's shared bookkeeping profile
+  (``openadapt_flow.app_profiles``, ``openemr``; the same rules the verifier's
+  frame and the RL grader use) is applied by the read itself.
 
 Synthetic data only (example.invalid, 555-01xx); no model calls.
 
@@ -35,7 +34,6 @@ import json
 import os
 import platform
 import re
-import secrets
 import shutil
 import sys
 import tempfile
@@ -59,7 +57,6 @@ UI_PORT, API_PORT = "9561", "9560"
 PROJECT = "openadapt-openemr-rollback"
 SAVE_STEP = "step_034"
 BEFORE_SAVE_STEP = "step_033"
-RO_USER = "rollback_ro"
 
 
 def _clone_state(source: Path, root: Path) -> Path:
@@ -190,8 +187,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--keep-up", action="store_true")
     parser.add_argument(
         "--profile",
-        default=None,
-        help="The app's frame-exclusion profile (YAML), shared with the verifier",
+        default="openemr",
+        help="The app's bookkeeping profile (openadapt_flow.app_profiles)",
     )
     args = parser.parse_args(argv)
     if not os.environ.get("DOCKER_HOST"):
@@ -241,34 +238,19 @@ def main(argv: list[str] | None = None) -> int:
             fx._db(input_bytes=keys_sql)
 
         reset()
-        password = secrets.token_urlsafe(24)
-        fx._db(
-            f"CREATE USER IF NOT EXISTS '{RO_USER}'@'%' IDENTIFIED BY '{password}'; "
-            f"ALTER USER '{RO_USER}'@'%' IDENTIFIED BY '{password}'; "
-            f"GRANT SELECT ON openemr.* TO '{RO_USER}'@'%'; FLUSH PRIVILEGES;"
-        )
-        os.environ["ROLLBACK_RO_PASSWORD"] = password
         container = fx._compose("ps", "-q", "db").stdout.decode().strip()
-        read = {
-            "sql_driver": "rollback_readonly_db",
-            "sql_connect_args": {
-                "container": container,
-                "user": RO_USER,
-                "database": "openemr",
-            },
-            "sql_password_env": "ROLLBACK_RO_PASSWORD",
-        }
         import rollback_readonly_db as ro
 
-        def connect() -> Any:
-            return ro.connect(container, RO_USER, password, "openemr")
+        def session() -> Any:
+            return ro.connect(container, "openemr")
+
+        def one_shot() -> Any:
+            return ro.OneShotConnection(container, "openemr")
 
         def before_save(b: Path, o: Path) -> Path:
             return _variant(b, o, before=BEFORE_SAVE_STEP)
 
-        from openadapt_flow.rollback_state import AppProfile
-
-        profile = AppProfile.load(args.profile) if args.profile else None
+        profile = args.profile or None
         # (bundle maker, app profile): every change counts, or the app's own
         # versioned bookkeeping profile (shared with the verifier and the RL
         # grader) excuses what it names.
@@ -288,12 +270,13 @@ def main(argv: list[str] | None = None) -> int:
                 bundle = make(args.bundle, work / f"bundle-{name}")
                 workflow = Workflow.load(bundle)
                 verifier = SqlRecordVerifier(
-                    connect, "SELECT * FROM patient_data", timeout_s=20.0
+                    one_shot, "SELECT * FROM patient_data", timeout_s=20.0
                 )
                 plan = RollbackPlan(
-                    DatabaseReader(dialect="mysql", read_config=read),
+                    DatabaseReader(
+                        dialect="mysql", connect=session, profile=case_profile
+                    ),
                     read_records=records_reader(verifier),
-                    profile=case_profile,
                 )
                 with sync_playwright() as p:
                     browser = launch_chromium(p.chromium, headless=True)
@@ -373,7 +356,7 @@ def main(argv: list[str] | None = None) -> int:
         "app": "openemr",
         "mode": "live (pinned OpenEMR fixture, real browser, whole-database read)",
         "bundle": "scoreboard openemr_referral program bundle (New Patient)",
-        "profile": profile.id if profile is not None else None,
+        "profile": profile,
         "measured_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "host": platform.platform(),
         "load_1m": round(os.getloadavg()[0], 2),

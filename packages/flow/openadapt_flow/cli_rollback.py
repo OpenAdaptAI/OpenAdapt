@@ -69,7 +69,6 @@ def _cmd_rollback_qualify(args: argparse.Namespace) -> int:
     from openadapt_flow.deployment import load_deployment
     from openadapt_flow.ir import Workflow
     from openadapt_flow.rollback_qualify import qualify_rollback, reader_for
-    from openadapt_flow.rollback_state import AppProfile
     from openadapt_flow.undo_proposal import (
         DeploymentUndoTestCopy,
         Sources,
@@ -96,9 +95,6 @@ def _cmd_rollback_qualify(args: argparse.Namespace) -> int:
     target = DeploymentUndoTestCopy(cfg, deployment_path=Path(args.config))
     workflow = Workflow.load(bundle)
     section = getattr(cfg, "rollback", None)
-    ignore = {
-        k: list(v) for k, v in (section.ignore_columns if section else {}).items()
-    }
     try:
         report, new = qualify_rollback(
             workflow,
@@ -110,13 +106,7 @@ def _cmd_rollback_qualify(args: argparse.Namespace) -> int:
                 network_lines=load_network_lines(args.recording),
             ),
             work_dir=Path(args.work_dir) if args.work_dir else None,
-            ignore_columns=ignore,
             allow_delete=bool(section.allow_delete) if section else False,
-            profile=(
-                AppProfile.load(section.profile)
-                if section is not None and section.profile
-                else None
-            ),
         )
     except ValueError as exc:
         print(f"rollback qualify REFUSED: {exc}", file=sys.stderr)

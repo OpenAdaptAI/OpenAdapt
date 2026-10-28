@@ -146,9 +146,7 @@ def halt_point(
     reader: StateReader,
     bundle_dir: Path,
     run_dir: Path,
-    ignore_columns: Optional[dict[str, list[str]]] = None,
     allow_delete: bool = False,
-    profile: Any = None,
 ) -> tuple[bool, str, Optional[RollbackRecord]]:
     """Reset, read, run steps ``[:end]``, roll back; did the store come back?"""
     try:
@@ -185,10 +183,8 @@ def halt_point(
         before=before,
         runner=CopyRunner(target),
         read_records=getattr(target, "read_records", None),
-        ignore_columns=ignore_columns,
         assume_stopped=True,
         allow_delete=allow_delete,
-        profile=profile,
     )
     assert record is not None
     try:
@@ -227,9 +223,7 @@ def qualify_rollback(
     reader: StateReader,
     sources: Sources,
     work_dir: Optional[Path] = None,
-    ignore_columns: Optional[dict[str, list[str]]] = None,
     allow_delete: bool = False,
-    profile: Any = None,
 ) -> tuple[QualifyReport, dict[str, tuple[Candidate, CandidateResult]]]:
     """Run the halt matrix; return the report and the new compensations that
     passed (for :func:`openadapt_flow.undo_proposal.write_proposals`).
@@ -267,9 +261,7 @@ def qualify_rollback(
                 reader=reader,
                 bundle_dir=bundle_dir,
                 run_dir=work / slug / "before",
-                ignore_columns=ignore_columns,
                 allow_delete=allow_delete,
-                profile=profile,
             )
             report.halt_points.append(
                 HaltPoint(
@@ -329,9 +321,7 @@ def qualify_rollback(
                     reader=reader,
                     bundle_dir=stage,
                     run_dir=work / slug / f"after-{n}",
-                    ignore_columns=ignore_columns,
                     allow_delete=allow_delete,
-                    profile=profile,
                 )
                 point = HaltPoint(
                     step_id=step.id,
@@ -372,15 +362,18 @@ class CopyReader:
     scope = "collection"
 
     def __init__(self, target: Any) -> None:
-        self.target = target
+        from openadapt_flow.rollback_state import _new_key
 
-    def read(self):  # type: ignore[no-untyped-def]
+        self.target = target
+        self.key = _new_key()
+
+    def read(self, before: Any = None) -> Any:
         from openadapt_flow.rollback_state import records_snapshot
 
         records = self.target.snapshot()
         if records is None:
             raise StateUnreadable("the test copy could not be read")
-        return records_snapshot(records)
+        return records_snapshot(records, key=self.key)
 
 
 def reader_for(cfg: Any, target: Any) -> StateReader:
@@ -390,7 +383,9 @@ def reader_for(cfg: Any, target: Any) -> StateReader:
 
     section = getattr(cfg, "rollback", None)
     if section is not None and section.database is not None:
-        return DatabaseReader.from_frame_database(section.database)
+        return DatabaseReader.from_frame_database(
+            section.database, profile=section.profile
+        )
     return CopyReader(target)
 
 

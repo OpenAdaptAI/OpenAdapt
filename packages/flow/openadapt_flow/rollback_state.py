@@ -1,38 +1,47 @@
 """The whole-store read a rollback is judged by, and the diff between two.
 
-A compensation is done only when the system of record is back to what it was
-before the run: every table, every row, every column, apart from the tables
-the app writes on its own (a reviewed ``allow_tables`` list). This module
-reads that state and compares two reads. ``rollback.py`` uses it at a halt,
-and ``rollback qualify`` uses it on a test copy.
+A compensation is done only when the run's changes are gone and nothing else
+moved: every table, every row, apart from the bookkeeping the app's versioned
+profile names (``openadapt_flow.app_profiles``, shared with the verifier's
+frame and the RL grader). This module reads that state and compares two
+reads. ``rollback.py`` uses it at a halt; ``rollback qualify`` on a test copy.
 
-Two readers:
+Two readers, one snapshot shape (``runtime.effects.db_snapshot``):
 
-- :class:`DatabaseReader` reads every table of a database through
-  ``frame.database`` settings (:mod:`runtime.effects.db_snapshot`).
+- :class:`DatabaseReader` reads every table in one read-only transaction
+  (``take_snapshot``). Rows are kept as keyed MACs, never values on disk; a
+  read given the earlier read as ``before`` keeps, in memory only, the plain
+  values of the rows that differ from it. One MAC key per reader, so every
+  read of one rollback compares. The app profile's append-only tables are
+  enforced by the snapshot itself; its session tables aren't read; its column
+  rules leave those columns out of each row's MAC.
 - :class:`VerifierReader` reads one collection through an effect verifier
   (``capture_pre_state``), for an app reached only over REST or FHIR. It sees
   only that collection, and the report says so.
 
 The diff's :meth:`StateDiff.summary` holds table names, counts and column
-names, never values, so it can go into ``report.json``. The full rows a
-person needs to repair a record are in :meth:`StateDiff.to_private_json`,
-which callers write owner-only.
+names, never values, so it can go into ``report.json``.
+:meth:`StateDiff.to_private_json` holds the values the reads kept (the rows
+that changed after the run started), which callers write owner-only.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import secrets
 from dataclasses import dataclass, field
-from typing import Any, Literal, Mapping, Optional, Protocol, Sequence
-
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
 from openadapt_flow.runtime.effects.db_snapshot import (
     KEY,
     Snapshot,
     Table,
-    keyed_rows,
+    mac_key,
+    row_hash,
+    row_key_hash,
+    unpack,
+    unread_reasons,
 )
 
 
@@ -43,64 +52,93 @@ class StateUnreadable(RuntimeError):
 class StateReader(Protocol):
     """Reads the whole system of record the rollback is judged by."""
 
-    #: ``database`` (every table) or ``collection`` (one verifier read).
+    #: database (every table) or collection (one verifier read).
     scope: str
 
-    def read(self) -> Snapshot:
-        """Every table and row. Raises :class:`StateUnreadable` on failure."""
+    def read(self, before: Optional[Snapshot] = None) -> Snapshot:
+        """Every table. With before, rows that differ from it carry their
+        values (in memory only). Raises :class:."""
         ...
+
+
+def _new_key() -> bytes:
+    return mac_key(secrets.token_bytes(16))
+
+
+#: The MAC key for snapshots built without one (one per process, as in the
+#: verifier's ``capture_database``): reads in one process compare.
+_PROCESS_KEY = _new_key()
 
 
 @dataclass
 class DatabaseReader:
-    """Every table of a database, from ``frame.database`` settings."""
+    """Every table of a database, from frame.database-style settings.
+
+    profile is the app's bookkeeping profile (a name such as openemr,
+    or a loaded AppProfile). allow_tables are kept append-only.
+    """
 
     dialect: str
-    read_config: Mapping[str, Any]
+    read_config: Mapping[str, Any] = field(default_factory=dict)
     allow_tables: Sequence[str] = ()
-    max_rows: int = 20000
+    max_rows: int = 2000
+    profile: Any = None
+    connect: Optional[Callable[[], Any]] = None
+    key: bytes = field(default_factory=_new_key, repr=False)
     scope: str = "database"
 
     @classmethod
-    def from_frame_database(cls, database: Any) -> "DatabaseReader":
+    def from_frame_database(
+        cls, database: Any, *, profile: Any = None
+    ) -> "DatabaseReader":
         return cls(
             dialect=str(database.dialect),
             read_config=dict(database.read),
-            allow_tables=tuple(database.allow_tables),
+            allow_tables=[
+                t if isinstance(t, str) else str(getattr(t, "table", t))
+                for t in database.allow_tables
+            ],
             max_rows=int(database.max_rows),
+            profile=profile,
         )
 
-    def read(self) -> Snapshot:
-        try:
-            # The verifier's own whole-database read (openadapt_flow.verifier,
-            # #1588), when this build has it; the same take_snapshot otherwise.
-            from openadapt_flow.verifier import (  # type: ignore[import-not-found,unused-ignore]
-                capture_database,
-            )
-        except ImportError:
-            capture_database = None
-        if capture_database is not None:
-            try:
-                snapshot: Snapshot = capture_database(
-                    self.read_config,
-                    self.dialect,
-                    allow_tables=list(self.allow_tables),
-                    max_rows=self.max_rows,
-                )
-                return snapshot
-            except Exception as exc:  # noqa: BLE001 - BaselineUnreadable and kin
-                raise StateUnreadable(
-                    f"the database could not be read ({type(exc).__name__})"
-                ) from exc
-        from openadapt_flow.runtime.effects.db_snapshot import take_snapshot
-        from openadapt_flow.verify_run import _db_connect
+    def _profile(self) -> Any:
+        if self.profile is None or not isinstance(self.profile, str):
+            return self.profile
+        from openadapt_flow.app_profiles import load_profile
 
+        return load_profile(self.profile)
+
+    @property
+    def profile_id(self) -> Optional[str]:
+        p = self._profile()
+        return None if p is None else f"{p.app}/{p.version}"
+
+    def read(self, before: Optional[Snapshot] = None) -> Snapshot:
+        from openadapt_flow.runtime.effects.db_snapshot import take_snapshot
+
+        profile = self._profile()
+        kwargs: dict[str, Any] = {}
+        if profile is not None:
+            kwargs["optional_modes"] = {
+                t["table"]: t["mode"] for t in profile.allow_tables()
+            }
+            kwargs["ignore"] = profile.ignore_columns()
         try:
+            if self.connect is not None:
+                connect = self.connect
+            else:
+                from openadapt_flow.verify_run import _db_connect
+
+                connect = _db_connect(self.read_config)
             return take_snapshot(
-                _db_connect(self.read_config),
+                connect,
                 self.dialect,  # type: ignore[arg-type]
-                skip=list(self.allow_tables),
+                key=self.key,
+                modes=dict.fromkeys(self.allow_tables, "append_only"),
                 max_rows=self.max_rows,
+                before=before,
+                **kwargs,
             )
         except Exception as exc:  # noqa: BLE001 - an unreadable store decides nothing
             raise StateUnreadable(
@@ -113,12 +151,12 @@ class DatabaseReader:
         """The verifier's own ``diff_database`` of two reads (table -> counts),
         or None when this build doesn't have it."""
         try:
-            from openadapt_flow.verifier import (  # type: ignore[import-not-found,unused-ignore]
-                diff_database,
-            )
+            from openadapt_flow.verifier import diff_database
         except ImportError:
             return None
-        moved = diff_database(before, after, allow_tables=list(self.allow_tables))
+        moved = diff_database(
+            before, after, allow_tables=list(self.allow_tables), key=self.key
+        )
         return {str(k): v for k, v in dict(moved).items()}
 
 
@@ -128,9 +166,10 @@ class VerifierReader:
 
     verifier: Any
     table: str = "records"
+    key: bytes = field(default_factory=_new_key, repr=False)
     scope: str = "collection"
 
-    def read(self) -> Snapshot:
+    def read(self, before: Optional[Snapshot] = None) -> Snapshot:
         try:
             state = self.verifier.capture_pre_state()
         except Exception as exc:  # noqa: BLE001
@@ -139,30 +178,60 @@ class VerifierReader:
             ) from exc
         if getattr(state, "reachable", False) is not True:
             raise StateUnreadable("the system of record could not be read")
-        return records_snapshot([dict(r) for r in state.records], table=self.table)
+        return records_snapshot(
+            [dict(r) for r in state.records], table=self.table, key=self.key
+        )
+
+
+def _schema_digest(columns: Sequence[str]) -> str:
+    return hashlib.sha256(json.dumps(list(columns)).encode()).hexdigest()
 
 
 def records_snapshot(
-    records: list[dict[str, Any]], *, table: str = "records"
+    records: list[dict[str, Any]],
+    *,
+    table: str = "records",
+    key: Optional[bytes] = None,
 ) -> Snapshot:
-    """A one-table snapshot of plain records.
+    """A one-table snapshot of plain records, in the database snapshot shape.
 
-    A collection has no fixed schema (an empty read names no columns), so
-    its columns are left empty and rows are compared field by field. Rows
-    are keyed by ``id`` when every record has a distinct one.
+    A collection has no fixed schema (an empty read names no columns), so its
+    definition is left empty and rows are compared field by field. Rows are
+    keyed by ``id`` when every record has a distinct one, else by content
+    (numbered, so a doubled row counts twice). The records are in memory
+    already, so every row keeps its values (never written).
     """
+    key = key or _PROCESS_KEY
     ids = [r.get("id") for r in records]
     keyed = all(i is not None for i in ids) and len(set(map(str, ids))) == len(ids)
+    rows: dict[str, list[str]] = {}
+    values: dict[str, dict[str, Any]] = {}
+    seen: dict[str, int] = {}
+    for record in records:
+        if keyed:
+            text = str(record["id"])
+        else:
+            body = json.dumps(record, sort_keys=True, default=str)
+            seen[body] = seen.get(body, 0) + 1
+            text = f"{body}#{seen[body]}"
+        k = row_key_hash(key, text, table)
+        rows[k] = [row_hash(key, table, record), ""]
+        values[k] = dict(record)
     return Snapshot(
+        dialect="records",
         tables={
             table: Table(
+                mode="compare",
+                schema="",
                 columns=[],
                 primary_key=["id"] if keyed else [],
+                generated_key=None,
                 defaults={},
                 count=len(records),
-                rows=list(records),
+                rows=rows,
+                values=values,
             )
-        }
+        },
     )
 
 
@@ -170,20 +239,28 @@ def records_snapshot(
 # The diff
 # ---------------------------------------------------------------------------
 
+#: The row key of a table whose rows couldn't be compared.
+UNREAD_KEY = "*unread*"
+
+#: (table, row key MAC, row before, row after). A side is None when the
+#: row was added or removed; a row's values are ``{}`` when no read kept
+#: them (the read from before the run keeps none).
+Change = tuple[str, str, Optional[dict[str, Any]], Optional[dict[str, Any]]]
+
 
 @dataclass
 class TableDiff:
     """What moved in one table between two reads."""
 
     table: str
-    added: list[dict[str, Any]] = field(default_factory=list)
-    removed: list[dict[str, Any]] = field(default_factory=list)
-    #: ``(key, before row, after row, changed columns)``.
+    added: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    removed: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    #: ``(row key, values before, values after, changed columns)``.
     changed: list[tuple[str, dict[str, Any], dict[str, Any], list[str]]] = field(
         default_factory=list
     )
-    #: Why rows couldn't be compared: the table appeared, disappeared or
-    #: changed shape, or it is fingerprinted and its fingerprint moved.
+    #: Why rows couldn't be compared (created, dropped, redefined, an
+    #: append-only table whose existing rows moved, ...).
     unread: Optional[str] = None
 
     @property
@@ -209,7 +286,6 @@ class StateDiff:
     """Every table that differs between two reads."""
 
     tables: list[TableDiff] = field(default_factory=list)
-    ignored_columns: dict[str, list[str]] = field(default_factory=dict)
 
     @property
     def empty(self) -> bool:
@@ -218,15 +294,6 @@ class StateDiff:
     def summary(self) -> dict[str, dict[str, Any]]:
         """Per table: counts and column names. Never a value."""
         return {t.table: t.summary() for t in self.tables if not t.empty}
-
-    def keys(self) -> set[tuple[str, str]]:
-        """``(table, row key)`` of every row that moved."""
-        out: set[tuple[str, str]] = set()
-        for t in self.tables:
-            out |= {(t.table, str(r[KEY])) for r in t.added}
-            out |= {(t.table, str(r[KEY])) for r in t.removed}
-            out |= {(t.table, key) for key, *_rest in t.changed}
-        return out
 
     def describe(self) -> str:
         """One line a person reads; counts and column names only."""
@@ -244,21 +311,23 @@ class StateDiff:
         return "; ".join(parts) if parts else "no difference"
 
     def to_private_json(self) -> dict[str, Any]:
-        """The full rows, for the person who repairs them. Write owner-only."""
+        """The values the reads kept, for the person who repairs the record.
+        Write owner-only. A row a read kept no values for is named by its
+        key MAC only."""
         return {
-            "schema": "openadapt.rollback-diff/v1",
+            "schema": "openadapt.rollback-diff/v2",
             "tables": {
                 t.table: {
-                    "added": [_plain(r) for r in t.added],
-                    "removed": [_plain(r) for r in t.removed],
+                    "added": [{"key": k, "row": v} for k, v in t.added],
+                    "removed": [{"key": k, "row": v} for k, v in t.removed],
                     "changed": [
                         {
-                            "key": key,
+                            "key": k,
                             "columns": cols,
-                            "before": {c: before.get(c) for c in cols},
-                            "after": {c: after.get(c) for c in cols},
+                            "before": {c: before.get(c) for c in cols if c in before},
+                            "after": {c: after.get(c) for c in cols if c in after},
                         }
-                        for key, before, after, cols in t.changed
+                        for k, before, after, cols in t.changed
                     ],
                     **({"unread": t.unread} if t.unread else {}),
                 }
@@ -266,10 +335,6 @@ class StateDiff:
                 if not t.empty
             },
         }
-
-
-def _plain(row: Mapping[str, Any]) -> dict[str, Any]:
-    return {k: v for k, v in row.items() if k != KEY}
 
 
 def _same(a: Any, b: Any) -> bool:
@@ -280,134 +345,88 @@ def _same(a: Any, b: Any) -> bool:
     )
 
 
-def diff_states(
-    before: Snapshot,
-    after: Snapshot,
-    *,
-    ignore_columns: Optional[Mapping[str, Sequence[str]]] = None,
-) -> StateDiff:
-    """Compare two reads table by table, row by row, column by column.
+def _changed_columns(a: Table, b: Table, k: str) -> list[str]:
+    old_v, new_v = a.values.get(k), b.values.get(k)
+    if old_v is not None and new_v is not None:
+        return sorted(
+            c
+            for c in set(old_v) | set(new_v)
+            if c != KEY and not _same(old_v.get(c), new_v.get(c))
+        )
+    if a.cell_columns and a.cell_columns == b.cell_columns:
+        old_c = unpack(a.cell_columns, a.rows[k][1])
+        new_c = unpack(b.cell_columns, b.rows[k][1])
+        cols = sorted(c for c in a.cell_columns if old_c.get(c) != new_c.get(c))
+        if cols:
+            return cols
+    return ["(row)"]
 
-    ``ignore_columns`` maps a table (or ``"*"`` for every table) to columns
-    that change on their own (a last-modified time). Ignoring a column is a
-    person's reviewed decision; it is recorded in the diff.
+
+def diff_states(before: Snapshot, after: Snapshot) -> StateDiff:
+    """Compare two reads table by table, row by row (by key MAC).
+
+    Bookkeeping the app profile names never appears: the reads left it out
+    (session tables), kept it append-only (a moved existing row shows as
+    unread), or left its columns out of each row's MAC.
     """
-    ignore = {k: set(v) for k, v in (ignore_columns or {}).items()}
-    out = StateDiff(ignored_columns={k: sorted(v) for k, v in ignore.items()})
+    out = StateDiff()
+    if before.objects != after.objects:
+        out.tables.append(TableDiff(table="(database code)", unread="changed"))
     for name in sorted(set(before.tables) | set(after.tables)):
-        skip = ignore.get(name, set()) | ignore.get("*", set())
         a, b = before.tables.get(name), after.tables.get(name)
         diff = TableDiff(table=name)
-        if a is None or b is None:
-            diff.unread = "table appeared" if a is None else "table disappeared"
-        elif a.columns != b.columns:
-            diff.unread = "table changed shape"
-        elif a.rows is None or b.rows is None:
-            if (a.count, a.digest) != (b.count, b.digest):
-                diff.unread = "fingerprinted table moved"
-        else:
-            old = {str(r[KEY]): r for r in keyed_rows(a)}
-            new = {str(r[KEY]): r for r in keyed_rows(b)}
-            diff.added = [new[k] for k in new if k not in old]
-            diff.removed = [old[k] for k in old if k not in new]
-            for key in sorted(set(old) & set(new)):
-                cols = sorted(
-                    c
-                    for c in (set(old[key]) | set(new[key])) - skip - {KEY}
-                    if not _same(old[key].get(c), new[key].get(c))
-                )
-                if cols:
-                    diff.changed.append((key, old[key], new[key], cols))
+        reasons = (
+            unread_reasons(a, b, after.dialect)
+            if after.dialect != "records"
+            else ([] if a is not None and b is not None else ["created or dropped"])
+        )
+        if reasons:
+            diff.unread = "; ".join(reasons)
+        if a is not None and b is not None and a.mode == "compare" == b.mode:
+            diff.added = [
+                (k, dict(b.values.get(k, {}))) for k in b.rows if k not in a.rows
+            ]
+            diff.removed = [
+                (k, dict(a.values.get(k, {}))) for k in a.rows if k not in b.rows
+            ]
+            for k in sorted(set(a.rows) & set(b.rows)):
+                if a.rows[k][0] != b.rows[k][0]:
+                    diff.changed.append(
+                        (
+                            k,
+                            dict(a.values.get(k, {})),
+                            dict(b.values.get(k, {})),
+                            _changed_columns(a, b, k),
+                        )
+                    )
         out.tables.append(diff)
     return out
 
 
-# ---------------------------------------------------------------------------
-# An app's own bookkeeping: the shared per-app frame-exclusion profile
-# ---------------------------------------------------------------------------
-
-
-class TableRule(BaseModel):
-    """How one table of an app's own bookkeeping may move.
-
-    ``append_only``: rows may be added; an existing row that changes or goes
-    is not excused. ``session``: per-user or per-session state; any change.
-    ``columns``: existing rows may change only in ``columns``; no row may be
-    added or removed.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    rule: Literal["append_only", "session", "columns"]
-    columns: list[str] = Field(default_factory=list)
-
-
-class AppProfile(BaseModel):
-    """The versioned list of what an app writes on its own (one per app).
-
-    The same file serves the verifier's frame, rollback and the RL grader.
-    No rule may name a patient-data table: ``patient_table_prefixes`` lists
-    them, and loading refuses a profile that names one.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    #: For example ``openemr-frame-exclusions/2026-10-28.1``.
-    id: str = Field(min_length=1)
-    tables: dict[str, TableRule]
-    patient_table_prefixes: list[str] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def _no_patient_tables(self) -> "AppProfile":
-        prefixes = tuple(self.patient_table_prefixes)
-        bad = sorted(t for t in self.tables if prefixes and t.startswith(prefixes))
-        if bad:
-            raise ValueError(
-                "an app profile can't excuse a patient-data table: " + ", ".join(bad)
-            )
-        for name, rule in self.tables.items():
-            if rule.rule == "columns" and not rule.columns:
-                raise ValueError(f"{name}: a columns rule names its columns")
-        return self
-
-    @classmethod
-    def load(cls, path: Any) -> "AppProfile":
-        import yaml
-
-        raw = yaml.safe_load(open(path, encoding="utf-8").read())
-        return cls.model_validate(raw)
-
-    def excuses(self, change: "Change") -> bool:
-        """Is this changed row the app's own bookkeeping, by its rule?"""
-        table, key, before, after = change
-        rule = self.tables.get(table)
-        if rule is None or key == UNREAD_KEY:
-            return False
-        if rule.rule == "session":
-            return True
-        if rule.rule == "append_only":
-            return before is None and after is not None
-        if before is None or after is None:
-            return False
-        moved = {
-            c
-            for c in (set(before) | set(after)) - {KEY}
-            if not _same(before.get(c), after.get(c))
-        }
-        return moved <= set(rule.columns)
+def changes(diff: StateDiff) -> list[Change]:
+    """Every row that moved, one entry per row."""
+    out: list[Change] = []
+    for t in diff.tables:
+        if t.unread:
+            # Rows can't be compared: one change nothing can attribute.
+            out.append((t.table, UNREAD_KEY, None, None))
+        out += [(t.table, k, None, v) for k, v in t.added]
+        out += [(t.table, k, v, None) for k, v in t.removed]
+        out += [(t.table, k, before, after) for k, before, after, _c in t.changed]
+    return out
 
 
 def keep_rows(diff: StateDiff, rows: Sequence[Any]) -> StateDiff:
-    """``diff`` limited to the rows in ``rows`` (``Change`` tuples)."""
+    """diff limited to the rows in rows (Change tuples)."""
     wanted = {(t, k) for t, k, *_rest in rows}
-    out = StateDiff(ignored_columns=dict(diff.ignored_columns))
+    out = StateDiff()
     for t in diff.tables:
         kept = TableDiff(
             table=t.table,
             unread=t.unread if (t.table, UNREAD_KEY) in wanted else None,
         )
-        kept.added = [r for r in t.added if (t.table, str(r[KEY])) in wanted]
-        kept.removed = [r for r in t.removed if (t.table, str(r[KEY])) in wanted]
+        kept.added = [r for r in t.added if (t.table, r[0]) in wanted]
+        kept.removed = [r for r in t.removed if (t.table, r[0]) in wanted]
         kept.changed = [c for c in t.changed if (t.table, c[0]) in wanted]
         out.tables.append(kept)
     return out
@@ -416,27 +435,6 @@ def keep_rows(diff: StateDiff, rows: Sequence[Any]) -> StateDiff:
 # ---------------------------------------------------------------------------
 # Who changed a row: the frame's attribution, applied to a rollback
 # ---------------------------------------------------------------------------
-
-#: The row key of a table whose rows couldn't be compared.
-UNREAD_KEY = "*unread*"
-
-#: ``(table, row key, row before, row after)``; a side is None when the row
-#: was added or removed.
-Change = tuple[str, str, Optional[dict[str, Any]], Optional[dict[str, Any]]]
-
-
-def changes(diff: StateDiff) -> list[Change]:
-    """Every row that moved, one entry per row."""
-    out: list[Change] = []
-    for t in diff.tables:
-        if t.unread:
-            # Rows can't be compared (fingerprinted, or the table changed
-            # shape): one change nothing can attribute.
-            out.append((t.table, UNREAD_KEY, None, None))
-        out += [(t.table, str(r[KEY]), None, r) for r in t.added]
-        out += [(t.table, str(r[KEY]), r, None) for r in t.removed]
-        out += [(t.table, key, before, after) for key, before, after, _c in t.changed]
-    return out
 
 
 class Attributor:
@@ -567,18 +565,17 @@ class Attributor:
 
 
 __all__ = [
-    "AppProfile",
-    "TableRule",
-    "keep_rows",
     "Attributor",
     "Change",
-    "changes",
     "DatabaseReader",
     "StateDiff",
     "StateReader",
     "StateUnreadable",
     "TableDiff",
+    "UNREAD_KEY",
     "VerifierReader",
+    "changes",
     "diff_states",
+    "keep_rows",
     "records_snapshot",
 ]

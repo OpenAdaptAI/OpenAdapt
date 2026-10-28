@@ -274,7 +274,7 @@ def test_an_unapproved_proposal_is_never_used(tmp_path, mockmed):
     assert (diff_path.stat().st_mode & 0o777) == 0o600
     diff = json.loads(diff_path.read_text())
     [added] = diff["tables"]["records"]["added"]
-    assert added["type"] == "Triage"
+    assert added["row"]["type"] == "Triage"
     assert "records: 1 added" in rollback.reason
 
 
@@ -487,10 +487,10 @@ def _run_clinic(
         dialect="sqlite",
         read_config={"sqlite_database": str(db)},
         allow_tables=list(allow_tables),
+        profile=profile,
     )
     plan = RollbackPlan(
         reader,
-        profile=profile,
         read_records=records_reader(_sql_verifier(db)),
         attribution=(
             FrameAttribution(
@@ -555,7 +555,7 @@ def test_a_compensation_that_leaves_a_side_record_is_named_precisely(tmp_path):
     assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
     diff = json.loads((tmp_path / "run" / rollback.diff_path).read_text())
     [row] = diff["tables"]["history"]["added"]
-    assert row["smoker"] == "no"
+    assert row["row"]["smoker"] == "no"
 
 
 # ---------------------------------------------------------------------------
@@ -569,7 +569,7 @@ class ListReader:
     def __init__(self, *reads: Optional[list[dict[str, Any]]]):
         self.reads = list(reads)
 
-    def read(self):
+    def read(self, before=None):
         records = self.reads.pop(0) if len(self.reads) > 1 else self.reads[0]
         if records is None:
             raise StateUnreadable("the system of record could not be read")
@@ -742,7 +742,6 @@ def test_diff_names_columns_never_values():
         "records": {"added": 0, "removed": 0, "changed": 1, "changed_columns": ["name"]}
     }
     assert "B" not in json.dumps(diff.summary())
-    assert diff_states(before, after, ignore_columns={"*": ["name"]}).empty
 
 
 # ---------------------------------------------------------------------------
@@ -846,15 +845,25 @@ def test_a_change_after_the_stop_blocks_the_compensation(tmp_path):
 
 
 def test_an_uncomparable_table_is_never_set_aside():
-    from openadapt_flow.rollback_state import changes
+    from openadapt_flow.rollback_state import UNREAD_KEY, changes
     from openadapt_flow.runtime.effects.db_snapshot import Snapshot, Table
 
-    before = Snapshot(tables={"big": Table(["a"], ["a"], {}, 5, None, "x")})
-    after = Snapshot(tables={"big": Table(["a"], ["a"], {}, 6, None, "y")})
+    def table(schema):
+        return Table(
+            mode="compare",
+            schema=schema,
+            columns=["a"],
+            primary_key=["a"],
+            generated_key=None,
+            defaults={},
+        )
+
+    before = Snapshot(tables={"big": table("v1")})
+    after = Snapshot(tables={"big": table("v2")})  # redefined in the window
     diff = diff_states(before, after)
     assert not diff.empty
     [change] = changes(diff)
-    assert change[0] == "big" and change[2] is None and change[3] is None
+    assert change == ("big", UNREAD_KEY, None, None)
 
 
 # ---------------------------------------------------------------------------
@@ -931,49 +940,42 @@ def test_a_run_with_no_person_to_ask_refuses_a_save_it_cannot_undo():
 # ---------------------------------------------------------------------------
 
 
-def _profile(**extra):
-    from openadapt_flow.rollback_state import AppProfile
+def _profile(**extra_rules):
+    from openadapt_flow.app_profiles import AppProfile
 
     return AppProfile.model_validate(
         {
-            "id": "clinic-frame-exclusions/test.1",
-            "tables": {
-                "log": {"rule": "append_only"},
-                "users": {"rule": "columns", "columns": ["uuid", "last_updated"]},
-                "sessions": {"rule": "session"},
-                **extra,
-            },
+            "schema_version": "openadapt.app-profile/v1",
+            "app": "clinic",
+            "version": "test.1",
             "patient_table_prefixes": ["patient", "history"],
+            "rules": [
+                {
+                    "id": "log",
+                    "table": "log",
+                    "mode": "append_only",
+                    "reason": "audit log",
+                },
+                *extra_rules.get("rules", []),
+            ],
         }
     )
 
 
-def test_profile_rules_excuse_only_what_they_name():
-    profile = _profile()
-    row = {"__row_key__": "1", "id": 1}
-    assert profile.excuses(("log", "1", None, row))  # appended
-    assert not profile.excuses(("log", "1", row, {**row, "event": "x"}))  # edited
-    assert not profile.excuses(("log", "1", row, None))  # removed
-    user = {"__row_key__": "7", "id": 7, "fname": "A", "last_updated": "t1"}
-    assert profile.excuses(("users", "7", user, {**user, "last_updated": "t2"}))
-    assert not profile.excuses(("users", "7", user, {**user, "fname": "B"}))
-    assert not profile.excuses(("users", "7", None, user))  # no new users
-    assert profile.excuses(("sessions", "s", user, None))
-    assert not profile.excuses(("notes", "1", None, row))  # not in the profile
-
-
-def test_a_profile_cannot_excuse_a_patient_table():
-    with pytest.raises(ValueError, match="patient-data table"):
-        _profile(patients={"rule": "session"})
+def test_a_profile_cannot_excuse_patient_data():
+    with pytest.raises(ValueError, match="patient data"):
+        _profile(
+            rules=[{"id": "p", "table": "patients", "mode": "session", "reason": "no"}]
+        )
 
 
 def test_whole_database_rollback_with_the_app_profile(tmp_path):
-    # The log is read, not skipped: the profile lets it grow, nothing else.
+    # The log is read, kept append-only by the profile: it may grow, and
+    # nothing else may move.
     report = _run_clinic(tmp_path, profile=_profile(), allow_tables=())
     rollback = report.rollback
     assert rollback.status == "rolled_back", rollback.reason
-    assert rollback.profile_id == "clinic-frame-exclusions/test.1"
-    assert rollback.profile_rows == 1  # the 'patient created' log row
+    assert rollback.profile_id == "clinic/test.1"
     assert set(rollback.after_stop_diff) == {"patients", "history"}
     assert report.transaction_outcome == "ROLLED_BACK"
 
@@ -981,3 +983,23 @@ def test_whole_database_rollback_with_the_app_profile(tmp_path):
     plain = _run_clinic(tmp_path / "plain", allow_tables=())
     assert plain.rollback.status == "not_rolled_back"
     assert "log" in plain.rollback.remaining_diff
+
+
+def test_an_edited_row_in_an_append_only_table_is_never_excused(tmp_path):
+    from openadapt_flow.rollback_state import DatabaseReader
+
+    db = tmp_path / "clinic.db"
+    _make_db(db)
+    conn = sqlite3.connect(db)
+    conn.execute("INSERT INTO log (event) VALUES ('signed in')")
+    conn.commit()
+    reader = DatabaseReader(
+        dialect="sqlite", read_config={"sqlite_database": str(db)}, profile=_profile()
+    )
+    before = reader.read()
+    conn.execute("INSERT INTO log (event) VALUES ('added row: fine')")
+    conn.execute("UPDATE log SET event = 'rewritten' WHERE id = 1")
+    conn.commit()
+    conn.close()
+    diff = diff_states(before, reader.read(before=before))
+    assert diff.summary()["log"]["unread"]
