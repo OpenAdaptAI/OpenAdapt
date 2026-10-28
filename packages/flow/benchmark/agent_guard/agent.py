@@ -70,6 +70,7 @@ class ScriptedAgent:
         self._act(run, "save", lambda: page.click("#save-encounter"))
         # Look at the result, as an agent would before reporting back.
         deadline = time.monotonic() + 4.0
+        saw_error = False
         while time.monotonic() < deadline:
             notice = page.query_selector("#openadapt-guard-notice")
             if notice is not None:
@@ -82,9 +83,13 @@ class ScriptedAgent:
                 break
             error = page.query_selector("#save-error")
             if error is not None and error.inner_text().strip():
-                run.screen_after = "error"
-                break
+                # A blocked save also fails the app's request, and its error
+                # can show before the guard's notice: keep looking for the
+                # notice until the deadline before calling it an error.
+                saw_error = True
             page.wait_for_timeout(100)
+        if run.screen_after == "nothing" and saw_error:
+            run.screen_after = "error"
         notice = page.query_selector("#openadapt-guard-notice")
         if notice is not None:
             run.notice = notice.inner_text()

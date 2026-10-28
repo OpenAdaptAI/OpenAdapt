@@ -1,0 +1,130 @@
+name: CI
+
+# The one required check, `ci`, for every pull request (and the merge queue
+# when it is on). It runs the fast lane and finishes in under ten minutes:
+#
+# - Packages (packages.yml) on its pull-request tier: lint, the oldest-Python
+#   syntax check, and the Linux tests of the packages the change touches. The
+#   slow end-to-end and browser-heavy tests, the other operating systems and
+#   the installer builds run on main and in the nightly run (nightly.yml).
+# - The launcher's own lint and tests (main.yml).
+# - A smoke test of every package, whatever changed: each installs from its
+#   lock, imports and starts (scripts/ci/smoke.py).
+#
+# `ci` passes when every job above passed or was not selected. Until branch
+# protection names `ci`, the old required names, `run-ci (ubuntu-latest,
+# 3.12)` and `packages-gate`, report the same result from this workflow.
+# CodeQL keeps reporting `Analyze (python)` from codeql.yml.
+
+on:
+  pull_request:
+    # Drafts run nothing (each job checks `draft`); marking one ready runs CI.
+    types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+
+permissions:
+  contents: read
+
+# A pull request's newer push cancels its older run. The called workflows see
+# this run's context, so main.yml keys its group `CI-<pr>`; group names are
+# case-insensitive, so this one must not be `ci-<pr>`.
+concurrency:
+  group: required-ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  packages:
+    name: packages
+    if: github.event.pull_request.draft != true
+    uses: ./.github/workflows/packages.yml
+
+  launcher:
+    name: launcher
+    if: github.event.pull_request.draft != true
+    uses: ./.github/workflows/main.yml
+
+  smoke:
+    name: smoke (every package installs, imports and starts)
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            packages/*/uv.lock
+          cache-suffix: smoke
+      - run: uv python install 3.12
+      - name: Install, import and start each package from its lock
+        env:
+          UV_PYTHON: "3.12"
+          # The tray's input and icon backends, as its own CI job sets them:
+          # a headless runner has no X display.
+          PYNPUT_BACKEND: dummy
+          PYSTRAY_BACKEND: dummy
+        run: python3 scripts/ci/smoke.py
+
+  ci:
+    name: ci
+    needs: [packages, launcher, smoke]
+    # Always reports, so a failed or cancelled job fails the check rather
+    # than leaving it missing.
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # A skipped required check counts as passing, so a draft would show
+      # green. Fail instead: a draft can't merge, and marking it ready
+      # (ready_for_review) starts a full run.
+      - name: Fail on a draft pull request
+        if: github.event.pull_request.draft == true
+        run: |
+          echo "::error::draft PR: CI runs when marked ready for review."
+          exit 1
+      - name: Require every job to pass or be unselected
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+
+          bad = {}
+          for name, need in json.loads(os.environ["RESULTS"]).items():
+              print(f"{name}: {need['result']}")
+              if need["result"] != "success":
+                  bad[name] = need["result"]
+          if bad:
+              print(f"failed: {bad}")
+          sys.exit(1 if bad else 0)
+          PY
+
+  # The names branch protection requires today. Remove both once it requires
+  # `ci` instead (.github/workflows/README.md has the command).
+  legacy-run-ci:
+    name: run-ci (ubuntu-latest, 3.12)
+    needs: ci
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Report the result of ci
+        env:
+          RESULT: ${{ needs.ci.result }}
+        run: test "$RESULT" = success
+
+  legacy-packages-gate:
+    name: packages-gate
+    needs: ci
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Report the result of ci
+        env:
+          RESULT: ${{ needs.ci.result }}
+        run: test "$RESULT" = success

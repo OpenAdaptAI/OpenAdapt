@@ -183,14 +183,130 @@ class _FramePoint:
 # The descriptor stays inside the page-local guard store. It binds the exact
 # actionable node, its ancestry, and the enclosing record row while excluding
 # the target's own cell (the same identity boundary as ``structured_text_at``).
-_DESCRIBE_TARGET_JS = r"""(node) => {
+# Repeated sibling structures count as record rows too (#1559): many apps build
+# a worklist from div rows, CSS-grid rows or cards, with no tr, li or role.
+# Two siblings are peers when they share a tag, at least one class (state
+# classes such as active or selected ignored; two class-less siblings match)
+# and the same shape, counting only children that carry text or a control (an
+# empty unread dot or an icon does not change the shape). A control is never
+# its own row, and peers that each hold a data-entry field are form field
+# groups, not rows. Peers are loose on purpose: over-counting look-alike rows
+# fails closed, under-counting signs the wrong chart.
+_REPEATED_ROW_HELPERS_JS = r"""
+    const cleanText = (value) => (value || '').replace(/\s+/g, ' ').trim();
+    const STATE_CLASS = /^(?:active|selected|hover|hovered|focus|focused|disabled|open|opened|expanded|collapsed|checked|current|highlighted|even|odd|first|last|visible|hidden|show|shown|(?:is|has)-.+)$/i;
+    const classesOf = (el) => Array.from(el.classList).filter((name) => !STATE_CLASS.test(name));
+    const FIELD = 'input:not([type="button"]):not([type="submit"]):not([type="reset"])' +
+        ':not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="image"]),' +
+        ' select, textarea, [contenteditable=""], [contenteditable="true"], [role="textbox"]';
+    const CONTROL = 'button, a[href], input, select, textarea, [role="button"],' +
+        ' [role="link"], [role="menuitem"], [role="tab"], [role="checkbox"], [role="radio"]';
+    const meaningful = (child) => (child.textContent || '').trim() !== '' ||
+        child.matches(CONTROL) || child.querySelector(CONTROL) !== null;
+    const shapeOf = (el) => Array.from(el.children).filter(meaningful)
+        .map((child) => child.tagName).join(',');
+    const alike = (a, b) => {
+        if (a.tagName !== b.tagName) return false;
+        const ca = classesOf(a);
+        const cb = classesOf(b);
+        const classes = (ca.length === 0 && cb.length === 0) ||
+            ca.some((name) => cb.includes(name));
+        return classes && shapeOf(a) === shapeOf(b);
+    };
+    const repeatedPeers = (el) => {
+        const parent = el.parentElement;
+        if (!parent || parent === document.documentElement) return [];
+        return Array.from(parent.children).filter((child) => alike(child, el));
+    };
+    // What a person reads as the control's name: aria-label, title, text,
+    // value, alt.
+    const accessibleName = (el) => cleanText(
+        el.getAttribute('aria-label') || el.getAttribute('title') ||
+        el.textContent || el.getAttribute('value') || el.getAttribute('alt') || ''
+    );
+    const siblingsLike = (el, controlTag) => {
+        const parent = el.parentElement;
+        const classes = classesOf(el);
+        if (!parent || parent === document.documentElement || !classes.length) return [];
+        return Array.from(parent.children).filter((child) =>
+            child.tagName === el.tagName &&
+            classesOf(child).some((name) => classes.includes(name)) &&
+            child.getElementsByTagName(controlTag).length > 0);
+    };
+    const repeatedRows = (node) => {
+        const found = [];
+        if (node.matches(FIELD)) return found;
+        const clicked = node.closest(CONTROL);
+        let cursor = node;
+        for (let depth = 0; cursor && depth < 10; depth += 1) {
+            if (cursor === document.body || cursor === document.documentElement) break;
+            if (!(cursor === node && cursor.matches(CONTROL))) {
+                let peers = repeatedPeers(cursor);
+                if (peers.length < 2 && clicked && cursor !== clicked && cursor.contains(clicked)) {
+                    // Rows whose badges differ have no same-shape peers.
+                    // Same-tag siblings that share a class and each hold a
+                    // control like the clicked one are rows too.
+                    peers = siblingsLike(cursor, clicked.tagName);
+                }
+                if (peers.length >= 2 && !peers.every((peer) => peer.querySelector(FIELD))) {
+                    found.push(cursor);
+                }
+            }
+            cursor = cursor.parentElement;
+        }
+        return found;
+    };
+    // One evaluation reads each element's text once.
+    const textMemo = new Map();
+    const textOf = (el) => {
+        let text = textMemo.get(el);
+        if (text === undefined) {
+            text = cleanText(el.textContent);
+            textMemo.set(el, text);
+        }
+        return text;
+    };
+    // A row's header: the direct child of the row that holds its heading (an
+    // h1-h6, role=heading or legend), or a first child made of several parts
+    // whose first plain text is the heading. [header child, heading text] or
+    // null.
+    const headerOf = (row) => {
+        const heading = row.querySelector('h1, h2, h3, h4, h5, h6, [role="heading"], legend');
+        if (heading) {
+            let child = heading;
+            while (child.parentElement && child.parentElement !== row) child = child.parentElement;
+            if (child.parentElement === row) return [child, textOf(heading)];
+        }
+        const first = row.firstElementChild;
+        if (first && first.children.length > 1) {
+            const label = Array.from(first.children).find((part) =>
+                textOf(part) && !part.matches(CONTROL) && !part.querySelector(CONTROL));
+            if (label) return [first, textOf(label)];
+        }
+        return null;
+    };
+    // An element's text without any descendant of the given tag (the clicked
+    // control's): a row's identity apart from its action buttons, whatever
+    // they are labelled.
+    const textWithout = (el, tag) => {
+        if (!tag) return textOf(el);
+        const clone = el.cloneNode(true);
+        for (const part of Array.from(clone.getElementsByTagName(tag))) part.remove();
+        if (clone.tagName === tag.toUpperCase()) return '';
+        return cleanText(clone.textContent);
+    };
+"""
+
+_DESCRIBE_TARGET_JS = (
+    r"""(node) => {
     const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
-    const row = node.closest('tr, [role="row"], li, [role="listitem"]');
+"""
+    + _REPEATED_ROW_HELPERS_JS
+    + r"""
     const own = node.closest(
         'td, th, [role="cell"], [role="gridcell"]'
-    ) || node;
-    let rowIdentity = '';
-    if (row) {
+    ) || node.closest(CONTROL) || node;
+    const identityOf = (row) => {
         // A row/list item with an explicit accessible name has already
         // declared its record identity. Prefer that stable application-owned
         // signal over concatenating every sibling control label, which would
@@ -216,7 +332,102 @@ _DESCRIBE_TARGET_JS = r"""(node) => {
             }
             if (cloneOwn) cloneOwn.remove();
         }
-        rowIdentity = declaredIdentity || clean(clone.textContent || '');
+        return declaredIdentity || clean(clone.textContent || '');
+    };
+    let row = node.closest('tr, [role="row"], li, [role="listitem"]');
+    let rowIdentity = row ? identityOf(row) : '';
+    let repeated = false;
+    let rowUncountable = false;
+    // The outermost element the identity was read from (the row itself, or
+    // the outer level a nested row's identity was combined with).
+    let scope = row;
+    // How the identity was read: 'row' (the row's text) or 'header' (a
+    // section header's text); the census compares candidates the same way.
+    let mode = 'row';
+    if (!row) {
+        // No table or list markup: the nearest repeated sibling structure is
+        // the row. Its identity is its heading when every peer's heading is
+        // unique (section cards: "Medications", whatever the patient), else
+        // its text minus the clicked cell. When that identity repeats across
+        // the document (a "Visit note" line in every patient card), the next
+        // repeated level up is added until it doesn't or no level is left.
+        const levels = repeatedRows(node).filter((level) => level.contains(own) || level === own);
+        // Heading-only identity applies only when the clicked control sits in
+        // the header with the heading (a section's Edit next to its title),
+        // and the headings that peers carry are unique. Then the identity is
+        // the header's text without its controls ("Medications"), whatever
+        // the record in the body. Anywhere else the row's full text is the
+        // identity.
+        const clickedControl = node.closest(CONTROL);
+        const levelIdentity = (level) => {
+            const header = headerOf(level);
+            if (header && header[1] && clickedControl && header[0] !== level &&
+                    header[0].contains(clickedControl)) {
+                const heads = repeatedPeers(level).map((peer) => headerOf(peer))
+                    .filter((found) => found && found[1]).map((found) => found[1]);
+                if (new Set(heads).size === heads.length) {
+                    return [textWithout(header[0], clickedControl.tagName), 'header'];
+                }
+            }
+            return [identityOf(level), 'row'];
+        };
+        const repeatsInDocument = (level) => {
+            const text = textOf(level);
+            let count = 0;
+            for (const other of document.getElementsByTagName(level.tagName)) {
+                if (textOf(other) === text && alike(other, level)) count += 1;
+                if (count > 1) return true;
+            }
+            return false;
+        };
+        for (let index = 0; index < levels.length; index += 1) {
+            const [text, textMode] = levelIdentity(levels[index]);
+            if (!text) continue;
+            row = levels[index];
+            rowIdentity = text;
+            mode = textMode;
+            repeated = true;
+            // The outer level's own text: everything outside the inner rows
+            // it holds (a card's patient heading). A plain group of rows has
+            // none, and combining with it would only add its other rows.
+            const ownTextOf = (outer, inner) => {
+                const clone = outer.cloneNode(true);
+                const innerClasses = classesOf(inner);
+                for (const part of Array.from(clone.getElementsByTagName(inner.tagName))) {
+                    const classes = classesOf(part);
+                    const same = innerClasses.length === 0
+                        ? classes.length === 0
+                        : classes.some((name) => innerClasses.includes(name));
+                    if (same) part.remove();
+                }
+                return cleanText(clone.textContent);
+            };
+            let level = index;
+            while (repeatsInDocument(levels[level]) && level + 1 < levels.length) {
+                const outerText = ownTextOf(levels[level + 1], levels[level]);
+                if (!outerText) break;
+                level += 1;
+                rowIdentity = rowIdentity + ' | ' + outerText;
+                mode = 'row';
+            }
+            scope = levels[level];
+            break;
+        }
+        // A repeated structure with no readable identity is a row nothing
+        // can count only when the clicked control's accessible name repeats
+        // too (every row's button reads "Open"). A menu or toolbar of
+        // uniquely named items is not a worklist.
+        if (!row && levels.length > 0) {
+            const control = node.closest(CONTROL) || node;
+            const name = accessibleName(control);
+            if (name) {
+                let same = 0;
+                for (const other of document.getElementsByTagName(control.tagName)) {
+                    if (accessibleName(other) === name) same += 1;
+                }
+                rowUncountable = same >= 2;
+            }
+        }
     }
     const ancestry = [];
     let cursor = node;
@@ -265,8 +476,13 @@ _DESCRIBE_TARGET_JS = r"""(node) => {
         ]),
         rowIdentity: rowIdentity,
         row: row,
+        repeated: repeated,
+        rowUncountable: rowUncountable,
+        scope: scope,
+        mode: mode,
     };
 }"""
+)
 
 _INSTALL_GUARD_BODY_JS = (
     r"""
@@ -395,6 +611,54 @@ GUARDED_ACTIONABLE_SELECTOR = (
     ' [role="tab"], [role="option"], [role="checkbox"],'
     ' [role="radio"], [role="switch"]'
 )
+
+#: The focused element's own facts, in its document (``focus_identity``).
+_FOCUS_IDENTITY_JS = r"""(el) => {
+    const doc = el.ownerDocument;
+    if (el === doc.body || el === doc.documentElement) return {none: true};
+    // activeElement names a shadow host when the focus is inside its shadow
+    // root. An open root is not followed, and a registered custom element may
+    // hide a closed one: either way the focused control can't be told apart.
+    // An unregistered element with a dash (an Angular or other framework
+    // component without a shadow root) is an ordinary element.
+    if (el.shadowRoot) return {unreadable: true};
+    if (el.localName.includes('-') && window.customElements
+        && doc.defaultView.customElements.get(el.localName)) return {unreadable: true};
+    const count = (sel) => {
+        try { return doc.querySelectorAll(sel).length; } catch (e) { return 0; }
+    };
+    const testid = el.getAttribute('data-testid') || null;
+    const id = el.id || null;
+    // An option is active only inside the listbox the control names by
+    // aria-controls: aria-activedescendant points at one of its role=option
+    // elements, or one of them is aria-selected.
+    let active = false;
+    const boxId = el.getAttribute('aria-controls');
+    const box = boxId ? doc.getElementById(boxId) : null;
+    if (box && box.getAttribute('role') === 'listbox') {
+        const activeId = el.getAttribute('aria-activedescendant');
+        const option = activeId ? doc.getElementById(activeId) : null;
+        if (option) {
+            active = option.getAttribute('role') === 'option' && box.contains(option);
+        } else {
+            active = !!box.querySelector('[role="option"][aria-selected="true"]');
+        }
+    }
+    let top = false;
+    try { top = doc.defaultView === doc.defaultView.top; } catch (e) { top = false; }
+    return {
+        none: false,
+        tag: el.localName,
+        testid: testid,
+        testid_count: testid ? count('[data-testid="' + CSS.escape(testid) + '"]') : 0,
+        id: id,
+        id_count: id ? count('#' + CSS.escape(id)) : 0,
+        active_option: active,
+        top: top,
+    };
+}"""
+#: The first line of an ARIA snapshot: ``- role "name"``.
+_ARIA_LINE = re.compile(r'^\s*-\s+([a-z]+)(?:\s+"((?:[^"\\]|\\.)*)")?')
 
 _BIND_COORDINATE_TARGET_JS = (
     r"""(args) => {
@@ -758,9 +1022,15 @@ _RECORD_KEY_JS = r"""(row, node) => {
                             /^(?:id|pid|mrn)$/i.test(k)) ids.push(k + '=' + v);
                 }
                 ids.sort();
-                const here = url.pathname === location.pathname && !ids.length;
+                // A link back to this same document ("#", "#top") names no
+                // record, even when the page's own URL carries ids.
+                const sameDocument = url.origin === location.origin &&
+                    url.pathname === location.pathname && url.search === location.search;
+                const fragmentOnly = sameDocument && (!url.hash || url.hash === '#' ||
+                    url.hash === location.hash);
                 const value = url.pathname + (ids.length ? '?' + ids.join('&') : '') + url.hash;
-                if (!(here && !url.hash) && value.length <= 512 && !positional(value)) {
+                if (!fragmentOnly && !(sameDocument && !url.hash) &&
+                        value.length <= 512 && !positional(value)) {
                     parts.push('href=' + value);
                 }
             }
@@ -770,11 +1040,18 @@ _RECORD_KEY_JS = r"""(row, node) => {
     return Array.from(new Set(parts)).sort().join('\n');
 }"""
 
-# Every shown row whose record identity equals the identity of the row under
-# the point, with each row's stable record id and position. The identity is
-# computed exactly as ``structured_text_at`` does, for the cell at the same
-# place in each row. ``{row: false}`` when the point has no row identity (a
-# form field group, a standalone control): there is no row to compare.
+# Every shown row like the one under the point, with each row's stable record
+# id and position. Once the target's row level is known, the candidates are
+# all children of that row's container that hold a control, whatever the
+# control's label, case or opacity (shown-ness is judged on the row, never on
+# a hover-revealed button). Each is compared on one key read the same way as
+# the target's: its text without any control of the clicked control's tag,
+# or, for a section header, the header's text without them. Exactly one match
+# is the target. Filtering candidates is what lets a look-alike row escape the
+# count, so the census filters as little as it can: over-counting fails
+# closed. ``{row: false}`` when the point has no row identity; ``{row: true,
+# uncountable: true}`` for a row no identity can be read from.
+# ``label_repeats`` says whether other rows in the container hold a control.
 _IDENTITY_CANDIDATES_AT_JS = (
     r"""([px, py, cap]) => {
     const el = document.elementFromPoint(px, py);
@@ -785,53 +1062,121 @@ _IDENTITY_CANDIDATES_AT_JS = (
     const recordKey = """
     + _RECORD_KEY_JS
     + r""";
+"""
+    + _REPEATED_ROW_HELPERS_JS
+    + r"""
     const target = describe(el);
+    if (target.rowUncountable) return {row: true, uncountable: true};
     if (!target.rowIdentity || !target.row) return {row: false};
     const row = target.row;
-    const own = el.closest('td, th, [role="cell"], [role="gridcell"]') || el;
-    const path = [];
-    let cursor = own;
-    while (cursor && cursor !== row) {
-        const parent = cursor.parentElement;
-        if (!parent) break;
-        path.unshift(Array.prototype.indexOf.call(parent.children, cursor));
-        cursor = parent;
-    }
-    const ownInRow = cursor === row;
+    // Compare at the identity's outermost level: the row, or the card a
+    // nested row's identity was combined with.
+    const level = target.scope || row;
     const shown = (node) => {
         if (!node.isConnected) return false;
         if (typeof node.checkVisibility === 'function') {
-            return node.checkVisibility({visibilityProperty: true, opacityProperty: true});
+            return node.checkVisibility({visibilityProperty: true});
         }
         if (!node.getClientRects().length) return false;
-        const style = window.getComputedStyle(node);
-        return style.visibility !== 'hidden' && style.display !== 'none';
+        return window.getComputedStyle(node).visibility !== 'hidden';
     };
-    const rows = document.querySelectorAll('tr, [role="row"], li, [role="listitem"]');
-    const rowRect = row.getBoundingClientRect();
+    const control = el.closest(CONTROL);
+    const tag = control ? control.tagName : null;
+    const ownCell = el.closest('td, th, [role="cell"], [role="gridcell"]');
+    const cellIndex = ownCell && ownCell.parentElement === row && level === row
+        ? Array.prototype.indexOf.call(row.children, ownCell) : -1;
+    // Text of a part with its index-th control of the clicked tag removed.
+    const textMinus = (part, index) => {
+        const clone = part.cloneNode(true);
+        const drop = clone.getElementsByTagName(tag)[index];
+        if (drop) drop.remove();
+        return cleanText(clone.textContent);
+    };
+    const partOf = (candidate) => {
+        if (target.mode !== 'header') return candidate;
+        const header = headerOf(candidate);
+        return header ? header[0] : null;
+    };
+    // The target's key leaves out only the clicked control, as its identity
+    // does. A candidate matches when leaving out ONE of its own controls of
+    // that tag gives the same key: a look-alike whose action reads "Resume"
+    // still matches, and a row whose name is a link keeps its name.
+    const targetPart = partOf(level);
+    let targetKey;
+    if (tag && targetPart) {
+        const index = Array.prototype.indexOf.call(
+            targetPart.getElementsByTagName(tag), control);
+        targetKey = index >= 0 ? textMinus(targetPart, index) : textOf(targetPart);
+    } else if (cellIndex >= 0) {
+        const clone = level.cloneNode(true);
+        const cell = clone.children[cellIndex];
+        if (cell) cell.remove();
+        targetKey = cleanText(clone.textContent);
+    } else {
+        targetKey = targetPart ? textOf(targetPart) : null;
+    }
+    const matchOf = (candidate) => {
+        const part = partOf(candidate);
+        if (!part || targetKey === null) return null;
+        if (tag) {
+            const controls = part.getElementsByTagName(tag);
+            if (!controls.length || textOf(part).length < targetKey.length) return null;
+            for (let index = 0; index < controls.length; index += 1) {
+                if (textMinus(part, index) === targetKey) return controls[index];
+            }
+            return null;
+        }
+        if (cellIndex >= 0) {
+            const clone = candidate.cloneNode(true);
+            const cell = clone.children[cellIndex];
+            if (cell) cell.remove();
+            return cleanText(clone.textContent) === targetKey ? candidate : null;
+        }
+        return textOf(part) === targetKey ? candidate : null;
+    };
+    const holdsControl = (candidate) =>
+        candidate.matches(CONTROL) || candidate.querySelector(CONTROL) !== null;
+    const container = level.parentElement;
+    const siblings = container ? Array.from(container.children) : [level];
+    // Candidates: the container's children, and everything like the row
+    // across the page (another tbody, another group, a second list).
+    const pageWide = target.repeated || level !== row
+        ? Array.from(document.getElementsByTagName(level.tagName)).filter(
+            (candidate) => !tag || candidate.getElementsByTagName(tag).length > 0)
+        : Array.from(document.querySelectorAll('tr, [role="row"], li, [role="listitem"]'));
+    const pool = new Set(siblings.concat(pageWide));
     const result = {
         record_key: recordKey(row, el),
-        incomplete: rows.length > cap,
+        incomplete: pool.size > cap,
+        label_repeats: false,
         candidates: [],
     };
     if (result.incomplete) return result;
-    for (const candidate of rows) {
-        if (candidate !== row && !shown(candidate)) continue;
-        let node = candidate;
-        if (ownInRow) {
-            for (const index of path) node = node && node.children[index];
-        }
-        if (!node) continue;
-        const observed = candidate === row ? target : describe(node);
-        if (observed.row !== candidate || observed.rowIdentity !== target.rowIdentity) {
+    const found = [[level, el]];
+    for (const candidate of pool) {
+        if (candidate === level || candidate.contains(level) || level.contains(candidate)) {
             continue;
         }
+        if (control && !holdsControl(candidate)) continue;
+        if (!shown(candidate)) continue;
+        const hit = matchOf(candidate);
+        if (hit) found.push([candidate, hit]);
+    }
+    let withControls = 0;
+    for (const candidate of siblings) {
+        if ((!control || holdsControl(candidate)) && (candidate === level || shown(candidate))) {
+            withControls += 1;
+        }
+    }
+    result.label_repeats = withControls >= 2;
+    const levelRect = level.getBoundingClientRect();
+    for (const [candidate, hit] of found) {
         const rect = candidate.getBoundingClientRect();
         result.candidates.push({
-            self: candidate === row,
-            record_key: candidate === row ? result.record_key : recordKey(candidate, node),
-            dx: rect.x - rowRect.x,
-            dy: rect.y - rowRect.y,
+            self: candidate === level,
+            record_key: candidate === level ? result.record_key : recordKey(candidate, hit),
+            dx: rect.x - levelRect.x,
+            dy: rect.y - levelRect.y,
         });
     }
     return result;
@@ -1870,6 +2215,63 @@ class PlaywrightBackend:
         )
         return result if isinstance(result, bool) else None
 
+    def focus_identity(self) -> Optional[dict[str, Any]]:
+        """Who has the focus: its testid, id, role and name, and how many share them.
+
+        For the ``focus_on`` postcondition. ``testid_count`` / ``id_count``
+        count the elements with the same ``data-testid`` / ``id`` in the
+        focused element's document; ``role_name_count`` counts the elements
+        with the same role and accessible name on the page (Playwright's own
+        accessibility tree, as replay resolves a role and a name). Role and
+        name are read only in the top document. ``active_option`` is whether
+        an option of the focused control is active: its
+        ``aria-activedescendant`` names an element, or the listbox it
+        controls has an ``aria-selected`` option. ``{"none": True}`` when
+        nothing has the focus; None when it can't be read.
+        """
+
+        frame_path: list[str] = []
+        info = self._focused_element_call(_FOCUS_IDENTITY_JS, frame_path_out=frame_path)
+        if not isinstance(info, dict) or info.get("unreadable"):
+            return None
+        if info.get("none"):
+            return {"none": True}
+        role: Optional[str] = None
+        name: Optional[str] = None
+        role_name_count = 0
+        if info.get("top"):
+            try:
+                snapshot = self.page.locator(":focus").aria_snapshot(timeout=1000)
+            except Exception:  # noqa: BLE001 - no snapshot: no role and name
+                snapshot = ""
+            first = snapshot.splitlines()[0] if snapshot else ""
+            match = _ARIA_LINE.match(first)
+            if match:
+                role = match.group(1)
+                name = (match.group(2) or "").replace('\\"', '"').strip() or None
+            if role and name:
+                try:
+                    role_name_count = self.page.get_by_role(
+                        role,  # type: ignore[arg-type]
+                        name=name,
+                        exact=True,
+                    ).count()
+                except Exception:  # noqa: BLE001 - uncountable is not unique
+                    role_name_count = 0
+        return {
+            "none": False,
+            "tag": info.get("tag"),
+            "testid": info.get("testid"),
+            "testid_count": int(info.get("testid_count") or 0),
+            "id": info.get("id"),
+            "id_count": int(info.get("id_count") or 0),
+            "role": role,
+            "name": name,
+            "role_name_count": role_name_count,
+            "active_option": info.get("active_option") is True,
+            "frame_path": list(frame_path),
+        }
+
     def element_texts(
         self, selector: str, frame_path: tuple[str, ...] = ()
     ) -> Optional[list[str]]:
@@ -1941,11 +2343,18 @@ class PlaywrightBackend:
         )
 
     def _focused_element_call(
-        self, js: str, *, arg: Any = None, with_arg: bool = False
+        self,
+        js: str,
+        *,
+        arg: Any = None,
+        with_arg: bool = False,
+        frame_path_out: Optional[list[str]] = None,
     ) -> Any:
         """Evaluate ``js`` on the exactly bound focused element (see above).
 
         Returns the raw result, or None on any frame mismatch or failure.
+        ``frame_path_out``, when given, receives the frame chain the focused
+        element is in (outermost first; empty in the top document).
         """
 
         scope: Any = self.page
@@ -1966,6 +2375,8 @@ class PlaywrightBackend:
                             scope, tuple(frame_path), box
                         ):
                             return None
+                        if frame_path_out is not None:
+                            frame_path_out[:] = frame_path
                         if with_arg:
                             return focused.evaluate(js, arg)
                         return focused.evaluate(js)
