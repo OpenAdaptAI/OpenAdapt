@@ -11,7 +11,11 @@ recorded crop and records:
   against the element's box in the page;
 - ``true_score`` / ``best_other_score``: the model's score for the true place
   and for the best other place;
-- ``ms``: wall time of the query (edge search plus model).
+- ``ms``: wall time of the query (edge search plus model);
+- ``rung_outcome``: what the resolver's rule makes of those look-alikes
+  (``resolver._model_grounded`` with the step's landmarks, OCR included):
+  ``target``, ``wrong_target``, ``abstain`` (a text-labelled target, left
+  to OCR, or nothing found) or ``halt:<refusal>``.
 
 It also times the template matcher on the same crop
 (``openadapt_flow.vision.find_template`` at the resolver's threshold) and
@@ -55,7 +59,12 @@ def main() -> int:
 
     from openadapt_flow import vision
     from openadapt_flow.runtime.local_grounder import LocalGroundingModel
-    from openadapt_flow.runtime.resolver import TEMPLATE_THRESHOLD, _scaled_click_point
+    from openadapt_flow.runtime.resolver import (
+        TEMPLATE_THRESHOLD,
+        _model_grounded,
+        _scaled_click_point,
+    )
+    from openadapt_flow.vision.ocr import OcrResolutionRefused
 
     model = LocalGroundingModel.load()
     rows = []
@@ -74,7 +83,10 @@ def main() -> int:
 
                 def on_target(region, anchor=step.anchor, box=(x, y, w, h)):
                     px, py = _scaled_click_point(anchor, tuple(region))
-                    return box[0] <= px <= box[0] + box[2] and box[1] <= py <= box[1] + box[3]
+                    return (
+                        box[0] <= px <= box[0] + box[2]
+                        and box[1] <= py <= box[1] + box[3]
+                    )
 
                 timings = []
                 for _ in range(REPEATS):
@@ -82,11 +94,29 @@ def main() -> int:
                     started = time.monotonic()
                     found = model.locate_anchor(png, template)
                     timings.append((time.monotonic() - started) * 1000.0)
+                # What the rung decides: the look-alike count and landmarks.
+                try:
+                    grounded = _model_grounded(
+                        step.anchor, png, vision, model.locate_anchor, template
+                    )
+                    if grounded is None:
+                        rung = "abstain"
+                    else:
+                        px, py = grounded[0]
+                        rung = (
+                            "target"
+                            if x <= px <= x + w and y <= py <= y + h
+                            else "wrong_target"
+                        )
+                except OcrResolutionRefused as exc:
+                    rung = "halt:" + type(exc).__name__
                 scored = model.candidates(png, template)
                 true_scores = [c.score for c in scored if on_target(c.region)]
                 other_scores = [c.score for c in scored if not on_target(c.region)]
                 started = time.monotonic()
-                tmatch = vision.find_template(png, template, threshold=TEMPLATE_THRESHOLD)
+                tmatch = vision.find_template(
+                    png, template, threshold=TEMPLATE_THRESHOLD
+                )
                 template_ms = (time.monotonic() - started) * 1000.0
                 rows.append(
                     {
@@ -95,12 +125,15 @@ def main() -> int:
                         "target": target,
                         "step_id": step.id,
                         "text_label": step.anchor.ocr_text,
+                        "rung_outcome": rung,
                         "lookalikes": len(found),
                         "true_found": any(on_target(c.region) for c in found),
                         "false_found": [
                             list(c.region) for c in found if not on_target(c.region)
                         ],
-                        "true_score": round(max(true_scores), 3) if true_scores else None,
+                        "true_score": round(max(true_scores), 3)
+                        if true_scores
+                        else None,
                         "best_other_score": (
                             round(max(other_scores), 3) if other_scores else None
                         ),

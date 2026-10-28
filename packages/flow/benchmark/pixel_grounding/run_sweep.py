@@ -181,6 +181,9 @@ def replay(
             backend,
             poll_interval_s=0.0,
             pixel_verify_enabled=True,
+            # As on an RDP or Citrix bundle: the layout check and the
+            # display-scale estimate (benchmark/pixel_scale) are on.
+            layout_drift=True,
             grounder=grounder,
         ).run(workflow, params=REPLAY, bundle_dir=bundle_dir, run_dir=run_dir)
     except Exception as exc:  # noqa: BLE001 - a crash is an outcome

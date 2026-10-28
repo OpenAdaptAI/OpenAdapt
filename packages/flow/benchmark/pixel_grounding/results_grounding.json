@@ -1,0 +1,2618 @@
+{
+  "commit": "7bf8e399cfa7dba1d6c11949d5aa36fac69a7876",
+  "generated_at": "2026-10-28T18:57:39.672559+00:00",
+  "grounder": {
+    "accept_score": 0.78,
+    "input_side": 112,
+    "license": "Apache-2.0",
+    "lookalike_margin": 0.15,
+    "model": "dinov2-small",
+    "rung": "grounder",
+    "sha256": "dfce54a839b491f395c516350ebb4a78f947e9170a6beac0f2bc5638e0f09d61",
+    "source": "facebook/dinov2-small"
+  },
+  "latency_ms": {
+    "max": 599.9,
+    "median": 129.9,
+    "p90": 224.2
+  },
+  "platform": "Darwin arm64 py3.12.7",
+  "rows": [
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.953,
+      "condition": "scale_100",
+      "false_found": [
+        [
+          231,
+          139,
+          97,
+          28
+        ],
+        [
+          231,
+          311,
+          97,
+          28
+        ],
+        [
+          231,
+          182,
+          97,
+          28
+        ],
+        [
+          231,
+          396,
+          97,
+          28
+        ],
+        [
+          916,
+          116,
+          107,
+          31
+        ],
+        [
+          231,
+          440,
+          97,
+          28
+        ],
+        [
+          228,
+          353,
+          107,
+          31
+        ],
+        [
+          94,
+          70,
+          78,
+          22
+        ],
+        [
+          50,
+          400,
+          78,
+          22
+        ],
+        [
+          846,
+          122,
+          78,
+          22
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 11,
+      "ms": 232.1,
+      "rung_outcome": "abstain",
+      "step_id": "step_000",
+      "target": "edit-2",
+      "template_found": true,
+      "template_ms": 78.7,
+      "template_wrong": false,
+      "text_label": "MRN 36428",
+      "true_found": true,
+      "true_score": 0.966
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.788,
+      "condition": "scale_100",
+      "false_found": [
+        [
+          1018,
+          80,
+          240,
+          96
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 6,
+      "ms": 115.4,
+      "rung_outcome": "abstain",
+      "step_id": "step_001",
+      "target": "visit",
+      "template_found": true,
+      "template_ms": 96.6,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.987
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.819,
+      "condition": "scale_100",
+      "false_found": [
+        [
+          686,
+          461,
+          336,
+          134
+        ],
+        [
+          898,
+          461,
+          336,
+          134
+        ],
+        [
+          883,
+          408,
+          192,
+          77
+        ],
+        [
+          1061,
+          408,
+          192,
+          77
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 7,
+      "ms": 113.3,
+      "rung_outcome": "abstain",
+      "step_id": "step_003",
+      "target": "note",
+      "template_found": true,
+      "template_ms": 97.8,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.942
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.776,
+      "condition": "scale_100",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 1,
+      "ms": 128.8,
+      "rung_outcome": "target",
+      "step_id": "step_005",
+      "target": "tb-attach",
+      "template_found": true,
+      "template_ms": 89.7,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.952
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.474,
+      "condition": "scale_100",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 1,
+      "ms": 117.2,
+      "rung_outcome": "target",
+      "step_id": "step_006",
+      "target": "save",
+      "template_found": true,
+      "template_ms": 88.8,
+      "template_wrong": false,
+      "text_label": "\u65e5 \u65e5",
+      "true_found": true,
+      "true_score": 0.951
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.941,
+      "condition": "scale_125",
+      "false_found": [
+        [
+          288,
+          442,
+          121,
+          35
+        ],
+        [
+          288,
+          389,
+          121,
+          35
+        ],
+        [
+          1144,
+          146,
+          136,
+          39
+        ],
+        [
+          288,
+          227,
+          121,
+          35
+        ],
+        [
+          288,
+          496,
+          121,
+          35
+        ],
+        [
+          116,
+          88,
+          97,
+          28
+        ],
+        [
+          937,
+          426,
+          87,
+          25
+        ]
+      ],
+      "frame": [
+        1600,
+        1000
+      ],
+      "lookalikes": 8,
+      "ms": 275.4,
+      "rung_outcome": "abstain",
+      "step_id": "step_000",
+      "target": "edit-2",
+      "template_found": false,
+      "template_ms": 114.3,
+      "template_wrong": false,
+      "text_label": "MRN 36428",
+      "true_found": true,
+      "true_score": 0.955
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.946,
+      "condition": "scale_125",
+      "false_found": [
+        [
+          1274,
+          163,
+          224,
+          90
+        ]
+      ],
+      "frame": [
+        1600,
+        1000
+      ],
+      "lookalikes": 4,
+      "ms": 141.5,
+      "rung_outcome": "abstain",
+      "step_id": "step_001",
+      "target": "visit",
+      "template_found": false,
+      "template_ms": 116.9,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.952
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.848,
+      "condition": "scale_125",
+      "false_found": [
+        [
+          557,
+          67,
+          192,
+          77
+        ],
+        [
+          1099,
+          504,
+          240,
+          96
+        ]
+      ],
+      "frame": [
+        1600,
+        1000
+      ],
+      "lookalikes": 4,
+      "ms": 117.6,
+      "rung_outcome": "abstain",
+      "step_id": "step_003",
+      "target": "note",
+      "template_found": false,
+      "template_ms": 148.2,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.926
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.67,
+      "condition": "scale_125",
+      "false_found": [],
+      "frame": [
+        1600,
+        1000
+      ],
+      "lookalikes": 1,
+      "ms": 148.8,
+      "rung_outcome": "target",
+      "step_id": "step_005",
+      "target": "tb-attach",
+      "template_found": false,
+      "template_ms": 125.5,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.951
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.506,
+      "condition": "scale_125",
+      "false_found": [],
+      "frame": [
+        1600,
+        1000
+      ],
+      "lookalikes": 1,
+      "ms": 154.7,
+      "rung_outcome": "target",
+      "step_id": "step_006",
+      "target": "save",
+      "template_found": false,
+      "template_ms": 122.3,
+      "template_wrong": false,
+      "text_label": "\u65e5 \u65e5",
+      "true_found": true,
+      "true_score": 0.928
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.945,
+      "condition": "scale_150",
+      "false_found": [
+        [
+          346,
+          531,
+          146,
+          42
+        ],
+        [
+          346,
+          466,
+          146,
+          42
+        ],
+        [
+          346,
+          209,
+          146,
+          42
+        ],
+        [
+          349,
+          662,
+          136,
+          39
+        ],
+        [
+          346,
+          595,
+          146,
+          42
+        ],
+        [
+          346,
+          273,
+          146,
+          42
+        ],
+        [
+          1371,
+          174,
+          170,
+          49
+        ],
+        [
+          1124,
+          186,
+          97,
+          28
+        ]
+      ],
+      "frame": [
+        1920,
+        1200
+      ],
+      "lookalikes": 9,
+      "ms": 342.8,
+      "rung_outcome": "abstain",
+      "step_id": "step_000",
+      "target": "edit-2",
+      "template_found": false,
+      "template_ms": 162.8,
+      "template_wrong": false,
+      "text_label": "MRN 36428",
+      "true_found": true,
+      "true_score": 0.931
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.937,
+      "condition": "scale_150",
+      "false_found": [
+        [
+          1082,
+          294,
+          240,
+          96
+        ],
+        [
+          1203,
+          294,
+          240,
+          96
+        ],
+        [
+          1325,
+          294,
+          240,
+          96
+        ],
+        [
+          1446,
+          294,
+          240,
+          96
+        ],
+        [
+          1568,
+          294,
+          240,
+          96
+        ],
+        [
+          1546,
+          195,
+          280,
+          112
+        ],
+        [
+          1043,
+          438,
+          176,
+          70
+        ],
+        [
+          1133,
+          438,
+          176,
+          70
+        ],
+        [
+          406,
+          106,
+          144,
+          58
+        ],
+        [
+          662,
+          106,
+          144,
+          58
+        ]
+      ],
+      "frame": [
+        1920,
+        1200
+      ],
+      "lookalikes": 10,
+      "ms": 156.2,
+      "rung_outcome": "abstain",
+      "step_id": "step_001",
+      "target": "visit",
+      "template_found": false,
+      "template_ms": 167.3,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": false,
+      "true_score": null
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.913,
+      "condition": "scale_150",
+      "false_found": [
+        [
+          259,
+          82,
+          192,
+          77
+        ],
+        [
+          360,
+          82,
+          192,
+          77
+        ],
+        [
+          461,
+          82,
+          192,
+          77
+        ],
+        [
+          562,
+          82,
+          192,
+          77
+        ],
+        [
+          782,
+          82,
+          192,
+          77
+        ],
+        [
+          1690,
+          82,
+          192,
+          77
+        ]
+      ],
+      "frame": [
+        1920,
+        1200
+      ],
+      "lookalikes": 6,
+      "ms": 130.9,
+      "rung_outcome": "abstain",
+      "step_id": "step_003",
+      "target": "note",
+      "template_found": false,
+      "template_ms": 229.9,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": false,
+      "true_score": null
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.657,
+      "condition": "scale_150",
+      "false_found": [],
+      "frame": [
+        1920,
+        1200
+      ],
+      "lookalikes": 1,
+      "ms": 155.5,
+      "rung_outcome": "target",
+      "step_id": "step_005",
+      "target": "tb-attach",
+      "template_found": false,
+      "template_ms": 169.5,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.954
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.518,
+      "condition": "scale_150",
+      "false_found": [],
+      "frame": [
+        1920,
+        1200
+      ],
+      "lookalikes": 1,
+      "ms": 156.4,
+      "rung_outcome": "target",
+      "step_id": "step_006",
+      "target": "save",
+      "template_found": false,
+      "template_ms": 174.4,
+      "template_wrong": false,
+      "text_label": "\u65e5 \u65e5",
+      "true_found": true,
+      "true_score": 0.978
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.942,
+      "condition": "scale_200",
+      "false_found": [
+        [
+          462,
+          622,
+          194,
+          56
+        ],
+        [
+          462,
+          708,
+          194,
+          56
+        ],
+        [
+          462,
+          794,
+          194,
+          56
+        ],
+        [
+          462,
+          364,
+          194,
+          56
+        ],
+        [
+          462,
+          881,
+          194,
+          56
+        ]
+      ],
+      "frame": [
+        2560,
+        1600
+      ],
+      "lookalikes": 6,
+      "ms": 599.9,
+      "rung_outcome": "abstain",
+      "step_id": "step_000",
+      "target": "edit-2",
+      "template_found": false,
+      "template_ms": 288.0,
+      "template_wrong": false,
+      "text_label": "MRN 36428",
+      "true_found": true,
+      "true_score": 0.94
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.937,
+      "condition": "scale_200",
+      "false_found": [
+        [
+          2346,
+          182,
+          144,
+          58
+        ],
+        [
+          1434,
+          182,
+          144,
+          58
+        ],
+        [
+          1507,
+          182,
+          144,
+          58
+        ],
+        [
+          1581,
+          182,
+          144,
+          58
+        ],
+        [
+          1654,
+          182,
+          144,
+          58
+        ],
+        [
+          1728,
+          182,
+          144,
+          58
+        ]
+      ],
+      "frame": [
+        2560,
+        1600
+      ],
+      "lookalikes": 10,
+      "ms": 297.5,
+      "rung_outcome": "abstain",
+      "step_id": "step_001",
+      "target": "visit",
+      "template_found": false,
+      "template_ms": 339.6,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.929
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.686,
+      "condition": "scale_200",
+      "false_found": [],
+      "frame": [
+        2560,
+        1600
+      ],
+      "lookalikes": 3,
+      "ms": 172.6,
+      "rung_outcome": "abstain",
+      "step_id": "step_003",
+      "target": "note",
+      "template_found": false,
+      "template_ms": 376.1,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.975
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.668,
+      "condition": "scale_200",
+      "false_found": [],
+      "frame": [
+        2560,
+        1600
+      ],
+      "lookalikes": 1,
+      "ms": 209.5,
+      "rung_outcome": "target",
+      "step_id": "step_005",
+      "target": "tb-attach",
+      "template_found": false,
+      "template_ms": 312.3,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.948
+    },
+    {
+      "axis": "display_scale",
+      "best_other_score": 0.492,
+      "condition": "scale_200",
+      "false_found": [],
+      "frame": [
+        2560,
+        1600
+      ],
+      "lookalikes": 1,
+      "ms": 210.7,
+      "rung_outcome": "target",
+      "step_id": "step_006",
+      "target": "save",
+      "template_found": false,
+      "template_ms": 317.1,
+      "template_wrong": false,
+      "text_label": "\u65e5 \u65e5",
+      "true_found": true,
+      "true_score": 0.942
+    },
+    {
+      "axis": "zoom",
+      "best_other_score": 0.944,
+      "condition": "zoom_110",
+      "false_found": [
+        [
+          253,
+          150,
+          107,
+          31
+        ],
+        [
+          1005,
+          126,
+          121,
+          35
+        ],
+        [
+          253,
+          339,
+          107,
+          31
+        ],
+        [
+          253,
+          433,
+          107,
+          31
+        ],
+        [
+          253,
+          385,
+          107,
+          31
+        ],
+        [
+          253,
+          197,
+          107,
+          31
+        ],
+        [
+          53,
+          437,
+          87,
+          25
+        ],
+        [
+          928,
+          132,
+          87,
+          25
+        ],
+        [
+          60,
+          251,
+          78,
+          22
+        ],
+        [
+          101,
+          77,
+          87,
+          25
+        ],
+        [
+          822,
+          370,
+          78,
+          22
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 12,
+      "ms": 207.2,
+      "rung_outcome": "abstain",
+      "step_id": "step_000",
+      "target": "edit-2",
+      "template_found": false,
+      "template_ms": 79.6,
+      "template_wrong": false,
+      "text_label": "MRN 36428",
+      "true_found": true,
+      "true_score": 0.958
+    },
+    {
+      "axis": "zoom",
+      "best_other_score": 0.772,
+      "condition": "zoom_110",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 4,
+      "ms": 113.5,
+      "rung_outcome": "abstain",
+      "step_id": "step_001",
+      "target": "visit",
+      "template_found": false,
+      "template_ms": 88.8,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.946
+    },
+    {
+      "axis": "zoom",
+      "best_other_score": 0.752,
+      "condition": "zoom_110",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 2,
+      "ms": 105.1,
+      "rung_outcome": "halt:LookAlikeTargetsRefused",
+      "step_id": "step_003",
+      "target": "note",
+      "template_found": false,
+      "template_ms": 94.3,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.902
+    },
+    {
+      "axis": "zoom",
+      "best_other_score": 0.76,
+      "condition": "zoom_110",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 1,
+      "ms": 118.4,
+      "rung_outcome": "target",
+      "step_id": "step_005",
+      "target": "tb-attach",
+      "template_found": false,
+      "template_ms": 86.3,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.958
+    },
+    {
+      "axis": "zoom",
+      "best_other_score": 0.454,
+      "condition": "zoom_110",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 1,
+      "ms": 112.3,
+      "rung_outcome": "target",
+      "step_id": "step_006",
+      "target": "save",
+      "template_found": false,
+      "template_ms": 87.4,
+      "template_wrong": false,
+      "text_label": "\u65e5 \u65e5",
+      "true_found": true,
+      "true_score": 0.969
+    },
+    {
+      "axis": "zoom",
+      "best_other_score": 0.948,
+      "condition": "zoom_125",
+      "false_found": [
+        [
+          288,
+          385,
+          121,
+          35
+        ],
+        [
+          288,
+          438,
+          121,
+          35
+        ],
+        [
+          288,
+          224,
+          121,
+          35
+        ],
+        [
+          288,
+          171,
+          121,
+          35
+        ],
+        [
+          1142,
+          146,
+          136,
+          39
+        ],
+        [
+          288,
+          491,
+          121,
+          35
+        ],
+        [
+          62,
+          497,
+          97,
+          28
+        ],
+        [
+          118,
+          88,
+          97,
+          28
+        ],
+        [
+          67,
+          284,
+          87,
+          25
+        ],
+        [
+          893,
+          87,
+          107,
+          31
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 11,
+      "ms": 209.1,
+      "rung_outcome": "abstain",
+      "step_id": "step_000",
+      "target": "edit-2",
+      "template_found": false,
+      "template_ms": 76.4,
+      "template_wrong": false,
+      "text_label": "MRN 36428",
+      "true_found": true,
+      "true_score": 0.951
+    },
+    {
+      "axis": "zoom",
+      "best_other_score": 0.937,
+      "condition": "zoom_125",
+      "false_found": [
+        [
+          902,
+          243,
+          200,
+          80
+        ],
+        [
+          1005,
+          243,
+          200,
+          80
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 4,
+      "ms": 113.3,
+      "rung_outcome": "abstain",
+      "step_id": "step_001",
+      "target": "visit",
+      "template_found": false,
+      "template_ms": 93.0,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.819
+    },
+    {
+      "axis": "zoom",
+      "best_other_score": 0.861,
+      "condition": "zoom_125",
+      "false_found": [
+        [
+          158,
+          581,
+          480,
+          192
+        ],
+        [
+          619,
+          67,
+          192,
+          77
+        ],
+        [
+          854,
+          523,
+          192,
+          77
+        ],
+        [
+          854,
+          576,
+          336,
+          134
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 5,
+      "ms": 119.1,
+      "rung_outcome": "abstain",
+      "step_id": "step_003",
+      "target": "note",
+      "template_found": false,
+      "template_ms": 116.0,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.905
+    },
+    {
+      "axis": "zoom",
+      "best_other_score": 0.697,
+      "condition": "zoom_125",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 1,
+      "ms": 127.6,
+      "rung_outcome": "target",
+      "step_id": "step_005",
+      "target": "tb-attach",
+      "template_found": false,
+      "template_ms": 95.5,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.943
+    },
+    {
+      "axis": "zoom",
+      "best_other_score": 0.504,
+      "condition": "zoom_125",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 1,
+      "ms": 140.6,
+      "rung_outcome": "target",
+      "step_id": "step_006",
+      "target": "save",
+      "template_found": false,
+      "template_ms": 98.7,
+      "template_wrong": false,
+      "text_label": "\u65e5 \u65e5",
+      "true_found": true,
+      "true_score": 0.949
+    },
+    {
+      "axis": "zoom",
+      "best_other_score": 0.951,
+      "condition": "zoom_150",
+      "false_found": [
+        [
+          346,
+          461,
+          146,
+          42
+        ],
+        [
+          346,
+          525,
+          146,
+          42
+        ],
+        [
+          346,
+          206,
+          146,
+          42
+        ],
+        [
+          346,
+          589,
+          146,
+          42
+        ],
+        [
+          346,
+          269,
+          146,
+          42
+        ],
+        [
+          349,
+          654,
+          136,
+          39
+        ],
+        [
+          349,
+          399,
+          136,
+          39
+        ],
+        [
+          80,
+          340,
+          107,
+          31
+        ],
+        [
+          137,
+          104,
+          121,
+          35
+        ],
+        [
+          34,
+          470,
+          97,
+          28
+        ],
+        [
+          1123,
+          183,
+          97,
+          28
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 12,
+      "ms": 224.2,
+      "rung_outcome": "abstain",
+      "step_id": "step_000",
+      "target": "edit-2",
+      "template_found": false,
+      "template_ms": 80.7,
+      "template_wrong": false,
+      "text_label": "MRN 36428",
+      "true_found": true,
+      "true_score": 0.955
+    },
+    {
+      "axis": "zoom",
+      "best_other_score": 0.862,
+      "condition": "zoom_150",
+      "false_found": [
+        [
+          1078,
+          294,
+          200,
+          80
+        ],
+        [
+          1082,
+          342,
+          160,
+          64
+        ],
+        [
+          1046,
+          432,
+          176,
+          70
+        ],
+        [
+          189,
+          176,
+          160,
+          64
+        ],
+        [
+          176,
+          653,
+          176,
+          70
+        ],
+        [
+          1123,
+          234,
+          128,
+          51
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 6,
+      "ms": 126.5,
+      "rung_outcome": "abstain",
+      "step_id": "step_001",
+      "target": "visit",
+      "template_found": false,
+      "template_ms": 92.9,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": false,
+      "true_score": null
+    },
+    {
+      "axis": "zoom",
+      "best_other_score": 0.872,
+      "condition": "zoom_150",
+      "false_found": [
+        [
+          758,
+          82,
+          216,
+          86
+        ],
+        [
+          394,
+          82,
+          192,
+          77
+        ],
+        [
+          624,
+          82,
+          192,
+          77
+        ],
+        [
+          259,
+          82,
+          192,
+          77
+        ],
+        [
+          163,
+          691,
+          264,
+          106
+        ],
+        [
+          1018,
+          691,
+          264,
+          106
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 6,
+      "ms": 124.1,
+      "rung_outcome": "abstain",
+      "step_id": "step_003",
+      "target": "note",
+      "template_found": false,
+      "template_ms": 102.2,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": false,
+      "true_score": 0.52
+    },
+    {
+      "axis": "zoom",
+      "best_other_score": 0.769,
+      "condition": "zoom_150",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 1,
+      "ms": 129.9,
+      "rung_outcome": "target",
+      "step_id": "step_005",
+      "target": "tb-attach",
+      "template_found": false,
+      "template_ms": 89.1,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.935
+    },
+    {
+      "axis": "zoom",
+      "best_other_score": 0.498,
+      "condition": "zoom_150",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 1,
+      "ms": 115.9,
+      "rung_outcome": "target",
+      "step_id": "step_006",
+      "target": "save",
+      "template_found": false,
+      "template_ms": 87.9,
+      "template_wrong": false,
+      "text_label": "\u65e5 \u65e5",
+      "true_found": true,
+      "true_score": 0.938
+    },
+    {
+      "axis": "font_size",
+      "best_other_score": 0.956,
+      "condition": "font_plus2",
+      "false_found": [
+        [
+          239,
+          228,
+          107,
+          31
+        ],
+        [
+          238,
+          399,
+          107,
+          31
+        ],
+        [
+          238,
+          185,
+          107,
+          31
+        ],
+        [
+          238,
+          357,
+          107,
+          31
+        ],
+        [
+          238,
+          442,
+          107,
+          31
+        ],
+        [
+          946,
+          119,
+          121,
+          35
+        ],
+        [
+          238,
+          270,
+          107,
+          31
+        ],
+        [
+          234,
+          140,
+          121,
+          35
+        ],
+        [
+          755,
+          126,
+          78,
+          22
+        ],
+        [
+          878,
+          126,
+          78,
+          22
+        ],
+        [
+          102,
+          70,
+          87,
+          25
+        ],
+        [
+          757,
+          349,
+          78,
+          22
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 12,
+      "ms": 209.7,
+      "rung_outcome": "abstain",
+      "step_id": "step_000",
+      "target": "edit-2",
+      "template_found": false,
+      "template_ms": 234.0,
+      "template_wrong": false,
+      "text_label": "MRN 36428",
+      "true_found": false,
+      "true_score": null
+    },
+    {
+      "axis": "font_size",
+      "best_other_score": 0.954,
+      "condition": "font_plus2",
+      "false_found": [
+        [
+          1040,
+          202,
+          176,
+          70
+        ],
+        [
+          1066,
+          138,
+          176,
+          70
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 5,
+      "ms": 137.8,
+      "rung_outcome": "abstain",
+      "step_id": "step_001",
+      "target": "visit",
+      "template_found": false,
+      "template_ms": 87.2,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.954
+    },
+    {
+      "axis": "font_size",
+      "best_other_score": 0.791,
+      "condition": "font_plus2",
+      "false_found": [
+        [
+          734,
+          466,
+          336,
+          134
+        ],
+        [
+          907,
+          466,
+          336,
+          134
+        ],
+        [
+          154,
+          470,
+          480,
+          192
+        ],
+        [
+          979,
+          384,
+          264,
+          106
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 5,
+      "ms": 110.7,
+      "rung_outcome": "abstain",
+      "step_id": "step_003",
+      "target": "note",
+      "template_found": true,
+      "template_ms": 94.3,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.918
+    },
+    {
+      "axis": "font_size",
+      "best_other_score": 0.784,
+      "condition": "font_plus2",
+      "false_found": [
+        [
+          138,
+          0,
+          160,
+          64
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 2,
+      "ms": 111.8,
+      "rung_outcome": "abstain",
+      "step_id": "step_005",
+      "target": "tb-attach",
+      "template_found": true,
+      "template_ms": 92.8,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.986
+    },
+    {
+      "axis": "font_size",
+      "best_other_score": 0.465,
+      "condition": "font_plus2",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 1,
+      "ms": 117.3,
+      "rung_outcome": "target",
+      "step_id": "step_006",
+      "target": "save",
+      "template_found": true,
+      "template_ms": 86.9,
+      "template_wrong": false,
+      "text_label": "\u65e5 \u65e5",
+      "true_found": true,
+      "true_score": 0.949
+    },
+    {
+      "axis": "font_size",
+      "best_other_score": 0.947,
+      "condition": "font_plus4",
+      "false_found": [
+        [
+          244,
+          230,
+          121,
+          35
+        ],
+        [
+          242,
+          315,
+          121,
+          35
+        ],
+        [
+          979,
+          120,
+          136,
+          39
+        ],
+        [
+          242,
+          444,
+          121,
+          35
+        ],
+        [
+          242,
+          400,
+          121,
+          35
+        ],
+        [
+          238,
+          356,
+          136,
+          39
+        ],
+        [
+          242,
+          186,
+          121,
+          35
+        ],
+        [
+          242,
+          272,
+          121,
+          35
+        ],
+        [
+          763,
+          129,
+          87,
+          25
+        ],
+        [
+          899,
+          129,
+          87,
+          25
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 10,
+      "ms": 204.8,
+      "rung_outcome": "abstain",
+      "step_id": "step_000",
+      "target": "edit-2",
+      "template_found": false,
+      "template_ms": 78.3,
+      "template_wrong": false,
+      "text_label": "MRN 36428",
+      "true_found": false,
+      "true_score": null
+    },
+    {
+      "axis": "font_size",
+      "best_other_score": 0.75,
+      "condition": "font_plus4",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 4,
+      "ms": 113.5,
+      "rung_outcome": "abstain",
+      "step_id": "step_001",
+      "target": "visit",
+      "template_found": false,
+      "template_ms": 87.3,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.935
+    },
+    {
+      "axis": "font_size",
+      "best_other_score": 0.783,
+      "condition": "font_plus4",
+      "false_found": [
+        [
+          29,
+          480,
+          336,
+          134
+        ],
+        [
+          202,
+          480,
+          336,
+          134
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 5,
+      "ms": 108.8,
+      "rung_outcome": "abstain",
+      "step_id": "step_003",
+      "target": "note",
+      "template_found": true,
+      "template_ms": 103.0,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.907
+    },
+    {
+      "axis": "font_size",
+      "best_other_score": 0.792,
+      "condition": "font_plus4",
+      "false_found": [
+        [
+          160,
+          0,
+          160,
+          64
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 2,
+      "ms": 116.2,
+      "rung_outcome": "abstain",
+      "step_id": "step_005",
+      "target": "tb-attach",
+      "template_found": true,
+      "template_ms": 87.0,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.961
+    },
+    {
+      "axis": "font_size",
+      "best_other_score": 0.48,
+      "condition": "font_plus4",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 1,
+      "ms": 113.4,
+      "rung_outcome": "target",
+      "step_id": "step_006",
+      "target": "save",
+      "template_found": true,
+      "template_ms": 87.7,
+      "template_wrong": false,
+      "text_label": "\u65e5 \u65e5",
+      "true_found": true,
+      "true_score": 0.956
+    },
+    {
+      "axis": "theme",
+      "best_other_score": 0.893,
+      "condition": "dark_100",
+      "false_found": [
+        [
+          231,
+          311,
+          97,
+          28
+        ],
+        [
+          231,
+          139,
+          97,
+          28
+        ],
+        [
+          231,
+          182,
+          97,
+          28
+        ],
+        [
+          231,
+          440,
+          97,
+          28
+        ],
+        [
+          231,
+          396,
+          97,
+          28
+        ],
+        [
+          228,
+          353,
+          107,
+          31
+        ],
+        [
+          916,
+          116,
+          107,
+          31
+        ],
+        [
+          94,
+          70,
+          78,
+          22
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 9,
+      "ms": 218.5,
+      "rung_outcome": "abstain",
+      "step_id": "step_000",
+      "target": "edit-2",
+      "template_found": false,
+      "template_ms": 79.3,
+      "template_wrong": false,
+      "text_label": "MRN 36428",
+      "true_found": true,
+      "true_score": 0.853
+    },
+    {
+      "axis": "theme",
+      "best_other_score": 0.756,
+      "condition": "dark_100",
+      "false_found": [
+        [
+          448,
+          86,
+          144,
+          58
+        ],
+        [
+          723,
+          227,
+          160,
+          64
+        ],
+        [
+          992,
+          230,
+          128,
+          51
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 7,
+      "ms": 113.3,
+      "rung_outcome": "abstain",
+      "step_id": "step_001",
+      "target": "visit",
+      "template_found": false,
+      "template_ms": 89.9,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.826
+    },
+    {
+      "axis": "theme",
+      "best_other_score": 0.719,
+      "condition": "dark_100",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 3,
+      "ms": 104.7,
+      "rung_outcome": "abstain",
+      "step_id": "step_003",
+      "target": "note",
+      "template_found": false,
+      "template_ms": 92.4,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.876
+    },
+    {
+      "axis": "theme",
+      "best_other_score": 0.414,
+      "condition": "dark_100",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 0,
+      "ms": 113.3,
+      "rung_outcome": "abstain",
+      "step_id": "step_005",
+      "target": "tb-attach",
+      "template_found": false,
+      "template_ms": 88.3,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": false,
+      "true_score": null
+    },
+    {
+      "axis": "theme",
+      "best_other_score": 0.464,
+      "condition": "dark_100",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 1,
+      "ms": 114.7,
+      "rung_outcome": "target",
+      "step_id": "step_006",
+      "target": "save",
+      "template_found": false,
+      "template_ms": 86.4,
+      "template_wrong": false,
+      "text_label": "\u65e5 \u65e5",
+      "true_found": true,
+      "true_score": 0.853
+    },
+    {
+      "axis": "theme",
+      "best_other_score": 0.865,
+      "condition": "dark_150",
+      "false_found": [
+        [
+          349,
+          662,
+          136,
+          39
+        ],
+        [
+          346,
+          209,
+          146,
+          42
+        ],
+        [
+          346,
+          466,
+          146,
+          42
+        ],
+        [
+          346,
+          273,
+          146,
+          42
+        ],
+        [
+          346,
+          595,
+          146,
+          42
+        ],
+        [
+          346,
+          531,
+          146,
+          42
+        ],
+        [
+          1371,
+          174,
+          170,
+          49
+        ],
+        [
+          81,
+          344,
+          107,
+          31
+        ],
+        [
+          1124,
+          186,
+          97,
+          28
+        ],
+        [
+          139,
+          105,
+          121,
+          35
+        ]
+      ],
+      "frame": [
+        1920,
+        1200
+      ],
+      "lookalikes": 11,
+      "ms": 334.0,
+      "rung_outcome": "abstain",
+      "step_id": "step_000",
+      "target": "edit-2",
+      "template_found": false,
+      "template_ms": 166.4,
+      "template_wrong": false,
+      "text_label": "MRN 36428",
+      "true_found": true,
+      "true_score": 0.828
+    },
+    {
+      "axis": "theme",
+      "best_other_score": 0.808,
+      "condition": "dark_150",
+      "false_found": [
+        [
+          1546,
+          195,
+          280,
+          112
+        ],
+        [
+          1082,
+          294,
+          240,
+          96
+        ],
+        [
+          1203,
+          294,
+          240,
+          96
+        ],
+        [
+          1325,
+          294,
+          240,
+          96
+        ],
+        [
+          1446,
+          294,
+          240,
+          96
+        ],
+        [
+          1568,
+          294,
+          240,
+          96
+        ],
+        [
+          659,
+          54,
+          320,
+          128
+        ]
+      ],
+      "frame": [
+        1920,
+        1200
+      ],
+      "lookalikes": 7,
+      "ms": 153.9,
+      "rung_outcome": "abstain",
+      "step_id": "step_001",
+      "target": "visit",
+      "template_found": false,
+      "template_ms": 168.5,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": false,
+      "true_score": null
+    },
+    {
+      "axis": "theme",
+      "best_other_score": 0.74,
+      "condition": "dark_150",
+      "false_found": [],
+      "frame": [
+        1920,
+        1200
+      ],
+      "lookalikes": 0,
+      "ms": 124.8,
+      "rung_outcome": "abstain",
+      "step_id": "step_003",
+      "target": "note",
+      "template_found": false,
+      "template_ms": 223.8,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": false,
+      "true_score": null
+    },
+    {
+      "axis": "theme",
+      "best_other_score": 0.457,
+      "condition": "dark_150",
+      "false_found": [],
+      "frame": [
+        1920,
+        1200
+      ],
+      "lookalikes": 0,
+      "ms": 151.0,
+      "rung_outcome": "abstain",
+      "step_id": "step_005",
+      "target": "tb-attach",
+      "template_found": false,
+      "template_ms": 168.6,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": false,
+      "true_score": null
+    },
+    {
+      "axis": "theme",
+      "best_other_score": 0.517,
+      "condition": "dark_150",
+      "false_found": [],
+      "frame": [
+        1920,
+        1200
+      ],
+      "lookalikes": 1,
+      "ms": 151.0,
+      "rung_outcome": "target",
+      "step_id": "step_006",
+      "target": "save",
+      "template_found": false,
+      "template_ms": 165.8,
+      "template_wrong": false,
+      "text_label": "\u65e5 \u65e5",
+      "true_found": true,
+      "true_score": 0.872
+    },
+    {
+      "axis": "codec",
+      "best_other_score": 0.919,
+      "condition": "codec_q50_100",
+      "false_found": [
+        [
+          231,
+          139,
+          97,
+          28
+        ],
+        [
+          231,
+          396,
+          97,
+          28
+        ],
+        [
+          916,
+          116,
+          107,
+          31
+        ],
+        [
+          231,
+          182,
+          97,
+          28
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 5,
+      "ms": 199.2,
+      "rung_outcome": "abstain",
+      "step_id": "step_000",
+      "target": "edit-2",
+      "template_found": false,
+      "template_ms": 74.5,
+      "template_wrong": false,
+      "text_label": "MRN 36428",
+      "true_found": true,
+      "true_score": 0.898
+    },
+    {
+      "axis": "codec",
+      "best_other_score": 0.941,
+      "condition": "codec_q50_100",
+      "false_found": [
+        [
+          1021,
+          83,
+          224,
+          90
+        ],
+        [
+          848,
+          275,
+          176,
+          70
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 6,
+      "ms": 113.7,
+      "rung_outcome": "abstain",
+      "step_id": "step_001",
+      "target": "visit",
+      "template_found": true,
+      "template_ms": 87.1,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.95
+    },
+    {
+      "axis": "codec",
+      "best_other_score": 0.816,
+      "condition": "codec_q50_100",
+      "false_found": [
+        [
+          1008,
+          408,
+          192,
+          77
+        ],
+        [
+          883,
+          408,
+          192,
+          77
+        ],
+        [
+          768,
+          461,
+          336,
+          134
+        ]
+      ],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 6,
+      "ms": 101.9,
+      "rung_outcome": "abstain",
+      "step_id": "step_003",
+      "target": "note",
+      "template_found": true,
+      "template_ms": 95.3,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.939
+    },
+    {
+      "axis": "codec",
+      "best_other_score": 0.74,
+      "condition": "codec_q50_100",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 1,
+      "ms": 108.6,
+      "rung_outcome": "target",
+      "step_id": "step_005",
+      "target": "tb-attach",
+      "template_found": true,
+      "template_ms": 85.4,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.934
+    },
+    {
+      "axis": "codec",
+      "best_other_score": 0.463,
+      "condition": "codec_q50_100",
+      "false_found": [],
+      "frame": [
+        1280,
+        800
+      ],
+      "lookalikes": 1,
+      "ms": 107.6,
+      "rung_outcome": "target",
+      "step_id": "step_006",
+      "target": "save",
+      "template_found": true,
+      "template_ms": 93.6,
+      "template_wrong": false,
+      "text_label": "\u65e5 \u65e5",
+      "true_found": true,
+      "true_score": 0.886
+    },
+    {
+      "axis": "codec",
+      "best_other_score": 0.863,
+      "condition": "codec_q50_150",
+      "false_found": [
+        [
+          1371,
+          174,
+          170,
+          49
+        ],
+        [
+          1124,
+          186,
+          97,
+          28
+        ]
+      ],
+      "frame": [
+        1920,
+        1200
+      ],
+      "lookalikes": 3,
+      "ms": 332.3,
+      "rung_outcome": "abstain",
+      "step_id": "step_000",
+      "target": "edit-2",
+      "template_found": false,
+      "template_ms": 156.7,
+      "template_wrong": false,
+      "text_label": "MRN 36428",
+      "true_found": true,
+      "true_score": 0.936
+    },
+    {
+      "axis": "codec",
+      "best_other_score": 0.931,
+      "condition": "codec_q50_150",
+      "false_found": [
+        [
+          1587,
+          294,
+          240,
+          96
+        ],
+        [
+          1085,
+          294,
+          240,
+          96
+        ],
+        [
+          1206,
+          294,
+          240,
+          96
+        ],
+        [
+          1328,
+          294,
+          240,
+          96
+        ],
+        [
+          1450,
+          294,
+          240,
+          96
+        ],
+        [
+          1546,
+          195,
+          280,
+          112
+        ]
+      ],
+      "frame": [
+        1920,
+        1200
+      ],
+      "lookalikes": 6,
+      "ms": 148.1,
+      "rung_outcome": "abstain",
+      "step_id": "step_001",
+      "target": "visit",
+      "template_found": false,
+      "template_ms": 165.9,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": false,
+      "true_score": null
+    },
+    {
+      "axis": "codec",
+      "best_other_score": 0.891,
+      "condition": "codec_q50_150",
+      "false_found": [
+        [
+          365,
+          82,
+          192,
+          77
+        ],
+        [
+          475,
+          82,
+          192,
+          77
+        ],
+        [
+          677,
+          82,
+          192,
+          77
+        ],
+        [
+          264,
+          82,
+          192,
+          77
+        ],
+        [
+          576,
+          82,
+          192,
+          77
+        ],
+        [
+          782,
+          82,
+          192,
+          77
+        ],
+        [
+          1027,
+          696,
+          336,
+          134
+        ],
+        [
+          1666,
+          82,
+          216,
+          86
+        ],
+        [
+          1205,
+          82,
+          216,
+          86
+        ],
+        [
+          1421,
+          600,
+          300,
+          120
+        ],
+        [
+          1109,
+          614,
+          264,
+          106
+        ]
+      ],
+      "frame": [
+        1920,
+        1200
+      ],
+      "lookalikes": 11,
+      "ms": 125.0,
+      "rung_outcome": "abstain",
+      "step_id": "step_003",
+      "target": "note",
+      "template_found": false,
+      "template_ms": 222.5,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": false,
+      "true_score": null
+    },
+    {
+      "axis": "codec",
+      "best_other_score": 0.787,
+      "condition": "codec_q50_150",
+      "false_found": [
+        [
+          179,
+          0,
+          240,
+          96
+        ]
+      ],
+      "frame": [
+        1920,
+        1200
+      ],
+      "lookalikes": 2,
+      "ms": 152.1,
+      "rung_outcome": "abstain",
+      "step_id": "step_005",
+      "target": "tb-attach",
+      "template_found": false,
+      "template_ms": 168.0,
+      "template_wrong": false,
+      "text_label": null,
+      "true_found": true,
+      "true_score": 0.935
+    },
+    {
+      "axis": "codec",
+      "best_other_score": 0.516,
+      "condition": "codec_q50_150",
+      "false_found": [],
+      "frame": [
+        1920,
+        1200
+      ],
+      "lookalikes": 1,
+      "ms": 151.9,
+      "rung_outcome": "target",
+      "step_id": "step_006",
+      "target": "save",
+      "template_found": false,
+      "template_ms": 169.1,
+      "template_wrong": false,
+      "text_label": "\u65e5 \u65e5",
+      "true_found": true,
+      "true_score": 0.958
+    }
+  ],
+  "schema": "openadapt.pixel-grounding-probe.v1"
+}

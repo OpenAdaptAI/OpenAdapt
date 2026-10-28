@@ -85,8 +85,10 @@ SEARCH_SHORT_SIDE = 20
 #: the true target scored 0.80 or more under every rendering condition there.
 ACCEPT_SCORE = 0.78
 #: A candidate within this margin of the best one is counted as a look-alike
-#: even below ACCEPT_SCORE, so a near tie is never resolved by ranking.
-LOOKALIKE_MARGIN = 0.06
+#: even below ACCEPT_SCORE, so a near tie is never resolved by ranking. On the
+#: benchmark the true target led the best other place by 0.3 or more wherever
+#: the target had a distinct look (an icon); a blank input box led by less.
+LOOKALIKE_MARGIN = 0.15
 
 _IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 _IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)

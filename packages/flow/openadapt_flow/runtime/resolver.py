@@ -687,6 +687,23 @@ def _is_text_label(text: Optional[str]) -> bool:
     return bool(text) and len(_LATIN_ALNUM.findall(text or "")) >= 2
 
 
+def _overlap(a: Region, b: Region) -> float:
+    """Intersection area over the smaller box's area."""
+    ix = max(0, min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0]))
+    iy = max(0, min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1]))
+    smaller = min(a[2] * a[3], b[2] * b[3])
+    return (ix * iy) / smaller if smaller > 0 else 0.0
+
+
+#: Look-alikes that overlap each other by more than this share the same
+#: pixels: the crop is self-similar (a stretch of blank input box) and
+#: cannot be located by its look.
+_SELF_SIMILAR_OVERLAP = 0.25
+#: A landmark supports a candidate when it puts the click within this share
+#: of the candidate's short side (8 px at least).
+_LANDMARK_TOLERANCE_SHARE = 0.3
+
+
 def _model_grounded(
     anchor: Anchor,
     screen_png: bytes,
@@ -696,16 +713,24 @@ def _model_grounded(
 ) -> Optional[tuple[Point, Region, float]]:
     """Resolve a pixel target with the local grounding model, or refuse.
 
-    The model returns every look-alike of the recorded crop. A target with a
-    text label is not this rung's to find: the OCR rungs above already
-    looked for the label and missed, so a model candidate could not be
-    corroborated and the rung abstains. For an icon or an unlabeled control:
+    The model returns every look-alike of the recorded crop. The rung
+    abstains (returns None, and the ladder goes on as without it) when:
 
-    - one look-alike: kept, unless every located landmark places the target
-      elsewhere (a typed contradiction);
-    - several: kept only when exactly one is where a uniquely located
-      landmark puts the target, with the landmark's recorded offset scaled by
-      that candidate's size. Otherwise :class:`LookAlikeTargetsRefused`.
+    - the target has a text label: the OCR rungs above already looked for it
+      and missed, so a model candidate could not be corroborated;
+    - nothing looks like the crop;
+    - the look-alikes overlap each other: the crop is self-similar (most of
+      it is blank input box) and its look cannot say where it is.
+
+    Otherwise each landmark the compiler kept is located by OCR and predicts
+    the click, with its recorded offset scaled by the candidate's size. A
+    landmark supports a candidate when the prediction is within 30% of the
+    candidate's short side.
+
+    - One look-alike: kept unless a located landmark disagrees with it
+      (:class:`ContradictoryOcrEvidenceError`).
+    - Several: kept only when exactly one is supported by every located
+      landmark (at least one located); else :class:`LookAlikeTargetsRefused`.
 
     Returns ``(click_point, matched_region, score)`` or None (abstain).
     """
@@ -714,6 +739,13 @@ def _model_grounded(
     candidates = list(locate_anchor(screen_png, template_png))
     if not candidates:
         return None
+    for index, first in enumerate(candidates):
+        for second in candidates[index + 1 :]:
+            if (
+                _overlap(tuple(first.region), tuple(second.region))
+                > _SELF_SIMILAR_OVERLAP
+            ):
+                return None
 
     located: list[tuple[Point, Landmark]] = []
     for landmark in anchor.landmarks:
@@ -729,36 +761,35 @@ def _model_grounded(
     def click(candidate: Any) -> Point:
         return _scaled_click_point(anchor, tuple(candidate.region))
 
-    def distance(candidate: Any, landmark_point: Point, landmark: Landmark) -> float:
+    def supported_by(candidate: Any, landmark_point: Point, landmark: Landmark) -> bool:
         assert landmark.dx_px is not None and landmark.dy_px is not None
         scale = float(candidate.scale)
         cx, cy = click(candidate)
         ex = landmark_point[0] + landmark.dx_px * scale
         ey = landmark_point[1] + landmark.dy_px * scale
-        return math.hypot(ex - cx, ey - cy)
-
-    def tolerance(candidate: Any) -> float:
-        return GLOBAL_LANDMARK_TOLERANCE_PX * max(1.0, float(candidate.scale))
+        _x, _y, width, height = candidate.region
+        tolerance = max(8.0, _LANDMARK_TOLERANCE_SHARE * min(width, height))
+        return math.hypot(ex - cx, ey - cy) <= tolerance
 
     if len(candidates) == 1:
         only = candidates[0]
-        if located and all(
-            distance(only, point, landmark) > tolerance(only)
-            for point, landmark in located
-        ):
+        if not all(supported_by(only, point, landmark) for point, landmark in located):
             raise ContradictoryOcrEvidenceError(
-                "every located landmark places the model-grounded target elsewhere"
+                "a located landmark places the model-grounded target elsewhere"
             )
         return click(only), tuple(only.region), float(only.score)
 
-    supported = [
-        candidate
-        for candidate in candidates
-        if any(
-            distance(candidate, point, landmark) <= tolerance(candidate)
-            for point, landmark in located
-        )
-    ]
+    supported = (
+        [
+            candidate
+            for candidate in candidates
+            if all(
+                supported_by(candidate, point, landmark) for point, landmark in located
+            )
+        ]
+        if located
+        else []
+    )
     if len(supported) == 1:
         chosen = supported[0]
         return click(chosen), tuple(chosen.region), float(chosen.score)

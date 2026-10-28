@@ -156,19 +156,40 @@ def test_a_landmark_singles_out_one_look_alike_at_the_candidate_scale():
     assert resolution.point == (190, 200)
 
 
-def test_a_landmark_that_supports_two_look_alikes_refuses():
+def test_overlapping_look_alikes_mean_a_self_similar_crop_and_the_rung_abstains():
+    # A crop that is mostly blank input box matches all along the box.
+    model = _Model(
+        [
+            _Candidate((140, 180, 240, 96), 1.5, 0.94),
+            _Candidate((261, 180, 240, 96), 1.5, 0.94),
+            _Candidate((383, 180, 240, 96), 1.5, 0.94),
+        ]
+    )
+    assert _resolve(_icon_anchor(), model) is None
+
+
+def test_landmarks_that_disagree_refuse_every_look_alike():
     anchor = _icon_anchor(
         landmarks=[
             Landmark(
                 relation="left_of", ocr_text="Notes", distance_px=60, dx_px=60, dy_px=0
-            )
+            ),
+            Landmark(
+                relation="above", ocr_text="Visit", distance_px=60, dx_px=0, dy_px=60
+            ),
         ]
     )
-    vision = _Vision({"Notes": _Match((100, 200), (80, 190, 40, 20))})
+    vision = _Vision(
+        {
+            "Notes": _Match((100, 200), (80, 190, 40, 20)),
+            # Moved: it now predicts the second look-alike, not the first.
+            "Visit": _Match((330, 140), (310, 130, 40, 20)),
+        }
+    )
     model = _Model(
         [
-            _Candidate((140, 180, 40, 40), 1.0, 0.95),
-            _Candidate((150, 180, 40, 40), 1.0, 0.95),
+            _Candidate((160, 170, 60, 60), 1.5, 0.95),
+            _Candidate((300, 170, 60, 60), 1.5, 0.95),
         ]
     )
     with pytest.raises(LookAlikeTargetsRefused):
