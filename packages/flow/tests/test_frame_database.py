@@ -38,6 +38,7 @@ CREATE TABLE calendar (id INTEGER PRIMARY KEY AUTOINCREMENT, pid INTEGER, title 
 CREATE TABLE access (pid INTEGER, user TEXT, role TEXT DEFAULT '',
   PRIMARY KEY (pid, user));
 CREATE TABLE codes (id INTEGER PRIMARY KEY, code TEXT);
+CREATE TABLE contact (id INTEGER PRIMARY KEY, foreign_id INTEGER);
 CREATE TABLE log (id INTEGER PRIMARY KEY, user TEXT, patient_id INTEGER,
   event TEXT, tbl TEXT);
 INSERT INTO patient_data (id, pid, fname, lname, email, regdate)
@@ -416,7 +417,7 @@ def test_the_baseline_holds_no_values(tmp_path: Path) -> None:
 def test_the_receipt_counts_tables_compared_and_allowed(tmp_path: Path) -> None:
     frame = _run(tmp_path)["evidence"]["frame"]
     counts = frame["database"]
-    assert counts["tables_compared"] == 5 and counts["tables_append_only"] == 1
+    assert counts["tables_compared"] == 6 and counts["tables_append_only"] == 1
     assert counts["tables_skipped"] == 0
     assert counts["allow_list_sha256"].startswith("sha256:")
 
@@ -483,3 +484,47 @@ def test_a_null_default_is_no_default(tmp_path: Path) -> None:
     assert _default_text("NULL", "sqlite") is None
     assert _default_text("NULL", "mysql") is None
     assert _default_text("'NULL'", "sqlite") == "NULL"  # the text NULL
+
+
+def test_a_side_row_of_another_users_new_chart_is_theirs(tmp_path: Path) -> None:
+    contact = {
+        "surface": "contact",
+        "link_field": "foreign_id",
+        "of_surface": "patient_data",
+        "of_field": "pid",
+    }
+    history = {
+        "surface": "history_data",
+        "link_field": "pid",
+        "of_surface": "patient_data",
+        "of_field": "pid",
+    }
+
+    def save(con: sqlite3.Connection) -> None:
+        _save(con)
+        con.execute("INSERT INTO contact (foreign_id) VALUES (2)")
+
+    def colleague(con: sqlite3.Connection) -> None:
+        # Another user's new chart: logged per table, but its contact row is
+        # logged with no patient (as OpenEMR does).
+        con.execute(
+            "INSERT INTO patient_data (id, pid, fname, lname, email, regdate) "
+            "VALUES (3, 3, 'Theo', 'Marsh', 't@example.test', '2026-10-25')"
+        )
+        con.execute("INSERT INTO history_data (pid, date) VALUES (3, '2026-10-25')")
+        con.execute("INSERT INTO contact (foreign_id) VALUES (3)")
+        con.execute(
+            "INSERT INTO log (user, patient_id, event, tbl) VALUES "
+            "('clinic2', 3, 'insert', 'patient_data'), "
+            "('clinic2', 3, 'insert', 'history_data'), "
+            "('clinic2', 0, 'insert', 'contact')"
+        )
+
+    frame = {"side_records": [history, contact]}
+    assert _frame(_run(tmp_path / "a", colleague, save=save, frame=frame)) == "held"
+    # A contact row for a chart nobody created in the window still refutes.
+    stray = "INSERT INTO contact (foreign_id) VALUES (1)"
+    result = _run(
+        tmp_path / "b", lambda con: con.execute(stray), save=save, frame=frame
+    )
+    assert _frame(result) == "refuted"
