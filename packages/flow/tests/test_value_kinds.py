@@ -112,3 +112,18 @@ def test_exact_new_set_matches_a_declared_kind() -> None:
 
     assert verdict("617-555-0142") == "confirmed"
     assert verdict("617-555-0124") == "refuted"
+
+
+def test_a_duplicate_key_with_a_kind_matches_in_canonical_form() -> None:
+    email = {"param": "x", "kind": "email"}
+    effect = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={"email": email},
+        idempotency_key=email,
+        key_field="email",
+    ).resolve({"x": "Ada.Quill@Example.TEST"})
+    before = EffectState(substrate="t", reachable=True, records=[])
+    verdict = judge_records(
+        effect, before, [{"id": "1", "email": "Ada.Quill@Example.TEST"}], substrate="t"
+    )
+    assert verdict.verdict.value == "confirmed"

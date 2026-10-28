@@ -100,7 +100,7 @@ def judge_records(
         matched = [
             r
             for r in matched
-            if str(r.get(effect.key_field, None)) == str(effect.idempotency_key)
+            if record_matches(r, _matchable({effect.key_field: effect.idempotency_key}))
         ]
 
     # Duplicate-write guard (count_new_only): judge only the records that
