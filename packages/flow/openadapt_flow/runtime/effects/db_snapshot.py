@@ -265,8 +265,8 @@ def _default_text(raw: Any, dialect: Dialect) -> Optional[str]:
         ("current_timestamp", "now", "current_date", "localtime", "datetime('now'")
     ):
         return CLOCK_DEFAULT
-    if dialect == "mysql" and text.upper() == "NULL":
-        return None  # MariaDB shows a NULL default as the text NULL
+    if text.upper() == "NULL":
+        return None  # SQLite and MariaDB show DEFAULT NULL as the text NULL
     if len(text) >= 2 and text[0] == text[-1] and text[0] in "'\"":
         return text[1:-1].replace("''", "'")
     return text
