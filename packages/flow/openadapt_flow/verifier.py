@@ -18,10 +18,13 @@ MCP skills, the RL reward and the registry all call this module; it wraps
 - **source** (when a :class:`Source` is given): the saved values match the
   document they came from.
 
-Fail-closed: an unreadable read, a missing baseline or an unbound parameter
-gives ``verified=False`` with that part ``not_checked``. A failed check never
-raises; :class:`VerifierError` is raised only for a contract that can't be
-loaded or read at all. No model calls.
+Fail-closed: an unreadable read or a missing or stale baseline gives
+``verified=False`` with that part ``not_checked``. A failed check never
+raises. :class:`VerifierError` is raised for a contract that can't be loaded
+or bound (an unbound parameter), a snapshot taken for another contract, and a
+snapshot that already verified a write. A refused call still uses up its
+snapshot. Whoever can write a snapshot controls the verdict, so the writer
+being judged must never have access to it. No model calls.
 
 The public names are ``Contract``, ``Snapshot``, ``Source``, ``capture``,
 ``verify_write``, ``WriteResult`` and ``VerifierError``
@@ -140,8 +143,11 @@ class Snapshot:
     write, as verify-run's baseline does.
     """
 
-    payload: dict[str, Any]
+    payload: dict[str, Any] = field(repr=False)
     used: bool = False
+    #: The file :meth:`load` read, so verify-run's own single-use marker
+    #: applies to it.
+    path: Optional[Path] = field(default=None, repr=False)
 
     def save(self, path: str | Path) -> Path:
         out = Path(path)
@@ -150,7 +156,14 @@ class Snapshot:
 
     @classmethod
     def load(cls, path: str | Path) -> "Snapshot":
-        return cls(json.loads(Path(path).read_text()))
+        source = Path(path)
+        return cls(json.loads(source.read_text()), path=source)
+
+
+#: The salt of every snapshot this process has verified a write with. Each
+#: capture draws a fresh salt, so a copy or a reload of a used snapshot is
+#: refused too.
+_CONSUMED: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -277,21 +290,32 @@ def verify_write(
     """
 
     run_record = actor.run_record()
-    if before.used:
+    token = str(before.payload.get("salt") or "")
+    if before.used or not token or token in _CONSUMED:
         raise VerifierError("this snapshot already verified a write; capture again")
     before.used = True
-    with tempfile.TemporaryDirectory(prefix="openadapt-verify-") as tmp:
-        path = before.save(Path(tmp) / "baseline.json")
-        result = verify_run(
-            contract.config,
-            params=params,
-            run_record=run_record,
-            write_attempted=write_attempted,
-            authorization_ref=authorization_ref,
-            baseline_path=path,
-            provenance=None if source is None else source.provenance,
-            documents=None if source is None else source.documents,
-        )
+    _CONSUMED.add(token)
+
+    def run(path: Path) -> dict[str, Any]:
+        try:
+            return verify_run(
+                contract.config,
+                params=params,
+                run_record=run_record,
+                write_attempted=write_attempted,
+                authorization_ref=authorization_ref,
+                baseline_path=path,
+                provenance=None if source is None else source.provenance,
+                documents=None if source is None else source.documents,
+            )
+        except VerifyRunError as exc:
+            raise VerifierError(str(exc)) from exc
+
+    if before.path is not None:
+        result = run(before.path)  # its .used marker records this use
+    else:
+        with tempfile.TemporaryDirectory(prefix="openadapt-verify-") as tmp:
+            result = run(before.save(Path(tmp) / "baseline.json"))
     receipt = dict(result["receipt"])
     evidence = dict(result["evidence"])
     outcome = str(receipt.get("terminal_outcome") or receipt.get("outcome") or "")

@@ -255,3 +255,49 @@ def test_diff_database_applies_the_profile_and_before(tmp_path: Path) -> None:
     _write(db, "UPDATE users_secure SET password = 'x' WHERE id = 1")
     after = capture_database(read, "sqlite", before=before, **args)
     assert set(diff_database(before, after, **args)) == {"users_secure"}
+
+
+def test_a_reloaded_or_copied_snapshot_is_still_single_use(tmp_path: Path) -> None:
+    """Adversarial review of #1588: one write must not earn two rewards."""
+
+    import copy
+
+    db = _store(tmp_path)
+    contract = _contract(db)
+    first = capture(contract, PARAMS)
+    path = first.save(tmp_path / "before.json")
+    _write(db, SAVE)
+    assert verify_write(
+        contract, Snapshot.load(path), params=PARAMS, actor=BOT
+    ).verified
+    for reuse in (
+        Snapshot.load(path),
+        first,
+        Snapshot(copy.deepcopy(first.payload)),
+    ):
+        with pytest.raises(VerifierError):
+            verify_write(contract, reuse, params=PARAMS, actor=BOT)
+
+
+def test_a_snapshot_from_another_contract_or_unbound_params_raise_verifier_error(
+    tmp_path: Path,
+) -> None:
+    db = _store(tmp_path)
+    contract = _contract(db)
+    other_db = (
+        _store(tmp_path / "other") if (tmp_path / "other").mkdir() is None else db
+    )
+    with pytest.raises(VerifierError):
+        verify_write(
+            _contract(other_db), capture(contract, PARAMS), params=PARAMS, actor=BOT
+        )
+    with pytest.raises(VerifierError):
+        verify_write(
+            contract, capture(contract, PARAMS), params={"fname": "Ada"}, actor=BOT
+        )
+
+
+def test_a_snapshot_repr_shows_no_values_or_salt(tmp_path: Path) -> None:
+    snapshot = capture(_contract(_store(tmp_path)), PARAMS)
+    assert str(snapshot.payload["salt"]) not in repr(snapshot)
+    assert "Wendell" not in repr(snapshot)
