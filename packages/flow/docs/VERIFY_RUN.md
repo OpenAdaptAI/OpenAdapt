@@ -180,11 +180,12 @@ existed has neither and still checks.
 
 A record check proves little until it has been seen to fail. The fault gate
 (`openadapt_flow/fault_gate.py`, [`VERIFICATION_COVERAGE.md`](VERIFICATION_COVERAGE.md))
-runs the check against a test copy of the system of record. It writes seven
+runs the check against a test copy of the system of record. It writes nine
 kinds of bad save to the copy's store, and the check reads each one through
 its own read: a wrong value in each declared field, the values on a
-look-alike record, an edit to another record, a partial write, a duplicate,
-no write, and a write that lands after the check's timeout. A read whose
+look-alike record, an edit to another record, an edit in another table, a
+row in another table for the saved record, a partial write, a duplicate, no
+write, and a write that lands after the check's timeout. A read whose
 scope can't see a fault fails the gate, not only a judge that misses it.
 
 The gate writes `check_coverage.json` (`openadapt.check-coverage/v1`): faults
@@ -198,11 +199,16 @@ admission:
   min_coverage: 1.0               # default: every applicable fault caught
   require_classes: [unrelated_edit]
   refuse_test_copies: [recorded_states]   # the default
+  refuse_not_applicable: false    # true for an EMR: refuse a trimmed copy
+  min_store_tables: 0             # the fewest tables the test copy must hold
 ```
 
-Under a policy, `checked.coverage` in the receipt holds the totals, the
-record's digest and `policy` (`met`, or why not, such as
-`coverage_for_another_check`). `verified` requires `met`. A changed check
+A check is admitted only when every fault class of every part it claims was
+tested and fully killed: one missed class refuses it, whatever
+`min_coverage` says. Under a policy, `checked.coverage` in the receipt holds
+the totals, the record's digest, `policy` (`met`, or why not, such as
+`coverage_for_another_check` or `coverage_class_missed:other_table`) and
+`classes`, each claimed class's result. `verified` requires `met`. A changed check
 needs a new coverage record. Without `admission:` nothing about coverage is
 required or stated.
 

@@ -431,8 +431,8 @@ def test_skip_the_check_is_judged_by_flows_read_back(
     assert stopped is None and agent.reported == "verified"
     readback = guard.check_delta(before, _rows(db))
     assert readback.status == status
-    if problem:
-        assert problem in readback.problems
+    assert readback.problems == ((problem,) if problem else ())
+    assert readback.verified is (status == "verified")
 
 
 def test_a_clean_run_inside_the_scope_is_not_refused(
