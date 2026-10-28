@@ -47,7 +47,9 @@ jobs:
         uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
         with:
           enable-cache: true
-          cache-dependency-glob: "packages/desktop/uv.lock"
+          cache-dependency-glob: |
+            packages/desktop/uv.lock
+            .github/ci-tools/audit/uv.lock
       - name: Set up Python 3.12
         run: uv python install 3.12
       - name: Export the exact locked dependency set
@@ -56,7 +58,8 @@ jobs:
           --output-file "${{ runner.temp }}/openadapt-desktop-requirements.txt"
       - name: Audit Python dependencies
         run: >-
-          uvx --from pip-audit==2.10.1 pip-audit
+          uv run --locked --project "$GITHUB_WORKSPACE/.github/ci-tools/audit"
+          --only-group audit pip-audit
           --require-hashes --disable-pip --progress-spinner off
           --requirement "${{ runner.temp }}/openadapt-desktop-requirements.txt"
 
@@ -74,7 +77,9 @@ jobs:
         uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
         with:
           enable-cache: true
-          cache-dependency-glob: "packages/desktop/uv.lock"
+          cache-dependency-glob: |
+            packages/desktop/uv.lock
+            .github/ci-tools/audit/uv.lock
       - name: Set up Python 3.12
         run: uv python install 3.12
       - name: Export the exact Intel macOS dependency set
@@ -83,7 +88,8 @@ jobs:
           --output-file "${{ runner.temp }}/openadapt-desktop-requirements.txt"
       - name: Audit Intel macOS Python dependencies
         run: >-
-          uvx --from pip-audit==2.10.1 pip-audit
+          uv run --locked --project "$GITHUB_WORKSPACE/.github/ci-tools/audit"
+          --only-group audit pip-audit
           --require-hashes --disable-pip --progress-spinner off
           --requirement "${{ runner.temp }}/openadapt-desktop-requirements.txt"
 

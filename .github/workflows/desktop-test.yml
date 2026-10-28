@@ -50,7 +50,7 @@ jobs:
         run: uv sync --locked --extra dev
 
       - name: Lint
-        run: uv run ruff check openadapt_desktop/ tests/ scripts/
+        run: uv run --locked ruff check openadapt_desktop/ tests/ scripts/
       - name: Syntax at the oldest supported Python (3.11)
         if: runner.os == 'Linux' && matrix.python-version == '3.12'
         # The PR lane runs Python 3.12 only, so syntax that needs a newer
@@ -61,11 +61,11 @@ jobs:
         env:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache-oldest
         run: |
-          uv run ruff check --isolated --select E9 --target-version py311 .
+          uv run --locked ruff check --isolated --select E9 --target-version py311 .
           uv run --no-project --python 3.11 python -m compileall -q -x '(^|/)(\.venv|node_modules|build|dist)/' .
 
       - name: Run tests
-        run: uv run pytest tests/ -v
+        run: uv run --locked pytest tests/ -v
 
   qualification-contract:
     name: Qualification contract (bundled Flow)
@@ -94,11 +94,11 @@ jobs:
       - name: Exercise the Desktop and Tray IPC contract
         env:
           OPENADAPT_TRAY_SOURCE: ../tray/src
-        run: uv run pytest tests/test_tray_integration.py -v
+        run: uv run --locked pytest tests/test_tray_integration.py -v
 
       - name: Exercise qualification safety contracts
         run: >-
-          uv run pytest
+          uv run --locked pytest
           tests/test_engine/test_qualification.py
           tests/test_engine/test_qualification_capabilities.py
           tests/test_engine/test_dispatch.py::TestLibraryCommands::test_first_supervised_replay_refuses_state_change_before_flow
@@ -115,7 +115,7 @@ jobs:
       # Parse each command line Desktop builds with the bundled Flow's parser.
       - name: Exercise the Desktop and Flow command-line contract
         run: >-
-          uv run pytest
+          uv run --locked pytest
           tests/test_flow_command_contract.py
           tests/test_dependency_compat.py
           -v
@@ -126,7 +126,7 @@ jobs:
       # in the plain test job, so name the file here explicitly.
       - name: Exercise the capture/Flow producer contract
         run: >-
-          uv run pytest
+          uv run --locked pytest
           tests/test_capture_runtime_contract.py
           tests/test_build_frozen_engine.py::test_bundled_capture_floor_comes_from_the_frozen_flow_runtime
           -v
@@ -135,4 +135,4 @@ jobs:
       # Flow, or installing Desktop next to the launcher downgrades one of
       # them. Flow's range is only readable where Flow is installed.
       - name: Check the shared types range against the bundled Flow
-        run: uv run pytest tests/test_dependency_compat.py -v
+        run: uv run --locked pytest tests/test_dependency_compat.py -v

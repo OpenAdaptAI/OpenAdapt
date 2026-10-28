@@ -1,0 +1,55 @@
+name: Nightly
+
+# Every package's full suite against main, whatever changed, on every
+# platform its CI covers. Pull requests and the merge queue run only the
+# packages a change touches, and the merge queue's push to main runs only the
+# fast lane, so a package nobody touched can break on main unseen: a new
+# runner image, a published dependency, a sibling's change it is not
+# re-tested against. This runs Packages (which calls the Desktop test and
+# build workflows) and the launcher CI as a schedule or dispatch, the tier
+# that runs every job, then keeps one "main is red" issue in step with the
+# result. It changes no required check and nothing on the PR lane.
+
+on:
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The called workflows key their own groups on this run's ID, so this group
+# must not be `<workflow>-<run_id>`.
+concurrency:
+  group: nightly-full-run
+  cancel-in-progress: false
+
+jobs:
+  packages:
+    name: packages
+    uses: ./.github/workflows/packages.yml
+
+  launcher:
+    name: launcher
+    uses: ./.github/workflows/main.yml
+
+  report:
+    name: main is red issue
+    needs: [packages, launcher]
+    # Runs after failures too, but not when someone cancels the run, and
+    # only for main: a dispatch from a branch reports nothing.
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Open, update or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/nightly_report.py
