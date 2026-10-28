@@ -25,6 +25,15 @@ To keep pull requests fast, CI runs in three tiers:
   (including the native installers) ran, so no Desktop release ships without
   this tier.
 
+- **Nightly** (`nightly.yml`, daily at 07:23 UTC and on dispatch): calls
+  Packages (with the Desktop test and build workflows) and the launcher CI as
+  a scheduled run, so every package's full suite runs against main on every
+  platform its CI covers, whatever changed. The merge queue's push and a pull
+  request run only the packages a change touches; this catches a package
+  nobody touched breaking on main. When a job fails, the run opens the
+  `main is red` issue (label `main-is-red`), or updates it if one is open. A
+  passing run closes it. The nightly run is not a required check.
+
 **Drafts run nothing.** Every job in a workflow that runs on pull requests
 checks `github.event.pull_request.draft != true`, and `ready_for_review` is a
 trigger, so marking a draft ready starts CI. `packages-gate` fails on a draft
