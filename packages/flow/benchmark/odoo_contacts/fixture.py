@@ -121,7 +121,8 @@ class OdooFixture:
         """Start the database, create ``oa`` with Contacts once, start Odoo."""
 
         self.compose("up", "-d", "db")
-        self._wait(lambda: "1" in self._db_exists(), wait_s, "database")
+        # Postgres answers (with 0 or 1) once it is up; 1 means ``oa`` exists.
+        self._wait(lambda: self._db_exists().strip() in ("0", "1"), wait_s, "database")
         if self._db_exists().strip() != "1":
             self.compose(
                 "run",
@@ -210,18 +211,32 @@ class OdooFixture:
 
         s = self.secrets()
         uid, models, pw = self.admin()
-        found = models.execute_kw(
-            DATABASE, uid, pw, "res.users", "search", [[["login", "=", ACTOR_LOGIN]]]
-        )
-        if not found:
-            group = models.execute_kw(
+        # An internal user who may create and edit contacts ("Contact
+        # Creation"); without it Odoo shows no save button.
+        groups = [
+            models.execute_kw(
                 DATABASE,
                 uid,
                 pw,
                 "ir.model.data",
                 "check_object_reference",
-                ["base", "group_user"],
+                ["base", xmlid],
             )[1]
+            for xmlid in ("group_user", "group_partner_manager")
+        ]
+        found = models.execute_kw(
+            DATABASE, uid, pw, "res.users", "search", [[["login", "=", ACTOR_LOGIN]]]
+        )
+        if found:
+            models.execute_kw(
+                DATABASE,
+                uid,
+                pw,
+                "res.users",
+                "write",
+                [found, {"groups_id": [[4, g] for g in groups]}],
+            )
+        else:
             models.execute_kw(
                 DATABASE,
                 uid,
@@ -233,7 +248,7 @@ class OdooFixture:
                         "name": "OpenAdapt Actor",
                         "login": ACTOR_LOGIN,
                         "password": s["actor_password"],
-                        "groups_id": [[6, 0, [group]]],
+                        "groups_id": [[6, 0, groups]],
                     }
                 ],
             )
