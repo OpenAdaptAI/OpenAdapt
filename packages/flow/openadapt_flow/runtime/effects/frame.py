@@ -523,8 +523,11 @@ def judge_frame(
     # Side records: the links each new declared record gives its side rows.
     side_links: list[set[str]] = []
     side_found: list[dict[str, int]] = []
+    #: Each link's parent ``ref_of`` value: a side row must name the same.
+    side_parent: list[dict[str, Any]] = []
     for side in spec.side_records:
         links: set[str] = set()
+        parents: dict[str, Any] = {}
         before_state, after_records = slices.get(side.of_surface, (None, None))
         if before_state is not None and after_records is not None:
             sels = selectors_for(side.of_surface)
@@ -543,7 +546,9 @@ def judge_frame(
                     value = record.get(side.of_field)
                     if value not in (None, "") and str(value) not in taken:
                         links.add(str(value))
+                        parents[str(value)] = ref_of(key_of(record), None, record)
         side_links.append(links)
+        side_parent.append(parents)
         side_found.append({link: 0 for link in links})
 
     for name, (before_state, after_records) in slices.items():
@@ -642,6 +647,12 @@ def judge_frame(
                         for i, side in enumerate(spec.side_records)
                         if side.surface == name
                         and str(after.get(side.link_field)) in side_links[i]
+                        # Filed under its parent's record_key, not another's.
+                        and (
+                            attribution is None
+                            or not attribution.record_key
+                            or ref == side_parent[i][str(after.get(side.link_field))]
+                        )
                     ),
                     None,
                 )
