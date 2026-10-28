@@ -879,10 +879,16 @@ def _build_and_run_replayer(
     readback_pipeline=None,
     secret_env_overrides: Optional[Mapping[str, str]] = None,
     api_steps_off_reason: Optional[str] = None,
+    rollback_plan=None,
+    fresh_session=None,
 ):
     """Build the shared Replayer configuration and execute one workflow.
 
     ``api_steps_off_reason`` turns API steps off for this run and says why.
+    ``rollback_plan`` (``openadapt_flow.rollback``) reads the system of
+    record before the run and, after a stop, runs the approved
+    compensations and proves the store is back; ``fresh_session`` returns
+    the backend to a signed-out start for a GUI compensation.
     """
     replayer = _configured_replayer(
         backend,
@@ -912,7 +918,8 @@ def _build_and_run_replayer(
     if api_steps_off_reason is not None:
         replayer.api_steps = False
         replayer.api_steps_off_reason = api_steps_off_reason
-    return replayer.run(
+    before = rollback_plan.arm() if rollback_plan is not None else None
+    report = replayer.run(
         workflow,
         params=params,
         worklists=worklists,
@@ -930,6 +937,35 @@ def _build_and_run_replayer(
             else run_id
         ),
     )
+    if rollback_plan is not None and not report.success:
+        from openadapt_flow.rollback import ReplayerRunner
+
+        def make_compensation_replayer():
+            # The run's backend, verifier, API actuator and approval gate. No
+            # governed authorization or qualification guard: those bind the
+            # run's own workflow, and a compensation is its own approved undo.
+            return _configured_replayer(
+                backend,
+                workflow=workflow,
+                allow_egress=allow_egress,
+                effect_verifier=effect_verifier,
+                api_actuator=api_actuator,
+                durable=False,
+                use_structural=use_structural,
+                pixel_verify_enabled=pixel_verify_enabled,
+                runtime_config=runtime_config,
+                approval_gate=approval_gate,
+            )
+
+        report = rollback_plan.finish(
+            report,
+            workflow,
+            before=before,
+            run_dir=Path(run_dir),
+            bundle_dir=Path(bundle),
+            runner=ReplayerRunner(make_compensation_replayer, fresh_session),
+        )
+    return report
 
 
 def _replay_outcome_epilogue(
@@ -1087,6 +1123,11 @@ def _finish_replay(
         ledger = _change_ledger_epilogue(report, run_dir, args)
         if ledger:
             print(f"\n{ledger}")
+        from openadapt_flow.rollback import rollback_lines
+
+        rolled = rollback_lines(report)
+        if rolled:
+            print("\n" + "\n".join(rolled))
     _maybe_report_break(run_dir, report)
     _maybe_report_run(run_dir, report, args, backend_kind=backend_kind)
     _maybe_attest_run(run_dir, report, args)
@@ -2712,6 +2753,9 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         backend = build_backend(backend_cfg, page=page)
         held_backend.append(backend)
         surface_backends = _build_surface_backends(surface_cfgs, page=page)
+        from openadapt_flow.rollback import plan_from_deployment, web_fresh_session
+
+        rollback_plan = plan_from_deployment(cfg, effect_verifier)
         return _build_and_run_replayer(
             backend,
             workflow=workflow,
@@ -2750,6 +2794,17 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             qualification_fault_driver=fault_driver,
             surface_backends=surface_backends,
             deployment_surface=backend_cfg.deployment_surface,
+            rollback_plan=rollback_plan,
+            # Never reset the operator's own attached browser: that would
+            # sign them out. Only API-only compensations run there.
+            fresh_session=(
+                web_fresh_session(page, entry_url or page.url)
+                if rollback_plan is not None
+                and not (
+                    backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url
+                )
+                else None
+            ),
         )
 
     if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:

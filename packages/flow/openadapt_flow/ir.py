@@ -4979,6 +4979,65 @@ def managed_result_loss_idempotency_sha256(idempotency_key: str) -> str:
     ).hexdigest()
 
 
+class RollbackStepRecord(BaseModel):
+    """What the rollback did about one change in the ledger."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    step_id: str
+    position: int = Field(ge=1)
+    undo_id: Optional[str] = None
+    #: ``compensated``: the compensation ran and its own check confirmed it.
+    #: ``not_needed``: a fresh read showed the step's change isn't there.
+    #: ``refused``: nothing ran for this step (no approved compensation, an
+    #: uncertain write a fresh read couldn't settle, a value that couldn't
+    #: be found). ``failed``: the compensation ran and wasn't confirmed.
+    decision: Literal["compensated", "not_needed", "refused", "failed"]
+    reason: str
+    #: For an uncertain or unconfirmed write, what a fresh read showed.
+    fresh_read: Optional[Literal["present", "absent", "unknown"]] = None
+    undo_outcome: Optional[str] = None
+
+
+class RollbackRecord(BaseModel):
+    """A compensating rollback after a stop (docs/ROLLBACK.md).
+
+    PHI-free: table and column names, counts and digests. The rows a person
+    needs to repair the record are in ``diff_path`` (owner-only).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: ``rolled_back``: compensations ran and the store matches the read from
+    #: before the run. ``nothing_landed``: the store already matched it after
+    #: the stop. ``not_rolled_back``: it doesn't match; a person repairs it
+    #: from the diff. ``unarmed``: the store couldn't be read before the run,
+    #: so no rollback was attempted.
+    status: Literal["rolled_back", "nothing_landed", "not_rolled_back", "unarmed"]
+    reason: str
+    #: ``database``: every table but ``allow_tables``. ``collection``: one
+    #: collection read through the effect verifier.
+    scope: Literal["database", "collection"]
+    allow_tables: list[str] = Field(default_factory=list)
+    ignored_columns: dict[str, list[str]] = Field(default_factory=dict)
+    before_sha256: Optional[str] = None
+    after_stop_sha256: Optional[str] = None
+    final_sha256: Optional[str] = None
+    #: What the stop left, against the read from before the run.
+    after_stop_diff: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    #: What still differs at the end (empty when rolled back).
+    remaining_diff: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    #: Run-directory-relative path of the full diff, when anything remains.
+    diff_path: Optional[str] = None
+    steps: list[RollbackStepRecord] = Field(default_factory=list)
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+
+    @property
+    def store_proven_unchanged(self) -> bool:
+        return self.status in ("rolled_back", "nothing_landed")
+
+
 class ManagedResultLossEvidence(BaseModel):
     """Sealed PHI-free evidence that a managed child result was lost.
 
@@ -5405,6 +5464,14 @@ class RunReport(BaseModel):
             "declared effects and whether each was confirmed, refuted or "
             "unknown, and the declared undo when there is one. PHI-free. "
             "See docs/AFTER_A_STOP.md."
+        ),
+    )
+    rollback: Optional[RollbackRecord] = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "The compensating rollback after a stop, when the deployment "
+            "turned it on. See docs/ROLLBACK.md."
         ),
     )
     managed_result_loss: Optional[ManagedResultLossEvidence] = Field(

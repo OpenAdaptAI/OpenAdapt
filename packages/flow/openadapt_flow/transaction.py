@@ -363,6 +363,18 @@ def _lacks_effect_absence_proof(report: RunReport) -> bool:
     )
 
 
+def _store_proven_unchanged(report: RunReport) -> bool:
+    """A rollback read the whole store after the stop and found nothing the
+    run did: positive proof of absence, stronger than per-effect coverage."""
+
+    rollback = report.rollback
+    return (
+        rollback is not None
+        and not report.success
+        and rollback.status == "nothing_landed"
+    )
+
+
 def _policy_rejected(report: RunReport) -> bool:
     """True when authorization/identity/qualification/environment refused.
 
@@ -412,6 +424,14 @@ def classify_transaction_outcome(report: RunReport) -> TransactionOutcome:
     if coarse == "VERIFIED":
         return TransactionOutcome.VERIFIED
 
+    # A compensating rollback (openadapt_flow.rollback) that ended with the
+    # whole store matching the read taken before the run settles what the
+    # run left behind, uncertain deliveries included: nothing it did remains.
+    rollback = report.rollback
+    if rollback is not None and not report.success:
+        if rollback.status == "rolled_back":
+            return TransactionOutcome.ROLLED_BACK
+
     # A save whose only check is a declared later report: saved, waiting for
     # that report. Never billable until a matching row settles it.
     if not report.canceled and _awaiting_report_only(report):
@@ -420,7 +440,7 @@ def classify_transaction_outcome(report: RunReport) -> TransactionOutcome:
     # Uncertain / conflicting delivery or persistence dominates every remaining
     # coarse bucket. This is where #250's no-blind-retry behavior surfaces as a
     # first-class terminal outcome.
-    if _has_unresolved_uncertainty(report):
+    if _has_unresolved_uncertainty(report) and not _store_proven_unchanged(report):
         return TransactionOutcome.RECONCILIATION_REQUIRED
 
     if coarse == "ROLLED_BACK":
@@ -449,7 +469,7 @@ def classify_transaction_outcome(report: RunReport) -> TransactionOutcome:
     # verifier settling what happened may have left a write in the system of
     # record.  Absence of evidence is not evidence of absence -- fail toward
     # RECONCILIATION_REQUIRED, never toward a false clean bill of health.
-    if _lacks_effect_absence_proof(report):
+    if _lacks_effect_absence_proof(report) and not _store_proven_unchanged(report):
         return TransactionOutcome.RECONCILIATION_REQUIRED
 
     # Remaining: every consequential step is positively proven effect-free.

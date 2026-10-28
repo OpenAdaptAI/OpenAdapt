@@ -50,6 +50,7 @@ from openadapt_flow.runtime.effects.auth import AuthRef, ResolvedSecrets
 from openadapt_flow.runtime.effects.deferred_report import DeferredReportSpec
 from openadapt_flow.runtime.effects.desktop_readback import DesktopReadbackSpec
 from openadapt_flow.runtime.effects.effect import Region, ValueExpr
+from openadapt_flow.runtime.effects.frame import FrameDatabase
 from openadapt_flow.runtime.effects.fresh_session import FreshSessionSpec
 from openadapt_flow.runtime.effects.smart_auth import SmartBackendConfig
 from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
@@ -990,6 +991,27 @@ class ProbeCopySection(BaseModel):
     reward_contract: Optional[str] = None
 
 
+class RollbackSection(BaseModel):
+    """Compensating rollback after a stop (docs/ROLLBACK.md).
+
+    Off unless ``enabled``. When on, the run reads the system of record before
+    it starts; after a stop it runs the compensation a person approved for
+    each change, latest first, and reads the store again. It is
+    ``ROLLED_BACK`` only when that read matches the first one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    #: Read every table but ``allow_tables`` (same shape as
+    #: ``frame.database`` in ``verify.yaml``). Without it, the rollback reads
+    #: the one collection the ``effects`` verifier reads.
+    database: Optional[FrameDatabase] = None
+    #: Table (or ``"*"``) -> columns that change on their own (a modified-at
+    #: time). Reviewed per app; the report lists them.
+    ignore_columns: dict[str, list[str]] = Field(default_factory=dict)
+
+
 #: Sentinel written by ``config init`` for fields the operator must fill.
 UNRESOLVED = "UNRESOLVED"
 
@@ -1075,6 +1097,9 @@ class DeploymentConfig(BaseModel):
     #: Declares the target a resettable test copy (``induce --probe-on``
     #: only). None (and omitted when serialized) otherwise.
     test_copy: Optional[ProbeCopySection] = None
+    #: Compensating rollback after a stop. None (and omitted when serialized)
+    #: otherwise.
+    rollback: Optional[RollbackSection] = None
     #: The pinned approver root (approval_mode/approver_roster.py). None (and
     #: omitted when serialized) means the run names it some other way.
     approvers: Optional[ApproversSection] = None
@@ -1110,6 +1135,8 @@ class DeploymentConfig(BaseModel):
             data.pop("worklist", None)
         if self.test_copy is None:
             data.pop("test_copy", None)
+        if self.rollback is None:
+            data.pop("rollback", None)
         if self.approvers is None:
             data.pop("approvers", None)
         if self.repair == RepairSection():
