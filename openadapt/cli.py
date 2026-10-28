@@ -1220,6 +1220,47 @@ def setup(dry_run: bool, undo: bool, only: tuple[str, ...]) -> None:
     sys.exit(1 if run.failures else 0)
 
 
+@main.group("verify")
+def verify() -> None:
+    """Verify writes against the system of record, for any agent.
+
+    Around each write your agent makes, it gets a verified receipt or a
+    refusal, never an unverified success. Python agents use the SDK
+    (`from openadapt.verify import ...`); any MCP client uses `openadapt
+    verify serve`.
+    """
+
+
+@verify.command("serve")
+@click.option(
+    "--contracts",
+    "contracts",
+    required=True,
+    type=click.Path(file_okay=False),
+    help="Folder of write contracts (<name>.yaml, openadapt.verify/v1).",
+)
+@click.option(
+    "--state",
+    "state",
+    default=None,
+    type=click.Path(file_okay=False),
+    help="Where baselines and receipts go (default ~/.openadapt/verify).",
+)
+def verify_serve(contracts: str, state: Optional[str]) -> None:
+    """Serve verify_contracts, verify_begin and verify_check over MCP (stdio)."""
+    _require_supported_python()
+    try:
+        from openadapt_flow.agent.cli import main as agent_main
+    except ImportError:
+        click.echo("Error: the OpenAdapt engine is not installed.", err=True)
+        click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
+        sys.exit(1)
+    argv = ["serve", "--verify", contracts]
+    if state:
+        argv += ["--verify-state", state]
+    sys.exit(int(agent_main(argv) or 0))
+
+
 @main.command(
     "agent",
     context_settings={
