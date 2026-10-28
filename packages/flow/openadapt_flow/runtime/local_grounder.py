@@ -52,7 +52,7 @@ from openadapt_flow.ir import Region
 #: (Apache-2.0) published as ``onnx-community/dinov2-small``. Revision and
 #: digest are fixed; a changed file is refused, never loaded. int8 scores 12
 #: candidates in about 55 ms on 4 CPU threads, 2.5x faster than float32.
-WEIGHTS = {
+WEIGHTS: dict[str, Any] = {
     "name": "dinov2-small",
     "license": "Apache-2.0",
     "source": "facebook/dinov2-small",
@@ -324,7 +324,7 @@ class LocalGroundingModel:
                 (
                     np.asarray(
                         c.convert("RGB").resize(
-                            (INPUT_SIDE, INPUT_SIDE), Image.BICUBIC
+                            (INPUT_SIDE, INPUT_SIDE), Image.Resampling.BICUBIC
                         ),
                         dtype=np.float32,
                     )
@@ -358,7 +358,9 @@ class LocalGroundingModel:
         grid = INPUT_SIDE // PATCH
         energy = _edges(
             np.asarray(
-                image.convert("L").resize((INPUT_SIDE, INPUT_SIDE), Image.BICUBIC),
+                image.convert("L").resize(
+                    (INPUT_SIDE, INPUT_SIDE), Image.Resampling.BICUBIC
+                ),
                 dtype=np.float32,
             )
         )
