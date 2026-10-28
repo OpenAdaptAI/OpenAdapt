@@ -101,6 +101,15 @@ passed the three clean cases: another user's work in the same window,
 including on the bot's new chart, and values that differ only in stored
 format. This is a stand-in result; the live OpenEMR run is next.
 
+## Held-out 5
+
+The check is fixed at measurement commit `0c9287b85` before the suite is
+written: #1582, #1586, #1597 and #1604 after three review rounds, with the
+whole-database contract pinning the OpenEMR profile
+(`openemr-frame-profile/2026-10-29.1`,
+`sha256:b626d14a92a9170a35bff156671a4ee5d850772f9769c73a05b9c3e6be090bb5`).
+It runs on the stand-in and on live OpenEMR; both results count.
+
 ## Live OpenEMR
 
 Pending: queued for the fixture lease.
