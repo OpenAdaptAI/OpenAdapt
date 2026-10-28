@@ -350,3 +350,78 @@ read the receipt an earlier run left behind. Every claims script now uses a
 fresh directory per item and reads a receipt only after verify-run exits 0
 or 1. Every row of the earlier claims runs has exit 0 or 1 and a fresh
 directory, so those runs were not affected.
+
+## Amendment 10 (2026-10-25): arm 7 with a read-back on every save, and the program it compiles
+
+Written while arm 7 was on item 25, before any result was summed. Code as
+action became the default first-run agent,
+and run 1 now reads every save back from the system of record before the
+agent goes on (`compile_agent.harness.record_readback`; packages/flow
+docs/CODE_AS_ACTION.md). Arm 7 measures that agent, and arm 3 measures the
+program compiled from it:
+
+- MockMed items 21 to 40 (20 items, the protocol's own schedule, so item 30
+  is the `optimistic` fault and item 40 the `wrong_record` fault). Run id
+  `2026-10-25-rb` for both arms.
+- Arm 7: `run code_agent mockmed --start 21 --n 40 --keep-program`. Each item
+  is its own first run. The MockMed server runs on the fixed origin, because
+  item 21's admitted program is kept for arm 3.
+- Arm 3: `run program mockmed --start 21 --n 40 --program-from
+  code-2026-10-25-rb`, the program compiled and admitted from arm 7's item 21.
+- The outcome rules are unchanged. The read-back the agent sees is the
+  agent's evidence, not the scoreboard's: the scoreboard still reads the store
+  on its own after each item.
+- Rows are timed only under the protocol's load rule.
+- Arm 7 now follows the runner's `--no-faults` switch like arms 1 and 3
+  (faults on by default). Its earlier runs were items 1 to 5, before any
+  fault item, so they are unaffected.
+
+## Amendment 11 (2026-10-25, after Amendment 10's run): arm 7 reports what its read-back saw
+
+In Amendment 10's run, item 30 (the save the server drops while the screen
+says "saved") came out `silent_wrong` by the word rule. The agent did not
+claim the save: its final message says the save "did not take effect" and
+that the read-back showed nothing was saved (`raw/mockmed/code_agent/
+2026-10-25-rb/ledgers/item-030.json`), but none of `FAILURE_WORDS` is in it.
+By hand review the item is a safe stop (`HAND_REVIEW.md` next to the run).
+Amendment 10's rows keep the word rule's verdict.
+
+From this amendment on, arm 7 reports success only when the word rule passes
+and its own read-back after the last save shows the save landed. The read-back
+is part of the arm (OpenAdapt reads every save back during run 1), so this is
+what the arm reports, not the scoreboard's judgement: the scoreboard still
+reads the store on its own after each item.
+
+## Amendment 12 (2026-10-25, written after the runs it describes): arm 7 on the OpenEMR referral with read-back
+
+A real-app check of the read-back, not a scored batch. Arm 7 on the
+`realrun` OpenEMR fixture (pinned image, ports 9301/9300), items 1 to 5
+(`2026-10-25-rb`), then item 6 (`2026-10-25-rb-admit`) after a recorder fix.
+Amendment 11's success rule applies.
+
+- Items 1 to 6: `correct`; each save's read-back showed the named chart
+  (matched by email and last name) landed.
+- Admission refused all 6 before the canary ("a write step lacks an
+  independent read-back"). Items 1 to 5: the confirm-dialog save step had no
+  system-of-record change bound, because the chart lands after the recorder's
+  post-save read. The recorder now waits for the change after a save the gate
+  let through (`Recorder.expect_write`); item 6 and a scripted replay show
+  the save step bound (`record_written`). The remaining refusal is the
+  "Create New Patient" click before it: write-shaped, it opens the
+  duplicate-check dialog and writes nothing, so it has no read-back. Not
+  fixed here: binding a "nothing was written here" read-back to such a step
+  changes what admission accepts.
+
+## Amendment 13 (2026-10-25, after review): the read-back's rules changed after Amendments 10 to 12's runs
+
+After review, run 1's read-back counts only a record created during run 1 as
+the named one (any change to or removal of a starting record stops the run),
+stops on a second named record (a duplicate, counted even without record
+ids), treats a save with no new record as unconfirmed and stops the next save
+if it lands late, stops when a read fails, and calls a save `landed` only
+when the new record holds every input value (`compile_agent.harness.
+RecordReadBack`). Amendments 10 to 12's runs used the earlier rules. Not
+re-run; by the rules, their verdicts are the same: every item made one save,
+on MockMed's empty store or next to OpenEMR records it left untouched; item
+40's save created a record on another patient (wrong record either way) and
+item 30's showed no new record (unconfirmed, the earlier "no change").

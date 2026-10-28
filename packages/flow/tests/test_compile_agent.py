@@ -225,7 +225,7 @@ def test_claude_loop_counts_tokens_and_the_gate_screenshot() -> None:
         ]
     )
     harness = _Harness()
-    ledger = ClaudeAgent(client=client).drive(REQUEST, harness)  # type: ignore[arg-type]
+    ledger = ClaudeAgent(vision="selective", client=client).drive(REQUEST, harness)  # type: ignore[arg-type]
     assert ledger.finished and ledger.summary == "done"
     assert ledger.model_calls == 3 and ledger.tool_errors == 1  # the stale ref
     assert harness.clicks == ["e1"]
@@ -252,13 +252,17 @@ def test_every_turn_mode_uses_the_computer_toolset() -> None:
 def test_a_refused_save_ends_the_loop() -> None:
     client = _Client([("click", {"ref": "e1"})])
     with pytest.raises(GateRefused):
-        ClaudeAgent(client=client).drive(REQUEST, _Harness(refuse=True))  # type: ignore[arg-type]
+        ClaudeAgent(vision="selective", client=client).drive(
+            REQUEST, _Harness(refuse=True)
+        )  # type: ignore[arg-type]
 
 
 def test_the_cost_cap_ends_the_loop() -> None:
     client = _Client([("observe", {})] * 5, tokens=400_000)
     with pytest.raises(BudgetExceeded):
-        ClaudeAgent(client=client, max_cost_usd=1.0).drive(REQUEST, _Harness())  # type: ignore[arg-type]
+        ClaudeAgent(vision="selective", client=client, max_cost_usd=1.0).drive(
+            REQUEST, _Harness()
+        )  # type: ignore[arg-type]
     assert len(client.requests) == 1
 
 

@@ -1,0 +1,27 @@
+{
+  "protocol_version": "2026-10-18.1",
+  "written_at": "2026-10-24T23:34:22-0400",
+  "machine": "arm64 Darwin 24.6.0",
+  "cpu_count": 12,
+  "python": "3.12.7",
+  "engine": {
+    "path": "packages/flow/openadapt_flow",
+    "git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31"
+  },
+  "benchmark_git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31",
+  "task": "mockmed",
+  "arm": "code_agent",
+  "model": "claude-sonnet-5-5",
+  "n": 40,
+  "vision": "code",
+  "effort": "medium",
+  "max_cost_per_item": 0.3,
+  "on_screen": [
+    "Jane Sample",
+    "MRN P1"
+  ],
+  "code_at_run": {
+    "commit": "bedf5439f462acd296a8056acdad8a58f4db2b31",
+    "note": "run on bedf5439 with no uncommitted engine or runner change"
+  }
+}
