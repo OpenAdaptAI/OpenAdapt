@@ -1513,18 +1513,27 @@ _STRUCTURAL_LOCATOR_AT_JS = (
             '#' + CSS.escape(id)).length === 1) {
         selector = '#' + CSS.escape(id);
     }
+    // <input type=submit> and its kin are buttons named by their value,
+    // as the accessibility tree (and get_by_role) names them.
+    const inputType = (actionable.getAttribute('type') || '').toLowerCase();
+    const inputButton = tag === 'input' &&
+        ['submit', 'button', 'reset', 'image'].includes(inputType);
     let role = actionable.getAttribute('role');
     if (!role) {
         const map = {button: 'button', a: 'link', input: 'textbox',
             select: 'combobox', textarea: 'textbox'};
-        role = map[tag] || null;
+        role = inputButton ? 'button' : (map[tag] || null);
         if (tag === 'a' && !actionable.getAttribute('href')) role = null;
     }
     const fieldLabel = """
     + _FIELD_LABEL_JS
     + r""";
     let name = actionable.getAttribute('aria-label');
-    if (!name) name = fieldLabel(actionable);
+    if (!name && inputButton) {
+        name = (actionable.getAttribute(inputType === 'image' ? 'alt' : 'value') ||
+            '').replace(/\s+/g, ' ').trim() || null;
+    }
+    if (!name && !inputButton) name = fieldLabel(actionable);
     if (!name) {
         const text = (actionable.textContent || '').replace(/\s+/g, ' ').trim();
         name = text ? text.slice(0, 120) : null;
