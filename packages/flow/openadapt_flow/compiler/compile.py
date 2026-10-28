@@ -1204,10 +1204,15 @@ def _focus_postcondition(before: Any, after: Any) -> Optional[Postcondition]:
         and isinstance(name, str)
         and name.strip()
     )
-    # An id or testid check also binds the element's role and name when it had
-    # them, so an id that moved to another element can't pass: the generated-id
-    # patterns are only a hint, and no list keeps up with every framework.
-    pair: dict[str, Any] = {"focus_role": role, "focus_name": name} if named else {}
+    # Every check needs a role and a non-empty name. An id or testid check
+    # binds them too, so an id that moved to another element can't pass: the
+    # generated-id patterns are only a hint, and no list keeps up with every
+    # framework. An element with no name (a bare tabindex div, a host whose
+    # closed shadow root holds the real focus) gets no check, and the step
+    # stays vacuous.
+    if not named:
+        return None
+    pair: dict[str, Any] = {"focus_role": role, "focus_name": name}
     if isinstance(testid, str) and testid.strip() and after.get("testid_count") == 1:
         return Postcondition(
             kind=PostconditionKind.FOCUS_ON,

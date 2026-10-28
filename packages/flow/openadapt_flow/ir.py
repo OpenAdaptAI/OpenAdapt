@@ -640,15 +640,25 @@ class Postcondition(BaseModel):
 def focus_identity_is_specific(pc: "Postcondition") -> bool:
     """Whether a FOCUS_ON postcondition names one element, not a kind of element.
 
-    A ``testid`` or an ``id`` with a value, or a role with a non-empty
-    accessible name. A tag alone, or a role with no name, names no element:
-    such a postcondition asserts nothing and never passes.
+    A role with a non-empty accessible name, alone or with a ``testid`` or an
+    ``id``. A tag, a role with no name, or an id or testid without a role and
+    name names no element: such a postcondition asserts nothing and never
+    passes.
     """
 
     if pc.kind is not PostconditionKind.FOCUS_ON:
         return False
     if pc.focus_by in ("testid", "id"):
-        return bool(pc.focus_value and pc.focus_value.strip())
+        # An id or testid names one element only together with its role and
+        # name: an id alone can move to another element between renders.
+        return bool(
+            pc.focus_value
+            and pc.focus_value.strip()
+            and pc.focus_role
+            and pc.focus_role.strip()
+            and pc.focus_name
+            and pc.focus_name.strip()
+        )
     if pc.focus_by == "role_name":
         return bool(
             pc.focus_role
