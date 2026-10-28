@@ -1125,7 +1125,120 @@ def _structural_postconditions(event: dict) -> list[Postcondition]:
         pcs.append(Postcondition(kind=PostconditionKind.URL_CHANGED))
     elif title_before and title_after and title_before != title_after:
         pcs.append(Postcondition(kind=PostconditionKind.TITLE_CHANGED))
+    if not pcs and event.get("kind") in ("key", "hotkey"):
+        focus = _focus_postcondition(
+            event.get("focus_before"), event.get("focus_after")
+        )
+        if focus is not None:
+            pcs.append(focus)
     return pcs
+
+
+#: Ids a UI framework generates per render: React's useId (``:r2:``,
+#: ``«r2»``), Radix, Headless UI, MUI, Ember, react-select, downshift, Reach,
+#: Mantine, and bare UUIDs or long numeric suffixes.
+_GENERATED_ID = re.compile(
+    # React useId, anywhere in the id: ``:r2:``, ``«r2»``, and React 19.2+'s
+    # ``_r_2_`` / ``_R_2_`` (react-aria's ``react-aria-:r1:`` contains one).
+    r":r[0-9a-z]+:|«r[0-9a-z]+»|_r_[0-9a-z]+_"
+    r"|^(?:radix-|headlessui-|mui-|ember|react-select-|downshift-|reach-|mantine-"
+    r"|mat-|cdk-|rc_select_)"
+    r"|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    r"|\d{4,}$",
+    re.IGNORECASE,
+)
+
+
+def _generated_id(value: str) -> bool:
+    return bool(_GENERATED_ID.search(value))
+
+
+def _focus_postcondition(before: Any, after: Any) -> Optional[Postcondition]:
+    """A ``focus_on`` check for a key that moved the focus, or None.
+
+    Only when the element focused after the key has a specific identity that
+    no other element on the page shared at teach time: a ``data-testid``,
+    then an ``id``, then a role with a non-empty accessible name. A tag, or
+    a role with no name, is not specific, and the step keeps no check. The
+    key must have moved the focus or made an option active; a key that
+    changed neither proves nothing about it.
+    """
+
+    if not isinstance(after, dict) or after.get("none") is not False:
+        return None
+    before = before if isinstance(before, dict) else {}
+
+    def ident(o: dict) -> tuple:
+        return (
+            o.get("tag"),
+            o.get("testid"),
+            o.get("id"),
+            o.get("role"),
+            o.get("name"),
+        )
+
+    moved = ident(before) != ident(after)
+    activated = after.get("active_option") is True and not (
+        not moved and before.get("active_option") is True
+    )
+    if not (moved or activated):
+        return None
+    frame_path = after.get("frame_path")
+    if not isinstance(frame_path, list) or not all(
+        isinstance(f, str) for f in frame_path
+    ):
+        return None
+    common: dict[str, Any] = {
+        "focus_active_option": activated,
+        "focus_frame_path": tuple(frame_path),
+    }
+    testid, ident_id = after.get("testid"), after.get("id")
+    if isinstance(ident_id, str) and _generated_id(ident_id):
+        # A framework-generated id (React useId, Radix, MUI ...) shifts from
+        # run to run, so it names no element; fall back to role and name.
+        ident_id = None
+    role, name = after.get("role"), after.get("name")
+    named = (
+        isinstance(role, str)
+        and role.strip()
+        and isinstance(name, str)
+        and name.strip()
+    )
+    # An id or testid check also binds the element's role and name when it had
+    # them, so an id that moved to another element can't pass: the generated-id
+    # patterns are only a hint, and no list keeps up with every framework.
+    pair: dict[str, Any] = {"focus_role": role, "focus_name": name} if named else {}
+    if isinstance(testid, str) and testid.strip() and after.get("testid_count") == 1:
+        return Postcondition(
+            kind=PostconditionKind.FOCUS_ON,
+            focus_by="testid",
+            focus_value=testid,
+            **pair,
+            **common,
+        )
+    if isinstance(ident_id, str) and ident_id.strip() and after.get("id_count") == 1:
+        return Postcondition(
+            kind=PostconditionKind.FOCUS_ON,
+            focus_by="id",
+            focus_value=ident_id,
+            **pair,
+            **common,
+        )
+    if (
+        isinstance(role, str)
+        and role.strip()
+        and isinstance(name, str)
+        and name.strip()
+        and after.get("role_name_count") == 1
+    ):
+        return Postcondition(
+            kind=PostconditionKind.FOCUS_ON,
+            focus_by="role_name",
+            focus_role=role,
+            focus_name=name,
+            **common,
+        )
+    return None
 
 
 def lint_param_leakage(workflow: Workflow, param_values: tuple[str, ...]) -> list[str]:
@@ -1164,6 +1277,12 @@ def lint_param_leakage(workflow: Workflow, param_values: tuple[str, ...]) -> lis
     violations: list[str] = []
     for step in workflow.steps:
         for pc in step.expect:
+            for focus in (pc.focus_name, pc.focus_value):
+                if focus and _contains_excluded(focus, values):
+                    violations.append(
+                        f"{step.id}: focus_on postcondition {focus!r} embeds a "
+                        "demo parameter value"
+                    )
             if pc.text and _contains_excluded(pc.text, values):
                 violations.append(
                     f"{step.id}: {pc.kind.value} postcondition "

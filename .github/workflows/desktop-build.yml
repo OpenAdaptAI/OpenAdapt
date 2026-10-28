@@ -146,7 +146,7 @@ jobs:
         run: uv build --wheel --sdist
 
       - name: Inspect the built Python archives
-        run: uv run python scripts/verify_build_artifact.py python-distribution
+        run: uv run --locked python scripts/verify_build_artifact.py python-distribution
 
       - name: Enforce the public source boundary
         run: python scripts/check_source_boundary.py --require-dist
@@ -190,21 +190,21 @@ jobs:
         run: python scripts/sync_frozen_dependencies.py
 
       - name: Build platform-native sidecar
-        run: uv run python scripts/build_frozen_engine.py
+        run: uv run --locked python scripts/build_frozen_engine.py
 
       - name: Smoke-test sidecar executable
-        run: uv run python scripts/verify_build_artifact.py sidecar
+        run: uv run --locked python scripts/verify_build_artifact.py sidecar
 
       - name: Install Linux Chromium runtime libraries
         if: runner.os == 'Linux'
-        run: uv run python -m playwright install-deps chromium
+        run: uv run --locked python -m playwright install-deps chromium
 
       - name: Alias lowercase X11 names for Flow 1.34.0
         if: runner.os == 'Linux'
         run: sudo python scripts/alias_lowercase_x11_sonames.py
 
       - name: Prove frozen browser record, compile, and replay
-        run: uv run python scripts/smoke_test_frozen_flow.py
+        run: uv run --locked python scripts/smoke_test_frozen_flow.py
 
       - name: Upload sidecar executable
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -312,8 +312,8 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/sync_frozen_dependencies.py
-          uv run python scripts/build_frozen_engine.py
-          uv run python scripts/verify_build_artifact.py sidecar
+          uv run --locked python scripts/build_frozen_engine.py
+          uv run --locked python scripts/verify_build_artifact.py sidecar
           mkdir -p src-tauri/binaries
           ext=""
           if [ "${RUNNER_OS}" = "Windows" ]; then ext=".exe"; fi
