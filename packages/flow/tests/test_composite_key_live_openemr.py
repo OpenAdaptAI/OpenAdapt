@@ -24,6 +24,10 @@ does not start containers). Run it from ``packages/flow``::
     OPENEMR_COMPOSITE_KEY_LIVE=1 PYTHONPATH=../types:. \\
         python -m pytest tests/test_composite_key_live_openemr.py -v -p no:cacheprovider
 
+``benchmark`` here is a namespace package: an installed package with that
+name (openadapt-evals installs one) shadows it, and the import of
+``benchmark.openemr_local`` fails. Run from an environment without it.
+
 Optional environment, as for ``benchmark/openemr_local/qualify_hooks.py``:
 
 - ``OPENEMR_FIXTURE_STATE``: the fixture state directory holding the OAuth
