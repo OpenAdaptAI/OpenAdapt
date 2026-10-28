@@ -227,8 +227,10 @@ What each skill run has:
 
 - **The record check, twice.** The program's own confirmed checks give the
   run its receipt. Then the cache reads the system of record again against
-  this task: exactly one new record, with this task's `expect` fields and
-  values.
+  this task: exactly one new record of this task's record (one that matches
+  `expect`), with this task's values, and no other change to that record.
+  Other users' writes to other records during the run don't fail it; they
+  are counted in `record_check["outside_run"]`.
 - **No wire check.** A skill run's writes are not checked before they leave
   (`wire_checked` is false). Run 1 has one only when you pass
   `write_adapter=`.

@@ -45,7 +45,15 @@ from openadapt_flow.compile_agent.agents import AgentLedger, ModelCall
 from openadapt_flow.compile_agent.harness import GateRefused, StaleRef
 from openadapt_flow.teach_scope import ScopeViolation, UnsupportedAction
 
-__all__ = ["BrowserTools", "FrameworkAgent", "SkillCache", "SkillRun", "Usage"]
+__all__ = [
+    "BrowserTools",
+    "FrameworkAgent",
+    "SkillCache",
+    "SkillRun",
+    "TaskRecordCheck",
+    "Usage",
+    "task_record_check",
+]
 
 #: What a framework run reports it spent. ``calls`` holds one mapping per
 #: model call with ``input_tokens``, ``output_tokens`` and optionally
@@ -281,9 +289,10 @@ class SkillCache:
     contents, policy and ``environment`` (name the app's version or
     deployment there, so a changed app compiles again). Every skill run is
     checked twice in the system of record: by the program's own confirmed
-    checks (its receipt) and by this task's record check, the one run 1
-    passed: exactly one new record, with this task's ``expect`` fields and
-    values. A skill run that fails either is evicted, and the next run of
+    checks (its receipt) and by :func:`task_record_check`: exactly one new
+    record of this task's record (matching ``expect``), with this task's
+    values, and nothing else changed on that record. Other users' writes to
+    other records during the run are counted, not refused. A skill run that fails either is evicted, and the next run of
     the task goes to the agent again.
     """
 
@@ -394,12 +403,10 @@ class SkillCache:
     def _skill_run(
         self, compiler: Any, server: Path, params: Mapping[str, Any], started: float
     ) -> SkillRun:
-        from openadapt_flow.compile_agent import check_run_record
-
         before = compiler.observer.system_of_record
         reply = asyncio.run(_call_skill(self.python, server, dict(params)))
         after = compiler.observer.system_of_record
-        check = check_run_record(
+        check = task_record_check(
             before,
             after,
             expect=self.common["expect"],
@@ -469,6 +476,88 @@ class SkillCache:
             compile=result.to_dict(),
             record_check=check,
         )
+
+
+@dataclass
+class TaskRecordCheck:
+    """This task's write in the system of record, apart from other writers."""
+
+    passed: bool
+    reasons: list[str]
+    #: Records of this task's record (they match ``expect``).
+    created: int
+    changed: int
+    removed: int
+    #: Writes to other records during the run (other users, other tasks).
+    outside_run: dict[str, int] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return dict(self.__dict__)
+
+
+def task_record_check(
+    before: Optional[list[dict[str, Any]]],
+    after: Optional[list[dict[str, Any]]],
+    *,
+    expect: Mapping[str, Any],
+    values: Mapping[str, str],
+) -> TaskRecordCheck:
+    """Whether the run wrote exactly this task's record, with its values.
+
+    Only records that match every ``expect`` field belong to the task. It
+    passes when exactly one such record appeared, it holds every value, and
+    no existing record of the task's record changed or disappeared. Records
+    of other records that appear or change during the run are another
+    writer's (a shared system has other users) and are counted, not judged:
+    a write the program itself made elsewhere is the program's own checks'
+    job (the receipt's frame), and it leaves this task's record unwritten.
+    """
+
+    from openadapt_flow.record_sor import diff_snapshots
+
+    if before is None or after is None:
+        return TaskRecordCheck(
+            False, ["the system of record could not be read"], 0, 0, 0
+        )
+
+    def mine(record: Optional[Mapping[str, Any]]) -> bool:
+        return record is not None and all(
+            str(record.get(name)) == str(wanted) for name, wanted in expect.items()
+        )
+
+    diff = diff_snapshots(before, after)
+    created = [r for r in diff.created if mine(r)]
+    changed = [c for c in diff.changed if mine(c.before) or mine(c.after)]
+    removed = [r for r in diff.removed if mine(r)]
+    reasons: list[str] = []
+    if len(created) != 1:
+        reasons.append(
+            f"{len(created)} new records of the task's record appeared; the "
+            "task makes one (wrong record, or not saved)"
+        )
+    if changed:
+        reasons.append(f"{len(changed)} existing records of the task's record changed")
+    if removed:
+        reasons.append(f"{len(removed)} records of the task's record disappeared")
+    if len(created) == 1:
+        held = {str(v) for v in created[0].values() if v is not None}
+        reasons += [
+            f"input {name!r} is not in the new record"
+            for name, value in values.items()
+            if value not in held
+        ]
+    return TaskRecordCheck(
+        passed=not reasons,
+        reasons=reasons,
+        created=len(created),
+        changed=len(changed),
+        removed=len(removed),
+        outside_run={
+            "created": len(diff.created) - len(created),
+            "changed": len(diff.changed) - len(changed),
+            "removed": len(diff.removed) - len(removed),
+        },
+    )
 
 
 def _set_aside(compiler: Any) -> Optional[Path]:

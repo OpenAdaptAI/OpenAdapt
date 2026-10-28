@@ -297,6 +297,8 @@ def test_a_skill_never_serves_another_record(
     assert served.replay.get("verified") is True  # its own checks pass on p1
     assert served.verified is False and served.status == "RECORD_CHECK_FAILED"
     assert "wrong record" in (served.detail or "")
+    assert served.record_check["created"] == 0
+    assert served.record_check["outside_run"]["created"] == 1
     assert jane.server(P_JANE, {"note": "x"}) is None  # evicted
     assert list((tmp_path / "cache" / "evicted").iterdir())
 
@@ -324,3 +326,43 @@ def test_the_cache_is_per_user_by_default(tmp_path: Path) -> None:
         "policy",
         "environment",
     }
+
+
+def test_another_users_write_elsewhere_does_not_fail_the_skill(
+    mockmed: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A shared system has other writers: a note saved on another chart
+    while the skill runs is outside the run, not a failure."""
+
+    from openadapt_flow.integrations.agents import skills
+
+    _http_json(f"{mockmed}/api/reset", method="POST", body={})
+    cache = _cache(tmp_path, mockmed, monkeypatch, [])
+    first = cache.run(
+        PROMPT, {"note": NOTE}, _agent(ScriptedChat(patient="Jane Sample", note=NOTE))
+    )
+    assert first.status == "admitted", first.detail
+    _http_json(f"{mockmed}/api/reset", method="POST", body={})
+
+    call_skill = skills._call_skill
+
+    async def with_another_writer(python, server, params):
+        _http_json(
+            f"{mockmed}/api/encounter?fault=ok",
+            method="POST",
+            body={"patient_id": "p2", "type": "Triage", "note": "Another user"},
+        )
+        return await call_skill(python, server, params)
+
+    monkeypatch.setattr(skills, "_call_skill", with_another_writer)
+    second = cache.run(
+        PROMPT,
+        {"note": NEW_NOTE},
+        _agent(ScriptedChat(patient="Jane Sample", note=NOTE)),
+    )
+    assert second.path == "skill" and second.verified, second.to_dict()
+    assert second.record_check["created"] == 1
+    assert second.record_check["outside_run"]["created"] == 1
+    assert cache.server(PROMPT, {"note": NOTE}) is not None  # not evicted
+    notes = {(r["patient_id"], r["note"]) for r in _records(mockmed)}
+    assert {("p1", NEW_NOTE), ("p2", "Another user")} <= notes
