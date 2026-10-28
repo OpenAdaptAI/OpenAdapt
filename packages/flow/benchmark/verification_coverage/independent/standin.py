@@ -489,3 +489,12 @@ class Store:
             "UPDATE users SET info = ? WHERE username = ?", (value, username)
         )
         self.log(user, "security-administration-update", 0, f"UPDATE users {username}")
+
+    def delete_last_allergy(self, user: Optional[str], pid: int) -> None:
+        """Delete ``pid``'s newest lists row, as the UI's delete action does."""
+
+        self.con.execute(
+            "DELETE FROM lists WHERE id = (SELECT MAX(id) FROM lists WHERE pid = ?)",
+            (pid,),
+        )
+        self.log(user, "patient-record-delete", pid, f"DELETE FROM lists pid={pid}")

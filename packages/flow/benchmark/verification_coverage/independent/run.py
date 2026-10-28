@@ -227,6 +227,7 @@ DELETE_INSURANCE_OP = "delete_primary_insurance"  # (placed before the window)
 EMPTY_HISTORY_OP = "add_history_row"  # a second history row, pid and date only
 CAPITALS_REGISTER_OP = "register_referral_capitals"  # street and city in capitals
 REVERT2_OP = REVERT_OP
+DELETE_LAST_ALLERGY_OP = "delete_last_allergy"  # the chart's newest lists row
 SET_USER_INFO_OP = "set_user_info"  # a users row's info column (step: user, value)
 HELD_OUT_OPS = {
     APPOINTMENT_OP: "new_patient",
@@ -234,6 +235,7 @@ HELD_OUT_OPS = {
     REVERT_OP: "other_patient",
     DELETE_INSURANCE_OP: "other_patient",
     EMPTY_HISTORY_OP: "new_patient",
+    DELETE_LAST_ALLERGY_OP: "other_patient",
 }
 #: The primary insurance ``DELETE_INSURANCE_OP`` needs in the baseline.
 PRE_WINDOW_INSURANCE = "Example Health Plan"
@@ -467,7 +469,8 @@ def apply_steps(
         elif op == CAPITALS_REGISTER_OP:
             new_pid = store.register(who, stored(capitals(told), ids))
         elif op == "register_patient":
-            store.register(who, person_values(step, ids))
+            # Another user's new chart: a later step can target it.
+            ids["registered_patient"] = store.register(who, person_values(step, ids))
         elif op in HELD_OUT_OPS:
             pid = new_pid if HELD_OUT_OPS[op] == "new_patient" else ids["other_patient"]
             if op == APPOINTMENT_OP:
@@ -478,6 +481,8 @@ def apply_steps(
                 store.add_history(who, pid)
             elif op == DELETE_INSURANCE_OP:
                 store.delete_insurance(who, pid)
+            elif op == DELETE_LAST_ALLERGY_OP:
+                store.delete_last_allergy(who, pid)
             else:  # REVERT_OP: the value before the run
                 field = "phone_home"
                 store.update_chart(who, pid, {field: SEEDS["other_patient"][field]})

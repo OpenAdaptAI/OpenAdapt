@@ -51,6 +51,7 @@ from verification_coverage.independent.run import (  # noqa: E402
     CAPITALS_REGISTER_OP,
     CONCURRENT_PERSON,
     DELETE_INSURANCE_OP,
+    DELETE_LAST_ALLERGY_OP,
     DOUBLE_HISTORY_OP,
     EMPTY_HISTORY_OP,
     HELD_OUT_OPS,
@@ -351,13 +352,17 @@ def api_body(values: dict[str, Any]) -> dict[str, Any]:
     return body
 
 
-def audit_row(user: str, pid: int) -> str:
-    """The ``log`` row OpenEMR's UI path writes for a patient-record insert."""
+def audit_row(
+    user: str, pid: int, statement: str, event: str = "patient-record-insert"
+) -> str:
+    """The ``log`` row OpenEMR writes for a patient-record write: the
+    statement base64-encoded in ``comments``, as the audit query decodes."""
 
     return (
         "INSERT INTO openemr.log (date, event, category, user, groupname, comments, "
-        f"patient_id, success, log_from) VALUES (NOW(), 'patient-record-insert', "
-        f"'Patient Demographics', {q(user)}, 'Default', '', {int(pid)}, 1, 'open-emr');"
+        f"patient_id, success, log_from) VALUES (NOW(), {q(event)}, "
+        f"'Patient Demographics', {q(user)}, 'Default', TO_BASE64({q(statement)}), "
+        f"{int(pid)}, 1, 'open-emr');"
     )
 
 
@@ -434,8 +439,13 @@ def apply_steps(
                 )
                 sql(
                     f"INSERT INTO openemr.history_data (pid, date) VALUES ({other}, NOW());"
-                    + audit_row(OTHER if who == "clinician2" else BOT, other)
+                    + audit_row(
+                        OTHER if who == "clinician2" else BOT,
+                        other,
+                        "INSERT INTO history_data",
+                    )
                 )
+                ids["registered_patient"] = other
                 continue
             if op in HELD_OUT_OPS:
                 pid = (
@@ -461,7 +471,21 @@ def apply_steps(
                         "pc_facility, pc_billing_location) VALUES (10, "
                         f"{q(str(ids['iholt']))}, {q(str(pid))}, 'New Patient', NOW(), "
                         "'2026-10-26', '0000-00-00', 1800, '09:00:00', '09:30:00', "
-                        "'-', 3, 3);" + audit_row(BOT, pid)
+                        "'-', 3, 3);"
+                        + audit_row(BOT, pid, "INSERT INTO openemr_postcalendar_events")
+                    )
+                elif op == DELETE_LAST_ALLERGY_OP:
+                    deviations.append(
+                        "the allergy delete ran as SQL with an audit row by the bot"
+                    )
+                    sql(
+                        "DELETE FROM openemr.lists WHERE id = (SELECT id FROM (SELECT "
+                        f"MAX(id) AS id FROM openemr.lists WHERE pid = {int(pid)}) m);"
+                        "INSERT INTO openemr.log (date, event, category, user, groupname, "
+                        "comments, patient_id, success, log_from) VALUES (NOW(), "
+                        "'patient-record-delete', 'Patient Demographics', "
+                        f"{q(BOT)}, 'Default', TO_BASE64('DELETE FROM lists'), "
+                        f"{int(pid)}, 1, 'open-emr')"
                     )
                 elif op == EMPTY_HISTORY_OP:
                     deviations.append(
@@ -469,7 +493,8 @@ def apply_steps(
                     )
                     sql(
                         "INSERT INTO openemr.history_data (pid, date) VALUES "
-                        f"({int(pid)}, NOW());" + audit_row(BOT, pid)
+                        f"({int(pid)}, NOW());"
+                        + audit_row(BOT, pid, "INSERT INTO history_data")
                     )
                 elif op == DELETE_INSURANCE_OP:
                     deviations.append(
@@ -477,7 +502,13 @@ def apply_steps(
                     )
                     sql(
                         "DELETE FROM openemr.insurance_data WHERE pid = "
-                        f"{int(pid)} AND type = 'primary';" + audit_row(BOT, pid)
+                        f"{int(pid)} AND type = 'primary';"
+                        + audit_row(
+                            BOT,
+                            pid,
+                            "DELETE FROM insurance_data",
+                            "patient-record-delete",
+                        )
                     )
                 elif op == DOUBLE_HISTORY_OP:
                     deviations.append(
@@ -495,7 +526,8 @@ def apply_steps(
                     sql(
                         f"INSERT INTO openemr.history_data ({cols}) SELECT {cols} "
                         f"FROM openemr.history_data WHERE pid = {int(pid)} "
-                        "ORDER BY id LIMIT 1;" + audit_row(BOT, pid)
+                        "ORDER BY id LIMIT 1;"
+                        + audit_row(BOT, pid, "INSERT INTO history_data")
                     )
                 continue
             pid = (
@@ -560,7 +592,8 @@ def apply_steps(
                     f"('primary', '0', {int(pid)}, CURDATE());"
                     "INSERT INTO openemr.log (date, event, category, user, groupname, "
                     "comments, patient_id, success, log_from) VALUES (NOW(), "
-                    f"'patient-record-insert', 'Insurance', {q(BOT)}, 'Default', '', "
+                    f"'patient-record-insert', 'Insurance', {q(BOT)}, 'Default', "
+                    "TO_BASE64('INSERT INTO insurance_data'), "
                     f"{int(pid)}, 1, 'open-emr')"
                 )
             else:
