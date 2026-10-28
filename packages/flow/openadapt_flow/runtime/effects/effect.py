@@ -62,6 +62,52 @@ _ASCII_UPPER = str.maketrans("abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRST
 _ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 
 
+ValueKind = Literal["phone", "date", "email"]
+
+
+def kind_form(
+    kind: Optional[str], value: Any, date_order: Optional[str] = None
+) -> Optional[str]:
+    """``value`` in the canonical form of a declared value kind, or None
+    when it can't be read as one (which then matches nothing).
+
+    - ``phone``: the digits, with an extension kept apart
+      (``(617) 555-0142 x12`` -> ``6175550142x12``);
+    - ``date``: ISO ``YYYY-MM-DD``; a numeric date like ``03/07/1984`` needs
+      ``date_order`` (``mdy`` or ``dmy``), or it is ambiguous;
+    - ``email``: trimmed, case folded.
+    """
+
+    if value is None:
+        return None
+    text = str(value).strip()
+    if kind is None:
+        return text
+    if kind == "email":
+        return text.lower() if "@" in text else None
+    if kind == "phone":
+        ext = re.search(r"(?i)\s*(?:x|ext\.?|extension)\s*(\d+)\s*$", text)
+        digits = re.sub(r"\D", "", text[: ext.start()] if ext else text)
+        if not digits:
+            return None
+        return digits + (f"x{ext.group(1)}" if ext else "")
+    if kind == "date":
+        iso = re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T].*)?", text)
+        if iso:
+            y, m, d = (int(g) for g in iso.groups())
+        else:
+            num = re.fullmatch(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", text)
+            if not num or date_order not in ("mdy", "dmy"):
+                return None
+            a, b, y = (int(g) for g in num.groups())
+            m, d = (a, b) if date_order == "mdy" else (b, a)
+        try:
+            return datetime(y, m, d).date().isoformat()
+        except ValueError:
+            return None
+    return None
+
+
 class ValueExpr(BaseModel):
     """A single effect-contract value: either a static ``literal`` or a
     reference to a run ``param`` (P0-3 fix).
@@ -102,6 +148,12 @@ class ValueExpr(BaseModel):
     #: strtoupper does. The check stays exact: it expects the stored form,
     #: not any casing.
     stored: Optional[Literal["upper", "lower"]] = None
+    #: A declared value kind (:func:`kind_form`): the expected value and the
+    #: stored one are compared in canonical form, so formatting alone never
+    #: refutes, and a different value always does. Never inferred.
+    kind: Optional[ValueKind] = None
+    #: ``kind: date`` only: how a numeric date entered for this value reads.
+    date_order: Optional[Literal["mdy", "dmy"]] = None
 
     @model_validator(mode="after")
     def _exactly_one_source(self) -> "ValueExpr":
@@ -115,6 +167,8 @@ class ValueExpr(BaseModel):
             raise ValueError("a value map needs a parameter and at least one entry")
         if self.stored is not None and self.param is None:
             raise ValueError("a stored form applies to a parameter")
+        if self.date_order is not None and self.kind != "date":
+            raise ValueError("date_order applies to kind: date")
         return self
 
     @model_serializer(mode="wrap")
@@ -123,7 +177,7 @@ class ValueExpr(BaseModel):
         # effect contract hashes and bundle digests are unchanged.
         data = handler(self)
         if isinstance(data, dict):
-            for key in ("map", "stored"):
+            for key in ("map", "stored", "kind", "date_order"):
                 if data.get(key) is None:
                     data.pop(key, None)
         return data
@@ -144,8 +198,12 @@ class ValueExpr(BaseModel):
             from openadapt_flow.runtime.authorization import runtime_param_text
 
             entered = runtime_param_text(params[self.param])  # type: ignore[arg-type]
-            return self.stored_form(entered)
-        return self.literal
+            value = self.stored_form(entered)
+        else:
+            value = self.literal
+        if self.kind is not None:
+            return kind_form(self.kind, value, self.date_order)
+        return value
 
     def stored_form(self, entered: str) -> Optional[str]:
         """What the system of record stores for ``entered``: its code under
@@ -162,7 +220,15 @@ class ValueExpr(BaseModel):
 
     def resolved(self, params: Mapping[str, object]) -> "ValueExpr":
         """Return a pure-literal copy of this expression bound to ``params``."""
-        return ValueExpr(literal=self.resolve(params))
+        return ValueExpr(literal=self.resolve(params), kind=self.kind)
+
+    def matches(self, stored: Any) -> bool:
+        """Does a stored value equal this (resolved) value? In canonical form
+        when a kind is declared, as text otherwise."""
+
+        if self.kind is None:
+            return str(stored) == str(self)
+        return self.literal is not None and kind_form(self.kind, stored) == self.literal
 
     # -- transparent str-compatibility (back-compat with the v1 plain-string
     #    form): a literal ValueExpr compares, hashes, stringifies, and reprs
@@ -1236,7 +1302,10 @@ def record_matches(record: dict[str, Any], selector: dict[str, str]) -> bool:
     An empty selector matches every record (used by absence checks).
     """
     for key, want in selector.items():
-        if str(record.get(key, None)) != str(want):
+        if isinstance(want, ValueExpr) and want.kind is not None:
+            if not want.matches(record.get(key, None)):
+                return False
+        elif str(record.get(key, None)) != str(want):
             return False
     return True
 

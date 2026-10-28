@@ -467,7 +467,9 @@ def _judge_field_equals(
         )
     record = matched[0]
     observed = "" if record.get(effect.field) is None else str(record.get(effect.field))
-    if observed == want:
+    kind = getattr(effect.value, "kind", None)
+    same = effect.value.matches(record.get(effect.field)) if kind else observed == want  # type: ignore[union-attr]
+    if same:
         return EffectVerdict(
             verdict=Verdict.CONFIRMED,
             kind=effect.kind,

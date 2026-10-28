@@ -385,7 +385,7 @@ def bound_maps(effects: Any) -> dict[str, Any]:
     return {
         param: expr
         for param, (_field, expr) in bindings(effects).items()
-        if expr.map or expr.stored
+        if expr.map or expr.stored or expr.kind
     }
 
 
@@ -431,6 +431,7 @@ def round_trip(
             continue
         source_value = second.read(document, name, prov.source)
         mapping = (maps or {}).get(name)
+        kind = None if isinstance(mapping, Mapping) else getattr(mapping, "kind", None)
         if mapping is not None and source_value is not None:
             # The document shows the label, the record stores its code (a
             # state's name and "MA", a provider's name and their id), or a
@@ -443,6 +444,17 @@ def round_trip(
         stored = "" if record.get(record_field) is None else str(record[record_field])
         if source_value is None:
             checks.append(FieldCheck(name, "missing", stored))
+        elif kind is not None:
+            # A declared kind: the stored value against the document's, both
+            # in canonical form (a date as the date the document prints).
+            from openadapt_flow.runtime.effects.effect import kind_form
+
+            ok = kind_form(kind, stored) is not None and kind_form(
+                kind, stored
+            ) == kind_form(kind, source_value, getattr(mapping, "date_order", None))
+            checks.append(
+                FieldCheck(name, "agree" if ok else "disagree", stored, source_value)
+            )
         elif same_value(stored, source_value, _kind(prov, source_value)):
             checks.append(FieldCheck(name, "agree", stored, source_value))
         else:
