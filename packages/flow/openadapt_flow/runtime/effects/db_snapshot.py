@@ -81,8 +81,13 @@ class SnapshotError(RuntimeError):
 def _host_secret() -> bytes:
     """The host's frame secret: ``OPENADAPT_FRAME_SECRET`` (hex), the file
     ``OPENADAPT_FRAME_SECRET_FILE``, or ``~/.config/openadapt/frame.key``
-    (created owner-only on first use). Keep it unreadable to the agent's
-    account; it is never written into a baseline."""
+    (created owner-only on first use). It is never written into a baseline.
+
+    The default file only keeps the secret out of the baseline: an agent
+    running as the same OS user can read it. A deployment sets
+    ``OPENADAPT_FRAME_SECRET`` (or the file) from a store the agent's account
+    can't read, so a baseline the agent can see still can't be tested
+    against guesses."""
 
     env = os.environ.get("OPENADAPT_FRAME_SECRET")
     if env:
@@ -528,10 +533,17 @@ def _read_rows(
     return out
 
 
-def _row_key(d: _Def, row: Mapping[str, Any], seen: dict[str, int]) -> str:
+def _row_key(
+    d: _Def, row: Mapping[str, Any], seen: dict[str, int], skip: Sequence[str] = ()
+) -> str:
     if d.primary_key:
         return "|".join(canonical(row.get(c)) for c in d.primary_key)
-    body = json.dumps(row, sort_keys=True, default=str)
+    # No key: the row's contents, without the columns a rule lets move (a
+    # counter row stays the same row when its counter moves).
+    ignored = set(skip)
+    body = json.dumps(
+        {c: v for c, v in row.items() if c not in ignored}, sort_keys=True, default=str
+    )
     digest = hashlib.sha256(body.encode()).hexdigest()[:16]
     seen[digest] = seen.get(digest, 0) + 1
     return f"{digest}#{seen[digest]}"
@@ -736,7 +748,7 @@ def _snapshot(
         skip = [*ignore.get(t, ()), *ignore.get("*", ())]
         seen_keys: dict[str, int] = {}
         for row in _read_rows(s, t, d) if table.count else []:
-            k = row_key_hash(key, _row_key(d, row, seen_keys), t)
+            k = row_key_hash(key, _row_key(d, row, seen_keys, skip), t)
             mac = row_hash(key, t, row, skip)
             table.rows[k] = [
                 mac,

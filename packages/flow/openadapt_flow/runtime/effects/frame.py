@@ -280,9 +280,24 @@ class FrameDatabase(BaseModel):
     #: append-only and session tables and its column rules apply on top of
     #: ``allow_tables`` and ``ignore_columns``.
     profile: Optional[str] = None
+    #: The profile's digest, pinned: a package upgrade that changes what is
+    #: excused can't change it under a contract (``frame_sha256`` binds it).
+    profile_sha256: Optional[str] = None
     #: Seconds to wait after the save before the read, so writes the app
     #: makes a moment later (background jobs) fall inside the window.
     settle_s: float = Field(default=0.0, ge=0)
+
+    @model_validator(mode="after")
+    def _pinned_profile(self) -> "FrameDatabase":
+        if self.profile is None:
+            return self
+        profile = self.loaded_profile()
+        if self.profile_sha256 != profile.sha256():
+            raise ValueError(
+                f"frame.database.profile_sha256 must pin {self.profile!r} "
+                f"({profile.version}, {profile.sha256()})"
+            )
+        return self
 
     @model_validator(mode="before")
     @classmethod
@@ -426,6 +441,8 @@ class FrameVerdict:
     #: In memory only: (surface, identity) of records another actor added,
     #: as their surface names them, when a table is judged in its place.
     added_by_others: set[tuple[str, str]] = field(default_factory=set)
+    #: In memory only: app profile rules that excused a row change.
+    excused_by: set[str] = field(default_factory=set)
 
     @property
     def held(self) -> bool:
@@ -548,6 +565,12 @@ def judge_frame(
     hashers: Optional[Mapping[str, Callable[[str, Any], str]]] = None,
     clock: tuple[str, str] = ("", ""),
     database_evidence: Optional[dict[str, Any]] = None,
+    excuse: Optional[
+        Callable[
+            [str, Optional[Mapping[str, Any]], Optional[Mapping[str, Any]], list[str]],
+            Optional[list[str]],
+        ]
+    ] = None,
 ) -> FrameVerdict:
     """Judge the frame of ``effects`` over ``slices``.
 
@@ -577,6 +600,9 @@ def judge_frame(
             hashed to compare with the baseline.
         clock: The database clock at the baseline and after the save.
         database_evidence: Counts for the receipt (tables compared, ...).
+        excuse: (table, before, after, changed fields) -> the app profile
+            rules that make this row change the app's own bookkeeping, or
+            None. Applied to rows no effect declares.
     """
 
     from openadapt_flow.runtime.effects.db_snapshot import KEY, ROW, is_default
@@ -838,6 +864,24 @@ def judge_frame(
             and not (found & self_ids)
             and not (actors(name, ref, field) & self_ids)
         )
+
+    excused_by: set[str] = set()
+
+    def bookkeeping(
+        name: str,
+        before: Optional[Mapping[str, Any]],
+        after: Optional[Mapping[str, Any]],
+        fields: list[str],
+    ) -> bool:
+        """Is this row change the app's own bookkeeping (its profile)?"""
+
+        if excuse is None or name not in hashers:
+            return False
+        rules = excuse(name, before, after, fields)
+        if rules:
+            excused_by.update(rules)
+            return True
+        return False
 
     # Each other actor's entry explains at most one row: a colleague's one
     # insert can't cover two stray rows.
@@ -1117,6 +1161,8 @@ def judge_frame(
                     declared_keys.add(str(ref_of(name, key, None, after)[0]))
                     new_row(name, key, after, (side.link_field,))
                     continue
+                if bookkeeping(name, None, after, []):
+                    continue
                 theirs = any(
                     side.surface == name
                     and str(after.get(side.link_field)) in other_links[i]
@@ -1136,6 +1182,8 @@ def judge_frame(
                     # that read the surface (an exact_new_set's additions).
                     added_by_others.add((view, str(after.get(spec.identity_field))))
             elif after is None and before is not None:
+                if bookkeeping(name, before, None, []):
+                    continue
                 note(
                     FrameChange(
                         name, "removed", attribute(name, key, before, None), key=key
@@ -1143,6 +1191,8 @@ def judge_frame(
                 )
             elif before is not None and after is not None:
                 fields = changed(name, before, after)
+                if fields and bookkeeping(name, before, after, fields):
+                    continue
                 if fields:
                     note(
                         FrameChange(
@@ -1201,6 +1251,7 @@ def judge_frame(
         concurrent=concurrent,
         database=database_evidence,
         added_by_others=added_by_others,
+        excused_by=excused_by,
     )
     verdict.reason = _reason(verdict)
     return verdict

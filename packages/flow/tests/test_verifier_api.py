@@ -214,6 +214,8 @@ def test_the_public_api_is_stable() -> None:
         "max_rows",
         "key",
         "profile",
+        "before",
+        "actor_names",
     ]
     assert [f for f in WriteResult.__dataclass_fields__] == [
         "verified",
@@ -225,3 +227,31 @@ def test_the_public_api_is_stable() -> None:
         "receipt_sha256",
         "evidence",
     ]
+
+
+def test_diff_database_applies_the_profile_and_before(tmp_path: Path) -> None:
+    db = tmp_path / "app.sqlite"
+    con = sqlite3.connect(db)
+    con.executescript(
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, uuid TEXT,"
+        " last_updated TEXT);"
+        "CREATE TABLE users_secure (id INTEGER PRIMARY KEY, username TEXT,"
+        " password TEXT, login_fail_counter INTEGER, last_update TEXT);"
+        "INSERT INTO users VALUES (1, 'clinic2', 'u1', 'a'), (2, 'bot', 'u2', 'a');"
+        "INSERT INTO users_secure VALUES (1, 'clinic2', 'h1', 0, 'a'), (2, 'bot', 'h2', 0, 'a');"
+    )
+    con.commit()
+    con.close()
+    read = {"sqlite_database": str(db)}
+    args = {"profile": "openemr", "actor_names": ["bot"]}
+    before = capture_database(read, "sqlite", **args)
+    _write(
+        db,
+        "UPDATE users_secure SET login_fail_counter = 1, last_update = 'b' WHERE id = 2",
+    )
+    after = capture_database(read, "sqlite", before=before, **args)
+    # The acting user's own sign-in bookkeeping: back where it was.
+    assert diff_database(before, after, **args) == {}
+    _write(db, "UPDATE users_secure SET password = 'x' WHERE id = 1")
+    after = capture_database(read, "sqlite", before=before, **args)
+    assert set(diff_database(before, after, **args)) == {"users_secure"}
