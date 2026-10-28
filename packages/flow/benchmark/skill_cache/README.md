@@ -1,7 +1,8 @@
 # Skill cache: run 1 by an agent, later runs by the compiled skill
 
 Measured on 2026-10-28 with `measure.py` in this folder, engine commit
-`7c7f36b1a2` (branch `claude/skill-cache`), model `claude-sonnet-5-5`.
+`7c7f36b1a2` (in this branch's history; later commits change no engine
+code), model `claude-sonnet-5-5`.
 
 The agent is a LangGraph graph (`ToolNode`) on `ChatAnthropic`, with the
 skill cache's browser tools (`openadapt_flow.integrations.agents.skills`).
