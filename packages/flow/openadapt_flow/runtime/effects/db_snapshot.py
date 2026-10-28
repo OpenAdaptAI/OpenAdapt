@@ -8,64 +8,102 @@ compares two of them like any other slice.
 
 What a snapshot holds, and why:
 
-- **No values on disk.** Each cell is a keyed hash (keyed BLAKE2b with the
-  run's salt), so a baseline is not a copy of the records. Plain values are
-  read only for rows the save added, and held in memory to judge them.
+- **No values on disk.** Each row is kept as a keyed MAC of its key and of
+  its contents (without ``ignore_columns``), and each cell as a keyed MAC
+  bound to its table and column: BLAKE2b, 128 bits, keyed by
+  :func:`mac_key` from the run's salt and a host secret that is never in the
+  baseline. A table over ``max_rows`` keeps cell MACs only for the columns
+  attribution and side records read (``ref_columns``). Plain values are read
+  in full, but kept in memory only for rows that differ from the baseline.
+- **Rows by key.** A changed row is known by its key in every table, so it
+  goes through attribution, and an added row is found by key for any
+  primary key.
 - **One consistent read.** Everything is read on one connection inside one
   read-only transaction (``START TRANSACTION WITH CONSISTENT SNAPSHOT, READ
-  ONLY`` on MySQL and MariaDB; ``BEGIN`` on SQLite), so a row committed
-  mid-snapshot is never half-seen. The audit log is read in the same
-  transaction (``extra_queries``).
-- **Large tables by bucket.** A table over ``max_rows`` with a single
-  integer key is digested in buckets of 1024 keys (salted SHA-256 of its rows'
-  hashes). Rows the save adds sit above the baseline's largest key and are
-  read in full; a changed bucket below it means an existing row moved.
-  A large table without an integer key gets one digest.
-- **Schema and code.** Each table's definition (column types, defaults,
-  nullability, extras) and the database's triggers, views, routines and
-  events are digested; a change is reported, never ignored.
-- **Counters.** ``sqlite_sequence`` and ``AUTO_INCREMENT`` show a row that
-  was written and deleted inside the window.
+  ONLY`` on MySQL and MariaDB; ``BEGIN`` on SQLite). The audit log is read in
+  the same transaction (``extra_queries``). MySQL's ``AUTO_INCREMENT`` isn't
+  part of a snapshot, so it is read just before the snapshot starts: a row
+  committed in between is in the snapshot, never missing from it.
+- **Schema and code.** Each table's definition and the database's triggers,
+  views, routines and events are digested. On MySQL a trigger is visible
+  only to an account with ``TRIGGER``; without it the snapshot says so
+  (``code_visible``), and the frame is not checked.
+- **Counters.** ``sqlite_sequence`` and ``AUTO_INCREMENT`` (on the column the
+  database numbers, key or not) show a row written and deleted in the window.
 - **The clock.** ``CURRENT_TIMESTAMP`` at the snapshot, so a column the
   database fills with the time can be held to the window.
 - **Allow-listed tables** are append-only by default: their existing rows
-  must not change (the audit log is the attribution channel). ``skip`` mode
-  reads nothing and needs a stated reason.
+  must not change or go. ``skip`` reads nothing and needs a stated reason.
 
 Read-only: SQLite files open with ``mode=ro``; a driver connection should use
-a SELECT-only account with SELECT on every schema the app can write.
+an account with SELECT (and, on MySQL, TRIGGER and SHOW VIEW) on every schema
+the app can write. The baseline must still be protected like the records:
+whoever holds both it and the host secret can test guesses against the MACs.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
+import secrets
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from typing import Any, Literal, Optional
 
 Dialect = Literal["sqlite", "mysql"]
 TableMode = Literal["compare", "append_only", "skip"]
 
-#: Keys per bucket in a large table's digest.
-BUCKET = 1024
 #: Columns per JSON object call: SQLite caps a function at 127 arguments.
 _CHUNK = 50
 #: The synthetic identity field of a database slice's records.
 KEY = "__row_key__"
+#: The row's contents MAC in a database slice's records.
+ROW = "__row_mac__"
 #: A column default meaning any value: the table's own generated key.
 ANY_VALUE = "\x00any"
 #: A column default the database computes as the current time at insert.
 CLOCK_DEFAULT = "\x00clock"
 _SYSTEM_SCHEMAS = ("information_schema", "mysql", "performance_schema", "sys")
+#: Hex characters per MAC (128 bits).
+MAC_HEX = 32
 
 
 class SnapshotError(RuntimeError):
     """The database can't be snapshotted as the frame needs."""
 
 
-# -- hashing ------------------------------------------------------------------
+# -- keys and MACs ------------------------------------------------------------
+
+
+def _host_secret() -> bytes:
+    """The host's frame secret: ``OPENADAPT_FRAME_SECRET`` (hex), the file
+    ``OPENADAPT_FRAME_SECRET_FILE``, or ``~/.config/openadapt/frame.key``
+    (created owner-only on first use). Keep it unreadable to the agent's
+    account; it is never written into a baseline."""
+
+    env = os.environ.get("OPENADAPT_FRAME_SECRET")
+    if env:
+        return bytes.fromhex(env)
+    path = Path(
+        os.environ.get("OPENADAPT_FRAME_SECRET_FILE")
+        or Path.home() / ".config" / "openadapt" / "frame.key"
+    )
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(secrets.token_bytes(32))
+    return path.read_bytes()
+
+
+def mac_key(salt: bytes) -> bytes:
+    """The run's MAC key: the salt (in the baseline) keyed by the host
+    secret (not in it), so the baseline alone can't be tested against."""
+
+    return hashlib.blake2b(salt, key=_host_secret()[:64], digest_size=32).digest()
 
 
 def canonical(value: Any) -> str:
@@ -83,30 +121,42 @@ def canonical(value: Any) -> str:
     return str(value)
 
 
-#: Hex characters per cell MAC (32 bits). A cell's MAC is only compared
-#: with the same cell's MAC, and is keyed, so it can't be forged; the row
-#: key MAC is 128 bits so distinct rows never share one.
-CELL_HEX = 8
-
-
-def cell_hash(key: bytes, value: Any) -> str:
-    """A cell's keyed MAC (BLAKE2b, 32 bits)."""
-
+def _mac(key: bytes, text: str) -> str:
     return hashlib.blake2b(
-        canonical(value).encode(), digest_size=CELL_HEX // 2, key=key[:64]
+        text.encode(), digest_size=MAC_HEX // 2, key=key[:64]
     ).hexdigest()
 
 
-def row_key_hash(key: bytes, text: str) -> str:
-    """A row key's keyed MAC (BLAKE2b, 128 bits)."""
+def cell_hash(key: bytes, value: Any, table: str = "", column: str = "") -> str:
+    """A cell's keyed MAC, bound to its table and column, so equal values in
+    different places don't share one."""
 
-    return hashlib.blake2b(text.encode(), digest_size=16, key=key[:64]).hexdigest()
+    return _mac(key, f"c\x1f{table}\x1f{column}\x1f{canonical(value)}")
+
+
+def row_key_hash(key: bytes, text: str, table: str = "") -> str:
+    """A row key's keyed MAC."""
+
+    return _mac(key, f"k\x1f{table}\x1f{text}")
+
+
+def row_hash(
+    key: bytes, table: str, row: Mapping[str, Any], ignore: Sequence[str] = ()
+) -> str:
+    """A row's contents MAC, without ``ignore`` columns."""
+
+    skip = set(ignore)
+    body = json.dumps(
+        sorted((c, canonical(v)) for c, v in row.items() if c not in skip),
+        separators=(",", ":"),
+    )
+    return _mac(key, f"r\x1f{table}\x1f{body}")
 
 
 def unpack(columns: Sequence[str], packed: str) -> dict[str, str]:
     """A stored row's cell MACs by column (stored as one string per row)."""
 
-    return {c: packed[i * CELL_HEX : (i + 1) * CELL_HEX] for i, c in enumerate(columns)}
+    return {c: packed[i * MAC_HEX : (i + 1) * MAC_HEX] for i, c in enumerate(columns)}
 
 
 # -- shapes -------------------------------------------------------------------
@@ -127,18 +177,17 @@ class Table:
     count: int = 0
     #: ``sqlite_sequence`` or ``AUTO_INCREMENT``, when the table has one.
     counter: Optional[int] = None
-    #: The largest generated key (None for an empty table or no such key).
-    max_key: Optional[int] = None
-    #: Row key MAC -> the row's cell MACs in column order, concatenated
-    #: (:func:`unpack`), for a table read row by row.
-    rows: Optional[dict[str, str]] = None
-    #: Bucket -> digest of the rows at or below ``max_key`` (large and
-    #: append-only tables with a generated key).
-    buckets: Optional[dict[str, str]] = None
-    #: One digest of the whole table (large tables without one).
-    digest: Optional[str] = None
-    #: In memory only, never saved: plain values of rows read in full, by
-    #: row key hash (a small table's rows; a large table's added rows).
+    #: The column the database numbers, and its largest value.
+    auto_column: Optional[str] = None
+    max_auto: Optional[int] = None
+    #: The columns each row keeps cell MACs for (all, or ``ref_columns`` for
+    #: a table over ``max_rows``; none for an append-only table).
+    cell_columns: list[str] = field(default_factory=list)
+    #: Row key MAC -> [row contents MAC, cell MACs of ``cell_columns``
+    #: concatenated (:func:`unpack`)].
+    rows: dict[str, list[str]] = field(default_factory=dict)
+    #: In memory only, never saved: plain values of the rows that differ
+    #: from the baseline (all rows of a read with no baseline: none kept).
     values: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
     #: The engine keeps no snapshot isolation for it (MyISAM, MEMORY).
     non_transactional: bool = False
@@ -148,19 +197,24 @@ class Table:
 class Snapshot:
     dialect: str = "sqlite"
     clock: str = ""
-    #: Digest of triggers, views, routines and events.
+    #: Digest of triggers, views, routines and events, and whether the
+    #: account could see triggers at all.
     objects: str = ""
+    code_visible: bool = True
+    schemas: list[str] = field(default_factory=list)
     tables: dict[str, Table] = field(default_factory=dict)
     #: In memory only: rows of ``extra_queries``, read in the same transaction.
     extra: dict[str, list[dict[str, Any]]] = field(default_factory=dict, repr=False)
 
     def to_json(self) -> dict[str, Any]:
-        """The persisted form: hashes and schema only, never values."""
+        """The persisted form: MACs and schema only, never values."""
 
         return {
             "dialect": self.dialect,
             "clock": self.clock,
             "objects": self.objects,
+            "code_visible": self.code_visible,
+            "schemas": self.schemas,
             "tables": {
                 name: {
                     "mode": t.mode,
@@ -171,10 +225,10 @@ class Snapshot:
                     "defaults": t.defaults,
                     "count": t.count,
                     "counter": t.counter,
-                    "max_key": t.max_key,
+                    "auto_column": t.auto_column,
+                    "max_auto": t.max_auto,
+                    "cell_columns": t.cell_columns,
                     "rows": t.rows,
-                    "buckets": t.buckets,
-                    "digest": t.digest,
                     "non_transactional": t.non_transactional,
                 }
                 for name, t in self.tables.items()
@@ -187,6 +241,8 @@ class Snapshot:
             dialect=str(data.get("dialect", "sqlite")),
             clock=str(data.get("clock", "")),
             objects=str(data.get("objects", "")),
+            code_visible=bool(data.get("code_visible", True)),
+            schemas=list(data.get("schemas", [])),
             tables={
                 name: Table(
                     mode=t["mode"],
@@ -197,10 +253,10 @@ class Snapshot:
                     defaults=dict(t["defaults"]),
                     count=int(t["count"]),
                     counter=t.get("counter"),
-                    max_key=t.get("max_key"),
-                    rows=t.get("rows"),
-                    buckets=t.get("buckets"),
-                    digest=t.get("digest"),
+                    auto_column=t.get("auto_column"),
+                    max_auto=t.get("max_auto"),
+                    cell_columns=list(t.get("cell_columns", [])),
+                    rows={k: list(v) for k, v in (t.get("rows") or {}).items()},
                     non_transactional=bool(t.get("non_transactional")),
                 )
                 for name, t in data["tables"].items()
@@ -286,13 +342,15 @@ def _literal(text: str) -> str:
 
 
 class _Session:
-    """One connection, one read-only transaction."""
+    """One connection, one read-only transaction (opened by :meth:`begin`)."""
 
     def __init__(self, connect: Callable[[], Any], dialect: Dialect) -> None:
         self.dialect = dialect
         self.con = connect()
         self.cur = self.con.cursor()
-        if dialect == "mysql":
+
+    def begin(self) -> None:
+        if self.dialect == "mysql":
             # Only statements that can't fail: a driver may end the session
             # on any error. MySQL 8 caches AUTO_INCREMENT unless told not to;
             # MariaDB has no such variable.
@@ -301,7 +359,6 @@ class _Session:
             )
             if self.cur.fetchall():
                 self.cur.execute("SET SESSION information_schema_stats_expiry = 0")
-            self.cur.execute("SET SESSION group_concat_max_len = 1073741824")
             self.cur.execute("SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             self.cur.execute("START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY")
         else:
@@ -332,6 +389,9 @@ class _Def:
     binary: set[str]
     schema: str
     non_transactional: bool = False
+    #: The column the database numbers (AUTO_INCREMENT, or SQLite's rowid
+    #: alias), whether or not it is the primary key.
+    auto_column: Optional[str] = None
 
 
 def _digest(parts: Sequence[Any]) -> str:
@@ -376,6 +436,7 @@ def _definitions(s: _Session) -> tuple[dict[str, _Def], str]:
                 d.primary_key.append(str(column))
             if "auto_increment" in str(extra).lower():
                 d.generated_key = str(column)
+                d.auto_column = str(column)
             if "binary" in str(dtype).lower() or "blob" in str(dtype).lower():
                 d.binary.add(str(column))
             d.schema = _digest(
@@ -425,6 +486,7 @@ def _definitions(s: _Session) -> tuple[dict[str, _Def], str]:
             {str(r[1]): _default_text(r[4], "sqlite") for r in info},
             set(),
             _digest([sql]),
+            auto_column=generated,
         )
     code = [r for r in master if r[0] in ("trigger", "view")]
     return out, _digest(code)
@@ -475,52 +537,24 @@ def _row_key(d: _Def, row: Mapping[str, Any], seen: dict[str, int]) -> str:
     return f"{digest}#{seen[digest]}"
 
 
-def _hash_rows(
-    key: bytes, d: _Def, rows: Sequence[Mapping[str, Any]]
-) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
-    hashed: dict[str, str] = {}
-    plain: dict[str, dict[str, Any]] = {}
-    seen: dict[str, int] = {}
-    for row in rows:
-        k = row_key_hash(key, _row_key(d, row, seen))
-        hashed[k] = "".join(cell_hash(key, row.get(c)) for c in d.columns)
-        plain[k] = dict(row)
-    return hashed, plain
+def _mysql_counters(s: _Session) -> dict[str, int]:
+    default = s.rows("SELECT DATABASE()")[0][0]
+    out: dict[str, int] = {}
+    for schema, table, value in s.rows(
+        "SELECT TABLE_SCHEMA, TABLE_NAME, AUTO_INCREMENT FROM information_schema.TABLES "
+        "WHERE AUTO_INCREMENT IS NOT NULL"
+    ):
+        name = str(table) if schema == default else f"{schema}.{table}"
+        out[name] = int(value)
+    return out
 
 
-def _bucket_digests(
-    s: _Session, name: str, d: _Def, key: bytes, upto: int
-) -> dict[str, str]:
-    """Salted digest per bucket of ``BUCKET`` keys, over keys <= ``upto``."""
+def _sees_triggers(s: _Session) -> bool:
+    """Can this MySQL account see triggers (it needs TRIGGER)?"""
 
-    k = _quote(s.dialect, d.generated_key or "")
-    if s.dialect == "mysql":
-        row = "CONCAT(" + ", ".join(_row_json("mysql", d)) + ")"
-        salt = _literal(key.hex())
-        return {
-            str(b): str(h)
-            for b, h in s.rows(
-                f"SELECT {k} DIV {BUCKET} AS b, SHA2(CONCAT({salt}, GROUP_CONCAT("
-                f"SHA2({row}, 256) ORDER BY {k} SEPARATOR '')), 256) "
-                f"FROM {_quote('mysql', name)} WHERE {k} <= {int(upto)} GROUP BY b"
-            )
-        }
-    out: dict[str, hashlib._Hash] = {}
-    for row in _read_rows(s, name, d, f"WHERE {k} <= {int(upto)} ORDER BY {k}"):
-        bucket = str(int(row[d.generated_key or ""]) // BUCKET)
-        h = out.setdefault(bucket, hashlib.sha256(key))
-        h.update(json.dumps(row, sort_keys=True, default=str).encode())
-    return {b: h.hexdigest() for b, h in out.items()}
-
-
-def _table_digest(s: _Session, name: str, d: _Def, key: bytes) -> str:
-    h = hashlib.sha256(key)
-    rows = sorted(
-        json.dumps(r, sort_keys=True, default=str) for r in _read_rows(s, name, d)
-    )
-    for r in rows:
-        h.update(r.encode())
-    return h.hexdigest()
+    grants = " ".join(str(r[0]) for r in s.rows("SHOW GRANTS FOR CURRENT_USER()"))
+    upper = grants.upper()
+    return "ALL PRIVILEGES" in upper or "TRIGGER" in upper
 
 
 def take_snapshot(
@@ -529,23 +563,30 @@ def take_snapshot(
     *,
     key: bytes,
     modes: Mapping[str, TableMode] = {},
-    max_rows: int = 20000,
+    max_rows: int = 2000,
     before: Optional[Snapshot] = None,
     extra_queries: Mapping[str, str] = {},
+    ignore: Mapping[str, Sequence[str]] = {},
+    ref_columns: Sequence[str] = (),
+    schemas: Sequence[str] = (),
 ) -> Snapshot:
     """Read every table in one read-only transaction.
 
     Args:
         connect: Opens one connection (DB-API 2.0: ``cursor()``, ``close()``).
-        key: The run's salt, which keys every hash.
+        key: The MAC key (:func:`mac_key`).
         modes: Table -> ``append_only`` or ``skip`` (allow-listed tables);
             every other table is compared.
-        max_rows: Over this many rows, a table is digested by bucket.
-        before: The baseline, when this is the read after the save: a large
-            or append-only table's existing rows are digested up to the
-            baseline's largest key, and rows above it are read in full.
+        max_rows: Over this many rows, a table keeps cell MACs only for
+            ``ref_columns`` (and a contents MAC for every row).
+        before: The baseline, when this is a read after the save: plain
+            values are kept for the rows that differ from it.
         extra_queries: Name -> a SELECT to run in the same transaction (the
             audit log); rows land in :attr:`Snapshot.extra`, in memory only.
+        ignore: Table -> columns left out of each row's contents MAC.
+        ref_columns: Columns attribution and side records read (a record
+            key, a link field): their cell MACs are kept in every table.
+        schemas: Schemas the read must see (MySQL); refused if one isn't.
 
     Raises:
         SnapshotError: the database can't be read as the frame needs it.
@@ -554,9 +595,11 @@ def take_snapshot(
     try:
         s = _Session(connect, dialect)
     except Exception as exc:  # noqa: BLE001
-        raise SnapshotError(f"could not open a read transaction: {exc}") from exc
+        raise SnapshotError(f"could not open a connection: {exc}") from exc
     try:
-        return _snapshot(s, key, modes, max_rows, before, extra_queries)
+        return _snapshot(
+            s, key, modes, max_rows, before, extra_queries, ignore, ref_columns, schemas
+        )
     except SnapshotError:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -572,12 +615,43 @@ def _snapshot(
     max_rows: int,
     before: Optional[Snapshot],
     extra_queries: Mapping[str, str],
+    ignore: Mapping[str, Sequence[str]],
+    ref_columns: Sequence[str],
+    schemas: Sequence[str],
 ) -> Snapshot:
     dialect = s.dialect
+    counters: dict[str, int] = {}
+    visible = True
+    if dialect == "mysql":
+        # Before the snapshot starts: a row committed after this read is in
+        # the snapshot, so the counter never runs ahead of what it shows.
+        counters = _mysql_counters(s)
+        visible = _sees_triggers(s)
+    s.begin()
     snap = Snapshot(
-        dialect=dialect, clock=_clock_text(s.rows("SELECT CURRENT_TIMESTAMP")[0][0])
+        dialect=dialect,
+        clock=_clock_text(s.rows("SELECT CURRENT_TIMESTAMP")[0][0]),
+        code_visible=visible,
     )
     defs, snap.objects = _definitions(s)
+    if dialect == "mysql":
+        default = str(s.rows("SELECT DATABASE()")[0][0])
+        seen = {default} | {t.split(".", 1)[0] for t in defs if "." in t}
+        missing = sorted(set(schemas) - seen)
+        if missing:
+            raise SnapshotError(
+                "the read account can't see schema(s): " + ", ".join(missing)
+            )
+        snap.schemas = sorted(seen)
+    else:
+        if any(
+            n == "sqlite_sequence"
+            for (n,) in s.rows("SELECT name FROM sqlite_master WHERE type = 'table'")
+        ):
+            counters = {
+                str(n): int(v)
+                for n, v in s.rows("SELECT name, seq FROM sqlite_sequence")
+            }
     for name, sql in extra_queries.items():
         snap.extra[name] = s.dicts(sql)
     unknown = sorted(set(modes) - set(defs))
@@ -600,43 +674,25 @@ def _snapshot(
             )
         )
     }
-    keyed = [t for t in names if defs[t].generated_key]
+    numbered = [t for t in names if defs[t].auto_column]
     maxes = (
         {
             str(t): (None if m is None else int(m))
             for t, m in s.rows(
                 " UNION ALL ".join(
-                    f"SELECT {_literal(t)}, MAX({_quote(dialect, defs[t].generated_key or '')}) "
+                    f"SELECT {_literal(t)}, MAX({_quote(dialect, defs[t].auto_column or '')}) "
                     f"FROM {_quote(dialect, t)}"
-                    for t in keyed
+                    for t in numbered
                 )
             )
         }
-        if keyed
+        if numbered
         else {}
     )
-    counters: dict[str, int] = {}
-    if dialect == "sqlite":
-        if any(
-            n == "sqlite_sequence"
-            for (n,) in s.rows("SELECT name FROM sqlite_master WHERE type = 'table'")
-        ):
-            counters = {
-                str(n): int(v)
-                for n, v in s.rows("SELECT name, seq FROM sqlite_sequence")
-            }
-    else:
-        default = s.rows("SELECT DATABASE()")[0][0]
-        for schema, table, value in s.rows(
-            "SELECT TABLE_SCHEMA, TABLE_NAME, AUTO_INCREMENT FROM information_schema.TABLES "
-            "WHERE AUTO_INCREMENT IS NOT NULL"
-        ):
-            name = str(table) if schema == default else f"{schema}.{table}"
-            counters[name] = int(value)
+    refs = set(ref_columns)
     for t in names:
         d = defs[t]
         mode: TableMode = "append_only" if modes.get(t) == "append_only" else "compare"
-        old = before.tables.get(t) if before is not None else None
         table = Table(
             mode,
             d.schema,
@@ -646,39 +702,33 @@ def _snapshot(
             dict(d.defaults),
             counts.get(t, 0),
             counters.get(t),
+            d.auto_column,
             maxes.get(t),
             non_transactional=d.non_transactional,
         )
         if d.generated_key:
             # Only the table's own generated key may hold any value.
             table.defaults[d.generated_key] = ANY_VALUE
-        if mode == "append_only" and not d.generated_key:
-            raise SnapshotError(
-                f"append-only table {t!r} has no generated key; mark it skip with "
-                "a reason, or compare it"
-            )
-        # Read after the save the way the baseline was read, so a table that
-        # crossed max_rows in the window is still compared like for like.
-        if old is not None and old.mode == mode and old.schema == d.schema:
-            by_bucket = old.buckets is not None
-            whole = old.digest is not None
+        old = before.tables.get(t) if before is not None else None
+        if mode == "append_only":
+            table.cell_columns = []
+        elif old is not None and old.mode == mode and old.schema == d.schema:
+            table.cell_columns = list(old.cell_columns)  # read like the baseline
+        elif table.count > max_rows:
+            table.cell_columns = [c for c in d.columns if c in refs]
         else:
-            by_bucket = bool(d.generated_key) and (
-                mode == "append_only" or table.count > max_rows
-            )
-            whole = not by_bucket and table.count > max_rows
-        if by_bucket:
-            upto = (old.max_key if old is not None else table.max_key) or 0
-            table.buckets = _bucket_digests(s, t, d, key, upto)
-            if before is not None and mode == "compare":
-                k = _quote(dialect, d.generated_key or "")
-                added = _read_rows(s, t, d, f"WHERE {k} > {int(upto)}")
-                _hashed, table.values = _hash_rows(key, d, added)
-        elif whole:
-            table.digest = _table_digest(s, t, d, key)
-        else:
-            rows = _read_rows(s, t, d) if table.count else []
-            table.rows, table.values = _hash_rows(key, d, rows)
+            table.cell_columns = list(d.columns)
+        skip = ignore.get(t, ())
+        seen_keys: dict[str, int] = {}
+        for row in _read_rows(s, t, d) if table.count else []:
+            k = row_key_hash(key, _row_key(d, row, seen_keys), t)
+            mac = row_hash(key, t, row, skip)
+            table.rows[k] = [
+                mac,
+                "".join(cell_hash(key, row.get(c), t, c) for c in table.cell_columns),
+            ]
+            if old is not None and (k not in old.rows or old.rows[k][0] != mac):
+                table.values[k] = dict(row)
         snap.tables[t] = table
     return snap
 
@@ -695,9 +745,9 @@ class TableDiff:
     removed: int = 0
     changed: int = 0
     changed_columns: list[str] = field(default_factory=list)
-    #: Moved, but not row by row: why (a schema change, a changed bucket of a
-    #: large table, an append-only table whose existing rows moved, a
-    #: counter that moved past the rows added).
+    #: Moved in a way no row comparison explains: why (a definition change,
+    #: an append-only table whose existing rows moved, a row written and
+    #: removed).
     unread: list[str] = field(default_factory=list)
 
 
@@ -715,23 +765,15 @@ def unread_reasons(
     if old.schema != new.schema or old.columns != new.columns:
         return ["definition changed"]
     reasons = []
-    if old.buckets is not None or new.buckets is not None:
-        if old.buckets != new.buckets:
-            reasons.append("existing rows changed (by bucket)")
-    elif old.digest is not None or new.digest is not None:
-        if old.digest is None or new.digest is None:
-            raise SnapshotError("a large table has no digest")
-        if old.digest != new.digest:
-            reasons.append("rows changed (whole-table digest)")
+    if old.mode == "append_only" and any(
+        k not in new.rows or new.rows[k][0] != v[0] for k, v in old.rows.items()
+    ):
+        reasons.append("existing rows changed or removed")
     if new.counter is not None:
-        # sqlite_sequence holds the last key used; AUTO_INCREMENT the next.
+        # sqlite_sequence holds the last number used; AUTO_INCREMENT the next.
         step = 1 if dialect == "mysql" else 0
         expected = max(
-            v
-            for v in (
-                old.counter or 0,
-                0 if new.max_key is None else new.max_key + step,
-            )
+            old.counter or 0, 0 if new.max_auto is None else new.max_auto + step
         )
         if new.counter > expected:
             reasons.append("a row was written and removed (counter moved)")
@@ -758,37 +800,35 @@ def diff(
         if name in skip:
             continue
         a, b = before.tables.get(name), after.tables.get(name)
-        reasons = unread_reasons(a, b, after.dialect)
-        moved = TableDiff(unread=reasons)
-        if (
-            a is not None
-            and b is not None
-            and a.mode == "compare"
-            and not (
-                reasons and reasons[0] in ("definition changed", "created or dropped")
-            )
-        ):
-            old = {k: unpack(a.columns, v) for k, v in (a.rows or {}).items()}
-            new = (
-                {k: unpack(b.columns, v) for k, v in b.rows.items()}
-                if b.rows is not None
-                else {
-                    k: {c: cell_hash(key, v.get(c)) for c in b.columns}
-                    for k, v in b.values.items()
-                }
-            )
-            if a.rows is not None:
-                moved.added = len(new.keys() - old.keys())
-                moved.removed = len(old.keys() - new.keys())
-            else:
-                moved.added = len(new)
-            columns: set[str] = set()
-            for k in old.keys() & new.keys():
-                fields = [c for c in b.columns if old[k].get(c) != new[k].get(c)]
-                if fields:
+        moved = TableDiff(unread=unread_reasons(a, b, after.dialect))
+        if a is not None and b is not None and a.mode == "compare" == b.mode:
+            if a.columns == b.columns and a.cell_columns == b.cell_columns:
+                moved.added = len(b.rows.keys() - a.rows.keys())
+                moved.removed = len(a.rows.keys() - b.rows.keys())
+                columns: set[str] = set()
+                for k in a.rows.keys() & b.rows.keys():
+                    if a.rows[k][0] == b.rows[k][0]:
+                        continue
                     moved.changed += 1
-                    columns.update(fields)
-            moved.changed_columns = sorted(columns)
+                    old = unpack(a.cell_columns, a.rows[k][1])
+                    new = unpack(b.cell_columns, b.rows[k][1])
+                    cols = [c for c in a.cell_columns if old[c] != new[c]]
+                    columns.update(cols or ["(columns not compared)"])
+                moved.changed_columns = sorted(columns)
         if moved.added or moved.removed or moved.changed or moved.unread:
             out[name] = moved
     return out
+
+
+def same_state(a: Snapshot, b: Snapshot) -> bool:
+    """Do two reads taken after the save show the same database?"""
+
+    if (a.objects, a.code_visible) != (b.objects, b.code_visible):
+        return False
+    if set(a.tables) != set(b.tables):
+        return False
+    return all(
+        (x.mode, x.schema, x.count, x.counter, x.max_auto, x.rows)
+        == (y.mode, y.schema, y.count, y.counter, y.max_auto, y.rows)
+        for x, y in ((a.tables[n], b.tables[n]) for n in a.tables)
+    )

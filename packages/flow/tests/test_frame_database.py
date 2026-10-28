@@ -18,8 +18,10 @@ import pytest
 
 from openadapt_flow.runtime.effects.db_snapshot import (
     CLOCK_DEFAULT,
+    cell_hash,
     is_default,
     take_snapshot,
+    unpack,
 )
 from openadapt_flow.verify_run import (
     capture_baseline,
@@ -56,6 +58,7 @@ ATTRIBUTION = {
     "event_field": "event",
     "write_events": ["insert", "update", "delete"],
     "insert_events": ["insert"],
+    "delete_events": ["delete"],
     "table_field": "tbl",
 }
 
@@ -456,8 +459,12 @@ def test_a_table_wider_than_one_json_call_is_read(tmp_path: Path) -> None:
     con.commit()
     con.close()
     snap = take_snapshot(lambda: sqlite3.connect(path), "sqlite", key=b"k")
-    (row,) = snap.tables["wide"].values.values()
-    assert row["c149"] == "last" and len(row) == 151
+    table = snap.tables["wide"]
+    ((_row_mac, cells),) = table.rows.values()
+    assert unpack(table.cell_columns, cells)["c149"] == cell_hash(
+        b"k", "last", "wide", "c149"
+    )
+    assert len(table.cell_columns) == 151
     assert "last" not in json.dumps(snap.to_json())
 
 
@@ -528,3 +535,130 @@ def test_a_side_row_of_another_users_new_chart_is_theirs(tmp_path: Path) -> None
         tmp_path / "b", lambda con: con.execute(stray), save=save, frame=frame
     )
     assert _frame(result) == "refuted"
+
+
+# -- round 2 of the review ---------------------------------------------------------
+
+
+def _colleague(pid: int, event: str, table: str = "history_data") -> str:
+    return (
+        "INSERT INTO log (user, patient_id, event, tbl) "
+        f"VALUES ('clinic2', {pid}, '{event}', '{table}')"
+    )
+
+
+def test_l1_a_colleagues_write_on_a_large_table_is_concurrent(tmp_path: Path) -> None:
+    def colleague(con: sqlite3.Connection) -> None:
+        con.execute("UPDATE patient_data SET phone_cell = '1' WHERE pid = 1")
+        con.execute(_colleague(1, "update", "patient_data"))
+
+    assert _frame(_run(tmp_path, colleague, max_rows=1)) == "held"
+
+
+def test_l2_ignore_columns_hold_on_a_large_table(tmp_path: Path) -> None:
+    moved = "UPDATE patient_data SET phone_cell = 'seen' WHERE pid = 1"
+    result = _run(
+        tmp_path,
+        lambda con: con.execute(moved),
+        max_rows=1,
+        ignore_columns={"patient_data": ["phone_cell"]},
+    )
+    assert _frame(result) == "held"
+
+
+def test_a1_a_row_moved_to_a_colleagues_chart_is_not_excused(tmp_path: Path) -> None:
+    def moved(con: sqlite3.Connection) -> None:
+        con.execute("UPDATE history_data SET pid = 3 WHERE id = 1")
+        con.execute(_colleague(3, "update"))
+
+    assert _frame(_run(tmp_path, moved)) == "refuted"
+
+
+def test_a2_an_update_entry_never_excuses_an_added_row(tmp_path: Path) -> None:
+    def stray(con: sqlite3.Connection) -> None:
+        con.execute("INSERT INTO history_data (pid, date) VALUES (1, '2026-10-25')")
+        con.execute(_colleague(1, "update"))
+
+    assert _frame(_run(tmp_path, stray)) == "refuted"
+
+
+def test_a3_one_insert_entry_excuses_one_row(tmp_path: Path) -> None:
+    def two(con: sqlite3.Connection) -> None:
+        con.execute("INSERT INTO history_data (pid, date) VALUES (1, '2026-10-25')")
+        con.execute("INSERT INTO history_data (pid, date) VALUES (1, '2026-10-26')")
+        con.execute(_colleague(1, "insert"))
+
+    assert _frame(_run(tmp_path, two)) == "refuted"
+
+
+def test_a4_an_update_entry_never_excuses_a_removed_row(tmp_path: Path) -> None:
+    def gone(con: sqlite3.Connection) -> None:
+        con.execute("DELETE FROM history_data WHERE pid = 1")
+        con.execute(_colleague(1, "update"))
+
+    assert _frame(_run(tmp_path, gone)) == "refuted"
+
+
+def test_a_delete_entry_excuses_a_removed_row(tmp_path: Path) -> None:
+    def gone(con: sqlite3.Connection) -> None:
+        con.execute("DELETE FROM history_data WHERE pid = 1")
+        con.execute(_colleague(1, "delete"))
+
+    assert _frame(_run(tmp_path, gone)) == "held"
+
+
+def test_the_baseline_alone_cant_be_tested_against(tmp_path: Path) -> None:
+    from openadapt_flow.runtime.effects.db_snapshot import cell_hash as mac
+
+    _run(tmp_path)
+    base = json.loads((tmp_path / "baseline.json").read_text())
+    salt = bytes.fromhex(base["salt"])
+    table = base["state"]["detail"]["openadapt:frame_database"]["tables"][
+        "patient_data"
+    ]
+    cells = [
+        unpack(table["cell_columns"], packed)["fname"]
+        for _row, packed in table["rows"].values()
+    ]
+    # The salt in the baseline is not the MAC key: guesses can't be tested.
+    assert mac(salt, "Wendell", "patient_data", "fname") not in cells
+
+
+def test_a_counter_on_a_column_that_is_not_the_key(tmp_path: Path) -> None:
+    db = tmp_path / "auto.sqlite"
+    con = sqlite3.connect(db)
+    con.executescript(
+        "CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT);"
+        "INSERT INTO t (v) VALUES ('a');"
+    )
+    con.commit()
+    con.close()
+    before = take_snapshot(lambda: sqlite3.connect(db), "sqlite", key=b"k")
+    con = sqlite3.connect(db)
+    con.execute("INSERT INTO t (v) VALUES ('b')")
+    con.commit()
+    con.close()
+    after = take_snapshot(
+        lambda: sqlite3.connect(db), "sqlite", key=b"k", before=before
+    )
+    from openadapt_flow.runtime.effects.db_snapshot import unread_reasons
+
+    assert unread_reasons(before.tables["t"], after.tables["t"]) == []
+
+
+def test_a_read_that_cant_see_triggers_is_not_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import openadapt_flow.runtime.effects.db_snapshot as ds
+
+    real = ds.take_snapshot
+
+    def blind(*args: Any, **kwargs: Any) -> Any:
+        snap = real(*args, **kwargs)
+        snap.code_visible = False
+        return snap
+
+    monkeypatch.setattr(ds, "take_snapshot", blind)
+    result = _run(tmp_path)
+    assert _frame(result) == "not_checked"
+    assert result["receipt"]["outcome"] != "verified"
