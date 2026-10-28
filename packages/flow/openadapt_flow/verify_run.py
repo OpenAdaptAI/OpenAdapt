@@ -1032,13 +1032,14 @@ def _seal_state(cfg: VerifyConfig, state: EffectState, salt: bytes) -> EffectSta
     from openadapt_flow.runtime.effects.sealed import seal
 
     identity = cfg.frame.identity_field if cfg.frame is not None else None
-    sealed = {"": seal(state.records, salt, identity)}
+    key = _mac_key(salt)
+    sealed = {"": seal(state.records, key, identity)}
     detail = dict(state.detail or {})
     for name, sub in (state.detail or {}).items():
         if name.startswith("openadapt:") or not isinstance(sub, dict):
             continue
         if isinstance(sub.get("records"), list):
-            sealed[name] = seal(sub["records"], salt, identity)
+            sealed[name] = seal(sub["records"], key, identity, name)
             detail[name] = {**sub, "records": []}
     detail[SEALED_DETAIL] = sealed
     return state.model_copy(update={"records": [], "detail": detail})
@@ -1061,6 +1062,7 @@ def _unseal_state(
     if not isinstance(now, EffectState) or not now.reachable:
         return before.model_copy(update={"reachable": False})
     identity = cfg.frame.identity_field if cfg.frame is not None else None
+    key = _mac_key(salt)
     detail = dict(before.detail)
     for name, entries in sealed.items():
         if not name:
@@ -1072,12 +1074,12 @@ def _unseal_state(
         detail[name] = {
             **detail.get(name, {}),
             "records": unseal(
-                entries, list(current.get("records", [])), salt, identity
+                entries, list(current.get("records", [])), key, identity, name
             ),
         }
     return before.model_copy(
         update={
-            "records": unseal(sealed.get("", []), list(now.records), salt, identity),
+            "records": unseal(sealed.get("", []), list(now.records), key, identity),
             "detail": detail,
         }
     )

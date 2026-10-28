@@ -3,8 +3,9 @@
 verify-run's baseline is what lets a check tell a record the save added from
 one that was there, and see what else moved. It used to hold the read set's
 rows as values: a copy of the records on disk. A sealed baseline holds, per
-record, a keyed MAC of its identity and one of each field (BLAKE2b keyed with
-the run's salt, as the database frame's snapshot does), never a value.
+record, a keyed MAC of its identity and one of each field (keyed BLAKE2b, 128 bits, bound
+to its surface and field, with the database frame's key: the run's salt
+keyed by a host secret never written into the baseline), never a value.
 
 At judging time one fresh read rebuilds the records as they were:
 
@@ -47,14 +48,19 @@ def _identity_text(record: Mapping[str, Any], identity_field: Optional[str]) -> 
 
 
 def seal(
-    records: Sequence[Mapping[str, Any]], key: bytes, identity_field: Optional[str]
+    records: Sequence[Mapping[str, Any]],
+    key: bytes,
+    identity_field: Optional[str],
+    surface: str = "",
 ) -> list[dict[str, Any]]:
-    """Each record's identity MAC and field MACs, in read order."""
+    """Each record's identity MAC and field MACs (bound to the surface and
+    field), in read order. ``key`` is the run's MAC key (``mac_key``)."""
 
+    where = f"surface:{surface}"
     return [
         {
-            "id": row_key_hash(key, _identity_text(r, identity_field)),
-            "cells": {f: cell_hash(key, v) for f, v in r.items()},
+            "id": row_key_hash(key, _identity_text(r, identity_field), where),
+            "cells": {f: cell_hash(key, v, where, f) for f, v in r.items()},
         }
         for r in records
     ]
@@ -65,13 +71,15 @@ def unseal(
     current: Sequence[Mapping[str, Any]],
     key: bytes,
     identity_field: Optional[str],
+    surface: str = "",
 ) -> list[dict[str, Any]]:
     """The baseline's records, rebuilt from a read now (see the module)."""
 
+    where = f"surface:{surface}"
     now: dict[str, Mapping[str, Any]] = {}
     for record in current:
         now.setdefault(
-            row_key_hash(key, _identity_text(record, identity_field)), record
+            row_key_hash(key, _identity_text(record, identity_field), where), record
         )
     out: list[dict[str, Any]] = []
     for entry in sealed:
@@ -83,7 +91,11 @@ def unseal(
             continue
         out.append(
             {
-                f: (record.get(f) if cell_hash(key, record.get(f)) == mac else CHANGED)
+                f: (
+                    record.get(f)
+                    if cell_hash(key, record.get(f), where, f) == mac
+                    else CHANGED
+                )
                 for f, mac in cells.items()
             }
         )

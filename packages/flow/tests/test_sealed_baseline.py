@@ -71,7 +71,7 @@ def _judge(tmp_path: Path, *statements: str) -> dict:
 def test_the_baseline_file_holds_no_record_values(tmp_path: Path) -> None:
     _setup(tmp_path)
     text = (tmp_path / "baseline.json").read_text()
-    for value in ("Wendell", "Prior", "w@example.test", "Mabel", "781"):
+    for value in ("Wendell", "Prior", "w@example.test", "Mabel", "m@example.test"):
         assert value not in text
 
 
