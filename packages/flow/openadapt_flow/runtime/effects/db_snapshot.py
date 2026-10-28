@@ -506,8 +506,8 @@ def _definitions(s: _Session) -> tuple[dict[str, _Def], str]:
             _digest([sql]),
             auto_column=generated,
         )
-    code = [r for r in master if r[0] in ("trigger", "view")]
-    return out, _digest(code)
+    sqlite_code = [r for r in master if r[0] in ("trigger", "view")]
+    return out, _digest(sqlite_code)
 
 
 def _cell(dialect: Dialect, column: str, binary: bool) -> str:

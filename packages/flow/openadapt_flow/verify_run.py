@@ -846,10 +846,10 @@ def judge_run_frame(
             )
         if routes is None:
             routes = {str(i): [""] for i in range(len(bound_effects))}
-        views = spec.database.views if spec.database is not None else {}
+        db_views = spec.database.views if spec.database is not None else {}
         routes = {k: list(v) for k, v in routes.items()}
-        for own in routes.values():
-            own.extend(t for t, surface in views.items() if surface in own)
+        for route in routes.values():
+            route.extend(t for t, surface in db_views.items() if surface in route)
         slices.update(db.slices)
         identities = {name: KEY for name in db.slices}
     audit_before: Optional[list[dict[str, Any]]] = None
