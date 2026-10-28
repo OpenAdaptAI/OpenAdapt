@@ -56,11 +56,6 @@ from pydantic import (
 )
 from pydantic_core import to_jsonable_python
 
-#: ASCII-only case maps: PHP's strtoupper and strtolower (OpenEMR) change
-#: a-z and A-Z only, so "Café" is stored "CAFé", not "CAFÉ".
-_ASCII_UPPER = str.maketrans("abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-_ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
-
 
 ValueKind = Literal["phone", "date", "email"]
 
@@ -144,9 +139,10 @@ class ValueExpr(BaseModel):
     map: Optional[dict[str, str]] = None
     #: For a ``param`` the system of record stores transformed: how it stores
     #: what was entered (OpenEMR's New Patient form saves street and city in
-    #: capitals). Applied after :attr:`map`, to ASCII letters only, as PHP's
-    #: strtoupper does. The check stays exact: it expects the stored form,
-    #: not any casing.
+    #: capitals). Applied after :attr:`map`, with full Unicode case mapping,
+    #: as the browser's ``toUpperCase()`` does for OpenEMR's "U" fields
+    #: ("Peña" is stored "PEÑA", "Straße" "STRASSE"). The check stays exact:
+    #: it expects the stored form, not any casing.
     stored: Optional[Literal["upper", "lower"]] = None
     #: A declared value kind (:func:`kind_form`): the expected value and the
     #: stored one are compared in canonical form, so formatting alone never
@@ -213,9 +209,9 @@ class ValueExpr(BaseModel):
         if self.map is not None:
             value = self.map.get(entered)
         if value is not None and self.stored == "upper":
-            value = value.translate(_ASCII_UPPER)
+            value = value.upper()
         elif value is not None and self.stored == "lower":
-            value = value.translate(_ASCII_LOWER)
+            value = value.lower()
         return value
 
     def resolved(self, params: Mapping[str, object]) -> "ValueExpr":

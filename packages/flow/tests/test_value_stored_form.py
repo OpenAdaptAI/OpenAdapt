@@ -53,12 +53,15 @@ def test_field_equals_expects_the_stored_capitals() -> None:
     assert verdict("14 LARCH WAY") != "confirmed"
 
 
-def test_the_stored_form_changes_ascii_letters_only() -> None:
-    # PHP's strtoupper (OpenEMR) leaves accented letters as they are.
+def test_the_stored_form_uses_full_unicode_case() -> None:
+    # OpenEMR's "U" fields upper-case in the browser (toUpperCase): measured
+    # on the pinned fixture, "12 Calle Peña" is stored "12 CALLE PEÑA" and
+    # "Straße" is stored "STRASSE".
     upper = ValueExpr(param="street", stored="upper")
-    assert upper.resolve({"street": "12 Rue Café"}) == "12 RUE CAFé"
+    assert upper.resolve({"street": "12 Calle Peña"}) == "12 CALLE PEÑA"
+    assert upper.resolve({"street": "Straße"}) == "STRASSE"
     lower = ValueExpr(param="email", stored="lower")
-    assert lower.resolve({"email": "ÉLodie@Example.TEST"}) == "Élodie@example.test"
+    assert lower.resolve({"email": "ÉLodie@Example.TEST"}) == "élodie@example.test"
 
 
 def test_a_binding_comes_from_one_effect() -> None:
