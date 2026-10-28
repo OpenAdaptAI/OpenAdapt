@@ -111,6 +111,21 @@ def _phash(png: bytes) -> str:
         return perceptual_hash(img)
 
 
+def _census_has_twin(census: dict[str, Any]) -> bool:
+    """Whether a teach-time census saw a look-alike no record id separates."""
+
+    candidates = census.get("candidates")
+    if not isinstance(candidates, list) or len(candidates) < 2:
+        return False
+    own = census.get("record_key")
+    if not isinstance(own, str) or not own:
+        return True
+    return any(
+        isinstance(c, dict) and not c.get("self") and c.get("record_key") == own
+        for c in candidates
+    )
+
+
 class Recorder:
     """Records a demonstration by mirroring backend actions to disk.
 
@@ -695,6 +710,12 @@ class Recorder:
                     key = census.get("record_key")
                     if isinstance(key, str) and key:
                         event = {**event, "record_key": key}
+                    if _census_has_twin(census):
+                        # Another row read the same when the person clicked,
+                        # and no record id told them apart. If the twin later
+                        # scrolls out of a virtualized list, the text check
+                        # alone would pass on it: replay halts before a write.
+                        event = {**event, "structured_ambiguous": True}
             # The part of the form the target sits in (a legend, an accordion
             # or tab header, a heading), for the program's named sections.
             # Display only: the compiler never puts it on a step.

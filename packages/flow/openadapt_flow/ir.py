@@ -340,6 +340,15 @@ class IdentityTemplate(BaseModel):
             "(unknown) is treated as a row."
         ),
     )
+    teach_ambiguous: bool = Field(
+        default=False,
+        description=(
+            "Teach time saw another shown row with the same identity and no "
+            "record id between them. Replay halts before a consequential "
+            "write: a twin that later scrolls out of view would otherwise "
+            "pass the text check."
+        ),
+    )
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -362,6 +371,10 @@ class IdentityTemplate(BaseModel):
             data.pop("record_key", None)
         if self.structured_row is None:
             data.pop("structured_row", None)
+        if not getattr(self, "structured_ambiguous", None):
+            data.pop("structured_ambiguous", None)
+        if not getattr(self, "teach_ambiguous", False):
+            data.pop("teach_ambiguous", None)
         return data
 
 
@@ -479,6 +492,14 @@ class Anchor(BaseModel):
             "time only; moved to ``identity_template.structured_row``)."
         ),
     )
+    structured_ambiguous: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Whether teach time saw another row read the same with no record "
+            "id between them (compile-time only; moved to "
+            "``identity_template.teach_ambiguous``)."
+        ),
+    )
     identity_template: Optional[IdentityTemplate] = Field(
         default=None,
         description=(
@@ -546,6 +567,10 @@ class Anchor(BaseModel):
             data.pop("record_key", None)
         if self.structured_row is None:
             data.pop("structured_row", None)
+        if not getattr(self, "structured_ambiguous", None):
+            data.pop("structured_ambiguous", None)
+        if not getattr(self, "teach_ambiguous", False):
+            data.pop("teach_ambiguous", None)
         return data
 
 
