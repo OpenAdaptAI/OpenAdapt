@@ -32,14 +32,16 @@ from typing import Any
 
 HERE = Path(__file__).resolve().parent
 MODEL = "claude-sonnet-5-5"
+TRACE: Path | None = None
 
 SYSTEM = (
     "You operate a web application for the user with browser tools. observe "
     "returns the page as a structural listing: one line per heading, text, "
-    "table row or control, and controls carry refs such as [e3]. Act with "
-    "click and type_text; each returns the new listing, and refs "
+    "table row or control on screen, and controls carry refs such as [e3]. Act with "
+    "click, type_text and scroll; each returns the new listing, and refs "
     "change, so use the refs in the latest listing. Before any save, the "
-    "harness checks that the right record is on screen. Do exactly the task, "
+    "harness checks that the right record is on screen. Save by clicking "
+    "the form's button. Do exactly the task, "
     "with the values given, and nothing else. When the task is done, or "
     "cannot be done, call finish with a one-line summary."
 )
@@ -75,6 +77,9 @@ APPS: dict[str, dict[str, Any]] = {
         # A new ticket has no earlier record to show; this names its form.
         "on_screen": ["Summary:"],
         "values": trac,
+        # Trac's form carries no idempotency key, which clinical-write
+        # requires for a save; permissive still requires the read-back.
+        "policy": "permissive",
     },
 }
 
@@ -127,6 +132,11 @@ def agent_for(chat: Any) -> Any:
         )
         calls = []
         replies = [m for m in state["messages"] if isinstance(m, AIMessage)]
+        if TRACE is not None:
+            # Private: the agent's tool calls hold the typed values.
+            with TRACE.open("a") as handle:
+                for reply in replies:
+                    handle.write(json.dumps(reply.tool_calls, default=str) + "\n")
         for reply, seconds in zip(replies, timings):
             usage = reply.usage_metadata or {}
             details = usage.get("input_token_details") or {}
@@ -172,6 +182,9 @@ def main() -> int:
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--work", type=Path, required=True, help="private state")
     args = parser.parse_args()
+    global TRACE
+    args.work.mkdir(parents=True, exist_ok=True)
+    TRACE = args.work / "agent-tool-calls.jsonl"
 
     from langchain_anthropic import ChatAnthropic
 

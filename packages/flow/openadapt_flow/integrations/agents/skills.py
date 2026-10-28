@@ -2,7 +2,8 @@
 the next matching task runs that program through MCP instead of the agent.
 
 The agent, in any framework, does the task with :class:`BrowserTools`
-(``observe``, ``click``, ``type_text``, ``press_key``, ``finish``). They are
+(``observe``, ``click``, ``type_text``, ``press_key``, ``scroll``,
+``finish``). They are
 compile-agent's harness: the structural listing first, and a check that the
 right record is on screen before every save. Run 1 goes through
 :func:`~openadapt_flow.compile_agent.compile_first_run`:
@@ -48,6 +49,7 @@ __all__ = ["BrowserTools", "FrameworkAgent", "SkillCache", "SkillRun", "Usage"]
 #: model call with ``input_tokens``, ``output_tokens`` and optionally
 #: ``cache_read_input_tokens``, ``cache_creation_input_tokens``, ``seconds``.
 Usage = Mapping[str, Any]
+_SCROLL_PX = 600
 
 
 class BrowserTools:
@@ -118,6 +120,15 @@ class BrowserTools:
 
         return self._do(lambda: self._harness.press(key))
 
+    def scroll(self, direction: str = "down") -> str:
+        """Scroll the page up or down by most of a screen. The listing shows
+        only what is on screen."""
+
+        if direction not in ("up", "down"):
+            return "Not done: direction is up or down"
+        dy = _SCROLL_PX if direction == "down" else -_SCROLL_PX
+        return self._do(lambda: self._harness.act({"kind": "scroll", "dy": dy}))
+
     def finish(self, summary: str) -> str:
         """End the task, once, when it is done or cannot be done."""
 
@@ -127,7 +138,14 @@ class BrowserTools:
     def functions(self) -> list[Callable[..., str]]:
         """The tools, for ``function_tool``, ``@tool`` or ``StructuredTool``."""
 
-        return [self.observe, self.click, self.type_text, self.press_key, self.finish]
+        return [
+            self.observe,
+            self.click,
+            self.type_text,
+            self.press_key,
+            self.scroll,
+            self.finish,
+        ]
 
     def _do(self, action: Callable[[], Any]) -> str:
         if threading.get_ident() == self._owner:
