@@ -132,7 +132,9 @@ def _stamp() -> str:
 
 def _write_json(path: Path, data: Any) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, sort_keys=True, default=str) + "\n")
+    path.write_text(
+        json.dumps(data, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
+    )
     return path
 
 
@@ -545,7 +547,7 @@ class FirstRunCompiler:
         reset: Optional[Callable[[], None]] = None,
         open_backend: Optional[Callable[[Any], Any]] = None,
     ) -> "FirstRunCompiler":
-        spec = json.loads((Path(task_dir) / SPEC_FILE).read_text())
+        spec = json.loads((Path(task_dir) / SPEC_FILE).read_text(encoding="utf-8"))
         if spec.get("schema") != SPEC_SCHEMA:
             raise ValueError(f"{task_dir} is not a compiled agent task")
         task = spec["task"]
@@ -764,7 +766,7 @@ class FirstRunCompiler:
 
         import yaml
 
-        doc = yaml.safe_load((self.out_dir / PROPOSED_FILE).read_text())
+        doc = yaml.safe_load((self.out_dir / PROPOSED_FILE).read_text(encoding="utf-8"))
         effects = doc.get("effects") or []
         extra: dict[str, Any] = {}
         verifier = doc.get("verifier")
@@ -780,7 +782,7 @@ class FirstRunCompiler:
         if reads.is_file():
             # What a code-as-action agent read: the identity before the save,
             # and its inputs read back after it. Evidence for the person.
-            extra["agent_read"] = json.loads(reads.read_text())
+            extra["agent_read"] = json.loads(reads.read_text(encoding="utf-8"))
         return {
             **extra,
             "file": str(self.out_dir / PROPOSED_FILE),
@@ -837,7 +839,7 @@ class FirstRunCompiler:
         if pinned:
             raise ValueError(f"{pinned} identify the record; they can't be dropped")
         proposed_path = self.out_dir / PROPOSED_FILE
-        doc = yaml.safe_load(proposed_path.read_text())
+        doc = yaml.safe_load(proposed_path.read_text(encoding="utf-8"))
         effects = []
         for effect in doc.get("effects") or []:
             effect = dict(effect)
@@ -1234,7 +1236,7 @@ def _repeats_run1(
             "run 1's input digests are missing, so canary values can't be "
             "checked against run 1's; record run 1 again"
         )
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     salt, digests = data.get("salt"), data.get("digests") or {}
     if not isinstance(salt, str) or not isinstance(digests, dict):
         return "run 1's input digests are unreadable; record run 1 again"

@@ -96,4 +96,4 @@ def replay(
     report_path = Path(run_dir) / "report.json"
     if not report_path.exists():
         raise FlowCommandFailed("replay", 1)
-    return RunReport.model_validate_json(report_path.read_text())
+    return RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))

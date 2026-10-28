@@ -1247,7 +1247,7 @@ def convert_capture(
             lines.append(json.dumps(line))
             step_times.append({"i": i, "t": line["t"], "kind": event["kind"]})
 
-        (out_dir / "events.jsonl").write_text("\n".join(lines) + "\n")
+        (out_dir / "events.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
         meta: dict[str, Any] = {
             "id": uuid.uuid4().hex,
@@ -1294,7 +1294,7 @@ def convert_capture(
                 meta["window_capture"]["resolved_window_id"] = resolved_window_id
         elif desktop_provenance is not None:
             meta["desktop_capture"] = desktop_provenance
-        (out_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+        (out_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
         _write_capture_narration(session, out_dir, started_at, step_times)
         return out_dir
     finally:

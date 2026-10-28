@@ -193,7 +193,7 @@ class PendingLedger:
                 pass
             finally:
                 os.unlink(tmp)
-        salt = bytes.fromhex(path.read_text().strip())
+        salt = bytes.fromhex(path.read_text(encoding="utf-8").strip())
         if len(salt) != 32:
             raise ValueError("the ledger salt is damaged")
         return salt
@@ -221,14 +221,16 @@ class PendingLedger:
         path = self._path(entry_id)
         if not path.is_file():
             return None
-        return PendingCheck.model_validate_json(path.read_text())
+        return PendingCheck.model_validate_json(path.read_text(encoding="utf-8"))
 
     def entries(self) -> list[PendingCheck]:
         if not self.directory.is_dir():
             return []
         out = []
         for path in sorted(self.directory.glob("*.json")):
-            out.append(PendingCheck.model_validate_json(path.read_text()))
+            out.append(
+                PendingCheck.model_validate_json(path.read_text(encoding="utf-8"))
+            )
         return out
 
     # -- the run side ---------------------------------------------------------------

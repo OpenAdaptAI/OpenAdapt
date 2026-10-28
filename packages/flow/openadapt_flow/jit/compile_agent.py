@@ -731,7 +731,7 @@ class CompiledAgent:
 
     def candidate(self) -> Optional[dict[str, Any]]:
         path = self.program_dir / CANDIDATE_FILE
-        return json.loads(path.read_text()) if path.is_file() else None
+        return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
 
     @property
     def admitted(self) -> bool:
@@ -924,8 +924,12 @@ class CompiledAgent:
         # Who made the recording, signed with the bundle digest, so editing
         # candidate.json can't turn the recorder into someone else.
         candidate = lifecycle.sign_recorder(program, candidate, key_dir=self.key_dir)
-        (program / "capture.json").write_text(json.dumps(computer.log, indent=2) + "\n")
-        (program / CANDIDATE_FILE).write_text(json.dumps(candidate, indent=2) + "\n")
+        (program / "capture.json").write_text(
+            json.dumps(computer.log, indent=2) + "\n", encoding="utf-8"
+        )
+        (program / CANDIDATE_FILE).write_text(
+            json.dumps(candidate, indent=2) + "\n", encoding="utf-8"
+        )
         lifecycle._event(program, "draft", recorded_by=candidate["recorded_by"])
         return JitResult(
             status=NEEDS_HUMAN_ADMIT,
@@ -945,14 +949,18 @@ class CompiledAgent:
         readback: Any = None,
     ) -> JitResult:
         program = self.program_dir
-        (program / "capture.json").write_text(json.dumps(computer.log, indent=2) + "\n")
+        (program / "capture.json").write_text(
+            json.dumps(computer.log, indent=2) + "\n", encoding="utf-8"
+        )
         refused: dict[str, Any] = {"status": status, "detail": detail}
         if guard is not None:
             refused["teach_scope"] = {
                 **guard.report(),
                 "readback": readback.to_dict() if readback is not None else None,
             }
-        (program / "refused.json").write_text(json.dumps(refused, indent=2) + "\n")
+        (program / "refused.json").write_text(
+            json.dumps(refused, indent=2) + "\n", encoding="utf-8"
+        )
         kept = self.task_dir / f"refused-{_stamp()}"
         program.rename(kept)
         return JitResult(
@@ -1334,7 +1342,8 @@ class CompiledAgent:
                 },
                 indent=2,
             )
-            + "\n"
+            + "\n",
+            encoding="utf-8",
         )
         result.inbox_item = item
         if self.on_halt is not None:

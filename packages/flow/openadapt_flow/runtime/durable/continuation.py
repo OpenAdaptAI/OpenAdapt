@@ -129,7 +129,9 @@ class ContinuationCoordinator:
         if not self.path.is_file():
             return None
         try:
-            return ContinuationLeaseRecord.model_validate_json(self.path.read_text())
+            return ContinuationLeaseRecord.model_validate_json(
+                self.path.read_text(encoding="utf-8")
+            )
         except (OSError, ValueError) as exc:
             raise ContinuationBusy(
                 "the retained continuation lease is invalid; reconcile it before retry"

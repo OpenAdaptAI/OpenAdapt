@@ -715,7 +715,7 @@ def _load_fix(fix: Path | str) -> Optional[CorrectionSpec]:
     path = Path(fix)
     if path.is_file() and path.suffix.lower() == ".json":
         try:
-            return CorrectionSpec.model_validate_json(path.read_text())
+            return CorrectionSpec.model_validate_json(path.read_text(encoding="utf-8"))
         except ValueError as e:
             raise TeachError(f"invalid correction spec {path}: {e}")
     if path.is_dir():

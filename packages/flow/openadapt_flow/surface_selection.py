@@ -177,7 +177,7 @@ def load_last_surface() -> Optional[ExecutionTargetKind]:
     """Return the persisted last-used surface, or None when absent/invalid."""
     path = _cli_state_path()
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     value = data.get("last_backend") if isinstance(data, dict) else None
@@ -196,13 +196,13 @@ def store_last_surface(surface: ExecutionTargetKind) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         existing: dict[str, object] = {}
         try:
-            loaded = json.loads(path.read_text())
+            loaded = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(loaded, dict):
                 existing = loaded
         except (OSError, ValueError):
             pass
         existing["last_backend"] = surface
-        path.write_text(json.dumps(existing, indent=2) + "\n")
+        path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
     except OSError:
         return
 

@@ -460,4 +460,6 @@ def read_sources(paths: list[Path]) -> dict[str, Any]:
 def load_provenance(path: Path | str) -> ProvenanceFile:
     import json
 
-    return ProvenanceFile.model_validate(json.loads(Path(path).read_text()))
+    return ProvenanceFile.model_validate(
+        json.loads(Path(path).read_text(encoding="utf-8"))
+    )

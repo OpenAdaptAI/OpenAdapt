@@ -272,13 +272,15 @@ class PrincipalRegistry(BaseModel):
         path = Path(key_dir) / PRINCIPALS_FILE
         if not path.is_file():
             return cls()
-        return cls.model_validate_json(path.read_text())
+        return cls.model_validate_json(path.read_text(encoding="utf-8"))
 
     def save(self, key_dir: Path) -> Path:
         path = Path(key_dir) / PRINCIPALS_FILE
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
-        tmp.write_text(self.model_dump_json(indent=2, by_alias=True) + "\n")
+        tmp.write_text(
+            self.model_dump_json(indent=2, by_alias=True) + "\n", encoding="utf-8"
+        )
         os.replace(tmp, path)
         return path
 
@@ -551,13 +553,15 @@ class SignedAdmissionPolicy(BaseModel):
     @classmethod
     def load(cls, path: Path | str) -> "SignedAdmissionPolicy":
         try:
-            return cls.model_validate_json(Path(path).read_text())
+            return cls.model_validate_json(Path(path).read_text(encoding="utf-8"))
         except ValueError as exc:
             raise AuthorityError(f"{path} is not a signed admission policy: {exc}")
 
     def save(self, path: Path | str) -> Path:
         out = Path(path)
-        out.write_text(self.model_dump_json(indent=2, by_alias=True) + "\n")
+        out.write_text(
+            self.model_dump_json(indent=2, by_alias=True) + "\n", encoding="utf-8"
+        )
         return out
 
 
@@ -754,7 +758,11 @@ def canary_runs(path: Path, digest: str) -> list[dict[str, Any]]:
 
     if not path.is_file():
         return []
-    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    rows = [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
     return [r for r in rows if r.get("digest") == digest]
 
 

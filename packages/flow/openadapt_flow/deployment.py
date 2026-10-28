@@ -1345,7 +1345,11 @@ def load_deployment(
     if pinned is None and not path.is_file():
         raise FileNotFoundError(f"deployment config {source!r} is not an existing file")
     try:
-        text = pinned.decode("utf-8") if pinned is not None else path.read_text()
+        text = (
+            pinned.decode("utf-8")
+            if pinned is not None
+            else path.read_text(encoding="utf-8")
+        )
         data = yaml.safe_load(text) or {}
     except yaml.YAMLError as e:  # pragma: no cover - passthrough
         raise ValueError(f"could not parse deployment YAML {path}: {e}") from e

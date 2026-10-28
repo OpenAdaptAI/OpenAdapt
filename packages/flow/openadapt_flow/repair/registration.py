@@ -224,7 +224,7 @@ def register_bundle_candidate(
     )
     path = detached_candidate_path(proposed_bundle)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(candidate.model_dump_json(indent=2))
+    path.write_text(candidate.model_dump_json(indent=2), encoding="utf-8")
     return path
 
 
@@ -236,4 +236,4 @@ def load_detached_candidate(proposed_bundle: Path | str) -> RepairCandidate:
             f"no detached repair candidate at {path}; register the bundle "
             "pair first (openadapt-flow repair register)"
         )
-    return RepairCandidate.model_validate_json(path.read_text())
+    return RepairCandidate.model_validate_json(path.read_text(encoding="utf-8"))

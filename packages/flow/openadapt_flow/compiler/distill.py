@@ -384,7 +384,7 @@ def _corrections(events: list[dict[str, Any]], dropped: dict[int, str]) -> None:
 
 
 def _load(recording_dir: Path) -> list[dict[str, Any]]:
-    lines = (recording_dir / "events.jsonl").read_text().splitlines()
+    lines = (recording_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()
     return [json.loads(line) for line in lines if line.strip()]
 
 
@@ -520,12 +520,14 @@ def distill_recording(recording_dir: Path | str, out_dir: Path | str) -> Distill
                     source_frame, dst / "frames" / f"{new_i:04d}_{side}.png"
                 )
         kept_lines.append(json.dumps({**event, "i": new_i, "distilled_from_i": old_i}))
-    (dst / "events.jsonl").write_text("".join(line + "\n" for line in kept_lines))
+    (dst / "events.jsonl").write_text(
+        "".join(line + "\n" for line in kept_lines), encoding="utf-8"
+    )
     meta_path = src / "meta.json"
     if meta_path.exists():
-        meta = json.loads(meta_path.read_text())
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
         meta["distilled_from"] = meta.get("id")
-        (dst / "meta.json").write_text(json.dumps(meta, indent=2))
+        (dst / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     for name in sorted(p.name for p in src.iterdir() if p.is_file()):
         if name not in ("events.jsonl", "meta.json") and not (dst / name).exists():
             shutil.copyfile(src / name, dst / name)
@@ -541,5 +543,7 @@ def distill_recording(recording_dir: Path | str, out_dir: Path | str) -> Distill
             for pos, rule in sorted(dropped.items())
         ],
     )
-    (dst / "distill.json").write_text(json.dumps(report.to_dict(), indent=2) + "\n")
+    (dst / "distill.json").write_text(
+        json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8"
+    )
     return report

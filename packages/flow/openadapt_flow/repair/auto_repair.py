@@ -261,7 +261,7 @@ class RepairLedger:
             return []
         return [
             json.loads(line)
-            for line in self.path.read_text().splitlines()
+            for line in self.path.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
 

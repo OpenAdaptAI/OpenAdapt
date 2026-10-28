@@ -296,7 +296,7 @@ def _read(path: Path) -> Optional[dict[str, Any]]:
     if not path.is_file():
         return None
     try:
-        value = json.loads(path.read_text())
+        value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     return value if isinstance(value, dict) else None
@@ -380,7 +380,7 @@ def admit(
     path = record_path(store_root, requalified.digest)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(record, indent=2, sort_keys=True))
+    tmp.write_text(json.dumps(record, indent=2, sort_keys=True), encoding="utf-8")
     tmp.replace(path)
     if lineage_refusal(store_root, parent_digest, requalified.digest, key_dir=keys):
         # Our own record must verify; refuse rather than leave a bad one.
@@ -394,7 +394,7 @@ def _revoked(store_root: Path) -> set[str]:
     if not path.exists():
         return set()
     try:
-        value = json.loads(path.read_text())
+        value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         # An unreadable revocation list revokes everything.
         return {"*"}
@@ -448,7 +448,7 @@ def lineage_refusal(
         return "no trusted admission key to verify the repair lineage"
     try:
         public = Ed25519PublicKey.from_public_bytes(
-            bytes.fromhex(pub_file.read_text().strip())
+            bytes.fromhex(pub_file.read_text(encoding="utf-8").strip())
         )
     except ValueError:
         return "the trusted admission key is unreadable"

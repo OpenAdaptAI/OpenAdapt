@@ -156,5 +156,5 @@ def run_bench(
         "iterations": iterations,
     }
 
-    (root / "bench.json").write_text(json.dumps(result, indent=2))
+    (root / "bench.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     return result

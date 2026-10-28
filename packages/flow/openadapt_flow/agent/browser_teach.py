@@ -740,7 +740,7 @@ class BrowserTeachBridge:
         self.programs: dict[str, dict[str, Any]] = {}
         for path in sorted(self.tools_dir.glob(f"*/{PROGRAM_FILE}")):
             try:
-                program = json.loads(path.read_text())
+                program = json.loads(path.read_text(encoding="utf-8"))
                 if program.get("schema") != PROGRAM_SCHEMA or not _NAME.fullmatch(
                     program.get("name", "")
                 ):
@@ -1346,7 +1346,9 @@ class BrowserTeachBridge:
             }
         folder = self.tools_dir / run.name
         folder.mkdir(parents=True, exist_ok=True)
-        (folder / PROGRAM_FILE).write_text(json.dumps(program, indent=2) + "\n")
+        (folder / PROGRAM_FILE).write_text(
+            json.dumps(program, indent=2) + "\n", encoding="utf-8"
+        )
         tool = TAUGHT_PREFIX + run.name
         self.programs[tool] = program
         return {

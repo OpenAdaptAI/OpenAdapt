@@ -220,7 +220,7 @@ def reason_from_run_dir(attended: Any, run_dir: Path) -> Optional[EngineResult]:
     if run_dir.is_symlink() or report_path.is_symlink() or not report_path.is_file():
         return None
     try:
-        report = json.loads(report_path.read_text())
+        report = json.loads(report_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     if not isinstance(report, dict):

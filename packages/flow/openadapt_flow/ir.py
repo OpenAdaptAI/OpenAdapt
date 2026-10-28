@@ -3187,13 +3187,13 @@ class Workflow(BaseModel):
             _seal_template_assets(bundle, key, self._decrypted_templates)
             path = encrypted_path
         else:
-            plaintext_path.write_text(serialized)
+            plaintext_path.write_text(serialized, encoding="utf-8")
             if encrypted_path.exists():
                 encrypted_path.unlink()
             path = plaintext_path
         if self.manifest is not None:
             (bundle / "manifest.json").write_text(
-                self.manifest.model_dump_json(indent=2)
+                self.manifest.model_dump_json(indent=2), encoding="utf-8"
             )
         return path
 
@@ -3300,7 +3300,7 @@ class Workflow(BaseModel):
             )
             raw = json.loads(decrypted)
         else:
-            raw = json.loads(plaintext_path.read_text())
+            raw = json.loads(plaintext_path.read_text(encoding="utf-8"))
         raw = _bv.migrate_bundle_dict(raw)
         # A manifest may be embedded in workflow.json OR sit in a sidecar; the
         # embedded one wins, else the sidecar, else it is computed fresh.
@@ -3310,7 +3310,9 @@ class Workflow(BaseModel):
         if wf.manifest is None:
             sidecar = bundle / "manifest.json"
             if sidecar.is_file():
-                wf.manifest = BundleManifest.model_validate_json(sidecar.read_text())
+                wf.manifest = BundleManifest.model_validate_json(
+                    sidecar.read_text(encoding="utf-8")
+                )
                 persisted = wf.manifest
 
         if sealed_assets is not None:

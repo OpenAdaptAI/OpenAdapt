@@ -690,14 +690,17 @@ def write_coverage(record: CoverageRecord, out_dir: Path) -> Path:
     path = Path(out_dir) / COVERAGE_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps(record.model_dump(mode="json"), indent=2, sort_keys=True) + "\n"
+        json.dumps(record.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
     )
     return path
 
 
 def load_coverage(path: Path) -> CoverageRecord:
     try:
-        return CoverageRecord.model_validate(json.loads(Path(path).read_text()))
+        return CoverageRecord.model_validate(
+            json.loads(Path(path).read_text(encoding="utf-8"))
+        )
     except (OSError, ValueError) as exc:
         raise GateError(f"cannot read coverage record {path}: {exc}") from exc
 

@@ -143,7 +143,9 @@ class SignedApproverGrant(BaseModel):
 
     def save(self, path: Path | str) -> Path:
         out = Path(path)
-        out.write_text(self.model_dump_json(indent=2, by_alias=True) + "\n")
+        out.write_text(
+            self.model_dump_json(indent=2, by_alias=True) + "\n", encoding="utf-8"
+        )
         return out
 
 

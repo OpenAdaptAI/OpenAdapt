@@ -154,7 +154,7 @@ def lift_params(bundle_dir: Path | str, inputs: Mapping[str, str]) -> LiftReport
     workflow = Workflow.load(bundle)
     steps = {step.id: step for step in workflow.steps}
     path = bundle / PROPOSALS_FILENAME
-    raw = json.loads(path.read_text()) if path.is_file() else {}
+    raw = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
     existing: list[dict[str, Any]] = [
         dict(entry) for entry in raw.get("proposals", []) if isinstance(entry, dict)
     ]
@@ -220,6 +220,7 @@ def lift_params(bundle_dir: Path | str, inputs: Mapping[str, str]) -> LiftReport
                 },
                 indent=2,
             )
-            + "\n"
+            + "\n",
+            encoding="utf-8",
         )
     return report

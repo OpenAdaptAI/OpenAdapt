@@ -116,13 +116,15 @@ class SkillLibrary:
     def _load(self) -> None:
         if not self.path.is_file():
             return
-        raw = json.loads(self.path.read_text())
+        raw = json.loads(self.path.read_text(encoding="utf-8"))
         for sid, data in raw.get("skills", {}).items():
             self._skills[sid] = Skill.model_validate(data)
 
     def save(self) -> Path:
         payload = {"skills": {sid: s.model_dump() for sid, s in self._skills.items()}}
-        self.path.write_text(json.dumps(payload, indent=2, default=str))
+        self.path.write_text(
+            json.dumps(payload, indent=2, default=str), encoding="utf-8"
+        )
         return self.path
 
     # -- read ---------------------------------------------------------------

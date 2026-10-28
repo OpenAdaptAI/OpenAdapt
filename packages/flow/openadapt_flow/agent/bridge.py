@@ -923,7 +923,7 @@ class AgentBridge:
                 return self._legacy_from_record(run_id, record)
             raise BridgeError("no local report exists for that run id")
         try:
-            report = json.loads(report_path.read_text())
+            report = json.loads(report_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             _LOG.exception("protected local report could not be read")
             raise BridgeError("the local report could not be read safely") from exc

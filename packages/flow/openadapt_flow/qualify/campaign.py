@@ -102,7 +102,10 @@ def _sha256(path: Path) -> str:
 
 def write_json(path: Path, value: Any) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2, sort_keys=True, default=str) + "\n")
+    path.write_text(
+        json.dumps(value, indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8",
+    )
     return path
 
 
@@ -267,7 +270,7 @@ def resolve_inputs(
         path = config.resolve_path(inputs.file or "")
         if not path.is_file():
             raise QualifyConfigError(f"inputs.file not found: {path}")
-        loaded = json.loads(path.read_text())
+        loaded = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(loaded, dict):
             raise QualifyConfigError(f"inputs.file must hold a JSON object: {path}")
         params.update({k: str(v) for k, v in loaded.items()})
@@ -1599,7 +1602,9 @@ def qualify(
     )
     result_path = write_json(out / "qualification" / "result.json", qresult)
     if write_campaign_files:
-        (out / "qualification" / "verdict.txt").write_text(qreport.render() + "\n")
+        (out / "qualification" / "verdict.txt").write_text(
+            qreport.render() + "\n", encoding="utf-8"
+        )
     log(qreport.render())
     log(
         f"qualification-result/v1 {result_sha256(qresult)[:16]}: passed="
@@ -1849,7 +1854,7 @@ def write_summary_markdown(result: QualifyResult) -> Path:
         "",
     ]
     path = result.out / "QUALIFICATION.md"
-    path.write_text("\n".join(lines))
+    path.write_text("\n".join(lines), encoding="utf-8")
     return path
 
 

@@ -181,7 +181,7 @@ def cmd_jit(
             return 0
         if args.jit_cmd == "sign-policy":
             policy = authority.AdmissionPolicy.model_validate_json(
-                Path(args.policy).read_text()
+                Path(args.policy).read_text(encoding="utf-8")
             )
             print(policy.model_dump_json(indent=2, by_alias=True))
             if confirm(f"Sign this policy as {policy.signer}?").strip().lower() not in (

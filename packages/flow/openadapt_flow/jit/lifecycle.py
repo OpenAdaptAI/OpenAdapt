@@ -177,11 +177,11 @@ def _now() -> str:
 
 
 def _read(path: Path) -> Optional[dict[str, Any]]:
-    return json.loads(path.read_text()) if path.is_file() else None
+    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
 
 
 def _write(path: Path, data: Mapping[str, Any]) -> None:
-    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _event(program_dir: Path, kind: str, **detail: Any) -> None:
@@ -214,7 +214,7 @@ def _record_signed(record: Mapping[str, Any], key_dir: Optional[Path]) -> bool:
     if not pub_file.is_file():
         return False
     public = Ed25519PublicKey.from_public_bytes(
-        bytes.fromhex(pub_file.read_text().strip())
+        bytes.fromhex(pub_file.read_text(encoding="utf-8").strip())
     )
     body = {k: v for k, v in record.items() if k != "signature"}
     return verify_signature(public, _canonical(body), str(record.get("signature", "")))
@@ -295,7 +295,7 @@ def _origin_on_disk(bundle: Path) -> Optional[str]:
 
     path = bundle / "workflow.json"
     try:
-        data = json.loads(path.read_text()) if path.is_file() else {}
+        data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
     except (OSError, ValueError):
         return None
     origin = data.get("origin") if isinstance(data, dict) else None
@@ -1526,7 +1526,7 @@ def verify_admission(
     if not pub_file.is_file():
         raise AdmissionError(f"no trusted admission key at {pub_file}")
     public = Ed25519PublicKey.from_public_bytes(
-        bytes.fromhex(pub_file.read_text().strip())
+        bytes.fromhex(pub_file.read_text(encoding="utf-8").strip())
     )
     body = {k: v for k, v in manifest.items() if k != "signature"}
     if body.get("signing_key") != fingerprint_of(public) or not verify_signature(

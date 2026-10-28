@@ -193,7 +193,7 @@ def record_click(
     if dialog_region is not None:
         event["identifier_region"] = list(dialog_region)
         event["identifier_scope"] = "dialog"
-    (directory / "events.jsonl").write_text(json.dumps(event) + "\n")
+    (directory / "events.jsonl").write_text(json.dumps(event) + "\n", encoding="utf-8")
     (directory / "meta.json").write_text(
         json.dumps(
             {
@@ -203,6 +203,7 @@ def record_click(
                 "app_url": "",
                 "params": {},
             }
-        )
+        ),
+        encoding="utf-8",
     )
     return directory

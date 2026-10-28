@@ -175,7 +175,7 @@ class SignedPromotionPolicy(BaseModel):
 
     @classmethod
     def load(cls, path: Path | str) -> "SignedPromotionPolicy":
-        return cls.model_validate_json(Path(path).read_text())
+        return cls.model_validate_json(Path(path).read_text(encoding="utf-8"))
 
     def save(self, path: Path | str) -> None:
         _atomic_write(Path(path), self.model_dump_json(indent=2) + "\n")
@@ -228,7 +228,7 @@ class RoleRegistry(BaseModel):
         file = Path(path)
         if not file.is_file():
             return cls()
-        return cls.model_validate_json(file.read_text())
+        return cls.model_validate_json(file.read_text(encoding="utf-8"))
 
     def save(self, path: Path | str) -> None:
         _atomic_write(Path(path), self.model_dump_json(indent=2) + "\n")

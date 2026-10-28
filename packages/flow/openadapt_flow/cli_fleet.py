@@ -92,7 +92,9 @@ def _cmd_status(args: argparse.Namespace) -> int:
         }
     trust_path = root / TRUST_FILE
     report["trusted_roots"] = (
-        sorted(FleetTrust.model_validate_json(trust_path.read_text()).roots)
+        sorted(
+            FleetTrust.model_validate_json(trust_path.read_text(encoding="utf-8")).roots
+        )
         if trust_path.is_file()
         else "none: every patch is refused"
     )
@@ -222,7 +224,7 @@ def _cmd_policy_sign(args: argparse.Namespace) -> int:
         )
     root = _dir(args)
     roles = RoleRegistry.load(root / ROLES_FILE)
-    draft = json.loads(Path(args.draft).read_text())
+    draft = json.loads(Path(args.draft).read_text(encoding="utf-8"))
     now = datetime.now(timezone.utc).isoformat()
     draft["approver"] = {
         "person_id": args.approver_id,

@@ -192,7 +192,7 @@ def save_session(
         "gateway": asdict(gateway) if gateway is not None else None,
     }
     path = Path(path)
-    path.write_text(json.dumps(body, indent=2, sort_keys=True) + "\n")
+    path.write_text(json.dumps(body, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
 
 
@@ -205,7 +205,7 @@ def load_session(
         ValueError: The file is not a session file, has unknown fields, or
             its profile no longer matches the recorded digest.
     """
-    data = json.loads(Path(path).read_text())
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(data, dict) or data.get("schema") != SESSION_SCHEMA:
         raise ValueError(f"{path}: not a {SESSION_SCHEMA} file")
     try:

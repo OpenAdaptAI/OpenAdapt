@@ -60,10 +60,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.write:
         C.corpus_path().parent.mkdir(parents=True, exist_ok=True)
         C.corpus_path().write_text(
-            json.dumps(corpus_doc, indent=2, sort_keys=True) + "\n"
+            json.dumps(corpus_doc, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
         C.results_path().write_text(
-            json.dumps(results_doc, indent=2, sort_keys=True) + "\n"
+            json.dumps(results_doc, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
         print(f"wrote {C.corpus_path()}")
         print(f"wrote {C.results_path()}")

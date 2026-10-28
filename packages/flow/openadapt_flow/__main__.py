@@ -346,7 +346,7 @@ def _load_worklist_file(path: Path) -> list[dict[str, str]]:
         raise SystemExit(f"--worklist file not found: {path}")
     suffix = path.suffix.lower()
     if suffix == ".json":
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             data = [data]
         if not isinstance(data, list) or not all(isinstance(r, dict) for r in data):
@@ -1327,7 +1327,7 @@ def _propose_lookup_check(args: argparse.Namespace, *, from_lookup: bool) -> Non
 
             target = recording / PROPOSED_CONTRACT_NAME
             try:
-                _write_private(target, readback.read_text())
+                _write_private(target, readback.read_text(encoding="utf-8"))
             except OSError as exc:
                 print(f"record --verify: could not write {target.name} ({exc})")
             else:
@@ -1986,7 +1986,7 @@ def _cmd_compile(args: argparse.Namespace) -> int:
         return 0
     decisions: list[pc.ParamDecision] = []
     if args.params_from:
-        decisions_json = json.loads(Path(args.params_from).read_text())
+        decisions_json = json.loads(Path(args.params_from).read_text(encoding="utf-8"))
         if not isinstance(decisions_json, dict):
             raise SystemExit("--params-from: file must be a JSON object")
         decisions = pc.decisions_from_file(proposals, decisions_json)
@@ -2065,7 +2065,9 @@ def _cmd_induce(args: argparse.Namespace) -> int:
     if args.report:
         report_path = Path(args.report)
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(result.model_dump_json(indent=2) + "\n")
+        report_path.write_text(
+            result.model_dump_json(indent=2) + "\n", encoding="utf-8"
+        )
         print(f"Induction report written to {report_path}")
 
     if args.held_out and len(traces) >= 2:
@@ -6479,7 +6481,7 @@ def _cmd_disambiguate(args: argparse.Namespace) -> int:
 
     answers: dict[str, str] = {}
     if args.answers:
-        answers = json.loads(Path(args.answers).read_text())
+        answers = json.loads(Path(args.answers).read_text(encoding="utf-8"))
     elif args.interactive:
         # Thin interactive wrapper -- prompts a human, then calls the same API
         # the tests drive directly. The core stays non-interactive.
@@ -8168,7 +8170,7 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
     )
     run_params = None
     if args.run_params:
-        run_params = json.loads(Path(args.run_params).read_text())
+        run_params = json.loads(Path(args.run_params).read_text(encoding="utf-8"))
         if not isinstance(run_params, dict):
             print("--run-params must hold a JSON object", file=sys.stderr)
             return 2
