@@ -267,7 +267,8 @@ def declared_selectors(effect: Effect) -> list[dict[str, str]]:
             for k, v in selector.items()
         }
         if effect.idempotency_key is not None:
-            out[effect.key_field] = str(effect.idempotency_key)
+            key = effect.idempotency_key
+            out[effect.key_field] = key if getattr(key, "kind", None) else str(key)  # type: ignore[assignment]
         return out
 
     if effect.kind is EffectKind.EXACT_NEW_SET:
