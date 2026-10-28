@@ -1144,6 +1144,7 @@ def resolve(
                 confidence=score,
                 elapsed_ms=elapsed_ms(),
                 resolution_evidence_regions=(full_frame_region,),
+                grounder_model="local",
             )
             return resolution, region
 

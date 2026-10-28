@@ -296,12 +296,27 @@ def test_edge_search_finds_the_icon_at_another_scale_and_theme(scale, dark):
     template = recorded.crop((x - 4, y - 4, x + w + 5, y + h + 5))
     live, (lx, ly, lw, lh) = _scene(scale, dark)
     found = edge_candidates(live, template)
-    # The edge search only proposes; the icon must be among its proposals.
-    assert any(
-        abs(cx + cw / 2 - (lx + lw / 2)) <= 0.25 * lw
-        and abs(cy + ch / 2 - (ly + lh / 2)) <= 0.25 * lh
-        for _score, (cx, cy, cw, ch), _scale in found
-    )
+    # The edge search only proposes; here, with nothing else like the icon on
+    # the frame, the icon is its strongest proposal.
+    _score, (cx, cy, cw, ch), _scale = found[0]
+    assert abs(cx + cw / 2 - (lx + lw / 2)) <= 0.25 * lw
+    assert abs(cy + ch / 2 - (ly + lh / 2)) <= 0.25 * lh
+
+
+@pytest.mark.parametrize(
+    "scale,dark", [(1.0, False), (1.5, False), (2.0, False), (1.25, True)]
+)
+def test_blank_background_is_never_a_candidate(scale, dark):
+    # On a flat window the edge map is float rounding noise, and normalised
+    # correlation scales it up to a perfect score. Such windows would crowd
+    # real look-alikes out of the proposals, differently on each platform.
+    recorded, (x, y, w, h) = _scene(1.0, False)
+    template = recorded.crop((x - 4, y - 4, x + w + 5, y + h + 5))
+    live, _box = _scene(scale, dark)
+    gray = np.asarray(live.convert("L"), dtype=np.int16)
+    for _score, (cx, cy, cw, ch), _scale in edge_candidates(live, template):
+        window = gray[cy : cy + ch, cx : cx + cw]
+        assert window.max() - window.min() > 0, (cx, cy, cw, ch)
 
 
 # -- weights ---------------------------------------------------------------
@@ -505,3 +520,34 @@ def test_local_grounding_on_wires_the_model_with_egress_off(monkeypatch):
     assert grounder.locate_anchor(SCREEN, b"crop") == model.candidates
     assert not component_may_egress(grounder)
     assert captured["allow_model_grounding"] is False
+
+
+# -- run accounting --------------------------------------------------------
+
+
+@pytest.mark.parametrize("local", [True, False])
+def test_a_local_model_step_is_not_counted_as_a_model_call(local):
+    from openadapt_flow.ir import Resolution, RunReport, StepResult
+    from openadapt_flow.runtime.replayer import Replayer
+
+    report = RunReport(workflow_name="w", started_at="2026-10-28T00:00:00Z", ok=True)
+    result = StepResult(
+        step_id="s",
+        intent="click",
+        ok=True,
+        resolution=Resolution(
+            rung="grounder",
+            point=(1, 2),
+            confidence=0.9,
+            elapsed_ms=1.0,
+            grounder_model="local" if local else None,
+        ),
+    )
+    Replayer._account_result(report, result)
+    assert report.rung_counts == {"grounder": 1}
+    assert (report.model_calls, report.local_model_calls) == (
+        (0, 1) if local else (1, 0)
+    )
+    dumped = report.model_dump()
+    assert ("local_model_calls" in dumped) is local
+    assert ("grounder_model" in result.resolution.model_dump()) is local

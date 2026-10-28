@@ -3440,6 +3440,9 @@ class Resolution(BaseModel):
     elapsed_ms: float
     structural_handle: Optional[StructuralHandle] = None
     visual_evidence: Optional["VisualResolutionEvidence"] = None
+    # "local" when the grounder rung was resolved by the in-process local
+    # grounding model, which sends nothing off the box. Absent otherwise.
+    grounder_model: Optional[Literal["local"]] = None
     resolution_evidence_regions: tuple[Region, ...] = Field(
         default_factory=tuple,
         exclude=True,
@@ -3455,6 +3458,8 @@ class Resolution(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.visual_evidence is None:
             data.pop("visual_evidence", None)
+        if self.grounder_model is None:
+            data.pop("grounder_model", None)
         return data
 
 
@@ -5673,6 +5678,10 @@ class RunReport(BaseModel):
     render_scale: Optional[dict[str, Any]] = None
     heal_count: int = 0
     model_calls: int = 0
+    # Steps resolved by the in-process local grounding model. Counted apart
+    # from ``model_calls`` because they make no outbound call and cost
+    # nothing per query; written only when nonzero.
+    local_model_calls: int = Field(default=0, ge=0, exclude_if=lambda value: value == 0)
     external_network_calls: Literal["none", "observed", "unknown"] = "unknown"
     est_model_cost_usd: float = 0.0
     total_ms: float = 0.0

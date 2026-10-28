@@ -19,9 +19,10 @@ finds the control again with a small vision model that runs in process:
    look-alike. The resolver keeps a look-alike only when the step's retained
    landmarks place the target there; two or more left over halt the step.
 
-The model only locates. It never decides identity: the resolver still
-corroborates the target's own text with OCR, the identity check still reads
-the record, and the look-alike census still counts rows. The rung is below
+The model only locates. It never decides identity: a target with a text
+label is left to the OCR rung and never reaches the model, landmarks located
+by OCR must agree with the place the model chose, the identity check still
+reads the record, and the look-alike census still counts rows. The rung is below
 OCR in the ladder, so an irreversible step it resolves halts at the risk gate.
 
 The weights are not part of the wheel. :meth:`LocalGroundingModel.load`
@@ -49,7 +50,8 @@ from PIL import Image
 from openadapt_flow.ir import Region
 
 #: The pinned weights: the int8 ONNX export of ``facebook/dinov2-small``
-#: (Apache-2.0) published as ``onnx-community/dinov2-small``. Revision and
+#: (Apache-2.0) published as ``onnx-community/dinov2-small``, whose card
+#: states no licence of its own; the upstream Apache-2.0 licence is recorded. Revision and
 #: digest are fixed; a changed file is refused, never loaded. int8 scores 12
 #: candidates in about 55 ms on 4 CPU threads, 2.5x faster than float32.
 WEIGHTS: dict[str, Any] = {
@@ -76,6 +78,13 @@ PEAKS_PER_SCALE = 6
 #: Edge-correlation floor for a candidate peak. Low on purpose: the model,
 #: not the edge match, decides what counts as the target.
 EDGE_FLOOR = 0.3
+#: A window of the frame whose edge strength varies less than this share of
+#: the template's is blank background, not a candidate. Normalised
+#: correlation divides by that variation, so on a flat window it scales
+#: float rounding noise up to a perfect score, and which flat windows win
+#: depends on the platform's arithmetic. Left in, they crowd real
+#: candidates, and real look-alikes, out of the proposals.
+FLAT_WINDOW_SHARE = 0.05
 MAX_CANDIDATES = 12
 #: The edge search runs at a size where the crop's short side is this many
 #: pixels; finer search costs time and adds nothing the model does not.
@@ -191,6 +200,22 @@ def _edges(gray: np.ndarray) -> np.ndarray:
     return cv2.magnitude(gx, gy)
 
 
+def _window_std(image: np.ndarray, w: int, h: int) -> np.ndarray:
+    """Standard deviation of every ``w`` x ``h`` window, shaped like the
+    output of ``cv2.matchTemplate`` (one value per top-left corner)."""
+    import cv2
+
+    total, squares = cv2.integral2(image.astype(np.float64))[:2]
+
+    def window_sum(table: np.ndarray) -> np.ndarray:
+        return table[h:, w:] - table[:-h, w:] - table[h:, :-w] + table[:-h, :-w]
+
+    area = float(w * h)
+    mean = window_sum(total) / area
+    variance = window_sum(squares) / area - mean * mean
+    return np.sqrt(np.maximum(variance, 0.0))
+
+
 def _nms(
     boxes: list[tuple[float, Region, float]], limit: int
 ) -> list[tuple[float, Region, float]]:
@@ -249,9 +274,11 @@ def edge_candidates(
             continue
         resized = cv2.resize(template_gray, (w, h), interpolation=cv2.INTER_AREA)
         tmpl_edges = _edges(resized)
-        if float(tmpl_edges.std()) < 1e-3:
+        tmpl_std = float(tmpl_edges.std())
+        if tmpl_std < 1e-3:
             continue
         result = cv2.matchTemplate(frame_edges, tmpl_edges, cv2.TM_CCOEFF_NORMED)
+        result[_window_std(frame_edges, w, h) < FLAT_WINDOW_SHARE * tmpl_std] = -1.0
         # The strongest peaks at this scale, each suppressing its own
         # neighbourhood before the next is taken.
         for _ in range(PEAKS_PER_SCALE):

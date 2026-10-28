@@ -52,7 +52,7 @@ card on 2026-10-28.
 | OmniParser v2 `icon_detect` | AGPL-3.0 | YOLOv8 | Excluded. |
 | OmniParser v2 `icon_detect_v3` | MIT | YOLOv9-E, 281 MB | Needs PyTorch at run time (about 700 MB), against the install-weight budget. |
 | Florence-2-base | MIT | 0.23B | Not measured. A general phrase grounder, not trained on screens. |
-| DINOv2-small (int8 ONNX) | Apache-2.0 | 22M | Chosen. Runs on the onnxruntime the base install already carries, so the `local-grounding` extra adds no package. |
+| DINOv2-small (int8 ONNX) | Apache-2.0 (upstream `facebook/dinov2-small`; the `onnx-community/dinov2-small` export's card states no licence of its own) | 22M | Chosen. Runs on the onnxruntime the base install already carries, so the `local-grounding` extra adds no package. |
 
 A generative grounding model answers "where is the Save button?" with one
 point. The fail-closed contract needs the opposite question: how many places
