@@ -14,7 +14,7 @@
 # No rule may name a patient-data table except for its system columns.
 schema_version: openadapt.app-profile/v1
 app: openemr
-version: openemr-frame-profile/2026-10-28.1
+version: openemr-frame-profile/2026-10-28.2
 patient_table_prefixes: [patient, lists, history_data, insurance, employer_data,
   prescriptions, openemr_postcalendar, form, forms, pnotes, immunizations,
   documents, billing, procedure, onotes]
@@ -29,6 +29,10 @@ rules:
   - {id: clinical-rules-log, table: clinical_rules_log, mode: append_only, reason: "the reminder widget's log, written when a chart is shown"}
   - {id: uuid-registry, table: uuid_registry, mode: append_only, reason: "system id map, written with any new record or a uuid backfill"}
   - {id: uuid-mapping, table: uuid_mapping, mode: append_only, reason: "system id map"}
+  # A link row (table name and record id, no address) OpenEMR adds when a
+  # chart is first opened or created; the address itself is in
+  # contact_address, which stays compared.
+  - {id: contact, table: contact, mode: append_only, reason: "a link row created when a patient chart is first opened"}
   - {id: session-tracker, table: session_tracker, mode: session, reason: "one row per sign-in session"}
   - {id: users-secure, table: users_secure, mode: session, reason: "password hashes, updated at sign-in"}
   - {id: user-settings, table: user_settings, mode: session, reason: "per-user UI state"}
