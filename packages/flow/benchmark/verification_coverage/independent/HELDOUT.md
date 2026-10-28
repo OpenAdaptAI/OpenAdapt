@@ -69,6 +69,24 @@ three of the five clean cases, from two gaps:
 - **Concurrent edits to the new chart:** another user's change to the bot's
   new record is never excused, even in a field the save didn't set.
 
+## After the review fixes (stand-in, not counted)
+
+The adversarial review of #1582 found 7 silent passes, a false hold on any
+table over `max_rows`, an inconsistent read and plaintext rows in the
+baseline. The fixes are in #1582, #1586, #1597 and #1571. They change the
+checker, so the scores above stand as measured. At measurement commit
+`1821c79c8` the whole-database contract gets **17/17 on the stand-in on all
+four suites** (the original suite and held-out 1, 2 and 3), passes no fault as
+verified, and reads every frame. None of these four scores counts: each set
+shaped the checker.
+
+The figure that counts today is held-out 3's **14/17** at `6d0b1525d`.
+
+## Held-out 4
+
+The check is fixed at `1821c79c8` before the suite is written. The suite
+will be authored, stored and run privately.
+
 ## Live OpenEMR
 
 Pending: queued for the fixture lease.
