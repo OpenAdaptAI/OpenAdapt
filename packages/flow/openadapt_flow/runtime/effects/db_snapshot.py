@@ -306,3 +306,59 @@ def keyed_rows(table: Table) -> list[dict[str, Any]]:
 
 #: The synthetic identity field of a database slice's records.
 KEY = "__row_key__"
+
+
+@dataclass
+class TableDiff:
+    """How one table moved between two snapshots. Counts and column names
+    only, never values."""
+
+    added: int = 0
+    removed: int = 0
+    changed: int = 0
+    changed_columns: list[str] = field(default_factory=list)
+    #: The table moved but wasn't compared row by row: fingerprinted (over
+    #: ``max_rows``), or created, dropped or altered in between.
+    unread: bool = False
+
+
+def diff(
+    before: Snapshot, after: Snapshot, *, allow_tables: Sequence[str] = ()
+) -> dict[str, TableDiff]:
+    """Every table that moved between ``before`` and ``after``, except
+    ``allow_tables``. Empty when the database is back where it was."""
+
+    from openadapt_flow.runtime.effects._common import _same_value
+
+    out: dict[str, TableDiff] = {}
+    skip = set(allow_tables)
+    for name in sorted(set(before.tables) | set(after.tables)):
+        if name in skip:
+            continue
+        a, b = before.tables.get(name), after.tables.get(name)
+        if a is None or b is None or a.columns != b.columns:
+            out[name] = TableDiff(unread=True)
+            continue
+        if a.rows is None or b.rows is None:
+            if (a.count, a.digest) != (b.count, b.digest):
+                out[name] = TableDiff(unread=True)
+            continue
+        old = {r[KEY]: r for r in keyed_rows(a)}
+        new = {r[KEY]: r for r in keyed_rows(b)}
+        moved = TableDiff(
+            added=len(new.keys() - old.keys()), removed=len(old.keys() - new.keys())
+        )
+        columns: set[str] = set()
+        for key in old.keys() & new.keys():
+            fields = [
+                c
+                for c in set(old[key]) | set(new[key])
+                if c != KEY and not _same_value(old[key].get(c), new[key].get(c))
+            ]
+            if fields:
+                moved.changed += 1
+                columns.update(fields)
+        moved.changed_columns = sorted(columns)
+        if moved.added or moved.removed or moved.changed:
+            out[name] = moved
+    return out

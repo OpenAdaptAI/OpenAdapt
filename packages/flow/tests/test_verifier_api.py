@@ -16,13 +16,19 @@ import pytest
 
 from openadapt_flow import verifier
 from openadapt_flow.verifier import (
+    Actor,
+    BaselineUnreadable,
     Contract,
     Snapshot,
     VerifierError,
     WriteResult,
     capture,
+    capture_database,
+    diff_database,
     verify_write,
 )
+
+BOT = Actor(kind="agent", id="bot")
 
 PARAMS = {"fname": "Ada", "lname": "Quill", "email": "ada@example.test"}
 
@@ -78,12 +84,14 @@ def _check(tmp_path: Path, *statements: str) -> WriteResult:
     contract = _contract(db)
     before = capture(contract, PARAMS)
     _write(db, *statements)
-    return verify_write(contract, before, params=PARAMS, actor="bot")
+    return verify_write(contract, before, params=PARAMS, actor=BOT)
 
 
 def test_a_correct_write_is_verified(tmp_path: Path) -> None:
     result = _check(tmp_path, SAVE)
     assert result.verified and result.outcome == "verified"
+    assert result.status == "verified"
+    assert len(result.receipt_sha256) == 64
     assert result.checked["delta"] == "held" and result.checked["frame"] == "held"
     assert result.reasons == []
     assert result.receipt["outcome"] == "verified"
@@ -99,13 +107,44 @@ def test_a_wrong_value_is_not_verified(tmp_path: Path) -> None:
 
 def test_a_stray_write_is_not_verified(tmp_path: Path) -> None:
     result = _check(tmp_path, SAVE, "UPDATE patient SET phone = '2' WHERE id = 1")
-    assert not result.verified
+    assert not result.verified and result.status == "refuted"
     assert result.checked["frame"] == "refuted"
     assert any("outside the declared write" in r for r in result.reasons)
 
 
 def test_no_write_is_not_verified(tmp_path: Path) -> None:
-    assert not _check(tmp_path).verified
+    result = _check(tmp_path)
+    assert not result.verified
+    # The store doesn't show the write: it may still land, so reconcile.
+    assert result.status == "unconfirmed"
+
+
+def test_an_unreadable_store_stops_before_the_write(tmp_path: Path) -> None:
+    contract = _contract(tmp_path / "missing" / "app.sqlite")
+    with pytest.raises(BaselineUnreadable):
+        capture(contract, PARAMS)
+
+
+def test_an_unknown_actor_kind_is_refused(tmp_path: Path) -> None:
+    db = _store(tmp_path)
+    contract = _contract(db)
+    before = capture(contract, PARAMS)
+    with pytest.raises(VerifierError):
+        verify_write(contract, before, params=PARAMS, actor=Actor("robot", "x"))
+
+
+def test_the_database_diff_names_what_moved_without_values(tmp_path: Path) -> None:
+    db = _store(tmp_path)
+    read = {"sqlite_database": str(db)}
+    before = capture_database(read, "sqlite")
+    _write(db, SAVE, "UPDATE patient SET phone = '2' WHERE id = 1")
+    moved = diff_database(before, capture_database(read, "sqlite"))
+    assert set(moved) == {"patient"}
+    assert (moved["patient"].added, moved["patient"].changed) == (1, 1)
+    assert moved["patient"].changed_columns == ["phone"]
+    # Undone: back where it was.
+    _write(db, "DELETE FROM patient WHERE id = 2", "UPDATE patient SET phone = '1'")
+    assert diff_database(before, capture_database(read, "sqlite")) == {}
 
 
 def test_a_snapshot_verifies_one_write(tmp_path: Path) -> None:
@@ -113,9 +152,9 @@ def test_a_snapshot_verifies_one_write(tmp_path: Path) -> None:
     contract = _contract(db)
     before = capture(contract, PARAMS)
     _write(db, SAVE)
-    verify_write(contract, before, params=PARAMS, actor="bot")
+    verify_write(contract, before, params=PARAMS, actor=BOT)
     with pytest.raises(VerifierError):
-        verify_write(contract, before, params=PARAMS, actor="bot")
+        verify_write(contract, before, params=PARAMS, actor=BOT)
 
 
 def test_a_snapshot_crosses_a_process_boundary(tmp_path: Path) -> None:
@@ -124,7 +163,7 @@ def test_a_snapshot_crosses_a_process_boundary(tmp_path: Path) -> None:
     path = capture(contract, PARAMS).save(tmp_path / "before.json")
     assert path.stat().st_mode & 0o777 == 0o600
     _write(db, SAVE)
-    result = verify_write(contract, Snapshot.load(path), params=PARAMS, actor="bot")
+    result = verify_write(contract, Snapshot.load(path), params=PARAMS, actor=BOT)
     assert result.verified
 
 
@@ -135,12 +174,18 @@ def test_a_bad_contract_raises(tmp_path: Path) -> None:
 
 def test_the_public_api_is_stable() -> None:
     assert sorted(verifier.__all__) == [
+        "Actor",
+        "BaselineUnreadable",
         "Contract",
+        "DatabaseSnapshot",
         "Snapshot",
         "Source",
+        "TableDiff",
         "VerifierError",
         "WriteResult",
         "capture",
+        "capture_database",
+        "diff_database",
         "verify_write",
     ]
 
@@ -160,12 +205,15 @@ def test_the_public_api_is_stable() -> None:
         ("actor", "KEYWORD_ONLY"),
         ("source", "KEYWORD_ONLY"),
         ("authorization_ref", "KEYWORD_ONLY"),
+        ("write_attempted", "KEYWORD_ONLY"),
     ]
     assert [f for f in WriteResult.__dataclass_fields__] == [
         "verified",
+        "status",
         "outcome",
         "checked",
         "reasons",
         "receipt",
+        "receipt_sha256",
         "evidence",
     ]

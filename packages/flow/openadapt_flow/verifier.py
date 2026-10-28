@@ -32,35 +32,81 @@ from __future__ import annotations
 
 import json
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from openadapt_flow.runtime.effects.db_snapshot import Snapshot as DatabaseSnapshot
+from openadapt_flow.runtime.effects.db_snapshot import TableDiff, diff, take_snapshot
 from openadapt_flow.verify_run import (
+    FRAME_DB_DETAIL,
     VerifyConfig,
     VerifyRunError,
     _write_private,
     capture_baseline,
     load_verify_config,
     parse_verify_config,
+    receipt_sha256,
     verify_run,
 )
 
 __all__ = [
+    "Actor",
+    "BaselineUnreadable",
     "Contract",
+    "DatabaseSnapshot",
     "Snapshot",
     "Source",
+    "TableDiff",
     "VerifierError",
     "WriteResult",
     "capture",
+    "capture_database",
+    "diff_database",
     "verify_write",
 ]
 
+#: The receipt's executor kinds, with the names callers also use.
+_KINDS = {
+    "program": "flow_replay",
+    "flow_replay": "flow_replay",
+    "agent": "agent",
+    "script": "script",
+    "person": "human",
+    "human": "human",
+}
+
 
 class VerifierError(ValueError):
-    """The contract can't be loaded, or the system of record can't be read
-    before the write (there is nothing to verify against)."""
+    """The contract can't be loaded or bound, or a call is misused."""
+
+
+class BaselineUnreadable(VerifierError):
+    """The system of record can't be read before the write. Don't write:
+    nothing could verify it afterwards."""
+
+
+@dataclass(frozen=True)
+class Actor:
+    """Who writes: ``program`` (a compiled replay), ``agent``, ``script`` or
+    ``person``, and an id. Its own changes are never excused as another
+    user's. ``build`` (strings only) is digested into the receipt."""
+
+    kind: str
+    id: str
+    build: Optional[Mapping[str, str]] = None
+
+    def run_record(self) -> dict[str, Any]:
+        kind = _KINDS.get(self.kind)
+        if kind is None:
+            raise VerifierError(
+                f"actor kind {self.kind!r} is not one of " + ", ".join(sorted(_KINDS))
+            )
+        record: dict[str, Any] = {"executor_kind": kind, "executor_id": self.id}
+        if self.build is not None:
+            record["executor_build"] = dict(self.build)
+        return record
 
 
 @dataclass(frozen=True)
@@ -118,6 +164,11 @@ class Source:
 class WriteResult:
     #: True only when every part checked held.
     verified: bool
+    #: ``verified``; ``refuted`` (the store shows a different, extra or
+    #: duplicate write: don't retry blindly); or ``unconfirmed`` (the store
+    #: doesn't show the write, or couldn't be read: it may still land, so
+    #: reconcile before retrying).
+    status: str
     #: ``verified``, ``reconciliation_required``, ``halted_before_effect``,
     #: or another verify-run outcome: never ``verified`` on a failed check.
     outcome: str
@@ -127,8 +178,10 @@ class WriteResult:
     checked: dict[str, str]
     #: Plain sentences, without record values.
     reasons: list[str] = field(default_factory=list)
-    #: The effect receipt and its evidence, as verify-run issues them.
+    #: The effect receipt, its SHA-256, and its evidence, as verify-run
+    #: issues them.
     receipt: dict[str, Any] = field(default_factory=dict)
+    receipt_sha256: str = ""
     evidence: dict[str, Any] = field(default_factory=dict)
 
 
@@ -141,8 +194,32 @@ def capture(contract: Contract, params: Mapping[str, object]) -> Snapshot:
                 contract.config, params, Path(tmp) / "baseline.json"
             )
         except VerifyRunError as exc:
-            raise VerifierError(str(exc)) from exc
+            raise BaselineUnreadable(str(exc)) from exc
+    state = payload.get("state") or {}
+    if not state.get("reachable"):
+        raise BaselineUnreadable("the system of record could not be read")
+    database = contract.config.frame.database if contract.config.frame else None
+    if database is not None and FRAME_DB_DETAIL not in (state.get("detail") or {}):
+        raise BaselineUnreadable("the database could not be read for the frame")
     return Snapshot(dict(payload))
+
+
+def _status(checked: Mapping[str, str], evidence: Mapping[str, Any]) -> str:
+    """``refuted`` when the store shows something other than the declared
+    write; ``unconfirmed`` when it doesn't show the write (or couldn't be
+    read), so the write may still land."""
+
+    if checked.get("frame") == "refuted" or checked.get("source") == "refuted":
+        return "refuted"
+    if checked.get("delta") != "refuted":
+        return "unconfirmed"
+    rows = (evidence.get("readback") or {}).get("effects") or []
+    failed = [
+        r for r in rows if isinstance(r, Mapping) and r.get("verdict") != "CONFIRMED"
+    ]
+    if failed and all(r.get("observed_effect") == "absent" for r in failed):
+        return "unconfirmed"
+    return "refuted"
 
 
 def _reasons(evidence: Mapping[str, Any]) -> list[str]:
@@ -177,9 +254,10 @@ def verify_write(
     before: Snapshot,
     *,
     params: Mapping[str, object],
-    actor: str,
+    actor: Actor,
     source: Optional[Source] = None,
     authorization_ref: str = "verify_write",
+    write_attempted: bool = True,
 ) -> WriteResult:
     """Read the system of record now and judge the write against ``before``.
 
@@ -187,14 +265,17 @@ def verify_write(
         contract: What the write must do (and, with a frame, must not do).
         before: :func:`capture` taken before the write. Single use.
         params: The run's inputs, which the contract's values bind.
-        actor: Who wrote (the bot's user or session id). Its own changes are
-            never excused as another user's.
+        actor: Who wrote. Its own changes are never excused as another
+            user's.
         source: The written values' provenance and documents, to compare the
             saved record with its source.
         authorization_ref: An opaque reference to what authorized the write;
             only its salted digest enters the receipt.
+        write_attempted: False when the write was never tried (a stop before
+            the save), so the receipt says no effect was attempted.
     """
 
+    run_record = actor.run_record()
     if before.used:
         raise VerifierError("this snapshot already verified a write; capture again")
     before.used = True
@@ -203,7 +284,8 @@ def verify_write(
         result = verify_run(
             contract.config,
             params=params,
-            run_record={"executor_kind": "agent", "executor_id": actor},
+            run_record=run_record,
+            write_attempted=write_attempted,
             authorization_ref=authorization_ref,
             baseline_path=path,
             provenance=None if source is None else source.provenance,
@@ -212,11 +294,59 @@ def verify_write(
     receipt = dict(result["receipt"])
     evidence = dict(result["evidence"])
     outcome = str(receipt.get("terminal_outcome") or receipt.get("outcome") or "")
+    checked = dict(receipt.get("checked") or {})
+    verified = outcome == "verified"
+    status = "verified" if verified else _status(checked, evidence)
     return WriteResult(
-        verified=outcome == "verified",
+        verified=verified,
+        status=status,
         outcome=outcome,
-        checked=dict(receipt.get("checked") or {}),
+        checked=checked,
         reasons=_reasons(evidence),
         receipt=receipt,
+        receipt_sha256=receipt_sha256(receipt),
         evidence=evidence,
     )
+
+
+def capture_database(
+    read: Mapping[str, Any],
+    dialect: str,
+    *,
+    allow_tables: Sequence[str] = (),
+    max_rows: int = 20000,
+) -> DatabaseSnapshot:
+    """Snapshot every table of a database, except ``allow_tables``.
+
+    ``read`` is a read-only connection, as in ``frame.database.read``:
+    ``sqlite_database``, or ``sql_driver`` with ``sql_connect_args`` and
+    ``sql_password_env``. It talks to the database over its own driver; no
+    application code is imported. Raises :class:`BaselineUnreadable`.
+    """
+
+    from openadapt_flow.verify_run import _db_connect
+
+    if dialect not in ("sqlite", "mysql"):
+        raise VerifierError(f"dialect {dialect!r} is not sqlite or mysql")
+    try:
+        return take_snapshot(
+            _db_connect(read),
+            dialect,  # type: ignore[arg-type]
+            skip=allow_tables,
+            max_rows=max_rows,
+        )
+    except Exception as exc:  # noqa: BLE001 - any read failure is unreadable
+        raise BaselineUnreadable(f"the database could not be read: {exc}") from exc
+
+
+def diff_database(
+    before: DatabaseSnapshot,
+    after: DatabaseSnapshot,
+    *,
+    allow_tables: Sequence[str] = (),
+) -> dict[str, TableDiff]:
+    """Every table that moved, with counts of rows added, removed and changed
+    and the changed column names, never values. Empty when the database is
+    back where it was (a compensation that undid everything)."""
+
+    return diff(before, after, allow_tables=allow_tables)
