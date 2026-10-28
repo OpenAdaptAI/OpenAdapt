@@ -593,7 +593,10 @@ class _Browser:
                 "could not start Chromium; run `python -m playwright install "
                 f"chromium` and try again ({type(exc).__name__})"
             ) from None
-        self.context = self._browser.new_context(accept_downloads=True)
+        # No service workers: their requests would skip the wire check.
+        self.context = self._browser.new_context(
+            accept_downloads=True, service_workers="block"
+        )
         self.context.route("**/*", self._guard)
         self.page = self.context.new_page()
         self.page.set_default_timeout(_STEP_TIMEOUT_MS)
