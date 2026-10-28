@@ -229,6 +229,7 @@
     "benchmark/results.json",
     "benchmark/rollback/results/mockmed-qualify.json",
     "benchmark/rollback/results/mockmed.json",
+    "benchmark/rollback/results/openemr.json",
     "benchmark/safety_gallery/gallery.html",
     "benchmark/safety_gallery/results.json",
     "benchmark/silent_wrong_action/results.json",
