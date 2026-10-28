@@ -132,9 +132,15 @@ def _pick_match(
             "it in no field"
         )
     steps = {step.id: step for step in workflow.steps}
-    hits = [sid for sid in step_ids if _field_names(steps[sid]) & holders]
+    hits = [
+        sid
+        for sid in step_ids
+        if _field_names(steps[sid]) & holders
+        or (len(step_ids) == 1 and not _field_names(steps[sid]))
+    ]
     if len(hits) == 1:
         return hits[0], ""
+
     if not hits:
         if len(step_ids) == 1:
             return None, (
