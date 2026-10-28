@@ -151,8 +151,9 @@ def cmd_compile(a: argparse.Namespace) -> None:
     first = json.loads((bundle / "api_proposal.json").read_text())
     wf = Workflow.load(bundle)
     # The referral's business rule (confirm a new chart only when OpenEMR's
-    # duplicate check finds no existing patient) is part of the demo compile
-    # (openemr_local_demo.apply_referral_rules), so every bundle carries it.
+    # duplicate check finds no existing patient) is mined by the compiler from
+    # the recorded dialog; openemr_local_demo.apply_referral_rules refuses a
+    # compile without it, so every bundle carries it.
     dialog = [s for s in wf.steps if s.anchor is not None and s.anchor.structural is not None
               and s.anchor.structural.selector == "#create"]
     assert len(dialog) == 1

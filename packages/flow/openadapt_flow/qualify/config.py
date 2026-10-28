@@ -32,7 +32,15 @@ Qualify adds what a campaign needs on top:
   deployment ``surface`` it will run on in production);
 - ``save_step``: the irreversible step, or ``auto`` to detect it;
 - ``inputs``: the test inputs for the cases;
-- ``campaign``: trials per case, cases, and the default certification policy.
+- ``campaign``: trials per case, cases, and the default certification policy;
+- ``business_rules``: cases for a rule the application itself enforces (an
+  existing record the save must not duplicate, for example). Each names a
+  ``seed`` step that creates the conflicting record after the reset, the
+  run ``params`` that trigger the rule, the required outcome
+  (``HALTED_BEFORE_EFFECT``) and the read-back (``no_mutation``: no new or
+  changed record). Certification runs each one on every trial, on the
+  certified bundle, and is refused unless all pass. Their case ids are
+  ``rule-<id>``.
 
 ``${NAME}`` in any string is replaced by the environment variable ``NAME``
 when the file is loaded (``${NAME:-default}`` gives a default); an unset
@@ -115,8 +123,8 @@ class ResetConfig(BaseModel):
     @model_validator(mode="after")
     def _one(self) -> "ResetConfig":
         if sum(x is not None for x in (self.command, self.http, self.python)) != 1:
-            raise ValueError("app.reset needs exactly one of command, http, python")
-        _check_hook(self.python, "app.reset.python")
+            raise ValueError("needs exactly one of command, http, python")
+        _check_hook(self.python, "python")
         return self
 
 
@@ -260,6 +268,41 @@ class InputsConfig(BaseModel):
         return self
 
 
+RULE_CASE_PREFIX = "rule-"
+
+
+class BusinessRuleCase(BaseModel):
+    """A rule the application enforces, which the workflow must not break.
+
+    The fault cases inject faults into the run. This case injects nothing:
+    after the reset, ``seed`` creates a record the save would conflict with
+    (for a registration, an existing record for the same person), and the run
+    uses ``params`` that trigger the application's rule. The workflow must
+    stop before the save (``HALTED_BEFORE_EFFECT``), and the read-back must
+    show no new or changed record (``no_mutation``). A bundle that clicks
+    through the application's warning saves a record and fails the case.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The case is ``rule-<id>``.
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,62}$")
+    description: str = Field(min_length=1, max_length=512)
+    #: Creates the conflicting record, after the reset and before the run.
+    seed: ResetConfig
+    #: Run inputs that trigger the rule. Values given here replace the
+    #: campaign's inputs; the rest are the campaign's.
+    params: dict[str, str] = Field(min_length=1)
+    #: The only outcome a rule case accepts: halted before the save.
+    expect: Literal["HALTED_BEFORE_EFFECT"]
+    #: The only read-back a rule case accepts: no new or changed record.
+    readback: Literal["no_mutation"] = "no_mutation"
+
+    @property
+    def case_id(self) -> str:
+        return f"{RULE_CASE_PREFIX}{self.id}"
+
+
 class CampaignConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -272,7 +315,12 @@ class CampaignConfig(BaseModel):
     @field_validator("cases")
     @classmethod
     def _cases(cls, value: list[str]) -> list[str]:
-        unknown = [case for case in value if case not in CASE_IDS]
+        # ``rule-<id>`` names a business-rule case; VerifyConfig checks it.
+        unknown = [
+            case
+            for case in value
+            if case not in CASE_IDS and not case.startswith(RULE_CASE_PREFIX)
+        ]
         if unknown:
             raise ValueError(f"unknown case(s) {unknown}; known: {list(CASE_IDS)}")
         if not value:
@@ -301,6 +349,7 @@ class VerifyConfig(BaseModel):
     save_step: str = "auto"
     inputs: InputsConfig = Field(default_factory=InputsConfig)
     campaign: CampaignConfig = Field(default_factory=CampaignConfig)
+    business_rules: list[BusinessRuleCase] = Field(default_factory=list)
     #: Where relative paths in the file resolve (set by the loader).
     base_dir: Optional[str] = Field(default=None, exclude=True)
 
@@ -374,6 +423,25 @@ class VerifyConfig(BaseModel):
         ):
             raise ValueError("record.duplicate_key must be one of record.fields")
         return self
+
+    @model_validator(mode="after")
+    def _business_rules(self) -> "VerifyConfig":
+        ids = [rule.case_id for rule in self.business_rules]
+        if len(ids) != len(set(ids)):
+            raise ValueError("business_rules ids must be unique")
+        unknown = [
+            case
+            for case in self.campaign.cases
+            if case.startswith(RULE_CASE_PREFIX) and case not in ids
+        ]
+        if unknown:
+            raise ValueError(f"campaign.cases names no business rule: {unknown}")
+        return self
+
+    def all_case_ids(self) -> list[str]:
+        """The six cases, then every business-rule case."""
+
+        return [*CASE_IDS, *(rule.case_id for rule in self.business_rules)]
 
     def resolve_path(self, value: str) -> Path:
         path = Path(value).expanduser()
@@ -468,7 +536,9 @@ def verify_config_schema() -> dict[str, Any]:
 
 __all__ = [
     "CASE_IDS",
+    "RULE_CASE_PREFIX",
     "AppConfig",
+    "BusinessRuleCase",
     "CampaignConfig",
     "InputsConfig",
     "QualifyConfigError",

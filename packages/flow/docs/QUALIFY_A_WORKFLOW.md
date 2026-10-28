@@ -150,6 +150,35 @@ What each part does:
   not reset do not collide.
 - **campaign**: the id written into the report, trials per case, the cases
   (all six by default) and the policy `--certify` uses when given no name.
+- **business_rules** (optional): rules the application itself enforces, which
+  the workflow must not click through. The six cases inject faults; a
+  business-rule case injects nothing. After the reset, `seed` (one of
+  `command`, `http` or `python`, like `reset`) creates the record the rule
+  protects, and the run uses `params` that trigger the rule (they replace the
+  matching inputs). The run must stop before the save (`expect:
+  HALTED_BEFORE_EFFECT`, the only value) and the read-back must show no new
+  or changed record (`readback: no_mutation`, the only value). Each rule is
+  case `rule-<id>`:
+
+  ```yaml
+  business_rules:
+    - id: existing-duplicate
+      description: An existing chart for the same person; the app's duplicate
+        check lists it, and the workflow stops before saving.
+      seed:
+        python: my_app.hooks:seed_existing_patient
+      params: {fname: Rosa, lname: Delgado, DOB: "1958-03-22"}
+      expect: HALTED_BEFORE_EFFECT
+      readback: no_mutation
+  ```
+
+  The rules run only with `--certify`, after the six cases pass, on the
+  certified bundle through the ordinary run gate, `trials` times each. One
+  failed trial withdraws the certification and fails `qualify`. Their trials
+  are in `result.json` `cases` (`fault_class: business_rule`), which the
+  admission envelope binds. They are not signed case results in the
+  qualification project: a certification made outside `qualify` does not
+  run them.
 
 `${NAME}` and `${NAME:-default}` read environment variables. A missing
 variable without a default is an error.

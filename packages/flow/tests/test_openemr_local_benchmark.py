@@ -683,10 +683,10 @@ def test_iframe_confirm_locator_and_explicit_save_event_marker(tmp_path: Path) -
     assert no_match.text == "No matches were found."
 
 
-def test_referral_rules_guard_duplicates_and_drop_the_mined_tab_strip() -> None:
-    """The duplicate rule is on #create, and the save step checks the chart
-    heading instead of the tab strip the recorder mined (the strip changes
-    when OpenEMR opens the new patient's tab)."""
+def test_referral_rules_keep_the_mined_duplicate_guard_and_drop_the_tab_strip() -> None:
+    """The duplicate rule on #create is the compiler's mined check, and the save
+    step checks the chart heading instead of the tab strip the recorder mined
+    (the strip changes when OpenEMR opens the new patient's tab)."""
 
     from types import SimpleNamespace
 
@@ -695,17 +695,42 @@ def test_referral_rules_guard_duplicates_and_drop_the_mined_tab_strip() -> None:
     region = Postcondition(
         kind=PostconditionKind.REGION_STABLE, region=(0, 255, 1280, 545)
     )
+    stray = Postcondition(kind=PostconditionKind.TEXT_PRESENT, text="Additional Add")
+    mined = Postcondition(
+        kind=PostconditionKind.TEXT_PRESENT,
+        text="No matches were found.",
+        timeout_s=10.0,
+    )
     tabs = Postcondition(
         kind=PostconditionKind.TEXT_PRESENT, text="CalendarxMessageCenterx"
     )
-    open_step = SimpleNamespace(expect=[region])
+    open_step = SimpleNamespace(expect=[region, stray, mined])
     save_step = SimpleNamespace(expect=[region, tabs])
 
     apply_referral_rules(open_step, save_step)
 
     assert open_step.expect == _duplicate_dialog_postconditions()
+    assert open_step.expect[1] is mined
     assert save_step.expect == [region, _saved_chart_postcondition()]
     assert _saved_chart_postcondition().text == "Medical Record Dashboard"
+
+
+def test_referral_rules_refuse_a_compile_without_the_mined_guard() -> None:
+    """The guard is not added by hand: a bundle whose compile did not mine it
+    is refused."""
+
+    from types import SimpleNamespace
+
+    from openadapt_flow.ir import Postcondition, PostconditionKind
+
+    region = Postcondition(
+        kind=PostconditionKind.REGION_STABLE, region=(0, 255, 1280, 545)
+    )
+    open_step = SimpleNamespace(expect=[region])
+    save_step = SimpleNamespace(expect=[region])
+    with pytest.raises(FixtureError, match="did not mine"):
+        apply_referral_rules(open_step, save_step)
+    assert open_step.expect == [region]
 
 
 def test_recording_opens_real_contact_accordion_before_address_fields() -> None:
@@ -1400,7 +1425,15 @@ def test_compiled_confirm_create_is_the_declared_consequential_write(
     while #create, which only opens the duplicate check, stayed irreversible.
     """
 
-    from openadapt_flow.ir import ActionKind, Anchor, ParamKind, ParamSpec, Step
+    from openadapt_flow.ir import (
+        ActionKind,
+        Anchor,
+        ParamKind,
+        ParamSpec,
+        Postcondition,
+        PostconditionKind,
+        Step,
+    )
     from openadapt_flow.ir import Workflow as FlowWorkflow
     from scripts.openemr_local_demo import compile_recording as compile_openemr
 
@@ -1449,14 +1482,22 @@ def test_compiled_confirm_create_is_the_declared_consequential_write(
             )
             for index, param in enumerate(params)
         ]
-        steps.append(
-            click(
-                f"step_{len(params):03d}",
-                "#create",
-                "Create New Patient",
-                "irreversible",
-            )
+        opener = click(
+            f"step_{len(params):03d}",
+            "#create",
+            "Create New Patient",
+            "irreversible",
         )
+        # What the compiler mines from the duplicate dialog
+        # (compiler.empty_result_guard; tests/test_empty_result_guard.py).
+        opener.expect = [
+            Postcondition(
+                kind=PostconditionKind.TEXT_PRESENT,
+                text="No matches were found.",
+                timeout_s=10.0,
+            )
+        ]
+        steps.append(opener)
         # What the compiler infers for the confirm click on its own.
         steps.append(
             click(

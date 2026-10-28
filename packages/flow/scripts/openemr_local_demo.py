@@ -906,7 +906,8 @@ def _duplicate_dialog_postconditions() -> list[Postcondition]:
     The second check is the referral's business rule: confirm a new chart only
     when the duplicate check finds no match. Without it, the program confirms
     a possible duplicate (the dialog shows "Confirm Create New Patient" either
-    way).
+    way). The compiler mines it from the recording
+    (``compiler.empty_result_guard``); this is what it must mine.
     """
 
     return [
@@ -930,15 +931,25 @@ def _saved_chart_postcondition() -> Postcondition:
 def apply_referral_rules(open_step: Any, save_step: Any) -> None:
     """The referral's checks on #create and #confirmCreate, for every compile.
 
-    ``open_step`` (#create) must show the duplicate-check dialog with no match
-    (generic mining emits a flaky region check for this full-frame change).
+    ``open_step`` (#create) must show the duplicate-check dialog with no match.
+    The no-match check is the compiler's: it mines the dialog's "No matches
+    were found." from the recording, and a compile that did not is refused
+    here rather than patched. The dialog's title check is added, and the
+    generic region check mined for this full-frame change (flaky) is dropped.
     On ``save_step`` (#confirmCreate) the text the recorder mined from the
     post-save frame is the tab strip, which changes when OpenEMR opens the new
     patient's tab; it is replaced by the chart heading every saved patient
     gets. The save itself is confirmed by its record check (effects).
     """
 
-    open_step.expect = _duplicate_dialog_postconditions()
+    title, no_match = _duplicate_dialog_postconditions()
+    mined = [p for p in open_step.expect if p == no_match]
+    if not mined:
+        raise FixtureError(
+            "the compiler did not mine the duplicate dialog's "
+            f"{NO_MATCH_TEXT!r} check on #create; refusing to add it by hand"
+        )
+    open_step.expect = [title, mined[0]]
     save_step.expect = [
         p for p in save_step.expect if p.kind is not PostconditionKind.TEXT_PRESENT
     ] + [_saved_chart_postcondition()]

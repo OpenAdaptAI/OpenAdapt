@@ -15,7 +15,12 @@ import json
 import subprocess
 from typing import Any, Callable, Mapping, Optional
 
-from openadapt_flow.qualify.config import AppConfig, QualifyConfigError, VerifyConfig
+from openadapt_flow.qualify.config import (
+    AppConfig,
+    QualifyConfigError,
+    ResetConfig,
+    VerifyConfig,
+)
 
 SessionOpener = Callable[[], tuple[Any, Callable[[], None]]]
 
@@ -92,23 +97,33 @@ def reset_runner(config: VerifyConfig) -> Optional[Callable[[], None]]:
     reset = config.app.reset
     if reset is None:
         return None
-    if reset.python:
-        return load_hook(reset.python)
-    if reset.command:
-        command = reset.command
+    return step_runner(reset, "app.reset")
+
+
+def step_runner(step: ResetConfig, where: str) -> Callable[[], None]:
+    """A callable for one setup step: a command, one HTTP request, or a hook.
+
+    ``where`` names the step in errors (``app.reset``, a business rule's
+    ``seed``).
+    """
+
+    if step.python:
+        return load_hook(step.python)
+    if step.command:
+        command = step.command
 
         def run_command() -> None:
             done = subprocess.run(
-                command, shell=True, timeout=reset.timeout_s, capture_output=True
+                command, shell=True, timeout=step.timeout_s, capture_output=True
             )
             if done.returncode != 0:
                 raise RuntimeError(
-                    f"app.reset command exited {done.returncode}: "
+                    f"{where} command exited {done.returncode}: "
                     f"{done.stderr.decode(errors='replace')[-400:]}"
                 )
 
         return run_command
-    http = reset.http
+    http = step.http
     assert http is not None
 
     def run_http() -> None:
@@ -120,10 +135,10 @@ def reset_runner(config: VerifyConfig) -> Optional[Callable[[], None]]:
             http.url,
             content=body,
             headers={"Content-Type": "application/json"} if body is not None else None,
-            timeout=reset.timeout_s,
+            timeout=step.timeout_s,
         )
         if response.status_code >= 300:
-            raise RuntimeError(f"app.reset HTTP {response.status_code}")
+            raise RuntimeError(f"{where} HTTP {response.status_code}")
 
     return run_http
 
@@ -167,5 +182,6 @@ __all__ = [
     "playwright_session",
     "reset_runner",
     "session_opener",
+    "step_runner",
     "verifier_factory",
 ]
