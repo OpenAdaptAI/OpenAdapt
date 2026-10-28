@@ -74,3 +74,4 @@ deploy/.env
 # package sources and the root llms.txt.
 !/packages/*/src/
 !/llms.txt
+/.smoke/
