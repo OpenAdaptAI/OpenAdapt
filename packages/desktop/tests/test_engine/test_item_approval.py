@@ -181,6 +181,9 @@ def test_run_it_waits_for_a_person_and_saves_after_approval(task) -> None:
 
     result = _run(disp)
 
+    # Flow gets the staged config's digest, so the bytes it reads are pinned.
+    digest = flow.run_kwargs.pop("config_sha256")
+    assert len(digest) == 64 and int(digest, 16) >= 0
     assert flow.run_kwargs == {"approval_mode": "each_item", "approval_wait_s": APPROVAL_WAIT_S}
     (shown,) = flow.seen
     assert shown["waiting"] is True
