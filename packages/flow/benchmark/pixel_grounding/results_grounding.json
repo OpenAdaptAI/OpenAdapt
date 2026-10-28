@@ -1,6 +1,6 @@
 {
-  "commit": "b7dccc977692e0d51c498797e0be93cfc0d7bff6",
-  "generated_at": "2026-10-28T19:02:32.444124+00:00",
+  "commit": "104d24df28289961d0ea58f79dd975b539507ab2",
+  "generated_at": "2026-10-28T23:15:52.170152+00:00",
   "grounder": {
     "accept_score": 0.78,
     "input_side": 112,
@@ -12,9 +12,9 @@
     "source": "facebook/dinov2-small"
   },
   "latency_ms": {
-    "max": 534.3,
-    "median": 130.4,
-    "p90": 242.2
+    "max": 859.4,
+    "median": 164.6,
+    "p90": 298.4
   },
   "platform": "Darwin arm64 py3.12.7",
   "rows": [
@@ -89,12 +89,12 @@
         800
       ],
       "lookalikes": 11,
-      "ms": 209.3,
+      "ms": 258.2,
       "rung_outcome": "abstain",
       "step_id": "step_000",
       "target": "edit-2",
       "template_found": true,
-      "template_ms": 77.7,
+      "template_ms": 78.3,
       "template_wrong": false,
       "text_label": "MRN 36428",
       "true_found": true,
@@ -117,12 +117,12 @@
         800
       ],
       "lookalikes": 6,
-      "ms": 112.5,
+      "ms": 119.2,
       "rung_outcome": "abstain",
       "step_id": "step_001",
       "target": "visit",
       "template_found": true,
-      "template_ms": 85.3,
+      "template_ms": 88.7,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -163,12 +163,12 @@
         800
       ],
       "lookalikes": 7,
-      "ms": 108.5,
+      "ms": 111.1,
       "rung_outcome": "abstain",
       "step_id": "step_003",
       "target": "note",
       "template_found": true,
-      "template_ms": 95.2,
+      "template_ms": 93.7,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -184,12 +184,12 @@
         800
       ],
       "lookalikes": 1,
-      "ms": 110.0,
+      "ms": 122.3,
       "rung_outcome": "target",
       "step_id": "step_005",
       "target": "tb-attach",
       "template_found": true,
-      "template_ms": 89.7,
+      "template_ms": 88.6,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -205,12 +205,12 @@
         800
       ],
       "lookalikes": 1,
-      "ms": 112.8,
+      "ms": 121.4,
       "rung_outcome": "target",
       "step_id": "step_006",
       "target": "save",
       "template_found": true,
-      "template_ms": 87.6,
+      "template_ms": 89.2,
       "template_wrong": false,
       "text_label": "\u65e5 \u65e5",
       "true_found": true,
@@ -218,7 +218,7 @@
     },
     {
       "axis": "display_scale",
-      "best_other_score": 0.941,
+      "best_other_score": 0.938,
       "condition": "scale_125",
       "false_found": [
         [
@@ -230,6 +230,12 @@
         [
           288,
           389,
+          121,
+          35
+        ],
+        [
+          288,
+          496,
           121,
           35
         ],
@@ -247,9 +253,15 @@
         ],
         [
           288,
-          496,
+          550,
           121,
           35
+        ],
+        [
+          284,
+          172,
+          136,
+          39
         ],
         [
           116,
@@ -262,27 +274,33 @@
           426,
           87,
           25
+        ],
+        [
+          25,
+          284,
+          107,
+          31
         ]
       ],
       "frame": [
         1600,
         1000
       ],
-      "lookalikes": 8,
-      "ms": 273.6,
+      "lookalikes": 11,
+      "ms": 375.3,
       "rung_outcome": "abstain",
       "step_id": "step_000",
       "target": "edit-2",
       "template_found": false,
-      "template_ms": 109.8,
+      "template_ms": 109.7,
       "template_wrong": false,
       "text_label": "MRN 36428",
       "true_found": true,
-      "true_score": 0.955
+      "true_score": 0.95
     },
     {
       "axis": "display_scale",
-      "best_other_score": 0.946,
+      "best_other_score": 0.932,
       "condition": "scale_125",
       "false_found": [
         [
@@ -297,16 +315,16 @@
         1000
       ],
       "lookalikes": 4,
-      "ms": 137.4,
+      "ms": 164.6,
       "rung_outcome": "abstain",
       "step_id": "step_001",
       "target": "visit",
       "template_found": false,
-      "template_ms": 115.1,
+      "template_ms": 117.5,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
-      "true_score": 0.952
+      "true_score": 0.946
     },
     {
       "axis": "display_scale",
@@ -331,12 +349,12 @@
         1000
       ],
       "lookalikes": 4,
-      "ms": 119.1,
+      "ms": 126.8,
       "rung_outcome": "abstain",
       "step_id": "step_003",
       "target": "note",
       "template_found": false,
-      "template_ms": 145.5,
+      "template_ms": 174.6,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -352,12 +370,12 @@
         1000
       ],
       "lookalikes": 1,
-      "ms": 159.4,
+      "ms": 199.8,
       "rung_outcome": "target",
       "step_id": "step_005",
       "target": "tb-attach",
       "template_found": false,
-      "template_ms": 130.4,
+      "template_ms": 128.0,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -373,12 +391,12 @@
         1000
       ],
       "lookalikes": 1,
-      "ms": 151.0,
+      "ms": 199.9,
       "rung_outcome": "target",
       "step_id": "step_006",
       "target": "save",
       "template_found": false,
-      "template_ms": 124.0,
+      "template_ms": 142.6,
       "template_wrong": false,
       "text_label": "\u65e5 \u65e5",
       "true_found": true,
@@ -386,7 +404,7 @@
     },
     {
       "axis": "display_scale",
-      "best_other_score": 0.945,
+      "best_other_score": 0.948,
       "condition": "scale_150",
       "false_found": [
         [
@@ -415,13 +433,13 @@
         ],
         [
           346,
-          595,
+          273,
           146,
           42
         ],
         [
           346,
-          273,
+          595,
           146,
           42
         ],
@@ -430,6 +448,18 @@
           174,
           170,
           49
+        ],
+        [
+          139,
+          105,
+          121,
+          35
+        ],
+        [
+          81,
+          344,
+          107,
+          31
         ],
         [
           1124,
@@ -442,17 +472,17 @@
         1920,
         1200
       ],
-      "lookalikes": 9,
-      "ms": 322.0,
+      "lookalikes": 11,
+      "ms": 470.5,
       "rung_outcome": "abstain",
       "step_id": "step_000",
       "target": "edit-2",
       "template_found": false,
-      "template_ms": 161.9,
+      "template_ms": 166.8,
       "template_wrong": false,
       "text_label": "MRN 36428",
       "true_found": true,
-      "true_score": 0.931
+      "true_score": 0.936
     },
     {
       "axis": "display_scale",
@@ -525,12 +555,12 @@
         1200
       ],
       "lookalikes": 10,
-      "ms": 147.7,
+      "ms": 192.5,
       "rung_outcome": "abstain",
       "step_id": "step_001",
       "target": "visit",
       "template_found": false,
-      "template_ms": 169.4,
+      "template_ms": 177.7,
       "template_wrong": false,
       "text_label": null,
       "true_found": false,
@@ -538,7 +568,7 @@
     },
     {
       "axis": "display_scale",
-      "best_other_score": 0.913,
+      "best_other_score": 0.908,
       "condition": "scale_150",
       "false_found": [
         [
@@ -576,19 +606,49 @@
           82,
           192,
           77
+        ],
+        [
+          1205,
+          82,
+          216,
+          86
+        ],
+        [
+          1027,
+          696,
+          336,
+          134
+        ],
+        [
+          1200,
+          696,
+          336,
+          134
+        ],
+        [
+          1373,
+          696,
+          336,
+          134
+        ],
+        [
+          1114,
+          614,
+          264,
+          106
         ]
       ],
       "frame": [
         1920,
         1200
       ],
-      "lookalikes": 6,
-      "ms": 121.9,
+      "lookalikes": 11,
+      "ms": 145.6,
       "rung_outcome": "abstain",
       "step_id": "step_003",
       "target": "note",
       "template_found": false,
-      "template_ms": 222.5,
+      "template_ms": 226.1,
       "template_wrong": false,
       "text_label": null,
       "true_found": false,
@@ -604,12 +664,12 @@
         1200
       ],
       "lookalikes": 1,
-      "ms": 154.4,
+      "ms": 180.7,
       "rung_outcome": "target",
       "step_id": "step_005",
       "target": "tb-attach",
       "template_found": false,
-      "template_ms": 168.1,
+      "template_ms": 170.0,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -625,12 +685,12 @@
         1200
       ],
       "lookalikes": 1,
-      "ms": 155.8,
+      "ms": 295.9,
       "rung_outcome": "target",
       "step_id": "step_006",
       "target": "save",
       "template_found": false,
-      "template_ms": 166.0,
+      "template_ms": 174.1,
       "template_wrong": false,
       "text_label": "\u65e5 \u65e5",
       "true_found": true,
@@ -638,7 +698,7 @@
     },
     {
       "axis": "display_scale",
-      "best_other_score": 0.942,
+      "best_other_score": 0.94,
       "condition": "scale_200",
       "false_found": [
         [
@@ -670,14 +730,32 @@
           881,
           194,
           56
+        ],
+        [
+          1498,
+          246,
+          136,
+          39
+        ],
+        [
+          108,
+          459,
+          146,
+          42
+        ],
+        [
+          105,
+          804,
+          146,
+          42
         ]
       ],
       "frame": [
         2560,
         1600
       ],
-      "lookalikes": 6,
-      "ms": 534.3,
+      "lookalikes": 9,
+      "ms": 859.4,
       "rung_outcome": "abstain",
       "step_id": "step_000",
       "target": "edit-2",
@@ -686,7 +764,7 @@
       "template_wrong": false,
       "text_label": "MRN 36428",
       "true_found": true,
-      "true_score": 0.94
+      "true_score": 0.945
     },
     {
       "axis": "display_scale",
@@ -735,12 +813,12 @@
         1600
       ],
       "lookalikes": 10,
-      "ms": 257.2,
+      "ms": 263.5,
       "rung_outcome": "abstain",
       "step_id": "step_001",
       "target": "visit",
       "template_found": false,
-      "template_ms": 309.4,
+      "template_ms": 311.5,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -748,24 +826,55 @@
     },
     {
       "axis": "display_scale",
-      "best_other_score": 0.686,
+      "best_other_score": 0.911,
       "condition": "scale_200",
-      "false_found": [],
+      "false_found": [
+        [
+          1085,
+          115,
+          216,
+          86
+        ],
+        [
+          2294,
+          115,
+          216,
+          86
+        ],
+        [
+          341,
+          115,
+          216,
+          86
+        ],
+        [
+          451,
+          115,
+          216,
+          86
+        ],
+        [
+          221,
+          346,
+          240,
+          96
+        ]
+      ],
       "frame": [
         2560,
         1600
       ],
-      "lookalikes": 3,
-      "ms": 166.2,
+      "lookalikes": 8,
+      "ms": 188.3,
       "rung_outcome": "abstain",
       "step_id": "step_003",
       "target": "note",
       "template_found": false,
-      "template_ms": 390.0,
+      "template_ms": 372.4,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
-      "true_score": 0.975
+      "true_score": 0.937
     },
     {
       "axis": "display_scale",
@@ -777,12 +886,12 @@
         1600
       ],
       "lookalikes": 1,
-      "ms": 210.7,
+      "ms": 274.5,
       "rung_outcome": "target",
       "step_id": "step_005",
       "target": "tb-attach",
       "template_found": false,
-      "template_ms": 310.3,
+      "template_ms": 322.6,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -798,12 +907,12 @@
         1600
       ],
       "lookalikes": 1,
-      "ms": 210.8,
+      "ms": 261.5,
       "rung_outcome": "target",
       "step_id": "step_006",
       "target": "save",
       "template_found": false,
-      "template_ms": 311.9,
+      "template_ms": 312.2,
       "template_wrong": false,
       "text_label": "\u65e5 \u65e5",
       "true_found": true,
@@ -886,12 +995,12 @@
         800
       ],
       "lookalikes": 12,
-      "ms": 206.1,
+      "ms": 281.0,
       "rung_outcome": "abstain",
       "step_id": "step_000",
       "target": "edit-2",
       "template_found": false,
-      "template_ms": 76.0,
+      "template_ms": 79.9,
       "template_wrong": false,
       "text_label": "MRN 36428",
       "true_found": true,
@@ -907,12 +1016,12 @@
         800
       ],
       "lookalikes": 4,
-      "ms": 112.8,
+      "ms": 125.5,
       "rung_outcome": "abstain",
       "step_id": "step_001",
       "target": "visit",
       "template_found": false,
-      "template_ms": 92.0,
+      "template_ms": 87.2,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -928,12 +1037,12 @@
         800
       ],
       "lookalikes": 2,
-      "ms": 112.5,
+      "ms": 110.9,
       "rung_outcome": "halt:LookAlikeTargetsRefused",
       "step_id": "step_003",
       "target": "note",
       "template_found": false,
-      "template_ms": 97.0,
+      "template_ms": 94.7,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -949,12 +1058,12 @@
         800
       ],
       "lookalikes": 1,
-      "ms": 113.1,
+      "ms": 129.8,
       "rung_outcome": "target",
       "step_id": "step_005",
       "target": "tb-attach",
       "template_found": false,
-      "template_ms": 99.6,
+      "template_ms": 89.3,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -970,12 +1079,12 @@
         800
       ],
       "lookalikes": 1,
-      "ms": 163.6,
+      "ms": 126.8,
       "rung_outcome": "target",
       "step_id": "step_006",
       "target": "save",
       "template_found": false,
-      "template_ms": 95.5,
+      "template_ms": 89.4,
       "template_wrong": false,
       "text_label": "\u65e5 \u65e5",
       "true_found": true,
@@ -1052,12 +1161,12 @@
         800
       ],
       "lookalikes": 11,
-      "ms": 291.6,
+      "ms": 302.2,
       "rung_outcome": "abstain",
       "step_id": "step_000",
       "target": "edit-2",
       "template_found": false,
-      "template_ms": 76.0,
+      "template_ms": 76.4,
       "template_wrong": false,
       "text_label": "MRN 36428",
       "true_found": true,
@@ -1086,12 +1195,12 @@
         800
       ],
       "lookalikes": 4,
-      "ms": 110.4,
+      "ms": 122.1,
       "rung_outcome": "abstain",
       "step_id": "step_001",
       "target": "visit",
       "template_found": false,
-      "template_ms": 87.1,
+      "template_ms": 88.2,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -1132,12 +1241,12 @@
         800
       ],
       "lookalikes": 5,
-      "ms": 105.7,
+      "ms": 107.8,
       "rung_outcome": "abstain",
       "step_id": "step_003",
       "target": "note",
       "template_found": false,
-      "template_ms": 91.8,
+      "template_ms": 94.7,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -1153,12 +1262,12 @@
         800
       ],
       "lookalikes": 1,
-      "ms": 152.6,
+      "ms": 122.8,
       "rung_outcome": "target",
       "step_id": "step_005",
       "target": "tb-attach",
       "template_found": false,
-      "template_ms": 86.3,
+      "template_ms": 94.7,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -1174,12 +1283,12 @@
         800
       ],
       "lookalikes": 1,
-      "ms": 109.7,
+      "ms": 128.3,
       "rung_outcome": "target",
       "step_id": "step_006",
       "target": "save",
       "template_found": false,
-      "template_ms": 88.2,
+      "template_ms": 147.8,
       "template_wrong": false,
       "text_label": "\u65e5 \u65e5",
       "true_found": true,
@@ -1262,12 +1371,12 @@
         800
       ],
       "lookalikes": 12,
-      "ms": 213.9,
+      "ms": 459.5,
       "rung_outcome": "abstain",
       "step_id": "step_000",
       "target": "edit-2",
       "template_found": false,
-      "template_ms": 76.2,
+      "template_ms": 138.6,
       "template_wrong": false,
       "text_label": "MRN 36428",
       "true_found": true,
@@ -1320,12 +1429,12 @@
         800
       ],
       "lookalikes": 6,
-      "ms": 117.7,
+      "ms": 182.3,
       "rung_outcome": "abstain",
       "step_id": "step_001",
       "target": "visit",
       "template_found": false,
-      "template_ms": 88.0,
+      "template_ms": 107.2,
       "template_wrong": false,
       "text_label": null,
       "true_found": false,
@@ -1378,12 +1487,12 @@
         800
       ],
       "lookalikes": 6,
-      "ms": 103.7,
+      "ms": 194.0,
       "rung_outcome": "abstain",
       "step_id": "step_003",
       "target": "note",
       "template_found": false,
-      "template_ms": 92.3,
+      "template_ms": 121.0,
       "template_wrong": false,
       "text_label": null,
       "true_found": false,
@@ -1399,12 +1508,12 @@
         800
       ],
       "lookalikes": 1,
-      "ms": 110.6,
+      "ms": 175.2,
       "rung_outcome": "target",
       "step_id": "step_005",
       "target": "tb-attach",
       "template_found": false,
-      "template_ms": 88.8,
+      "template_ms": 87.0,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -1420,12 +1529,12 @@
         800
       ],
       "lookalikes": 1,
-      "ms": 114.5,
+      "ms": 121.4,
       "rung_outcome": "target",
       "step_id": "step_006",
       "target": "save",
       "template_found": false,
-      "template_ms": 86.6,
+      "template_ms": 89.8,
       "template_wrong": false,
       "text_label": "\u65e5 \u65e5",
       "true_found": true,
@@ -1514,12 +1623,12 @@
         800
       ],
       "lookalikes": 12,
-      "ms": 205.8,
+      "ms": 271.8,
       "rung_outcome": "abstain",
       "step_id": "step_000",
       "target": "edit-2",
       "template_found": false,
-      "template_ms": 77.5,
+      "template_ms": 78.6,
       "template_wrong": false,
       "text_label": "MRN 36428",
       "true_found": false,
@@ -1548,12 +1657,12 @@
         800
       ],
       "lookalikes": 5,
-      "ms": 113.6,
+      "ms": 126.2,
       "rung_outcome": "abstain",
       "step_id": "step_001",
       "target": "visit",
       "template_found": false,
-      "template_ms": 85.5,
+      "template_ms": 135.1,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -1594,12 +1703,12 @@
         800
       ],
       "lookalikes": 5,
-      "ms": 102.2,
+      "ms": 137.9,
       "rung_outcome": "abstain",
       "step_id": "step_003",
       "target": "note",
       "template_found": true,
-      "template_ms": 99.2,
+      "template_ms": 103.8,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -1622,12 +1731,12 @@
         800
       ],
       "lookalikes": 2,
-      "ms": 113.5,
+      "ms": 132.4,
       "rung_outcome": "abstain",
       "step_id": "step_005",
       "target": "tb-attach",
       "template_found": true,
-      "template_ms": 91.4,
+      "template_ms": 97.2,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -1643,12 +1752,12 @@
         800
       ],
       "lookalikes": 1,
-      "ms": 117.0,
+      "ms": 188.0,
       "rung_outcome": "target",
       "step_id": "step_006",
       "target": "save",
       "template_found": true,
-      "template_ms": 88.2,
+      "template_ms": 93.1,
       "template_wrong": false,
       "text_label": "\u65e5 \u65e5",
       "true_found": true,
@@ -1725,12 +1834,12 @@
         800
       ],
       "lookalikes": 10,
-      "ms": 242.2,
+      "ms": 298.4,
       "rung_outcome": "abstain",
       "step_id": "step_000",
       "target": "edit-2",
       "template_found": false,
-      "template_ms": 77.9,
+      "template_ms": 81.5,
       "template_wrong": false,
       "text_label": "MRN 36428",
       "true_found": false,
@@ -1746,12 +1855,12 @@
         800
       ],
       "lookalikes": 4,
-      "ms": 111.4,
+      "ms": 137.2,
       "rung_outcome": "abstain",
       "step_id": "step_001",
       "target": "visit",
       "template_found": false,
-      "template_ms": 86.3,
+      "template_ms": 86.6,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -1780,12 +1889,12 @@
         800
       ],
       "lookalikes": 5,
-      "ms": 104.4,
+      "ms": 120.3,
       "rung_outcome": "abstain",
       "step_id": "step_003",
       "target": "note",
       "template_found": true,
-      "template_ms": 93.5,
+      "template_ms": 92.6,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -1808,12 +1917,12 @@
         800
       ],
       "lookalikes": 2,
-      "ms": 118.7,
+      "ms": 142.3,
       "rung_outcome": "abstain",
       "step_id": "step_005",
       "target": "tb-attach",
       "template_found": true,
-      "template_ms": 86.3,
+      "template_ms": 87.5,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -1829,12 +1938,12 @@
         800
       ],
       "lookalikes": 1,
-      "ms": 113.8,
+      "ms": 122.3,
       "rung_outcome": "target",
       "step_id": "step_006",
       "target": "save",
       "template_found": true,
-      "template_ms": 88.2,
+      "template_ms": 96.0,
       "template_wrong": false,
       "text_label": "\u65e5 \u65e5",
       "true_found": true,
@@ -1899,12 +2008,12 @@
         800
       ],
       "lookalikes": 9,
-      "ms": 207.9,
+      "ms": 275.6,
       "rung_outcome": "abstain",
       "step_id": "step_000",
       "target": "edit-2",
       "template_found": false,
-      "template_ms": 78.2,
+      "template_ms": 75.3,
       "template_wrong": false,
       "text_label": "MRN 36428",
       "true_found": true,
@@ -1939,12 +2048,12 @@
         800
       ],
       "lookalikes": 7,
-      "ms": 118.6,
+      "ms": 122.5,
       "rung_outcome": "abstain",
       "step_id": "step_001",
       "target": "visit",
       "template_found": false,
-      "template_ms": 87.3,
+      "template_ms": 88.2,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -1960,12 +2069,12 @@
         800
       ],
       "lookalikes": 3,
-      "ms": 106.0,
+      "ms": 108.9,
       "rung_outcome": "abstain",
       "step_id": "step_003",
       "target": "note",
       "template_found": false,
-      "template_ms": 97.9,
+      "template_ms": 95.1,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -1973,7 +2082,7 @@
     },
     {
       "axis": "theme",
-      "best_other_score": 0.414,
+      "best_other_score": 0.416,
       "condition": "dark_100",
       "false_found": [],
       "frame": [
@@ -1981,12 +2090,12 @@
         800
       ],
       "lookalikes": 0,
-      "ms": 140.5,
+      "ms": 131.1,
       "rung_outcome": "abstain",
       "step_id": "step_005",
       "target": "tb-attach",
       "template_found": false,
-      "template_ms": 88.7,
+      "template_ms": 87.0,
       "template_wrong": false,
       "text_label": null,
       "true_found": false,
@@ -2002,12 +2111,12 @@
         800
       ],
       "lookalikes": 1,
-      "ms": 114.2,
+      "ms": 122.6,
       "rung_outcome": "target",
       "step_id": "step_006",
       "target": "save",
       "template_found": false,
-      "template_ms": 89.8,
+      "template_ms": 87.4,
       "template_wrong": false,
       "text_label": "\u65e5 \u65e5",
       "true_found": true,
@@ -2084,12 +2193,12 @@
         1200
       ],
       "lookalikes": 11,
-      "ms": 343.8,
+      "ms": 455.6,
       "rung_outcome": "abstain",
       "step_id": "step_000",
       "target": "edit-2",
       "template_found": false,
-      "template_ms": 167.5,
+      "template_ms": 167.0,
       "template_wrong": false,
       "text_label": "MRN 36428",
       "true_found": true,
@@ -2148,12 +2257,12 @@
         1200
       ],
       "lookalikes": 7,
-      "ms": 161.9,
+      "ms": 182.3,
       "rung_outcome": "abstain",
       "step_id": "step_001",
       "target": "visit",
       "template_found": false,
-      "template_ms": 167.8,
+      "template_ms": 168.7,
       "template_wrong": false,
       "text_label": null,
       "true_found": false,
@@ -2169,12 +2278,12 @@
         1200
       ],
       "lookalikes": 0,
-      "ms": 130.4,
+      "ms": 140.0,
       "rung_outcome": "abstain",
       "step_id": "step_003",
       "target": "note",
       "template_found": false,
-      "template_ms": 246.9,
+      "template_ms": 232.2,
       "template_wrong": false,
       "text_label": null,
       "true_found": false,
@@ -2182,7 +2291,7 @@
     },
     {
       "axis": "theme",
-      "best_other_score": 0.457,
+      "best_other_score": 0.456,
       "condition": "dark_150",
       "false_found": [],
       "frame": [
@@ -2190,12 +2299,12 @@
         1200
       ],
       "lookalikes": 0,
-      "ms": 197.8,
+      "ms": 183.7,
       "rung_outcome": "abstain",
       "step_id": "step_005",
       "target": "tb-attach",
       "template_found": false,
-      "template_ms": 222.7,
+      "template_ms": 180.8,
       "template_wrong": false,
       "text_label": null,
       "true_found": false,
@@ -2211,12 +2320,12 @@
         1200
       ],
       "lookalikes": 1,
-      "ms": 211.7,
+      "ms": 181.2,
       "rung_outcome": "target",
       "step_id": "step_006",
       "target": "save",
       "template_found": false,
-      "template_ms": 167.6,
+      "template_ms": 176.4,
       "template_wrong": false,
       "text_label": "\u65e5 \u65e5",
       "true_found": true,
@@ -2224,7 +2333,7 @@
     },
     {
       "axis": "codec",
-      "best_other_score": 0.919,
+      "best_other_score": 0.905,
       "condition": "codec_q50_100",
       "false_found": [
         [
@@ -2240,6 +2349,30 @@
           28
         ],
         [
+          231,
+          311,
+          97,
+          28
+        ],
+        [
+          231,
+          440,
+          97,
+          28
+        ],
+        [
+          228,
+          353,
+          107,
+          31
+        ],
+        [
+          94,
+          70,
+          78,
+          22
+        ],
+        [
           916,
           116,
           107,
@@ -2250,23 +2383,29 @@
           182,
           97,
           28
+        ],
+        [
+          50,
+          400,
+          78,
+          22
         ]
       ],
       "frame": [
         1280,
         800
       ],
-      "lookalikes": 5,
-      "ms": 194.4,
+      "lookalikes": 10,
+      "ms": 273.4,
       "rung_outcome": "abstain",
       "step_id": "step_000",
       "target": "edit-2",
       "template_found": false,
-      "template_ms": 73.3,
+      "template_ms": 77.7,
       "template_wrong": false,
       "text_label": "MRN 36428",
       "true_found": true,
-      "true_score": 0.898
+      "true_score": 0.873
     },
     {
       "axis": "codec",
@@ -2291,12 +2430,12 @@
         800
       ],
       "lookalikes": 6,
-      "ms": 105.5,
+      "ms": 124.1,
       "rung_outcome": "abstain",
       "step_id": "step_001",
       "target": "visit",
       "template_found": true,
-      "template_ms": 84.3,
+      "template_ms": 88.6,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -2331,12 +2470,12 @@
         800
       ],
       "lookalikes": 6,
-      "ms": 98.3,
+      "ms": 107.8,
       "rung_outcome": "abstain",
       "step_id": "step_003",
       "target": "note",
       "template_found": true,
-      "template_ms": 88.5,
+      "template_ms": 95.4,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -2352,12 +2491,12 @@
         800
       ],
       "lookalikes": 1,
-      "ms": 105.8,
+      "ms": 119.3,
       "rung_outcome": "target",
       "step_id": "step_005",
       "target": "tb-attach",
       "template_found": true,
-      "template_ms": 85.9,
+      "template_ms": 89.7,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -2373,12 +2512,12 @@
         800
       ],
       "lookalikes": 1,
-      "ms": 106.5,
+      "ms": 144.4,
       "rung_outcome": "target",
       "step_id": "step_006",
       "target": "save",
       "template_found": true,
-      "template_ms": 84.2,
+      "template_ms": 93.8,
       "template_wrong": false,
       "text_label": "\u65e5 \u65e5",
       "true_found": true,
@@ -2386,9 +2525,45 @@
     },
     {
       "axis": "codec",
-      "best_other_score": 0.863,
+      "best_other_score": 0.917,
       "condition": "codec_q50_150",
       "false_found": [
+        [
+          346,
+          209,
+          146,
+          42
+        ],
+        [
+          346,
+          466,
+          146,
+          42
+        ],
+        [
+          346,
+          531,
+          146,
+          42
+        ],
+        [
+          346,
+          595,
+          146,
+          42
+        ],
+        [
+          346,
+          273,
+          146,
+          42
+        ],
+        [
+          349,
+          662,
+          136,
+          39
+        ],
         [
           1371,
           174,
@@ -2400,23 +2575,35 @@
           186,
           97,
           28
+        ],
+        [
+          139,
+          105,
+          121,
+          35
+        ],
+        [
+          81,
+          344,
+          107,
+          31
         ]
       ],
       "frame": [
         1920,
         1200
       ],
-      "lookalikes": 3,
-      "ms": 325.1,
+      "lookalikes": 11,
+      "ms": 481.6,
       "rung_outcome": "abstain",
       "step_id": "step_000",
       "target": "edit-2",
       "template_found": false,
-      "template_ms": 158.0,
+      "template_ms": 172.1,
       "template_wrong": false,
       "text_label": "MRN 36428",
       "true_found": true,
-      "true_score": 0.936
+      "true_score": 0.921
     },
     {
       "axis": "codec",
@@ -2465,12 +2652,12 @@
         1200
       ],
       "lookalikes": 6,
-      "ms": 149.2,
+      "ms": 196.7,
       "rung_outcome": "abstain",
       "step_id": "step_001",
       "target": "visit",
       "template_found": false,
-      "template_ms": 167.7,
+      "template_ms": 179.2,
       "template_wrong": false,
       "text_label": null,
       "true_found": false,
@@ -2553,12 +2740,12 @@
         1200
       ],
       "lookalikes": 11,
-      "ms": 123.0,
+      "ms": 137.5,
       "rung_outcome": "abstain",
       "step_id": "step_003",
       "target": "note",
       "template_found": false,
-      "template_ms": 224.4,
+      "template_ms": 231.8,
       "template_wrong": false,
       "text_label": null,
       "true_found": false,
@@ -2581,12 +2768,12 @@
         1200
       ],
       "lookalikes": 2,
-      "ms": 144.3,
+      "ms": 184.9,
       "rung_outcome": "abstain",
       "step_id": "step_005",
       "target": "tb-attach",
       "template_found": false,
-      "template_ms": 166.9,
+      "template_ms": 174.2,
       "template_wrong": false,
       "text_label": null,
       "true_found": true,
@@ -2602,12 +2789,12 @@
         1200
       ],
       "lookalikes": 1,
-      "ms": 151.5,
+      "ms": 178.4,
       "rung_outcome": "target",
       "step_id": "step_006",
       "target": "save",
       "template_found": false,
-      "template_ms": 166.5,
+      "template_ms": 171.2,
       "template_wrong": false,
       "text_label": "\u65e5 \u65e5",
       "true_found": true,
