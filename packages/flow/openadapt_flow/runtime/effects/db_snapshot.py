@@ -293,14 +293,15 @@ class _Session:
         self.con = connect()
         self.cur = self.con.cursor()
         if dialect == "mysql":
-            for statement in (
-                "SET SESSION information_schema_stats_expiry = 0",  # MySQL 8
-                "SET SESSION group_concat_max_len = 1073741824",
-            ):
-                try:
-                    self.cur.execute(statement)
-                except Exception:  # noqa: BLE001 - MariaDB lacks the first
-                    pass
+            # Only statements that can't fail: a driver may end the session
+            # on any error. MySQL 8 caches AUTO_INCREMENT unless told not to;
+            # MariaDB has no such variable.
+            self.cur.execute(
+                "SHOW SESSION VARIABLES LIKE 'information_schema_stats_expiry'"
+            )
+            if self.cur.fetchall():
+                self.cur.execute("SET SESSION information_schema_stats_expiry = 0")
+            self.cur.execute("SET SESSION group_concat_max_len = 1073741824")
             self.cur.execute("SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             self.cur.execute("START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY")
         else:
