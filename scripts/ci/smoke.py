@@ -28,11 +28,19 @@ SMOKES: dict[str, tuple[str, str, list[str]]] = {
     "flow": ("packages/flow", "openadapt_flow", ["openadapt-flow", "--help"]),
     "agent": ("packages/agent", "openadapt_agent", ["openadapt-agent", "--help"]),
     "capture": ("packages/capture", "openadapt_capture", ["capture", "--help"]),
-    "privacy": ("packages/privacy", "openadapt_privacy", ["openadapt-privacy-scan", "--help"]),
+    "privacy": (
+        "packages/privacy",
+        "openadapt_privacy",
+        ["openadapt-privacy-scan", "--help"],
+    ),
     # The tray's entry point starts a GUI; its IPC module is the contract
     # Desktop and Flow talk to.
     "tray": ("packages/tray", "openadapt_tray.ipc", []),
-    "desktop": ("packages/desktop", "openadapt_desktop", ["openadapt-desktop", "--help"]),
+    "desktop": (
+        "packages/desktop",
+        "openadapt_desktop",
+        ["openadapt-desktop", "--help"],
+    ),
 }
 
 
@@ -42,12 +50,23 @@ def smoke(name: str) -> tuple[bool, str]:
     env = {**os.environ, "UV_PROJECT_ENVIRONMENT": str(ROOT / ".smoke" / name)}
     steps = [
         ["uv", "sync", "--locked", "--no-dev", "--quiet", *project],
-        ["uv", "run", "--locked", "--no-dev", *project, "python", "-c", f"import {module}"],
+        [
+            "uv",
+            "run",
+            "--locked",
+            "--no-dev",
+            *project,
+            "python",
+            "-c",
+            f"import {module}",
+        ],
     ]
     if command:
         steps.append(["uv", "run", "--locked", "--no-dev", *project, *command])
     for step in steps:
-        result = subprocess.run(step, env=env, capture_output=True, text=True, timeout=600)
+        result = subprocess.run(
+            step, env=env, capture_output=True, text=True, timeout=600
+        )
         if result.returncode != 0:
             tail = (result.stdout + result.stderr)[-2000:]
             return False, f"{' '.join(step[:4])} ... exited {result.returncode}\n{tail}"
@@ -63,7 +82,10 @@ def main(argv: list[str]) -> int:
     for name in names:
         start = time.monotonic()
         ok, detail = smoke(name)
-        print(f"{'ok  ' if ok else 'FAIL'} {name} ({time.monotonic() - start:.0f}s)", flush=True)
+        print(
+            f"{'ok  ' if ok else 'FAIL'} {name} ({time.monotonic() - start:.0f}s)",
+            flush=True,
+        )
         if not ok:
             print(detail, file=sys.stderr)
             failed.append(name)

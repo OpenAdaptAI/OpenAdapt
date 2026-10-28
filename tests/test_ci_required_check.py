@@ -62,7 +62,9 @@ def test_ci_requires_every_job_and_always_reports() -> None:
     assert job["name"] == "ci"
     assert job["if"] == "always()"
     assert set(job["needs"]) == {"packages", "launcher", "smoke"}
-    script = next(step["run"] for step in job["steps"] if "RESULTS" in step.get("env", {}))
+    script = next(
+        step["run"] for step in job["steps"] if "RESULTS" in step.get("env", {})
+    )
     assert 'need["result"] != "success"' in script
 
 

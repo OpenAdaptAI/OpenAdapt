@@ -29,7 +29,9 @@ REPO = "OpenAdaptAI/OpenAdapt"
 
 
 def _gh_json(*args: str):
-    out = subprocess.run(["gh", *args], check=True, capture_output=True, text=True).stdout
+    out = subprocess.run(
+        ["gh", *args], check=True, capture_output=True, text=True
+    ).stdout
     return json.loads(out) if out.strip() else None
 
 
@@ -54,7 +56,10 @@ def measure(runs: list[dict]) -> dict:
         start = _time(run.get("run_started_at") or run.get("created_at"))
         if start:
             starts.append(start)
-        for job in _pages(f"repos/{REPO}/actions/runs/{run['id']}/jobs?filter=latest&per_page=100", "jobs"):
+        for job in _pages(
+            f"repos/{REPO}/actions/runs/{run['id']}/jobs?filter=latest&per_page=100",
+            "jobs",
+        ):
             began, done = _time(job.get("started_at")), _time(job.get("completed_at"))
             if not began or not done or job.get("conclusion") == "skipped":
                 continue
@@ -62,7 +67,12 @@ def measure(runs: list[dict]) -> dict:
             jobs += 1
             ends.append(done)
     wall = (max(ends) - min(starts)).total_seconds() / 60 if starts and ends else 0.0
-    return {"runs": len(runs), "jobs": jobs, "wall_min": round(wall, 1), "job_min": round(minutes, 1)}
+    return {
+        "runs": len(runs),
+        "jobs": jobs,
+        "wall_min": round(wall, 1),
+        "job_min": round(minutes, 1),
+    }
 
 
 def main() -> int:

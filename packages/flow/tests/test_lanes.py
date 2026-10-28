@@ -22,7 +22,9 @@ def test_every_listed_test_exists() -> None:
             names = {
                 node.name
                 for node in ast.walk(tree)
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                if isinstance(
+                    node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                )
             }
             assert name.split("::")[0].split("[")[0] in names, entry
     assert len(entries) == len(set(entries))
