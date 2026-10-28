@@ -106,7 +106,7 @@ _MAX_ICON_GEOMETRY_CHARS = 20_000
 #: the list of elements the program (or the demonstrator) typed into. Returns
 #: the structural observation and ``canon``, its canonical JSON (with the raw
 #: icon geometry), which the delivery guard recomputes and compares.
-_OBSERVE_SUBMIT_BINDING_TEMPLATE = r"""(control, fields) => {
+_OBSERVE_SUBMIT_BINDING_TEMPLATE = r"""(control, fields, baseline) => {
     const ACTIONABLE = __ACTIONABLE__;
     const FIELD = __FIELD__;
     const ROW = 'tr, [role="row"], li, [role="listitem"]';
@@ -181,7 +181,7 @@ _OBSERVE_SUBMIT_BINDING_TEMPLATE = r"""(control, fields) => {
         earlier.compareDocumentPosition(later) &
             Node.DOCUMENT_POSITION_FOLLOWING
     ) && !earlier.contains(later);
-    const formFingerprint = (form, submitter, typed) => {
+    const formFingerprint = (form, submitter, typed, baseline) => {
         // Where and how the form submits (origin, path and query), the
         // name and type of every control the submission would carry, and
         // the values of the controls the run did not type into.
@@ -198,6 +198,8 @@ _OBSERVE_SUBMIT_BINDING_TEMPLATE = r"""(control, fields) => {
             ? submitter.formMethod : form.method) || 'get').toLowerCase();
         const controls = [];
         const values = [];
+        // Hidden values that changed since the first field was filled in.
+        const rotated = [];
         for (const el of Array.from(form.elements)) {
             const name = el.name;
             if (!name) continue;
@@ -230,9 +232,13 @@ _OBSERVE_SUBMIT_BINDING_TEMPLATE = r"""(control, fields) => {
             } else {
                 values.push([name, type, String(el.value)]);
             }
+            if (type === 'hidden' && baseline instanceof WeakMap &&
+                    baseline.has(el) && baseline.get(el) !== String(el.value)) {
+                rotated.push(name);
+            }
         }
         controls.sort();
-        return {action, query, method, controls, values};
+        return {action, query, method, controls, values, rotated};
     };
     const fieldLocal = (el, stop) => {
         // The first ancestor that holds any field decides: exactly one field
@@ -383,7 +389,7 @@ _OBSERVE_SUBMIT_BINDING_TEMPLATE = r"""(control, fields) => {
         // can tell this form from an edit form or a form scoped elsewhere
         // that looks the same (openadapt_flow.ir.FormIdentity).
         if (formOwner === 'shared' && result.submit_role === 'form_submit') {
-            result.form = formFingerprint(scope, control, live);
+            result.form = formFingerprint(scope, control, live, baseline);
         }
         return {observation: result, canon: JSON.stringify(result)};
     }
@@ -478,15 +484,26 @@ _TOKEN_NAME = re.compile(
 )
 
 
-def _is_token(name: str, value: str) -> bool:
+#: A record id rather than a random token: hex groups joined by - or _ (a
+#: UUID, ``enc-3f2a9c1e-0001``).
+_RECORD_LIKE = re.compile(
+    r"^[A-Za-z]{0,12}[-_]?[0-9A-Fa-f]{4,}(?:[-_][0-9A-Fa-f]{2,})+$"
+)
+
+
+def _is_token(name: str, value: str, rotated: bool = False) -> bool:
     """A hidden value (or query value) that is a per-session or per-page
-    token: named like one AND shaped like one (at least 16 characters, not
-    all digits). A name alone (``encounter_token=7``) or a value that merely
-    changed while the form was filled (a parent id a script sets) is not
-    enough: those are compared."""
+    token, not compared: named like one AND shaped like one (at least 16
+    characters, not all digits), and not shaped like a record id unless it
+    changed while the demonstration was being filled in. A name alone
+    (``encounter_token=7``), a record-shaped value (``enc-3f2a9c1e-0001``)
+    and a value a script set while the form was filled in (a parent id) are
+    compared."""
 
     bare = name.lstrip("?")
-    return bool(_TOKEN_NAME.search(bare)) and len(value) >= 16 and not value.isdigit()
+    if not _TOKEN_NAME.search(bare) or len(value) < 16 or value.isdigit():
+        return False
+    return rotated or not _RECORD_LIKE.match(value)
 
 
 @dataclass(frozen=True)
@@ -515,6 +532,7 @@ def form_values_from_page(raw: object) -> Optional[FormValues]:
         return None
     grouped: dict[str, list[str]] = {}
     exempt: set[str] = set()
+    rotated = {str(name) for name in form.get("rotated") or ()}
     items = [tuple(str(part) for part in item) for item in form.get("values") or ()]
     for item in form.get("query") or ():
         if not isinstance(item, (list, tuple)) or len(item) != 2:
@@ -524,7 +542,7 @@ def form_values_from_page(raw: object) -> Optional[FormValues]:
         if len(item) != 3:
             raise ValueError("form values are malformed")
         name, kind, value = item
-        if kind in ("hidden", "query") and _is_token(name, value):
+        if kind in ("hidden", "query") and _is_token(name, value, name in rotated):
             exempt.add(name)
             continue
         grouped.setdefault(name, []).append(value)

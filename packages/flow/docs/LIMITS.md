@@ -395,25 +395,34 @@ field typed since the last save, the compiler gives it a **form identity**
   its demonstrated value, stored as a salted digest. Only a per-page token is
   not compared: a hidden field or query value named like one (`csrf`, `token`,
   `nonce` and the like) whose value is shaped like one (16 characters or more,
-  not all digits). A short or numeric value under such a name, and a value a
+  not all digits) and is not shaped like a record id (hex groups joined by `-`
+  or `_`, as a UUID is) unless it changed while the demonstration was filled
+  in. A short, numeric or record-shaped value under such a name, and a value a
   script set while the form was filled in, are compared. A program that
   should create under a different parent on each run therefore halts until
   that parent is checked another way.
 
-From the check until the next step, a guard in the page compares every submit
+From the check until the next step, the browser holds every write request the
+page sends, and a GET navigation to the form's address, at the network: it
+leaves only when its method, address, query and fields equal what the checked
+button would send (form fields or a flat JSON object), and only once. Page
+listeners that run after every in-page check (a form submit listener, a
+document capture listener, a `formdata` listener, a timer) can't change a save
+on its way out. A save sent in another shape (nested JSON, a custom encoding)
+can't be compared, so it is held too. In the page, a guard also compares every submit
 with what the checked button would have sent (address and query, method, and
 every field's value except the exempt tokens). A submit from another form,
 from the right form without its save button, with contents that changed after
 the check (a click handler that fills in or enables a field), or a second
 submit, is cancelled. The run watches the guard for two seconds after the
 click, then again at the start of the next step, and halts on any cancelled
-submit. A script that submits with `form.submit()` or `fetch` sends no submit
-event, so the guard doesn't see it. A submit a script delays past the start
-of the next step is still cancelled until the page changes, but the run no
-longer reports it. A page whose own click handler fills in or enables a field
-as the form is sent changes what is sent after the check, so its save halts
-even when the demonstration did the same: a false halt, in the safe
-direction.
+submit. A save sent by script (`form.submit()`, `fetch`) raises no submit
+event, but its request is still held at the network. A submission a script
+delays past the end of the run is still held until the page changes, but the
+run, already over, doesn't report it. A page whose own click or submit
+listener fills in or enables a field as the form is sent changes what is sent
+after the check, so its save halts even when the demonstration did the same: a
+false halt, in the safe direction.
 
 The digests of untouched values are salted; with the per-bundle salt stored in
 the bundle (the default, unless `OPENADAPT_FLOW_IDENTITY_SALT` is set), a

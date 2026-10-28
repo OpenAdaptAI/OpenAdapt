@@ -171,6 +171,13 @@ def _page(variant: str) -> str:
         hidden = '<input type="hidden" name="pid" value="">'
     if variant == "toggle":
         hidden = '<input type="hidden" name="id" value="42" disabled>'
+    if variant in ("uuidA", "uuidB"):
+        # Named and shaped like a token, but a record id (hex groups).
+        hidden = (
+            '<input type="hidden" name="encounter_token" value="enc-3f2a9c1e-000'
+            + ("1" if variant == "uuidA" else "2")
+            + '">'
+        )
     if variant in ("enc7", "enc9"):
         # Named like a token, but a short number: a record id, not a token.
         hidden = (
@@ -261,7 +268,7 @@ def url() -> Iterator[str]:
     stop()
 
 
-def _record(url: str, out: Path) -> Path:
+def _record(url: str, out: Path, *, armed: bool = True) -> Path:
     def drive(page: Any, pump: Any) -> None:
         def settle() -> None:
             for _ in range(12):
@@ -278,6 +285,9 @@ def _record(url: str, out: Path) -> Path:
         settle()
         page.locator("[name=submit]").click()
         settle()
+        # Let the recorder capture the page after the save before it ends.
+        for _ in range(30):
+            pump()
         assert page.evaluate("window.created") == ["Printer jams on tray 2"]
 
     recording = record_interactive(
@@ -288,6 +298,10 @@ def _record(url: str, out: Path) -> Path:
         param_fields=("field_summary", "field_description"),
     )
     compile_recording(recording, out / "bundle", name="newticket")
+    # A save recorded unarmed has nothing to check: say so here, so a slow
+    # recording can't pass (or fail) a case for the wrong reason.
+    save = Workflow.load(out / "bundle").steps[-1]
+    assert (save.anchor is not None and save.anchor.form_identity is not None) is armed
     return out / "bundle"
 
 
@@ -422,7 +436,7 @@ def test_a_portal_button_with_no_form_owner_is_not_armed_and_halts(
     # Recorded on the portal page: nothing ties the button to the form, so
     # the save gets no form identity and stays unarmed (a policy that
     # refuses unarmed saves refuses it).
-    portal = _record(f"{url}?v=portal", tmp_path / "portal")
+    portal = _record(f"{url}?v=portal", tmp_path / "portal", armed=False)
     save = Workflow.load(portal).steps[-1]
     assert save.anchor is not None and save.anchor.form_identity is None
     assert not is_identity_armed(save)
@@ -535,6 +549,8 @@ def test_a_per_session_token_still_verifies(url: str, tmp_path: Path) -> None:
         ("pid_input7", "pid_input9", "'pid' field, which this run did not type"),
         # A short number under a token-like name is compared.
         ("enc7", "enc9", "'encounter_token' field, which this run did not type"),
+        # A record-shaped value under a token-like name is compared too.
+        ("uuidA", "uuidB", "'encounter_token' field, which this run did not type"),
         # The address's query parameter names count.
         ("query_new", "query_42", "submits to a different address"),
     ],

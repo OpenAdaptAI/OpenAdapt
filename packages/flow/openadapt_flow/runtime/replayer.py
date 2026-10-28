@@ -2539,6 +2539,7 @@ class Replayer:
             report.success = len(report.results) == len(workflow.steps) and all(
                 result.ok for result in report.results
             )
+            self._halt_on_late_form_submit(report)
         report.total_ms = (time.monotonic() - t_run) * 1000.0
 
         # Emit the structured HALT record on any unsuccessful run, so the
@@ -13037,10 +13038,16 @@ class Replayer:
             return error
         # A script may submit after the click returns (setTimeout): watch the
         # guard through a short settle window.
+        wait = getattr(backend, "wait_form_submit_guard", None)
         refusal = refusal_of()
         deadline = time.monotonic() + _FORM_GUARD_SETTLE_S
         while refusal is None and error is None and time.monotonic() < deadline:
-            time.sleep(0.1)
+            # The wire guard runs only while the browser connection is
+            # serviced: wait through the backend, not with a bare sleep.
+            if callable(wait):
+                wait(100)
+            else:
+                time.sleep(0.1)
             refusal = refusal_of()
         if refusal is not None and error is None:
             return halt(
@@ -13048,6 +13055,28 @@ class Replayer:
                 "was cancelled before it left the page — run aborted"
             )
         return error
+
+    def _halt_on_late_form_submit(self, report: RunReport) -> None:
+        """A create-new form's submit guard still armed when the run ends
+        (the save was the last step): fail the run if it cancelled anything.
+        It stays armed, so a submission a script sends later is still
+        cancelled; the next step or run on this page reads it."""
+
+        backend = self.backend
+        if not getattr(backend, "form_submit_guard_armed", False):
+            return
+        late = backend.form_submit_guard_refusal()  # type: ignore[attr-defined]
+        if late is None or not report.results:
+            return
+        last = report.results[-1]
+        last.ok = False
+        last.safety_halt = True
+        last.failure_category = "safety_halt"
+        last.error = (
+            f"after the save, {late}; that submission was cancelled before it "
+            "left the page — run aborted"
+        )
+        report.success = False
 
     def _act_closing_surface(
         self,
