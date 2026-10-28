@@ -175,7 +175,9 @@ def _mockmed_workflow(*, proposed: bool = False) -> Workflow:
     return Workflow(
         name="triage-then-vitals",
         steps=[
-            _key_step("save_triage", "save Triage", "Enter", effects=[_triage_effect()]),
+            _key_step(
+                "save_triage", "save Triage", "Enter", effects=[_triage_effect()]
+            ),
             _key_step("save_vitals", "save Vitals", "F2", effects=[_vitals_effect()]),
         ],
         undo_steps=[_delete_triage_undo(proposed=proposed)],
@@ -230,7 +232,9 @@ def test_a_stop_after_a_save_is_rolled_back_and_proven(tmp_path, mockmed):
     assert rollback is not None
     assert rollback.status == "rolled_back", rollback.reason
     assert rollback.scope == "collection"
-    assert rollback.after_stop_diff == {"records": {"added": 1, "removed": 0, "changed": 0}}
+    assert rollback.after_stop_diff == {
+        "records": {"added": 1, "removed": 0, "changed": 0}
+    }
     assert rollback.remaining_diff == {}
     assert rollback.before_sha256 == rollback.final_sha256
     [step] = rollback.steps
@@ -241,7 +245,9 @@ def test_a_stop_after_a_save_is_rolled_back_and_proven(tmp_path, mockmed):
     assert not report.success
     assert _records(mockmed) == []
     # The persisted report carries it, PHI-free.
-    persisted = RunReport.model_validate_json((tmp_path / "run" / "report.json").read_text())
+    persisted = RunReport.model_validate_json(
+        (tmp_path / "run" / "report.json").read_text()
+    )
     assert persisted.rollback == rollback
     assert "p1" not in persisted.rollback.model_dump_json()
     assert "Rolled back" in "\n".join(rollback_lines(persisted))
@@ -282,7 +288,9 @@ CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT);
 def _make_db(path: Path) -> None:
     conn = sqlite3.connect(path)
     conn.executescript(SCHEMA)
-    conn.execute("INSERT INTO patients (name, dob) VALUES ('Existing Person', '1950-01-01')")
+    conn.execute(
+        "INSERT INTO patients (name, dob) VALUES ('Existing Person', '1950-01-01')"
+    )
     conn.execute("INSERT INTO notes (body) VALUES ('keep me')")
     conn.commit()
     conn.close()
@@ -389,7 +397,9 @@ def _clinic_workflow() -> Workflow:
         name="create-patient-then-sign",
         params={"name": "Ada Synthetic"},
         steps=[
-            _key_step("create_patient", "create the patient", "Enter", effects=[created]),
+            _key_step(
+                "create_patient", "create the patient", "Enter", effects=[created]
+            ),
             failing,
         ],
         undo_steps=[
@@ -461,7 +471,9 @@ def test_a_compensation_that_leaves_a_side_record_is_named_precisely(tmp_path):
     [step] = rollback.steps
     assert step.decision == "compensated"
     assert rollback.status == "not_rolled_back"
-    assert rollback.remaining_diff == {"history": {"added": 1, "removed": 0, "changed": 0}}
+    assert rollback.remaining_diff == {
+        "history": {"added": 1, "removed": 0, "changed": 0}
+    }
     assert "history: 1 added" in rollback.reason
     assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
     diff = json.loads((tmp_path / "run" / rollback.diff_path).read_text())
@@ -524,7 +536,9 @@ def _stopped(entries) -> RunReport:
 def _single_save_workflow() -> Workflow:
     return Workflow(
         name="w",
-        steps=[_key_step("save_triage", "save Triage", "Enter", effects=[_triage_effect()])],
+        steps=[
+            _key_step("save_triage", "save Triage", "Enter", effects=[_triage_effect()])
+        ],
         undo_steps=[_delete_triage_undo()],
     )
 

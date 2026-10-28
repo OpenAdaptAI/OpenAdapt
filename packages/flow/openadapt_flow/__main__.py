@@ -11844,6 +11844,10 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    from openadapt_flow.cli_rollback import register as _register_rollback
+
+    _register_rollback(sub)
+
     from openadapt_flow.jit.cli import add_parser as _add_jit_parser
 
     _add_jit_parser(sub)

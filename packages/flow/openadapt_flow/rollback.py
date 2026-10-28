@@ -232,6 +232,7 @@ def roll_back(
     runner: CompensationRunner,
     read_records: Optional[RecordsReader] = None,
     ignore_columns: Optional[dict[str, list[str]]] = None,
+    assume_stopped: bool = False,
 ) -> Optional[RollbackRecord]:
     """Undo what a stopped run left, then prove the store is as it was.
 
@@ -240,9 +241,11 @@ def roll_back(
     reads the collection the compensations' own checks use; it settles
     uncertain writes and finds created records. Returns None for a run that
     finished. Never raises for a failed read or compensation; those end as
-    ``not_rolled_back`` with the reason.
+    ``not_rolled_back`` with the reason. ``assume_stopped`` treats a finished
+    run as stopped there (``rollback qualify`` stops runs on purpose by
+    running only the steps up to a halt point).
     """
-    if report.success:
+    if report.success and not assume_stopped:
         return None
     run_dir = Path(run_dir)
     allow = list(getattr(reader, "allow_tables", ()) or ())
