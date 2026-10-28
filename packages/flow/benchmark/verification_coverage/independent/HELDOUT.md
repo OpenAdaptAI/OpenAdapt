@@ -103,12 +103,23 @@ format. This is a stand-in result; the live OpenEMR run is next.
 
 ## Held-out 5
 
-The check is fixed at measurement commit `784fc15e4`, recorded and pushed
-before the suite was opened: #1582, #1586, #1597 and #1604 after three
-review rounds, with the whole-database contract pinning the OpenEMR profile
-`openemr-frame-profile/2026-10-29.2`
-(`sha256:a3daefcf7b7f96e0c68a7d5c1829c3e358dc1ce9366e3098d18bc80441685bed`).
-It runs on the stand-in and on live OpenEMR; both results count.
+`sha256 01104c9e103e191ed90354b48cff8cdbe8a9c0d29e35a7c18ec8d2b51ebea969`.
+The check was fixed at measurement commit `784fc15e4`, recorded and pushed
+before the suite was opened, with the contract pinning the OpenEMR profile
+`openemr-frame-profile/2026-10-29.2`. The run is at harness commit
+`3cf03e43c`, with no check changes. 17 cases: wrong record 2, unrelated
+change 4, misread source 3 (one a clean control), missing side record 1,
+duplicate 1, concurrent legitimate 3 (clean), mixed 3.
+
+| contract | stand-in | faults passed as verified | live OpenEMR |
+|---|---|---|---|
+| production | 14/17 | 0 | pending |
+| read-list candidate | 13/17 | 0 | pending |
+| whole database | **17/17** | 0 | pending |
+
+Both the stand-in and the live result count for this suite. Two cases needed
+a row placed before the window opens (an existing insurance row, a
+colleague's setting), as the steps assume one exists.
 
 ## Live OpenEMR
 
