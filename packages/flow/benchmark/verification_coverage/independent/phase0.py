@@ -327,6 +327,28 @@ def live_case(case: dict[str, Any], work: Path, contract: str) -> dict[str, Any]
     return out
 
 
+def grant_reader() -> str:
+    """A SELECT-only MariaDB account over the whole openemr schema (the
+    whole-database frame reads every table); returns the database container.
+    A MariaDB account, not an OpenEMR row: it survives every reset."""
+
+    import secrets
+
+    from verification_coverage.independent import live
+
+    password = os.environ.setdefault(live.AUDIT_ENV, secrets.token_urlsafe(24))
+    live.sql(
+        f"CREATE USER IF NOT EXISTS '{live.AUDIT_USER}'@'%' IDENTIFIED BY '{password}'; "
+        f"ALTER USER '{live.AUDIT_USER}'@'%' IDENTIFIED BY '{password}'; "
+        f"GRANT SELECT, SHOW VIEW ON openemr.* TO '{live.AUDIT_USER}'@'%'; "
+        "FLUSH PRIVILEGES;"
+    )
+    out = live.fx()._compose("ps", "-q", "db").stdout.decode().split()
+    if not out:
+        raise SystemExit("no database container for the fixture")
+    return out[0]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("mode", choices=("standin", "live"))
@@ -361,6 +383,8 @@ def main() -> int:
             raise SystemExit("standin needs --baseline-sql")
         standin.build(args.baseline_sql, work / "baseline.sqlite")
         standin.keep_tables(work / "baseline.sqlite", run.SLICE)
+    else:
+        os.environ.setdefault("PHASE0_DB_CONTAINER", grant_reader())
     rows_path = args.out / "rows.json"
     rows = json.loads(rows_path.read_text()) if rows_path.exists() else []
     done = {r["id"] for r in rows}
