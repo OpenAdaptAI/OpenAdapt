@@ -275,9 +275,10 @@ class FrameDatabase(BaseModel):
     #: Schemas the read account must see (MySQL); the snapshot refuses when
     #: one isn't visible, so a schema the app writes can't be left out.
     schemas: list[str] = Field(default_factory=list)
-    #: Seconds to wait after the save before the read, so writes the app
-    #: makes a moment later (background jobs) fall inside the window.
-    settle_s: float = Field(default=0.0, ge=0)
+    #: Seconds between the two reads after the save. They must match: a
+    #: write the app makes a moment later (a background job) shows as a
+    #: difference, and the frame is not checked until the database settles.
+    settle_s: float = Field(default=1.0, ge=0)
 
     @model_validator(mode="before")
     @classmethod

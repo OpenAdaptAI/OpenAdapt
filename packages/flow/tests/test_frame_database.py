@@ -662,3 +662,24 @@ def test_a_read_that_cant_see_triggers_is_not_checked(
     result = _run(tmp_path)
     assert _frame(result) == "not_checked"
     assert result["receipt"]["outcome"] != "verified"
+
+
+def test_a_write_between_the_two_reads_leaves_the_frame_unchecked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The app writes again a moment after the save (a background job): the
+    # two reads after the save differ, so nothing is claimed yet.
+    import openadapt_flow.verify_run as vr
+
+    db = tmp_path / "app.sqlite"
+
+    def late_write(seconds: float) -> None:
+        con = sqlite3.connect(db)
+        con.execute("INSERT INTO calendar (pid, title) VALUES (2, 'late')")
+        con.commit()
+        con.close()
+
+    monkeypatch.setattr(vr.time, "sleep", late_write)
+    result = _run(tmp_path)
+    assert _frame(result) == "not_checked"
+    assert result["receipt"]["outcome"] != "verified"

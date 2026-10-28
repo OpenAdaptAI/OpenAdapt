@@ -547,6 +547,8 @@ class _DatabaseFrame:
     #: The read account can't see triggers: what the save caused can't be
     #: ruled out, so the frame is not checked.
     blind: bool = False
+    #: The two reads after the save differed: the database was still moving.
+    still_moving: bool = False
 
 
 def _database_frame(
@@ -568,6 +570,7 @@ def _database_frame(
         SnapshotError,
         cell_hash,
         mac_key,
+        same_state,
         unpack,
         unread_reasons,
     )
@@ -590,11 +593,19 @@ def _database_frame(
     if not isinstance(stored, dict):
         return unreachable
     old = Snapshot.from_json(stored)
-    if database.settle_s:
-        time.sleep(database.settle_s)
     new = _read_database(cfg, salt, before=old)
     if new is None:
         return unreachable
+    # Read again a moment later: the two reads must match, or the app is
+    # still writing and what the save caused can't be told yet.
+    time.sleep(database.settle_s)
+    again = _read_database(cfg, salt, before=old)
+    if again is None:
+        return unreachable
+    if not same_state(new, again):
+        moving = _DatabaseFrame({}, {}, [], {}, ("", ""), {}, None)
+        moving.still_moving = True
+        return moving
     if not (old.code_visible and new.code_visible):
         blind = _DatabaseFrame({}, {}, [], {}, ("", ""), {}, None)
         blind.blind = True
@@ -726,6 +737,15 @@ def judge_run_frame(
         slices[""] = (before, _post_records(after))
     identities: Optional[dict[str, str]] = None
     db = _database_frame(cfg, before, salt)
+    if db is not None and db.still_moving:
+        return FrameVerdict(
+            status="not_checked",
+            reason=(
+                "the database was still changing after the save (two reads "
+                "differed); what the save caused can't be told yet"
+            ),
+            attribution=spec.attribution.kind if spec.attribution else "none",
+        )
     if db is not None and db.blind:
         return FrameVerdict(
             status="not_checked",
