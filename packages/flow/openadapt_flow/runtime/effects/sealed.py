@@ -10,21 +10,25 @@ keyed by a host secret never written into the baseline), never a value.
 At judging time one fresh read rebuilds the records as they were:
 
 - a record whose identity and fields all match is the record now, as read;
-- a field whose MAC differs is set to :data:`CHANGED`, which no stored value
-  can equal, so it shows as changed;
+- a field whose MAC differs is set to :data:`CHANGED`, a per-process random
+  marker no stored value can equal, so it shows as changed (a cell's MAC
+  covers its type, so ``True`` and ``"true"`` differ);
 - a field the record didn't have stays absent;
 - a record that is gone comes back as a placeholder whose identity is
   :data:`REMOVED` plus its MAC, so it shows as removed.
 
 So every check downstream (new records, an exact new set, collateral
 changes, the frame) works on the rebuilt records unchanged. Values never
-reach the baseline file.
+reach the baseline file, though whoever can read the host secret can test
+guesses for short values against it.
 """
 
 from __future__ import annotations
 
 import json
+import secrets
 from collections.abc import Mapping, Sequence
+from decimal import Decimal
 from typing import Any, Optional
 
 from openadapt_flow.runtime.effects.db_snapshot import (
@@ -33,10 +37,32 @@ from openadapt_flow.runtime.effects.db_snapshot import (
     row_key_hash,
 )
 
-#: A rebuilt field whose value moved since the baseline.
-CHANGED = "\x00changed"
-#: The identity prefix of a rebuilt record that is gone.
-REMOVED = "\x00removed:"
+#: A rebuilt field whose value moved since the baseline. Random per process,
+#: so no value an app stores (or an agent writes) can equal it.
+CHANGED = "\x00changed:" + secrets.token_hex(16)
+#: The identity prefix of a rebuilt record that is gone (random, as above).
+REMOVED = "\x00removed:" + secrets.token_hex(16) + ":"
+
+
+def _typed(value: Any) -> str:
+    """``canonical`` with its type, so ``True`` and ``"true"``, or an object
+    and its JSON text, don't seal alike. Numbers share one class."""
+
+    if value is None:
+        tag = "n"
+    elif isinstance(value, bool):
+        tag = "b"
+    elif isinstance(value, (int, float, Decimal)):
+        tag = "d"
+    elif isinstance(value, (dict, list)):
+        tag = "j"
+    else:
+        tag = "s"
+    return f"{tag}:{canonical(value)}"
+
+
+def _cell(key: bytes, value: Any, where: str, field: str) -> str:
+    return cell_hash(key, _typed(value), where, field)
 
 
 def _identity_text(record: Mapping[str, Any], identity_field: Optional[str]) -> str:
@@ -60,7 +86,7 @@ def seal(
     return [
         {
             "id": row_key_hash(key, _identity_text(r, identity_field), where),
-            "cells": {f: cell_hash(key, v, where, f) for f, v in r.items()},
+            "cells": {f: _cell(key, v, where, f) for f, v in r.items()},
         }
         for r in records
     ]
@@ -93,7 +119,7 @@ def unseal(
             {
                 f: (
                     found.get(f)
-                    if cell_hash(key, found.get(f), where, f) == mac
+                    if _cell(key, found.get(f), where, f) == mac
                     else CHANGED
                 )
                 for f, mac in cells.items()

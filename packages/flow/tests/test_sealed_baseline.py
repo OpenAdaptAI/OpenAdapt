@@ -95,3 +95,67 @@ def test_unseal_rebuilds_what_it_can_and_marks_the_rest() -> None:
     assert rebuilt[0] == {"id": 1, "a": "x", "b": CHANGED}
     assert rebuilt[1]["id"].startswith(REMOVED)
     assert all("new" not in str(r) for r in rebuilt)
+
+
+# Adversarial review of #1599: each of these ended ``held`` with a sealed
+# baseline, where the raw one refuted.
+
+_KEY = b"k" * 32
+
+
+def _frame(before: list[dict], after: list[dict], spec: dict | None = None) -> str:
+    from openadapt_flow.runtime.effects.effect import Effect, EffectKind, EffectState
+    from openadapt_flow.runtime.effects.frame import FrameSpec, judge_frame
+
+    rebuilt = unseal(seal(before, _KEY, "id"), after, _KEY, "id")
+    return judge_frame(
+        FrameSpec(identity_field="id", **(spec or {})),
+        [Effect(kind=EffectKind.RECORD_WRITTEN, match={"id": "9"})],
+        {"": (EffectState(substrate="t", reachable=True, records=rebuilt), after)},
+        params={},
+        run_actors=["bot"],
+    ).status
+
+
+def test_a_value_that_keeps_its_text_but_not_its_type_shows_as_changed() -> None:
+    new = {"id": 9, "flag": False, "coding": None}
+    before = [{"id": 1, "flag": True, "coding": {"code": "E11"}}]
+    assert _frame(before, [{**before[0], "flag": "true"}, new]) == "refuted"
+    assert (
+        _frame(before, [{**before[0], "coding": '{"code": "E11"}'}, new]) == "refuted"
+    )
+    assert (
+        _frame([{"id": 1, "flag": None}], [{"id": 1, "flag": "\x00null"}, new])
+        == "refuted"
+    )
+
+
+def test_no_stored_text_can_equal_the_changed_marker() -> None:
+    before = [{"id": 1, "name": "Wendell"}]
+    for written in ("\x00changed", "\x00removed:"):
+        after = [{"id": 1, "name": written}, {"id": 9, "name": "Ada"}]
+        assert _frame(before, after) == "refuted"
+    assert CHANGED != "\x00changed" and not REMOVED.startswith("\x00removed:\x00")
+
+
+def test_an_attribution_path_through_a_changed_field_is_unattributed() -> None:
+    spec = {
+        "attribution": {
+            "kind": "record_field",
+            "actor_field": "meta.lastUpdatedBy",
+            "self": ["bot"],
+            "server_set": ["meta.lastUpdatedBy", "meta.lastUpdated"],
+        }
+    }
+    before = [
+        {"id": 1, "note": "ok", "meta": {"lastUpdatedBy": "bob", "lastUpdated": "t0"}}
+    ]
+    after = [
+        {
+            "id": 1,
+            "note": "EDITED",
+            "meta": {"lastUpdatedBy": "bob", "lastUpdated": "t1"},
+        },
+        {"id": 9, "note": "new", "meta": {"lastUpdatedBy": "bot", "lastUpdated": "t1"}},
+    ]
+    assert _frame(before, after, spec) == "refuted"

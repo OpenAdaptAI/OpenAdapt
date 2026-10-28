@@ -440,6 +440,22 @@ def get_path(record: Mapping[str, Any], path: str) -> Any:
     return node
 
 
+def path_unknown(record: Mapping[str, Any], path: str) -> bool:
+    """True when ``path`` runs through a value that isn't a mapping: a field
+    a sealed baseline rebuilt as changed, so what was under it is unknown."""
+
+    if path in record:
+        return False
+    node: Any = record
+    for part in path.split("."):
+        if not isinstance(node, Mapping):
+            return True
+        if part not in node:
+            return False
+        node = node[part]
+    return False
+
+
 def declared_selectors(effect: Effect) -> list[dict[str, str]]:
     """The selectors naming the records ``effect`` may write.
 
@@ -857,6 +873,14 @@ def judge_frame(
             return "unattributed"
         if str(actor) in self_ids:
             return "self"
+        if before is not None and any(
+            path_unknown(before, p)
+            for p in (attribution.actor_field, attribution.version_field)
+            if p
+        ):
+            # The baseline can't say who last changed it, or which version
+            # it was: nothing shows another actor made this change.
+            return "unattributed"
         if attribution.version_field:
             new_version = get_path(after, attribution.version_field)
             old_version = (
