@@ -284,9 +284,8 @@ def test_a_snapshot_from_another_contract_or_unbound_params_raise_verifier_error
 ) -> None:
     db = _store(tmp_path)
     contract = _contract(db)
-    other_db = (
-        _store(tmp_path / "other") if (tmp_path / "other").mkdir() is None else db
-    )
+    (tmp_path / "other").mkdir()
+    other_db = _store(tmp_path / "other")
     with pytest.raises(VerifierError):
         verify_write(
             _contract(other_db), capture(contract, PARAMS), params=PARAMS, actor=BOT
