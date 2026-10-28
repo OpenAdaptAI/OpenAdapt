@@ -1301,7 +1301,10 @@ def pin_deployment_bytes(source: str | Path, sha256: str) -> bytes:
     import stat
 
     try:
-        fd = os.open(str(source), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        # O_BINARY: on Windows a plain os.open reads in text mode, turning
+        # CRLF into LF, so the bytes hashed wouldn't be the bytes written.
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+        fd = os.open(str(source), flags)
     except OSError as exc:
         raise ValueError(
             f"deployment config {source} can't be opened as a plain file: {exc}"
