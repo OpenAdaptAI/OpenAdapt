@@ -1,0 +1,52 @@
+final-run.sh:6: no matches found: $LEASE_DIR/held-*
+final-run.sh:6: no matches found: $LEASE_DIR/held-*
+LEASE TAKEN Sun Oct 25 04:13:56 EDT 2026
+ 4:13  up 59 days,  8:50, 68 users, load averages: 20.85 19.17 19.75
+/dev/disk3s5      1858 1766        43    98% 25827549 458164720    5%   /System/Volumes/Data
+Starting machine "openadapt-benchmark"
+
+This machine is currently configured in rootless mode. If your containers
+require root permissions (e.g. ports < 1024), or if you run into compatibility
+issues with non-podman clients, you can switch using the following command:
+
+	podman machine set --rootful openadapt-benchmark
+
+API forwarding listening on: $PODMAN_API_SOCK
+
+The system helper service is not installed; the default Docker API socket
+address can't be used by podman. If you would like to install it, run the following commands:
+
+        sudo /opt/homebrew/Cellar/podman/6.0.1_1/bin/podman-mac-helper install
+        podman machine stop openadapt-benchmark; podman machine start openadapt-benchmark
+
+You can still connect Docker API clients by setting DOCKER_HOST using the
+following command in your terminal session:
+
+        export DOCKER_HOST='unix://$PODMAN_API_SOCK'
+
+Machine "openadapt-benchmark" started successfully
+COMMIT 9eb8912a07082a8a914a275aeb1a3ec5a67e53d1
+saved $LIFECYCLE_OPENEMR_STATE/fresh-oauth-keys.sql
+[openadapt-production-relabel] resetting the app to its baseline
+[openadapt-production-relabel] setup
+packages/flow/openadapt_flow/report.py:283: PlaintextPHIWarning: Writing REPORT.md with PLAINTEXT identity-like text: PHI scrubbing is not active (OPENADAPT_FLOW_SCRUB=auto and the 'privacy' extra is not installed). This shareable report may contain patient name/DOB/MRN. Install it (pip install 'openadapt-flow[privacy]' && python -m spacy download en_core_web_sm) and set OPENADAPT_FLOW_SCRUB=on to scrub and fail closed.
+  _warn_if_plaintext_phi(report)
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "packages/flow/benchmark/lifecycle/run.py", line 468, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "packages/flow/benchmark/lifecycle/run.py", line 447, in main
+    run_arm(
+  File "packages/flow/benchmark/lifecycle/run.py", line 183, in run_arm
+    for phase in arm.setup(env, operator):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "packages/flow/benchmark/lifecycle/production_arm.py", line 227, in setup
+    proof.phase_admit(ctx, source, self.trials)
+  File "packages/flow/benchmark/lifecycle_proof/run.py", line 586, in phase_admit
+    qual = qualify(
+           ^^^^^^^^
+  File "packages/flow/openadapt_flow/qualify/campaign.py", line 1509, in qualify
+    raise QualifyError(f"{case_id} trial {trial}: {failure}")
+openadapt_flow.qualify.campaign.QualifyError: representative trial 1: observed HALTED, expected VERIFIED (Step 'step_015' (scroll by (0, 300)): closed-loop scroll exhausted its budget (600px of 750px allowed, 2.5x the recorded distance) without the anchor of step 'step_016' (click recorded visual target) resolving — target never came into view; run aborted)

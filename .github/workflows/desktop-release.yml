@@ -382,13 +382,13 @@ jobs:
           uv build --wheel --sdist
           python scripts/check_release_consistency.py --require-dist
           python scripts/check_source_boundary.py --require-dist
-          uv run --with 'twine==7.0.0' --no-project twine check --strict dist/*
+          uv run --locked --project "$GITHUB_WORKSPACE/.github/ci-tools" --only-group release twine check --strict dist/*
           mkdir python-dist
           cp dist/openadapt_desktop-*.whl dist/openadapt_desktop-*.tar.gz python-dist/
           ls -l python-dist
 
       - name: Inspect the built Python archives
-        run: uv run python scripts/verify_build_artifact.py python-distribution
+        run: uv run --locked python scripts/verify_build_artifact.py python-distribution
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -485,9 +485,9 @@ jobs:
           set -euo pipefail
           python -m pip install --disable-pip-version-check uv==0.11.29
           python scripts/sync_frozen_dependencies.py
-          uv run python scripts/build_frozen_engine.py
-          uv run python scripts/verify_build_artifact.py sidecar
-          uv run python scripts/smoke_test_frozen_flow.py
+          uv run --locked python scripts/build_frozen_engine.py
+          uv run --locked python scripts/verify_build_artifact.py sidecar
+          uv run --locked python scripts/smoke_test_frozen_flow.py
           mkdir -p src-tauri/binaries
           cp dist/openadapt-engine \
             "src-tauri/binaries/openadapt-engine-${{ matrix.target }}"
@@ -610,9 +610,9 @@ jobs:
           set -euo pipefail
           python -m pip install --disable-pip-version-check uv==0.11.29
           python scripts/sync_frozen_dependencies.py
-          uv run python scripts/build_frozen_engine.py
-          uv run python scripts/verify_build_artifact.py sidecar
-          uv run python scripts/smoke_test_frozen_flow.py
+          uv run --locked python scripts/build_frozen_engine.py
+          uv run --locked python scripts/verify_build_artifact.py sidecar
+          uv run --locked python scripts/smoke_test_frozen_flow.py
           mkdir -p src-tauri/binaries
           cp dist/openadapt-engine.exe \
             src-tauri/binaries/openadapt-engine-x86_64-pc-windows-msvc.exe
@@ -794,11 +794,11 @@ jobs:
           set -euo pipefail
           python -m pip install --disable-pip-version-check uv==0.11.29
           python scripts/sync_frozen_dependencies.py
-          uv run python scripts/build_frozen_engine.py
-          uv run python scripts/verify_build_artifact.py sidecar
-          uv run python -m playwright install-deps chromium
+          uv run --locked python scripts/build_frozen_engine.py
+          uv run --locked python scripts/verify_build_artifact.py sidecar
+          uv run --locked python -m playwright install-deps chromium
           sudo python scripts/alias_lowercase_x11_sonames.py
-          uv run python scripts/smoke_test_frozen_flow.py
+          uv run --locked python scripts/smoke_test_frozen_flow.py
           mkdir -p src-tauri/binaries
           cp dist/openadapt-engine \
             src-tauri/binaries/openadapt-engine-x86_64-unknown-linux-gnu
