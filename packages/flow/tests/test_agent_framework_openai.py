@@ -109,6 +109,40 @@ def test_the_agent_gets_a_refusal_for_a_double_save(
     assert "Don't retry" in reply["next"]
 
 
+def test_a_tool_timeout_does_not_lead_to_a_second_write(
+    portal: Portal, tmp_path: Path
+) -> None:
+    """The SDK's own tool timeout cancels the call after the POST landed."""
+
+    from agents.tool import invoke_function_tool
+    from agents.tool_context import ToolContext
+
+    @function_tool(timeout=0.5)
+    async def save_order(customer: str, product: str, units: str) -> str:
+        """Save a new order."""
+        out = await asyncio.to_thread(portal.save_order, customer, product, units)
+        if portal.posts == 1:
+            await asyncio.sleep(1.0)  # only the first reply is slow
+        return out
+
+    tool = verified(save_order, contract=portal.contract(), workdir=tmp_path)
+
+    async def call() -> str:
+        args = json.dumps(ORDER)
+        ctx = ToolContext(
+            context=None, tool_name=tool.name, tool_call_id="c1", tool_arguments=args
+        )
+        return await invoke_function_tool(
+            function_tool=tool, context=ctx, arguments=args
+        )
+
+    first = asyncio.run(call())
+    assert "timed out" in first
+    second = json.loads(asyncio.run(call()))
+    assert second["verified"] is True and second["not_sent_again"] is True
+    assert portal.posts == 1 and len(portal.orders()) == 1
+
+
 @pytest.mark.skipif(
     not (
         os.environ.get("OPENADAPT_REAL_MODEL_TESTS") == "1"

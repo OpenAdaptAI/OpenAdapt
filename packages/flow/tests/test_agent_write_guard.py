@@ -7,7 +7,10 @@ its order store back, including the portal's own faults.
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
+
+import pytest
 
 from openadapt_flow.integrations.agents import WriteGuard
 from tests._orders_portal import Portal, portal  # noqa: F401 - fixture
@@ -107,3 +110,81 @@ def test_async_writes_are_checked_too(portal: Portal, tmp_path: Path) -> None:
 
     reply = asyncio.run(_guard(portal, tmp_path).arun(ORDER, write))
     assert reply["verified"] is True
+
+
+def test_a_cancelled_write_is_read_back_and_not_sent_again(
+    portal: Portal, tmp_path: Path
+) -> None:
+    guard = _guard(portal, tmp_path)
+
+    async def slow_write():
+        out = await asyncio.to_thread(portal.save_order, **ORDER)
+        await asyncio.sleep(5)  # the reply is slow after the POST landed
+        return out
+
+    async def timed_out():
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0.5):
+                await guard.arun(ORDER, slow_write)
+
+    asyncio.run(timed_out())
+    retry = guard.run(ORDER, _write(portal, ORDER))
+    assert retry["verified"] is True and retry["not_sent_again"] is True
+    assert portal.posts == 1 and len(portal.orders()) == 1
+
+
+def test_an_interrupted_sync_write_is_read_back(portal: Portal, tmp_path: Path) -> None:
+    guard = _guard(portal, tmp_path)
+
+    def write():
+        portal.save_order(**ORDER)
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        guard.run(ORDER, write)
+    retry = guard.run(ORDER, _write(portal, ORDER))
+    assert retry["not_sent_again"] is True and portal.posts == 1
+
+
+def test_a_waiter_cancelled_on_the_lock_does_not_keep_it(
+    portal: Portal, tmp_path: Path
+) -> None:
+    guard = _guard(portal, tmp_path)
+    guard._lock.acquire()  # another write in progress
+
+    async def cancelled_waiter():
+        task = asyncio.ensure_future(guard.arun(ORDER, lambda: asyncio.sleep(0)))
+        await asyncio.sleep(0.2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(cancelled_waiter())
+    guard._lock.release()
+    assert guard._lock.acquire(timeout=1)
+    guard._lock.release()
+    assert guard.run(ORDER, _write(portal, ORDER))["verified"] is True
+
+
+def test_the_reply_and_receipt_say_who_declared_each_value(
+    portal: Portal, tmp_path: Path
+) -> None:
+    pinned = _guard(portal, tmp_path, pinned={"customer": "Acme"})
+    reply = pinned.run(ORDER, _write(portal, ORDER))
+    assert reply["values_declared_by"] == {
+        "customer": "operator",
+        "product": "agent",
+        "units": "agent",
+    }
+    plain = _guard(portal, tmp_path / "plain")
+    other = {**ORDER, "product": "Office chair"}
+    second = plain.run(other, _write(portal, other))
+    assert set(second["values_declared_by"].values()) == {"agent"}
+    # The split is bound into the evidence the receipt covers, as the
+    # digest of the executor build.
+    first = json.loads(Path(reply["receipt_path"]).read_text())
+    other_doc = json.loads(Path(second["receipt_path"]).read_text())
+    first_build = first["evidence"]["executor"]["build_sha256"]
+    assert (
+        first_build and first_build != other_doc["evidence"]["executor"]["build_sha256"]
+    )

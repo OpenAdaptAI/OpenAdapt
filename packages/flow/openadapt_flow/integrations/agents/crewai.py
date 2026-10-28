@@ -10,7 +10,7 @@
         tools=[verified(save_order, contract="contracts/order.yaml")],
     )
 
-Needs ``openadapt-flow[crewai]``.
+Needs ``crewai`` installed beside ``openadapt-flow``; see docs/AGENT_FRAMEWORKS.md.
 """
 
 from __future__ import annotations

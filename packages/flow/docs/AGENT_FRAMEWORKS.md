@@ -12,8 +12,8 @@ Each call goes through four steps:
 2. Before the write, the system of record is read. If it can't be read, the
    tool doesn't write.
 3. Your tool writes, the same way it always did.
-4. The system of record is read again. A refused write is held: the same call
-   is not made again until a person checks the record.
+4. The system of record is read again, even when the call times out or is
+   cancelled after the write may have been sent.
 
 | The agent gets | Meaning |
 | --- | --- |
@@ -21,8 +21,35 @@ Each call goes through four steps:
 | `"verdict": "REFUTED"` | It shows a different write: a wrong value or a duplicate. |
 | `"verdict": "RECONCILIATION_REQUIRED"` | It doesn't show the write, or couldn't be read. The write may still land. |
 | `"verdict": "NOT_WRITTEN"` | Nothing was written: the store couldn't be read first, a value was missing or differed from a pinned one, or the same write is held. |
+| `"not_sent_again": true` | The same write was already made, and its reply was lost to a timeout. This is the first result; the write wasn't sent twice. |
 
 The tool's own return value is in `tool_output`.
+
+## What `verified: true` proves
+
+It proves the system of record shows exactly the write the call declared. It
+doesn't prove the agent picked the right record. Values in the agent's tool
+call are the agent's own. Every reply lists who declared each value
+(`values_declared_by`: `operator` or `agent`), and the receipt binds that
+split. A value that names the record or the tenant, such as a patient, an
+account or a clinic, is under your control only when you pin it:
+
+```python
+verified(save_note, contract="contracts/note.yaml", pinned={"clinic": "north"})
+```
+
+## Wrap every tool that can write
+
+`verified()` checks the tool you give it. A tool you don't wrap isn't
+checked, and an agent with a shell, a file writer or an HTTP tool can reach
+the same system around the wrapper. Give the agent only tools you've
+wrapped, or tools that can't write.
+
+Within one process, a refused write is held: the same values are refused
+until a person checks the record. A write whose reply was lost to a timeout
+isn't sent again: the retry gets the first result. Both are protections
+against retries, not guarantees. A new process, or a value spelled
+differently, starts fresh.
 
 ## Claude Agent SDK
 
@@ -31,8 +58,8 @@ pip install "openadapt-flow[claude-agent-sdk]"
 ```
 
 ```python
-from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server, tool
-from openadapt_flow.integrations.agents.claude_sdk import verified
+from claude_agent_sdk import create_sdk_mcp_server, tool
+from openadapt_flow.integrations.agents.claude_sdk import only, verified
 
 @tool("save_order", "Save a new order.", {"customer": str, "product": str, "units": str})
 async def save_order(args):
@@ -42,8 +69,13 @@ async def save_order(args):
 orders = create_sdk_mcp_server(
     "orders", tools=[verified(save_order, contract="contracts/order.yaml")]
 )
-options = ClaudeAgentOptions(mcp_servers={"orders": orders})
+options = only({"orders": orders})
 ```
+
+Claude Code's built-in tools (Bash, Write, WebFetch and the rest) can write
+too. `only()` builds `ClaudeAgentOptions` with all of them off and allows only
+the servers you pass. Other `ClaudeAgentOptions` fields go in as keywords:
+`only({"orders": orders}, model="claude-sonnet-5-5")`.
 
 ## OpenAI Agents SDK
 
@@ -90,6 +122,13 @@ does: `ToolNode`, `bind_tools` or a prebuilt agent.
 ```bash
 pip install openadapt-flow crewai
 ```
+
+Every CrewAI release so far depends on a chromadb version with open critical
+advisories that have no patched release yet
+([GHSA-f4j7-r4q5-qw2c](https://github.com/advisories/GHSA-f4j7-r4q5-qw2c),
+[GHSA-36p7-vc44-83pf](https://github.com/advisories/GHSA-36p7-vc44-83pf)).
+So `openadapt-flow` doesn't install CrewAI for you. Check those advisories
+against your deployment before you install it.
 
 ```python
 from crewai import Agent
