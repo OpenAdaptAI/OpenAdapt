@@ -1,0 +1,42 @@
+# OpenEMR's own bookkeeping: rows it writes on its own for any signed-in
+# user, whatever a run does. The whole-database frame, the rollback check and
+# the RL grader load this one profile. Measured on the pinned OpenEMR 8.0.0.3
+# fixture (synthetic patients): the RL environment's calibration episodes and
+# the frame's live witness (2026-10-28). Each rule is the narrowest that held.
+#
+# - append_only: rows may be added; an existing row that changes or goes is
+#   a write the run caused.
+# - columns: existing rows may change only in the named columns; no row may
+#   be added or removed. On a patient-data table only system columns may be
+#   named.
+# - session: per-user or per-session state, not patient data; not compared.
+#
+# No rule may name a patient-data table except for its system columns.
+schema_version: openadapt.app-profile/v1
+app: openemr
+version: openemr-frame-profile/2026-10-28.1
+patient_table_prefixes: [patient, lists, history_data, insurance, employer_data,
+  prescriptions, openemr_postcalendar, form, forms, pnotes, immunizations,
+  documents, billing, procedure, onotes]
+system_columns: [uuid]
+rules:
+  - {id: log, table: log, mode: append_only, reason: "audit log"}
+  - {id: log-comment-encrypt, table: log_comment_encrypt, mode: append_only, reason: "audit log checksums"}
+  - {id: api-log, table: api_log, mode: append_only, reason: "API audit log"}
+  - {id: extended-log, table: extended_log, mode: append_only, reason: "activity log"}
+  - {id: audit-master, table: audit_master, mode: append_only, reason: "audit log"}
+  - {id: audit-details, table: audit_details, mode: append_only, reason: "audit log"}
+  - {id: clinical-rules-log, table: clinical_rules_log, mode: append_only, reason: "the reminder widget's log, written when a chart is shown"}
+  - {id: uuid-registry, table: uuid_registry, mode: append_only, reason: "system id map, written with any new record or a uuid backfill"}
+  - {id: uuid-mapping, table: uuid_mapping, mode: append_only, reason: "system id map"}
+  - {id: session-tracker, table: session_tracker, mode: session, reason: "one row per sign-in session"}
+  - {id: users-secure, table: users_secure, mode: session, reason: "password hashes, updated at sign-in"}
+  - {id: user-settings, table: user_settings, mode: session, reason: "per-user UI state"}
+  - {id: login-mfa, table: login_mfa_registrations, mode: session, reason: "sign-in state"}
+  - {id: ip-tracking, table: ip_tracking, mode: session, reason: "sign-in state"}
+  - {id: recent-patients, table: recent_patients, mode: session, reason: "per-user list of charts opened"}
+  - {id: background-services, table: background_services, mode: session, reason: "scheduler state (next_run)"}
+  - {id: sequences, table: sequences, mode: session, reason: "one id counter row"}
+  - {id: keys, table: keys, mode: session, reason: "OAuth signing keys"}
+  - {id: users-uuid-backfill, table: users, mode: columns, columns: [uuid, last_updated], reason: "uuid backfill on user rows, which bumps their ON UPDATE stamp"}
+  - {id: uuid-backfill, table: "*", mode: columns, columns: [uuid], reason: "a row's system uuid, backfilled when a record is first opened"}

@@ -275,6 +275,11 @@ class FrameDatabase(BaseModel):
     #: Schemas the read account must see (MySQL); the snapshot refuses when
     #: one isn't visible, so a schema the app writes can't be left out.
     schemas: list[str] = Field(default_factory=list)
+    #: An app profile (``openadapt_flow.app_profiles``): the app's own
+    #: bookkeeping, versioned and shared with rollback and the RL grader. Its
+    #: append-only and session tables and its column rules apply on top of
+    #: ``allow_tables`` and ``ignore_columns``.
+    profile: Optional[str] = None
     #: Seconds between the two reads after the save. They must match: a
     #: write the app makes a moment later (a background job) shows as a
     #: difference, and the frame is not checked until the database settles.
@@ -292,6 +297,31 @@ class FrameDatabase(BaseModel):
 
     def modes(self) -> dict[str, str]:
         return {t.table: t.mode for t in self.allow_tables}
+
+    def loaded_profile(self) -> Any:
+        from openadapt_flow.app_profiles import load_profile
+
+        return None if self.profile is None else load_profile(self.profile)
+
+    def profile_modes(self) -> dict[str, str]:
+        """The profile's tables: append-only, or skipped (session state)."""
+
+        profile = self.loaded_profile()
+        if profile is None:
+            return {}
+        return {t["table"]: t["mode"] for t in profile.allow_tables()}
+
+    def all_ignore_columns(self) -> dict[str, list[str]]:
+        out = {t: list(c) for t, c in self.ignore_columns.items()}
+        profile = self.loaded_profile()
+        if profile is not None:
+            for table, cols in profile.ignore_columns().items():
+                out.setdefault(table, []).extend(cols)
+        return out
+
+    def ignore_columns_for(self, table: str) -> list[str]:
+        both = self.all_ignore_columns()
+        return [*both.get(table, []), *both.get("*", [])]
 
     def allow_list_sha256(self) -> str:
         payload = [t.model_dump(mode="json") for t in self.allow_tables]
@@ -592,7 +622,7 @@ def judge_frame(
     def ignore_for(name: str) -> set[str]:
         if name in hashers:
             # Database tables: only the columns declared for that table.
-            cols = database.ignore_columns.get(name, []) if database else []
+            cols = database.ignore_columns_for(name) if database else []
             return set(cols) | {KEY}
         return surface_ignore
 
