@@ -37,6 +37,16 @@ Only evidence the bot can't write counts (the safety review of #1443):
   the saved value may no longer stand, so it blocks like collateral. Only
   changes outside the declared delta can be concurrent edits.
 
+With ``frame.database``, another actor's entry explains a row only when it
+is a write of the matching kind (insert for an added row, delete for a
+removed one, update for a changed one) on the same table, naming the record
+as it was before the change; each entry explains at most one row, and a row
+whose record key changed is never explained. What the log can't show stays a
+limit: an entry the app files under the wrong record (a write logged against
+the chart the bot has open), or one colleague insert whose own row never
+landed, still reads as that colleague's. List every app account the bot
+holds in ``self``.
+
 The judge reads nothing itself; callers pass the snapshots. Fail-safe: a
 missing baseline, an unreadable read, a record without its identity field or
 an unresolved self id makes the frame ``not_checked``, never ``held``.
@@ -116,6 +126,10 @@ class FrameAttribution(BaseModel):
     #: Another actor's later write to a record the bot created can be told
     #: apart from the bot's own insert only through these.
     insert_events: list[str] = Field(default_factory=list)
+    #: The write events that remove a record (a subset of ``write_events``).
+    #: An added row is explained only by an insert, a removed one only by a
+    #: delete, a changed one only by the other write events.
+    delete_events: list[str] = Field(default_factory=list)
     #: ``audit_read`` only: the entry field naming the table written. Set,
     #: an entry attributes a change only to a row of that table. Required
     #: with ``frame.database``.
@@ -152,8 +166,10 @@ class FrameAttribution(BaseModel):
                 raise ValueError("server_set applies to record_field attribution")
             if bool(self.event_field) != bool(self.write_events):
                 raise ValueError("event_field and write_events go together")
-            if not set(self.insert_events) <= set(self.write_events):
-                raise ValueError("insert_events must be among write_events")
+            if not (set(self.insert_events) | set(self.delete_events)) <= set(
+                self.write_events
+            ):
+                raise ValueError("insert_events and delete_events must be write_events")
         elif self.record_keys or self.write_events or self.table_field:
             raise ValueError(
                 "record_keys, write_events and table_field apply to audit_read"
@@ -253,13 +269,15 @@ class FrameDatabase(BaseModel):
     #: Table -> columns that change on their own on every row (a last-seen
     #: time). ``frame.ignore_fields`` applies to surfaces only.
     ignore_columns: dict[str, list[str]] = Field(default_factory=dict)
-    #: Over this many rows a table is digested by key bucket: its existing
-    #: rows by digest, the rows the save adds in full.
-    max_rows: int = Field(default=20000, ge=1)
-    #: Seconds between the two reads after the save. They must match: a
-    #: write the app makes a moment later (a background job) shows as a
-    #: difference, and the frame is not checked until the database settles.
-    settle_s: float = Field(default=1.0, ge=0)
+    #: Over this many rows a table keeps, per row, its key and contents MACs
+    #: and cell MACs only for the columns attribution and side records read.
+    max_rows: int = Field(default=2000, ge=1)
+    #: Schemas the read account must see (MySQL); the snapshot refuses when
+    #: one isn't visible, so a schema the app writes can't be left out.
+    schemas: list[str] = Field(default_factory=list)
+    #: Seconds to wait after the save before the read, so writes the app
+    #: makes a moment later (background jobs) fall inside the window.
+    settle_s: float = Field(default=0.0, ge=0)
 
     @model_validator(mode="before")
     @classmethod
@@ -497,7 +515,7 @@ def judge_frame(
     identities: Optional[Mapping[str, str]] = None,
     new_row_defaults: Optional[Mapping[str, Mapping[str, Optional[str]]]] = None,
     unread_changes: Sequence[tuple[str, str]] = (),
-    hashers: Optional[Mapping[str, Callable[[Any], str]]] = None,
+    hashers: Optional[Mapping[str, Callable[[str, Any], str]]] = None,
     clock: tuple[str, str] = ("", ""),
     database_evidence: Optional[dict[str, Any]] = None,
 ) -> FrameVerdict:
@@ -524,14 +542,14 @@ def judge_frame(
             ``CLOCK_DEFAULT`` a column the database fills with the time.
         unread_changes: (table, why) for tables that moved in a way no row
             comparison explains. Each is collateral.
-        hashers: Slice -> the keyed hash its baseline records hold instead of
+        hashers: Slice -> (column, value) -> the keyed MAC its baseline records hold instead of
             values (database tables). A post-save record is plain; it is
             hashed to compare with the baseline.
         clock: The database clock at the baseline and after the save.
         database_evidence: Counts for the receipt (tables compared, ...).
     """
 
-    from openadapt_flow.runtime.effects.db_snapshot import KEY, is_default
+    from openadapt_flow.runtime.effects.db_snapshot import KEY, ROW, is_default
 
     attribution = spec.attribution
     mode: str = attribution.kind if attribution is not None else "none"
@@ -586,18 +604,23 @@ def judge_frame(
     def changed(
         name: str, before: Mapping[str, Any], after: Mapping[str, Any]
     ) -> list[str]:
-        """Fields that differ. A database baseline holds hashes, so the
-        post-save value is hashed to compare."""
+        """Fields that differ. A database baseline row holds cell MACs (for
+        all columns, or only the reference columns of a large table) and its
+        contents MAC: the post-save value is MACed to compare, and a row
+        whose contents moved in no compared column says so."""
 
         ignore = ignore_for(name)
         hasher = hashers.get(name)
         if hasher is None:
             return _changed_fields(before, after, ignore)
-        return sorted(
+        fields = sorted(
             k
-            for k in set(before) | set(after)
-            if k not in ignore and before.get(k) != hasher(after.get(k))
+            for k in before
+            if k not in ignore and k != ROW and before.get(k) != hasher(k, after.get(k))
         )
+        if not fields and before.get(ROW) != after.get(ROW):
+            fields = ["(columns not compared)"]
+        return fields
 
     row_fields = database.new_row_fields if database is not None else {}
 
@@ -609,7 +632,13 @@ def judge_frame(
         defaults = (new_row_defaults or {}).get(name)
         if defaults is None:
             return []
-        allowed = written | set(row_fields.get(name, ())) | ignore_for(name) | set(also)
+        allowed = (
+            written
+            | set(row_fields.get(name, ()))
+            | ignore_for(name)
+            | {ROW}
+            | set(also)
+        )
         return sorted(
             c
             for c, v in record.items()
@@ -636,25 +665,49 @@ def judge_frame(
     def table_of(name: str) -> Optional[str]:
         return name if name in hashers else surface_tables.get(name)
 
-    def entries_for(name: str, ref: Any, hashed: bool) -> list[dict[str, Any]]:
+    def event_kinds(change: Optional[str]) -> Optional[set[str]]:
+        """The write events that can explain this kind of change: an insert
+        for an added row, a delete for a removed one, an update otherwise.
+        None: any write (the frame names no event kinds)."""
+
+        if attribution is None or not attribution.write_events or change is None:
+            return None
+        inserts, deletes = (
+            set(attribution.insert_events),
+            set(attribution.delete_events),
+        )
+        if change == "added":
+            return inserts
+        if change == "removed":
+            return deletes
+        return set(attribution.write_events) - inserts - deletes
+
+    def entries_for(
+        name: str, ref: Any, field: Optional[str], kinds: Optional[set[str]] = None
+    ) -> list[dict[str, Any]]:
         """Window entries that name this record (and its table, when the
-        attribution says which table an entry wrote)."""
+        attribution says which table an entry wrote). ``field`` is set when
+        ``ref`` is a baseline MAC of that column."""
 
         if window_entries is None or ref is None or attribution is None:
             return []
-        hasher = hashers.get(name) if hashed else None
+        hasher = hashers.get(name) if field else None
         table = table_of(name)
         out = []
         for e in window_entries:
             entry_ref = get_path(e, attribution.record_field or "")
             if entry_ref in (None, ""):
                 continue
-            if (hasher(entry_ref) if hasher else str(entry_ref)) != str(ref):
+            if (hasher(field, entry_ref) if hasher else str(entry_ref)) != str(ref):
                 continue
             if attribution.table_field:
                 if table is None or str(get_path(e, attribution.table_field)) != table:
                     continue
             if get_path(e, attribution.actor_field) in (None, ""):
+                continue
+            if kinds is not None and (
+                str(get_path(e, attribution.event_field or "")) not in kinds
+            ):
                 continue
             out.append(e)
         return out
@@ -664,24 +717,46 @@ def judge_frame(
         key: Any,
         before: Optional[Mapping[str, Any]],
         after: Optional[Mapping[str, Any]],
-    ) -> tuple[Any, bool]:
-        """What an audit entry names for this record, and whether it is a
-        baseline hash (the record is gone from the post-save read)."""
+    ) -> tuple[Any, Optional[str]]:
+        """What an audit entry names for this record, taken from the record
+        as it was BEFORE the change when there was one (so a write can't pick
+        its own excuse by moving a row), and the column when that value is a
+        baseline MAC."""
 
         if attribution is None:
-            return key, False
+            return key, None
         field = attribution.record_keys.get(name, attribution.record_key)
         if not field:
-            return key, name in hashers and after is None
-        record = after if after is not None else before
+            return key, None
+        record = before if before is not None else after
         value = None if record is None else record.get(field)
-        hashed = name in hashers and after is None
-        return (None if value in (None, "") else str(value)), hashed
+        hashed = name in hashers and before is not None
+        return (None if value in (None, "") else str(value)), (
+            field if hashed else None
+        )
 
-    def actors(name: str, ref: Any, hashed: bool) -> set[str]:
+    def key_moved(
+        name: str, before: Mapping[str, Any], after: Mapping[str, Any]
+    ) -> bool:
+        """Did the column an audit entry names change? Then no entry about
+        either chart can explain the row."""
+
+        if attribution is None or attribution.kind != "audit_read":
+            return False
+        field = attribution.record_keys.get(name, attribution.record_key)
+        if not field or field not in before:
+            return False
+        hasher = hashers.get(name)
+        if hasher is not None:
+            return before.get(field) != hasher(field, after.get(field))
+        return not _same(before.get(field), after.get(field))
+
+    def actors(
+        name: str, ref: Any, field: Optional[str], kinds: Optional[set[str]] = None
+    ) -> set[str]:
         return {
             str(get_path(e, attribution.actor_field))  # type: ignore[union-attr]
-            for e in entries_for(name, ref, hashed)
+            for e in entries_for(name, ref, field, kinds)
         }
 
     def other_on_target(
@@ -695,8 +770,8 @@ def judge_frame(
         if attribution is None:
             return False
         if attribution.kind == "audit_read":
-            ref, hashed = ref_of(name, key, before, after)
-            return bool(actors(name, ref, hashed) - self_ids)
+            ref, field = ref_of(name, key, before, after)
+            return bool(actors(name, ref, field) - self_ids)
         if after is None:
             return False
         if before is not None and not changed(name, before, after):
@@ -713,12 +788,30 @@ def judge_frame(
         inserts = set(attribution.insert_events)
         mine = [
             e
-            for e in entries_for(name, ref, False)
+            for e in entries_for(name, ref, None)
             if str(get_path(e, attribution.actor_field)) in self_ids
         ]
         return all(
             str(get_path(e, attribution.event_field or "")) in inserts for e in mine
         )
+
+    def inserted_by_other(name: str, key: Any, record: Mapping[str, Any]) -> bool:
+        """Does another actor's insert entry name this new record? (A look
+        only: it doesn't use the entry up.)"""
+
+        if attribution is None or attribution.kind != "audit_read":
+            return False
+        ref, field = ref_of(name, key, None, record)
+        found = actors(name, ref, field, event_kinds("added"))
+        return (
+            bool(found)
+            and not (found & self_ids)
+            and not (actors(name, ref, field) & self_ids)
+        )
+
+    # Each other actor's entry explains at most one row: a colleague's one
+    # insert can't cover two stray rows.
+    used: set[int] = set()
 
     def attribute(
         name: str,
@@ -729,13 +822,31 @@ def judge_frame(
         if attribution is None:
             return "unattributed"
         if attribution.kind == "audit_read":
-            ref, hashed = ref_of(name, key, before, after)
+            ref, field = ref_of(name, key, before, after)
             if window_entries is None or ref is None:
                 return "unattributed"
-            who = actors(name, ref, hashed)
-            if who & self_ids:
+            if (
+                before is not None
+                and after is not None
+                and key_moved(name, before, after)
+            ):
+                return "unattributed"  # the row moved between charts
+            if actors(name, ref, field) & self_ids:
                 return "self"
-            return "other" if who else "unattributed"
+            change = (
+                "added" if before is None else "removed" if after is None else "changed"
+            )
+            kinds = event_kinds(change)
+            for e in entries_for(name, ref, field, kinds):
+                if (
+                    id(e) in used
+                    or str(get_path(e, attribution.actor_field)) in self_ids
+                ):
+                    continue
+                if attribution.write_events:
+                    used.add(id(e))
+                return "other"
+            return "unattributed"
         # record_field: the record says who last changed it.
         if after is None:
             return "unattributed"  # a removed record can't say who removed it
@@ -793,7 +904,7 @@ def judge_frame(
         if not extra:
             return
         ref, _hashed = ref_of(name, key, None, after)
-        others = actors(name, ref, False) - self_ids
+        others = actors(name, ref, None) - self_ids
         change = FrameChange(name, "added", "self", extra, on_target=True, key=key)
         if others and bot_only_inserted(name, ref):
             change.attribution = "other"
@@ -823,11 +934,8 @@ def judge_frame(
                     continue
                 if any(record_matches(dict(record), s) for s in sels):
                     links.add(str(value))
-                elif (
-                    attribute(
-                        side.of_surface, key_of(record, side.of_surface), None, record
-                    )
-                    == "other"
+                elif inserted_by_other(
+                    side.of_surface, key_of(record, side.of_surface), record
                 ):
                     theirs.add(str(value))
         side_links.append(links)
@@ -851,7 +959,7 @@ def judge_frame(
         def declared(record: Mapping[str, Any], hashed: bool = False) -> bool:
             if hashed and hasher is not None:
                 return any(
-                    all(record.get(k) == hasher(v) for k, v in s.items())
+                    all(record.get(k) == hasher(k, v) for k, v in s.items())
                     for s in selectors
                 )
             return any(record_matches(dict(record), s) for s in selectors)
@@ -918,14 +1026,14 @@ def judge_frame(
                 fields = changed(name, before, after)  # type: ignore[arg-type]
                 stray = [f for f in fields if f not in may_change]
                 if other_on_target(name, key, before, after):
-                    ref, hashed = ref_of(name, key, before, after)
+                    ref, field = ref_of(name, key, before, after)
                     if (
                         fields
                         and not (set(fields) & may_change)
                         and attribution is not None
                         and attribution.write_events
                         and attribution.table_field
-                        and not (actors(name, ref, hashed) & self_ids)
+                        and not (actors(name, ref, field) & self_ids)
                     ):
                         # Another actor wrote, by a write to this table, only
                         # fields this save doesn't declare, and the bot wrote

@@ -460,12 +460,29 @@ def _audit_sql(cfg: VerifyConfig) -> dict[str, str]:
     return {}
 
 
+def _ref_columns(cfg: VerifyConfig) -> list[str]:
+    """Columns attribution and side records read: kept as cell MACs in
+    every table, however large."""
+
+    frame = cfg.frame
+    if frame is None:
+        return []
+    cols = {frame.identity_field} if frame.identity_field else set()
+    a = frame.attribution
+    if a is not None:
+        cols |= {a.record_key} if a.record_key else set()
+        cols |= set(a.record_keys.values())
+    for side in frame.side_records:
+        cols |= {side.link_field, side.of_field}
+    return sorted(c for c in cols if c)
+
+
 def _read_database(
     cfg: VerifyConfig, salt: bytes, before: Optional[Any] = None
 ) -> Optional[Any]:
     """The whole-database snapshot, or None when it can't be read."""
 
-    from openadapt_flow.runtime.effects.db_snapshot import take_snapshot
+    from openadapt_flow.runtime.effects.db_snapshot import mac_key, take_snapshot
 
     database = cfg.frame.database if cfg.frame is not None else None
     if database is None:
@@ -474,21 +491,32 @@ def _read_database(
         return take_snapshot(
             _db_connect(database.read),
             database.dialect,
-            key=salt,
+            key=mac_key(salt),
             modes=database.modes(),  # type: ignore[arg-type]
             max_rows=database.max_rows,
             before=before,
             extra_queries=_audit_sql(cfg),
+            ignore=database.ignore_columns,
+            ref_columns=_ref_columns(cfg),
+            schemas=database.schemas,
         )
     except Exception:  # noqa: BLE001 - unreadable -> the frame is not checked
         return None
+
+
+def _mac_key(salt: bytes) -> bytes:
+    from openadapt_flow.runtime.effects.db_snapshot import mac_key
+
+    return mac_key(salt)
 
 
 def _audit_ids_each(entries: Sequence[Mapping[str, Any]], salt: bytes) -> list[str]:
     from openadapt_flow.runtime.effects.effect import stable_id
 
     return [
-        hmac.new(salt, repr(stable_id(dict(e))).encode(), hashlib.sha256).hexdigest()
+        hmac.new(
+            _mac_key(salt), repr(stable_id(dict(e))).encode(), hashlib.sha256
+        ).hexdigest()
         for e in entries
     ]
 
@@ -500,7 +528,9 @@ def _audit_ids(entries: Sequence[Mapping[str, Any]], salt: bytes) -> list[str]:
     from openadapt_flow.runtime.effects.effect import stable_id
 
     return sorted(
-        hmac.new(salt, repr(stable_id(dict(e))).encode(), hashlib.sha256).hexdigest()
+        hmac.new(
+            _mac_key(salt), repr(stable_id(dict(e))).encode(), hashlib.sha256
+        ).hexdigest()
         for e in entries
     )
 
@@ -514,26 +544,30 @@ class _DatabaseFrame:
     clock: tuple[str, str]
     evidence: dict[str, Any]
     audit_after: Optional[list[dict[str, Any]]]
-    #: The two reads after the save differed: the database was still moving.
-    still_moving: bool = False
+    #: The read account can't see triggers: what the save caused can't be
+    #: ruled out, so the frame is not checked.
+    blind: bool = False
 
 
 def _database_frame(
     cfg: VerifyConfig, before: EffectState, salt: bytes
 ) -> Optional[_DatabaseFrame]:
-    """Every table as a slice, from the baseline snapshot and one read now.
+    """The rows that moved, as slices, from the baseline and one read now.
 
-    None when there is no ``frame.database``. A baseline without a readable
-    snapshot, or an unreadable read now, gives one unreachable slice, so the
-    frame is not checked.
+    Only rows whose contents MAC differs (changed), and rows on one side only
+    (added or removed), reach the judge: a baseline row as its MACs, a row now
+    as read. None when there is no ``frame.database``. A baseline without a
+    readable snapshot, or an unreadable read now, gives one unreachable
+    slice, so the frame is not checked.
     """
 
     from openadapt_flow.runtime.effects.db_snapshot import (
         KEY,
+        ROW,
         Snapshot,
         SnapshotError,
         cell_hash,
-        same_state,
+        mac_key,
         unpack,
         unread_reasons,
     )
@@ -556,19 +590,16 @@ def _database_frame(
     if not isinstance(stored, dict):
         return unreachable
     old = Snapshot.from_json(stored)
+    if database.settle_s:
+        time.sleep(database.settle_s)
     new = _read_database(cfg, salt, before=old)
     if new is None:
         return unreachable
-    # Read again a moment later: the two reads must match, or the app is
-    # still writing and what the save caused can't be told yet.
-    time.sleep(database.settle_s)
-    again = _read_database(cfg, salt, before=old)
-    if again is None:
-        return unreachable
-    if not same_state(new, again, salt):
-        moving = _DatabaseFrame({}, {}, [], {}, ("", ""), {}, None)
-        moving.still_moving = True
-        return moving
+    if not (old.code_visible and new.code_visible):
+        blind = _DatabaseFrame({}, {}, [], {}, ("", ""), {}, None)
+        blind.blind = True
+        return blind
+    key = mac_key(salt)
     out = _DatabaseFrame({}, {}, [], {}, (old.clock, new.clock), {}, None)
     if "audit" in new.extra:
         out.audit_after = list(new.extra["audit"])
@@ -576,7 +607,6 @@ def _database_frame(
         out.unread.append(
             ("(database code)", "triggers, views, routines or events changed")
         )
-    hasher = lambda value: cell_hash(salt, value)  # noqa: E731
     counts = {"compare": 0, "append_only": 0, "skip": 0}
     for name in sorted(set(old.tables) | set(new.tables)):
         a, b = old.tables.get(name), new.tables.get(name)
@@ -591,21 +621,26 @@ def _database_frame(
             a is None
             or b is None
             or a.mode != "compare"
+            or b.mode != "compare"
+            or a.cell_columns != b.cell_columns
             or (reasons and reasons[0] in ("definition changed", "created or dropped"))
         ):
             continue
-        if b.rows is None and b.buckets is None:
-            continue  # a whole-table digest: moved or not, nothing row by row
+        gone = [k for k in a.rows if k not in b.rows or b.rows[k][0] != a.rows[k][0]]
+        now = [k for k in b.rows if k not in a.rows or a.rows[k][0] != b.rows[k][0]]
         before_rows = [
-            {KEY: k, **unpack(a.columns, cells)} for k, cells in (a.rows or {}).items()
+            {KEY: k, ROW: a.rows[k][0], **unpack(a.cell_columns, a.rows[k][1])}
+            for k in gone
         ]
-        after_rows = [{KEY: k, **row} for k, row in b.values.items()]
+        after_rows = [{KEY: k, ROW: b.rows[k][0], **b.values.get(k, {})} for k in now]
         out.slices[name] = (
             EffectState(substrate="database", reachable=True, records=before_rows),
             after_rows,
         )
         out.defaults[name] = dict(b.defaults)
-        out.hashers[name] = hasher
+        out.hashers[name] = (
+            lambda table: lambda column, value: cell_hash(key, value, table, column)
+        )(name)
     out.evidence = {
         "tables_compared": counts.get("compare", 0),
         "tables_append_only": counts.get("append_only", 0),
@@ -613,6 +648,7 @@ def _database_frame(
         "tables_without_snapshot_isolation": sum(
             1 for t in new.tables.values() if t.non_transactional
         ),
+        "schemas": list(new.schemas),
         "allow_list_sha256": database.allow_list_sha256(),
     }
     return out
@@ -690,12 +726,12 @@ def judge_run_frame(
         slices[""] = (before, _post_records(after))
     identities: Optional[dict[str, str]] = None
     db = _database_frame(cfg, before, salt)
-    if db is not None and db.still_moving:
+    if db is not None and db.blind:
         return FrameVerdict(
             status="not_checked",
             reason=(
-                "the database was still changing after the save (two reads "
-                "differed); what the save caused can't be told yet"
+                "the database read account can't see triggers (on MySQL it "
+                "needs TRIGGER), so a trigger planted in the window could pass"
             ),
             attribution=spec.attribution.kind if spec.attribution else "none",
         )
