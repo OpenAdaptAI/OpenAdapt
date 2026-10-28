@@ -54,12 +54,18 @@ from verification_coverage.independent.run import (  # noqa: E402
     DELETE_LAST_ALLERGY_OP,
     DOUBLE_HISTORY_OP,
     EMPTY_HISTORY_OP,
+    FLIP_COLLEAGUE_SETTING_OP,
     HELD_OUT_OPS,
     LABELS,
+    MOVE_HISTORY_OP,
     OTHER,
     PRE_WINDOW_INSURANCE,
     REFERRAL,
+    REPOINT_CONTACT_OP,
+    REPOINT_INSURANCE_OP,
+    RESET_COLLEAGUE_PASSWORD_OP,
     REVERT2_OP,
+    REVERT_FIELD_OP,
     REVERT_OP,
     SEEDS,
     SET_USER_INFO_OP,
@@ -369,11 +375,25 @@ def audit_row(
 def prepare_window(case: dict[str, Any], ids: dict[str, Any]) -> None:
     """What a case says the baseline holds before the run window opens."""
 
-    if any(step["op"] == DELETE_INSURANCE_OP for step in case["steps"]):
+    ops = {step["op"] for step in case["steps"]}
+    other = int(ids["other_patient"])
+    if DELETE_INSURANCE_OP in ops or REPOINT_INSURANCE_OP in ops:
         sql(
             "INSERT INTO openemr.insurance_data (type, provider, pid, date) VALUES "
-            f"('primary', {q(PRE_WINDOW_INSURANCE)}, {int(ids['other_patient'])}, "
-            "CURDATE())"
+            f"('primary', {q(PRE_WINDOW_INSURANCE)}, {other}, CURDATE())"
+        )
+    if FLIP_COLLEAGUE_SETTING_OP in ops:
+        sql(
+            "INSERT INTO openemr.user_settings VALUES "
+            f"({int(ids[OTHER])}, 'gacl_protect', '0')"
+        )
+    if REPOINT_CONTACT_OP in ops:
+        # The REST seed writes no contact row; the case says to create one.
+        sql(
+            "INSERT INTO openemr.contact (foreign_table_name, foreign_id) "
+            f"SELECT 'patient_data', {other} FROM DUAL WHERE NOT EXISTS (SELECT 1 "
+            "FROM openemr.contact WHERE foreign_table_name = 'patient_data' AND "
+            f"foreign_id = {other})"
         )
 
 
@@ -404,6 +424,66 @@ def apply_steps(
                         f"WHERE email = {q(values['email'])}"
                     ).split()[0]
                 )
+                continue
+            if op in (REPOINT_INSURANCE_OP, REPOINT_CONTACT_OP, MOVE_HISTORY_OP):
+                table, column, old, new = {
+                    REPOINT_INSURANCE_OP: (
+                        "insurance_data",
+                        "pid",
+                        ids["other_patient"],
+                        new_pid,
+                    ),
+                    REPOINT_CONTACT_OP: (
+                        "contact",
+                        "foreign_id",
+                        ids["other_patient"],
+                        new_pid,
+                    ),
+                    MOVE_HISTORY_OP: (
+                        "history_data",
+                        "pid",
+                        new_pid,
+                        ids["other_patient"],
+                    ),
+                }[op]
+                deviations.append(f"{op} ran as SQL with an audit row by the bot")
+                sql(
+                    f"UPDATE openemr.{table} SET {column} = {int(new)} "
+                    f"WHERE {column} = {int(old)};"
+                    + audit_row(
+                        BOT, int(old), f"UPDATE {table}", "patient-record-update"
+                    )
+                )
+                continue
+            if op == FLIP_COLLEAGUE_SETTING_OP:
+                deviations.append("the setting flip ran as SQL (no audit entry)")
+                sql(
+                    "UPDATE openemr.user_settings SET setting_value = CASE "
+                    "setting_value WHEN '0' THEN '1' ELSE '0' END "
+                    f"WHERE setting_user = {int(ids[OTHER])}"
+                )
+                continue
+            if op == RESET_COLLEAGUE_PASSWORD_OP:
+                deviations.append(
+                    "the password reset ran as SQL with an audit row by the bot"
+                )
+                sql(
+                    "UPDATE openemr.users_secure SET password = "
+                    f"{q('$2y$10$reset' + OTHER)} WHERE username = {q(OTHER)};"
+                    "INSERT INTO openemr.log (date, event, category, user, groupname, "
+                    "comments, patient_id, success, log_from) VALUES (NOW(), "
+                    "'security-administration-update', 'Security-Administration', "
+                    f"{q(BOT)}, 'Default', TO_BASE64('UPDATE users_secure'), 0, 1, "
+                    "'open-emr')"
+                )
+                continue
+            if op == REVERT_FIELD_OP:
+                target, column = step["target"], step["field"]
+                uuid = patient(ids[target])["uuid"]
+                current = api(sessions[who], "GET", f"/patient/{uuid}")["data"]
+                body = {k: current.get(k) for k in api_body(current)}
+                body[column] = SEEDS[target][column]
+                api(sessions[who], "PUT", f"/patient/{uuid}", body)
                 continue
             if op == SET_USER_INFO_OP:
                 deviations.append(
