@@ -499,9 +499,10 @@ def _read_database(
             max_rows=database.max_rows,
             before=before,
             extra_queries=_audit_sql(cfg),
-            ignore=database.ignore_columns,
+            ignore=database.all_ignore_columns(),
             ref_columns=_ref_columns(cfg),
             schemas=database.schemas,
+            optional_modes=database.profile_modes(),  # type: ignore[arg-type]
         )
     except Exception:  # noqa: BLE001 - unreadable -> the frame is not checked
         return None
@@ -550,6 +551,40 @@ class _DatabaseFrame:
     #: The read account can't see triggers: what the save caused can't be
     #: ruled out, so the frame is not checked.
     blind: bool = False
+
+
+def _rules_used(profile: Any, old: Any, new: Any) -> list[str]:
+    """The profile's rules that excused something in this run: an
+    append-only table that gained rows, a session table present, or a row
+    whose only changes were in a rule's columns."""
+
+    from openadapt_flow.runtime.effects.db_snapshot import unpack
+
+    used = []
+    for rule in profile.rules:
+        if rule.mode == "append_only":
+            a, b = old.tables.get(rule.table), new.tables.get(rule.table)
+            if a is not None and b is not None and len(b.rows) > len(a.rows):
+                used.append(rule.id)
+        elif rule.mode == "session":
+            if rule.table in new.tables:
+                used.append(rule.id)
+        else:
+            tables = new.tables if rule.table == "*" else {rule.table: None}
+            for name in tables:
+                a, b = old.tables.get(name), new.tables.get(name)
+                if a is None or b is None or a.cell_columns != b.cell_columns:
+                    continue
+                cols = [c for c in rule.columns if c in a.cell_columns]
+                if any(
+                    unpack(a.cell_columns, a.rows[k][1])[c]
+                    != unpack(b.cell_columns, b.rows[k][1])[c]
+                    for k in a.rows.keys() & b.rows.keys()
+                    for c in cols
+                ):
+                    used.append(rule.id)
+                    break
+    return used
 
 
 def _database_frame(
@@ -654,6 +689,13 @@ def _database_frame(
         "schemas": list(new.schemas),
         "allow_list_sha256": database.allow_list_sha256(),
     }
+    profile = database.loaded_profile()
+    if profile is not None:
+        out.evidence["profile"] = {
+            "version": profile.version,
+            "sha256": profile.sha256(),
+            "rules_used": _rules_used(profile, old, new),
+        }
     return out
 
 
