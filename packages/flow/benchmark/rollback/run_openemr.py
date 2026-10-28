@@ -59,29 +59,7 @@ UI_PORT, API_PORT = "9561", "9560"
 PROJECT = "openadapt-openemr-rollback"
 SAVE_STEP = "step_034"
 BEFORE_SAVE_STEP = "step_033"
-#: Tables OpenEMR writes on its own for any signed-in user. Reviewed on the
-#: lifecycle proof (measure/phase0-independent, verify.database.yaml).
-ALLOW_TABLES = [
-    "log",
-    "log_comment_encrypt",
-    "api_log",
-    "sessions",
-    "users_secure",
-    "uuid_registry",
-    "uuid_mapping",
-    "sequences",
-    "recent_patients",
-    "user_settings",
-    "clinical_rules_log",
-]
 RO_USER = "rollback_ro"
-#: Columns OpenEMR moves on its own while a signed-in user works, found by the
-#: first live pass (background job schedule; user rows touched at sign-in).
-#: Ignoring them is a reviewed decision; the "_reviewed" cases use it.
-REVIEWED_IGNORE = {
-    "background_services": ["next_run"],
-    "users": ["last_updated", "uuid"],
-}
 
 
 def _clone_state(source: Path, root: Path) -> Path:
@@ -210,6 +188,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--keep-up", action="store_true")
+    parser.add_argument(
+        "--profile",
+        default=None,
+        help="The app's frame-exclusion profile (YAML), shared with the verifier",
+    )
     args = parser.parse_args(argv)
     if not os.environ.get("DOCKER_HOST"):
         raise SystemExit("set DOCKER_HOST to the fixtures' podman socket first")
@@ -283,16 +266,21 @@ def main(argv: list[str] | None = None) -> int:
         def before_save(b: Path, o: Path) -> Path:
             return _variant(b, o, before=BEFORE_SAVE_STEP)
 
-        # (bundle maker, columns ignored as reviewed app bookkeeping)
+        from openadapt_flow.rollback_state import AppProfile
+
+        profile = AppProfile.load(args.profile) if args.profile else None
+        # (bundle maker, app profile): every change counts, or the app's own
+        # versioned bookkeeping profile (shared with the verifier and the RL
+        # grader) excuses what it names.
         cases = {
-            "before_save": (before_save, {}),
-            "after_save": (_after_save, {}),
-            "before_save_reviewed": (before_save, REVIEWED_IGNORE),
-            "after_save_reviewed": (_after_save, REVIEWED_IGNORE),
+            "before_save_no_profile": (before_save, None),
+            "before_save_app_profile": (before_save, profile),
         }
+        if profile is None:
+            cases.pop("before_save_app_profile")
         with tempfile.TemporaryDirectory(prefix="rollback-openemr-") as tmp:
             work = Path(tmp)
-            for name, (make, ignore) in cases.items():
+            for name, (make, case_profile) in cases.items():
                 reset()
                 # The recording's own synthetic values: the program's screen
                 # checks quote them (step_007 checks the recorded last name).
@@ -303,11 +291,9 @@ def main(argv: list[str] | None = None) -> int:
                     connect, "SELECT * FROM patient_data", timeout_s=20.0
                 )
                 plan = RollbackPlan(
-                    DatabaseReader(
-                        dialect="mysql", read_config=read, allow_tables=ALLOW_TABLES
-                    ),
+                    DatabaseReader(dialect="mysql", read_config=read),
                     read_records=records_reader(verifier),
-                    ignore_columns=ignore,
+                    profile=case_profile,
                 )
                 with sync_playwright() as p:
                     browser = launch_chromium(p.chromium, headless=True)
@@ -366,6 +352,8 @@ def main(argv: list[str] | None = None) -> int:
                     "rollback_reason": rollback.reason if rollback else None,
                     "after_stop_diff": rollback.after_stop_diff if rollback else None,
                     "remaining_diff": rollback.remaining_diff if rollback else None,
+                    "profile_id": rollback.profile_id if rollback else None,
+                    "profile_rows": rollback.profile_rows if rollback else None,
                     "steps": [
                         {"step_id": s.step_id, "decision": s.decision}
                         for s in (rollback.steps if rollback else [])
@@ -385,7 +373,7 @@ def main(argv: list[str] | None = None) -> int:
         "app": "openemr",
         "mode": "live (pinned OpenEMR fixture, real browser, whole-database read)",
         "bundle": "scoreboard openemr_referral program bundle (New Patient)",
-        "allow_tables": ALLOW_TABLES,
+        "profile": profile.id if profile is not None else None,
         "measured_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "host": platform.platform(),
         "load_1m": round(os.getloadavg()[0], 2),

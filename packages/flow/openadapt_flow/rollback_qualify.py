@@ -148,6 +148,7 @@ def halt_point(
     run_dir: Path,
     ignore_columns: Optional[dict[str, list[str]]] = None,
     allow_delete: bool = False,
+    profile: Any = None,
 ) -> tuple[bool, str, Optional[RollbackRecord]]:
     """Reset, read, run steps ``[:end]``, roll back; did the store come back?"""
     try:
@@ -187,6 +188,7 @@ def halt_point(
         ignore_columns=ignore_columns,
         assume_stopped=True,
         allow_delete=allow_delete,
+        profile=profile,
     )
     assert record is not None
     try:
@@ -227,6 +229,7 @@ def qualify_rollback(
     work_dir: Optional[Path] = None,
     ignore_columns: Optional[dict[str, list[str]]] = None,
     allow_delete: bool = False,
+    profile: Any = None,
 ) -> tuple[QualifyReport, dict[str, tuple[Candidate, CandidateResult]]]:
     """Run the halt matrix; return the report and the new compensations that
     passed (for :func:`openadapt_flow.undo_proposal.write_proposals`).
@@ -266,6 +269,7 @@ def qualify_rollback(
                 run_dir=work / slug / "before",
                 ignore_columns=ignore_columns,
                 allow_delete=allow_delete,
+                profile=profile,
             )
             report.halt_points.append(
                 HaltPoint(
@@ -327,6 +331,7 @@ def qualify_rollback(
                     run_dir=work / slug / f"after-{n}",
                     ignore_columns=ignore_columns,
                     allow_delete=allow_delete,
+                    profile=profile,
                 )
                 point = HaltPoint(
                     step_id=step.id,

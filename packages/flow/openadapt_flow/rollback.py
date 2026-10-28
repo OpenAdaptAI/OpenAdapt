@@ -53,6 +53,7 @@ from openadapt_flow.ir import (
     Workflow,
 )
 from openadapt_flow.rollback_state import (
+    AppProfile,
     Attributor,
     Change,
     StateDiff,
@@ -291,6 +292,7 @@ def roll_back(
     assume_stopped: bool = False,
     attributor: Optional[Attributor] = None,
     allow_delete: bool = False,
+    profile: Optional[AppProfile] = None,
 ) -> Optional[RollbackRecord]:
     """Undo what a stopped run left, then prove the run's changes are gone.
 
@@ -358,10 +360,17 @@ def roll_back(
     def whose(change: Change) -> str:
         return attributor.attribute(change, window) if attributor else "unattributed"
 
+    if profile is not None:
+        record.profile_id = profile.id
     run_changes: list[Change] = []
     conflicts: list[Change] = []
     others = 0
+    excused = 0
     for change in changes(landed):
+        if profile is not None and profile.excuses(change):
+            # The app's own bookkeeping, by its versioned profile rule.
+            excused += 1
+            continue
         who = whose(change)
         runs_record = _is_runs_record(change, selectors)
         if who == "other" and not runs_record:
@@ -375,6 +384,7 @@ def roll_back(
             conflicts.append(change)
         run_changes.append(change)
     record.other_actor_rows = others
+    record.profile_rows = excused
     record.after_stop_diff = keep_rows(landed, run_changes).summary()
     run_keys = {(t, k) for t, k, *_rest in run_changes}
     if not run_changes:
@@ -547,6 +557,8 @@ def roll_back(
         if (table, key) in retained:
             kept += 1
             continue
+        if profile is not None and profile.excuses(change):
+            continue
         mine = (table, key) in run_keys or _is_runs_record(change, selectors)
         if (
             not mine
@@ -557,7 +569,7 @@ def roll_back(
         residue.append(change)
     record.retained_rows = kept
     left = keep_rows(remaining, residue)
-    if not residue and attributor is None and not kept:
+    if not residue and attributor is None and not kept and profile is None:
         # With nothing set aside, the verifier's own whole-database diff must
         # agree that the store is back. It decides when the two differ.
         cross = getattr(reader, "verifier_diff", None)
@@ -725,7 +737,9 @@ class RollbackPlan:
         attribution: Any = None,
         audit_read: Optional[RecordsReader] = None,
         allow_delete: bool = False,
+        profile: Optional[AppProfile] = None,
     ) -> None:
+        self.profile = profile
         self.reader = reader
         self.read_records = read_records
         self.ignore_columns = dict(ignore_columns or {})
@@ -774,6 +788,7 @@ class RollbackPlan:
             ignore_columns=self.ignore_columns,
             attributor=self.attributor,
             allow_delete=self.allow_delete,
+            profile=self.profile,
         )
         return apply_rollback(report, workflow, record, run_dir)
 
@@ -812,6 +827,7 @@ def plan_from_deployment(cfg: Any, effect_verifier: Any) -> Optional[RollbackPla
         attribution=section.attribution,
         audit_read=audit_read,
         allow_delete=section.allow_delete,
+        profile=AppProfile.load(section.profile) if section.profile else None,
     )
 
 

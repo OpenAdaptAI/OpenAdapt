@@ -24,7 +24,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Optional, Protocol, Sequence
+from typing import Any, Literal, Mapping, Optional, Protocol, Sequence
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from openadapt_flow.runtime.effects.db_snapshot import (
     KEY,
@@ -320,6 +322,81 @@ def diff_states(
     return out
 
 
+# ---------------------------------------------------------------------------
+# An app's own bookkeeping: the shared per-app frame-exclusion profile
+# ---------------------------------------------------------------------------
+
+
+class TableRule(BaseModel):
+    """How one table of an app's own bookkeeping may move.
+
+    ``append_only``: rows may be added; an existing row that changes or goes
+    is not excused. ``session``: per-user or per-session state; any change.
+    ``columns``: existing rows may change only in ``columns``; no row may be
+    added or removed.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule: Literal["append_only", "session", "columns"]
+    columns: list[str] = Field(default_factory=list)
+
+
+class AppProfile(BaseModel):
+    """The versioned list of what an app writes on its own (one per app).
+
+    The same file serves the verifier's frame, rollback and the RL grader.
+    No rule may name a patient-data table: ``patient_table_prefixes`` lists
+    them, and loading refuses a profile that names one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: For example ``openemr-frame-exclusions/2026-10-28.1``.
+    id: str = Field(min_length=1)
+    tables: dict[str, TableRule]
+    patient_table_prefixes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _no_patient_tables(self) -> "AppProfile":
+        prefixes = tuple(self.patient_table_prefixes)
+        bad = sorted(t for t in self.tables if prefixes and t.startswith(prefixes))
+        if bad:
+            raise ValueError(
+                "an app profile can't excuse a patient-data table: " + ", ".join(bad)
+            )
+        for name, rule in self.tables.items():
+            if rule.rule == "columns" and not rule.columns:
+                raise ValueError(f"{name}: a columns rule names its columns")
+        return self
+
+    @classmethod
+    def load(cls, path: Any) -> "AppProfile":
+        import yaml
+
+        raw = yaml.safe_load(open(path, encoding="utf-8").read())
+        return cls.model_validate(raw)
+
+    def excuses(self, change: "Change") -> bool:
+        """Is this changed row the app's own bookkeeping, by its rule?"""
+        table, key, before, after = change
+        rule = self.tables.get(table)
+        if rule is None or key == UNREAD_KEY:
+            return False
+        if rule.rule == "session":
+            return True
+        if rule.rule == "append_only":
+            return before is None and after is not None
+        if before is None or after is None:
+            return False
+        moved = {
+            c
+            for c in (set(before) | set(after)) - {KEY}
+            if not _same(before.get(c), after.get(c))
+        }
+        return moved <= set(rule.columns)
+
+
 def keep_rows(diff: StateDiff, rows: Sequence[Any]) -> StateDiff:
     """``diff`` limited to the rows in ``rows`` (``Change`` tuples)."""
     wanted = {(t, k) for t, k, *_rest in rows}
@@ -490,6 +567,8 @@ class Attributor:
 
 
 __all__ = [
+    "AppProfile",
+    "TableRule",
     "keep_rows",
     "Attributor",
     "Change",

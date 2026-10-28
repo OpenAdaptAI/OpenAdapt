@@ -470,6 +470,8 @@ def _run_clinic(
     colleague: Optional[str] = None,
     attribution: bool = False,
     allow_delete: bool = True,
+    profile=None,
+    allow_tables=("log",),
 ) -> RunReport:
     tmp_path.mkdir(parents=True, exist_ok=True)
     db = tmp_path / "clinic.db"
@@ -482,10 +484,13 @@ def _run_clinic(
     from openadapt_flow.runtime.effects.frame import FrameAttribution
 
     reader = DatabaseReader(
-        dialect="sqlite", read_config={"sqlite_database": str(db)}, allow_tables=["log"]
+        dialect="sqlite",
+        read_config={"sqlite_database": str(db)},
+        allow_tables=list(allow_tables),
     )
     plan = RollbackPlan(
         reader,
+        profile=profile,
         read_records=records_reader(_sql_verifier(db)),
         attribution=(
             FrameAttribution(
@@ -919,3 +924,60 @@ def test_a_run_with_no_person_to_ask_refuses_a_save_it_cannot_undo():
     assert gate.undo_or_person is True and gate.undo_allows_delete is True
     covered = workflow.model_copy(update={"steps": workflow.steps[:1]})
     _require_undo_or_person(covered, plan, None)  # every save is undoable
+
+
+# ---------------------------------------------------------------------------
+# The app's own bookkeeping: one versioned profile per app
+# ---------------------------------------------------------------------------
+
+
+def _profile(**extra):
+    from openadapt_flow.rollback_state import AppProfile
+
+    return AppProfile.model_validate(
+        {
+            "id": "clinic-frame-exclusions/test.1",
+            "tables": {
+                "log": {"rule": "append_only"},
+                "users": {"rule": "columns", "columns": ["uuid", "last_updated"]},
+                "sessions": {"rule": "session"},
+                **extra,
+            },
+            "patient_table_prefixes": ["patient", "history"],
+        }
+    )
+
+
+def test_profile_rules_excuse_only_what_they_name():
+    profile = _profile()
+    row = {"__row_key__": "1", "id": 1}
+    assert profile.excuses(("log", "1", None, row))  # appended
+    assert not profile.excuses(("log", "1", row, {**row, "event": "x"}))  # edited
+    assert not profile.excuses(("log", "1", row, None))  # removed
+    user = {"__row_key__": "7", "id": 7, "fname": "A", "last_updated": "t1"}
+    assert profile.excuses(("users", "7", user, {**user, "last_updated": "t2"}))
+    assert not profile.excuses(("users", "7", user, {**user, "fname": "B"}))
+    assert not profile.excuses(("users", "7", None, user))  # no new users
+    assert profile.excuses(("sessions", "s", user, None))
+    assert not profile.excuses(("notes", "1", None, row))  # not in the profile
+
+
+def test_a_profile_cannot_excuse_a_patient_table():
+    with pytest.raises(ValueError, match="patient-data table"):
+        _profile(patients={"rule": "session"})
+
+
+def test_whole_database_rollback_with_the_app_profile(tmp_path):
+    # The log is read, not skipped: the profile lets it grow, nothing else.
+    report = _run_clinic(tmp_path, profile=_profile(), allow_tables=())
+    rollback = report.rollback
+    assert rollback.status == "rolled_back", rollback.reason
+    assert rollback.profile_id == "clinic-frame-exclusions/test.1"
+    assert rollback.profile_rows == 1  # the 'patient created' log row
+    assert set(rollback.after_stop_diff) == {"patients", "history"}
+    assert report.transaction_outcome == "ROLLED_BACK"
+
+    # Without the profile, the log rows are the run's too.
+    plain = _run_clinic(tmp_path / "plain", allow_tables=())
+    assert plain.rollback.status == "not_rolled_back"
+    assert "log" in plain.rollback.remaining_diff

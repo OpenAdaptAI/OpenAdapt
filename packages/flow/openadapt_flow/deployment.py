@@ -1014,6 +1014,11 @@ class RollbackSection(BaseModel):
     #: Many record systems forbid deleting a chart for audit or legal reasons:
     #: prefer a ``void`` compensation there.
     allow_delete: bool = False
+    #: The app's versioned profile of its own bookkeeping (one file per app,
+    #: shared with the verifier's frame and the RL grader): which tables may
+    #: move on their own and how (append-only, session state, named columns).
+    #: Never a patient-data table. Without it, every changed row counts.
+    profile: Optional[str] = None
     #: Who changed a row (``frame.attribution`` in ``verify.yaml``). Rows
     #: another actor changed during the run are set aside; rows nothing
     #: attributes count as the run's.

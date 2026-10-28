@@ -138,6 +138,7 @@ rollback:
   ignore_columns:
     "*": [modified_at]              # columns that change on their own
   allow_delete: false               # the default: no hard deletes
+  profile: openemr-frame-exclusions.yaml   # the app's own bookkeeping
   attribution:                      # optional: who changed a row
     kind: record_field
     actor_field: modified_by
@@ -194,25 +195,37 @@ None of the runs made a model call.
 
 **OpenEMR, live:** the pinned local fixture (its own stack), a real browser,
 the scoreboard's New Patient program, and the whole `openemr` database read
-through a SELECT-only user, skipping the reviewed allow-list of tables
-OpenEMR writes on its own (logs, sessions, id registries). The program
-filled 28 steps of the form and stopped before the save.
+through a SELECT-only user. The program filled 28 steps of the form and
+stopped before the save. Read with only a copied allow-list of log and session
+tables, the rollback ended `RECONCILIATION_REQUIRED` and named exactly what
+else moved: 2 `background_services` rows (`next_run`) and 4 `users` rows
+(`last_updated`, `uuid`), bookkeeping OpenEMR does on its own while a user is
+signed in. That is the case the app profile below is for: a column nobody
+listed shows up by name rather than being assumed harmless.
 
-| Read | Outcome | What the read showed |
-| --- | --- | --- |
-| Allow-list only | `RECONCILIATION_REQUIRED` | 2 `background_services` rows (`next_run`) and 4 `users` rows (`last_updated`, `uuid`) changed, all bookkeeping OpenEMR does on its own while a user is signed in |
-| Those three columns ignored as reviewed bookkeeping | `HALTED_BEFORE_EFFECT` (nothing landed) | Nothing else in the database moved: the filled form saved nothing |
+Not measured on OpenEMR: a stop after the save. On this stack the recorded
+program stops at its own scroll step (step 28 of 35), before the save, and the
+fixture ships with chart deletion turned off (`allow_pat_delete`), so there is
+no compensation to run.
 
-The first row shows what the whole-database read is for: a column nobody
-listed shows up, by name, rather than being assumed harmless. Which columns
-to ignore is a person's reviewed decision per app, and the report lists
-them.
+## The app's own bookkeeping: one profile per app
 
-Not measured yet on OpenEMR: a stop after the save. On this stack the
-recorded program stops at its own scroll step (step 28 of 35), before the
-save, and the fixture ships with chart deletion turned off
-(`allow_pat_delete`), so there is no compensation to run.
+Every app writes some rows on its own while a person is signed in: logs,
+session state, ids. A rollback must not count those as the run's, and must
+not excuse anything else. `rollback.profile` points at the app's versioned
+profile, the same file the verifier's frame and the RL grader use, so the
+three agree on what "the app's own" means. Each table gets the narrowest rule
+that holds:
 
+| Rule | Allows |
+| --- | --- |
+| `append_only` | New rows. An existing row that changes or goes still counts. |
+| `session` | Any change (per-user or per-session state). |
+| `columns` | Changes to the named columns of existing rows; no rows added or removed. |
+
+A profile can never name a patient-data table: it lists the patient-table
+prefixes, and loading refuses one that names such a table. The report records
+the profile's id and how many rows it excused (`profile_id`, `profile_rows`).
 
 ## What this doesn't do
 

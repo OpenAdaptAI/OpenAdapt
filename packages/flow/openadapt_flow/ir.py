@@ -5048,6 +5048,10 @@ class RollbackRecord(BaseModel):
     conflicts: int = 0
     #: Voided records left in place by a ``void`` compensation.
     retained_rows: int = 0
+    #: The app profile that names the app's own bookkeeping
+    #: (``rollback.profile``), and how many changed rows it excused.
+    profile_id: Optional[str] = None
+    profile_rows: int = 0
     #: The verifier's own whole-database diff (``openadapt_flow.verifier``)
     #: agreed with the final check. None when it wasn't available or didn't
     #: apply (a collection read, attribution, or voided rows).
