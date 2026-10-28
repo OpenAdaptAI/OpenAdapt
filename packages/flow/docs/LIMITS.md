@@ -428,8 +428,9 @@ Chromium-drawn clinic screen
 ([`benchmark/pixel_grounding`](../benchmark/pixel_grounding/README.md)) it
 found the two toolbar and form icons under 21 of 26 conditions where the
 template matcher found 8, abstained on the other 5, and picked no wrong
-target among 65 click targets. A median query took 113 ms on a 1280x800 frame
-and 211 ms at 2560x1600 (M2 Max, CPU). It does not change what a whole run
+target among 65 click targets. A query takes 133 ms (p95 139 ms) on a 1080p
+frame and about 310 ms (p95 up to 374 ms) at 4K on an M2 Max CPU; Apple's
+Neural Engine, through onnxruntime's CoreML provider, is slower. It does not change what a whole run
 does there: the same 4 of 39 runs saved in both arms, because other checks
 stop the run first. The layout check stops a zoomed or larger-font screen at
 its first step. The identity template of a banner does not match a dark

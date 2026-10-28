@@ -131,9 +131,71 @@ fields abstain because their crop matches all along the field; the row's key
 text is left to OCR. The template matcher found 15 of 65 and picked no wrong
 target.
 
-Query time on an M2 Max, 4 CPU threads, median (max): 113 ms (292 ms) on a
-1280x800 frame, 151 ms (274 ms) at 1600x1000, 154 ms (344 ms) at 1920x1200,
-211 ms (534 ms) at 2560x1600. Data: [`results_grounding.json`](results_grounding.json).
+Data: [`results_grounding.json`](results_grounding.json).
+
+### Query time
+
+[`latency_probe.py`](latency_probe.py) times one query (`locate_anchor`) per
+target, 30 times, on three captures of the same page: 1080p at 100% display
+scaling, 4K at 200% (the target drawn at twice its recorded size) and 4K at
+100%. The recorded crop's own embedding is cached, as it is after the first
+query of a run. M2 Max, onnxruntime 1.24, 4 threads. The target is 50 ms per
+query.
+
+The rung is **not** under 50 ms. On CPU, for the two icons (the targets the
+rung exists for), from the run at host load 22–25
+([`results_latency_low_load.json`](results_latency_low_load.json)):
+
+| Capture | p50 | p95 | PNG decode | Edge search | Model, 12 crops |
+|---|---|---|---|---|---|
+| 1080p (1920x1080) | 133 ms | 139 ms | 18 ms | 56 ms | 60 ms |
+| 4K at 200% (3840x2160) | 308–310 ms | 360–370 ms | 69 ms | 178 ms | 63 ms |
+| 4K at 100% (3840x2160) | 306 ms | 357–374 ms | 69 ms | 175–177 ms | 60 ms |
+
+The blank input fields, which the rung abstains on, take 111–134 ms at 1080p
+and 225–316 ms at 4K. The first query for a target in a run also embeds the
+crop and its inverse: 15–150 ms more. A repeat run, during which load from
+other jobs on the host rose to 105
+([`results_latency.json`](results_latency.json)), measured 121–304 ms p50 at
+1080p and 224–434 ms at 4K, all targets included.
+
+**The Apple Neural Engine does not help as shipped.** With onnxruntime's
+CoreML provider the model stage takes 260–450 ms instead of 60 ms: CoreML
+accepts 618 of the int8 graph's 917 nodes, in 99 pieces, and every handover
+between CoreML and CPU costs more than the work it moves.
+
+**What would reach 50 ms.** Every stage has to shrink:
+
+- **Decode, 18–69 ms → 0.** The replayer has already decoded the frame for
+  OCR and the identity check; passing the decoded frame (or caching it by
+  frame digest) removes this stage.
+- **Edge search, 56–178 ms → about 20 ms (estimate).** It scans the whole
+  frame at 9 scales. On RDP and Citrix the replayer already estimates the
+  display scale, so 3 scales around the estimate would do a third of the
+  work, and at 4K at 200% a known scale of 2 lets the search shrink the frame
+  2.4x instead of 1.2x, a quarter of the pixels. The search must keep
+  covering the whole frame: the look-alike count is only sound if every
+  place on the screen is a candidate.
+- **Model, 60 ms → 20–36 ms.** The model stage is already int8 (2.5x faster
+  than float32). Timed alone (median, interleaved with the other cells so
+  load bursts fall on all of them alike):
+
+  | Model input | 1 crop | 4 crops | 8 crops | 12 crops |
+  |---|---|---|---|---|
+  | 112 px (current) | 13 ms | 27 ms | 44 ms | 62 ms |
+  | 84 px | 9 ms | 17 ms | 27 ms | 36 ms |
+  | 56 px | 6 ms | 9 ms | 14 ms | 20 ms |
+
+  A smaller input keeps all 12 candidates; fewer candidates would be
+  cheaper still, but a look-alike that is never proposed is never counted,
+  so the candidate count is a safety setting, not a speed setting. Either
+  change moves the scores, so the acceptance score and look-alike margin
+  have to be tuned again and the probe above rerun for 0 wrong targets.
+  A float16 Core ML conversion that runs whole on the Neural Engine is
+  another route, not measured here.
+
+Together these come to about 40–55 ms at both 1080p and 4K: near the target,
+not yet measured, and only after the accuracy probe passes again.
 
 ### Whole runs
 
@@ -182,7 +244,8 @@ own safety review.
   and landmark tolerance). Its first version picked a wrong target on a blank
   input field 4 times in 65 here; the self-similar-crop check and the stricter
   landmark rule removed them. A new fixture can show cases this one does not.
-- Latency is from one M2 Max, under load from other jobs on the host.
+- Latency is from one M2 Max, shared with other jobs; no x86 CPU or Windows
+  host was measured.
 
 ## Reproduce
 
@@ -191,7 +254,10 @@ python benchmark/pixel_grounding/run_sweep.py --arm template --output results_te
 python benchmark/pixel_grounding/run_sweep.py --arm model --output results_model.json
 python benchmark/pixel_grounding/grounding_probe.py --output results_grounding.json
 python benchmark/pixel_grounding/summarize.py results_template.json results_model.json results_grounding.json
+python benchmark/pixel_grounding/latency_probe.py --output results_latency.json
+python benchmark/pixel_grounding/summarize.py --latency results_latency.json
 ```
 
 Needs Playwright's Chromium. The model arm and the probe fetch the 24 MB
-weights on first use. Each sweep takes about 8 minutes, the probe about 2.
+weights on first use. Each sweep takes about 8 minutes, the probe about 2, the latency probe
+about 15.

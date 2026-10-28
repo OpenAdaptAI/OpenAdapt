@@ -244,6 +244,8 @@
     "benchmark/openimis_claims/submit_binding_probe.json",
     "benchmark/pixel_grounding/fixture/emr.html",
     "benchmark/pixel_grounding/results_grounding.json",
+    "benchmark/pixel_grounding/results_latency.json",
+    "benchmark/pixel_grounding/results_latency_low_load.json",
     "benchmark/pixel_grounding/results_model.json",
     "benchmark/pixel_grounding/results_template.json",
     "benchmark/pixel_identity/crop_O0_digit_1_sibling.png",

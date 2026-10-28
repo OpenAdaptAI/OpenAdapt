@@ -5,6 +5,7 @@ Usage::
 
     python benchmark/pixel_grounding/summarize.py \\
         results_template.json results_model.json results_grounding.json
+    python benchmark/pixel_grounding/summarize.py --latency results_latency.json
 """
 
 from __future__ import annotations
@@ -99,7 +100,40 @@ def per_target(probe: dict) -> None:
     print(f"  all: {probe['latency_ms']}")
 
 
+def latency(data: dict) -> None:
+    print(
+        "| Provider | Capture | Target | p50 ms | p95 ms | Decode | Edge search | Model |"
+    )
+    print("|---|---|---|---|---|---|---|---|")
+    for row in data["rows"]:
+        if not row["queried_in_replay"]:
+            continue
+        provider = row["provider"].replace("ExecutionProvider", "")
+        print(
+            f"| {provider} | {row['capture']} ({row['frame'][0]}x{row['frame'][1]}) "
+            f"| {row['target']} | {row['warm_ms']['p50']:.0f} | "
+            f"{row['warm_ms']['p95']:.0f} | {row['decode_ms']['p50']:.0f} | "
+            f"{row['edge_search_ms']['p50']:.0f} | {row['model_ms']['p50']:.0f} |"
+        )
+    print()
+    print("| Input side | 1 crop | 4 crops | 8 crops | 12 crops |")
+    print("|---|---|---|---|---|")
+    by_side: dict[int, dict[int, float]] = {}
+    for entry in data["model_by_batch"]:
+        if "p50" in entry:
+            by_side.setdefault(entry["input_side"], {})[entry["batch"]] = entry["p50"]
+    for side, cells in by_side.items():
+        print(
+            f"| {side} px | "
+            + " | ".join(f"{cells.get(n, float('nan')):.0f}" for n in (1, 4, 8, 12))
+            + " |"
+        )
+
+
 def main() -> int:
+    if len(sys.argv) == 3 and sys.argv[1] == "--latency":
+        latency(_load(sys.argv[2]))
+        return 0
     template, model, probe = (_load(p) for p in sys.argv[1:4])
     end_to_end(template, model)
     per_target(probe)
