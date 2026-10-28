@@ -321,10 +321,15 @@ def main() -> int:
     # names in <suite>.ops.yaml beside it (a private suite keeps both).
     aliases_path = args.suite.with_suffix(".ops.yaml")
     if aliases_path.exists():
-        aliases = yaml.safe_load(aliases_path.read_text())["ops"]
+        doc = yaml.safe_load(aliases_path.read_text())
+        aliases, set_values = doc.get("ops", {}), doc.get("set_values", {})
         for case in suite["cases"]:
             for step in case["steps"]:
-                step["op"] = aliases.get(step["op"], step["op"])
+                alias = aliases.get(step["op"], step["op"])
+                # An alias is a name, or a name with the step's arguments.
+                step.update(alias if isinstance(alias, dict) else {"op": alias})
+                for key, value in (step.get("set") or {}).items():
+                    step["set"][key] = set_values.get(value, value)
     args.out.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="phase0-"))
     if args.mode == "standin":

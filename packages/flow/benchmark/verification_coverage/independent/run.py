@@ -227,6 +227,7 @@ DELETE_INSURANCE_OP = "delete_primary_insurance"  # (placed before the window)
 EMPTY_HISTORY_OP = "add_history_row"  # a second history row, pid and date only
 CAPITALS_REGISTER_OP = "register_referral_capitals"  # street and city in capitals
 REVERT2_OP = REVERT_OP
+SET_USER_INFO_OP = "set_user_info"  # a users row's info column (step: user, value)
 HELD_OUT_OPS = {
     APPOINTMENT_OP: "new_patient",
     DOUBLE_HISTORY_OP: "new_patient",
@@ -236,6 +237,22 @@ HELD_OUT_OPS = {
 }
 #: The primary insurance ``DELETE_INSURANCE_OP`` needs in the baseline.
 PRE_WINDOW_INSURANCE = "Example Health Plan"
+
+
+#: Providers by the name a referral prints, as the suite's users.
+PROVIDERS = {"Dr. Iris Holt": "iholt", "Dr. Owen Hale": "ohale"}
+
+
+def set_value(field: str, value: Any, ids: dict[str, int]) -> Any:
+    """A value a step sets: ``seed:<chart>.<field>`` is that chart's seeded
+    value, and a provider's name in ``providerID`` is their ``users.id``."""
+
+    if isinstance(value, str) and value.startswith("seed:"):
+        chart, column = value[len("seed:") :].split(".", 1)
+        return SEEDS[chart][column]
+    if field == "providerID" and value in PROVIDERS:
+        return ids[PROVIDERS[value]]
+    return value
 
 
 def capitals(values: dict[str, str]) -> dict[str, str]:
@@ -274,9 +291,7 @@ def person_values(step: dict[str, Any], ids: dict[str, int]) -> dict[str, Any]:
     blank = dict.fromkeys(CONCURRENT_PERSON, "")
     out = {**blank, **person}
     out["state"] = "MA" if out["state"] == "Massachusetts" else out["state"]
-    provider = {"Dr. Iris Holt": "iholt", "Dr. Owen Hale": "ohale"}.get(
-        str(out.pop("providerID", ""))
-    )
+    provider = PROVIDERS.get(str(out.pop("providerID", "")))
     return {**out, "providerID": ids[provider] if provider else None}
 
 
@@ -466,6 +481,8 @@ def apply_steps(
             else:  # REVERT_OP: the value before the run
                 field = "phone_home"
                 store.update_chart(who, pid, {field: SEEDS["other_patient"][field]})
+        elif op == SET_USER_INFO_OP:
+            store.set_user_info(who, step["user"], step["value"])
         elif op == "overwrite_chart":
             values = stored(REFERRAL, ids)
             store.update_chart(who, ids[step["target"]], values)
@@ -474,7 +491,7 @@ def apply_steps(
             if op == "update_chart":
                 values = stored(REFERRAL, ids)
                 changes = {
-                    k: (values[k] if v == "referral" else v)
+                    k: (values[k] if v == "referral" else set_value(k, v, ids))
                     for k, v in step["set"].items()
                 }
                 store.update_chart(who, pid, changes)

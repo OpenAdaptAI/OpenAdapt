@@ -204,6 +204,11 @@ def copy(src: Path, dst: Path) -> Path:
     return dst
 
 
+def _iso_date(value: str) -> str:
+    match = re.fullmatch(r"(\d{2})/(\d{2})/(\d{4})", value.strip())
+    return f"{match[3]}-{match[1]}-{match[2]}" if match else value
+
+
 class Store:
     """The ops of ``faults.yaml`` on one stand-in database."""
 
@@ -278,7 +283,8 @@ class Store:
             "title": v["title"],
             "fname": v["fname"],
             "lname": v["lname"],
-            "DOB": v["DOB"],
+            # A US-format date field stores ISO (03/07/1984 -> 1984-03-07).
+            "DOB": _iso_date(str(v["DOB"])),
             "sex": v["sex"],
             # OpenEMR's New Patient form saves these in capitals (WITNESS.md).
             "street": str(v["street"]).upper(),
@@ -461,3 +467,11 @@ class Store:
         self.log(
             user, "patient-record-delete", pid, f"DELETE FROM insurance_data pid={pid}"
         )
+
+    def set_user_info(self, user: Optional[str], username: str, value: str) -> None:
+        """Set a users row's ``info``, as the user admin form saves it."""
+
+        self.con.execute(
+            "UPDATE users SET info = ? WHERE username = ?", (value, username)
+        )
+        self.log(user, "security-administration-update", 0, f"UPDATE users {username}")

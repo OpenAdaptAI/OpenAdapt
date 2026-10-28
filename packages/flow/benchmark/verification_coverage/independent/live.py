@@ -61,12 +61,14 @@ from verification_coverage.independent.run import (  # noqa: E402
     REVERT2_OP,
     REVERT_OP,
     SEEDS,
+    SET_USER_INFO_OP,
     SHIPPED_PARAMS,
     SHIPPED_RECORD,
     capitals,
     provenance_for,
     referral_text,
     score,
+    set_value,
     step_values,
     told_values,
 )
@@ -398,6 +400,19 @@ def apply_steps(
                     ).split()[0]
                 )
                 continue
+            if op == SET_USER_INFO_OP:
+                deviations.append(
+                    "the users edit ran as SQL with an audit row by the bot"
+                )
+                sql(
+                    f"UPDATE openemr.users SET info = {q(step['value'])} "
+                    f"WHERE username = {q(step['user'])};"
+                    "INSERT INTO openemr.log (date, event, category, user, groupname, "
+                    "comments, patient_id, success, log_from) VALUES (NOW(), "
+                    "'security-administration-update', 'Security-Administration', "
+                    f"{q(BOT)}, 'Default', '', 0, 1, 'open-emr')"
+                )
+                continue
             if op == "register_patient":
                 person = step.get("person")
                 if not isinstance(person, dict):
@@ -493,7 +508,7 @@ def apply_steps(
                     changes = referral
                 else:
                     changes = {
-                        k: (referral[k] if v == "referral" else v)
+                        k: (referral[k] if v == "referral" else set_value(k, v, ids))
                         for k, v in step["set"].items()
                     }
                 if who == "none":
