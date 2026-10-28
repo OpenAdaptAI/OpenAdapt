@@ -4,10 +4,16 @@ The org is on GitHub's free Actions plan: 20 concurrent jobs, 5 of them
 macOS. Every pull request and every queue group competes for those runners.
 To keep pull requests fast, CI runs in three tiers:
 
-- **PR tier** (`pull_request`): one fast Linux lane. That's one Python
-  version (3.12) and only the packages a change touches, including Flow's
-  unit suite. The checkout is the pull request merged with main, so this tier
-  already tests the change on top of main.
+- **PR tier** (`pull_request`): one required check, `ci` (ci.yml), that
+  finishes in under ten minutes. ci.yml calls packages.yml and main.yml on
+  this tier: lint, the oldest-Python syntax check, and the Linux tests of the
+  packages a change touches, on Python 3.12. Flow's unit shards leave out the
+  slow tests listed in `packages/flow/tests/nightly_only.txt`. Those are tests
+  over about 5 s on CI, except the realism tests that guard safety, which stay.
+  Flow's critical tests run in two parallel steps, end-to-end and unit. A smoke test
+  (`scripts/ci/smoke.py`) installs every package from its lock, imports it
+  and runs its command with `--help`, whatever changed. The checkout is the
+  pull request merged with main, so this tier tests the change on top of main.
 - **Queue tier** (`merge_group`), when the merge queue is on (ruleset
   25486718; it is off as of 2026-10-25, so a pull request merges once its
   PR-tier checks pass and the PR tier is the only gate before main): a lean re-check of the group on top of the
@@ -25,47 +31,63 @@ To keep pull requests fast, CI runs in three tiers:
   (including the native installers) ran, so no Desktop release ships without
   this tier.
 
+- **Nightly** (`nightly.yml`, daily at 07:23 UTC and on dispatch): calls
+  Packages (with the Desktop test and build workflows) and the launcher CI as
+  a scheduled run, so every package's full suite runs against main on every
+  platform its CI covers, whatever changed. The merge queue's push and a pull
+  request run only the packages a change touches; this catches a package
+  nobody touched breaking on main. When a job fails, the run opens the
+  `main is red` issue (label `main-is-red`), or updates it if one is open. A
+  passing run closes it. The nightly run is not a required check.
+
 **Drafts run nothing.** Every job in a workflow that runs on pull requests
 checks `github.event.pull_request.draft != true`, and `ready_for_review` is a
-trigger, so marking a draft ready starts CI. `packages-gate` fails on a draft
+trigger, so marking a draft ready starts CI. `ci` fails on a draft
 with "draft PR: CI runs when marked ready for review", so a draft never shows
 a stale green. A draft can't merge anyway.
 
-Nothing that used to run before merge was dropped: every job removed from the
-PR and queue tiers runs in the post-merge tier.
+Nothing that used to run before merge was dropped: every job or test removed
+from the PR and queue tiers runs in the post-merge tier and nightly.
 
 ## Required checks
 
-Branch protection requires these five checks, both on pull requests and in the
-merge queue:
+`ci` is the check a pull request needs, with `gitleaks` and
+`dependency-review`:
 
 | Check | Workflow | On a PR | In the queue |
 |---|---|---|---|
+| `ci` | ci.yml | runs; fails on a draft | runs |
 | `gitleaks` | secret-scan.yml | runs | runs |
 | `dependency-review` | dependency-review.yml | runs | runs |
-| `Analyze (python)` | codeql.yml | reports; analyzes when Python files change | reports; analyzes when the group changes Python files |
-| `run-ci (ubuntu-latest, 3.12)` | main.yml | runs (skips the suite for package-only changes) | runs |
-| `packages-gate` | packages.yml | runs; fails on a draft | runs |
 
-`packages-gate` needs every job in packages.yml. It fails when a job fails. It
-also fails when a job the change selects was skipped, except on a tier where
-that job doesn't run:
+The `ci` job needs Packages, the launcher CI and the smoke test. It fails
+unless each one passed. Inside Packages, `packages-gate` still requires every
+job the change selects to run and pass, except on a tier where that job
+doesn't run:
 
-- Post-merge-only jobs (`capture-macos`, `capture-windows`) may be skipped on
-  a pull request and in the queue, and must run and pass on main and on
-  dispatch.
-- `flow-unit` may be skipped in the queue only. A pull request can't enter
-  the queue until `packages-gate` passed with it green.
+- Post-merge-only jobs (`capture-macos`, `capture-windows`,
+  `flow-native-census`) may be skipped on a pull request and in the queue,
+  and must run and pass on main and on dispatch.
+- `flow-unit` may be skipped in the queue only.
 - `desktop-release-intent` runs on pull requests only.
 
-Inside the reusable desktop workflows, the native installers and the macOS and
-Windows legs run only post-merge. The gate sees each reusable workflow as one
-result, so a tier-skipped job inside it is never "skipped although selected".
+packages.yml and main.yml no longer trigger on pull requests or the merge
+queue themselves. ci.yml calls them, so each job runs once per pull request.
 
-Jobs in other workflows that run only post-merge, such as main.yml's macOS
-and older-Python legs and the macOS Intel audit, are not required checks.
-Adding their check names to branch protection would block every pull request,
-because they never report there.
+**Switching branch protection.** Until branch protection names `ci`, ci.yml
+also reports the two old required names, `run-ci (ubuntu-latest, 3.12)` and
+`packages-gate`, with `ci`'s result. CodeQL keeps reporting
+`Analyze (python)` from codeql.yml, as a non-required check after the
+switch. An admin switches it with:
+
+```bash
+gh api -X PATCH repos/OpenAdaptAI/OpenAdapt/branches/main/protection/required_status_checks --input - <<'EOF'
+{"strict": false, "checks": [{"context": "ci", "app_id": 15368}, {"context": "gitleaks", "app_id": 15368}, {"context": "dependency-review", "app_id": 15368}]}
+EOF
+```
+
+Then remove the `legacy-run-ci` and `legacy-packages-gate` jobs from ci.yml.
+App 15368 is GitHub Actions, the app the current checks are pinned to.
 
 ## Jobs by tier
 
@@ -75,7 +97,9 @@ because they never report there.
 | main.yml | `unsupported-python-guard` | no | no | Python 3.13 and 3.14 |
 | packages.yml | `types`, `agent` | Python 3.12 | Python 3.12 | Python 3.10 and 3.12 |
 | packages.yml | `flow-lint`, `flow-critical` | yes | yes | yes |
-| packages.yml | `flow-unit` | 2 xdist shards | no | 2 xdist shards |
+| ci.yml | `smoke`, `ci` | yes | yes | no |
+| packages.yml | `flow-unit` | 2 xdist shards, fast lane (without `nightly_only.txt`) | no | 2 xdist shards |
+| packages.yml | `flow-native-census` | no | no | Windows and macOS |
 | packages.yml | `capture-linux` | Python 3.12 | Python 3.12 | Python 3.10 (ubuntu-22.04), 3.11, 3.12 |
 | packages.yml | `capture-macos`, `capture-windows` | no | no | yes |
 | packages.yml | `capture-contract`, `capture-core-record` | yes | yes | yes |
@@ -104,6 +128,51 @@ per runner, one test file per worker at a time, each worker with its own
 `--basetemp` directory. A test file that can't share the runner with others
 should get its own serial step rather than turning xdist off.
 
+## Releases
+
+One pattern for every PyPI package: merging a reviewed version bump is the
+authorization to publish it. No one dispatches a release.
+
+- **Desktop** (`desktop-release.yml`) publishes its wheel, sdist and native
+  installers as one release.
+- **types, flow, agent, capture, privacy and tray** publish through
+  `release-package.yml`.
+
+Both start after each Packages run on main, every three hours, and on a
+dispatch. The dispatch is a fallback for the same commit, not an approval.
+A package publishes only when all of these hold:
+
+- The newest commit on main's first-parent history that changed the package
+  has a successful push run on main, with the package's own jobs run and
+  passed (`scripts/ci/newest_green.py`). A cancelled or failed run blocks the
+  release until a re-run passes.
+- Its version is not on PyPI, is higher than every version there, and has no
+  tag yet.
+- Its CHANGELOG.md starts with an entry for exactly that version.
+
+Each package's GitHub environment (`pypi-<package>`) still gates its upload.
+The release builds main's tip, where the package is unchanged since that
+commit, and tags it only after PyPI serves exactly the built files.
+`scripts/ci/release_plan.py` makes these decisions, and a run's plan job
+prints each package's decision.
+
+A version is never republished. A half-published version is resumed, not
+rebuilt:
+
+- **Re-run the failed jobs** of the run that published it. That reuses its
+  built files.
+- **Dispatch with `resume`** when PyPI serves the version and its tag exists
+  but the GitHub release isn't published. It fetches the files PyPI serves,
+  checks them against PyPI's digests, and publishes the release at the
+  tag's commit.
+
+A version on PyPI with no package tag counts as done. Capture 1.3.0, Privacy
+1.1.3 and Tray 0.3.7 predate package tags.
+
+The launcher (`release-and-publish.yml`) and `@openadapt/program-graph`
+(`release-program-graph.yml`) still start from a dispatch. Both refuse to
+build unless the newest commit that changed them has a green run on main.
+
 ## Concurrency
 
 Every workflow that runs on pull requests uses one rule. A newer push to a
@@ -129,11 +198,9 @@ Three kinds of workflow keep their own groups:
 
 ## Caches
 
-The Flow and agent jobs install with `uv pip install --system` into the
-`actions/setup-python` interpreter, with the uv cache keyed on the pyproject
-files they resolve; uv takes seconds where pip took two to three minutes. The
-other pip jobs use `cache: pip`. Every other `setup-uv` step sets
-`enable-cache: true` and keys the cache on its package's own `uv.lock`.
+Every `setup-uv` step sets `enable-cache: true` and keys the cache on the
+`uv.lock` files its job installs from; uv takes seconds where pip took two to
+three minutes.
 npm uses `cache: npm`. The Tauri builds use `Swatinem/rust-cache`, and the
 Rust audit caches its `cargo-audit` binary. The release workflows keep caching
 off on purpose: release builds start from a clean cache.
@@ -152,7 +219,39 @@ are branch-protection settings, so an admin changes them. How GitHub fills a
 group at those values hasn't been tested here; check the result on the next
 few queue runs.
 
+## Locked installs
+
+Every job installs Python packages from a uv lockfile, test tools included, so
+nothing changes version between two runs of the same commit. A floating
+pytest 9.2 once broke flow-unit on every pull request at once.
+
+- Jobs that own a package directory run `uv sync --locked`, then
+  `uv run --no-sync` or `uv run --locked`.
+- Jobs that install into the setup-python interpreter run
+  `scripts/ci/locked_install.py`. It exports each named lock with
+  `uv export --locked` and installs it with `--require-hashes --no-deps`.
+  In-tree packages then install editable without dependencies, and
+  `uv pip check` fails the job if one of them needs something no lock has.
+  Where an in-tree sibling needs newer dependencies than the published copy
+  another lock names, the job adds the sibling's own lock after it. For
+  example, flow-unit installs Flow's lock, then Capture's.
+- Jobs that test no package of their own (Python support, platform manifest,
+  wheel builds, release builds) use the groups in `.github/ci-tools/uv.lock`.
+  The Desktop audit's pip-audit has its own lock in `.github/ci-tools/audit/`,
+  because the fixed filelock it pulls in needs Python 3.11.
+
+When a job fails with "The lockfile at `uv.lock` needs to be updated", run
+`uv lock` in that directory and commit the lock.
+`tests/test_ci_locked_installs.py` fails on any workflow install that resolves
+at run time. The few that do on purpose are listed there with their reasons:
+the launcher's check of what a user's pip picks, the uv bootstrap and the
+Harness² commit pin.
+
 ## Dependabot
 
-Each ecosystem and directory opens at most one grouped version-update pull
-request a week (`.github/dependabot.yml`). Security updates are not grouped.
+`.github/dependabot.yml` opens grouped version-update pull requests weekly.
+One uv entry covers every lock except Desktop's and opens at most two pull
+requests a week, each across all of those directories: `test-tools` (pytest
+and its plugins, ruff, mypy, Playwright, build, pip, pip-audit, twine) and
+`python` (everything else). Desktop's uv, npm and cargo locks keep their own
+entries. Security updates are not grouped.

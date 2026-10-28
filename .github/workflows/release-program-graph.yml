@@ -43,6 +43,10 @@ jobs:
     name: build @openadapt/program-graph ${{ inputs.version }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      # Reads the package's newest green run on main.
+      actions: read
     outputs:
       tag: ${{ steps.check.outputs.tag }}
       tarball: ${{ steps.pack.outputs.tarball }}
@@ -68,6 +72,14 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: packages/program-graph/package-lock.json
+      - name: Require the newest green main run for this package
+        # One release rule for every package: the newest commit on main that
+        # changed it must have a passed push run with its jobs run, and the
+        # release builds main's tip, where the package is unchanged since.
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/newest_green.py program-graph --tip "$GITHUB_SHA"
       - name: Check the dispatched commit, version, changelog and npm state
         id: check
         env:
