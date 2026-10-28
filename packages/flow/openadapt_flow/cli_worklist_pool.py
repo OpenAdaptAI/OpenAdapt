@@ -206,6 +206,9 @@ class WebPoolWorker:
     sign_in: Optional[Callable[[Any], None]] = None
     #: How to reach the item's start page; default ``page.goto(entry_url)``.
     open_entry: Optional[Callable[[Any], None]] = None
+    #: After a halted item: clean the screen and check the start screen
+    #: (``halt_cleanup.run_cleanup``). Returns None when clean, else why not.
+    clean: Optional[Callable[[Any, Path], Optional[str]]] = None
     cdp_endpoint: Optional[str] = None
     headed: bool = False
     readback_window: int = 0
@@ -255,6 +258,11 @@ class WebPoolWorker:
         report = self.run_item_on_page(self._page, idx, row, item_dir, self._pipeline)
         return _item_run(report, self._pipeline)
 
+    def clean_after_halt(self, cleanup_dir: Path) -> Optional[str]:
+        if self.clean is None:
+            return None
+        return self.clean(self._page, cleanup_dir)
+
     def close(self) -> None:
         try:
             if self._pipeline is not None:
@@ -281,11 +289,18 @@ class BackendPoolWorker:
     run_item_on_backend: RunItem
     fingerprint: Optional[str] = None
     readback_window: int = 0
+    #: After a halted item: clean the screen and check the start screen.
+    clean: Optional[Callable[[Any, Path], Optional[str]]] = None
     _pipeline: Optional[ReadbackPipeline] = None
 
     def open(self) -> None:
         if self.readback_window > 0:
             self._pipeline = ReadbackPipeline()
+
+    def clean_after_halt(self, cleanup_dir: Path) -> Optional[str]:
+        if self.clean is None:
+            return None
+        return self.clean(self.backend, cleanup_dir)
 
     def session_fingerprint(self) -> Optional[str]:
         return self.fingerprint

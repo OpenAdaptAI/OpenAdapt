@@ -414,6 +414,22 @@ def _stops_run(state: str, detail: Mapping[str, Any], on_halt: str) -> bool:
     return True
 
 
+def _clean_after_halt(worker: Any, item_dir: Path) -> Optional[str]:
+    """Run the worker's halt cleanup; None when its session is clean.
+
+    A worker without one keeps today's behavior (the next item re-enters from
+    the entry page). A cleanup that raises leaves the session dirty.
+    """
+    clean = getattr(worker, "clean_after_halt", None)
+    if not callable(clean):
+        return None
+    try:
+        reason: Optional[str] = clean(item_dir / "halt-cleanup")
+    except Exception as exc:  # noqa: BLE001 - a failed cleanup is a dirty session
+        return f"the cleanup raised {type(exc).__name__}"
+    return reason
+
+
 @dataclass
 class WorkerSummary:
     name: str
@@ -422,6 +438,9 @@ class WorkerSummary:
     busy_s: float = 0.0
     open_s: float = 0.0
     error: Optional[str] = None
+    #: Why this worker's session took no more items after a halt: the
+    #: cleanup didn't bring back the start screen (docs/HALT_CLEANUP.md).
+    dirty: Optional[str] = None
 
 
 @dataclass
@@ -702,6 +721,18 @@ def run_worklist_pool(
                     pending.append((idx, fut, []))
                 else:
                     finish(worker, idx, out.state, detail)
+                    if out.state not in SUCCESS_STATES:
+                        # The halted item may have left a dialog open or a
+                        # form half filled. Clean the screen and confirm the
+                        # start screen before this session takes another item.
+                        dirty = _clean_after_halt(worker, item_dir)
+                        if dirty is not None:
+                            summary.dirty = dirty
+                            say(
+                                f"{worker.name}: session dirty after item {idx} "
+                                f"({dirty}); it takes no more items"
+                            )
+                            break
             while pending:
                 settle(pending.popleft())
         except Exception as exc:  # noqa: BLE001 - never leave peers running blind

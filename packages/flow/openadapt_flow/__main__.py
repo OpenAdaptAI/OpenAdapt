@@ -2989,6 +2989,34 @@ def _replay_worklist_pool(
     wirings = [_deployment_runtime(args, params=params) for _ in accounts]
     salt = getattr(getattr(workflow, "manifest", None), "content_digest", "") or ""
 
+    # After a halted item, clean the screen and confirm the start screen
+    # before the session takes another item (docs/HALT_CLEANUP.md). Without a
+    # qualified halt_cleanup, the default only re-enters and checks.
+    from openadapt_flow import halt_cleanup as _hc
+    from openadapt_flow.runtime import Replayer as _Replayer
+
+    item_cleanup = _hc.runnable_cleanup(workflow)
+
+    def clean_session(source, cleanup_dir, *, page_mode: bool, open_entry=None):
+        if item_cleanup is None:
+            return None
+        backend = build_backend(backend_cfg, page=source) if page_mode else source
+
+        def reenter() -> None:
+            if open_entry is not None:
+                open_entry(source)
+            else:
+                source.goto(entry_url)
+
+        return _hc.run_cleanup(
+            lambda: _Replayer(backend),
+            workflow,
+            item_cleanup,
+            bundle_dir=bundle,
+            run_dir=cleanup_dir,
+            reenter=reenter if page_mode else None,
+        )
+
     if kind == "web":
         workers = []
         for i, account in enumerate(accounts):
@@ -3022,6 +3050,7 @@ def _replay_worklist_pool(
                     run_item_on_page=partial(run_item, wirings[i], page_mode=True),
                     sign_in=sign_in,
                     open_entry=open_entry,
+                    clean=partial(clean_session, page_mode=True, open_entry=open_entry),
                     cdp_endpoint=account.browser_cdp_endpoint if account else None,
                     headed=bool(args.headed or cfg.backend.headed),
                     readback_window=policy.readback_window,
@@ -3056,6 +3085,7 @@ def _replay_worklist_pool(
                     backend_cfg, rdp_transport=session, rdp_connect=False
                 ),
                 run_item_on_backend=partial(run_item, wirings[i], page_mode=False),
+                clean=partial(clean_session, page_mode=False),
                 fingerprint=hashlib.sha256(
                     f"{backend_cfg.rdp_host}|{account.rdp_username}".encode()
                 ).hexdigest(),
@@ -11788,6 +11818,10 @@ def build_parser() -> argparse.ArgumentParser:
             _add_deployment_flags,
         ),
     )
+
+    from openadapt_flow.cli_cleanup import register as _register_cleanup
+
+    _register_cleanup(sub)
 
     from openadapt_flow.jit.cli import add_parser as _add_jit_parser
 
