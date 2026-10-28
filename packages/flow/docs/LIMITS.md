@@ -405,23 +405,46 @@ field typed since the last save, the compiler gives it a **form identity**
 The checks above read the page before the click; they are pre-checks. The
 safety layer is the wire check (`openadapt_flow/wire_check.py`, shared with
 taught browser writes): from the check until the next step, a Playwright route
-holds every write request the page sends, and a GET navigation to the form's
-address, at the network, where page scripts can't reach it. A request leaves
-only when its method, address, query and fields equal what the checked button
-would send (form fields or a flat JSON object, every value except the exempt
-tokens), and only once; anything else is aborted before it is sent. So a page
-listener that runs after the check (a submit, capture or `formdata` listener,
-a click handler that fills in or enables a field, a timer), a save sent by
-script (`form.submit()`, `fetch`), a submit from another form and a second
-submit can't send anything the check didn't see. A save sent in another shape
-(nested JSON, a custom encoding) can't be compared, so it is held too. The run
-watches the wire check for two seconds after the click, then again at the
-start of the next step and at the end of the run, and halts on any held
-request. A submission a script delays past the end of the run is still held
-until the page closes, but the run, already over, doesn't report it. A page
-whose own listener changes a field as the form is sent changes what is sent
-after the check, so its save halts even when the demonstration did the same: a
-false halt, in the safe direction.
+on the browser context holds every write request from any of its pages (a
+popup or new tab the click opens included), and a GET navigation to the
+form's address, at the network, where page scripts can't reach it. A request
+leaves only when its method, address, query and fields equal what the checked
+button would send (form fields or a flat JSON object, every value except the
+exempt tokens), and only once; anything else is aborted before it is sent. So
+a page listener that runs after the check (a submit, capture or `formdata`
+listener, a click handler that fills in or enables a field, a timer), a save
+sent by script (`form.submit()`, `fetch`), a write from a popup, a submit from
+another form and a second submit can't send anything the check didn't see. A
+save sent in another shape (nested JSON, JSON with a repeated key, a custom
+encoding) can't be compared, so it is held too. The run watches the wire check
+for two seconds after the click, then again at the start of the next step and
+at the end of the run, and halts on any held request.
+
+What the wire check doesn't see:
+
+- **Service workers.** Their requests skip routes. The runner's browsers block
+  service workers; on a page one controls anyway, the save is refused before
+  the click, and one that starts while the save is held halts the run.
+- **WebSockets.** One opened while the save is held is never connected to the
+  server. A message sent on one opened earlier can't be stopped: the run
+  halts on it, after it was sent.
+- **Redirects.** A 307 or 308 answer to the checked save makes the browser send
+  the same request again to the address the server names, possibly another
+  site. The server that accepted the save chooses that.
+- **GET requests.** Reads pass. An app whose GET addresses change records
+  (some do, OpenEMR among them) is outside the wire check; its record check
+  still applies.
+- **Late requests.** A submission a script delays past the end of the run is
+  still held until the page closes, but the run, already over, doesn't
+  report it.
+
+A page whose own listener changes a field as the form is sent changes what is
+sent after the check, so its save halts even when the demonstration did the
+same: a false halt, in the safe direction. The compiler treats a click on the
+submit button of the form the demonstration typed into as a save, whatever
+the screen did afterwards, so a slow recording still arms the check. When the
+check can't be armed on such a save, the step names why, and the save is
+refused.
 
 The digests of untouched values are salted; with the per-bundle salt stored in
 the bundle (the default, unless `OPENADAPT_FLOW_IDENTITY_SALT` is set), a
