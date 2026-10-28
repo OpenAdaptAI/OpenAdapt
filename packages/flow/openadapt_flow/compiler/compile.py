@@ -1138,8 +1138,11 @@ def _structural_postconditions(event: dict) -> list[Postcondition]:
 #: ``«r2»``), Radix, Headless UI, MUI, Ember, react-select, downshift, Reach,
 #: Mantine, and bare UUIDs or long numeric suffixes.
 _GENERATED_ID = re.compile(
-    r"^(?::r[0-9a-z]+:|«r[0-9a-z]+»|:[0-9a-z]+:)$"
-    r"|^(?:radix-|headlessui-|mui-|ember|react-select-|downshift-|reach-|mantine-)"
+    # React useId, anywhere in the id: ``:r2:``, ``«r2»``, and React 19.2+'s
+    # ``_r_2_`` / ``_R_2_`` (react-aria's ``react-aria-:r1:`` contains one).
+    r":r[0-9a-z]+:|«r[0-9a-z]+»|_r_[0-9a-z]+_"
+    r"|^(?:radix-|headlessui-|mui-|ember|react-select-|downshift-|reach-|mantine-"
+    r"|mat-|cdk-|rc_select_)"
     r"|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     r"|\d{4,}$",
     re.IGNORECASE,
@@ -1195,11 +1198,22 @@ def _focus_postcondition(before: Any, after: Any) -> Optional[Postcondition]:
         # run to run, so it names no element; fall back to role and name.
         ident_id = None
     role, name = after.get("role"), after.get("name")
+    named = (
+        isinstance(role, str)
+        and role.strip()
+        and isinstance(name, str)
+        and name.strip()
+    )
+    # An id or testid check also binds the element's role and name when it had
+    # them, so an id that moved to another element can't pass: the generated-id
+    # patterns are only a hint, and no list keeps up with every framework.
+    pair: dict[str, Any] = {"focus_role": role, "focus_name": name} if named else {}
     if isinstance(testid, str) and testid.strip() and after.get("testid_count") == 1:
         return Postcondition(
             kind=PostconditionKind.FOCUS_ON,
             focus_by="testid",
             focus_value=testid,
+            **pair,
             **common,
         )
     if isinstance(ident_id, str) and ident_id.strip() and after.get("id_count") == 1:
@@ -1207,6 +1221,7 @@ def _focus_postcondition(before: Any, after: Any) -> Optional[Postcondition]:
             kind=PostconditionKind.FOCUS_ON,
             focus_by="id",
             focus_value=ident_id,
+            **pair,
             **common,
         )
     if (

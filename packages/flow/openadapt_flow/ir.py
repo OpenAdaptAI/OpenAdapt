@@ -594,7 +594,9 @@ class Postcondition(BaseModel):
     focus_by: Optional[Literal["testid", "id", "role_name"]] = None
     #: FOCUS_ON: the ``data-testid`` or ``id`` (``focus_by`` testid / id).
     focus_value: Optional[str] = Field(default=None, min_length=1, max_length=256)
-    #: FOCUS_ON: the ARIA role and accessible name (``focus_by`` role_name).
+    #: FOCUS_ON: the ARIA role and accessible name (``focus_by`` role_name;
+    #: with a testid or id too, when the element had them, and then both must
+    #: hold at replay).
     focus_role: Optional[str] = Field(default=None, min_length=1, max_length=64)
     focus_name: Optional[str] = Field(default=None, min_length=1, max_length=256)
     #: FOCUS_ON: an option of the focused control must be active.

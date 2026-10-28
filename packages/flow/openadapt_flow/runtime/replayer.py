@@ -18240,12 +18240,17 @@ class Replayer:
             return False
         if tuple(seen.get("frame_path") or ()) != tuple(pc.focus_frame_path or ()):
             return False
-        if pc.focus_by == "testid":
+        if pc.focus_by in ("testid", "id"):
             held = (
-                seen.get("testid") == pc.focus_value and seen.get("testid_count") == 1
+                seen.get(pc.focus_by) == pc.focus_value
+                and seen.get(f"{pc.focus_by}_count") == 1
             )
-        elif pc.focus_by == "id":
-            held = seen.get("id") == pc.focus_value and seen.get("id_count") == 1
+            if held and pc.focus_role and pc.focus_name:
+                # Recorded with a role and name too: both must still hold.
+                held = (
+                    seen.get("role") == pc.focus_role
+                    and seen.get("name") == pc.focus_name
+                )
         else:
             held = (
                 seen.get("role") == pc.focus_role

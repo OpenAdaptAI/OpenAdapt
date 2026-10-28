@@ -339,3 +339,69 @@ def test_aria_owns_alone_is_not_an_active_option():
         assert backend.focus_identity()["active_option"] is False
     finally:
         close()
+
+
+# -- round 2: ids that move, and framework components ------------------------------------
+
+
+def test_react_19_ids_that_shift_fall_back_to_role_and_name():
+    backend, close = _launch(
+        "<button id=_r_1_>Cancel</button><button id=_r_2_>Save</button>"
+    )
+    try:
+        page = backend.page
+        page.get_by_role("button", name="Save").focus()
+        pc = _mined(backend, BEFORE)
+        assert (pc.focus_by, pc.focus_name) == ("role_name", "Save")
+        page.evaluate(
+            "document.querySelectorAll('button').forEach((b, i) => b.id = '_r_' + (i + 5) + '_')"
+        )
+        assert _held(backend, pc) is True
+        page.get_by_role("button", name="Cancel").focus()
+        assert _held(backend, pc) is False
+    finally:
+        close()
+
+
+def test_a_react_aria_id_is_not_identity():
+    pc = _focus_postcondition(BEFORE, _focus(id="react-aria-:r1:", id_count=1))
+    assert pc.focus_by == "role_name"
+
+
+def test_an_id_that_moves_to_another_button_fails_on_its_name():
+    backend, close = _launch(
+        "<button id=btn-7>Save</button><button id=btn-8>Cancel</button>"
+    )
+    try:
+        page = backend.page
+        page.get_by_role("button", name="Save").focus()
+        pc = _mined(backend, BEFORE)
+        assert (pc.focus_by, pc.focus_value, pc.focus_name) == ("id", "btn-7", "Save")
+        # The ids swap: the wrong button now carries the recorded id.
+        page.evaluate(
+            "const [a, b] = document.querySelectorAll('button'); a.id = 'btn-8'; b.id = 'btn-7';"
+        )
+        page.get_by_role("button", name="Cancel").focus()
+        assert _held(backend, pc) is False
+    finally:
+        close()
+
+
+def test_an_unregistered_component_keeps_its_check_and_a_registered_one_does_not():
+    backend, close = _launch(
+        "<mat-select tabindex=0 role=combobox aria-label=Gender></mat-select>"
+        "<x-picker tabindex=0 role=button aria-label=Pick></x-picker>"
+        "<script>customElements.define('x-picker', class extends HTMLElement {})</script>"
+    )
+    try:
+        page = backend.page
+        page.locator("mat-select").focus()
+        seen = backend.focus_identity()
+        assert seen is not None and (seen["role"], seen["name"]) == (
+            "combobox",
+            "Gender",
+        )
+        page.locator("x-picker").focus()
+        assert backend.focus_identity() is None
+    finally:
+        close()

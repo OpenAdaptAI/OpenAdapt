@@ -617,9 +617,13 @@ _FOCUS_IDENTITY_JS = r"""(el) => {
     const doc = el.ownerDocument;
     if (el === doc.body || el === doc.documentElement) return {none: true};
     // activeElement names a shadow host when the focus is inside its shadow
-    // root. An open root is not followed, and a custom element may hide a
-    // closed one: either way the focused control can't be told apart.
-    if (el.shadowRoot || el.localName.includes('-')) return {unreadable: true};
+    // root. An open root is not followed, and a registered custom element may
+    // hide a closed one: either way the focused control can't be told apart.
+    // An unregistered element with a dash (an Angular or other framework
+    // component without a shadow root) is an ordinary element.
+    if (el.shadowRoot) return {unreadable: true};
+    if (el.localName.includes('-') && window.customElements
+        && doc.defaultView.customElements.get(el.localName)) return {unreadable: true};
     const count = (sel) => {
         try { return doc.querySelectorAll(sel).length; } catch (e) { return 0; }
     };
