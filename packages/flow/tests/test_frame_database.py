@@ -475,3 +475,11 @@ def test_declared_defaults() -> None:
         CLOCK_DEFAULT,
         ("2026-10-25 10:59:59", "2026-10-25 11:00:05"),
     )
+
+
+def test_a_null_default_is_no_default(tmp_path: Path) -> None:
+    from openadapt_flow.runtime.effects.db_snapshot import _default_text
+
+    assert _default_text("NULL", "sqlite") is None
+    assert _default_text("NULL", "mysql") is None
+    assert _default_text("'NULL'", "sqlite") == "NULL"  # the text NULL
