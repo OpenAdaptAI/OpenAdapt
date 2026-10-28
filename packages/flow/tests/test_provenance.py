@@ -328,3 +328,90 @@ def test_a_task_whose_values_differ_from_its_provenance_is_refused(
     with pytest.raises(GuardRefused) as refused:
         load_task(path)
     assert refused.value.code == "task_invalid"
+
+
+def test_round_trip_maps_a_label_to_the_stored_code() -> None:
+    """The referral prints the state's name; the record stores its code."""
+
+    from openadapt_flow.provenance import bound_fields, bound_maps
+
+    document = IntakeDocument(
+        "r.txt", "text", ["Last name: Okafor", "State: Massachusetts"]
+    )
+    sha = sha256_bytes(document.text.encode("utf-8"))
+    prov = ProvenanceFile(
+        params={
+            name: ParamProvenance(
+                value=value,
+                source=SourceRef(kind="document", sha256=sha, line=line, label=label),
+                extractor="model:first-reader",
+            )
+            for name, value, line, label in (
+                ("lname", "Okafor", 1, "Last name"),
+                ("state_label", "Massachusetts", 2, "State"),
+            )
+        }
+    )
+    match = {"lname": {"param": "lname"}}
+    effects = [
+        Effect(kind=EffectKind.RECORD_WRITTEN, match=match),
+        Effect(
+            kind=EffectKind.FIELD_EQUALS,
+            match=match,
+            field="state",
+            value={"param": "state_label", "map": {"Massachusetts": "MA"}},
+        ),
+    ]
+    from openadapt_flow.provenance import default_extractor
+
+    def judge(stored: str) -> str:
+        return round_trip(
+            prov,
+            {"id": 1, "lname": "Okafor", "state": stored},
+            bound_fields(effects),
+            {sha: document},
+            default_extractor(prov),
+            maps=bound_maps(effects),
+        ).status
+
+    assert judge("MA") == "held"
+    assert judge("RI") == "refuted"
+
+
+def test_round_trip_applies_the_stored_form() -> None:
+    """OpenEMR saves the street in capitals; the referral prints mixed case."""
+
+    from openadapt_flow.provenance import bound_fields, bound_maps, default_extractor
+
+    document = IntakeDocument("r.txt", "text", ["Street: 41 Larch Way"])
+    sha = sha256_bytes(document.text.encode("utf-8"))
+    prov = ProvenanceFile(
+        params={
+            "street": ParamProvenance(
+                value="41 Larch Way",
+                source=SourceRef(kind="document", sha256=sha, line=1, label="Street"),
+                extractor="model:first-reader",
+            )
+        }
+    )
+    effects = [
+        Effect(
+            kind=EffectKind.FIELD_EQUALS,
+            match={"id": "1"},
+            field="street",
+            value={"param": "street", "stored": "upper"},
+        )
+    ]
+
+    def judge(stored: str) -> str:
+        return round_trip(
+            prov,
+            {"id": 1, "street": stored},
+            bound_fields(effects),
+            {sha: document},
+            default_extractor(prov),
+            maps=bound_maps(effects),
+        ).status
+
+    assert judge("41 LARCH WAY") == "held"
+    assert judge("14 LARCH WAY") == "refuted"

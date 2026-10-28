@@ -100,7 +100,7 @@ def judge_records(
         matched = [
             r
             for r in matched
-            if str(r.get(effect.key_field, None)) == str(effect.idempotency_key)
+            if record_matches(r, _matchable({effect.key_field: effect.idempotency_key}))
         ]
 
     # Duplicate-write guard (count_new_only): judge only the records that
@@ -131,6 +131,13 @@ _SAMPLE_LIMIT = 5
 
 def _selector_text(selector: dict[str, Any]) -> str:
     return "{" + ", ".join(f"{k}={v}" for k, v in sorted(selector.items())) + "}"
+
+
+def _matchable(selector: dict[str, Any]) -> dict[str, Any]:
+    """A selector for :func:`record_matches`: a value with a declared kind
+    stays an expression (compared in canonical form), others become text."""
+
+    return {k: (v if getattr(v, "kind", None) else str(v)) for k, v in selector.items()}
 
 
 def _judge_exact_new_set(
@@ -193,7 +200,7 @@ def _judge_exact_new_set(
     for selector in effect.new_records:
         plain = {k: str(v) for k, v in selector.items()}
         key = _selector_text(plain)
-        found, multiplicity = declared.get(key, (plain, 0))
+        found, multiplicity = declared.get(key, (_matchable(selector), 0))
         declared[key] = (found, multiplicity + 1)
     for key, (selector, multiplicity) in sorted(declared.items()):
         observed = sum(1 for r in added if record_matches(r, selector))
@@ -208,8 +215,7 @@ def _judge_exact_new_set(
         r
         for r in added
         if not any(
-            record_matches(r, {k: str(v) for k, v in selector.items()})
-            for selector in effect.new_records
+            record_matches(r, _matchable(selector)) for selector in effect.new_records
         )
     ]
     if extra:
@@ -467,7 +473,9 @@ def _judge_field_equals(
         )
     record = matched[0]
     observed = "" if record.get(effect.field) is None else str(record.get(effect.field))
-    if observed == want:
+    kind = getattr(effect.value, "kind", None)
+    same = effect.value.matches(record.get(effect.field)) if kind else observed == want  # type: ignore[union-attr]
+    if same:
         return EffectVerdict(
             verdict=Verdict.CONFIRMED,
             kind=effect.kind,
