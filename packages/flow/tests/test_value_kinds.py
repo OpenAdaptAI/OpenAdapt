@@ -94,3 +94,21 @@ def test_date_order_needs_a_date_kind() -> None:
 
 def test_an_unset_kind_keeps_the_contract_digest() -> None:
     assert ValueExpr(param="x").model_dump() == {"literal": None, "param": "x"}
+
+
+def test_exact_new_set_matches_a_declared_kind() -> None:
+    effect = Effect(
+        kind=EffectKind.EXACT_NEW_SET,
+        match={},
+        identity_field="id",
+        new_records=[{"phone": {"param": "x", "kind": "phone"}}],
+    ).resolve({"x": "(617) 555-0142"})
+    before = EffectState(substrate="t", reachable=True, records=[])
+
+    def verdict(stored: str) -> str:
+        return judge_records(
+            effect, before, [{"id": "1", "phone": stored}], substrate="t"
+        ).verdict.value
+
+    assert verdict("617-555-0142") == "confirmed"
+    assert verdict("617-555-0124") == "refuted"

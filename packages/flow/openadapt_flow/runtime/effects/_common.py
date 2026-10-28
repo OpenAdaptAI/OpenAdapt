@@ -133,6 +133,13 @@ def _selector_text(selector: dict[str, Any]) -> str:
     return "{" + ", ".join(f"{k}={v}" for k, v in sorted(selector.items())) + "}"
 
 
+def _matchable(selector: dict[str, Any]) -> dict[str, Any]:
+    """A selector for :func:`record_matches`: a value with a declared kind
+    stays an expression (compared in canonical form), others become text."""
+
+    return {k: (v if getattr(v, "kind", None) else str(v)) for k, v in selector.items()}
+
+
 def _judge_exact_new_set(
     effect: Effect,
     before: EffectState,
@@ -193,7 +200,7 @@ def _judge_exact_new_set(
     for selector in effect.new_records:
         plain = {k: str(v) for k, v in selector.items()}
         key = _selector_text(plain)
-        found, multiplicity = declared.get(key, (plain, 0))
+        found, multiplicity = declared.get(key, (_matchable(selector), 0))
         declared[key] = (found, multiplicity + 1)
     for key, (selector, multiplicity) in sorted(declared.items()):
         observed = sum(1 for r in added if record_matches(r, selector))
@@ -208,8 +215,7 @@ def _judge_exact_new_set(
         r
         for r in added
         if not any(
-            record_matches(r, {k: str(v) for k, v in selector.items()})
-            for selector in effect.new_records
+            record_matches(r, _matchable(selector)) for selector in effect.new_records
         )
     ]
     if extra:
