@@ -233,12 +233,14 @@ def test_desktop_has_no_command_that_turns_the_switch_on(task) -> None:
     disp, _db, _config, _digest = task
     commands = {name for name in disp._handlers if "approval" in name or "switch" in name}
     # The item-approval pair answers one save a running item waits on
-    # (``each_item``); neither reads or writes a switch record.
+    # (``each_item``), as does a stop card's save approval; none reads or
+    # writes a switch record.
     assert commands == {
         "get_approval_mode",
         "turn_off_approval_mode",
         "get_item_approval",
         "answer_item_approval",
+        "answer_stop_approval",
     }
     source = Path(__file__).resolve().parents[2] / "openadapt_desktop" / "dispatch.py"
     assert "accept_switch" not in source.read_text()
