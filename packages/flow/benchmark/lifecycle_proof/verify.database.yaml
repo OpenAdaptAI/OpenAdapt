@@ -6,8 +6,8 @@
 # after the save (frame.database). Any row added, removed or changed is
 # collateral unless the record contract, the chart's history row
 # (side_records) or a concurrent writer named by OpenEMR's audit trail
-# explains it. contact is the chart's address link, a side record per
-# WITNESS.md, not bookkeeping. A new chart or history row that sets a column the contract
+# explains it. contact (a link row per chart) is append-only bookkeeping
+# in the OpenEMR profile. A new chart or history row that sets a column the contract
 # doesn't name, outside new_row_fields, is collateral too.
 #
 # allow_tables is the reviewed list of tables OpenEMR writes on its own for any
@@ -59,13 +59,11 @@ frame:
   identity_field: id
   side_records:
     - {surface: history_data, link_field: pid, of_surface: patient, of_field: pid}
-    - {surface: contact, link_field: foreign_id, of_surface: patient, of_field: pid}
   attribution:
     kind: audit_read
     actor_field: user
     record_field: patient_id
     record_key: pid
-    record_keys: {contact: foreign_id}
     # Only a write to the same table attributes a change; a chart viewed is
     # never a chart written.
     event_field: event
@@ -117,4 +115,3 @@ frame:
       # the form's empty strings where the column's default is NULL.
       patient_data: [billing_note, birth_fname, birth_lname, birth_mname, care_team_status, created_by, date, dupscore, financial_review, gender_identity, guardianaddress, guardiancity, guardiancountry, guardianemail, guardianphone, guardianpostalcode, guardianrelationship, guardiansex, guardiansname, guardianstate, guardianworkphone, hipaa_allowemail, hipaa_allowsms, imm_reg_status, industry, interpreter_needed, nationality_country, occupation, patient_groups, pid, preferred_name, pronoun, protect_indicator, publicity_code, pubpid, ref_providerID, regdate, sex_identified, sexual_orientation, street_line_2, suffix, tribal_affiliations, updated_by, uuid]
       history_data: [created_by, date, uuid]
-      contact: [foreign_table_name]
