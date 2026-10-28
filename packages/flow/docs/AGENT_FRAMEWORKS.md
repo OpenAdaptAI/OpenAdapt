@@ -135,3 +135,49 @@ reply = guard.run(order, lambda: my_api.create(**order))
 
 From an MCP client, use `openadapt verify serve` instead
 ([VERIFY_WRITES.md](VERIFY_WRITES.md)).
+
+## Skill cache: run a browser task once with the agent, then as a program
+
+When your agent does a browser task and the write is verified, the run can
+become a program. The next time the same task comes in, the program runs
+through MCP instead of the agent, with no model calls.
+
+```python
+from openadapt_flow.integrations.agents.skills import FrameworkAgent, SkillCache
+
+def run_agent(task, tools):
+    # tools.functions(): observe, click, type_text, press_key, scroll, finish.
+    # Wrap them for your framework (function_tool, @tool, StructuredTool) and
+    # run your agent on `task`. Return its token usage, or None.
+    ...
+
+cache = SkillCache(
+    url="https://clinic.example/referrals",
+    verify="verify.yaml",                     # reads the system of record
+    expect={"patient_id": "p1"},              # the record the task writes
+    on_screen=["Jane Sample", "MRN P1"],      # checked before every save
+    offer=ask_the_operator,                   # sees the proposed checks
+    admitter=operator_key,                    # a registered admitter key
+    canary_params=[{"note": "Canary note"}],
+)
+agent = FrameworkAgent(run_agent, principal_id="agent:intake")
+
+first = cache.run("Save this note for Jane Sample: {note}", {"note": "..."}, agent)
+later = cache.run("Save this note for Jane Sample: {note}", {"note": "..."}, agent)
+# first.path == "agent"; later.path == "skill", later.model_calls == 0
+```
+
+The first run goes through [compile-agent](COMPILE_AGENT.md):
+
+1. The agent works through the tools. They show the page as a structural
+   listing and check that the right record is on screen before every save.
+2. The system of record must show exactly the record the task names. If it
+   doesn't, nothing is compiled.
+3. `offer` gets the proposed record checks and returns the name of the
+   person who confirmed them, or None to leave the run as a draft.
+4. Canary runs with new values, then admission by your admitter key.
+5. The program is written out as an MCP server with one tool.
+
+Every later call with the same task runs that tool over MCP. Each save is
+read back, and the run gets a receipt. A run that doesn't end verified stops
+and goes to the exception inbox. It is never handed back to the agent.
